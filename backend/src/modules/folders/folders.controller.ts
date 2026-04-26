@@ -11,7 +11,7 @@ import {
 } from '@nestjs/common'
 import { FoldersService } from './folders.service'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
-import { CreateFolderDto, UpdateFolderDto } from './dto/folder.dto'
+import { CreateFolderDto, UpdateFolderDto, ReorderFoldersDto } from './dto/folder.dto'
 import { Request as ExpressRequest } from 'express'
 
 @Controller('folders')
@@ -36,6 +36,12 @@ export class FoldersController {
       createFolderDto.name,
       createFolderDto.parentId,
     )
+  }
+
+  @Put('reorder')
+  async reorder(@Request() req: ExpressRequest, @Body() reorderDto: ReorderFoldersDto) {
+    await this.foldersService.reorder(req.user!.userId, reorderDto.folderIds)
+    return { message: '排序已更新' }
   }
 
   @Put(':id')

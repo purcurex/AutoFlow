@@ -6,6 +6,8 @@ import { AuthController } from './auth.controller'
 import { AuthService } from './auth.service'
 import { JwtStrategy } from './jwt.strategy'
 import { UsersModule } from '../users/users.module'
+import { VerificationService } from './verification.service'
+import { getJwtExpiresIn, getJwtSecret } from './jwt.config'
 
 @Module({
   imports: [
@@ -14,16 +16,16 @@ import { UsersModule } from '../users/users.module'
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => ({
-        secret: configService.get<string>('JWT_SECRET') || 'default-secret-key',
+        secret: getJwtSecret(configService),
         signOptions: {
-          expiresIn: '7d',
+          expiresIn: getJwtExpiresIn(configService) as any,
         },
       }),
       inject: [ConfigService],
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy],
+  providers: [AuthService, JwtStrategy, VerificationService],
   exports: [AuthService, JwtModule],
 })
 export class AuthModule {}

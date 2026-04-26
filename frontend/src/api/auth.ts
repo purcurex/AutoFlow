@@ -8,7 +8,11 @@ export const authApi = {
     return api.post('/auth/login', data)
   },
 
-  register(data: RegisterRequest): Promise<AuthResponse> {
+  sendVerificationCode(email: string): Promise<{ success: boolean; message: string }> {
+    return api.post('/auth/send-code', { email })
+  },
+
+  register(data: RegisterRequest & { verificationCode: string }): Promise<AuthResponse> {
     return api.post('/auth/register', data)
   },
 

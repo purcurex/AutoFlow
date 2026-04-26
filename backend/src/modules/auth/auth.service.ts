@@ -1,15 +1,34 @@
-import { Injectable, UnauthorizedException, ConflictException } from '@nestjs/common'
+import { Injectable, UnauthorizedException, ConflictException, BadRequestException } from '@nestjs/common'
 import { JwtService } from '@nestjs/jwt'
 import { UsersService } from '../users/users.service'
+import { UserRole } from '../users/user.entity'
+import { VerificationService } from './verification.service'
 
 @Injectable()
 export class AuthService {
   constructor(
     private usersService: UsersService,
     private jwtService: JwtService,
+    private verificationService: VerificationService,
   ) {}
 
-  async register(email: string, username: string, password: string) {
+  async sendVerificationCode(email: string) {
+    // 检查邮箱是否已注册
+    const existingEmail = await this.usersService.findByEmail(email)
+    if (existingEmail) {
+      throw new ConflictException('该邮箱已被注册')
+    }
+
+    return this.verificationService.sendVerificationCode(email)
+  }
+
+  async register(email: string, username: string, password: string, verificationCode: string) {
+    // 验证验证码
+    const verification = this.verificationService.verifyCode(email, verificationCode)
+    if (!verification.valid) {
+      throw new BadRequestException(verification.message)
+    }
+
     // 检查邮箱是否已存在
     const existingEmail = await this.usersService.findByEmail(email)
     if (existingEmail) {
@@ -26,7 +45,7 @@ export class AuthService {
     const user = await this.usersService.create(email, username, password)
 
     // 生成token
-    const token = this.generateToken(user.id, user.email)
+    const token = this.generateToken(user.id, user.email, user.role)
 
     return {
       token,
@@ -35,6 +54,7 @@ export class AuthService {
         email: user.email,
         username: user.username,
         avatarUrl: user.avatarUrl,
+        role: user.role,
         createdAt: user.createdAt,
         updatedAt: user.updatedAt,
       },
@@ -52,7 +72,7 @@ export class AuthService {
       throw new UnauthorizedException('邮箱或密码错误')
     }
 
-    const token = this.generateToken(user.id, user.email)
+    const token = this.generateToken(user.id, user.email, user.role)
 
     return {
       token,
@@ -61,14 +81,15 @@ export class AuthService {
         email: user.email,
         username: user.username,
         avatarUrl: user.avatarUrl,
+        role: user.role,
         createdAt: user.createdAt,
         updatedAt: user.updatedAt,
       },
     }
   }
 
-  private generateToken(userId: string, email: string): string {
-    const payload = { userId, email }
+  private generateToken(userId: string, email: string, role: UserRole): string {
+    const payload = { userId, email, role }
     return this.jwtService.sign(payload)
   }
 }

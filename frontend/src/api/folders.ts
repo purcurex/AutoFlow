@@ -20,5 +20,9 @@ export const foldersApi = {
 
   delete(id: string): Promise<void> {
     return api.delete(`/folders/${id}`)
+  },
+
+  reorder(folderIds: string[]): Promise<void> {
+    return api.put('/folders/reorder', { folderIds })
   }
 }

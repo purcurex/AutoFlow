@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { watch, onMounted, ref } from 'vue'
+import { watch, onMounted, onUnmounted, ref } from 'vue'
 import { useEditor, EditorContent } from '@tiptap/vue-3'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
@@ -7,7 +7,29 @@ import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight'
 import { Color } from '@tiptap/extension-color'
 import { Highlight } from '@tiptap/extension-highlight'
 import { TextStyle } from '@tiptap/extension-text-style'
+import { Link } from '@tiptap/extension-link'
 import { common, createLowlight } from 'lowlight'
+
+// 自定义字体大小扩展
+const FontSize = TextStyle.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      fontSize: {
+        default: null,
+        parseHTML: element => element.style.fontSize?.replace(/['"]+/g, ''),
+        renderHTML: attributes => {
+          if (!attributes.fontSize) {
+            return {}
+          }
+          return {
+            style: `font-size: ${attributes.fontSize}`,
+          }
+        },
+      },
+    }
+  },
+})
 
 const props = defineProps<{
   modelValue: string
@@ -32,10 +54,16 @@ const editor = useEditor({
     CodeBlockLowlight.configure({
       lowlight,
     }),
-    TextStyle,
+    FontSize,
     Color,
     Highlight.configure({
       multicolor: true,
+    }),
+    Link.configure({
+      openOnClick: false,
+      HTMLAttributes: {
+        class: 'editor-link',
+      },
     }),
   ],
   onUpdate: ({ editor }) => {
@@ -49,8 +77,180 @@ watch(() => props.modelValue, (value) => {
   }
 })
 
+// 撤销和重做
+function undo() {
+  editor.value?.chain().focus().undo().run()
+}
+
+function redo() {
+  editor.value?.chain().focus().redo().run()
+}
+
+// 格式刷功能
+const isFormatPainterActive = ref(false)
+const copiedFormat = ref<{
+  bold?: boolean
+  italic?: boolean
+  strike?: boolean
+  color?: string
+  highlight?: string
+  fontSize?: string
+} | null>(null)
+
+// 获取选中文本的格式
+function getSelectionFormat(): typeof copiedFormat.value {
+  if (!editor.value) return null
+
+  const format: typeof copiedFormat.value = {}
+
+  // 检查各种格式
+  if (editor.value.isActive('bold')) {
+    format.bold = true
+  }
+  if (editor.value.isActive('italic')) {
+    format.italic = true
+  }
+  if (editor.value.isActive('strike')) {
+    format.strike = true
+  }
+
+  // 获取文字颜色
+  const color = editor.value.getAttributes('textStyle').color
+  if (color) {
+    format.color = color
+  }
+
+  // 获取高亮颜色
+  const highlight = editor.value.getAttributes('highlight').color
+  if (highlight) {
+    format.highlight = highlight
+  }
+
+  // 获取字体大小
+  const fontSize = editor.value.getAttributes('textStyle').fontSize
+  if (fontSize) {
+    format.fontSize = fontSize
+  }
+
+  // 如果没有任何格式，返回 null
+  if (Object.keys(format).length === 0) {
+    return null
+  }
+
+  return format
+}
+
+// 切换格式刷模式
+function toggleFormatPainter() {
+  if (isFormatPainterActive.value) {
+    // 如果已激活，取消格式刷
+    isFormatPainterActive.value = false
+    copiedFormat.value = null
+    return
+  }
+
+  if (!editor.value) return
+
+  const { from, to } = editor.value.state.selection
+
+  // 检查是否有选中文本
+  if (from === to) {
+    alert('请先选中带有格式的文本')
+    return
+  }
+
+  // 获取选中文本的格式
+  const format = getSelectionFormat()
+
+  if (!format) {
+    alert('选中的文本没有特殊格式')
+    return
+  }
+
+  // 复制格式并激活格式刷
+  copiedFormat.value = format
+  isFormatPainterActive.value = true
+}
+
+// 应用格式（在鼠标释放时调用）
+function applyFormatOnMouseUp() {
+  if (!isFormatPainterActive.value || !copiedFormat.value || !editor.value) return
+
+  const { from, to } = editor.value.state.selection
+
+  // 检查是否有选中文本
+  if (from === to) return
+
+  const format = copiedFormat.value
+
+  // 应用保存的格式到新选区
+  const chain = editor.value.chain().focus()
+
+  // 清除现有格式
+  chain.unsetAllMarks()
+
+  // 应用保存的格式
+  if (format.bold) {
+    chain.toggleBold()
+  }
+  if (format.italic) {
+    chain.toggleItalic()
+  }
+  if (format.strike) {
+    chain.toggleStrike()
+  }
+  if (format.color) {
+    chain.setColor(format.color)
+  }
+  if (format.highlight) {
+    chain.toggleHighlight({ color: format.highlight })
+  }
+  if (format.fontSize) {
+    chain.setMark('textStyle', { fontSize: format.fontSize })
+  }
+
+  chain.run()
+
+  // 保持格式刷激活状态，可以继续应用
+}
+
+// 监听键盘事件，Ctrl+Z 取消格式刷
+function handleKeyDown(event: KeyboardEvent) {
+  if (isFormatPainterActive.value && event.ctrlKey && event.key === 'z') {
+    isFormatPainterActive.value = false
+    copiedFormat.value = null
+  }
+}
+
+// 关闭所有下拉菜单
+function closeAllDropdowns() {
+  showColorPicker.value = false
+  showHighlightPicker.value = false
+  showFontSizePicker.value = false
+}
+
+// 点击外部关闭下拉菜单
+function handleClickOutside(event: MouseEvent) {
+  const target = event.target as HTMLElement
+  if (!target.closest('.dropdown-container')) {
+    closeAllDropdowns()
+  }
+}
+
+// 统一的生命周期钩子
 onMounted(() => {
   editor.value?.commands.focus()
+  document.addEventListener('click', handleClickOutside)
+  // 监听鼠标释放事件，用于格式刷
+  document.addEventListener('mouseup', applyFormatOnMouseUp)
+  // 监听键盘事件，Ctrl+Z 取消格式刷
+  document.addEventListener('keydown', handleKeyDown)
+})
+
+onUnmounted(() => {
+  document.removeEventListener('click', handleClickOutside)
+  document.removeEventListener('mouseup', applyFormatOnMouseUp)
+  document.removeEventListener('keydown', handleKeyDown)
 })
 
 function toggleBold() {
@@ -66,7 +266,29 @@ function toggleStrike() {
 }
 
 function toggleHeading(level: 1 | 2 | 3 | 4 | 5 | 6) {
-  editor.value?.chain().focus().toggleHeading({ level }).run()
+  // 标题对应的字体大小
+  const headingSizes: Record<number, string> = {
+    1: '24px',
+    2: '20px',
+    3: '18px',
+    4: '16px',
+    5: '14px',
+    6: '12px',
+  }
+
+  const chain = editor.value?.chain().focus()
+  if (!chain) return
+
+  // 切换标题
+  chain.toggleHeading({ level })
+
+  // 设置字体大小
+  const fontSize = headingSizes[level]
+  if (fontSize) {
+    chain.setMark('textStyle', { fontSize })
+  }
+
+  chain.run()
 }
 
 function toggleBulletList() {
@@ -86,6 +308,12 @@ function toggleBlockquote() {
 }
 
 function setLink() {
+  // 如果已有链接，取消链接
+  if (editor.value?.isActive('link')) {
+    editor.value.chain().focus().unsetLink().run()
+    return
+  }
+
   const url = window.prompt('输入链接地址')
   if (url) {
     editor.value?.chain().focus().setLink({ href: url }).run()
@@ -136,12 +364,65 @@ function setFontSize(size: string) {
   editor.value?.chain().focus().setMark('textStyle', { fontSize: size }).run()
   showFontSizePicker.value = false
 }
+
+// 清除字体大小
+function unsetFontSize() {
+  editor.value?.chain().focus().unsetMark('textStyle').run()
+  showFontSizePicker.value = false
+}
 </script>
 
 <template>
-  <div class="editor-wrapper border border-[var(--color-border)] rounded-lg overflow-hidden">
+  <div
+    class="editor-wrapper border border-[var(--color-border)] rounded-lg overflow-hidden"
+    :class="{ 'format-painter-mode': isFormatPainterActive }"
+  >
     <!-- 工具栏 -->
     <div class="editor-toolbar border-b border-[var(--color-border)] flex flex-wrap">
+      <!-- 撤销/重做 -->
+      <button
+        @click="undo"
+        class="editor-toolbar-btn"
+        :disabled="!editor?.can().undo()"
+        title="撤销 (Ctrl+Z)"
+      >
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+        </svg>
+      </button>
+      <button
+        @click="redo"
+        class="editor-toolbar-btn"
+        :disabled="!editor?.can().redo()"
+        title="重做 (Ctrl+Shift+Z)"
+      >
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 10h-10a8 8 0 00-8 8v2M21 10l-6 6m6-6l-6-6" />
+        </svg>
+      </button>
+      <div class="w-px h-6 bg-[var(--color-border)] mx-1"></div>
+
+      <!-- 格式刷 -->
+      <button
+        @click="toggleFormatPainter"
+        class="editor-toolbar-btn format-painter-btn"
+        :class="{ active: isFormatPainterActive }"
+        :title="isFormatPainterActive ? '点击取消格式刷' : '格式刷：选中有格式的文本后点击，再选其他文本应用格式'"
+      >
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <!-- 刷子柄 -->
+          <path d="M18 2L22 6" />
+          <rect x="14" y="4" width="7" height="4" rx="1" transform="rotate(45 14 4)" />
+          <!-- 刷子头 -->
+          <path d="M13 9L4 18C3 19 3 20.5 4 21.5C5 22.5 6.5 22.5 7.5 21.5L16.5 12.5" />
+          <!-- 刷毛 -->
+          <path d="M4.5 18.5L2 21" />
+          <path d="M6 20L3.5 22.5" />
+          <path d="M7.5 21.5L5 24" />
+        </svg>
+      </button>
+      <div class="w-px h-6 bg-[var(--color-border)] mx-1"></div>
+
       <button
         @click="toggleBold"
         class="editor-toolbar-btn"
@@ -194,15 +475,22 @@ function setFontSize(size: string) {
       <div class="w-px h-6 bg-[var(--color-border)] mx-1"></div>
 
       <!-- 字体大小 -->
-      <div class="relative">
+      <div class="relative dropdown-container">
         <button
-          @click="showFontSizePicker = !showFontSizePicker"
+          @click.stop="showFontSizePicker = !showFontSizePicker; showColorPicker = false; showHighlightPicker = false"
           class="editor-toolbar-btn text-sm"
+          :class="{ active: showFontSizePicker }"
           title="字体大小"
         >
           Aa
         </button>
         <div v-if="showFontSizePicker" class="absolute left-0 top-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-10 py-1 min-w-[80px]">
+          <button
+            @click="unsetFontSize"
+            class="block w-full px-4 py-1 text-left hover:bg-gray-100 dark:hover:bg-gray-700 whitespace-nowrap text-gray-500"
+          >
+            默认
+          </button>
           <button
             v-for="size in fontSizes"
             :key="size"
@@ -216,10 +504,11 @@ function setFontSize(size: string) {
       </div>
 
       <!-- 文字颜色 -->
-      <div class="relative">
+      <div class="relative dropdown-container">
         <button
-          @click="showColorPicker = !showColorPicker"
+          @click.stop="showColorPicker = !showColorPicker; showFontSizePicker = false; showHighlightPicker = false"
           class="editor-toolbar-btn"
+          :class="{ active: showColorPicker }"
           title="文字颜色"
         >
           <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
@@ -240,10 +529,11 @@ function setFontSize(size: string) {
       </div>
 
       <!-- 高亮颜色 -->
-      <div class="relative">
+      <div class="relative dropdown-container">
         <button
-          @click="showHighlightPicker = !showHighlightPicker"
+          @click.stop="showHighlightPicker = !showHighlightPicker; showColorPicker = false; showFontSizePicker = false"
           class="editor-toolbar-btn"
+          :class="{ active: showHighlightPicker }"
           title="高亮颜色"
         >
           <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
@@ -309,7 +599,7 @@ function setFontSize(size: string) {
         @click="setLink"
         class="editor-toolbar-btn"
         :class="{ active: editor?.isActive('link') }"
-        title="插入链接"
+        :title="editor?.isActive('link') ? '取消链接' : '插入链接'"
       >
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
@@ -361,6 +651,71 @@ function setFontSize(size: string) {
   padding: 0 2px;
 }
 
+/* 标题样式 */
+.editor-content .ProseMirror h1 {
+  font-size: 24px;
+  font-weight: 700;
+  color: #000;
+  margin: 1em 0 0.5em;
+}
+
+.editor-content .ProseMirror h2 {
+  font-size: 20px;
+  font-weight: 700;
+  color: #000;
+  margin: 1em 0 0.5em;
+}
+
+.editor-content .ProseMirror h3 {
+  font-size: 18px;
+  font-weight: 700;
+  color: #000;
+  margin: 1em 0 0.5em;
+}
+
+.dark .editor-content .ProseMirror h1,
+.dark .editor-content .ProseMirror h2,
+.dark .editor-content .ProseMirror h3 {
+  color: #fff;
+}
+
+/* 列表样式 */
+.editor-content .ProseMirror ul,
+.editor-content .ProseMirror ol {
+  padding-left: 1.5rem;
+  margin: 0.5em 0;
+}
+
+.editor-content .ProseMirror ul {
+  list-style-type: disc;
+}
+
+.editor-content .ProseMirror ol {
+  list-style-type: decimal;
+}
+
+.editor-content .ProseMirror li {
+  margin: 0.25em 0;
+}
+
+.editor-content .ProseMirror li p {
+  margin: 0;
+}
+
+/* 引用样式 */
+.editor-content .ProseMirror blockquote {
+  border-left: 4px solid #cbd5e1;
+  padding-left: 1rem;
+  margin: 1em 0;
+  color: #64748b;
+  font-style: italic;
+}
+
+.dark .editor-content .ProseMirror blockquote {
+  border-left-color: #475569;
+  color: #94a3b8;
+}
+
 /* 店铺链接颜色 */
 .editor-content .ProseMirror a {
   color: #0088CC;
@@ -378,5 +733,25 @@ function setFontSize(size: string) {
 
 .dark .editor-content .ProseMirror a:hover {
   color: #80bfff;
+}
+
+/* 格式刷模式样式 */
+.format-painter-mode {
+  border-color: #3b82f6 !important;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3);
+}
+
+.format-painter-mode .ProseMirror {
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%233b82f6' stroke-width='1.5'%3E%3Cpath d='M18 2L22 6'/%3E%3Crect x='14' y='4' width='7' height='4' rx='1' transform='rotate(45 14 4)'/%3E%3Cpath d='M13 9L4 18C3 19 3 20.5 4 21.5C5 22.5 6.5 22.5 7.5 21.5L16.5 12.5'/%3E%3Cpath d='M4.5 18.5L2 21'/%3E%3Cpath d='M6 20L3.5 22.5'/%3E%3Cpath d='M7.5 21.5L5 24'/%3E%3C/svg%3E") 2 18, auto !important;
+}
+
+.format-painter-btn.active {
+  background-color: #3b82f6 !important;
+  color: white !important;
+  border-radius: 4px;
+}
+
+.format-painter-btn.active svg {
+  stroke: white;
 }
 </style>

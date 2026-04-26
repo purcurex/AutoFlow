@@ -111,6 +111,17 @@ export const useNoteStore = defineStore('note', () => {
     folders.value = folders.value.filter(f => f.id !== id)
   }
 
+  async function reorderFolders(folderIds: string[]) {
+    await foldersApi.reorder(folderIds)
+    // 更新本地排序
+    folderIds.forEach((id, index) => {
+      const folder = folders.value.find(f => f.id === id)
+      if (folder) {
+        folder.sortOrder = index
+      }
+    })
+  }
+
   function setCurrentNote(note: Note | null) {
     currentNote.value = note
   }
@@ -141,6 +152,7 @@ export const useNoteStore = defineStore('note', () => {
     createFolder,
     updateFolder,
     deleteFolder,
+    reorderFolders,
     setCurrentNote,
     setCurrentFolder
   }

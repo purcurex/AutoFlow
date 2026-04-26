@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsBoolean, IsEnum, IsArray, IsNumber } from 'class-validator'
+import { IsString, IsOptional, IsBoolean, IsEnum, IsArray, IsNumber, IsNotEmpty } from 'class-validator'
 import { EditorType } from '../note.entity'
 
 export class CreateNoteDto {
@@ -54,5 +54,12 @@ export class UpdateNoteDto {
 export class ReorderNotesDto {
   @IsArray()
   @IsString({ each: true })
+  noteIds: string[]
+}
+
+export class ExportNotesDto {
+  @IsArray()
+  @IsString({ each: true })
+  @IsNotEmpty()
   noteIds: string[]
 }

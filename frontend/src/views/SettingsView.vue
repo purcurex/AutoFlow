@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { useUserStore } from '@/stores'
+import { useUserStore, useNoteStore } from '@/stores'
 import { AppLayout } from '@/components/layout'
+import { exportNotesToPdf } from '@/utils/export'
+import type { Note } from '@/types'
 
 const router = useRouter()
 const userStore = useUserStore()
+const noteStore = useNoteStore()
 
 const username = ref('')
 const email = ref('')
@@ -14,6 +17,7 @@ const isSaving = ref(false)
 const isUploadingAvatar = ref(false)
 const saveMessage = ref('')
 const avatarInput = ref<HTMLInputElement | null>(null)
+const isExporting = ref(false)
 
 onMounted(async () => {
   // 获取用户信息
@@ -23,6 +27,8 @@ onMounted(async () => {
     email.value = userStore.user.email
   }
   isDarkMode.value = document.documentElement.classList.contains('dark')
+  // 获取笔记列表
+  await noteStore.fetchNotes()
 })
 
 function toggleDarkMode() {
@@ -101,6 +107,35 @@ function goBack() {
 async function logout() {
   userStore.logout()
   router.push('/login')
+}
+
+// 导出所有笔记
+async function exportAllNotes() {
+  if (isExporting.value) return
+
+  // 获取所有笔记
+  const notes = noteStore.notes as Note[]
+  if (!notes || notes.length === 0) {
+    saveMessage.value = '没有笔记可导出'
+    setTimeout(() => { saveMessage.value = '' }, 2000)
+    return
+  }
+
+  isExporting.value = true
+  saveMessage.value = ''
+
+  try {
+    // 导出 PDF
+    await exportNotesToPdf(notes, userStore.user?.username)
+    saveMessage.value = `已导出 ${notes.length} 篇笔记`
+    setTimeout(() => { saveMessage.value = '' }, 3000)
+  } catch (error) {
+    console.error('导出失败:', error)
+    saveMessage.value = '导出失败，请重试'
+    setTimeout(() => { saveMessage.value = '' }, 2000)
+  } finally {
+    isExporting.value = false
+  }
 }
 </script>
 
@@ -217,19 +252,30 @@ async function logout() {
       <div class="card p-6 mb-6">
         <h2 class="text-lg font-semibold mb-4">数据管理</h2>
         <div class="space-y-3">
-          <button class="btn btn-secondary w-full justify-start gap-2">
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <button
+            @click="exportAllNotes"
+            class="btn btn-secondary w-full justify-start gap-2"
+            :disabled="isExporting"
+          >
+            <svg v-if="isExporting" class="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <svg v-else class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
             </svg>
-            导出所有笔记
+            {{ isExporting ? '导出中...' : '导出所有笔记 (PDF)' }}
           </button>
-          <button class="btn btn-secondary w-full justify-start gap-2">
+          <button class="btn btn-secondary w-full justify-start gap-2" disabled>
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
             </svg>
-            导入笔记
+            导入笔记 (开发中)
           </button>
         </div>
+        <p v-if="saveMessage" class="text-sm mt-2" :class="saveMessage.includes('导出') ? 'text-green-500' : 'text-red-500'">
+          {{ saveMessage }}
+        </p>
       </div>
 
       <!-- 退出登录 -->

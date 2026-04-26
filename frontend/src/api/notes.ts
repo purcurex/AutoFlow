@@ -1,6 +1,14 @@
 import api from './index'
 import type { Note, CreateNoteRequest, UpdateNoteRequest } from '@/types'
 
+export interface AdminNote extends Note {
+  user: {
+    id: string
+    username: string
+    email: string
+  }
+}
+
 export const notesApi = {
   getAll(): Promise<Note[]> {
     return api.get('/notes')
@@ -40,5 +48,20 @@ export const notesApi = {
 
   reorder(noteIds: string[]): Promise<{ message: string }> {
     return api.put('/notes/reorder', { noteIds })
+  },
+
+  exportExcel(noteIds: string[]): Promise<Blob> {
+    return api.post('/notes/export/excel', { noteIds }, {
+      responseType: 'blob'
+    })
+  },
+
+  // 管理员接口
+  adminGetAll(): Promise<AdminNote[]> {
+    return api.get('/notes/admin/all')
+  },
+
+  adminDelete(id: string): Promise<{ message: string }> {
+    return api.delete(`/notes/admin/${id}`)
   }
 }

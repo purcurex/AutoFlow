@@ -11,6 +11,7 @@ export const useUserStore = defineStore('user', () => {
 
   const isLoggedIn = computed(() => !!token.value)
   const username = computed(() => user.value?.username || '')
+  const isAdmin = computed(() => user.value?.role === 'admin')
   const avatarUrl = computed(() => {
     if (!user.value?.avatarUrl) return null
     // 如果是完整URL则直接返回，否则拼接API地址
@@ -25,14 +26,20 @@ export const useUserStore = defineStore('user', () => {
     token.value = response.token
     user.value = response.user
     localStorage.setItem('token', response.token)
+    localStorage.setItem('user', JSON.stringify(response.user))
     return response
   }
 
-  async function register(email: string, username: string, password: string) {
-    const response = await authApi.register({ email, username, password })
+  async function sendVerificationCode(email: string) {
+    return authApi.sendVerificationCode(email)
+  }
+
+  async function register(email: string, username: string, password: string, verificationCode: string) {
+    const response = await authApi.register({ email, username, password, verificationCode })
     token.value = response.token
     user.value = response.user
     localStorage.setItem('token', response.token)
+    localStorage.setItem('user', JSON.stringify(response.user))
     return response
   }
 
@@ -41,6 +48,7 @@ export const useUserStore = defineStore('user', () => {
     try {
       const response = await authApi.getProfile()
       user.value = response
+      localStorage.setItem('user', JSON.stringify(response))
     } catch {
       logout()
     }
@@ -62,6 +70,7 @@ export const useUserStore = defineStore('user', () => {
     user.value = null
     token.value = null
     localStorage.removeItem('token')
+    localStorage.removeItem('user')
   }
 
   return {
@@ -69,8 +78,10 @@ export const useUserStore = defineStore('user', () => {
     token,
     isLoggedIn,
     username,
+    isAdmin,
     avatarUrl,
     login,
+    sendVerificationCode,
     register,
     fetchUser,
     updateProfile,

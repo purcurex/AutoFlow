@@ -1,4 +1,4 @@
-import { IsString, IsOptional } from 'class-validator'
+import { IsString, IsOptional, IsArray } from 'class-validator'
 
 export class CreateFolderDto {
   @IsString()
@@ -20,4 +20,9 @@ export class UpdateFolderDto {
 
   @IsOptional()
   sortOrder?: number
+}
+
+export class ReorderFoldersDto {
+  @IsArray()
+  folderIds: string[]
 }

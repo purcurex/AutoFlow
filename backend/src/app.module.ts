@@ -8,6 +8,8 @@ import { FoldersModule } from './modules/folders/folders.module'
 import { AiModule } from './modules/ai/ai.module'
 import { ShopifySearchModule } from './modules/shopify-search/shopify-search.module'
 import { FacebookAdsModule } from './modules/facebook-ads/facebook-ads.module'
+import { SeederModule } from './modules/seeder/seeder.module'
+import { AutoflowModule } from './modules/autoflow/autoflow.module'
 
 @Module({
   imports: [
@@ -42,6 +44,8 @@ import { FacebookAdsModule } from './modules/facebook-ads/facebook-ads.module'
     AiModule,
     ShopifySearchModule,
     FacebookAdsModule,
+    AutoflowModule,
+    SeederModule,
   ],
 })
 export class AppModule {}

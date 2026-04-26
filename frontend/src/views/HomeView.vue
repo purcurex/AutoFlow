@@ -3,6 +3,8 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useNoteStore } from '@/stores'
 import { AppLayout } from '@/components/layout'
 import { RichTextEditor } from '@/components/editor'
+import { ExportDialog } from '@/components/export'
+import { AIChatPanel } from '@/components/ai'
 import { notesApi } from '@/api'
 import type { Note, Folder } from '@/types'
 
@@ -18,6 +20,12 @@ const showMoveDialog = ref(false)
 const showDeleteConfirm = ref<string | null>(null)
 const selectedNoteToMove = ref<string | null>(null)
 const draggedNoteId = ref<string | null>(null)
+
+// 导出相关
+const showExportDialog = ref(false)
+const notesToExport = ref<Note[]>([])
+const selectedNoteIds = ref<Set<string>>(new Set())
+const isSelectMode = ref(false)
 
 const displayedNotes = computed(() => {
   const notes = noteStore.filteredNotes || []
@@ -230,27 +238,134 @@ async function onDrop(targetNoteId: string) {
 function onDragOver(event: DragEvent) {
   event.preventDefault()
 }
+
+// 导出功能
+function exportCurrentNote() {
+  if (!noteStore.currentNote) return
+  notesToExport.value = [noteStore.currentNote]
+  showExportDialog.value = true
+}
+
+function toggleSelectMode() {
+  isSelectMode.value = !isSelectMode.value
+  if (!isSelectMode.value) {
+    selectedNoteIds.value.clear()
+  }
+}
+
+function toggleNoteSelection(noteId: string) {
+  if (selectedNoteIds.value.has(noteId)) {
+    selectedNoteIds.value.delete(noteId)
+  } else {
+    selectedNoteIds.value.add(noteId)
+  }
+}
+
+function selectAllNotes() {
+  // 如果已全选，则取消全选
+  if (isAllSelected.value) {
+    selectedNoteIds.value.clear()
+  } else {
+    // 否则全选
+    displayedNotes.value.forEach((note: Note) => {
+      selectedNoteIds.value.add(note.id)
+    })
+  }
+}
+
+const isAllSelected = computed(() => {
+  return displayedNotes.value.length > 0 && selectedNoteIds.value.size === displayedNotes.value.length
+})
+
+function exportSelectedNotes() {
+  if (selectedNoteIds.value.size === 0) return
+  notesToExport.value = displayedNotes.value.filter((note: Note) =>
+    selectedNoteIds.value.has(note.id)
+  )
+  showExportDialog.value = true
+}
+
+const selectedCount = computed(() => selectedNoteIds.value.size)
+
+// AI助手 - 插入文本到编辑器
+function insertAIText(text: string) {
+  if (content.value) {
+    content.value += '\n\n' + text
+  } else {
+    content.value = text
+  }
+  hasChanges.value = true
+}
 </script>
 
 <template>
   <AppLayout>
     <div class="flex h-full">
       <!-- 笔记列表 -->
-      <div class="w-64 border-r border-[var(--color-border)] flex flex-col">
+      <div class="w-80 border-r border-[var(--color-border)] flex flex-col">
         <div class="p-3 border-b border-[var(--color-border)] flex items-center justify-between">
           <h2 class="text-sm font-medium text-gray-500">
             {{ noteStore.currentFolder?.name || '所有笔记' }}
             <span class="text-gray-400">({{ displayedNotes.length }})</span>
+            <span v-if="isSelectMode && selectedCount > 0" class="text-primary-500 ml-2">
+              (已选 {{ selectedCount }} 篇)
+            </span>
           </h2>
-          <button
-            @click="createNewNote"
-            class="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-primary-500"
-            title="新建笔记"
-          >
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-            </svg>
-          </button>
+          <div class="flex items-center gap-1">
+            <button
+              v-if="!isSelectMode"
+              @click="toggleSelectMode"
+              class="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500"
+              title="批量选择"
+            >
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+              </svg>
+            </button>
+            <template v-else>
+              <button
+                @click="selectAllNotes"
+                class="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
+                :class="isAllSelected ? 'text-green-500' : 'text-gray-500'"
+                :title="isAllSelected ? '取消全选' : '全选'"
+              >
+                <div class="w-5 h-5 rounded border-2 flex items-center justify-center"
+                  :class="isAllSelected ? 'bg-green-500 border-green-500' : 'border-gray-400'">
+                  <svg v-if="isAllSelected" class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+              </button>
+              <button
+                @click="exportSelectedNotes"
+                class="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-primary-500"
+                :disabled="selectedCount === 0"
+                title="导出选中"
+              >
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+              </button>
+              <button
+                @click="toggleSelectMode"
+                class="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500"
+                title="取消选择"
+              >
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </template>
+            <button
+              @click="createNewNote"
+              class="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-primary-500"
+              title="新建笔记"
+            >
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+              </svg>
+            </button>
+          </div>
         </div>
         <div class="flex-1 overflow-auto">
           <div
@@ -258,16 +373,29 @@ function onDragOver(event: DragEvent) {
             :key="note.id"
             class="p-3 border-b border-[var(--color-border)] cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors group"
             :class="{
-              'bg-primary-50 dark:bg-primary-900/20': noteStore.currentNote?.id === note.id,
-              'opacity-50': draggedNoteId === note.id
+              'bg-primary-50 dark:bg-primary-900/20': noteStore.currentNote?.id === note.id && !isSelectMode,
+              'opacity-50': draggedNoteId === note.id,
+              'bg-green-50 dark:bg-green-900/20': isSelectMode && selectedNoteIds.has(note.id),
+              'ring-2 ring-green-500': isSelectMode && selectedNoteIds.has(note.id)
             }"
-            draggable="true"
+            :draggable="!isSelectMode"
             @dragstart="onDragStart(note.id)"
             @dragend="onDragEnd"
             @dragover="onDragOver"
             @drop="onDrop(note.id)"
           >
-            <div class="flex items-start justify-between" @click="selectNote(note.id)">
+            <div class="flex items-start justify-between" @click="isSelectMode ? toggleNoteSelection(note.id) : selectNote(note.id)">
+              <!-- 选择模式下显示复选框 -->
+              <div v-if="isSelectMode" class="flex items-center gap-2 mr-2">
+                <div
+                  class="w-4 h-4 rounded border-2 flex items-center justify-center transition-colors"
+                  :class="selectedNoteIds.has(note.id) ? 'bg-green-500 border-green-500' : 'border-gray-300'"
+                >
+                  <svg v-if="selectedNoteIds.has(note.id)" class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+              </div>
               <div class="flex-1 min-w-0">
                 <h3 class="font-medium text-sm truncate">{{ note.title || '无标题' }}</h3>
                 <p class="text-xs text-gray-500 truncate mt-1">
@@ -352,6 +480,17 @@ function onDragOver(event: DragEvent) {
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
                 </svg>
                 AI
+              </button>
+
+              <button
+                @click="exportCurrentNote"
+                class="btn btn-secondary text-sm gap-1"
+                title="导出笔记"
+              >
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                导出
               </button>
             </div>
           </div>
@@ -456,5 +595,19 @@ function onDragOver(event: DragEvent) {
         </div>
       </div>
     </Teleport>
+
+    <!-- 导出对话框 -->
+    <ExportDialog
+      :visible="showExportDialog"
+      :notes="notesToExport"
+      @close="showExportDialog = false"
+    />
+
+    <!-- AI助手面板 -->
+    <AIChatPanel
+      v-model:visible="showAIAssistant"
+      :note-content="content"
+      @insert-text="insertAIText"
+    />
   </AppLayout>
 </template>

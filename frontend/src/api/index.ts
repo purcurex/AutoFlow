@@ -1,4 +1,4 @@
-import axios from 'axios'
+﻿import axios from 'axios'
 import { useUserStore } from '@/stores/user'
 
 export { authApi } from './auth'
@@ -6,16 +6,16 @@ export { notesApi } from './notes'
 export { foldersApi } from './folders'
 export { aiApi } from './ai'
 export { shopifySearchApi } from './shopify-search'
+export { autoflowApi } from './autoflow'
 
 const api = axios.create({
-  baseURL: '/api',  // 使用相对路径，通过 Vite 代理访问后端
+  baseURL: '/api',
   timeout: 30000,
   headers: {
-    'Content-Type': 'application/json'
-  }
+    'Content-Type': 'application/json',
+  },
 })
 
-// 请求拦截器
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token')
@@ -24,12 +24,9 @@ api.interceptors.request.use(
     }
     return config
   },
-  (error) => {
-    return Promise.reject(error)
-  }
+  (error) => Promise.reject(error),
 )
 
-// 响应拦截器
 api.interceptors.response.use(
   (response) => response.data,
   (error) => {
@@ -39,7 +36,7 @@ api.interceptors.response.use(
       window.location.href = '/login'
     }
     return Promise.reject(error.response?.data || error)
-  }
+  },
 )
 
 export default api

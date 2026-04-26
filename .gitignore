@@ -1,9 +1,13 @@
 # Dependencies
 node_modules/
+**/node_modules/
 
 # Build outputs
 dist/
 build/
+**/dist/
+deploy/backend/
+deploy/frontend/
 
 # Environment files
 .env

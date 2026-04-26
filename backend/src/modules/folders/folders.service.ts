@@ -2,12 +2,15 @@ import { Injectable, NotFoundException, ConflictException } from '@nestjs/common
 import { InjectRepository } from '@nestjs/typeorm'
 import { Repository, IsNull } from 'typeorm'
 import { Folder } from './folder.entity'
+import { Note } from '../notes/note.entity'
 
 @Injectable()
 export class FoldersService {
   constructor(
     @InjectRepository(Folder)
     private foldersRepository: Repository<Folder>,
+    @InjectRepository(Note)
+    private notesRepository: Repository<Note>,
   ) {}
 
   async findAll(userId: string): Promise<Folder[]> {
@@ -76,6 +79,26 @@ export class FoldersService {
       throw new ConflictException('该文件夹下有子文件夹，无法删除')
     }
 
+    // 检查是否有笔记
+    const notesCount = await this.notesRepository.count({
+      where: { folderId: id },
+    })
+    if (notesCount > 0) {
+      throw new ConflictException('该文件夹下有笔记，请先移动或删除笔记')
+    }
+
     await this.foldersRepository.remove(folder)
+  }
+
+  /**
+   * 重新排序文件夹
+   */
+  async reorder(userId: string, folderIds: string[]): Promise<void> {
+    for (let i = 0; i < folderIds.length; i++) {
+      await this.foldersRepository.update(
+        { id: folderIds[i], userId },
+        { sortOrder: i }
+      )
+    }
   }
 }

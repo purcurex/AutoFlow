@@ -1,4 +1,4 @@
-import api from './index'
+import axios from 'axios'
 
 /**
  * 域名流量信息
@@ -34,13 +34,44 @@ export interface ShopifySearchResult {
   error?: string
 }
 
+// 创建专门用于 Shopify 搜索的 axios 实例，设置更长的超时时间
+const shopifyApi = axios.create({
+  baseURL: '/api/shopify-search',
+  timeout: 60000, // 60 秒超时，因为搜索需要调用多个外部 API
+  headers: {
+    'Content-Type': 'application/json'
+  }
+})
+
+// 请求拦截器
+shopifyApi.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('token')
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`
+    }
+    return config
+  },
+  (error) => {
+    return Promise.reject(error)
+  }
+)
+
+// 响应拦截器
+shopifyApi.interceptors.response.use(
+  (response) => response.data,
+  (error) => {
+    return Promise.reject(error.response?.data || error)
+  }
+)
+
 export const shopifySearchApi = {
   async searchByImageUrl(imageUrl: string): Promise<ShopifySearchResult> {
-    return api.post('/shopify-search/by-image-url', { imageUrl })
+    return shopifyApi.post('/by-image-url', { imageUrl })
   },
 
   async searchByKeyword(keyword: string): Promise<ShopifySearchResult> {
-    return api.post('/shopify-search/by-keyword', { keyword })
+    return shopifyApi.post('/by-keyword', { keyword })
   },
 
   async searchByImageUpload(file: File): Promise<ShopifySearchResult> {
