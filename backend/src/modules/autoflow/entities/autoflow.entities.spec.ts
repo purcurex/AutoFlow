@@ -15,6 +15,7 @@ import { AdCreativeEntity, ShopifyStoreEntity } from '../../discovery/entities'
 import { QuotationEntity } from '../../quotation/entities/quotation.entity'
 import { QuotationVersionEntity } from '../../quotation/entities/quotation-version.entity'
 import { FopHandoffEntity } from '../../fop-integration/fop-handoff.entity'
+import { AuditEventEntity } from '../../observability/audit-event.entity'
 
 describe('AutoFlow persistence entities', () => {
   const storage = getMetadataArgsStorage()
@@ -34,6 +35,7 @@ describe('AutoFlow persistence entities', () => {
     [QuotationEntity, 'quotations'],
     [QuotationVersionEntity, 'quotation_versions'],
     [FopHandoffEntity, 'fop_handoffs'],
+    [AuditEventEntity, 'audit_events'],
   ])('maps %p to table %s', (entity, tableName) => {
     const table = storage.tables.find((metadata) => metadata.target === entity)
 
@@ -92,6 +94,7 @@ describe('AutoFlow persistence entities', () => {
         'idx_quotation_versions_quote_created_at',
         'idx_fop_handoffs_owner_updated_at',
         'idx_outreach_tasks_template_key',
+        'idx_audit_events_correlation_id',
       ]),
     )
   })

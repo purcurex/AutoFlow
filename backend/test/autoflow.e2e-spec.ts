@@ -118,6 +118,26 @@ describe('AutoFlow persistence API', () => {
     expect(otherList.body.items).toHaveLength(0)
   })
 
+  it('propagates correlation IDs and persists payload-free write audits', async () => {
+    const correlationId = 'e2e-correlation-0001'
+    const created = await request(app.getHttpServer())
+      .post('/api/autoflow/workflows')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .set('X-Correlation-ID', correlationId)
+      .send({ seedType: 'keyword', seedValue: 'audit test product', targetMarket: 'United States' })
+      .expect(201)
+    expect(created.headers['x-correlation-id']).toBe(correlationId)
+
+    const events = await request(app.getHttpServer())
+      .get('/api/autoflow/audit-events')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .expect(200)
+    const event = events.body.find((item: { correlationId: string }) => item.correlationId === correlationId)
+    expect(event).toMatchObject({ actorUserId: ownerUserId, outcome: 'succeeded' })
+    expect(event.metadata).toEqual(expect.objectContaining({ statusCode: 201 }))
+    expect(event.metadata).not.toHaveProperty('body')
+  })
+
   it('rejects unexpected profile properties instead of escalating a user role', async () => {
     await request(app.getHttpServer())
       .put('/api/users/profile')

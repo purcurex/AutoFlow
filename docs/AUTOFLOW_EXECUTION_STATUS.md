@@ -477,3 +477,22 @@ Verification:
 - AI, outreach service, and migration tests: 18 passed.
 - PostgreSQL E2E: 9 passed, including WhatsApp target selection, template identity, and encoded send URL.
 - Local database migration `AddOutreachDeliveryContext1784716000000` applied successfully.
+
+## 22. 2026-07-22 Audit And Observability
+
+Completed operational visibility:
+
+- Added accepted-or-generated `X-Correlation-ID` propagation on every API request/response.
+- Added structured request completion logs with correlation ID, method, path, status, outcome, duration, and actor ID.
+- Added persistent write-operation audit events for successful and failed POST/PUT/PATCH/DELETE requests.
+- Audit records intentionally exclude request/response bodies, authorization headers, credentials, and provider secrets.
+- Added owner-scoped audit history at `/api/autoflow/audit-events`.
+- Extended public health output with aggregate workflow queue status and stale-lease counts only.
+- Added server warning signals when failed jobs or stale leases require attention.
+
+Verification:
+
+- Migration/entity tests: 37 passed.
+- PostgreSQL E2E: 10 passed, including correlation response propagation and payload-free audit persistence.
+- Full lint and backend build passed.
+- Local database migration `AddAuditEvents1784717000000` applied successfully.

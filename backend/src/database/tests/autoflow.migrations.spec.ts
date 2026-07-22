@@ -10,6 +10,7 @@ import { AddDiscoveryVerificationEvidence1784713000000 } from '../migrations/178
 import { AddQuotationSnapshots1784714000000 } from '../migrations/1784714000000-AddQuotationSnapshots'
 import { AddFopHandoffs1784715000000 } from '../migrations/1784715000000-AddFopHandoffs'
 import { AddOutreachDeliveryContext1784716000000 } from '../migrations/1784716000000-AddOutreachDeliveryContext'
+import { AddAuditEvents1784717000000 } from '../migrations/1784717000000-AddAuditEvents'
 
 describe('AutoFlow core migration', () => {
   function createQueryRunner() {
@@ -153,5 +154,15 @@ describe('P1 contract and discovery-link migrations', () => {
     expect(sql).toContain('"target_contact" varchar(500)')
     expect(sql).toContain('"subject" varchar(200)')
     expect(sql).toContain('"template_key" varchar(80)')
+  })
+
+  it('adds correlation-aware audit events without request payloads', async () => {
+    const queryRunner = createQueryRunner()
+    await new AddAuditEvents1784717000000().up(queryRunner)
+    const sql = (queryRunner.query as jest.Mock).mock.calls.map(([statement]) => statement).join('\n')
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS "audit_events"')
+    expect(sql).toContain('"correlation_id" varchar(80)')
+    expect(sql).toContain('"idx_audit_events_actor_created_at"')
+    expect(sql).not.toContain('request_body')
   })
 })

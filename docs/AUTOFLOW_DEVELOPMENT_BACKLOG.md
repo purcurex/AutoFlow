@@ -131,6 +131,9 @@ When work is interrupted, resume in this order:
 - [x] Add a production startup + `/api/health` CI smoke test.
 - [x] Sanitize rich-text `v-html` rendering and add security headers/CSP.
 - [x] Harden the frontend admin route fallback and align password validation with the backend.
+- [x] Add request correlation IDs and structure access completion logs.
+- [x] Persist redacted write-operation audit events without request bodies or secrets.
+- [x] Add workflow queue health metrics and stale/failed warning signals.
 
 ### P2-D Production Discovery And Execution Hardening
 

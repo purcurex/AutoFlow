@@ -16,6 +16,7 @@ import { validateEnvironment } from './config/environment'
 import { HealthModule } from './modules/health/health.module'
 import { FopIntegrationModule } from './modules/fop-integration/fop-integration.module'
 import { QuotationModule } from './modules/quotation/quotation.module'
+import { ObservabilityModule } from './modules/observability/observability.module'
 
 @Module({
   imports: [
@@ -64,6 +65,7 @@ import { QuotationModule } from './modules/quotation/quotation.module'
     HealthModule,
     FopIntegrationModule,
     QuotationModule,
+    ObservabilityModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
