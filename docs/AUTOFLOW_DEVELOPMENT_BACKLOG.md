@@ -171,13 +171,14 @@ When work is interrupted, resume in this order:
 
 - [x] Define `FopProductCostPort`.
 - [x] Define `FopLogisticsRatePort`.
-- [ ] Define integration-call status, idempotency, correlation, timeout, and retry contracts.
-- [ ] Add explicit test adapters and fixtures for development/test only.
-- [ ] Return a clear unavailable response when production FOP configuration is absent.
-- [ ] Preserve source, external request ID, version/effective time, expiration, units, and currency.
+- [x] Define integration-call status, idempotency, correlation, timeout, and retry contracts.
+- [x] Add explicit test adapters and fixtures for development/test only.
+- [x] Return a clear unavailable response when production FOP configuration is absent.
+- [x] Preserve source, external request ID, version/effective time, expiration, units, and currency.
 - [x] Add authenticated FOP capability discovery that fails closed until live adapters exist.
 - [x] Ensure no local mock or estimate is presented as a real FOP price.
-- [ ] Add product-tier, multi-country freight, matrix, validation, failure, and duplicate-request tests.
+- [x] Add product-tier, multi-country freight, validation, unavailable, and contract-identity tests.
+- [ ] Add live matrix, provider failure, timeout, and duplicate-request reconciliation tests.
 
 ### P4-C Live FOP Enablement Gate
 

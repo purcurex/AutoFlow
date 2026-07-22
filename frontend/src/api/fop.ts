@@ -10,6 +10,8 @@ export interface FopCapability {
 export interface FopCapabilities {
   provider: 'fop'
   platform: 'kingdee-cloud-cosmic'
+  mode: 'disabled' | 'sandbox' | 'live'
+  syntheticData: boolean
   productCost: FopCapability
   logisticsRate: FopCapability
   crmHandoff: FopCapability

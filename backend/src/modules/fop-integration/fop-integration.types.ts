@@ -1,13 +1,17 @@
 export type FopCapabilityStatus = 'not_implemented' | 'not_configured' | 'available' | 'unavailable'
+export type FopIntegrationMode = 'disabled' | 'sandbox' | 'live'
 
 export interface FopCapability {
   status: FopCapabilityStatus
   available: boolean
+  reason?: string
 }
 
 export interface FopCapabilities {
   provider: 'fop'
   platform: 'kingdee-cloud-cosmic'
+  mode: FopIntegrationMode
+  syntheticData: boolean
   productCost: FopCapability
   logisticsRate: FopCapability
   crmHandoff: FopCapability

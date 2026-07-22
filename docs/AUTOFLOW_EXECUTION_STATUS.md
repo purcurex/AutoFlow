@@ -419,3 +419,25 @@ Verification:
 - PostgreSQL E2E: 8 passed, including owner isolation and version 1 to version 2 snapshots.
 - Full backend/frontend lint and production build passed.
 - Local database migration `AddQuotationSnapshots1784714000000` applied successfully.
+
+## 19. 2026-07-22 FOP Modes And Contract Fixtures
+
+Completed FOP integration preparation:
+
+- Added explicit `disabled`, non-production `sandbox`, and `live` modes.
+- Added fail-closed capability reasons and a `syntheticData` marker.
+- Added deterministic development/test adapters for product cost, logistics rates, and CRM handoff.
+- Added contract reconciliation tests for product lines, quantity tiers, currencies, countries, channels, request identity, and source version.
+- Prohibited sandbox capability advertisement in production.
+- Added `AUTOFLOW_FOP_CONFIGURATION_INVENTORY.md` with required configuration, authentication questions, operation/form IDs, field mappings, error cases, and live reconciliation gate.
+- Updated `.env.example` with AutoFlow database naming, storefront controls, and FOP configuration placeholders.
+
+Verification:
+
+- FOP capability and contract tests: 6 passed.
+- PostgreSQL application E2E: 8 passed with default FOP mode remaining unavailable.
+- Full lint and backend build passed.
+
+External gate:
+
+- Live mode remains unavailable until Kingdee Cloud Cosmic endpoints/operation IDs, credentials, field mappings, and approved sandbox evidence are supplied and reconciled.
