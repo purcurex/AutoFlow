@@ -78,6 +78,11 @@ export interface OutreachTask {
   channel: OutreachChannel
   status: OutreachStatus
   message: string
+  targetContact: string | null
+  subject: string | null
+  templateKey: string
+  sendUrl: string | null
+  recommendedNextAction: string
   nextFollowUpAt: string | null
   owner: string
 }

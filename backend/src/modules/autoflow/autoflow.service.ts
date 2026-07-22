@@ -16,6 +16,7 @@ import {
   LEAD_STATUS_TRANSITIONS,
   LeadStatus,
   OUTREACH_STATUS_TRANSITIONS,
+  OutreachChannel,
   OutreachTask,
   PaginatedResult,
   StoreLead,
@@ -25,6 +26,7 @@ import {
 import {
   CrmActivityEntity,
   LeadEntity,
+  LeadContactEntity,
   OutreachTaskEntity,
   WorkflowRunEntity,
   WorkflowStepEntity,
@@ -217,10 +219,14 @@ export class AutoflowService {
     leadId: string,
     data: GenerateMessageDto,
   ): Promise<OutreachTask> {
-    const lead = await this.leadRepository.findOne({ where: { id: leadId, ownerUserId } })
+    const lead = await this.leadRepository.findOne({
+      where: { id: leadId, ownerUserId },
+      relations: { contacts: true },
+    })
     if (!lead) throw new NotFoundException('Lead not found')
 
     const channel = data.channel || 'whatsapp'
+    const targetContact = this.selectContact(lead.contacts || [], channel)
     const message = await this.aiService.generateSalesOutreach({
       channel,
       language: data.language || lead.language || 'English',
@@ -240,6 +246,9 @@ export class AutoflowService {
         channel,
         status: 'draft',
         message,
+        targetContact,
+        subject: channel === 'email' ? `Sourcing support for ${lead.brandName}` : null,
+        templateKey: `${channel}-first-touch-v1`,
         nextFollowUpAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
         sentAt: null,
         repliedAt: null,
@@ -427,8 +436,50 @@ export class AutoflowService {
       channel: task.channel,
       status: task.status,
       message: task.message,
+      targetContact: task.targetContact,
+      subject: task.subject,
+      templateKey: task.templateKey,
+      sendUrl: this.buildSendUrl(task),
+      recommendedNextAction: this.recommendedNextAction(task),
       nextFollowUpAt: task.nextFollowUpAt?.toISOString() || null,
       owner: task.owner?.username || 'Unassigned',
     }
+  }
+
+  private selectContact(
+    contacts: LeadContactEntity[],
+    channel: OutreachChannel,
+  ): string | null {
+    const preferredTypes = channel === 'email'
+      ? ['email']
+      : channel === 'whatsapp' ? ['whatsapp', 'phone'] : [channel]
+    return [...contacts]
+      .filter((contact) => preferredTypes.includes(contact.type))
+      .sort((a, b) => Number(b.verified) - Number(a.verified) || b.confidence - a.confidence)[0]?.value || null
+  }
+
+  private buildSendUrl(task: OutreachTaskEntity): string | null {
+    if (!task.targetContact) return null
+    if (task.channel === 'email') {
+      return `mailto:${encodeURIComponent(task.targetContact)}?subject=${encodeURIComponent(task.subject || '')}&body=${encodeURIComponent(task.message)}`
+    }
+    if (task.channel === 'whatsapp') {
+      const digits = task.targetContact.replace(/.*wa\.me\//i, '').split(/[?/#]/)[0].replace(/\D/g, '')
+      return digits ? `https://wa.me/${digits}?text=${encodeURIComponent(task.message)}` : null
+    }
+    return /^https:\/\//i.test(task.targetContact) ? task.targetContact : null
+  }
+
+  private recommendedNextAction(task: OutreachTaskEntity): string {
+    if (task.status === 'draft') return 'Review and approve the message'
+    if (task.status === 'ready') return task.targetContact
+      ? `Open ${task.channel} and send manually`
+      : `Add a verified ${task.channel} contact before sending`
+    if (task.status === 'sent') return task.nextFollowUpAt
+      ? `Follow up on ${task.nextFollowUpAt.toISOString()}`
+      : 'Schedule a follow-up'
+    if (task.status === 'replied') return 'Qualify the reply and prepare a quote'
+    if (task.status === 'failed') return 'Review the contact and retry'
+    return 'No action required'
   }
 }

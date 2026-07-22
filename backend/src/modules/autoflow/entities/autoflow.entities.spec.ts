@@ -91,6 +91,7 @@ describe('AutoFlow persistence entities', () => {
         'idx_quotations_owner_updated_at',
         'idx_quotation_versions_quote_created_at',
         'idx_fop_handoffs_owner_updated_at',
+        'idx_outreach_tasks_template_key',
       ]),
     )
   })

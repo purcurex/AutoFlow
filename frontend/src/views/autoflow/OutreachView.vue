@@ -2,7 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useAutoFlowStore } from '@/stores'
 import { AppLayout } from '@/components/layout'
-import { CheckCircle2, MessageSquareReply, RotateCcw, Send, SkipForward } from 'lucide-vue-next'
+import { CheckCircle2, ExternalLink, MessageSquareReply, RotateCcw, Send, SkipForward } from 'lucide-vue-next'
 
 const store = useAutoFlowStore()
 const status = ref('all')
@@ -48,9 +48,14 @@ function nextPrimaryAction(task: { status: string }) {
           <div class="flex flex-wrap items-center justify-between gap-3">
             <div>
               <p class="font-semibold capitalize">{{ task.channel }} task</p>
-              <p class="text-sm text-slate-500">Owner {{ task.owner }} · follow up {{ task.nextFollowUpAt }}</p>
+              <p class="text-sm text-slate-500">Owner {{ task.owner }} | follow up {{ task.nextFollowUpAt || 'not scheduled' }}</p>
+              <p class="mt-1 text-xs text-slate-500">{{ task.recommendedNextAction }}</p>
             </div>
             <div class="flex gap-2">
+              <a v-if="task.status === 'ready' && task.sendUrl" :href="task.sendUrl" target="_blank" rel="noopener noreferrer" class="btn btn-secondary gap-2 text-sm">
+                <ExternalLink class="h-4 w-4" />
+                Open {{ task.channel }}
+              </a>
               <button v-if="['draft', 'ready', 'failed'].includes(task.status)" class="btn btn-secondary gap-2 text-sm" @click="store.updateOutreachTask(task.id, { status: 'skipped' })">
                 <SkipForward class="h-4 w-4" />
                 Skip
@@ -62,6 +67,7 @@ function nextPrimaryAction(task: { status: string }) {
             </div>
           </div>
           <p class="mt-4 whitespace-pre-wrap rounded-lg bg-slate-50 p-3 text-sm leading-6 dark:bg-slate-800">{{ task.message }}</p>
+          <p v-if="task.subject" class="mt-2 text-xs text-slate-500">Subject: {{ task.subject }}</p>
         </article>
         <div v-if="tasks.length === 0" class="rounded-lg border border-slate-200 bg-white p-8 text-center text-slate-500 dark:border-slate-800 dark:bg-slate-900">
           No outreach tasks in this status.

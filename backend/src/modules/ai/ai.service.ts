@@ -37,6 +37,12 @@ export class AiService implements OnModuleInit {
     evidenceSummary: string
     offer: string
   }): Promise<string> {
+    const channelGuidance = ({
+      whatsapp: 'Write at most 70 words. Use short conversational paragraphs. Do not include a subject line.',
+      email: 'Write at most 130 words. Use three short paragraphs. Do not include a subject line.',
+      instagram: 'Write at most 60 words for a direct message. Do not include a subject line.',
+      facebook: 'Write at most 70 words for a direct message. Do not include a subject line.',
+    } as Record<string, string>)[input.channel] || 'Write at most 100 words. Do not include a subject line.'
     const systemPrompt = `You write concise first-touch outbound messages for a Dropshipping supply-chain sales team.
 The prospect is an overseas small business. Use only the supplied facts, never invent performance claims, contacts, ad details, or pricing.
 Make the message specific, respectful, low-pressure, and suitable for human review before sending.
@@ -50,6 +56,7 @@ Return only the message body in the requested language. Do not add analysis, hea
       `Market: ${input.country || 'Unknown'}`,
       `Available lead context: ${input.evidenceSummary || 'No additional evidence'}`,
       `Offer: ${input.offer}`,
+      `Template rules: ${channelGuidance}`,
       'Write one short opening message with one clear call to action.',
     ].join('\n')
     return this.generateWithSystem(systemPrompt, userPrompt)

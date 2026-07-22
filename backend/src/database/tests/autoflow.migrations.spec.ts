@@ -9,6 +9,7 @@ import { AddWorkflowJobQueue1784712000000 } from '../migrations/1784712000000-Ad
 import { AddDiscoveryVerificationEvidence1784713000000 } from '../migrations/1784713000000-AddDiscoveryVerificationEvidence'
 import { AddQuotationSnapshots1784714000000 } from '../migrations/1784714000000-AddQuotationSnapshots'
 import { AddFopHandoffs1784715000000 } from '../migrations/1784715000000-AddFopHandoffs'
+import { AddOutreachDeliveryContext1784716000000 } from '../migrations/1784716000000-AddOutreachDeliveryContext'
 
 describe('AutoFlow core migration', () => {
   function createQueryRunner() {
@@ -143,5 +144,14 @@ describe('P1 contract and discovery-link migrations', () => {
     expect(sql).toContain('"uq_fop_handoffs_idempotency_key"')
     expect(sql).toContain('"fop_opportunity_id" varchar(160)')
     expect(sql).toContain('"conflicts" jsonb')
+  })
+
+  it('adds reviewed outreach delivery targets and template identity', async () => {
+    const queryRunner = createQueryRunner()
+    await new AddOutreachDeliveryContext1784716000000().up(queryRunner)
+    const sql = (queryRunner.query as jest.Mock).mock.calls.map(([statement]) => statement).join('\n')
+    expect(sql).toContain('"target_contact" varchar(500)')
+    expect(sql).toContain('"subject" varchar(200)')
+    expect(sql).toContain('"template_key" varchar(80)')
   })
 })

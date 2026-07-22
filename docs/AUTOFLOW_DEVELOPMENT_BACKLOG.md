@@ -145,11 +145,11 @@ When work is interrupted, resume in this order:
 ## 4. P3 AI Outreach Tasks
 
 - [x] Rewrite AI system prompt for Dropshipping sales outreach.
-- [ ] Add message templates for WhatsApp and Email.
+- [x] Add message templates for WhatsApp and Email.
 - [x] Add persistent lead context to AI outreach generation.
 - [x] Generate outreach task from lead detail.
 - [x] Add human-review `draft -> ready` status flow.
-- [ ] Add next follow-up suggestion.
+- [x] Add next follow-up suggestion.
 - [x] Test AI unavailable behavior.
 - [x] Test outreach task creation.
 

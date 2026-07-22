@@ -316,12 +316,31 @@ describe('AutoFlow persistence API', () => {
   })
 
   it('reviews outreach before updating lead and local follow-up activity', async () => {
+    await dataSource.getRepository(LeadContactEntity).save({
+      leadId,
+      type: 'whatsapp',
+      value: 'https://wa.me/15551234567',
+      label: 'Sales WhatsApp',
+      verified: true,
+      isPrimary: true,
+      sourceUrl: 'https://example.test/contact',
+      sourceType: 'e2e_fixture',
+      verificationStatus: 'verified',
+      confidence: 100,
+      evidence: {},
+    })
     const generated = await request(app.getHttpServer())
       .post(`/api/autoflow/leads/${leadId}/messages`)
       .set('Authorization', `Bearer ${ownerToken}`)
       .send({ channel: 'whatsapp', offer: 'fast fulfillment' })
       .expect(201)
     expect(generated.body.status).toBe('draft')
+    expect(generated.body).toMatchObject({
+      targetContact: 'https://wa.me/15551234567',
+      templateKey: 'whatsapp-first-touch-v1',
+      recommendedNextAction: 'Review and approve the message',
+    })
+    expect(generated.body.sendUrl).toContain('https://wa.me/15551234567?text=')
 
     await request(app.getHttpServer())
       .patch(`/api/autoflow/outreach-tasks/${generated.body.id}`)

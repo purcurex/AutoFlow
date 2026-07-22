@@ -23,6 +23,7 @@ import { LeadEntity } from './lead.entity'
 @Index('idx_outreach_tasks_team_id', ['teamId'])
 @Index('idx_outreach_tasks_next_follow_up_at', ['nextFollowUpAt'])
 @Index('idx_outreach_tasks_created_at', ['createdAt'])
+@Index('idx_outreach_tasks_template_key', ['templateKey'])
 export class OutreachTaskEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string
@@ -53,6 +54,15 @@ export class OutreachTaskEntity {
 
   @Column({ type: 'text' })
   message: string
+
+  @Column({ name: 'target_contact', type: 'varchar', length: 500, nullable: true })
+  targetContact: string | null
+
+  @Column({ type: 'varchar', length: 200, nullable: true })
+  subject: string | null
+
+  @Column({ name: 'template_key', type: 'varchar', length: 80 })
+  templateKey: string
 
   @Column({ name: 'next_follow_up_at', type: 'timestamptz', nullable: true })
   nextFollowUpAt: Date | null

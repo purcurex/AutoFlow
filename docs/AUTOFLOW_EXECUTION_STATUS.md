@@ -460,3 +460,20 @@ Verification:
 - PostgreSQL E2E: 9 passed, including owner isolation, retry attempt increment, stable idempotency key, and one-row uniqueness.
 - Full lint and production build passed.
 - Local database migration `AddFopHandoffs1784715000000` applied successfully.
+
+## 21. 2026-07-22 Semi-Automated Outreach Delivery
+
+Completed outreach ergonomics:
+
+- Added channel-specific WhatsApp, Email, Instagram, and Facebook AI template rules.
+- Added persisted target contact, Email subject, and template version to outreach tasks.
+- Selects the highest-confidence verified contact for the requested channel.
+- Added WhatsApp and Email deep links only after human approval; AutoFlow does not send automatically.
+- Added state-aware next-action suggestions for review, manual send, follow-up, reply qualification, and retry.
+- Added visible subject, next action, and manual channel-open action in the outreach queue.
+
+Verification:
+
+- AI, outreach service, and migration tests: 18 passed.
+- PostgreSQL E2E: 9 passed, including WhatsApp target selection, template identity, and encoded send URL.
+- Local database migration `AddOutreachDeliveryContext1784716000000` applied successfully.
