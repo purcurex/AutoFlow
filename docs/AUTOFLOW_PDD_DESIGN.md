@@ -138,6 +138,26 @@ Initial entities:
 
 - `AuditEventEntity`
 
+### 3.8 P1-A Persistence Schema
+
+| Entity | Table | Ownership | Main Relations |
+|---|---|---|---|
+| `WorkflowRunEntity` | `workflow_runs` | `owner_user_id`, optional `team_id` | Has workflow steps and discovered leads |
+| `WorkflowStepEntity` | `workflow_steps` | Inherited from workflow | Belongs to one workflow run; one row per stage |
+| `LeadEntity` | `leads` | `owner_user_id`, optional `team_id` | Optionally belongs to a workflow; has contacts, outreach tasks, and CRM activities |
+| `LeadContactEntity` | `lead_contacts` | Inherited from lead | Belongs to one lead; unique by lead, type, and value |
+| `OutreachTaskEntity` | `outreach_tasks` | `owner_user_id`, optional `team_id` | Belongs to one lead |
+| `CrmActivityEntity` | `crm_activities` | `owner_user_id`, optional `team_id` | Belongs to one lead and records timeline/follow-up data |
+
+Persistence rules:
+
+- Workflow progress and lead score columns are constrained to `0..100`.
+- Workflow stages, lead statuses, outreach statuses, contact types, and CRM activity types use named PostgreSQL enums.
+- Query indexes cover ownership, workflow relation, lead status, follow-up time, and created/updated timestamps.
+- `team_id` remains nullable without a foreign key until a Team aggregate is introduced.
+- Legacy `notes` rows can optionally reference `workflow_runs` and `leads`; deleting a linked aggregate sets the legacy link to null.
+- `DB_SYNCHRONIZE` defaults to false. Versioned migrations are the schema authority.
+
 ## 4. API Contracts
 
 ### Current P0 Scaffold

@@ -112,22 +112,29 @@ PATCH /api/autoflow/outreach-tasks/:id
 GET   /api/autoflow/crm
 ```
 
-Current implementation uses in-memory scaffold data inside `AutoflowService`. This is intentional for the first shell and should be replaced with TypeORM entities in the next iteration.
+P1-A persistence entities and migrations are implemented. `AutoflowService` still returns in-memory scaffold data; P1-B replaces those collections with owner-scoped TypeORM repositories.
 
 ## 5. Target Domain Model
 
-Near-term persistent entities:
+Current persistent entities:
 
 ```text
 WorkflowRun
-ProductSeed
-AdLead
-StoreLead
+WorkflowStep
+Lead
 LeadContact
-LeadScore
-MessageDraft
 OutreachTask
 CrmActivity
+```
+
+Planned entities:
+
+```text
+ProductSeed
+AdCreative
+ShopifyStore
+LeadScore
+MessageDraft
 IntegrationAccount
 ```
 
@@ -151,10 +158,10 @@ Implemented:
 - Production no longer falls back to a default JWT secret.
 - `JWT_EXPIRES_IN` is now respected.
 - Search modules no longer silently return mock data in production unless `ENABLE_MOCK_SEARCH=true`.
+- P1-A schema changes use versioned TypeORM migrations with synchronization disabled by default.
 
 Required before production:
 
-- Add TypeORM migrations.
 - Add request throttling for search and auth endpoints.
 - Add audit logging for lead export and outreach.
 - Move integration keys into encrypted storage.
@@ -167,6 +174,13 @@ Build commands:
 ```powershell
 npm.cmd run build --workspace=backend
 npm.cmd run build --workspace=frontend
+```
+
+Migration commands:
+
+```powershell
+npm.cmd run db:migration:show
+npm.cmd run db:migrate
 ```
 
 Dev command:
@@ -184,7 +198,7 @@ Known Windows note:
 
 Priority order:
 
-1. Replace AutoFlow in-memory scaffold with TypeORM entities and migrations.
+1. Replace AutoFlow in-memory scaffold with owner-scoped TypeORM repository services.
 2. Convert Shopify/Facebook modules into workflow steps.
 3. Add background job queue for long-running discovery and scoring.
 4. Add lead scoring rules engine.

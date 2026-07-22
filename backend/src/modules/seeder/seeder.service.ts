@@ -14,8 +14,11 @@ export class SeederService {
     const adminPassword = 'Admin@123456'
 
     try {
-      const existingAdmin = await this.usersService.findByEmail(adminEmail)
-      if (existingAdmin) {
+      const [existingEmail, existingUsername] = await Promise.all([
+        this.usersService.findByEmail(adminEmail),
+        this.usersService.findByUsername(adminUsername),
+      ])
+      if (existingEmail || existingUsername) {
         this.logger.log('AutoFlow admin account already exists')
         return
       }

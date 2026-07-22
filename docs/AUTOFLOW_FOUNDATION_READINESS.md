@@ -25,6 +25,7 @@ This document defines the ground preparation required before formal AutoFlow tra
 | Development Backlog | Ready | See `AUTOFLOW_DEVELOPMENT_BACKLOG.md` |
 | Legacy Note Repositioning | Ready | UI uses business records and record categories while legacy routes and tables remain compatible |
 | AutoFlow API Contracts | Ready | Frontend types are centralized and backend write endpoints use validated DTO classes |
+| P1-A Persistence Schema | Ready | Six core entities and two versioned migrations are applied to `hyperzone/noteflow` |
 
 ## 3. Required Before Coding Each Iteration
 
@@ -83,11 +84,11 @@ A development task is done when:
 
 ## 7. Next Formal Development Recommendation
 
-P0 foundation work is complete. Start with P1 persistence:
+P0 and P1-A are complete. Continue with P1-B persistence services:
 
-1. Add workflow, lead, outreach, and CRM entities in dependency order.
-2. Add ownership fields and indexes before repository-backed services.
-3. Define nullable business-record links after workflow and lead entities exist.
-4. Add migrations and repository integration tests before replacing in-memory fixtures.
+1. Replace in-memory workflow, lead, and outreach collections with TypeORM repositories.
+2. Scope every query by authenticated owner or permitted team.
+3. Add lead and outreach status transition guards.
+4. Write CRM activities for significant state changes.
 
-This preserves the completed P0 compatibility boundary while moving AutoFlow onto durable workflow data.
+Keep P1-B changes on top of the versioned P1-A schema; do not re-enable automatic synchronization.

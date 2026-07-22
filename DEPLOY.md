@@ -34,6 +34,8 @@ DB_PORT=5432
 DB_USERNAME=
 DB_PASSWORD=
 DB_DATABASE=
+DB_SYNCHRONIZE=false
+DB_MIGRATIONS_RUN=false
 
 JWT_SECRET=
 JWT_EXPIRES_IN=7d
@@ -74,6 +76,15 @@ Before renaming or migrating an existing database:
 2. Confirm the app can connect to the new database.
 3. Run schema migration scripts.
 4. Verify login, workflow, lead, outreach, and legacy record flows.
+
+Apply versioned migrations before starting the new backend version:
+
+```powershell
+npm.cmd run db:migration:show
+npm.cmd run db:migrate
+```
+
+Production should keep `DB_SYNCHRONIZE=false`. Use `DB_MIGRATIONS_RUN=true` only when startup-time migrations are an intentional deployment policy; otherwise run `db:migrate` as a separate release step.
 
 ## 4. Runtime
 

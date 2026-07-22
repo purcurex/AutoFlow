@@ -60,14 +60,14 @@ When work is interrupted, resume in this order:
 
 ### P1-A Entities
 
-- [ ] Create `WorkflowRunEntity`.
-- [ ] Create `WorkflowStepEntity`.
-- [ ] Create `LeadEntity`.
-- [ ] Create `LeadContactEntity`.
-- [ ] Create `OutreachTaskEntity`.
-- [ ] Create `CrmActivityEntity`.
-- [ ] Add ownership fields: `ownerUserId`, optional `teamId`.
-- [ ] Add indexes for owner, workflow, lead status, and timestamps.
+- [x] Create `WorkflowRunEntity`.
+- [x] Create `WorkflowStepEntity`.
+- [x] Create `LeadEntity`.
+- [x] Create `LeadContactEntity`.
+- [x] Create `OutreachTaskEntity`.
+- [x] Create `CrmActivityEntity`.
+- [x] Add ownership fields: `ownerUserId`, optional `teamId`.
+- [x] Add indexes for owner, workflow, lead status, and timestamps.
 
 ### P1-B Services
 

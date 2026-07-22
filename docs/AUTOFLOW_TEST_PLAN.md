@@ -25,6 +25,9 @@ Already added:
 - `frontend/src/tests/legacy-records.test.ts`
 - `backend/src/modules/autoflow/autoflow.service.spec.ts`
 - `backend/src/modules/autoflow/dto/autoflow.dto.spec.ts`
+- `backend/src/modules/autoflow/entities/autoflow.entities.spec.ts`
+- `backend/src/database/tests/autoflow.migrations.spec.ts`
+- `backend/src/modules/seeder/seeder.service.spec.ts`
 - Root `npm.cmd run ci:local` verification command.
 
 Required next:
@@ -68,6 +71,8 @@ Required next:
 | TC-029 | Build | Backend build passes | P0 | CI script |
 | TC-030 | Regression | Legacy record route stays out of primary navigation and export uses business-record terminology | P0 | Frontend component |
 | TC-031 | Contract | AutoFlow write DTOs accept supported fields and reject invalid enum/date values | P0 | Backend unit |
+| TC-032 | Persistence | P1-A entities map to the expected tables, ownership columns, links, and indexes | P1 | Backend metadata unit |
+| TC-033 | Migration | Core migration creates all P1-A tables and reverts without dropping legacy tables | P1 | Backend migration unit |
 
 ## 5. BDD To Test Mapping
 

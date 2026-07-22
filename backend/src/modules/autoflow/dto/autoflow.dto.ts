@@ -6,7 +6,14 @@ import {
   MaxLength,
   MinLength,
 } from 'class-validator'
-import type { OutreachChannel, OutreachStatus, SeedType } from '../autoflow.types'
+import {
+  OUTREACH_CHANNELS,
+  OUTREACH_STATUSES,
+  SEED_TYPES,
+  type OutreachChannel,
+  type OutreachStatus,
+  type SeedType,
+} from '../autoflow.types'
 
 export class CreateWorkflowDto {
   @IsOptional()
@@ -15,7 +22,7 @@ export class CreateWorkflowDto {
   @MaxLength(120)
   name?: string
 
-  @IsIn(['keyword', 'image'])
+  @IsIn(SEED_TYPES)
   seedType: SeedType
 
   @IsString()
@@ -32,7 +39,7 @@ export class CreateWorkflowDto {
 
 export class GenerateMessageDto {
   @IsOptional()
-  @IsIn(['whatsapp', 'email', 'instagram', 'facebook'])
+  @IsIn(OUTREACH_CHANNELS)
   channel?: OutreachChannel
 
   @IsOptional()
@@ -48,7 +55,7 @@ export class GenerateMessageDto {
 
 export class UpdateOutreachTaskDto {
   @IsOptional()
-  @IsIn(['draft', 'ready', 'sent', 'replied', 'skipped'])
+  @IsIn(OUTREACH_STATUSES)
   status?: OutreachStatus
 
   @IsOptional()

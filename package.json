@@ -15,6 +15,9 @@
     "test": "npm run test --workspace=frontend && npm run test --workspace=backend",
     "test:frontend": "npm run test --workspace=frontend",
     "test:backend": "npm run test --workspace=backend",
+    "db:migrate": "npm run migration:run --workspace=backend",
+    "db:migration:show": "npm run migration:show --workspace=backend",
+    "db:migration:revert": "npm run migration:revert --workspace=backend",
     "ci:local": "npm run test && npm run build",
     "start": "npm run start:prod --workspace=backend"
   },

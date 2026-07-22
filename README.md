@@ -42,8 +42,10 @@ Product keyword or image
 ```text
 note-app/
   backend/
+    src/database/migrations/
     src/modules/
       autoflow/
+        entities/
       auth/
       facebook-ads/
       shopify-search/
@@ -99,6 +101,8 @@ DB_PORT=5432
 DB_USERNAME=postgres
 DB_PASSWORD=postgres
 DB_DATABASE=noteflow
+DB_SYNCHRONIZE=false
+DB_MIGRATIONS_RUN=false
 
 JWT_SECRET=change-me
 JWT_EXPIRES_IN=7d
@@ -111,6 +115,25 @@ HOSTIO_API_KEY=
 ```
 
 Note: the current local Docker PostgreSQL container is `hyperzone`, and the existing development database is still `noteflow`. Product-facing naming should be AutoFlow. Rename the physical database only after a backup and migration plan exists.
+
+## Database Migrations
+
+AutoFlow uses versioned TypeORM migrations. Schema synchronization is disabled by default.
+
+Check and apply migrations before starting a backend against a new or updated database:
+
+```powershell
+npm.cmd run db:migration:show
+npm.cmd run db:migrate
+```
+
+Revert only the latest migration when a rollback is explicitly required:
+
+```powershell
+npm.cmd run db:migration:revert
+```
+
+Set `DB_MIGRATIONS_RUN=true` only when the deployment environment should apply pending migrations during application startup. Keep `DB_SYNCHRONIZE=false` for normal development and production use.
 
 ## Verification
 

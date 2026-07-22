@@ -24,6 +24,7 @@ export type LeadStatus =
 
 export type OutreachChannel = 'whatsapp' | 'email' | 'instagram' | 'facebook'
 export type OutreachStatus = 'draft' | 'ready' | 'sent' | 'replied' | 'skipped'
+export type LeadContactType = OutreachChannel | 'website' | 'phone'
 
 export interface WorkflowRun {
   id: string
@@ -40,7 +41,7 @@ export interface WorkflowRun {
 }
 
 export interface LeadContact {
-  type: OutreachChannel
+  type: LeadContactType
   value: string
   verified: boolean
 }

@@ -101,7 +101,7 @@ Resume order for formal transformation work:
 3. Read `docs/AUTOFLOW_BDD_SCENARIOS.md`.
 4. Read `docs/AUTOFLOW_TEST_PLAN.md`.
 5. Read `docs/AUTOFLOW_DEVELOPMENT_BACKLOG.md`.
-6. Start from P0-A Brand And Positioning.
+6. Continue from the first unchecked task in `AUTOFLOW_DEVELOPMENT_BACKLOG.md`.
 
 Completed foundation implementation phase:
 
@@ -112,8 +112,8 @@ Completed foundation implementation phase:
 
 Next implementation phase:
 
-- P1-A AutoFlow persistence entities and indexes.
-- P1-B repository-backed services and migrations.
+- P1-B repository-backed services and status transitions.
+- P1-C persistence and transition integration tests.
 
 
 ## Latest Optimization Pass - 2026-04-26 17:26:32
@@ -138,7 +138,6 @@ pm.cmd run build --workspace=frontend.
 
 Remaining high-priority work:
 
-- Add TypeORM entities and migrations for AutoFlow domain data.
 - Replace in-memory AutoFlow scaffold with persistent storage.
 - Add tests for auth, AutoFlow API, search fallback behavior, and outreach state updates.
 - Continue phased cleanup of legacy Chinese encoding corruption in user-facing files.
@@ -171,4 +170,28 @@ npm.cmd run ci:local
 - Backend: 2 test suites, 8 tests passed; Nest production build passed.
 - Known non-blocking warning: legacy record/export routes still produce frontend chunks over 500 kB.
 
-Resume from the first unchecked P1-A task in `docs/AUTOFLOW_DEVELOPMENT_BACKLOG.md`.
+P0 verification remains reproducible with the root `ci:local` command.
+
+## P1-A Persistence Foundation - 2026-07-22
+
+Completed:
+
+- Added `WorkflowRunEntity`, `WorkflowStepEntity`, `LeadEntity`, `LeadContactEntity`, `OutreachTaskEntity`, and `CrmActivityEntity`.
+- Added owner/team fields, foreign keys, enum contracts, score/progress checks, and operational indexes.
+- Added nullable workflow/lead links to legacy business records.
+- Added a reusable TypeORM CLI DataSource and explicit migration commands.
+- Disabled schema synchronization by default in favor of versioned migrations.
+- Added a legacy schema baseline migration and a reversible AutoFlow core migration.
+- Applied both migrations to Docker database `hyperzone/noteflow`.
+- Made startup admin seeding idempotent across both email and username uniqueness.
+
+Database verification:
+
+- Migration history contains `BaselineLegacySchema1784700000000` and `AddAutoFlowCoreEntities1784700060000`.
+- New tables: `workflow_runs`, `workflow_steps`, `leads`, `lead_contacts`, `outreach_tasks`, `crm_activities`.
+- Legacy row counts remained unchanged: 4 users, 5 folders, 66 notes.
+- TypeORM `schema:log` reports that the schema is up to date.
+- Backend: 5 test suites, 25 tests passed.
+- Nest `AppModule` initializes and closes cleanly against the migrated database with synchronization disabled.
+
+Resume from P1-B in `docs/AUTOFLOW_DEVELOPMENT_BACKLOG.md`.

@@ -1,0 +1,62 @@
+import { getMetadataArgsStorage } from 'typeorm'
+import { Note } from '../../notes/note.entity'
+import {
+  CrmActivityEntity,
+  LeadContactEntity,
+  LeadEntity,
+  OutreachTaskEntity,
+  WorkflowRunEntity,
+  WorkflowStepEntity,
+} from './index'
+
+describe('AutoFlow persistence entities', () => {
+  const storage = getMetadataArgsStorage()
+
+  it.each([
+    [WorkflowRunEntity, 'workflow_runs'],
+    [WorkflowStepEntity, 'workflow_steps'],
+    [LeadEntity, 'leads'],
+    [LeadContactEntity, 'lead_contacts'],
+    [OutreachTaskEntity, 'outreach_tasks'],
+    [CrmActivityEntity, 'crm_activities'],
+  ])('maps %p to table %s', (entity, tableName) => {
+    const table = storage.tables.find((metadata) => metadata.target === entity)
+
+    expect(table?.name).toBe(tableName)
+  })
+
+  it.each([WorkflowRunEntity, LeadEntity, OutreachTaskEntity, CrmActivityEntity])(
+    'adds user and optional team ownership to %p',
+    (entity) => {
+      const columns = storage.columns
+        .filter((metadata) => metadata.target === entity)
+        .map((metadata) => metadata.propertyName)
+
+      expect(columns).toEqual(expect.arrayContaining(['ownerUserId', 'teamId']))
+    },
+  )
+
+  it('adds workflow and lead links to legacy business records', () => {
+    const columns = storage.columns
+      .filter((metadata) => metadata.target === Note)
+      .map((metadata) => metadata.propertyName)
+
+    expect(columns).toEqual(expect.arrayContaining(['workflowRunId', 'leadId']))
+  })
+
+  it('defines owner, workflow, status, and timestamp indexes', () => {
+    const indexNames = storage.indices.map((metadata) => metadata.name)
+
+    expect(indexNames).toEqual(
+      expect.arrayContaining([
+        'idx_workflow_runs_owner_created_at',
+        'idx_workflow_steps_run_sequence',
+        'idx_leads_owner_status',
+        'idx_leads_workflow_run_id',
+        'idx_outreach_tasks_owner_status',
+        'idx_outreach_tasks_next_follow_up_at',
+        'idx_crm_activities_lead_occurred_at',
+      ]),
+    )
+  })
+})
