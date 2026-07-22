@@ -1,105 +1,119 @@
-# NoteFlow 部署指南
+# AutoFlow Deployment Guide
 
-## 环境要求
+This guide describes the current deployment baseline for AutoFlow.
 
-- Node.js 18+
-- PostgreSQL 14+
+AutoFlow is still in transformation from a legacy NoteFlow codebase. The current deployment priority is to keep the Vue + NestJS + PostgreSQL application buildable and reproducible while product-facing language and business modules are refactored.
 
-## 部署步骤
+## 1. Build
 
-### 1. 安装依赖
+Run local CI before packaging:
 
-```bash
-cd backend
-npm install --production
+```powershell
+npm.cmd run ci:local
 ```
 
-### 2. 配置环境变量
+Or run builds individually:
 
-创建 `.env` 文件：
+```powershell
+npm.cmd --workspace frontend run build
+npm.cmd --workspace backend run build
+```
+
+## 2. Environment
+
+Backend environment variables are loaded from `backend/.env`.
+
+Required production variables:
 
 ```env
-# 应用配置
 NODE_ENV=production
 PORT=3000
 
-# 数据库配置
-DB_HOST=localhost
+DB_HOST=
 DB_PORT=5432
-DB_USERNAME=postgres
-DB_PASSWORD=your_password
-DB_DATABASE=noteflow
+DB_USERNAME=
+DB_PASSWORD=
+DB_DATABASE=
 
-# JWT配置
-JWT_SECRET=your-super-secret-jwt-key-change-in-production
+JWT_SECRET=
 JWT_EXPIRES_IN=7d
-
-# AI配置 (可选)
-ANTHROPIC_API_KEY=your-anthropic-api-key
-
-# SerpAPI配置 (Shopify搜索)
-SERPAPI_KEY=your-serpapi-key
-
-# Google搜索API配置 (可选)
-GOOGLE_API_KEY=your-google-api-key
-GOOGLE_SEARCH_CX=your-custom-search-engine-id
 ```
 
-### 3. 创建数据库
+Optional integration variables:
 
-```bash
-createdb noteflow
+```env
+ANTHROPIC_API_KEY=
+SERPAPI_KEY=
+GOOGLE_API_KEY=
+GOOGLE_SEARCH_CX=
+HOSTIO_API_KEY=
+ENABLE_MOCK_SEARCH=false
 ```
 
-### 4. 启动服务
+Production must provide `JWT_SECRET`. Do not rely on a fallback secret.
 
-```bash
-npm run start:prod
+## 3. Database
+
+The current local Docker PostgreSQL container is `hyperzone`, and the existing development database may still be named `noteflow` until a formal migration is performed.
+
+Recommended production database name:
+
+```text
+autoflow
 ```
 
-或使用 PM2（推荐）：
+Create database example:
 
-```bash
-npm install -g pm2
-pm2 start dist/main.js --name noteflow
+```powershell
+createdb autoflow
 ```
 
-### 5. 访问应用
+Before renaming or migrating an existing database:
 
-打开浏览器访问：http://localhost:3000
+1. Create a backup.
+2. Confirm the app can connect to the new database.
+3. Run schema migration scripts.
+4. Verify login, workflow, lead, outreach, and legacy record flows.
 
-## 生产环境建议
+## 4. Runtime
 
-1. **反向代理**：使用 Nginx 作为反向代理
-2. **HTTPS**：配置 SSL 证书
-3. **数据库**：使用连接池，定期备份
-4. **日志**：配置日志收集
-5. **监控**：使用 PM2 或其他监控工具
+Build backend:
 
-## Nginx 配置示例
-
-```nginx
-server {
-    listen 80;
-    server_name your-domain.com;
-
-    location / {
-        proxy_pass http://localhost:3000;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host $host;
-        proxy_cache_bypass $http_upgrade;
-    }
-}
+```powershell
+npm.cmd --workspace backend run build
 ```
 
-## 文件结构
+Start backend in production mode:
 
+```powershell
+npm.cmd --workspace backend run start:prod
 ```
-backend/
-├── dist/           # 编译后的后端代码
-├── public/         # 前端静态文件
-├── uploads/        # 用户上传文件
-└── .env            # 环境变量配置
+
+PM2 example:
+
+```powershell
+pm2 start backend/dist/main.js --name autoflow
 ```
+
+## 5. Static Assets
+
+Do not commit generated frontend bundles into `backend/public`.
+
+Current policy:
+
+- `frontend/dist` is a generated build output.
+- `backend/dist` is a generated build output.
+- `backend/public` legacy frontend bundles have been removed from source control.
+- Deployment packaging should copy fresh build artifacts explicitly if static hosting is needed.
+
+## 6. Smoke Checks
+
+After deployment:
+
+- Backend health / API base responds.
+- Login works.
+- AutoFlow dashboard loads.
+- Workflow list API responds.
+- PostgreSQL connection is healthy.
+- Search adapters fail clearly if provider keys are missing.
+- Production does not silently use mock search results.

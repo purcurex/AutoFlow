@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '@/stores'
 
 const router = useRouter()
@@ -14,7 +14,7 @@ const isLoading = ref(false)
 
 async function handleLogin() {
   if (!email.value || !password.value) {
-    error.value = '请填写邮箱和密码'
+    error.value = '请输入邮箱和密码'
     return
   }
 
@@ -34,21 +34,19 @@ async function handleLogin() {
 </script>
 
 <template>
-  <div class="min-h-screen flex items-center justify-center bg-[var(--color-background-secondary)] px-4">
+  <div class="flex min-h-screen items-center justify-center bg-[var(--color-background-secondary)] px-4">
     <div class="w-full max-w-md">
-      <!-- Logo -->
-      <div class="text-center mb-8">
-        <h1 class="text-3xl font-bold text-primary-600">NoteFlow</h1>
-        <p class="text-gray-500 mt-2">智能笔记，高效记录</p>
+      <div class="mb-8 text-center">
+        <h1 class="text-3xl font-bold text-primary-600">AutoFlow</h1>
+        <p class="mt-2 text-gray-500">Dropshipping 客户开发自动化工作台</p>
       </div>
 
-      <!-- 登录表单 -->
       <div class="card p-6">
-        <h2 class="text-xl font-semibold mb-6">登录</h2>
+        <h2 class="mb-6 text-xl font-semibold">登录</h2>
 
-        <form @submit.prevent="handleLogin" class="space-y-4">
+        <form class="space-y-4" @submit.prevent="handleLogin">
           <div>
-            <label class="block text-sm font-medium mb-1">邮箱</label>
+            <label class="mb-1 block text-sm font-medium">邮箱</label>
             <input
               v-model="email"
               type="email"
@@ -59,7 +57,7 @@ async function handleLogin() {
           </div>
 
           <div>
-            <label class="block text-sm font-medium mb-1">密码</label>
+            <label class="mb-1 block text-sm font-medium">密码</label>
             <input
               v-model="password"
               type="password"
@@ -69,13 +67,9 @@ async function handleLogin() {
             />
           </div>
 
-          <div v-if="error" class="text-red-500 text-sm">{{ error }}</div>
+          <div v-if="error" class="text-sm text-red-500">{{ error }}</div>
 
-          <button
-            type="submit"
-            class="w-full btn btn-primary"
-            :disabled="isLoading"
-          >
+          <button type="submit" class="btn btn-primary w-full" :disabled="isLoading">
             {{ isLoading ? '登录中...' : '登录' }}
           </button>
         </form>

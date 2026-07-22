@@ -1,149 +1,175 @@
-# NoteFlow - 智能笔记应用
+# AutoFlow
 
-一款面向个人用户的免费Web端高级笔记应用，融合Markdown与富文本编辑，提供AI智能辅助功能。
+AutoFlow is a Dropshipping outbound sales workflow workspace for sales teams serving overseas Shopify small-business sellers.
 
-## 技术栈
+The product is being transformed from a legacy note-taking application into a sales automation tool that helps reps discover prospects, identify Shopify stores, score leads, generate outreach messages, prepare quotes, and manage follow-up work.
 
-### 前端
-- Vue 3 + TypeScript
-- Vite
-- Tailwind CSS
-- TipTap (富文本编辑器)
-- Pinia (状态管理)
-- Vue Router
+## Core Workflow
 
-### 后端
-- NestJS + TypeScript
-- PostgreSQL
-- TypeORM
-- JWT认证
-- Claude API (AI功能)
-
-## 快速开始
-
-### 环境要求
-- Node.js 18+
-- PostgreSQL 14+
-
-### 安装依赖
-
-```bash
-cd note-app
-npm install
+```text
+Product keyword or image
+-> Ad discovery
+-> Shopify store detection
+-> Lead cleanup and scoring
+-> AI outreach message
+-> Human-reviewed WhatsApp / Email outreach
+-> Quote preparation
+-> CRM follow-up
 ```
 
-### 配置环境变量
+## Current Capabilities
 
-#### 后端配置 (backend/.env)
+- JWT authentication and admin role.
+- AutoFlow workbench pages: Dashboard, Workflows, Leads, Lead detail, Outreach, and CRM.
+- Shopify store search adapter.
+- Facebook Ads discovery adapter.
+- AI text generation adapter.
+- Legacy record capability inherited from the original note module.
+- Frontend Vitest baseline.
+- Backend Jest baseline.
+
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Frontend | Vue 3, Vite, TypeScript, Pinia, Vue Router, Tailwind CSS |
+| Backend | NestJS, TypeScript, TypeORM |
+| Database | PostgreSQL |
+| Testing | Vitest, Vue Test Utils, jsdom, Jest, ts-jest |
+
+## Project Structure
+
+```text
+note-app/
+  backend/
+    src/modules/
+      autoflow/
+      auth/
+      facebook-ads/
+      shopify-search/
+      notes/
+      folders/
+      users/
+  frontend/
+    src/views/autoflow/
+    src/api/
+    src/stores/
+    src/tests/
+  docs/
+```
+
+## Local Development
+
+Install dependencies:
+
+```powershell
+npm.cmd install
+```
+
+Run both frontend and backend:
+
+```powershell
+npm.cmd run dev
+```
+
+Run frontend only:
+
+```powershell
+npm.cmd run dev:frontend
+```
+
+Run backend only:
+
+```powershell
+npm.cmd run dev:backend
+```
+
+## Environment
+
+Backend configuration is read from `backend/.env`.
+
+Example:
+
 ```env
-# 数据库配置
+NODE_ENV=development
+PORT=3000
+
 DB_HOST=localhost
 DB_PORT=5432
 DB_USERNAME=postgres
-DB_PASSWORD=your_password
+DB_PASSWORD=postgres
 DB_DATABASE=noteflow
 
-# JWT配置
-JWT_SECRET=your-jwt-secret-key
+JWT_SECRET=change-me
 JWT_EXPIRES_IN=7d
 
-# AI配置
-ANTHROPIC_API_KEY=your-anthropic-api-key
-
-# SerpAPI配置 (用于Shopify店铺搜索)
-# 获取方式: https://serpapi.com/
-SERPAPI_KEY=your-serpapi-key
-
-# Google搜索API配置 (可选，用于增强搜索)
-GOOGLE_API_KEY=your-google-api-key
-GOOGLE_SEARCH_CX=your-custom-search-engine-id
+ANTHROPIC_API_KEY=
+SERPAPI_KEY=
+GOOGLE_API_KEY=
+GOOGLE_SEARCH_CX=
+HOSTIO_API_KEY=
 ```
 
-#### 前端配置 (frontend/.env)
-```env
-VITE_API_URL=http://localhost:3000/api
+Note: the current local Docker PostgreSQL container is `hyperzone`, and the existing development database is still `noteflow`. Product-facing naming should be AutoFlow. Rename the physical database only after a backup and migration plan exists.
+
+## Verification
+
+Run the local CI baseline:
+
+```powershell
+npm.cmd run ci:local
 ```
 
-### 创建数据库
+This runs frontend tests, backend tests, frontend build, and backend build.
 
-```bash
-createdb noteflow
+Individual commands:
+
+```powershell
+npm.cmd --workspace frontend run test
+npm.cmd --workspace backend run test
+npm.cmd --workspace frontend run build
+npm.cmd --workspace backend run build
 ```
 
-### 启动开发服务器
+Database check:
 
-```bash
-# 同时启动前后端
-npm run dev
-
-# 或分别启动
-npm run dev:backend  # 后端 http://localhost:3000
-npm run dev:frontend # 前端 http://localhost:5173
+```powershell
+docker ps --format "{{.Names}}\t{{.Status}}\t{{.Ports}}"
+Test-NetConnection -ComputerName localhost -Port 5432
+docker exec hyperzone psql -U postgres -d noteflow -c "select current_database() as database, current_user as user_name;"
 ```
 
-## 项目结构
+Verified local development state:
 
-```
-note-app/
-├── frontend/                # 前端项目
-│   ├── src/
-│   │   ├── api/            # API接口
-│   │   ├── components/     # 组件
-│   │   │   ├── editor/     # 编辑器组件
-│   │   │   └── layout/     # 布局组件
-│   │   ├── router/         # 路由配置
-│   │   ├── stores/         # 状态管理
-│   │   ├── types/          # 类型定义
-│   │   └── views/          # 页面视图
-│   └── ...
-│
-├── backend/                 # 后端项目
-│   ├── src/
-│   │   ├── modules/
-│   │   │   ├── auth/            # 认证模块
-│   │   │   ├── users/           # 用户模块
-│   │   │   ├── notes/           # 笔记模块
-│   │   │   ├── folders/         # 文件夹模块
-│   │   │   ├── ai/              # AI模块
-│   │   │   └── shopify-search/  # Shopify店铺搜索模块
-│   │   └── common/         # 公共模块
-│   └── ...
-│
-└── package.json            # 根配置
+```text
+Docker container: hyperzone
+Host port: localhost:5432
+Database: noteflow
+Connection: OK
 ```
 
-## 功能特性
+## Documentation
 
-### 编辑器
-- ✅ Markdown模式（实时预览、代码高亮）
-- ✅ 富文本模式（所见即所得）
-- ✅ 双模式无缝切换
+Formal transformation documents:
 
-### 笔记管理
-- ✅ 文件夹分类
-- ✅ 标签系统
-- ✅ 收藏功能
-- ✅ 搜索功能
-- ✅ 回收站
-- ✅ 导出功能
-  - 单笔记导出 - 支持导出为 PDF/Excel 格式
-  - 批量导出 - 多选笔记后批量导出
-  - PDF格式 - 保留笔记排版，适合打印和分享
-  - Excel格式 - 表格形式，便于数据整理
+- `docs/AUTOFLOW_PRODUCT_SPEC.md`
+- `docs/AUTOFLOW_BDD_SCENARIOS.md`
+- `docs/AUTOFLOW_PDD_DESIGN.md`
+- `docs/AUTOFLOW_TEST_PLAN.md`
+- `docs/AUTOFLOW_DEVELOPMENT_BACKLOG.md`
+- `docs/AUTOFLOW_FOUNDATION_READINESS.md`
+- `docs/AUTOFLOW_TRANSFORMATION_PROPOSAL.md`
 
-### AI功能
-- ✅ 智能续写
-- ✅ 文字润色
-- ✅ 内容摘要
-- ✅ 多语言翻译
-- ✅ 智能标签推荐
+## Default Admin For Fresh Seeds
 
-### Shopify店铺搜索
-- ✅ 图片搜索 - 上传商品图片，通过 Google Lens 反向图片搜索找到销售该产品的 Shopify 店铺
-- ✅ 图片URL搜索 - 输入图片URL地址进行搜索
-- ✅ 关键词搜索 - 输入产品关键词搜索相关店铺
-- ✅ 结果保存 - 一键将搜索结果（最多20个店铺链接）保存到笔记
+Fresh seeded environments use:
 
-## 许可证
+```text
+Email: admin@autoflow.local
+Username: admin
+Password: Admin@123456
+```
 
-MIT
+Change the default password immediately after first login.
+
+Existing local databases created before the AutoFlow migration may still contain `admin@noteflow.com`.

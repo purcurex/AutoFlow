@@ -12,8 +12,12 @@ This document defines the ground preparation required before formal AutoFlow tra
 | Database | Ready | Docker instance `hyperzone` exposes PostgreSQL on `localhost:5432` |
 | Frontend Dev Server | Ready | Verified at `http://127.0.0.1:5173` |
 | Frontend Test Baseline | Ready | Vitest + Vue Test Utils + jsdom installed |
+| Backend Test Baseline | Ready | Jest + ts-jest installed with AutoFlow service smoke tests |
 | Frontend Build | Ready | Build passes with chunk size warning |
 | Backend Build | Ready | Nest build passes |
+| Root CI Script | Ready | `npm.cmd run ci:local` runs tests and builds |
+| Legacy Build Artifacts | Ready | Tracked `backend/public` frontend bundle removed and ignored |
+| Local Docker Database | Ready | Docker container `hyperzone` is running, `localhost:5432` is reachable, and database `noteflow` accepts the app credentials |
 | AutoFlow Product Spec | Ready | See `AUTOFLOW_PRODUCT_SPEC.md` |
 | BDD Scenarios | Ready | See `AUTOFLOW_BDD_SCENARIOS.md` |
 | PDD Design | Ready | See `AUTOFLOW_PDD_DESIGN.md` |
@@ -32,9 +36,12 @@ This document defines the ground preparation required before formal AutoFlow tra
 ## 4. Local Commands
 
 ```powershell
+npm.cmd run ci:local
 npm.cmd --workspace frontend run test
 npm.cmd --workspace frontend run build
+npm.cmd --workspace backend run test
 npm.cmd --workspace backend run build
+docker exec hyperzone psql -U postgres -d noteflow -c "select current_database() as database, current_user as user_name;"
 ```
 
 Start frontend:
@@ -82,4 +89,3 @@ Start with P0-A and P0-B:
 4. Run frontend test/build and backend build.
 
 This gives the team a clean product foundation before deeper persistence and workflow refactoring.
-

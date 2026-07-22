@@ -9,14 +9,14 @@ export class SeederService {
   constructor(private readonly usersService: UsersService) {}
 
   async seedAdmin(): Promise<void> {
-    const adminEmail = 'admin@noteflow.com'
+    const adminEmail = 'admin@autoflow.local'
     const adminUsername = 'admin'
     const adminPassword = 'Admin@123456'
 
     try {
       const existingAdmin = await this.usersService.findByEmail(adminEmail)
       if (existingAdmin) {
-        this.logger.log('管理员账号已存在')
+        this.logger.log('AutoFlow admin account already exists')
         return
       }
 
@@ -26,13 +26,13 @@ export class SeederService {
         adminPassword,
         UserRole.ADMIN,
       )
-      this.logger.log('管理员账号创建成功')
-      this.logger.log(`邮箱: ${adminEmail}`)
-      this.logger.log(`用户名: ${adminUsername}`)
-      this.logger.log(`密码: ${adminPassword}`)
-      this.logger.warn('请及时修改默认管理员密码！')
+      this.logger.log('AutoFlow admin account created')
+      this.logger.log(`Email: ${adminEmail}`)
+      this.logger.log(`Username: ${adminUsername}`)
+      this.logger.log(`Password: ${adminPassword}`)
+      this.logger.warn('Please change the default admin password immediately.')
     } catch (error) {
-      this.logger.error('创建管理员账号失败', error)
+      this.logger.error('Failed to create AutoFlow admin account', error)
     }
   }
 }

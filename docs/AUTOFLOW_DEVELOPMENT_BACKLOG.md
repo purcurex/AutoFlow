@@ -18,14 +18,14 @@ When work is interrupted, resume in this order:
 
 ### P0-A Brand And Positioning
 
-- [ ] Replace user-facing `NoteFlow` with `AutoFlow`.
-- [ ] Replace smart-note positioning with outbound sales workflow positioning.
-- [ ] Update login page copy.
-- [ ] Update register page copy.
-- [ ] Update README product description.
-- [ ] Update DEPLOY product naming where safe.
-- [ ] Update email verification product copy.
-- [ ] Update seed admin email/domain decision.
+- [x] Replace user-facing `NoteFlow` with `AutoFlow`.
+- [x] Replace smart-note positioning with outbound sales workflow positioning.
+- [x] Update login page copy.
+- [x] Update register page copy.
+- [x] Update README product description.
+- [x] Update DEPLOY product naming where safe.
+- [x] Update email verification product copy.
+- [x] Update seed admin email/domain decision.
 - [ ] Review all visible navigation labels.
 - [ ] Keep migration notes where historical NoteFlow references are useful.
 
@@ -41,11 +41,13 @@ When work is interrupted, resume in this order:
 ### P0-C Development Workflow
 
 - [x] Add frontend Vitest baseline.
-- [ ] Add backend test command verification.
-- [ ] Add a root-level `test` or `ci:local` script.
-- [ ] Add a docs-based definition of done.
-- [ ] Ensure generated `dist`, `deploy`, and archives remain ignored.
-- [ ] Confirm Docker database `hyperzone` connection instructions.
+- [x] Add backend test command verification.
+- [x] Add a root-level `test` or `ci:local` script.
+- [x] Add a docs-based definition of done.
+- [x] Ensure generated `dist`, `deploy`, and archives remain ignored.
+- [x] Confirm Docker database `hyperzone` connection instructions.
+- [x] Verify Docker database `hyperzone` connectivity from host and container.
+- [x] Remove tracked legacy frontend build artifacts from `backend/public`.
 
 ### P0-D Contract Cleanup
 
@@ -158,17 +160,36 @@ When work is interrupted, resume in this order:
 10. P4 Quote Workspace.
 11. P5 CRM/FOP Handoff.
 
-## 8. Current Known Dirty Files
+## 8. Current Foundation Closeout Changes
 
-These files were changed while adding the frontend test baseline and spec foundation:
+These files were changed while closing formal development readiness gaps:
 
-- `frontend/package.json`
-- `frontend/vite.config.ts`
+- `.gitignore`
+- `package.json`
+- `backend/package.json`
+- `backend/jest.config.js`
+- `backend/src/modules/autoflow/autoflow.service.spec.ts`
+- `backend/src/app.module.ts`
+- `backend/src/database/seed.ts`
+- `backend/src/modules/auth/verification.service.ts`
+- `backend/src/modules/seeder/seeder.service.ts`
 - `package-lock.json`
-- `frontend/src/tests/App.test.ts`
-- `docs/AUTOFLOW_PRODUCT_SPEC.md`
-- `docs/AUTOFLOW_BDD_SCENARIOS.md`
-- `docs/AUTOFLOW_PDD_DESIGN.md`
-- `docs/AUTOFLOW_TEST_PLAN.md`
+- `README.md`
+- `DEPLOY.md`
 - `docs/AUTOFLOW_DEVELOPMENT_BACKLOG.md`
+- `docs/AUTOFLOW_FOUNDATION_READINESS.md`
+- removed tracked `backend/public` legacy build artifacts
 
+Verification command:
+
+```powershell
+npm.cmd run ci:local
+```
+
+Database verification:
+
+```powershell
+docker ps --format "{{.Names}}\t{{.Status}}\t{{.Ports}}"
+Test-NetConnection -ComputerName localhost -Port 5432
+docker exec hyperzone psql -U postgres -d noteflow -c "select current_database() as database, current_user as user_name;"
+```

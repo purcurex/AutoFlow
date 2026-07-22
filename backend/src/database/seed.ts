@@ -5,7 +5,6 @@ import { User } from '../modules/users/user.entity'
 import { Note } from '../modules/notes/note.entity'
 import { Folder } from '../modules/folders/folder.entity'
 
-// 加载 .env 文件
 config({ path: __dirname + '/../../.env' })
 
 const AppDataSource = new DataSource({
@@ -14,90 +13,89 @@ const AppDataSource = new DataSource({
   port: parseInt(process.env.DB_PORT || '5432'),
   username: process.env.DB_USERNAME || 'postgres',
   password: process.env.DB_PASSWORD || 'postgres',
-  database: process.env.DB_DATABASE || 'noteflow',
+  database: process.env.DB_DATABASE || 'autoflow',
   entities: [User, Note, Folder],
 })
 
 async function seed() {
   await AppDataSource.initialize()
-  console.log('数据库连接成功')
+  console.log('Database connected')
 
   const userRepository = AppDataSource.getRepository(User)
   const noteRepository = AppDataSource.getRepository(Note)
   const folderRepository = AppDataSource.getRepository(Folder)
 
-  // 检查测试用户是否存在（按邮箱或用户名查找）
   let testUser = await userRepository.findOne({
-    where: [{ email: 'test@test.com' }, { username: 'testuser' }]
+    where: [{ email: 'test@autoflow.local' }, { username: 'sales_user' }],
   })
 
   const hashedPassword = await bcrypt.hash('123456', 10)
 
   if (testUser) {
-    // 更新现有用户的密码，确保可以登录
-    testUser.email = 'test@test.com'
-    testUser.username = 'testuser'
+    testUser.email = 'test@autoflow.local'
+    testUser.username = 'sales_user'
     testUser.password = hashedPassword
     await userRepository.save(testUser)
-    console.log('测试用户已存在，密码已重置:')
-    console.log('  邮箱: test@test.com')
-    console.log('  密码: 123456')
+    console.log('Sales test user reset')
   } else {
-    // 创建测试用户
     testUser = userRepository.create({
-      email: 'test@test.com',
-      username: 'testuser',
+      email: 'test@autoflow.local',
+      username: 'sales_user',
       password: hashedPassword,
     })
     await userRepository.save(testUser)
-    console.log('测试用户创建成功:')
-    console.log('  邮箱: test@test.com')
-    console.log('  密码: 123456')
+    console.log('Sales test user created')
   }
 
-  // 创建测试文件夹
-  let testFolder = await folderRepository.findOne({ where: { name: '测试文件夹' } })
-  if (!testFolder) {
-    testFolder = folderRepository.create({
-      name: '测试文件夹',
+  console.log('  email: test@autoflow.local')
+  console.log('  password: 123456')
+
+  let salesFolder = await folderRepository.findOne({
+    where: { name: 'Customer Development Records' },
+  })
+
+  if (!salesFolder) {
+    salesFolder = folderRepository.create({
+      name: 'Customer Development Records',
       userId: testUser.id,
     })
-    await folderRepository.save(testFolder)
-    console.log('测试文件夹创建成功')
+    await folderRepository.save(salesFolder)
+    console.log('Customer development record category created')
   }
 
-  // 创建测试笔记
   const existingNotes = await noteRepository.count({ where: { userId: testUser.id } })
   if (existingNotes === 0) {
-    const testNotes = [
+    const records = [
       {
-        title: '欢迎使用 NoteFlow',
-        content: '# 欢迎使用 NoteFlow\n\n这是一款强大的笔记应用，支持：\n\n- Markdown 编辑\n- 文件夹管理\n- AI 智能助手\n- 标签分类\n\n开始你的笔记之旅吧！',
+        title: 'AutoFlow Customer Development Playbook',
+        content:
+          '# AutoFlow Customer Development Playbook\n\nUse this workspace to track product ideas, target stores, buyer contacts, outreach drafts, quotes, and CRM follow-up notes for Dropshipping sales development.',
         userId: testUser.id,
-        folderId: testFolder.id,
-        tags: ['欢迎', '教程'],
+        folderId: salesFolder.id,
+        tags: ['autoflow', 'sales'],
       },
       {
-        title: 'Markdown 语法示例',
-        content: '# Markdown 语法示例\n\n## 文本格式\n\n**粗体** 和 *斜体* 和 ~~删除线~~\n\n## 列表\n\n1. 有序列表项 1\n2. 有序列表项 2\n\n- 无序列表项 1\n- 无序列表项 2\n\n## 代码\n\n```javascript\nconst hello = "Hello, World!"\nconsole.log(hello)\n```\n\n## 引用\n\n> 这是一段引用文本\n\n## 链接和图片\n\n[点击这里](https://example.com)',
+        title: 'Sample Outreach Research Record',
+        content:
+          '# Sample Outreach Research Record\n\n- Product keyword: phone case\n- Target store: example-shop.myshopify.com\n- Channel: WhatsApp\n- Next action: verify contact and prepare first message',
         userId: testUser.id,
-        folderId: testFolder.id,
-        tags: ['Markdown', '教程'],
+        folderId: salesFolder.id,
+        tags: ['lead', 'outreach'],
       },
     ]
 
-    for (const noteData of testNotes) {
-      const note = noteRepository.create(noteData)
-      await noteRepository.save(note)
+    for (const recordData of records) {
+      const record = noteRepository.create(recordData)
+      await noteRepository.save(record)
     }
-    console.log('测试笔记创建成功')
+    console.log('Sample sales records created')
   }
 
   await AppDataSource.destroy()
-  console.log('\n种子数据初始化完成!')
+  console.log('Seed data initialized')
 }
 
 seed().catch((error) => {
-  console.error('种子数据初始化失败:', error)
+  console.error('Seed data initialization failed', error)
   process.exit(1)
 })
