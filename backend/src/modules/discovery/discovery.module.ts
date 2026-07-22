@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common'
 import { TypeOrmModule } from '@nestjs/typeorm'
-import { WorkflowRunEntity } from '../autoflow/entities'
+import { WorkflowJobEntity, WorkflowRunEntity } from '../autoflow/entities'
 import { FacebookAdsModule } from '../facebook-ads/facebook-ads.module'
 import { ShopifySearchModule } from '../shopify-search/shopify-search.module'
 import { FacebookAdsDiscoveryAdapter } from './adapters/facebook-ads-discovery.adapter'
@@ -15,11 +15,13 @@ import {
   WorkflowStepEntity,
 } from '../autoflow/entities'
 import { WorkflowExecutionService } from './workflow-execution.service'
+import { WorkflowJobWorkerService } from './workflow-job-worker.service'
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([
       WorkflowRunEntity,
+      WorkflowJobEntity,
       WorkflowStepEntity,
       WorkflowLeadEntity,
       LeadEntity,
@@ -33,6 +35,7 @@ import { WorkflowExecutionService } from './workflow-execution.service'
   providers: [
     DiscoveryService,
     WorkflowExecutionService,
+    WorkflowJobWorkerService,
     { provide: AD_DISCOVERY_ADAPTER, useClass: FacebookAdsDiscoveryAdapter },
     { provide: STORE_DISCOVERY_ADAPTER, useClass: ShopifyStoreDiscoveryAdapter },
   ],

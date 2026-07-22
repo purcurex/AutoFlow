@@ -134,8 +134,9 @@ When work is interrupted, resume in this order:
 
 ### P2-D Production Discovery And Execution Hardening
 
-- [ ] Replace the process-local active-run guard with a persistent queue/lease worker before paid-provider or multi-instance usage.
-- [ ] Add startup recovery, heartbeat, idempotent provider calls, retry budgets, and provider telemetry.
+- [x] Replace the process-local active-run guard with a PostgreSQL queue/lease worker before paid-provider or multi-instance usage.
+- [x] Add startup recovery, heartbeat, expired-lease recovery, and bounded retry budgets.
+- [ ] Add provider request idempotency and provider telemetry before enabling paid providers.
 - [ ] Replace search-hint advertising records with approved real ad evidence where provider access allows.
 - [ ] Strengthen Shopify verification and ad-to-store linkage confidence.
 - [ ] Add contact enrichment with source and verification state.

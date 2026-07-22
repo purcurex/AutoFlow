@@ -11,6 +11,7 @@ import {
   WorkflowStepEntity,
   WorkflowLeadEntity,
   LeadScoreEntity,
+  WorkflowJobEntity,
 } from './entities'
 import { DiscoveryModule } from '../discovery/discovery.module'
 import { AiModule } from '../ai/ai.module'
@@ -28,6 +29,7 @@ import { AiModule } from '../ai/ai.module'
       OutreachTaskEntity,
       CrmActivityEntity,
       LeadScoreEntity,
+      WorkflowJobEntity,
     ]),
   ],
   controllers: [AutoflowController],

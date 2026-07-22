@@ -362,3 +362,21 @@ Quality gate:
 - PostgreSQL E2E: 1 test suite, 7 tests passed.
 - Production build/package/start smoke passed.
 - Production dependency audit has no high or critical findings; two moderate transitive `uuid` findings remain through ExcelJS.
+
+## 16. 2026-07-22 Persistent Workflow Queue
+
+Completed execution reliability work:
+
+- Added the `workflow_jobs` PostgreSQL entity and migration with one durable job per workflow run.
+- Replaced process-local scheduling with transactional enqueue and row-level workflow locking.
+- Added multi-instance-safe job claiming through `FOR UPDATE SKIP LOCKED`.
+- Added worker leases, periodic heartbeat, expired-lease recovery, bounded retry attempts, and exponential retry delay.
+- Preserved `workflow_steps` as business checkpoints so retries reuse completed discovery evidence.
+- Added migration, entity, worker retry, and PostgreSQL E2E assertions for final job completion.
+
+Verification:
+
+- New migration applied successfully to the local `autoflow` database.
+- Queue-focused unit and metadata tests: 30 passed.
+- PostgreSQL E2E: 7 passed, including `workflow_jobs.status = completed` and `attempts = 1`.
+- Backend build and lint passed.

@@ -121,7 +121,7 @@ GET   /api/autoflow/crm
 
 P1 and P2 persistence are implemented. `AutoflowService` uses owner-scoped TypeORM repositories, paginated list contracts, explicit status transition maps, and transactions that synchronize outreach, lead status, and CRM activity. The P2 runner persists discovery evidence, progress, errors, deduplicated leads, workflow links, and score snapshots.
 
-The current scheduler runs asynchronously inside one API instance. PostgreSQL state supports explicit restart/resume through the start endpoint, but multi-instance deployment requires a persistent queue worker.
+Discovery execution is scheduled through the PostgreSQL-backed `workflow_jobs` queue. Workers claim work with `FOR UPDATE SKIP LOCKED`, renew time-bounded leases with heartbeats, retry failures with bounded exponential backoff, and reclaim expired leases after process interruption. Persisted workflow steps remain the business-level checkpoints, so a retried job resumes completed discovery stages instead of discarding evidence.
 
 ## 5. Target Domain Model
 
@@ -130,6 +130,7 @@ Current persistent entities:
 ```text
 WorkflowRun
 WorkflowStep
+WorkflowJob
 Lead
 LeadContact
 OutreachTask
@@ -257,7 +258,7 @@ Priority order after P2:
 
 1. Rewrite AI message generation around persistent lead context and human review.
 2. Add WhatsApp deep-link outreach and channel templates.
-3. Add a persistent queue worker before horizontal scaling and paid provider calls.
+3. Add provider idempotency keys and telemetry before paid provider calls.
 4. Expand discovery with verified ad-to-store matching and contact enrichment.
 5. Add quote navigation, product-tier editor, destination selector, result states, and combined matrix shell.
 6. Implement FOP provider ports and contract-test adapters without inventing live Kingdee endpoints.

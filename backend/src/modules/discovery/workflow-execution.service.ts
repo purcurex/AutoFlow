@@ -5,6 +5,7 @@ import type { QueryDeepPartialEntity } from 'typeorm/query-builder/QueryPartialE
 import {
   LeadEntity,
   LeadScoreEntity,
+  WorkflowJobEntity,
   WorkflowLeadEntity,
   WorkflowRunEntity,
   WorkflowStepEntity,
@@ -29,7 +30,6 @@ interface PromotedLead {
 @Injectable()
 export class WorkflowExecutionService {
   private readonly logger = new Logger(WorkflowExecutionService.name)
-  private readonly activeRuns = new Set<string>()
 
   constructor(
     @InjectRepository(WorkflowRunEntity)
@@ -41,48 +41,75 @@ export class WorkflowExecutionService {
   ) {}
 
   async startDiscovery(ownerUserId: string, workflowRunId: string): Promise<DiscoveryStartResult> {
-    const workflow = await this.workflowRepository.findOne({ where: { id: workflowRunId, ownerUserId } })
-    if (!workflow) throw new NotFoundException('Workflow not found')
-    if (workflow.status === 'completed' || workflow.status === 'cancelled') {
-      throw new ConflictException(`Workflow cannot start discovery from ${workflow.status}`)
-    }
+    return this.dataSource.transaction(async (manager) => {
+      const workflowRepository = manager.getRepository(WorkflowRunEntity)
+      const stepRepository = manager.getRepository(WorkflowStepEntity)
+      const jobRepository = manager.getRepository(WorkflowJobEntity)
+      const workflow = await workflowRepository.createQueryBuilder('workflow')
+        .setLock('pessimistic_write')
+        .where('workflow.id = :workflowRunId', { workflowRunId })
+        .andWhere('workflow.ownerUserId = :ownerUserId', { ownerUserId })
+        .getOne()
 
-    const resumed = workflow.status === 'running' || workflow.status === 'failed'
-    if (this.activeRuns.has(workflowRunId)) {
-      return { workflowRunId, status: 'running', scheduled: false, resumed: true }
-    }
+      if (!workflow) throw new NotFoundException('Workflow not found')
+      if (workflow.status === 'completed' || workflow.status === 'cancelled') {
+        throw new ConflictException(`Workflow cannot start discovery from ${workflow.status}`)
+      }
 
-    await this.workflowStepRepository.update(
-      { workflowRunId, status: In(['running', 'failed']) },
-      { status: 'pending', errorMessage: null, startedAt: null, completedAt: null },
-    )
-    await this.workflowRepository.update(
-      { id: workflowRunId, ownerUserId },
-      {
-        status: 'running',
-        currentStage: 'ad_discovery',
-        progress: Math.max(workflow.progress, 10),
-        startedAt: workflow.startedAt || new Date(),
+      const resumed = workflow.status === 'running' || workflow.status === 'failed'
+      const existingJob = await jobRepository.findOne({ where: { workflowRunId } })
+      if (existingJob?.status === 'queued' || existingJob?.status === 'running') {
+        return { workflowRunId, status: 'running', scheduled: false, resumed: true }
+      }
+
+      await stepRepository.update(
+        { workflowRunId, status: In(['running', 'failed']) },
+        { status: 'pending', errorMessage: null, startedAt: null, completedAt: null },
+      )
+      await workflowRepository.update(
+        { id: workflowRunId, ownerUserId },
+        {
+          status: 'running',
+          currentStage: 'ad_discovery',
+          progress: Math.max(workflow.progress, 10),
+          startedAt: workflow.startedAt || new Date(),
+          completedAt: null,
+        },
+      )
+
+      const job = jobRepository.create({
+        ...existingJob,
+        workflowRunId,
+        ownerUserId,
+        status: 'queued',
+        attempts: 0,
+        maxAttempts: existingJob?.maxAttempts || 3,
+        availableAt: new Date(),
+        leaseOwner: null,
+        leaseExpiresAt: null,
+        heartbeatAt: null,
+        lastError: null,
         completedAt: null,
-      },
-    )
-
-    this.activeRuns.add(workflowRunId)
-    void Promise.resolve()
-      .then(() => this.execute(ownerUserId, workflowRunId))
-      .catch((error: unknown) => {
-        this.logger.error(`Workflow ${workflowRunId} background execution failed`, error)
       })
-      .finally(() => this.activeRuns.delete(workflowRunId))
+      await jobRepository.save(job)
 
-    return { workflowRunId, status: 'running', scheduled: true, resumed }
+      return { workflowRunId, status: 'running', scheduled: true, resumed }
+    })
   }
 
-  private async execute(ownerUserId: string, workflowRunId: string): Promise<void> {
+  async executeQueuedDiscovery(ownerUserId: string, workflowRunId: string): Promise<void> {
     let activeStages: WorkflowStage[] = ['ad_discovery', 'store_detection']
 
     try {
       const workflow = await this.requireWorkflow(ownerUserId, workflowRunId)
+      await this.workflowStepRepository.update(
+        { workflowRunId, status: In(['running', 'failed']) },
+        { status: 'pending', errorMessage: null, startedAt: null, completedAt: null },
+      )
+      await this.workflowRepository.update(
+        { id: workflowRunId, ownerUserId },
+        { status: 'running', completedAt: null },
+      )
       const steps = await this.workflowStepRepository.find({ where: { workflowRunId } })
       const completedStages = new Set(
         steps.filter((step) => step.status === 'completed').map((step) => step.stage),
@@ -143,6 +170,7 @@ export class WorkflowExecutionService {
         { status: 'failed', currentStage: activeStages[0], completedAt: new Date() },
       )
       this.logger.error(`Workflow ${workflowRunId} failed at ${activeStages.join(', ')}`, error)
+      throw error
     }
   }
 

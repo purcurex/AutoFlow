@@ -7,6 +7,7 @@ import { LeadEntity } from '../src/modules/autoflow/entities/lead.entity'
 import { CrmActivityEntity } from '../src/modules/autoflow/entities/crm-activity.entity'
 import {
   LeadScoreEntity,
+  WorkflowJobEntity,
   WorkflowLeadEntity,
   WorkflowRunEntity,
   WorkflowStepEntity,
@@ -154,18 +155,20 @@ describe('AutoFlow persistence API', () => {
     }
 
     expect(workflow).toMatchObject({ status: 'completed', progress: 100, leadCount: 3 })
-    const [ads, stores, links, scores, steps] = await Promise.all([
+    const [ads, stores, links, scores, steps, job] = await Promise.all([
       dataSource.getRepository(AdCreativeEntity).findBy({ workflowRunId: created.body.id }),
       dataSource.getRepository(ShopifyStoreEntity).findBy({ workflowRunId: created.body.id }),
       dataSource.getRepository(WorkflowLeadEntity).findBy({ workflowRunId: created.body.id }),
       dataSource.getRepository(LeadScoreEntity).findBy({ workflowRunId: created.body.id }),
       dataSource.getRepository(WorkflowStepEntity).findBy({ workflowRunId: created.body.id }),
+      dataSource.getRepository(WorkflowJobEntity).findOneBy({ workflowRunId: created.body.id }),
     ])
     expect(ads).toHaveLength(3)
     expect(stores).toHaveLength(3)
     expect(stores.every((store) => store.leadId)).toBe(true)
     expect(links).toHaveLength(3)
     expect(scores).toHaveLength(3)
+    expect(job).toMatchObject({ status: 'completed', attempts: 1, lastError: null })
     expect(steps.filter((step) => step.status === 'completed').map((step) => step.stage)).toEqual(
       expect.arrayContaining(['seed', 'ad_discovery', 'store_detection', 'lead_cleaning', 'lead_scoring']),
     )

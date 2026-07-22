@@ -22,6 +22,7 @@ import {
 import { LeadEntity } from './lead.entity'
 import { WorkflowStepEntity } from './workflow-step.entity'
 import { WorkflowLeadEntity } from './workflow-lead.entity'
+import { WorkflowJobEntity } from './workflow-job.entity'
 
 @Entity('workflow_runs')
 @Index('idx_workflow_runs_owner_created_at', ['ownerUserId', 'createdAt'])
@@ -92,6 +93,9 @@ export class WorkflowRunEntity {
 
   @OneToMany(() => WorkflowLeadEntity, (link) => link.workflowRun)
   leadLinks: WorkflowLeadEntity[]
+
+  @OneToMany(() => WorkflowJobEntity, (job) => job.workflowRun)
+  jobs: WorkflowJobEntity[]
 
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date

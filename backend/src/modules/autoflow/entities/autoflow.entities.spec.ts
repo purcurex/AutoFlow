@@ -9,6 +9,7 @@ import {
   WorkflowStepEntity,
   WorkflowLeadEntity,
   LeadScoreEntity,
+  WorkflowJobEntity,
 } from './index'
 import { AdCreativeEntity, ShopifyStoreEntity } from '../../discovery/entities'
 
@@ -24,6 +25,7 @@ describe('AutoFlow persistence entities', () => {
     [CrmActivityEntity, 'crm_activities'],
     [WorkflowLeadEntity, 'workflow_leads'],
     [LeadScoreEntity, 'lead_scores'],
+    [WorkflowJobEntity, 'workflow_jobs'],
     [AdCreativeEntity, 'ad_creatives'],
     [ShopifyStoreEntity, 'shopify_stores'],
   ])('maps %p to table %s', (entity, tableName) => {
@@ -76,6 +78,8 @@ describe('AutoFlow persistence entities', () => {
         'idx_ad_creatives_owner_discovered_at',
         'idx_shopify_stores_owner_domain',
         'idx_lead_scores_owner_total_score',
+        'idx_workflow_jobs_status_available_at',
+        'idx_workflow_jobs_lease_expires_at',
       ]),
     )
   })
