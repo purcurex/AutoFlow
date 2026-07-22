@@ -37,6 +37,7 @@ export interface ShopifySearchResult {
 // 创建专门用于 Shopify 搜索的 axios 实例，设置更长的超时时间
 const shopifyApi = axios.create({
   baseURL: '/api/shopify-search',
+  withCredentials: true,
   timeout: 60000, // 60 秒超时，因为搜索需要调用多个外部 API
   headers: {
     'Content-Type': 'application/json'
@@ -46,10 +47,6 @@ const shopifyApi = axios.create({
 // 请求拦截器
 shopifyApi.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('token')
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`
-    }
     return config
   },
   (error) => {
@@ -80,9 +77,7 @@ export const shopifySearchApi = {
 
     const response = await fetch('/api/shopify-search/by-image-upload', {
       method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`
-      },
+      credentials: 'include',
       body: formData
     })
 

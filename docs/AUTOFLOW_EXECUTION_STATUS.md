@@ -496,3 +496,24 @@ Verification:
 - PostgreSQL E2E: 10 passed, including correlation response propagation and payload-free audit persistence.
 - Full lint and backend build passed.
 - Local database migration `AddAuditEvents1784717000000` applied successfully.
+
+## 23. 2026-07-22 Browser Security And Frontend Packaging
+
+Completed security and packaging work:
+
+- Replaced JavaScript-accessible JWT storage with an `HttpOnly`, `SameSite=Lax`, path-scoped session cookie.
+- Production cookies require HTTPS through the `Secure` flag.
+- Login/register responses no longer expose JWT values to frontend JavaScript.
+- Added cookie logout/clear behavior and cookie extraction while retaining Bearer compatibility for non-browser clients.
+- Converted Axios, upload, streaming AI, and Shopify fetch calls to credentialed cookie requests.
+- Removed static `html2pdf.js`, reusing lazy `jsPDF`/`html2canvas` exports instead.
+- Split Tiptap/ProseMirror and syntax-highlight vendor code into lazy editor chunks.
+- Reduced Settings from about 946 kB to about 10 kB and NoteDetail route code from about 552 kB to about 17 kB; no build chunk exceeds 500 kB.
+- Added `AUTOFLOW_SECURITY_RISK_REGISTER.md` for the remaining two moderate ExcelJS/UUID findings.
+
+Verification:
+
+- Cookie-authenticated PostgreSQL E2E: 10 passed, including HttpOnly/SameSite assertions and absence of a token response field.
+- Frontend tests: 6 passed.
+- Frontend/backend builds and lint passed.
+- Production audit has zero high/critical findings. Two moderate findings remain accepted and monitored because the observed ExcelJS call path uses unaffected UUID v4 without a buffer; forced remediation would downgrade ExcelJS across a major compatibility boundary.

@@ -1,4 +1,3 @@
-import html2pdf from 'html2pdf.js'
 import type { Note } from '@/types'
 
 export function htmlToPlainText(html: string): string {
@@ -59,23 +58,12 @@ function createNoteElement(note: Note, creatorName: string): HTMLElement {
   return element
 }
 
-export function exportNoteToPdf(note: Note, username?: string): void {
-  const element = createNoteElement(note, username || '未知用户')
+export async function exportNoteToPdf(note: Note, username?: string): Promise<void> {
   const date = new Date().toISOString().slice(0, 10)
-
-  html2pdf()
-    .set({
-      margin: [15, 15, 15, 15],
-      filename: `${note.title || '无标题业务记录'}_${date}.pdf`,
-      image: { type: 'jpeg', quality: 0.98 },
-      html2canvas: { scale: 2, useCORS: true },
-      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-    })
-    .from(element)
-    .save()
+  return exportNotesToPdf([note], username, `${note.title || '无标题业务记录'}_${date}.pdf`)
 }
 
-export async function exportNotesToPdf(notes: Note[], username?: string): Promise<void> {
+export async function exportNotesToPdf(notes: Note[], username?: string, filename?: string): Promise<void> {
   const [{ default: jsPDF }, { default: html2canvas }] = await Promise.all([
     import('jspdf'),
     import('html2canvas'),
@@ -107,5 +95,5 @@ export async function exportNotesToPdf(notes: Note[], username?: string): Promis
     }
   }
 
-  pdf.save(`业务记录导出_${notes.length}条_${new Date().toISOString().slice(0, 10)}.pdf`)
+  pdf.save(filename || `业务记录导出_${notes.length}条_${new Date().toISOString().slice(0, 10)}.pdf`)
 }

@@ -26,7 +26,6 @@
     "axios": "^1.18.1",
     "dompurify": "^3.4.12",
     "html2canvas": "^1.4.1",
-    "html2pdf.js": "^0.14.0",
     "jspdf": "^4.2.1",
     "lowlight": "^3.3.0",
     "lucide-vue-next": "^0.577.0",

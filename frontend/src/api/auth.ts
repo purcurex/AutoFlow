@@ -28,12 +28,9 @@ export const authApi = {
     const formData = new FormData()
     formData.append('avatar', file)
 
-    const token = localStorage.getItem('token')
     const response = await fetch(`${API_URL}/users/avatar`, {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
+      credentials: 'include',
       body: formData,
     })
 
@@ -47,5 +44,9 @@ export const authApi = {
 
   changePassword(oldPassword: string, newPassword: string): Promise<void> {
     return api.put('/auth/password', { oldPassword, newPassword })
-  }
+  },
+
+  logout(): Promise<{ success: boolean }> {
+    return api.post('/auth/logout')
+  },
 }

@@ -7,9 +7,7 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api'
 
 export const useUserStore = defineStore('user', () => {
   const user = ref<User | null>(null)
-  const token = ref<string | null>(localStorage.getItem('token'))
-
-  const isLoggedIn = computed(() => !!token.value)
+  const isLoggedIn = computed(() => !!user.value)
   const username = computed(() => user.value?.username || '')
   const isAdmin = computed(() => user.value?.role === 'admin')
   const avatarUrl = computed(() => {
@@ -23,9 +21,7 @@ export const useUserStore = defineStore('user', () => {
 
   async function login(email: string, password: string) {
     const response = await authApi.login({ email, password })
-    token.value = response.token
     user.value = response.user
-    localStorage.setItem('token', response.token)
     localStorage.setItem('user', JSON.stringify(response.user))
     return response
   }
@@ -36,21 +32,18 @@ export const useUserStore = defineStore('user', () => {
 
   async function register(email: string, username: string, password: string, verificationCode: string) {
     const response = await authApi.register({ email, username, password, verificationCode })
-    token.value = response.token
     user.value = response.user
-    localStorage.setItem('token', response.token)
     localStorage.setItem('user', JSON.stringify(response.user))
     return response
   }
 
   async function fetchUser() {
-    if (!token.value) return
     try {
       const response = await authApi.getProfile()
       user.value = response
       localStorage.setItem('user', JSON.stringify(response))
     } catch {
-      logout()
+      clearSession()
     }
   }
 
@@ -66,16 +59,18 @@ export const useUserStore = defineStore('user', () => {
     return response
   }
 
-  function logout() {
+  function clearSession() {
     user.value = null
-    token.value = null
     localStorage.removeItem('token')
     localStorage.removeItem('user')
   }
 
+  function logout() {
+    void authApi.logout().finally(clearSession)
+  }
+
   return {
     user,
-    token,
     isLoggedIn,
     username,
     isAdmin,
@@ -86,6 +81,7 @@ export const useUserStore = defineStore('user', () => {
     fetchUser,
     updateProfile,
     uploadAvatar,
-    logout
+    logout,
+    clearSession,
   }
 })

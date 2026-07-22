@@ -110,11 +110,11 @@ function getStoredRole(): string | null {
 }
 
 router.beforeEach(async (to, _from, next) => {
-  const token = localStorage.getItem('token')
+  const hasSession = Boolean(localStorage.getItem('user'))
 
-  if (to.meta.requiresAuth && !token) {
+  if (to.meta.requiresAuth && !hasSession) {
     next({ name: 'Login', query: { redirect: to.fullPath } })
-  } else if (to.meta.guest && token) {
+  } else if (to.meta.guest && hasSession) {
     next({ name: 'Dashboard' })
   } else if (to.meta.requiresAdmin) {
     if (getStoredRole() !== 'admin') {

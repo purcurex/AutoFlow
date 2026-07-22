@@ -41,7 +41,7 @@ describe('security and compatibility routing', () => {
   })
 
   it('rejects the admin route when the local user record is absent', async () => {
-    localStorage.setItem('token', 'test-token')
+    localStorage.setItem('user', JSON.stringify({ role: 'user' }))
 
     await router.push('/admin')
 
@@ -49,7 +49,7 @@ describe('security and compatibility routing', () => {
   })
 
   it('redirects the legacy CRM route to lightweight follow-up', async () => {
-    localStorage.setItem('token', 'test-token')
+    localStorage.setItem('user', JSON.stringify({ role: 'user' }))
 
     await router.push('/crm')
 

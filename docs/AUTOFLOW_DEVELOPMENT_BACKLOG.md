@@ -134,6 +134,9 @@ When work is interrupted, resume in this order:
 - [x] Add request correlation IDs and structure access completion logs.
 - [x] Persist redacted write-operation audit events without request bodies or secrets.
 - [x] Add workflow queue health metrics and stale/failed warning signals.
+- [x] Move browser JWT storage from JavaScript-accessible local storage to an HttpOnly SameSite session cookie.
+- [x] Lazy-load PDF export dependencies and split legacy editor vendor chunks below the build warning threshold.
+- [x] Remove `html2pdf.js` and document the remaining ExcelJS transitive `uuid` moderate-risk exception.
 
 ### P2-D Production Discovery And Execution Hardening
 

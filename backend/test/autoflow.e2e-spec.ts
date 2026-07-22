@@ -22,8 +22,8 @@ jest.setTimeout(30000)
 describe('AutoFlow persistence API', () => {
   let app: INestApplication
   let dataSource: DataSource
-  let ownerToken: string
-  let otherToken: string
+  let ownerCookie: string
+  let otherCookie: string
   let ownerUserId: string
   let leadId: string
 
@@ -65,8 +65,11 @@ describe('AutoFlow persistence API', () => {
       .post('/api/auth/login')
       .send({ email: 'other@autoflow.test', password: 'StrongPassword123' })
       .expect(201)
-    ownerToken = ownerLogin.body.token
-    otherToken = otherLogin.body.token
+    ownerCookie = ownerLogin.headers['set-cookie'][0].split(';')[0]
+    otherCookie = otherLogin.headers['set-cookie'][0].split(';')[0]
+    expect(ownerLogin.body).not.toHaveProperty('token')
+    expect(ownerLogin.headers['set-cookie'][0]).toMatch(/HttpOnly/i)
+    expect(ownerLogin.headers['set-cookie'][0]).toMatch(/SameSite=Lax/i)
   })
 
   afterAll(async () => {
@@ -82,7 +85,7 @@ describe('AutoFlow persistence API', () => {
   it('reports FOP quote and handoff capabilities as unavailable without fake values', async () => {
     const response = await request(app.getHttpServer())
       .get('/api/autoflow/integrations/fop/capabilities')
-      .set('Authorization', `Bearer ${ownerToken}`)
+      .set('Cookie', ownerCookie)
       .expect(200)
 
     expect(response.body).toMatchObject({
@@ -98,7 +101,7 @@ describe('AutoFlow persistence API', () => {
   it('persists a workflow and returns it only to its owner', async () => {
     const created = await request(app.getHttpServer())
       .post('/api/autoflow/workflows')
-      .set('Authorization', `Bearer ${ownerToken}`)
+      .set('Cookie', ownerCookie)
       .send({ seedType: 'keyword', seedValue: 'pet grooming brush', targetMarket: 'United States' })
       .expect(201)
 
@@ -107,11 +110,11 @@ describe('AutoFlow persistence API', () => {
 
     const ownerList = await request(app.getHttpServer())
       .get('/api/autoflow/workflows')
-      .set('Authorization', `Bearer ${ownerToken}`)
+      .set('Cookie', ownerCookie)
       .expect(200)
     const otherList = await request(app.getHttpServer())
       .get('/api/autoflow/workflows')
-      .set('Authorization', `Bearer ${otherToken}`)
+      .set('Cookie', otherCookie)
       .expect(200)
 
     expect(ownerList.body.items.map((item: { id: string }) => item.id)).toContain(created.body.id)
@@ -122,7 +125,7 @@ describe('AutoFlow persistence API', () => {
     const correlationId = 'e2e-correlation-0001'
     const created = await request(app.getHttpServer())
       .post('/api/autoflow/workflows')
-      .set('Authorization', `Bearer ${ownerToken}`)
+      .set('Cookie', ownerCookie)
       .set('X-Correlation-ID', correlationId)
       .send({ seedType: 'keyword', seedValue: 'audit test product', targetMarket: 'United States' })
       .expect(201)
@@ -130,7 +133,7 @@ describe('AutoFlow persistence API', () => {
 
     const events = await request(app.getHttpServer())
       .get('/api/autoflow/audit-events')
-      .set('Authorization', `Bearer ${ownerToken}`)
+      .set('Cookie', ownerCookie)
       .expect(200)
     const event = events.body.find((item: { correlationId: string }) => item.correlationId === correlationId)
     expect(event).toMatchObject({ actorUserId: ownerUserId, outcome: 'succeeded' })
@@ -141,7 +144,7 @@ describe('AutoFlow persistence API', () => {
   it('rejects unexpected profile properties instead of escalating a user role', async () => {
     await request(app.getHttpServer())
       .put('/api/users/profile')
-      .set('Authorization', `Bearer ${ownerToken}`)
+      .set('Cookie', ownerCookie)
       .send({ username: 'owner', role: 'admin' })
       .expect(400)
   })
@@ -149,18 +152,18 @@ describe('AutoFlow persistence API', () => {
   it('executes discovery asynchronously and persists idempotent workflow evidence', async () => {
     const created = await request(app.getHttpServer())
       .post('/api/autoflow/workflows')
-      .set('Authorization', `Bearer ${ownerToken}`)
+      .set('Cookie', ownerCookie)
       .send({ seedType: 'keyword', seedValue: 'portable blender', targetMarket: 'United States' })
       .expect(201)
 
     await request(app.getHttpServer())
       .post(`/api/autoflow/workflows/${created.body.id}/start-discovery`)
-      .set('Authorization', `Bearer ${otherToken}`)
+      .set('Cookie', otherCookie)
       .expect(404)
 
     const started = await request(app.getHttpServer())
       .post(`/api/autoflow/workflows/${created.body.id}/start-discovery`)
-      .set('Authorization', `Bearer ${ownerToken}`)
+      .set('Cookie', ownerCookie)
       .expect(202)
     expect(started.body).toMatchObject({
       workflowRunId: created.body.id,
@@ -205,7 +208,7 @@ describe('AutoFlow persistence API', () => {
 
     await request(app.getHttpServer())
       .post(`/api/autoflow/workflows/${created.body.id}/start-discovery`)
-      .set('Authorization', `Bearer ${ownerToken}`)
+      .set('Cookie', ownerCookie)
       .expect(409)
   })
 
@@ -234,18 +237,18 @@ describe('AutoFlow persistence API', () => {
 
     await request(app.getHttpServer())
       .get(`/api/autoflow/leads/${leadId}`)
-      .set('Authorization', `Bearer ${otherToken}`)
+      .set('Cookie', otherCookie)
       .expect(404)
 
     await request(app.getHttpServer())
       .patch(`/api/autoflow/leads/${leadId}/status`)
-      .set('Authorization', `Bearer ${ownerToken}`)
+      .set('Cookie', ownerCookie)
       .send({ status: 'won' })
       .expect(409)
 
     const qualified = await request(app.getHttpServer())
       .patch(`/api/autoflow/leads/${leadId}/status`)
-      .set('Authorization', `Bearer ${ownerToken}`)
+      .set('Cookie', ownerCookie)
       .send({ status: 'qualified', note: 'Validated store and contact fit' })
       .expect(200)
     expect(qualified.body.status).toBe('qualified')
@@ -278,7 +281,7 @@ describe('AutoFlow persistence API', () => {
     }
     const created = await request(app.getHttpServer())
       .post('/api/autoflow/quotes')
-      .set('Authorization', `Bearer ${ownerToken}`)
+      .set('Cookie', ownerCookie)
       .send(quoteDraft)
       .expect(201)
 
@@ -292,12 +295,12 @@ describe('AutoFlow persistence API', () => {
 
     await request(app.getHttpServer())
       .get(`/api/autoflow/quotes/${created.body.id}`)
-      .set('Authorization', `Bearer ${otherToken}`)
+      .set('Cookie', otherCookie)
       .expect(404)
 
     const revised = await request(app.getHttpServer())
       .post(`/api/autoflow/quotes/${created.body.id}/versions`)
-      .set('Authorization', `Bearer ${ownerToken}`)
+      .set('Cookie', ownerCookie)
       .send({ ...quoteDraft, leadId: undefined, title: undefined })
       .expect(201)
     expect(revised.body.currentVersion).toBe(2)
@@ -307,13 +310,13 @@ describe('AutoFlow persistence API', () => {
   it('persists one fail-closed, retryable FOP handoff per lead', async () => {
     await request(app.getHttpServer())
       .post(`/api/autoflow/leads/${leadId}/fop-handoff`)
-      .set('Authorization', `Bearer ${otherToken}`)
+      .set('Cookie', otherCookie)
       .send({ reason: 'Qualified for FOP follow-up' })
       .expect(404)
 
     const first = await request(app.getHttpServer())
       .post(`/api/autoflow/leads/${leadId}/fop-handoff`)
-      .set('Authorization', `Bearer ${ownerToken}`)
+      .set('Cookie', ownerCookie)
       .send({ reason: 'Qualified for FOP follow-up' })
       .expect(201)
     expect(first.body).toMatchObject({
@@ -326,7 +329,7 @@ describe('AutoFlow persistence API', () => {
 
     const second = await request(app.getHttpServer())
       .post(`/api/autoflow/leads/${leadId}/fop-handoff`)
-      .set('Authorization', `Bearer ${ownerToken}`)
+      .set('Cookie', ownerCookie)
       .send({ reason: 'Retry after integration check' })
       .expect(201)
     expect(second.body.id).toBe(first.body.id)
@@ -351,7 +354,7 @@ describe('AutoFlow persistence API', () => {
     })
     const generated = await request(app.getHttpServer())
       .post(`/api/autoflow/leads/${leadId}/messages`)
-      .set('Authorization', `Bearer ${ownerToken}`)
+      .set('Cookie', ownerCookie)
       .send({ channel: 'whatsapp', offer: 'fast fulfillment' })
       .expect(201)
     expect(generated.body.status).toBe('draft')
@@ -364,13 +367,13 @@ describe('AutoFlow persistence API', () => {
 
     await request(app.getHttpServer())
       .patch(`/api/autoflow/outreach-tasks/${generated.body.id}`)
-      .set('Authorization', `Bearer ${ownerToken}`)
+      .set('Cookie', ownerCookie)
       .send({ status: 'ready', message: 'Human-reviewed test draft' })
       .expect(200)
 
     await request(app.getHttpServer())
       .patch(`/api/autoflow/outreach-tasks/${generated.body.id}`)
-      .set('Authorization', `Bearer ${ownerToken}`)
+      .set('Cookie', ownerCookie)
       .send({ status: 'sent' })
       .expect(200)
 
