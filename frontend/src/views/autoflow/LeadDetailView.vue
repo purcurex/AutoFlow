@@ -1,9 +1,10 @@
 ﻿<script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import { CheckCircle2, FileSpreadsheet, Sparkles } from 'lucide-vue-next'
+import { CheckCircle2, FileSpreadsheet, Send, Sparkles } from 'lucide-vue-next'
 import { useAutoFlowStore } from '@/stores'
 import { AppLayout } from '@/components/layout'
+import { fopApi, type FopHandoff } from '@/api/fop'
 
 const route = useRoute()
 const store = useAutoFlowStore()
@@ -11,9 +12,13 @@ const generatedMessage = ref('')
 const generatedTaskId = ref('')
 const draftStatus = ref<'idle' | 'draft' | 'ready'>('idle')
 const messageError = ref('')
+const handoff = ref<FopHandoff | null>(null)
+const handoffBusy = ref(false)
 
-onMounted(() => {
-  store.fetchLead(String(route.params.id))
+onMounted(async () => {
+  const leadId = String(route.params.id)
+  await store.fetchLead(leadId)
+  handoff.value = await fopApi.getHandoff(leadId)
 })
 
 const lead = computed(() => store.currentLead)
@@ -35,6 +40,16 @@ async function approveDraft() {
   if (!generatedTaskId.value || !generatedMessage.value.trim()) return
   await store.updateOutreachTask(generatedTaskId.value, { status: 'ready', message: generatedMessage.value.trim() })
   draftStatus.value = 'ready'
+}
+
+async function handoffToFop() {
+  if (!lead.value || handoffBusy.value) return
+  handoffBusy.value = true
+  try {
+    handoff.value = await fopApi.handoff(lead.value.id, 'Qualified prospect handed off from AutoFlow')
+  } finally {
+    handoffBusy.value = false
+  }
 }
 </script>
 
@@ -114,6 +129,17 @@ async function approveDraft() {
             <FileSpreadsheet class="h-4 w-4" />
             Prepare quote
           </RouterLink>
+          <button class="btn btn-secondary mt-3 w-full gap-2" :disabled="handoffBusy || handoff?.status === 'pending' || handoff?.status === 'succeeded'" @click="handoffToFop">
+            <Send class="h-4 w-4" />
+            {{ handoff?.status === 'succeeded' ? 'Handed off to FOP' : handoffBusy ? 'Handing off...' : 'Handoff to FOP' }}
+          </button>
+          <div v-if="handoff" class="mt-3 border-l-4 border-slate-300 px-3 py-2 text-xs text-slate-600 dark:border-slate-700 dark:text-slate-300">
+            <p class="font-medium capitalize">FOP sync: {{ handoff.status.replace('_', ' ') }}</p>
+            <p v-if="handoff.fopLeadId" class="mt-1">Lead ID: {{ handoff.fopLeadId }}</p>
+            <p v-if="handoff.fopOpportunityId" class="mt-1">Opportunity ID: {{ handoff.fopOpportunityId }}</p>
+            <p v-if="handoff.conflicts.length" class="mt-1 text-amber-700 dark:text-amber-300">{{ handoff.conflicts.join('; ') }}</p>
+            <p v-if="handoff.lastError" class="mt-1 text-red-600 dark:text-red-300">{{ handoff.lastError }}</p>
+          </div>
         </aside>
       </div>
 

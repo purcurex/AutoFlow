@@ -441,3 +441,22 @@ Verification:
 External gate:
 
 - Live mode remains unavailable until Kingdee Cloud Cosmic endpoints/operation IDs, credentials, field mappings, and approved sandbox evidence are supplied and reconciled.
+
+## 20. 2026-07-22 Idempotent FOP Handoff
+
+Completed lightweight handoff work:
+
+- Added one owner-scoped `fop_handoffs` record per AutoFlow lead.
+- Added a stable unique idempotency key, attempt count, retryable unavailable/failed states, and fresh-pending suppression.
+- Added FOP lead ID, opportunity ID, conflicts, last error, and last-sync time without copying FOP opportunity stages.
+- Added authenticated read/create APIs at `/api/autoflow/leads/:leadId/fop-handoff`.
+- Added a lead-detail action and visible sync/conflict state.
+- Added a lightweight handoff activity record for local next-action history.
+- Default disabled mode persists an honest `unavailable` result instead of fabricating FOP identifiers.
+
+Verification:
+
+- Migration, entity, capability, and FOP contract tests: 40 passed.
+- PostgreSQL E2E: 9 passed, including owner isolation, retry attempt increment, stable idempotency key, and one-row uniqueness.
+- Full lint and production build passed.
+- Local database migration `AddFopHandoffs1784715000000` applied successfully.

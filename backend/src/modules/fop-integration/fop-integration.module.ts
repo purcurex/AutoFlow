@@ -1,4 +1,6 @@
 import { Module } from '@nestjs/common'
+import { TypeOrmModule } from '@nestjs/typeorm'
+import { CrmActivityEntity, LeadEntity } from '../autoflow/entities'
 import { FopIntegrationController } from './fop-integration.controller'
 import { FopIntegrationService } from './fop-integration.service'
 import { FopCrmHandoffPort, FopLogisticsRatePort, FopProductCostPort } from './fop-integration.types'
@@ -10,11 +12,16 @@ import {
   UnavailableFopLogisticsRateAdapter,
   UnavailableFopProductCostAdapter,
 } from './fop-sandbox.adapters'
+import { FopHandoffEntity } from './fop-handoff.entity'
+import { FopHandoffController } from './fop-handoff.controller'
+import { FopHandoffService } from './fop-handoff.service'
 
 @Module({
-  controllers: [FopIntegrationController],
+  imports: [TypeOrmModule.forFeature([FopHandoffEntity, LeadEntity, CrmActivityEntity])],
+  controllers: [FopIntegrationController, FopHandoffController],
   providers: [
     FopIntegrationService,
+    FopHandoffService,
     {
       provide: FopProductCostPort,
       inject: [FopIntegrationService],

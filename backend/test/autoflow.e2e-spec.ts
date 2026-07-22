@@ -15,6 +15,7 @@ import {
 } from '../src/modules/autoflow/entities'
 import { AdCreativeEntity, ShopifyStoreEntity } from '../src/modules/discovery/entities'
 import { AiService } from '../src/modules/ai/ai.service'
+import { FopHandoffEntity } from '../src/modules/fop-integration/fop-handoff.entity'
 
 jest.setTimeout(30000)
 
@@ -281,6 +282,37 @@ describe('AutoFlow persistence API', () => {
       .expect(201)
     expect(revised.body.currentVersion).toBe(2)
     expect(revised.body.versions.map((version: { version: number }) => version.version)).toEqual([2, 1])
+  })
+
+  it('persists one fail-closed, retryable FOP handoff per lead', async () => {
+    await request(app.getHttpServer())
+      .post(`/api/autoflow/leads/${leadId}/fop-handoff`)
+      .set('Authorization', `Bearer ${otherToken}`)
+      .send({ reason: 'Qualified for FOP follow-up' })
+      .expect(404)
+
+    const first = await request(app.getHttpServer())
+      .post(`/api/autoflow/leads/${leadId}/fop-handoff`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ reason: 'Qualified for FOP follow-up' })
+      .expect(201)
+    expect(first.body).toMatchObject({
+      leadId,
+      status: 'unavailable',
+      attempts: 1,
+      fopLeadId: null,
+      fopOpportunityId: null,
+    })
+
+    const second = await request(app.getHttpServer())
+      .post(`/api/autoflow/leads/${leadId}/fop-handoff`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ reason: 'Retry after integration check' })
+      .expect(201)
+    expect(second.body.id).toBe(first.body.id)
+    expect(second.body.idempotencyKey).toBe(first.body.idempotencyKey)
+    expect(second.body.attempts).toBe(2)
+    expect(await dataSource.getRepository(FopHandoffEntity).countBy({ leadId })).toBe(1)
   })
 
   it('reviews outreach before updating lead and local follow-up activity', async () => {

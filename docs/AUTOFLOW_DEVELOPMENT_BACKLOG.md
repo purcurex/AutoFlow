@@ -195,13 +195,14 @@ Live FOP integration is blocked by the interface inventory, not by the quote UI 
 - [x] Reposition `/crm` as a lightweight follow-up/next-action queue and keep a compatibility redirect.
 - [ ] Keep only latest outcome, next action, next-action time, note, and handoff status in AutoFlow.
 - [x] Define `FopCrmHandoffPort`.
-- [ ] Add validated handoff DTOs with the live handoff API.
-- [ ] Add FOP lead ID, opportunity ID, sync status, conflicts, and last-sync time references.
-- [ ] Add an explicit, idempotent handoff action from lead detail and quote result.
-- [ ] Display FOP duplicate, ownership, and stage conflicts without overwriting FOP data.
-- [ ] Add handoff activity/audit events and retry handling.
-- [ ] Add handoff contract and API tests.
-- [ ] Do not implement FOP opportunity stages, ownership rules, or authoritative follow-up history in AutoFlow.
+- [x] Add validated handoff DTOs with the handoff API.
+- [x] Add FOP lead ID, opportunity ID, sync status, conflicts, and last-sync time references.
+- [x] Add an explicit, idempotent handoff action from lead detail.
+- [ ] Add the same handoff action from a completed quote result.
+- [x] Display FOP duplicate, ownership, and stage conflicts without overwriting FOP data.
+- [x] Add handoff activity/audit events and retry handling.
+- [x] Add handoff contract and API tests.
+- [x] Do not implement FOP opportunity stages, ownership rules, or authoritative follow-up history in AutoFlow.
 
 ## 7. Suggested Execution Order
 

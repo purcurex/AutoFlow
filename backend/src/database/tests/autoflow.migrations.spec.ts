@@ -8,6 +8,7 @@ import { FixLeadScoreUniqueIndex1784711060000 } from '../migrations/178471106000
 import { AddWorkflowJobQueue1784712000000 } from '../migrations/1784712000000-AddWorkflowJobQueue'
 import { AddDiscoveryVerificationEvidence1784713000000 } from '../migrations/1784713000000-AddDiscoveryVerificationEvidence'
 import { AddQuotationSnapshots1784714000000 } from '../migrations/1784714000000-AddQuotationSnapshots'
+import { AddFopHandoffs1784715000000 } from '../migrations/1784715000000-AddFopHandoffs'
 
 describe('AutoFlow core migration', () => {
   function createQueryRunner() {
@@ -132,5 +133,15 @@ describe('P1 contract and discovery-link migrations', () => {
     expect(sql).toContain('"request_snapshot" jsonb NOT NULL')
     expect(sql).toContain('"result_snapshot" jsonb')
     expect(sql).toContain('"uq_quotation_versions_quote_version"')
+  })
+
+  it('adds idempotent FOP handoff references and conflict state', async () => {
+    const queryRunner = createQueryRunner()
+    await new AddFopHandoffs1784715000000().up(queryRunner)
+    const sql = (queryRunner.query as jest.Mock).mock.calls.map(([statement]) => statement).join('\n')
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS "fop_handoffs"')
+    expect(sql).toContain('"uq_fop_handoffs_idempotency_key"')
+    expect(sql).toContain('"fop_opportunity_id" varchar(160)')
+    expect(sql).toContain('"conflicts" jsonb')
   })
 })
