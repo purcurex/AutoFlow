@@ -113,6 +113,13 @@ export interface CreateWorkflowRequest {
   targetMarket?: string
 }
 
+export interface DiscoveryStartResult {
+  workflowRunId: string
+  status: 'running'
+  scheduled: boolean
+  resumed: boolean
+}
+
 export interface GenerateMessageRequest {
   channel?: OutreachChannel
   language?: string
@@ -134,6 +141,9 @@ export const autoflowApi = {
   },
   createWorkflow(data: CreateWorkflowRequest): Promise<WorkflowRun> {
     return api.post('/autoflow/workflows', data)
+  },
+  startDiscovery(id: string): Promise<DiscoveryStartResult> {
+    return api.post(`/autoflow/workflows/${id}/start-discovery`)
   },
   getLeads(status?: LeadStatus): Promise<PaginatedResult<StoreLead>> {
     return api.get('/autoflow/leads', { params: { status } })

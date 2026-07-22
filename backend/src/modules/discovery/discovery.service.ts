@@ -61,6 +61,53 @@ export class DiscoveryService {
     }
   }
 
+  async getPersistedEvidence(
+    ownerUserId: string,
+    workflowRunId: string,
+  ): Promise<DiscoveryEvidenceResult> {
+    const workflow = await this.workflowRepository.findOne({ where: { id: workflowRunId, ownerUserId } })
+    if (!workflow) throw new NotFoundException('Workflow not found')
+
+    const [adEntities, storeEntities] = await Promise.all([
+      this.adCreativeRepository.find({
+        where: { workflowRunId, ownerUserId },
+        order: { discoveredAt: 'ASC' },
+      }),
+      this.shopifyStoreRepository.find({
+        where: { workflowRunId, ownerUserId },
+        order: { discoveredAt: 'ASC' },
+      }),
+    ])
+    const ads: NormalizedAdCreative[] = adEntities.map((ad) => ({
+      provider: ad.provider,
+      advertiserName: ad.advertiserName,
+      sourceUrl: ad.sourceUrl,
+      description: ad.description,
+      imageUrl: ad.imageUrl,
+      confidence: ad.confidence,
+      rawPayload: ad.rawPayload || {},
+    }))
+    const stores: NormalizedShopifyStore[] = storeEntities.map((store) => ({
+      name: store.name,
+      domain: store.domain,
+      normalizedDomain: store.normalizedDomain,
+      url: store.url,
+      description: store.description,
+      imageUrl: store.imageUrl,
+      detectionSource: store.detectionSource,
+      shopifyConfidence: store.shopifyConfidence,
+      traffic: store.traffic,
+      rawPayload: store.rawPayload || {},
+    }))
+
+    return {
+      workflowRunId,
+      ads,
+      stores,
+      candidates: stores.map((store) => this.toLeadCandidate(store)),
+    }
+  }
+
   private async persistAds(
     ownerUserId: string,
     teamId: string | null,

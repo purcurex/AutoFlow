@@ -263,3 +263,38 @@ Quality gate:
 - Production dependency audit has no high or critical findings.
 
 Next phase: P2-B Workflow Execution.
+
+## P2-B And P2-C Discovery Execution - 2026-07-22
+
+Completed:
+
+- Added owner-scoped `POST /api/autoflow/workflows/:id/start-discovery` with `202 Accepted`.
+- Added workflow-list start/retry controls with automatic progress refresh.
+- Added single-instance asynchronous execution with duplicate-run protection.
+- Persisted workflow progress, step output, step errors, completion, and failure state.
+- Reused completed discovery evidence when resuming an interrupted workflow.
+- Promoted store candidates into leads with `owner_user_id + normalized_domain` upsert behavior.
+- Linked workflows, leads, and Shopify detections without duplicating stable customer assets.
+- Added explainable `rules-v1` score snapshots and an upsert-compatible unique index.
+- Kept seed-level ad evidence out of store-specific ad scores until a verified match exists.
+- Marked deferred message, outreach, and CRM steps as `skipped` instead of reporting false completion.
+- Added development mock and production provider fail-closed tests.
+- Added PostgreSQL E2E coverage for the complete discovery workflow and owner isolation.
+
+Recovery contract:
+
+- Active duplicate starts return without scheduling another run.
+- Failed or process-interrupted runs can be started again and resume from persisted step/evidence state.
+- Completed and cancelled workflows reject discovery restarts.
+- A persistent queue worker remains required before horizontal or multi-instance deployment.
+
+Quality gate:
+
+- Frontend: 2 test files, 3 tests passed.
+- Backend: 13 test suites, 55 tests passed.
+- PostgreSQL E2E: 1 test suite, 6 tests passed.
+- All seven TypeORM migrations are applied and `schema:log` reports no drift.
+- Frontend and backend production builds passed.
+- Production dependency audit has no high or critical findings.
+
+Next phase: P3 AI Outreach.

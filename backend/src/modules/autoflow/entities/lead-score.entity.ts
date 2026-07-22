@@ -17,6 +17,9 @@ import { WorkflowRunEntity } from './workflow-run.entity'
 @Index('idx_lead_scores_owner_total_score', ['ownerUserId', 'totalScore'])
 @Index('idx_lead_scores_team_id', ['teamId'])
 @Index('idx_lead_scores_workflow_run_id', ['workflowRunId'])
+@Index('uq_lead_scores_lead_workflow', ['leadId', 'workflowRunId'], {
+  unique: true,
+})
 @Check(
   'chk_lead_scores_dimensions',
   'shopify_confidence BETWEEN 0 AND 100 AND ad_activity_score BETWEEN 0 AND 100 AND traffic_score BETWEEN 0 AND 100 AND contact_score BETWEEN 0 AND 100 AND category_fit_score BETWEEN 0 AND 100 AND dropshipping_fit_score BETWEEN 0 AND 100 AND risk_score BETWEEN 0 AND 100 AND total_score BETWEEN 0 AND 100',

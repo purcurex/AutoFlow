@@ -44,6 +44,13 @@ Implemented P1 integration baseline:
 - Outreach-to-lead-to-CRM transaction flow.
 - Database-backed `/api/health` readiness check.
 
+Implemented P2 integration baseline:
+
+- Development mock and production fail-closed provider tests.
+- Owner-scoped asynchronous discovery start API.
+- PostgreSQL verification for workflow steps, ad creatives, Shopify stores, leads, workflow links, and score snapshots.
+- Completed workflow restart rejection and cross-owner start rejection.
+
 ## 4. Test Case Matrix
 
 | ID | Area | Case | Priority | Automation |
@@ -81,6 +88,10 @@ Implemented P1 integration baseline:
 | TC-031 | Contract | AutoFlow write DTOs accept supported fields and reject invalid enum/date values | P0 | Backend unit |
 | TC-032 | Persistence | P1-A entities map to the expected tables, ownership columns, links, and indexes | P1 | Backend metadata unit |
 | TC-033 | Migration | Core migration creates all P1-A tables and reverts without dropping legacy tables | P1 | Backend migration unit |
+| TC-034 | Discovery | Start endpoint returns 202 and persists provider evidence | P0 | PostgreSQL E2E |
+| TC-035 | Discovery | Candidate stores create deduplicated leads and workflow links | P0 | PostgreSQL E2E |
+| TC-036 | Workflow | Discovery steps complete and deferred stages are explicitly skipped | P0 | PostgreSQL E2E |
+| TC-037 | Scoring | Workflow creates one structured score snapshot per lead | P1 | PostgreSQL E2E |
 
 ## 5. BDD To Test Mapping
 
@@ -88,7 +99,7 @@ Implemented P1 integration baseline:
 |---|---|
 | Brand Positioning | TC-001, TC-002 |
 | Workflow Creation | TC-005, TC-006, TC-007 |
-| Discovery And Lead Generation | TC-008, TC-009, TC-010, TC-011 |
+| Discovery And Lead Generation | TC-008, TC-009, TC-010, TC-011, TC-034, TC-035, TC-036, TC-037 |
 | Lead Scoring | TC-015, TC-016 |
 | AI Outreach | TC-017, TC-020 |
 | Outreach Queue | TC-018, TC-019 |

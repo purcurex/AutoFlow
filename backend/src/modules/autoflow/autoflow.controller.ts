@@ -1,4 +1,17 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Query, Request, UseGuards } from '@nestjs/common'
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Query,
+  Request,
+  UseGuards,
+} from '@nestjs/common'
 import { Request as ExpressRequest } from 'express'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
 import { AutoflowService } from './autoflow.service'
@@ -11,11 +24,15 @@ import {
   UpdateLeadStatusDto,
   UpdateOutreachTaskDto,
 } from './dto/autoflow.dto'
+import { WorkflowExecutionService } from '../discovery/workflow-execution.service'
 
 @Controller('autoflow')
 @UseGuards(JwtAuthGuard)
 export class AutoflowController {
-  constructor(private readonly autoflowService: AutoflowService) {}
+  constructor(
+    private readonly autoflowService: AutoflowService,
+    private readonly workflowExecutionService: WorkflowExecutionService,
+  ) {}
 
   @Get('dashboard')
   getDashboard(@Request() req: ExpressRequest) {
@@ -30,6 +47,15 @@ export class AutoflowController {
   @Post('workflows')
   createWorkflow(@Request() req: ExpressRequest, @Body() body: CreateWorkflowDto) {
     return this.autoflowService.createWorkflow(req.user!.userId, body)
+  }
+
+  @Post('workflows/:id/start-discovery')
+  @HttpCode(HttpStatus.ACCEPTED)
+  startDiscovery(
+    @Request() req: ExpressRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.workflowExecutionService.startDiscovery(req.user!.userId, id)
   }
 
   @Get('leads')

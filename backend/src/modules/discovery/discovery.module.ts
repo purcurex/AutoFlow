@@ -8,18 +8,34 @@ import { ShopifyStoreDiscoveryAdapter } from './adapters/shopify-store-discovery
 import { DiscoveryService } from './discovery.service'
 import { AD_DISCOVERY_ADAPTER, STORE_DISCOVERY_ADAPTER } from './discovery.types'
 import { AdCreativeEntity, ShopifyStoreEntity } from './entities'
+import {
+  LeadEntity,
+  LeadScoreEntity,
+  WorkflowLeadEntity,
+  WorkflowStepEntity,
+} from '../autoflow/entities'
+import { WorkflowExecutionService } from './workflow-execution.service'
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([WorkflowRunEntity, AdCreativeEntity, ShopifyStoreEntity]),
+    TypeOrmModule.forFeature([
+      WorkflowRunEntity,
+      WorkflowStepEntity,
+      WorkflowLeadEntity,
+      LeadEntity,
+      LeadScoreEntity,
+      AdCreativeEntity,
+      ShopifyStoreEntity,
+    ]),
     FacebookAdsModule,
     ShopifySearchModule,
   ],
   providers: [
     DiscoveryService,
+    WorkflowExecutionService,
     { provide: AD_DISCOVERY_ADAPTER, useClass: FacebookAdsDiscoveryAdapter },
     { provide: STORE_DISCOVERY_ADAPTER, useClass: ShopifyStoreDiscoveryAdapter },
   ],
-  exports: [DiscoveryService],
+  exports: [DiscoveryService, WorkflowExecutionService],
 })
 export class DiscoveryModule {}

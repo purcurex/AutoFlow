@@ -5,6 +5,13 @@ import * as request from 'supertest'
 import { UsersService } from '../src/modules/users/users.service'
 import { LeadEntity } from '../src/modules/autoflow/entities/lead.entity'
 import { CrmActivityEntity } from '../src/modules/autoflow/entities/crm-activity.entity'
+import {
+  LeadScoreEntity,
+  WorkflowLeadEntity,
+  WorkflowRunEntity,
+  WorkflowStepEntity,
+} from '../src/modules/autoflow/entities'
+import { AdCreativeEntity, ShopifyStoreEntity } from '../src/modules/discovery/entities'
 
 jest.setTimeout(30000)
 
@@ -20,6 +27,8 @@ describe('AutoFlow persistence API', () => {
     process.env.NODE_ENV = 'test'
     process.env.DB_DATABASE = 'autoflow_test'
     process.env.ENABLE_ADMIN_BOOTSTRAP = 'false'
+    process.env.ENABLE_MOCK_SEARCH = 'true'
+    process.env.SERPAPI_KEY = ''
 
     const { default: migrationDataSource } = await import('../src/database/data-source')
     await migrationDataSource.initialize()
@@ -92,6 +101,62 @@ describe('AutoFlow persistence API', () => {
       .set('Authorization', `Bearer ${ownerToken}`)
       .send({ username: 'owner', role: 'admin' })
       .expect(400)
+  })
+
+  it('executes discovery asynchronously and persists idempotent workflow evidence', async () => {
+    const created = await request(app.getHttpServer())
+      .post('/api/autoflow/workflows')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ seedType: 'keyword', seedValue: 'portable blender', targetMarket: 'United States' })
+      .expect(201)
+
+    await request(app.getHttpServer())
+      .post(`/api/autoflow/workflows/${created.body.id}/start-discovery`)
+      .set('Authorization', `Bearer ${otherToken}`)
+      .expect(404)
+
+    const started = await request(app.getHttpServer())
+      .post(`/api/autoflow/workflows/${created.body.id}/start-discovery`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .expect(202)
+    expect(started.body).toMatchObject({
+      workflowRunId: created.body.id,
+      status: 'running',
+      scheduled: true,
+      resumed: false,
+    })
+
+    let workflow: WorkflowRunEntity | null = null
+    for (let attempt = 0; attempt < 60; attempt += 1) {
+      workflow = await dataSource.getRepository(WorkflowRunEntity).findOneBy({ id: created.body.id })
+      if (workflow?.status === 'completed' || workflow?.status === 'failed') break
+      await new Promise((resolve) => setTimeout(resolve, 100))
+    }
+
+    expect(workflow).toMatchObject({ status: 'completed', progress: 100, leadCount: 3 })
+    const [ads, stores, links, scores, steps] = await Promise.all([
+      dataSource.getRepository(AdCreativeEntity).findBy({ workflowRunId: created.body.id }),
+      dataSource.getRepository(ShopifyStoreEntity).findBy({ workflowRunId: created.body.id }),
+      dataSource.getRepository(WorkflowLeadEntity).findBy({ workflowRunId: created.body.id }),
+      dataSource.getRepository(LeadScoreEntity).findBy({ workflowRunId: created.body.id }),
+      dataSource.getRepository(WorkflowStepEntity).findBy({ workflowRunId: created.body.id }),
+    ])
+    expect(ads).toHaveLength(3)
+    expect(stores).toHaveLength(3)
+    expect(stores.every((store) => store.leadId)).toBe(true)
+    expect(links).toHaveLength(3)
+    expect(scores).toHaveLength(3)
+    expect(steps.filter((step) => step.status === 'completed').map((step) => step.stage)).toEqual(
+      expect.arrayContaining(['seed', 'ad_discovery', 'store_detection', 'lead_cleaning', 'lead_scoring']),
+    )
+    expect(steps.filter((step) => step.status === 'skipped').map((step) => step.stage)).toEqual(
+      expect.arrayContaining(['message_generation', 'outreach', 'crm']),
+    )
+
+    await request(app.getHttpServer())
+      .post(`/api/autoflow/workflows/${created.body.id}/start-discovery`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .expect(409)
   })
 
   it('hides leads across owners and rejects invalid transitions', async () => {

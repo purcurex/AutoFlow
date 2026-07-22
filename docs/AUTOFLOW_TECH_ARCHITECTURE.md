@@ -33,10 +33,11 @@ Vue 3 SPA
         v
 NestJS API
   - Auth / Users
-  - AutoFlow scaffold API
+  - Owner-scoped AutoFlow API
+  - Discovery adapters and workflow executor
   - Legacy Notes / Folders
-  - Legacy Shopify Search
-  - Legacy Facebook Ads Search
+  - Shopify Search provider client
+  - Facebook Ads provider client
   - AI service
         |
         v
@@ -104,6 +105,7 @@ Current AutoFlow API:
 GET   /api/autoflow/dashboard
 GET   /api/autoflow/workflows
 POST  /api/autoflow/workflows
+POST  /api/autoflow/workflows/:id/start-discovery
 GET   /api/autoflow/leads
 GET   /api/autoflow/leads/:id
 POST  /api/autoflow/leads/:id/messages
@@ -112,7 +114,9 @@ PATCH /api/autoflow/outreach-tasks/:id
 GET   /api/autoflow/crm
 ```
 
-P1 persistence is implemented. `AutoflowService` uses owner-scoped TypeORM repositories, paginated list contracts, explicit status transition maps, and transactions that synchronize outreach, lead status, and CRM activity.
+P1 and P2 persistence are implemented. `AutoflowService` uses owner-scoped TypeORM repositories, paginated list contracts, explicit status transition maps, and transactions that synchronize outreach, lead status, and CRM activity. The P2 runner persists discovery evidence, progress, errors, deduplicated leads, workflow links, and score snapshots.
+
+The current scheduler runs asynchronously inside one API instance. PostgreSQL state supports explicit restart/resume through the start endpoint, but multi-instance deployment requires a persistent queue worker.
 
 ## 5. Target Domain Model
 
@@ -201,13 +205,12 @@ Known Windows note:
 
 ## 8. Next Architecture Iterations
 
-Priority order after P2-A:
+Priority order after P2:
 
-1. Add idempotent workflow-step execution around the discovery facade.
-2. Promote normalized candidates into deduplicated leads and workflow evidence links.
-3. Add background job queue for long-running discovery and scoring.
-4. Add lead scoring rules engine.
-5. Add WhatsApp deep-link outreach.
-6. Add CRM activity timeline UI.
-7. Add CSV/Excel export for leads.
-8. Continue legacy user-facing language cleanup.
+1. Rewrite AI message generation around persistent lead context and human review.
+2. Add WhatsApp deep-link outreach and channel templates.
+3. Add a persistent queue worker before horizontal scaling.
+4. Expand the lead scoring rules engine with verified ad-to-store matching.
+5. Add CRM activity timeline UI.
+6. Add CSV/Excel export for leads.
+7. Continue legacy user-facing language cleanup.

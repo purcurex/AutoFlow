@@ -191,13 +191,20 @@ Current contract rules:
 - List APIs return `{ items, total, page, pageSize }` and are always scoped by the authenticated owner.
 - Status transitions and corresponding CRM activities commit in one database transaction.
 
-### Planned Workflow APIs
+### Workflow APIs
 
 ```text
 GET    /api/autoflow/workflows/:id
-POST   /api/autoflow/workflows/:id/start-discovery
 GET    /api/autoflow/workflows/:id/steps
 ```
+
+Implemented in P2:
+
+```text
+POST   /api/autoflow/workflows/:id/start-discovery -> 202 Accepted
+```
+
+The P2 runner is asynchronous within one application instance. Workflow progress, step outputs, failures, and deduplication keys are persisted in PostgreSQL. A repeated start resumes a failed or interrupted run unless it is already active in the current process. A durable queue worker is required before multi-instance deployment.
 
 ### Planned Lead APIs
 

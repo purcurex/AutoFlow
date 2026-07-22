@@ -111,18 +111,18 @@ When work is interrupted, resume in this order:
 
 ### P2-B Workflow Execution
 
-- [ ] Add `POST /api/autoflow/workflows/:id/start-discovery`.
-- [ ] Add workflow step updates.
-- [ ] Add discovery progress state.
-- [ ] Create leads from normalized discovery results.
-- [ ] Mark workflow completed or failed.
+- [x] Add `POST /api/autoflow/workflows/:id/start-discovery`.
+- [x] Add workflow step updates.
+- [x] Add discovery progress state.
+- [x] Create leads from normalized discovery results.
+- [x] Mark workflow completed or failed.
 
 ### P2-C Tests
 
-- [ ] Test mock adapter behavior in development.
-- [ ] Test production missing key behavior.
-- [ ] Test discovery creates leads.
-- [ ] Test workflow step progression.
+- [x] Test mock adapter behavior in development.
+- [x] Test production missing key behavior.
+- [x] Test discovery creates leads.
+- [x] Test workflow step progression.
 
 ## 4. P3 AI Outreach Tasks
 

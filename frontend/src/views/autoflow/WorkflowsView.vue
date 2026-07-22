@@ -1,6 +1,7 @@
 ﻿<script setup lang="ts">
-import { computed, onMounted, reactive } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { Play, RefreshCw } from 'lucide-vue-next'
 import { useAutoFlowStore } from '@/stores'
 import { AppLayout } from '@/components/layout'
 import type { SeedType } from '@/api/autoflow'
@@ -8,6 +9,9 @@ import type { SeedType } from '@/api/autoflow'
 const props = defineProps<{ create?: boolean }>()
 const router = useRouter()
 const store = useAutoFlowStore()
+const activeWorkflowIds = reactive(new Set<string>())
+const actionMessage = ref('')
+let disposed = false
 
 const form = reactive({
   name: '',
@@ -20,12 +24,39 @@ onMounted(() => {
   store.fetchWorkflows()
 })
 
+onBeforeUnmount(() => {
+  disposed = true
+})
+
 const title = computed(() => props.create ? 'Create workflow' : 'Workflows')
 
 async function submitWorkflow() {
   if (!form.seedValue.trim()) return
   const workflow = await store.createWorkflow({ ...form })
   if (workflow) router.push('/workflows')
+}
+
+async function startDiscovery(workflowId: string) {
+  activeWorkflowIds.add(workflowId)
+  actionMessage.value = ''
+  try {
+    await store.startDiscovery(workflowId)
+    for (let attempt = 0; attempt < 60 && !disposed; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 500))
+      await store.fetchWorkflows()
+      const workflow = store.workflows.find((item) => item.id === workflowId)
+      if (!workflow || workflow.status !== 'running') {
+        actionMessage.value = workflow?.status === 'completed'
+          ? 'Discovery completed.'
+          : 'Discovery stopped. Review the workflow status.'
+        break
+      }
+    }
+  } catch (error) {
+    actionMessage.value = error instanceof Error ? error.message : 'Unable to start discovery.'
+  } finally {
+    activeWorkflowIds.delete(workflowId)
+  }
 }
 </script>
 
@@ -69,6 +100,9 @@ async function submitWorkflow() {
       </section>
 
       <section v-else class="rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+        <div v-if="actionMessage" class="border-b border-slate-200 px-4 py-3 text-sm text-slate-600 dark:border-slate-800 dark:text-slate-300">
+          {{ actionMessage }}
+        </div>
         <div class="overflow-x-auto">
           <table class="w-full text-sm">
             <thead class="bg-slate-50 text-left text-xs uppercase text-slate-500 dark:bg-slate-900">
@@ -80,6 +114,7 @@ async function submitWorkflow() {
                 <th class="px-4 py-3">Leads</th>
                 <th class="px-4 py-3">Progress</th>
                 <th class="px-4 py-3">Status</th>
+                <th class="w-40 px-4 py-3 text-right">Action</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
@@ -95,9 +130,27 @@ async function submitWorkflow() {
                   </div>
                 </td>
                 <td class="px-4 py-3 capitalize">{{ workflow.status }}</td>
+                <td class="px-4 py-3 text-right">
+                  <button
+                    v-if="workflow.status === 'draft' || workflow.status === 'failed' || workflow.status === 'running'"
+                    class="btn btn-secondary inline-flex min-w-32 items-center justify-center gap-2"
+                    :disabled="workflow.status === 'running' || activeWorkflowIds.has(workflow.id)"
+                    :title="workflow.status === 'failed' ? 'Retry discovery' : 'Start discovery'"
+                    @click="startDiscovery(workflow.id)"
+                  >
+                    <RefreshCw
+                      v-if="workflow.status === 'failed' || workflow.status === 'running'"
+                      class="h-4 w-4"
+                      :class="{ 'animate-spin': workflow.status === 'running' }"
+                    />
+                    <Play v-else class="h-4 w-4" />
+                    {{ workflow.status === 'failed' ? 'Retry' : workflow.status === 'running' ? 'Running' : 'Start' }}
+                  </button>
+                  <span v-else class="inline-block min-w-32 text-center text-slate-400">-</span>
+                </td>
               </tr>
               <tr v-if="store.workflows.length === 0">
-                <td colspan="7" class="px-4 py-8 text-center text-slate-500">No workflows yet.</td>
+                <td colspan="8" class="px-4 py-8 text-center text-slate-500">No workflows yet.</td>
               </tr>
             </tbody>
           </table>

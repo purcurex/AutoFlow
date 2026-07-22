@@ -3,6 +3,8 @@ import { AddAutoFlowCoreEntities1784700060000 } from '../migrations/178470006000
 import { AlignP1Contracts1784709000000 } from '../migrations/1784709000000-AlignP1Contracts'
 import { AddLeadDiscoveryLinks1784709060000 } from '../migrations/1784709060000-AddLeadDiscoveryLinks'
 import { AddDiscoveryEvidence1784710000000 } from '../migrations/1784710000000-AddDiscoveryEvidence'
+import { AddWorkflowExecutionGuards1784711000000 } from '../migrations/1784711000000-AddWorkflowExecutionGuards'
+import { FixLeadScoreUniqueIndex1784711060000 } from '../migrations/1784711060000-FixLeadScoreUniqueIndex'
 
 describe('AutoFlow core migration', () => {
   function createQueryRunner() {
@@ -79,5 +81,22 @@ describe('P1 contract and discovery-link migrations', () => {
     expect(sql).toContain('CREATE TABLE IF NOT EXISTS "shopify_stores"')
     expect(sql).toContain('CREATE TABLE IF NOT EXISTS "lead_scores"')
     expect(sql).toContain('"uq_shopify_stores_run_domain"')
+  })
+
+  it('prevents duplicate score snapshots for the same lead and workflow', async () => {
+    const queryRunner = createQueryRunner()
+    await new AddWorkflowExecutionGuards1784711000000().up(queryRunner)
+    const sql = (queryRunner.query as jest.Mock).mock.calls.map(([statement]) => statement).join('\n')
+    expect(sql).toContain('"uq_lead_scores_lead_workflow"')
+    expect(sql).toContain('WHERE "workflow_run_id" IS NOT NULL')
+  })
+
+  it('uses an upsert-compatible lead score unique index', async () => {
+    const queryRunner = createQueryRunner()
+    await new FixLeadScoreUniqueIndex1784711060000().up(queryRunner)
+    const sql = (queryRunner.query as jest.Mock).mock.calls.map(([statement]) => statement).join('\n')
+    expect(sql).toContain('DROP INDEX IF EXISTS "uq_lead_scores_lead_workflow"')
+    expect(sql).toContain('CREATE UNIQUE INDEX "uq_lead_scores_lead_workflow"')
+    expect(sql).not.toContain('WHERE "workflow_run_id" IS NOT NULL')
   })
 })

@@ -88,9 +88,11 @@ A development task is done when:
 
 ## 7. Next Formal Development Recommendation
 
-P0, P0.5, P1, and P2-A are complete. Continue with P2-B Workflow Execution:
+P0, P0.5, P1, and P2 are complete. Continue with P3 AI Outreach:
 
-1. Add `POST /api/autoflow/workflows/:id/start-discovery`.
-2. Execute discovery with idempotent workflow-step updates.
-3. Upsert leads by `owner_user_id + normalized_domain` and save `workflow_leads` evidence.
-4. Mark workflow completion or failure with recoverable error details.
+1. Rewrite the AI prompt and context builder for Dropshipping sales outreach.
+2. Add WhatsApp and email templates with human review before sending.
+3. Generate outreach tasks from persistent lead context.
+4. Add unavailable-provider and task-persistence tests.
+
+Before horizontal scaling, replace the P2 in-process scheduler with a persistent queue worker. The current single-instance runner stores every step and error in PostgreSQL and can resume through the same start endpoint after a restart.

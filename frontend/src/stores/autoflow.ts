@@ -43,6 +43,17 @@ export const useAutoFlowStore = defineStore('autoflow', () => {
     return workflow
   }
 
+  async function startDiscovery(id: string) {
+    const result = await autoflowApi.startDiscovery(id)
+    const workflow = workflows.value.find((item) => item.id === id)
+    if (workflow) {
+      workflow.status = 'running'
+      workflow.currentStage = 'ad_discovery'
+      workflow.progress = Math.max(workflow.progress, 10)
+    }
+    return result
+  }
+
   async function fetchLeads(status?: LeadStatus) {
     const result = await autoflowApi.getLeads(status)
     leads.value = result.items
@@ -99,6 +110,7 @@ export const useAutoFlowStore = defineStore('autoflow', () => {
     fetchDashboard,
     fetchWorkflows,
     createWorkflow,
+    startDiscovery,
     fetchLeads,
     fetchLead,
     generateMessage,
