@@ -517,3 +517,31 @@ Verification:
 - Frontend tests: 6 passed.
 - Frontend/backend builds and lint passed.
 - Production audit has zero high/critical findings. Two moderate findings remain accepted and monitored because the observed ExcelJS call path uses unaffected UUID v4 without a buffer; forced remediation would downgrade ExcelJS across a major compatibility boundary.
+
+## 24. 2026-07-22 Ordered Optimization Closeout
+
+Final gate results:
+
+- Root `npm run ci:local`: passed in full.
+- Frontend: 3 test files, 6 tests passed.
+- Backend: 18 test suites, 79 tests passed.
+- PostgreSQL E2E: 10 tests passed.
+- Migrations: all 13 source migrations applied to the local `autoflow` database.
+- Local API/database health: `status=ok`, `database=up`, `workflowQueue.stale=0`.
+- Production frontend package, Nest startup, SPA fallback, CSP/security headers, and health smoke: passed.
+- Production dependency gate: zero high or critical findings; two documented moderate findings.
+- Browser title and first-viewport branding use `AutoFlow`.
+
+Conclusion:
+
+The project now has a sustainable development baseline for AutoFlow discovery, evidence-backed lead qualification, human-reviewed outreach, versioned quotations, lightweight FOP handoff, durable execution, security, and observability. It is ready for the next controlled implementation phase and internal acceptance testing.
+
+The project is not yet ready to claim live FOP or real advertising-library production integration. Those capabilities remain correctly fail-closed pending external Kingdee Cloud Cosmic interface inventory, credentials, approved sandbox evidence, and an approved real ad-evidence provider.
+
+Next implementation boundary:
+
+1. Connect an approved real ad-library evidence source and reconcile ad-to-store matches.
+2. Complete FOP live authentication/operation/field inventory and staging adapters.
+3. Add multi-product quote line editing, live provider request execution, country/channel comparison, and combined result selection.
+4. Add quote-result-to-FOP handoff and live duplicate/timeout/partial-result reconciliation tests.
+5. Complete lightweight local next-action fields without duplicating FOP opportunity stages or authoritative CRM history.
