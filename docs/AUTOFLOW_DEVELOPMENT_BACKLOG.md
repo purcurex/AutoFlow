@@ -124,39 +124,82 @@ When work is interrupted, resume in this order:
 - [x] Test discovery creates leads.
 - [x] Test workflow step progression.
 
+### P0-R Release And Security Reopen
+
+- [x] Fix `start:prod` to use the actual Nest build entry.
+- [x] Define and automate frontend static hosting or deployment packaging.
+- [x] Add a production startup + `/api/health` CI smoke test.
+- [x] Sanitize rich-text `v-html` rendering and add security headers/CSP.
+- [x] Harden the frontend admin route fallback and align password validation with the backend.
+
+### P2-D Production Discovery And Execution Hardening
+
+- [ ] Replace the process-local active-run guard with a persistent queue/lease worker before paid-provider or multi-instance usage.
+- [ ] Add startup recovery, heartbeat, idempotent provider calls, retry budgets, and provider telemetry.
+- [ ] Replace search-hint advertising records with approved real ad evidence where provider access allows.
+- [ ] Strengthen Shopify verification and ad-to-store linkage confidence.
+- [ ] Add contact enrichment with source and verification state.
+- [ ] Recalibrate scoring so ad activity and contact completeness are evidence-driven rather than fixed values.
+
 ## 4. P3 AI Outreach Tasks
 
-- [ ] Rewrite AI system prompt for Dropshipping sales outreach.
+- [x] Rewrite AI system prompt for Dropshipping sales outreach.
 - [ ] Add message templates for WhatsApp and Email.
-- [ ] Add lead context builder.
-- [ ] Generate outreach task from lead detail.
-- [ ] Add human-review status flow.
+- [x] Add persistent lead context to AI outreach generation.
+- [x] Generate outreach task from lead detail.
+- [x] Add human-review `draft -> ready` status flow.
 - [ ] Add next follow-up suggestion.
-- [ ] Test AI unavailable behavior.
-- [ ] Test outreach task creation.
+- [x] Test AI unavailable behavior.
+- [x] Test outreach task creation.
 
-## 5. P4 Quote Workspace Tasks
+## 5. P4 FOP-Backed Quote Workspace Tasks
 
-- [ ] Create quote entities.
-- [ ] Create quote calculation service.
-- [ ] Add product cost fields.
-- [ ] Add logistics cost fields.
-- [ ] Add margin calculation.
-- [ ] Add 15% margin warning.
-- [ ] Add 10% approval-required flag.
-- [ ] Add quote validity date.
-- [ ] Add quote UI entry from lead detail.
-- [ ] Add quote tests.
+### P4-A Quote Surface And Domain Contracts
 
-## 6. P5 CRM/FOP Handoff Tasks
+- [x] Add Quotes navigation and lead-detail entry.
+- [ ] Add quote draft, version, source, validity, and provider-status UI states.
+- [ ] Add product/SKU line editor.
+- [x] Add ordered, non-overlapping quantity-tier editor with explicit unit and currency.
+- [x] Add multi-country destination selector and package condition editor.
+- [ ] Add per-country logistics channel comparison.
+- [x] Add product/SKU x quantity tier x destination country x shipping channel matrix shell.
+- [ ] Define validated quote DTOs and decimal-safe monetary fields.
+- [ ] Persist quote/provider snapshots only after the quote migration is reviewed.
 
-- [ ] Add FOP customer number placeholder.
-- [ ] Add registration status field.
-- [ ] Add store connection status field.
-- [ ] Add order intent status field.
-- [ ] Add handoff activity type.
-- [ ] Add manager dashboard metrics.
-- [ ] Document future FOP API integration points.
+### P4-B FOP Provider Ports And Placeholder Adapters
+
+- [x] Define `FopProductCostPort`.
+- [x] Define `FopLogisticsRatePort`.
+- [ ] Define integration-call status, idempotency, correlation, timeout, and retry contracts.
+- [ ] Add explicit test adapters and fixtures for development/test only.
+- [ ] Return a clear unavailable response when production FOP configuration is absent.
+- [ ] Preserve source, external request ID, version/effective time, expiration, units, and currency.
+- [x] Add authenticated FOP capability discovery that fails closed until live adapters exist.
+- [x] Ensure no local mock or estimate is presented as a real FOP price.
+- [ ] Add product-tier, multi-country freight, matrix, validation, failure, and duplicate-request tests.
+
+### P4-C Live FOP Enablement Gate
+
+- [ ] Inventory Kingdee Cloud Cosmic authentication, endpoints/operations, bill/form IDs, and field mappings.
+- [ ] Confirm FOP product/SKU mapping source and cost contract.
+- [ ] Confirm FOP country/channel/package fields and logistics-rate contract.
+- [ ] Reconcile approved sandbox fixtures against FOP results.
+- [ ] Configure secrets, redaction, metrics, alerts, rollback, and production enablement flag.
+
+Live FOP integration is blocked by the interface inventory, not by the quote UI work. The canonical contract is `AUTOFLOW_FOP_INTEGRATION_SPEC.md`.
+
+## 6. P5 Lightweight Follow-Up And FOP Handoff Tasks
+
+- [x] Reposition `/crm` as a lightweight follow-up/next-action queue and keep a compatibility redirect.
+- [ ] Keep only latest outcome, next action, next-action time, note, and handoff status in AutoFlow.
+- [x] Define `FopCrmHandoffPort`.
+- [ ] Add validated handoff DTOs with the live handoff API.
+- [ ] Add FOP lead ID, opportunity ID, sync status, conflicts, and last-sync time references.
+- [ ] Add an explicit, idempotent handoff action from lead detail and quote result.
+- [ ] Display FOP duplicate, ownership, and stage conflicts without overwriting FOP data.
+- [ ] Add handoff activity/audit events and retry handling.
+- [ ] Add handoff contract and API tests.
+- [ ] Do not implement FOP opportunity stages, ownership rules, or authoritative follow-up history in AutoFlow.
 
 ## 7. Suggested Execution Order
 
@@ -168,9 +211,13 @@ When work is interrupted, resume in this order:
 6. P1-B Services.
 7. P1-C Tests.
 8. P2 Discovery Workflow.
-9. P3 AI Outreach.
-10. P4 Quote Workspace.
-11. P5 CRM/FOP Handoff.
+9. P0-R Release And Security Reopen.
+10. P2-D Production Discovery And Execution Hardening.
+11. P3 AI Outreach.
+12. P4-A Quote Surface And Domain Contracts.
+13. P4-B FOP Provider Ports And Placeholder Adapters.
+14. P5 Lightweight Follow-Up And FOP Handoff.
+15. P4-C Live FOP Enablement after the FOP interface inventory and sandbox are available.
 
 ## 8. Current Foundation Closeout Changes
 

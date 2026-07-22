@@ -96,11 +96,13 @@ Production should keep `DB_SYNCHRONIZE=false`. Use `DB_MIGRATIONS_RUN=true` only
 
 ## 4. Runtime
 
-Build backend:
+Build and package the complete application from the repository root:
 
 ```powershell
-npm.cmd --workspace backend run build
+npm.cmd run build
 ```
+
+This builds both workspaces and copies the fresh Vue bundle into `backend/dist/public`.
 
 Start backend in production mode:
 
@@ -111,25 +113,27 @@ npm.cmd --workspace backend run start:prod
 PM2 example:
 
 ```powershell
-pm2 start backend/dist/main.js --name autoflow
+pm2 start backend/dist/src/main.js --name autoflow
 ```
 
 ## 5. Static Assets
 
-Do not commit generated frontend bundles into `backend/public`.
+Do not commit generated frontend bundles into source control.
 
 Current policy:
 
 - `frontend/dist` is a generated build output.
 - `backend/dist` is a generated build output.
 - `backend/public` legacy frontend bundles have been removed from source control.
-- Deployment packaging should copy fresh build artifacts explicitly if static hosting is needed.
+- `npm.cmd run build` packages the current frontend into generated `backend/dist/public`.
+- The production backend serves the SPA and supports direct navigation to Vue routes.
 
 ## 6. Smoke Checks
 
 After deployment:
 
 - Backend health / API base responds.
+- Packaged frontend `/` responds and includes CSP/security headers.
 - Login works.
 - AutoFlow dashboard loads.
 - Workflow list API responds.
@@ -138,3 +142,9 @@ After deployment:
 - Production does not silently use mock search results.
 - `GET /api/health` reports `status=ok` and `database=up`.
 - Admin bootstrap is disabled after intentional first use.
+
+Automated local/CI smoke:
+
+```powershell
+npm.cmd run test:prod-smoke
+```

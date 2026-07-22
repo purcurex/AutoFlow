@@ -4,7 +4,7 @@ import { autoflowApi } from '@/api/autoflow'
 import type {
   AutoFlowDashboard,
   CreateWorkflowRequest,
-  CrmStage,
+  FollowUpStage,
   LeadStatus,
   OutreachTask,
   StoreLead,
@@ -18,7 +18,7 @@ export const useAutoFlowStore = defineStore('autoflow', () => {
   const leads = ref<StoreLead[]>([])
   const currentLead = ref<StoreLead | null>(null)
   const outreachTasks = ref<OutreachTask[]>([])
-  const crmStages = ref<CrmStage[]>([])
+  const followUpStages = ref<FollowUpStage[]>([])
   const isLoading = ref(false)
 
   const topLeads = computed(() => [...leads.value].sort((a, b) => b.totalScore - a.totalScore).slice(0, 10))
@@ -29,7 +29,7 @@ export const useAutoFlowStore = defineStore('autoflow', () => {
     workflows.value = dashboard.value.recentWorkflows
     leads.value = dashboard.value.topLeads
     outreachTasks.value = dashboard.value.nextTasks
-    crmStages.value = dashboard.value.funnel
+    followUpStages.value = dashboard.value.funnel
   }
 
   async function fetchWorkflows() {
@@ -84,14 +84,14 @@ export const useAutoFlowStore = defineStore('autoflow', () => {
     return task
   }
 
-  async function fetchCrm() {
-    crmStages.value = await autoflowApi.getCrm()
+  async function fetchFollowUps() {
+    followUpStages.value = await autoflowApi.getFollowUps()
   }
 
   async function loadWorkspace() {
     isLoading.value = true
     try {
-      await Promise.all([fetchDashboard(), fetchWorkflows(), fetchLeads(), fetchOutreachTasks(), fetchCrm()])
+      await Promise.all([fetchDashboard(), fetchWorkflows(), fetchLeads(), fetchOutreachTasks(), fetchFollowUps()])
     } finally {
       isLoading.value = false
     }
@@ -103,7 +103,7 @@ export const useAutoFlowStore = defineStore('autoflow', () => {
     leads,
     currentLead,
     outreachTasks,
-    crmStages,
+    followUpStages,
     isLoading,
     topLeads,
     readyTasks,
@@ -116,7 +116,7 @@ export const useAutoFlowStore = defineStore('autoflow', () => {
     generateMessage,
     fetchOutreachTasks,
     updateOutreachTask,
-    fetchCrm,
+    fetchFollowUps,
     loadWorkspace,
   }
 })

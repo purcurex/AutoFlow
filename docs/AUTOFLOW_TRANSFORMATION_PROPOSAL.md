@@ -18,9 +18,9 @@ AutoFlow 不应继续作为 NoteFlow 智能笔记应用的改名版本，而应�
 → 线索评分
 → AI 生成建联话术
 → WhatsApp / Email 半自动触达
-→ 报价测算
-→ CRM 跟进
-→ 注册 / 绑店 / 下单 / FOP 履约复盘
+→ 产品阶梯报价与目的国运费询价
+→ 综合客户报价
+→ FOP 线索 / 商机交接
 ```
 
 原项目的笔记、富文本、文件夹、导出能力可以保留，但需要从主产品定位中降级，改造为客户开发过程中的资料沉淀、跟进记录、报价备注和素材归档能力。
@@ -31,17 +31,17 @@ AutoFlow = **Dropshipping Sales Workflow Copilot**
 
 目标用户：
 
-- 外贸业务员：搜客户、建联、报价、跟进。
-- 销售经理：线索分配、客户归属、报价审批、业绩复盘。
-- 订单助理：后续承接 FOP 履约异常。
-- 售后 / 财务：后续处理售后、回款、毛利与赔付。
+- 外贸业务员：搜品、搜店铺、找联系方式、快速筛查、建联与报价。
+- 销售经理：复核线索质量、报价完整性、异常和 FOP 交接状态。
+- FOP 用户：在金蝶云苍穹中承接正式线索、商机、商机阶段和后续跟进。
 
 第一阶段建议不要替代 CRM/FOP，而是聚焦销售前端提效：
 
 ```text
 AutoFlow 负责销售前端提效
-CRM 负责正式客户跟进沉淀
-FOP 负责订单、履约、物流、售后、财务主账
+FOP 负责正式线索、商机、阶段、跟进和客户主数据
+FOP 后端能力负责产品成本与物流渠道运费测算
+AutoFlow 通过接口组装客户报价，不复制 FOP 计算模型
 ```
 
 ## 3. 当前项目现状
@@ -56,20 +56,20 @@ FOP 负责订单、履约、物流、售后、财务主账
 - Shopify 搜索模块。
 - Facebook Ads 搜索模块。
 - AI 生成模块。
-- AutoFlow 初版页面：Dashboard、Workflows、Leads、Lead Detail、Outreach、CRM。
-- AutoFlow 初版后端接口：workflow、lead、outreach、crm funnel。
-- 已补充前端 Vitest 自动化测试基础脚本。
+- AutoFlow 初版页面：Dashboard、Workflows、Leads、Lead Detail、Outreach 和 CRM 兼容页。
+- Workflow、Lead、Contact、Outreach、CRM Activity、Discovery Evidence 和评分快照已持久化到 PostgreSQL。
+- P2 已具备单实例异步发现、步骤持久化、失败重试和线索去重基线。
+- 已建立前后端单测、PostgreSQL E2E、构建和依赖审计质量门禁。
 
 ### 3.2 主要问题
 
-- 项目中仍残留大量 `NoteFlow`、`noteflow`、`智能笔记`、`笔记应用` 语义。
-- `autoflow` 后端当前是内存假数据，没有持久化。
-- Shopify / Facebook / AI 能力尚未真正并入 AutoFlow 工作流。
-- 缺少报价、物流、客户归属、客户等级、跟进记录等 Dropshipping 核心对象。
-- 前端 AutoFlow 类型存在重复定义，后续容易漂移。
-- AI 模块仍是写作助手定位，不是销售开发助手。
-- 旧笔记功能仍占据较多产品语义，需要重新定位。
-- 部分中文文案存在编码损坏，需要逐步清理。
+- 生产启动入口与前端静态产物打包尚未闭合，CI 需要增加启动烟测。
+- 管理端富文本预览需要完成存储型 XSS 清洗和安全头加固。
+- 当前发现适配器仍偏搜索提示与启发式识别，真实广告素材、店铺验证和联系方式补全需要增强。
+- AI 服务尚未真正接入 AutoFlow 话术生成与人工审核流程。
+- 产品阶梯报价、多目的国运费报价、综合报价和 FOP 对接契约已完成设计，代码实现尚未开始。
+- 当前单实例进程内执行器在付费调用和多实例部署前需要升级为持久任务队列。
+- 前端仍存在重复 AutoFlow 视图，需要在对应功能迭代中合并。
 
 ## 4. 业务理解
 
@@ -95,11 +95,10 @@ HyperZone / HzDrop 业务面向经营 Shopify 独立站的小 B 卖家，提供 
 
 | 系统 | 主职责 |
 |---|---|
-| AutoFlow | 销售开发、线索发现、建联、报价、跟进提效 |
-| CRM | 线索、商机、跟进、日报、周报、客户开发过程 |
+| AutoFlow | 搜品、店铺发现、联系方式筛查、建联、报价编排和交接提效 |
 | AppStore | 客户注册、绑店、订单展示、付款确认 |
 | Shopify | 源单事实、订单、支付、退款、取消、履约对象 |
-| FOP | 客户、归属、履约、物流、售后、财务、回款、毛利主账 |
+| FOP（金蝶云苍穹） | 线索、商机、商机阶段、跟进记录、客户、产品成本、运费测算、履约、物流、售后、财务和毛利主账 |
 
 ## 5. 核心模块建议
 
@@ -156,26 +155,21 @@ HyperZone / HzDrop 业务面向经营 Shopify 独立站的小 B 卖家，提供 
 - 沉默客户唤醒话术。
 - 按客户国家、语言、类目、广告素材生成差异化切入角度。
 
-### 5.6 报价工作台
+### 5.6 FOP 驱动的报价工作台
 
 建议支持：
 
-- 产品成本。
-- 包装费。
-- 质检费。
-- 服务费。
-- 物流渠道。
-- 目的国。
-- 计费重量。
-- 参考时效。
-- 汇率。
-- 目标毛利率。
-- 最低 10% 毛利红线。
-- 15% 毛利绩效警戒提示。
-- 报价有效期。
-- 报价版本。
-- 报价审批状态。
-- 报价单或报价消息输出。
+- 产品 / SKU 选择。
+- 数量阶梯：起始数量、结束数量、单位和面向客户的阶梯单价。
+- 通过 FOP 产品成本接口获取各数量阶梯的权威成本结果。
+- 同一报价选择一个或多个目的国家。
+- 明确包裹重量、尺寸、数量、币种和单位。
+- 通过 FOP 运费接口获取各目的国的物流渠道、运费、计费重、时效、附加费和有效期。
+- 按“产品 / SKU × 数量阶梯 × 目的国 × 物流渠道”生成综合报价矩阵。
+- 保存使用过的 FOP 请求、结果版本、来源和所选方案，使报价可复现。
+- 支持报价有效期、版本、备注和客户报价输出。
+
+AutoFlow 不实现 FOP 的产品成本规则、运费测算模型或未确认的汇率规则。它只做条件采集、接口调用、结果比较、透明组合和客户报价展示。
 
 ### 5.7 Outreach 建联队列
 
@@ -186,15 +180,12 @@ HyperZone / HzDrop 业务面向经营 Shopify 独立站的小 B 卖家，提供 
 - 负责人。
 - 跟进提醒。
 
-### 5.8 CRM 跟进看板
+### 5.8 轻量跟进与 FOP 交接
 
-- 线索阶段。
-- 跟进记录。
-- 下次动作。
-- 业务员归属。
-- 客户保护期。
-- 沉默客户提醒。
-- 客户归属争议留痕。
+- AutoFlow 仅记录最近沟通结果、下一动作、下一动作时间、短备注和交接状态。
+- 正式线索、商机、商机阶段、客户归属和权威跟进记录由 FOP 管理。
+- 业务员可显式发起 FOP 交接，并查看 FOP 线索 ID、商机 ID、同步状态和冲突信息。
+- FOP 重复判断、客户归属和阶段结果具有最终权威性。
 
 ### 5.9 业务资料库
 
@@ -222,10 +213,14 @@ HyperZone / HzDrop 业务面向经营 Shopify 独立站的小 B 卖家，提供 
 - `shopify_stores`
 - `outreach_tasks`
 - `crm_activities`
-- `quotes`
-- `quote_items`
-- `logistics_quotes`
-- `customer_ownerships`
+- `quote_drafts`
+- `product_quote_lines`
+- `product_quote_tiers`
+- `shipping_quote_requests`
+- `shipping_quote_options`
+- `quote_combinations`
+- `integration_calls`
+- `fop_references`
 - `audit_events`
 
 ### 6.2 后端服务拆分
@@ -239,7 +234,8 @@ store-detection
 lead-scoring
 outreach
 quote
-crm
+follow-up
+fop-integration
 integration
 audit
 ```
@@ -255,7 +251,7 @@ src/views/autoflow/
   LeadDetailView.vue
   OutreachView.vue
   QuoteView.vue
-  CrmView.vue
+  FollowUpView.vue
 
 src/stores/
   autoflow.ts
@@ -268,6 +264,7 @@ src/api/
   leads.ts
   quotes.ts
   outreach.ts
+  fop.ts
 ```
 
 ### 6.4 旧模块处理建议
@@ -305,7 +302,7 @@ src/api/
 
 - 调整导航结构。
 - 新增 Discovery、Quote 入口。
-- 优化 Dashboard、Lead Detail、Outreach、CRM 为中文业务场景。
+- 优化 Dashboard、Lead Detail、Outreach、Quote、轻量跟进为中文业务场景。
 - 弱化或隐藏旧笔记入口。
 
 ### Agent D：流程接入与测试
@@ -351,20 +348,20 @@ src/api/
 - 跟进提醒。
 - 沉默客户唤醒。
 
-### P4：报价工作台
+### P4：报价工作台与 FOP 测算接口
 
-- 产品报价。
-- 物流报价。
-- 毛利测算。
-- 报价审批提示。
-- 报价记录沉淀到客户详情。
+- 本期先建立报价页面入口、产品数量阶梯编辑器、多目的国选择器和综合报价矩阵界面。
+- 定义产品成本、物流运费和综合报价的 AutoFlow 内部 API。
+- 定义可替换的 FOP 产品成本与物流运费 Provider Port。
+- 使用明确标识的测试适配器完成契约测试，不伪装为真实 FOP 价格。
+- FOP 接口清单确认后，再接入金蝶云苍穹的真实认证、操作和字段映射。
 
-### P5：CRM / FOP 边界衔接
+### P5：轻量跟进与 FOP 交接
 
-- 客户注册 / 绑店 / 下单状态字段。
-- FOP 客户编号。
-- 订单 / 回款 / 履约状态同步预留接口。
-- 经理看板与销售复盘。
+- 将 CRM 看板收缩为下一动作和交接状态队列。
+- 定义幂等的 FOP 线索 / 商机交接接口。
+- 保存 FOP 线索 ID、商机 ID、同步状态、冲突和最后同步时间。
+- 不在 AutoFlow 复制 FOP 商机阶段、跟进历史和客户归属规则。
 
 ## 9. 第一版落地建议
 
@@ -378,8 +375,9 @@ src/api/
 → 生成建联话术
 → 加入跟进队列
 → 记录客户状态
-→ 支持报价备注
+→ 编辑产品数量阶梯和目的国
+→ 调用 FOP 成本 / 运费接口并组合报价
+→ 显式交接 FOP
 ```
 
-这个闭环跑起来后，AutoFlow 才真正从 NoteFlow 转型为业务工具。后续再接 FOP、Shopify OAuth、物流试算、报价审批，会更稳。
-
+这个闭环跑起来后，AutoFlow 才真正从 NoteFlow 转型为客户开发和报价提效工具。FOP 接口细节以 `AUTOFLOW_FOP_INTEGRATION_SPEC.md` 为契约基线，在接口清单和沙箱结果确认后启用真实连接。

@@ -7,6 +7,7 @@ export { foldersApi } from './folders'
 export { aiApi } from './ai'
 export { shopifySearchApi } from './shopify-search'
 export { autoflowApi } from './autoflow'
+export { fopApi } from './fop'
 
 const api = axios.create({
   baseURL: '/api',

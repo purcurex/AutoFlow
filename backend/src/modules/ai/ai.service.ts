@@ -1,9 +1,10 @@
-import { Injectable, OnModuleInit } from '@nestjs/common'
+import { Injectable, Logger, OnModuleInit, ServiceUnavailableException } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import Anthropic from '@anthropic-ai/sdk'
 
 @Injectable()
 export class AiService implements OnModuleInit {
+  private readonly logger = new Logger(AiService.name)
   private anthropic: Anthropic | null = null
 
   constructor(private configService: ConfigService) {}
@@ -16,10 +17,6 @@ export class AiService implements OnModuleInit {
   }
 
   async generateText(prompt: string, context?: string): Promise<string> {
-    if (!this.anthropic) {
-      throw new Error('AI服务未配置，请设置ANTHROPIC_API_KEY')
-    }
-
     const systemPrompt = `你是一个专业的写作助手。你需要帮助用户完成写作任务，包括续写、润色、摘要、翻译等。
 请用中文回复，保持专业和友好的语气。`
 
@@ -27,15 +24,62 @@ export class AiService implements OnModuleInit {
       ? `上下文：\n${context}\n\n任务：\n${prompt}`
       : prompt
 
-    const message = await this.anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 2048,
-      system: systemPrompt,
-      messages: [{ role: 'user', content: userPrompt }],
-    })
+    return this.generateWithSystem(systemPrompt, userPrompt)
+  }
 
-    const textBlock = message.content[0] as Anthropic.TextBlock
-    return textBlock.text
+  async generateSalesOutreach(input: {
+    channel: string
+    language: string
+    brandName: string
+    domain: string
+    category: string
+    country: string
+    evidenceSummary: string
+    offer: string
+  }): Promise<string> {
+    const systemPrompt = `You write concise first-touch outbound messages for a Dropshipping supply-chain sales team.
+The prospect is an overseas small business. Use only the supplied facts, never invent performance claims, contacts, ad details, or pricing.
+Make the message specific, respectful, low-pressure, and suitable for human review before sending.
+Return only the message body in the requested language. Do not add analysis, headings, or placeholders.`
+    const userPrompt = [
+      `Channel: ${input.channel}`,
+      `Language: ${input.language}`,
+      `Brand: ${input.brandName}`,
+      `Store: ${input.domain}`,
+      `Category: ${input.category || 'Unknown'}`,
+      `Market: ${input.country || 'Unknown'}`,
+      `Available lead context: ${input.evidenceSummary || 'No additional evidence'}`,
+      `Offer: ${input.offer}`,
+      'Write one short opening message with one clear call to action.',
+    ].join('\n')
+    return this.generateWithSystem(systemPrompt, userPrompt)
+  }
+
+  private async generateWithSystem(system: string, prompt: string): Promise<string> {
+    if (!this.anthropic) {
+      throw new ServiceUnavailableException('AI service is not configured. Set ANTHROPIC_API_KEY.')
+    }
+
+    let message: Anthropic.Message
+    try {
+      message = await this.anthropic.messages.create({
+        model: this.configService.get<string>('ANTHROPIC_MODEL', 'claude-sonnet-4-20250514'),
+        max_tokens: 2048,
+        system,
+        messages: [{ role: 'user', content: prompt }],
+      })
+    } catch (error) {
+      this.logger.warn(`AI provider request failed: ${error instanceof Error ? error.message : 'unknown error'}`)
+      throw new ServiceUnavailableException('AI provider is temporarily unavailable. Retry later.')
+    }
+
+    const text = message.content
+      .filter((block): block is Anthropic.TextBlock => block.type === 'text')
+      .map((block) => block.text.trim())
+      .filter(Boolean)
+      .join('\n')
+    if (!text) throw new ServiceUnavailableException('AI provider returned an empty response.')
+    return text
   }
 
   async continueWriting(content: string): Promise<string> {

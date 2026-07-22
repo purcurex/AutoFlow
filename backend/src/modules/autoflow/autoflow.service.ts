@@ -12,7 +12,7 @@ import {
 } from './dto/autoflow.dto'
 import {
   AutoFlowDashboard,
-  CrmStage,
+  FollowUpStage,
   LEAD_STATUS_TRANSITIONS,
   LeadStatus,
   OUTREACH_STATUS_TRANSITIONS,
@@ -29,6 +29,7 @@ import {
   WorkflowRunEntity,
   WorkflowStepEntity,
 } from './entities'
+import { AiService } from '../ai/ai.service'
 
 @Injectable()
 export class AutoflowService {
@@ -44,6 +45,7 @@ export class AutoflowService {
     @InjectRepository(CrmActivityEntity)
     private readonly activityRepository: Repository<CrmActivityEntity>,
     private readonly dataSource: DataSource,
+    private readonly aiService: AiService,
   ) {}
 
   async getDashboard(ownerUserId: string): Promise<AutoFlowDashboard> {
@@ -67,7 +69,7 @@ export class AutoflowService {
           order: { nextFollowUpAt: 'ASC', createdAt: 'DESC' },
           take: 5,
         }),
-        this.getCrm(ownerUserId),
+        this.getFollowUps(ownerUserId),
       ])
 
     return {
@@ -218,14 +220,26 @@ export class AutoflowService {
     const lead = await this.leadRepository.findOne({ where: { id: leadId, ownerUserId } })
     if (!lead) throw new NotFoundException('Lead not found')
 
+    const channel = data.channel || 'whatsapp'
+    const message = await this.aiService.generateSalesOutreach({
+      channel,
+      language: data.language || lead.language || 'English',
+      brandName: lead.brandName,
+      domain: lead.domain,
+      category: lead.category,
+      country: lead.country,
+      evidenceSummary: lead.recommendedAngle,
+      offer: data.offer || 'low-MOQ sourcing, fast fulfillment, and product testing support',
+    })
+
     const task = await this.outreachRepository.save(
       this.outreachRepository.create({
         leadId,
         ownerUserId,
         teamId: lead.teamId,
-        channel: data.channel || 'whatsapp',
-        status: 'ready',
-        message: this.buildMessage(lead, data),
+        channel,
+        status: 'draft',
+        message,
         nextFollowUpAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
         sentAt: null,
         repliedAt: null,
@@ -273,6 +287,9 @@ export class AutoflowService {
 
       if (data.status && data.status !== task.status) {
         this.assertTransition('outreach', task.status, data.status, OUTREACH_STATUS_TRANSITIONS)
+        if (data.status === 'ready' && !(data.message ?? task.message).trim()) {
+          throw new ConflictException('Outreach message must be reviewed before it becomes ready')
+        }
         task.status = data.status
         if (data.status === 'sent') task.sentAt = new Date()
         if (data.status === 'replied') task.repliedAt = new Date()
@@ -300,14 +317,14 @@ export class AutoflowService {
         }
       }
 
-      if (data.message !== undefined) task.message = data.message
+      if (data.message !== undefined) task.message = data.message.trim()
       if (data.nextFollowUpAt !== undefined) task.nextFollowUpAt = new Date(data.nextFollowUpAt)
       await taskRepository.save(task)
     })
     return this.getOutreachTask(ownerUserId, id)
   }
 
-  async getCrm(ownerUserId: string): Promise<CrmStage[]> {
+  async getFollowUps(ownerUserId: string): Promise<FollowUpStage[]> {
     const counts = await this.leadRepository
       .createQueryBuilder('lead')
       .select('lead.status', 'status')
@@ -353,12 +370,6 @@ export class AutoflowService {
     if (status === 'sent' && (current === 'new' || current === 'qualified')) return 'contacted'
     if (status === 'replied' && current === 'contacted') return 'replied'
     return null
-  }
-
-  private buildMessage(lead: LeadEntity, data: GenerateMessageDto): string {
-    const offer = data.offer || 'low-MOQ sourcing, fast fulfillment, and product testing support'
-    const category = lead.category ? lead.category.toLowerCase() : 'product'
-    return `Hi ${lead.brandName} team, I noticed your ${category} ads and ${lead.domain} store. We help Shopify sellers with ${offer}. Would you like me to share a short product sheet for your next test campaign?`
   }
 
   private mapWorkflow(workflow: WorkflowRunEntity): WorkflowRun {

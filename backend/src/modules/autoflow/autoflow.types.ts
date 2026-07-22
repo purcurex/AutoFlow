@@ -132,7 +132,7 @@ export interface OutreachTask {
   owner: string
 }
 
-export interface CrmStage {
+export interface FollowUpStage {
   key: LeadStatus
   label: string
   count: number
@@ -147,7 +147,7 @@ export interface AutoFlowDashboard {
     replies: number
     opportunities: number
   }
-  funnel: CrmStage[]
+  funnel: FollowUpStage[]
   recentWorkflows: WorkflowRun[]
   topLeads: StoreLead[]
   nextTasks: OutreachTask[]

@@ -124,7 +124,7 @@
         <p class="text-gray-500 dark:text-gray-400 text-sm mb-4">
           作者: {{ viewingNote?.user?.username }} | 创建时间: {{ formatDate(viewingNote?.createdAt) }}
         </p>
-        <div class="bg-gray-50 dark:bg-gray-700/50 p-4 rounded-lg max-h-96 overflow-y-auto text-gray-800 dark:text-gray-200" v-html="viewingNote?.content"></div>
+        <div class="bg-gray-50 dark:bg-gray-700/50 p-4 rounded-lg max-h-96 overflow-y-auto text-gray-800 dark:text-gray-200" v-html="sanitizedViewingContent"></div>
         <div class="flex justify-end mt-4">
           <button @click="showViewDialog = false" class="px-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors">关闭</button>
         </div>
@@ -136,6 +136,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import DOMPurify from 'dompurify'
 import { notesApi, type AdminNote } from '@/api/notes'
 
 const router = useRouter()
@@ -154,6 +155,8 @@ const uniqueUsers = computed(() => {
   const userIds = new Set(notes.value.map(n => n.userId))
   return userIds.size
 })
+
+const sanitizedViewingContent = computed(() => DOMPurify.sanitize(viewingNote.value?.content || ''))
 
 // 筛选后的业务记录
 const filteredNotes = computed(() => {

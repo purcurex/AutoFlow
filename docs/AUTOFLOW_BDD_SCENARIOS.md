@@ -103,9 +103,9 @@ And the recommended action should warn the sales rep before outreach
 
 Given a qualified lead exists  
 When the sales rep requests a WhatsApp message  
-Then the system should generate a message based on lead category, store, market, and sourcing angle  
-And create an outreach task with status "ready"  
-And the message should require human review before sending
+Then the system should generate a message based on lead category, store, market, and sourcing angle
+And create an outreach task with status "draft"
+And the message should require human review before it can become "ready"
 
 ### Scenario 5.2: Generate email message
 
@@ -129,7 +129,7 @@ Given an outreach task is ready
 When the sales rep marks it as sent  
 Then the task status should become "sent"  
 And the lead status should become "contacted" if it was new or qualified  
-And a CRM activity should be recorded
+And a lightweight local follow-up activity should be recorded
 
 ### Scenario 6.2: Record prospect reply
 
@@ -139,37 +139,76 @@ Then the task status should become "replied"
 And the lead status should become "replied"  
 And the next follow-up action should be required
 
-## Feature 7: Quote Foundation
+## Feature 7: FOP-Backed Quote Workspace
 
-### Scenario 7.1: Calculate quote margin
+### Scenario 7.1: Define product quantity tiers
 
-Given a lead exists  
-And a quote item has product cost, logistics cost, and customer price  
-When the sales rep saves the quote  
-Then the system should calculate gross margin  
-And show a warning if margin is below 15%  
-And require approval if margin is below 10%
+Given a lead and a quote draft exist
+When the sales rep adds a product with quantity tiers 1-99, 100-499, and 500 or more
+Then the tiers should be stored in ascending order
+And overlapping or inverted quantity ranges should be rejected
+And each tier should preserve its unit and currency
 
-### Scenario 7.2: Quote validity
+### Scenario 7.2: Request product costs from FOP
 
-Given a quote has validity days set to 7  
-When the quote is created  
-Then the quote expiration date should be calculated  
-And expired quotes should not be reused as current offers
+Given a quote contains valid product tiers and FOP product mapping references
+When the sales rep requests product costs
+Then AutoFlow should call the configured product-cost provider port once with an idempotency key
+And save the FOP source, external request ID, version/effective time, currency, and tier result snapshot
+And AutoFlow should not reproduce FOP product-cost rules locally
 
-## Feature 8: CRM Follow-Up
+### Scenario 7.3: Request freight for multiple destination countries
 
-### Scenario 8.1: Add follow-up note
+Given a quote contains explicit package weight, dimensions, units, currency, and destination countries US and DE
+When the sales rep requests freight options
+Then AutoFlow should call the configured logistics-rate provider port
+And group returned channels and rates under US and DE
+And preserve chargeable weight, freight, returned fees, ETA, validity, and source version for each option
 
-Given a lead exists  
-When the sales rep adds a follow-up record  
-Then the record should appear in the lead timeline  
-And the record should include owner, timestamp, type, and content
+### Scenario 7.4: Build a combined quotation matrix
 
-### Scenario 8.2: Protect lead ownership
+Given product-cost tiers and shipping-rate options have been returned by FOP
+When the sales rep selects one or more destination channels and composes the quote
+Then AutoFlow should show product/SKU x quantity tier x destination country x shipping channel combinations
+And every displayed amount should reference the exact product-cost and shipping-rate snapshots used
+And any arithmetic should be transparent and reproducible
 
-Given a lead has an owner and protection period  
-When another user tries to claim the lead  
-Then the system should prevent silent takeover  
-And require manager review or ownership transfer record
+### Scenario 7.5: FOP quote capability is unavailable
 
+Given the FOP provider is not configured or is temporarily unavailable
+When the sales rep requests product cost or freight
+Then the quote draft and request conditions should remain saved
+And the UI should show a retryable unavailable state and correlation ID
+And no mock, estimated, or invented amount should be presented as a real FOP result
+
+### Scenario 7.6: Quote result expires or is superseded
+
+Given a quote uses an FOP result with an expiration time
+When that result expires or a newer result is selected
+Then the old snapshot should remain immutable for audit
+And it should not be used for a newly shared quote without explicit refresh
+
+## Feature 8: Lightweight Follow-Up And FOP Handoff
+
+### Scenario 8.1: Record the next AutoFlow action
+
+Given a lead exists
+When the sales rep records the latest outcome, next action, next-action time, or a short note
+Then the action should appear in the AutoFlow lead timeline
+And it should include owner, timestamp, type, and content
+And it should not be presented as the authoritative FOP follow-up history
+
+### Scenario 8.2: Handoff a prospect to FOP idempotently
+
+Given a qualified lead or a lead with a ready/shared quote has not been handed off
+When the sales rep starts FOP handoff
+Then AutoFlow should call the configured FOP handoff port with lead, contact, evidence, outreach, and quote context
+And save the returned FOP lead ID, optional opportunity ID, sync status, and conflicts
+And repeating the same idempotent request should not create a duplicate FOP lead or opportunity
+
+### Scenario 8.3: Respect FOP authority
+
+Given FOP reports a duplicate, ownership conflict, or different opportunity stage
+When AutoFlow receives the handoff result
+Then AutoFlow should display the conflict and require review
+And should not silently overwrite FOP customer, ownership, stage, or follow-up data

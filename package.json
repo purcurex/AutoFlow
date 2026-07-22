@@ -11,7 +11,8 @@
     "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
     "dev:frontend": "npm run dev --workspace=frontend",
     "dev:backend": "npm run start:dev --workspace=backend",
-    "build": "npm run build --workspace=frontend && npm run build --workspace=backend",
+    "build": "npm run build --workspace=frontend && npm run build --workspace=backend && npm run package:frontend",
+    "package:frontend": "node scripts/package-frontend.mjs",
     "test": "npm run test --workspace=frontend && npm run test --workspace=backend",
     "test:frontend": "npm run test --workspace=frontend",
     "test:backend": "npm run test --workspace=backend",
@@ -22,7 +23,8 @@
     "db:migrate": "npm run migration:run --workspace=backend",
     "db:migration:show": "npm run migration:show --workspace=backend",
     "db:migration:revert": "npm run migration:revert --workspace=backend",
-    "ci:local": "npm run lint && npm run test && npm run test:e2e && npm run build && npm run audit:prod",
+    "test:prod-smoke": "node scripts/production-smoke.mjs",
+    "ci:local": "npm run lint && npm run test && npm run test:e2e && npm run build && npm run test:prod-smoke && npm run audit:prod",
     "start": "npm run start:prod --workspace=backend"
   },
   "devDependencies": {

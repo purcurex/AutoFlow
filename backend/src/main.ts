@@ -2,10 +2,31 @@ import { NestFactory } from '@nestjs/core'
 import { ValidationPipe } from '@nestjs/common'
 import { NestExpressApplication } from '@nestjs/platform-express'
 import { join } from 'path'
+import type { NextFunction, Request, Response } from 'express'
+import helmet from 'helmet'
 import { AppModule } from './app.module'
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule)
+  const isProduction = process.env.NODE_ENV === 'production'
+  const backendRoot = isProduction ? join(__dirname, '..', '..') : join(__dirname, '..')
+
+  app.use(helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", 'data:', 'blob:', 'https:'],
+        connectSrc: ["'self'"],
+        fontSrc: ["'self'", 'data:'],
+        objectSrc: ["'none'"],
+        baseUri: ["'self'"],
+        frameAncestors: ["'none'"],
+      },
+    },
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+  }))
 
   // 全局验证管道
   app.useGlobalPipes(
@@ -17,7 +38,7 @@ async function bootstrap() {
   )
 
   // 启用CORS（开发环境）
-  if (process.env.NODE_ENV !== 'production') {
+  if (!isProduction) {
     app.enableCors({
       origin: true,
       credentials: true,
@@ -25,14 +46,23 @@ async function bootstrap() {
   }
 
   // 配置静态文件服务 - 用于访问上传的头像
-  app.useStaticAssets(join(__dirname, '..', 'uploads'), {
+  app.useStaticAssets(join(backendRoot, 'uploads'), {
     prefix: '/uploads/',
   })
 
   // 生产环境：服务前端静态文件
-  if (process.env.NODE_ENV === 'production') {
-    app.useStaticAssets(join(__dirname, '..', 'public'), {
+  if (isProduction) {
+    const frontendRoot = join(backendRoot, 'dist', 'public')
+    app.useStaticAssets(frontendRoot, {
       prefix: '/',
+    })
+    app.use((req: Request, res: Response, next: NextFunction) => {
+      const isFrontendRoute = req.method === 'GET'
+        && !req.path.startsWith('/api')
+        && !req.path.startsWith('/uploads')
+        && !req.path.includes('.')
+      if (!isFrontendRoute) return next()
+      return res.sendFile(join(frontendRoot, 'index.html'))
     })
   }
 

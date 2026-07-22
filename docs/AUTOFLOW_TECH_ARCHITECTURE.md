@@ -13,8 +13,10 @@ Product keyword / product image
   -> lead cleaning and scoring
   -> AI outreach draft
   -> semi-automated outreach
-  -> WhatsApp conversion
-  -> CRM follow-up
+  -> contact response and lightweight next action
+  -> product tier and destination freight quotation
+  -> combined customer quote
+  -> FOP lead/opportunity handoff
 ```
 
 The first implementation keeps the original Vue + NestJS full-stack foundation and adds an AutoFlow workbench on top of it.
@@ -47,6 +49,7 @@ External services:
   - Anthropic API for AI writing
   - SerpAPI for search and Google Lens
   - Host.io / OpenPageRank for traffic estimates
+  - Kingdee Cloud Cosmic FOP for formal CRM records, product cost, and logistics rates
 ```
 
 ## 3. Frontend Structure
@@ -70,7 +73,9 @@ Primary routes:
 /leads            Lead pool
 /leads/:id        Lead detail
 /outreach         Outreach queue
-/crm              CRM pipeline
+/quotes           Product and freight quote workspace (planned)
+/follow-ups       Lightweight next-action and FOP handoff queue (planned)
+/crm              Compatibility route for the current lightweight scaffold
 /settings         Account settings
 /admin            Admin
 ```
@@ -145,6 +150,14 @@ Planned entities:
 ProductSeed
 MessageDraft
 IntegrationAccount
+QuoteDraft
+ProductQuoteLine
+ProductQuoteTier
+ShippingQuoteRequest
+ShippingQuoteOption
+QuoteCombination
+IntegrationCall
+FopReference
 ```
 
 Recommended ownership:
@@ -156,11 +169,45 @@ store-detection     Detects Shopify/DTC stores
 lead-scoring        Computes lead quality
 ai-messaging        Generates outreach copy
 outreach            Manages semi-automated sending
-crm                 Tracks follow-up and conversion
-integrations        Stores API keys/provider configs
+follow-up           Tracks only local next actions and handoff state
+quote-orchestration Builds reproducible customer quote views from FOP snapshots
+fop-integration     Adapts product cost, freight rating, and CRM handoff capabilities
+integrations        Stores encrypted provider configurations
 ```
 
-## 6. Security and Production Rules
+## 6. FOP Integration Architecture
+
+```text
+Vue Quote / Lead Detail pages
+  -> AutoFlow quote and handoff APIs
+  -> Quote / Handoff application services
+  -> FOP provider ports
+  -> Kingdee Cloud Cosmic adapter
+  -> configured FOP backend operations
+```
+
+Architecture boundary:
+
+- AutoFlow owns discovery evidence, contact review, outreach preparation, quote interaction, and reproducible snapshots.
+- FOP owns formal leads, opportunities, stages, follow-up history, customer records, product-cost rules, and logistics-rating rules.
+- The browser never receives FOP credentials or calls FOP directly.
+- Domain code depends on `FopProductCostPort`, `FopLogisticsRatePort`, and `FopCrmHandoffPort`.
+- Kingdee Cloud Cosmic URLs, authentication, bill/form IDs, and dynamic-object mappings remain adapter configuration.
+- The canonical contract is `docs/AUTOFLOW_FOP_INTEGRATION_SPEC.md`.
+
+Quote dimensions:
+
+```text
+product / SKU
+x quantity tier
+x destination country
+x selected shipping channel
+= traceable combined customer quote
+```
+
+AutoFlow may perform transparent addition and presentation formatting, but it does not reproduce FOP pricing or freight-rating rules. Production calls fail closed when FOP is unavailable.
+
+## 7. Security and Production Rules
 
 Implemented:
 
@@ -171,12 +218,13 @@ Implemented:
 
 Required before production:
 
-- Add request throttling for search and auth endpoints.
+- Add request throttling and cost budgets for integration endpoints.
 - Add audit logging for lead export and outreach.
 - Move integration keys into encrypted storage.
 - Add role-based guards for admin and future team workspaces.
+- Add idempotency, correlation IDs, timeouts, retry classification, and redacted FOP request logs.
 
-## 7. Build and Local Development
+## 8. Build and Local Development
 
 Build commands:
 
@@ -203,14 +251,15 @@ Known Windows note:
 - `npm` may be blocked by PowerShell execution policy; use `npm.cmd`.
 - Vite/concurrently can hit Windows `spawn EPERM` in restricted shells.
 
-## 8. Next Architecture Iterations
+## 9. Next Architecture Iterations
 
 Priority order after P2:
 
 1. Rewrite AI message generation around persistent lead context and human review.
 2. Add WhatsApp deep-link outreach and channel templates.
-3. Add a persistent queue worker before horizontal scaling.
-4. Expand the lead scoring rules engine with verified ad-to-store matching.
-5. Add CRM activity timeline UI.
-6. Add CSV/Excel export for leads.
-7. Continue legacy user-facing language cleanup.
+3. Add a persistent queue worker before horizontal scaling and paid provider calls.
+4. Expand discovery with verified ad-to-store matching and contact enrichment.
+5. Add quote navigation, product-tier editor, destination selector, result states, and combined matrix shell.
+6. Implement FOP provider ports and contract-test adapters without inventing live Kingdee endpoints.
+7. Replace the CRM-oriented page with a lightweight follow-up and FOP handoff queue.
+8. Enable live FOP adapters only after the interface inventory and sandbox reconciliation pass.

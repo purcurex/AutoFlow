@@ -14,6 +14,7 @@ import { APP_GUARD } from '@nestjs/core'
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler'
 import { validateEnvironment } from './config/environment'
 import { HealthModule } from './modules/health/health.module'
+import { FopIntegrationModule } from './modules/fop-integration/fop-integration.module'
 
 @Module({
   imports: [
@@ -60,6 +61,7 @@ import { HealthModule } from './modules/health/health.module'
     AutoflowModule,
     SeederModule,
     HealthModule,
+    FopIntegrationModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })

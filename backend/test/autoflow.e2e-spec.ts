@@ -12,6 +12,7 @@ import {
   WorkflowStepEntity,
 } from '../src/modules/autoflow/entities'
 import { AdCreativeEntity, ShopifyStoreEntity } from '../src/modules/discovery/entities'
+import { AiService } from '../src/modules/ai/ai.service'
 
 jest.setTimeout(30000)
 
@@ -36,7 +37,10 @@ describe('AutoFlow persistence API', () => {
     await migrationDataSource.destroy()
 
     const { AppModule } = await import('../src/app.module')
-    const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile()
+    const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
+      .overrideProvider(AiService)
+      .useValue({ generateSalesOutreach: jest.fn().mockResolvedValue('Approved test draft') })
+      .compile()
     app = moduleRef.createNestApplication()
     app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }))
     app.setGlobalPrefix('api')
@@ -70,6 +74,22 @@ describe('AutoFlow persistence API', () => {
   it('reports API and database readiness', async () => {
     const response = await request(app.getHttpServer()).get('/api/health').expect(200)
     expect(response.body).toMatchObject({ status: 'ok', database: 'up' })
+  })
+
+  it('reports FOP quote and handoff capabilities as unavailable without fake values', async () => {
+    const response = await request(app.getHttpServer())
+      .get('/api/autoflow/integrations/fop/capabilities')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .expect(200)
+
+    expect(response.body).toMatchObject({
+      provider: 'fop',
+      platform: 'kingdee-cloud-cosmic',
+      productCost: { status: 'not_implemented', available: false },
+      logisticsRate: { status: 'not_implemented', available: false },
+      crmHandoff: { status: 'not_implemented', available: false },
+    })
+    expect(JSON.stringify(response.body)).not.toMatch(/amount|price|costValue|freightValue/i)
   })
 
   it('persists a workflow and returns it only to its owner', async () => {
@@ -201,13 +221,19 @@ describe('AutoFlow persistence API', () => {
     expect(qualified.body.status).toBe('qualified')
   })
 
-  it('updates outreach, lead, and CRM activity in one business flow', async () => {
+  it('reviews outreach before updating lead and local follow-up activity', async () => {
     const generated = await request(app.getHttpServer())
       .post(`/api/autoflow/leads/${leadId}/messages`)
       .set('Authorization', `Bearer ${ownerToken}`)
       .send({ channel: 'whatsapp', offer: 'fast fulfillment' })
       .expect(201)
-    expect(generated.body.status).toBe('ready')
+    expect(generated.body.status).toBe('draft')
+
+    await request(app.getHttpServer())
+      .patch(`/api/autoflow/outreach-tasks/${generated.body.id}`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ status: 'ready', message: 'Human-reviewed test draft' })
+      .expect(200)
 
     await request(app.getHttpServer())
       .patch(`/api/autoflow/outreach-tasks/${generated.body.id}`)

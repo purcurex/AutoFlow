@@ -15,9 +15,6 @@ const workflows = computed(() => store.dashboard?.recentWorkflows || store.workf
 const topLeads = computed(() => store.dashboard?.topLeads || store.leads.slice(0, 5))
 const tasks = computed(() => store.dashboard?.nextTasks || store.outreachTasks.slice(0, 4))
 
-function formatCurrency(value = 0) {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(value)
-}
 </script>
 
 <template>
@@ -50,11 +47,11 @@ function formatCurrency(value = 0) {
         </div>
         <div class="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
           <p class="text-xs font-medium uppercase text-slate-500">Replies</p>
-          <p class="mt-2 text-2xl font-semibold">{{ metrics?.replies ?? 0 }}%</p>
+          <p class="mt-2 text-2xl font-semibold">{{ metrics?.replies ?? 0 }}</p>
         </div>
         <div class="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-          <p class="text-xs font-medium uppercase text-slate-500">Pipeline</p>
-          <p class="mt-2 text-2xl font-semibold">{{ formatCurrency(store.crmStages.reduce((sum, stage) => sum + stage.value, 0)) }}</p>
+          <p class="text-xs font-medium uppercase text-slate-500">Lead records</p>
+          <p class="mt-2 text-2xl font-semibold">{{ store.followUpStages.reduce((sum, stage) => sum + stage.count, 0) }}</p>
         </div>
       </div>
 

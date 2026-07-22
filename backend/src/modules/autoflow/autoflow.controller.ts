@@ -102,6 +102,11 @@ export class AutoflowController {
 
   @Get('crm')
   getCrm(@Request() req: ExpressRequest) {
-    return this.autoflowService.getCrm(req.user!.userId)
+    return this.autoflowService.getFollowUps(req.user!.userId)
+  }
+
+  @Get('follow-ups')
+  getFollowUps(@Request() req: ExpressRequest) {
+    return this.autoflowService.getFollowUps(req.user!.userId)
   }
 }

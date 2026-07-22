@@ -13,10 +13,12 @@ import {
   LeadScoreEntity,
 } from './entities'
 import { DiscoveryModule } from '../discovery/discovery.module'
+import { AiModule } from '../ai/ai.module'
 
 @Module({
   imports: [
     DiscoveryModule,
+    AiModule,
     TypeOrmModule.forFeature([
       WorkflowRunEntity,
       WorkflowStepEntity,

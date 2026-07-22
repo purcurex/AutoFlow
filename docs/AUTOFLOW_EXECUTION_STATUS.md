@@ -298,3 +298,67 @@ Quality gate:
 - Production dependency audit has no high or critical findings.
 
 Next phase: P3 AI Outreach.
+
+## 14. 2026-07-22 Scope Alignment: Quote And FOP
+
+Decision:
+
+- AutoFlow focuses on product/store discovery, contact enrichment, rapid qualification, outreach preparation, and customer quotation efficiency.
+- FOP is built on Kingdee Cloud Cosmic and remains the system of record for formal leads, opportunities, opportunity stages, follow-up records, customers, product cost, and logistics rates.
+- AutoFlow will not build a full CRM or duplicate FOP product-cost and freight-rating models.
+- Existing `CrmActivityEntity` remains a compatibility implementation for lightweight local next actions until a versioned rename is justified.
+
+Quotation scope:
+
+- Product quotation supports ordered quantity tiers.
+- Freight quotation supports multiple destination countries and FOP-returned channels.
+- Combined quotation supports product/SKU x quantity tier x destination country x shipping channel.
+- AutoFlow stores traceable request/result snapshots and composes customer-facing output from selected FOP results.
+- This phase reserves page controls, internal APIs, provider ports, test adapters, and failure states; it does not claim a live FOP connection.
+
+Planning artifacts updated:
+
+- `AUTOFLOW_PRODUCT_SPEC.md`
+- `AUTOFLOW_PDD_DESIGN.md`
+- `AUTOFLOW_FOP_INTEGRATION_SPEC.md`
+- `AUTOFLOW_BDD_SCENARIOS.md`
+- `AUTOFLOW_TEST_PLAN.md`
+- `AUTOFLOW_DEVELOPMENT_BACKLOG.md`
+- `AUTOFLOW_TECH_ARCHITECTURE.md`
+- `AUTOFLOW_TRANSFORMATION_PROPOSAL.md`
+
+Revised delivery order:
+
+1. Close production-startup and rich-text security blockers.
+2. Add persistent workflow execution before production paid-provider usage.
+3. Complete real discovery/contact enrichment and P3 human-reviewed outreach.
+4. Build P4-A quote UI/domain contracts and P4-B FOP provider ports/test adapters.
+5. Build P5 lightweight follow-up and idempotent FOP handoff.
+6. Enable P4-C live FOP adapters only after interface inventory and sandbox reconciliation.
+
+## 15. 2026-07-22 Code Alignment Pass
+
+Completed release and security work:
+
+- Fixed the production Nest entry and automated Vue packaging into generated `backend/dist/public`.
+- Added SPA route fallback and a production smoke test for database health, frontend serving, CSP, and security headers.
+- Added Helmet, explicit DOMPurify sanitization, fail-closed admin routing, and frontend/backend password-rule alignment.
+- Removed six unused duplicate AutoFlow view implementations.
+
+Completed Spec alignment work:
+
+- Replaced the hard-coded outreach message with the AI sales-outreach service and persistent lead context.
+- AI failures no longer create empty tasks; successful generations start as `draft` and require human review before `ready`.
+- Added legal state-aware actions to the outreach queue.
+- Replaced the CRM navigation surface with `/follow-ups`; `/crm` remains a compatibility redirect.
+- Added quote navigation, lead-detail entry, product/SKU reference, quantity tiers, multi-country/package conditions, and a combined quote matrix shell.
+- Added FOP product-cost, logistics-rate, and CRM-handoff provider ports plus authenticated capability discovery.
+- FOP capabilities report `not_implemented` and return no price values until real Kingdee Cloud Cosmic adapters are available.
+
+Quality gate:
+
+- Frontend: 3 test files, 6 tests passed.
+- Backend: 15 test suites, 59 tests passed.
+- PostgreSQL E2E: 1 test suite, 7 tests passed.
+- Production build/package/start smoke passed.
+- Production dependency audit has no high or critical findings; two moderate transitive `uuid` findings remain through ExcelJS.

@@ -1,6 +1,7 @@
 ﻿<script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
+import { Calculator, LayoutDashboard, ListTodo, MessageSquareText, Settings, Shield, Users, Workflow } from 'lucide-vue-next'
 import { useUserStore } from '@/stores'
 
 defineProps<{
@@ -11,11 +12,12 @@ const route = useRoute()
 const userStore = useUserStore()
 
 const navItems = computed(() => [
-  { label: 'Dashboard', to: '/', match: ['Dashboard'] },
-  { label: 'Workflows', to: '/workflows', match: ['Workflows', 'NewWorkflow'] },
-  { label: 'Leads', to: '/leads', match: ['Leads', 'LeadDetail'] },
-  { label: 'Outreach', to: '/outreach', match: ['Outreach'] },
-  { label: 'CRM', to: '/crm', match: ['CRM'] },
+  { label: 'Dashboard', to: '/', match: ['Dashboard'], icon: LayoutDashboard },
+  { label: 'Workflows', to: '/workflows', match: ['Workflows', 'NewWorkflow'], icon: Workflow },
+  { label: 'Leads', to: '/leads', match: ['Leads', 'LeadDetail'], icon: Users },
+  { label: 'Outreach', to: '/outreach', match: ['Outreach'], icon: MessageSquareText },
+  { label: 'Quotes', to: '/quotes', match: ['Quotes'], icon: Calculator },
+  { label: 'Follow-up', to: '/follow-ups', match: ['FollowUps'], icon: ListTodo },
 ])
 
 function isActive(item: { match: string[] }) {
@@ -46,6 +48,7 @@ function isActive(item: { match: string[] }) {
             ? 'bg-primary-50 text-primary-700 dark:bg-primary-950 dark:text-primary-200'
             : 'text-slate-600 hover:bg-slate-100 hover:text-slate-950 dark:text-slate-300 dark:hover:bg-slate-900 dark:hover:text-white'"
         >
+          <component :is="item.icon" class="mr-3 h-4 w-4 shrink-0" />
           {{ item.label }}
         </RouterLink>
       </nav>
@@ -55,6 +58,7 @@ function isActive(item: { match: string[] }) {
           to="/settings"
           class="flex items-center rounded-lg px-3 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-900"
         >
+          <Settings class="mr-3 h-4 w-4" />
           Settings
         </RouterLink>
         <RouterLink
@@ -62,6 +66,7 @@ function isActive(item: { match: string[] }) {
           to="/admin"
           class="flex items-center rounded-lg px-3 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-900"
         >
+          <Shield class="mr-3 h-4 w-4" />
           Admin
         </RouterLink>
       </div>

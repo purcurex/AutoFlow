@@ -8,6 +8,7 @@ import {
   WorkflowRunEntity,
   WorkflowStepEntity,
 } from './entities'
+import type { AiService } from '../ai/ai.service'
 
 describe('AutoflowService persistence boundaries', () => {
   function repository<T extends ObjectLiteral>() {
@@ -29,8 +30,11 @@ describe('AutoflowService persistence boundaries', () => {
     const outreach = repository<OutreachTaskEntity>()
     const activities = repository<CrmActivityEntity>()
     const dataSource = { transaction: jest.fn() } as unknown as jest.Mocked<DataSource>
-    const service = new AutoflowService(workflows, steps, leads, outreach, activities, dataSource)
-    return { service, workflows, steps, leads, outreach, activities, dataSource }
+    const aiService = {
+      generateSalesOutreach: jest.fn().mockResolvedValue('Draft outreach message'),
+    } as unknown as jest.Mocked<AiService>
+    const service = new AutoflowService(workflows, steps, leads, outreach, activities, dataSource, aiService)
+    return { service, workflows, steps, leads, outreach, activities, dataSource, aiService }
   }
 
   it('scopes workflow lists to the authenticated owner', async () => {
@@ -82,5 +86,52 @@ describe('AutoflowService persistence boundaries', () => {
       service.updateLeadStatus('owner-1', 'lead-1', { status: 'won' }),
     ).rejects.toBeInstanceOf(ConflictException)
     expect(leads.save).not.toHaveBeenCalled()
+  })
+
+  it('creates an AI-generated outreach task as a human-review draft', async () => {
+    const { service, leads, outreach, aiService } = createService()
+    leads.findOne.mockResolvedValue({
+      id: 'lead-1',
+      ownerUserId: 'owner-1',
+      teamId: null,
+      brandName: 'Example Store',
+      domain: 'example.test',
+      language: 'English',
+      category: 'Pet supplies',
+      country: 'US',
+      recommendedAngle: 'Verified Shopify store',
+    } as LeadEntity)
+    outreach.save.mockImplementation(async (task) => ({ id: 'task-1', ...task }) as OutreachTaskEntity)
+    outreach.findOne.mockResolvedValue({
+      id: 'task-1',
+      leadId: 'lead-1',
+      ownerUserId: 'owner-1',
+      channel: 'whatsapp',
+      status: 'draft',
+      message: 'Draft outreach message',
+      nextFollowUpAt: null,
+      lead: { brandName: 'Example Store' },
+      owner: { username: 'owner' },
+    } as OutreachTaskEntity)
+
+    const task = await service.generateMessage('owner-1', 'lead-1', { channel: 'whatsapp' })
+
+    expect(aiService.generateSalesOutreach).toHaveBeenCalledWith(expect.objectContaining({
+      brandName: 'Example Store',
+      channel: 'whatsapp',
+    }))
+    expect(outreach.create).toHaveBeenCalledWith(expect.objectContaining({ status: 'draft' }))
+    expect(task.status).toBe('draft')
+  })
+
+  it('does not create an outreach task when the AI provider fails', async () => {
+    const { service, leads, outreach, aiService } = createService()
+    leads.findOne.mockResolvedValue({
+      id: 'lead-1', ownerUserId: 'owner-1', brandName: 'Store', domain: 'store.test',
+    } as LeadEntity)
+    aiService.generateSalesOutreach.mockRejectedValue(new Error('provider unavailable'))
+
+    await expect(service.generateMessage('owner-1', 'lead-1', {})).rejects.toThrow('provider unavailable')
+    expect(outreach.save).not.toHaveBeenCalled()
   })
 })

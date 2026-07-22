@@ -70,8 +70,8 @@ async function handleRegister() {
     return
   }
 
-  if (password.value.length < 6) {
-    error.value = '密码长度至少 6 位'
+  if (password.value.length < 10) {
+    error.value = '密码长度至少 10 位'
     return
   }
 
@@ -161,7 +161,7 @@ async function handleRegister() {
             <input
               v-model="password"
               type="password"
-              placeholder="请输入密码，至少 6 位"
+              placeholder="请输入密码，至少 10 位"
               class="input"
               autocomplete="new-password"
               required

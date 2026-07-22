@@ -2,7 +2,7 @@
 
 AutoFlow is a Dropshipping outbound sales workflow workspace for sales teams serving overseas Shopify small-business sellers.
 
-The product is being transformed from a legacy note-taking application into a sales automation tool that helps reps discover prospects, identify Shopify stores, score leads, generate outreach messages, prepare quotes, and manage follow-up work.
+The product is being transformed from a legacy note-taking application into a sales automation tool that helps reps discover prospects, identify Shopify stores, find contacts, score leads, prepare outreach, and assemble customer quotations before handoff to FOP.
 
 ## Core Workflow
 
@@ -13,20 +13,25 @@ Product keyword or image
 -> Lead cleanup and scoring
 -> AI outreach message
 -> Human-reviewed WhatsApp / Email outreach
--> Quote preparation
--> CRM follow-up
+-> Product quantity-tier quotation
+-> Destination-country freight quotation
+-> Combined customer quote
+-> FOP lead / opportunity handoff
 ```
 
 ## Current Capabilities
 
 - JWT authentication and admin role.
-- AutoFlow workbench pages: Dashboard, Workflows, Leads, Lead detail, Outreach, and CRM.
+- AutoFlow workbench pages: Dashboard, Workflows, Leads, Lead detail, Outreach, Quotes, and lightweight Follow-up/FOP handoff.
 - Shopify store search adapter.
 - Facebook Ads discovery adapter.
 - AI text generation adapter.
+- FOP-backed quote workspace shell for product tiers, destination freight, and combined quotes; live FOP adapters remain intentionally disabled.
 - Legacy record capability inherited from the original note module.
 - Frontend Vitest baseline.
 - Backend Jest baseline.
+
+The canonical FOP boundary and placeholder API contract are documented in [`docs/AUTOFLOW_FOP_INTEGRATION_SPEC.md`](docs/AUTOFLOW_FOP_INTEGRATION_SPEC.md).
 
 ## Tech Stack
 

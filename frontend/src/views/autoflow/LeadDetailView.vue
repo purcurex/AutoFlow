@@ -1,12 +1,16 @@
 ﻿<script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
+import { CheckCircle2, FileSpreadsheet, Sparkles } from 'lucide-vue-next'
 import { useAutoFlowStore } from '@/stores'
 import { AppLayout } from '@/components/layout'
 
 const route = useRoute()
 const store = useAutoFlowStore()
 const generatedMessage = ref('')
+const generatedTaskId = ref('')
+const draftStatus = ref<'idle' | 'draft' | 'ready'>('idle')
+const messageError = ref('')
 
 onMounted(() => {
   store.fetchLead(String(route.params.id))
@@ -16,8 +20,21 @@ const lead = computed(() => store.currentLead)
 
 async function generateMessage() {
   if (!lead.value) return
-  const response = await store.generateMessage(lead.value.id)
-  generatedMessage.value = response?.message || ''
+  messageError.value = ''
+  try {
+    const response = await store.generateMessage(lead.value.id)
+    generatedTaskId.value = response.id
+    generatedMessage.value = response.message
+    draftStatus.value = 'draft'
+  } catch (error) {
+    messageError.value = error instanceof Error ? error.message : 'AI message generation is unavailable.'
+  }
+}
+
+async function approveDraft() {
+  if (!generatedTaskId.value || !generatedMessage.value.trim()) return
+  await store.updateOutreachTask(generatedTaskId.value, { status: 'ready', message: generatedMessage.value.trim() })
+  draftStatus.value = 'ready'
 }
 </script>
 
@@ -26,7 +43,7 @@ async function generateMessage() {
     <div class="min-h-full bg-slate-50 p-6 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
       <RouterLink to="/leads" class="text-sm font-medium text-primary-600">Back to leads</RouterLink>
 
-      <div v-if="lead" class="mt-4 grid gap-6 xl:grid-cols-[1fr_380px]">
+      <div v-if="lead" class="mt-4 grid gap-6 xl:grid-cols-[1fr_400px]">
         <section class="rounded-lg border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
           <div class="flex flex-wrap items-start justify-between gap-4">
             <div>
@@ -74,9 +91,24 @@ async function generateMessage() {
         </section>
 
         <aside class="rounded-lg border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
-          <h2 class="font-semibold">AI outreach draft</h2>
-          <button class="btn btn-primary mt-4 w-full" :disabled="store.isLoading" @click="generateMessage">Generate message</button>
+          <div class="flex items-center justify-between gap-3">
+            <h2 class="font-semibold">AI outreach draft</h2>
+            <span v-if="draftStatus !== 'idle'" class="rounded-full bg-slate-100 px-2 py-1 text-xs font-medium capitalize text-slate-600 dark:bg-slate-800 dark:text-slate-300">{{ draftStatus }}</span>
+          </div>
+          <button class="btn btn-primary mt-4 w-full gap-2" :disabled="store.isLoading" @click="generateMessage">
+            <Sparkles class="h-4 w-4" />
+            Generate draft
+          </button>
           <textarea v-model="generatedMessage" class="input mt-4 min-h-64 resize-y" placeholder="Generated message will appear here." />
+          <p v-if="messageError" class="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950 dark:text-red-200">{{ messageError }}</p>
+          <button class="btn btn-secondary mt-3 w-full gap-2" :disabled="draftStatus !== 'draft' || !generatedMessage.trim()" @click="approveDraft">
+            <CheckCircle2 class="h-4 w-4" />
+            Approve for outreach
+          </button>
+          <RouterLink :to="{ name: 'Quotes', query: { leadId: lead.id } }" class="btn btn-secondary mt-3 w-full gap-2">
+            <FileSpreadsheet class="h-4 w-4" />
+            Prepare quote
+          </RouterLink>
         </aside>
       </div>
 

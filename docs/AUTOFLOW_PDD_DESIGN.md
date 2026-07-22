@@ -8,8 +8,10 @@ PDD here means product-and-process design for implementation. It turns the accep
 - Evolve legacy note capabilities into business records instead of deleting them immediately.
 - Persist AutoFlow business data before building deeper automation.
 - Keep external integrations behind adapters.
-- Treat FOP as the downstream business source of truth for orders, fulfillment, logistics, after-sales, finance, and margin.
-- Treat AutoFlow as the pre-CRM sales development cockpit.
+- Treat FOP, built on Kingdee Cloud Cosmic, as the source of truth for formal leads, opportunities, stages, follow-up records, customer data, product cost, logistics rates, and downstream operations.
+- Treat AutoFlow as the discovery, contact enrichment, outreach, and customer-quotation cockpit before and around explicit FOP handoff.
+- Do not rebuild FOP product-cost or logistics-rating rules inside AutoFlow.
+- Keep AutoFlow follow-up deliberately lightweight: latest outcome, next action, note, and handoff status.
 - Prefer explicit status machines over free-form string updates.
 - Every important workflow, quote, and ownership action should produce an audit event.
 
@@ -27,22 +29,25 @@ NestJS API
   → Discovery Adapters
   → Lead Scoring
   → Outreach
-  → Quote
-  → CRM Activity
+  → Quote Orchestration
+  → Lightweight Follow-Up
+  → FOP Integration
   → Audit
 
 PostgreSQL
   → workflows
   → leads
   → outreach
-  → quotes
-  → crm activities
+  → quote drafts and provider snapshots
+  → local follow-up activities
+  → integration calls and FOP references
   → audit events
 
 External Systems
   → Search providers
   → AI provider
-  → future CRM/FOP/Shopify/Logistics integrations
+  → FOP product-cost, logistics-rate, and lead/opportunity handoff adapters
+  → future Shopify integrations
 ```
 
 ## 3. Backend Modules
@@ -94,7 +99,7 @@ Responsibility:
 - Generate AI-assisted outreach drafts.
 - Manage outreach queue.
 - Update outreach task status.
-- Create CRM activities when status changes.
+- Create lightweight follow-up activities when status changes.
 
 Initial entities:
 
@@ -104,30 +109,48 @@ Initial entities:
 
 Responsibility:
 
-- Quote draft creation.
-- Product and logistics cost entry.
-- Margin calculation.
-- Approval warning foundation.
+- Quote draft and customer-facing presentation orchestration.
+- Ordered, non-overlapping product quantity tiers.
+- Multi-country shipping requests and per-country channel comparison.
+- Combined product-tier x destination-country x shipping-channel matrix.
+- Invocation of FOP product-cost and logistics-rate ports.
+- Immutable request/result snapshots, selected options, source version, currency, units, and validity.
+- Transparent presentation arithmetic only; FOP remains responsible for cost, pricing-policy, and logistics-rating rules.
 
-Initial entities:
+Planned entities:
 
-- `QuoteEntity`
-- `QuoteItemEntity`
-- `LogisticsQuoteEntity`
+- `QuoteDraftEntity`
+- `ProductQuoteLineEntity`
+- `ProductQuoteTierEntity`
+- `ShippingQuoteRequestEntity`
+- `ShippingQuoteOptionEntity`
+- `QuoteCombinationEntity`
+- `IntegrationCallEntity`
 
-### 3.6 `crm`
+### 3.6 `follow-up`
 
 Responsibility:
 
-- Timeline records.
-- Follow-up actions.
-- Next action reminders.
+- Keep the latest local outcome, next action, next-action time, and short notes needed to complete outreach, quotation, and handoff.
+- Show FOP handoff and synchronization status.
+- Avoid duplicating FOP opportunity stages, ownership decisions, and authoritative follow-up history.
 
 Initial entities:
 
-- `CrmActivityEntity`
+- `CrmActivityEntity` as a compatibility implementation of `FollowUpActivity`.
 
-### 3.7 `audit`
+### 3.7 `fop-integration`
+
+Responsibility:
+
+- Expose `FopProductCostPort`, `FopLogisticsRatePort`, and `FopCrmHandoffPort` to domain services.
+- Map AutoFlow contracts to Kingdee Cloud Cosmic transport contracts without leaking dynamic-object fields into the domain.
+- Enforce timeout, idempotency, correlation, retry classification, redaction, and source tracking.
+- Persist FOP lead/opportunity references and conflicts without overwriting FOP master data.
+
+The exact FOP URLs, authentication, bill/form IDs, field mappings, and error catalogue remain configurable and `TBD` until the FOP API inventory is approved. See `AUTOFLOW_FOP_INTEGRATION_SPEC.md`.
+
+### 3.8 `audit`
 
 Responsibility:
 
@@ -138,7 +161,7 @@ Initial entities:
 
 - `AuditEventEntity`
 
-### 3.8 P1-A Persistence Schema
+### 3.9 P1-A Persistence Schema
 
 | Entity | Table | Ownership | Main Relations |
 |---|---|---|---|
@@ -147,7 +170,7 @@ Initial entities:
 | `LeadEntity` | `leads` | `owner_user_id`, optional `team_id` | Optionally belongs to a workflow; has contacts, outreach tasks, and CRM activities |
 | `LeadContactEntity` | `lead_contacts` | Inherited from lead | Belongs to one lead; unique by lead, type, and value |
 | `OutreachTaskEntity` | `outreach_tasks` | `owner_user_id`, optional `team_id` | Belongs to one lead |
-| `CrmActivityEntity` | `crm_activities` | `owner_user_id`, optional `team_id` | Belongs to one lead and records timeline/follow-up data |
+| `CrmActivityEntity` | `crm_activities` | `owner_user_id`, optional `team_id` | Temporary local follow-up/action log before or around FOP handoff |
 | `WorkflowLeadEntity` | `workflow_leads` | Inherited from workflow and lead | Many-to-many discovery evidence between workflows and stable leads |
 | `AdCreativeEntity` | `ad_creatives` | `owner_user_id`, optional `team_id` | Immutable provider evidence scoped to a workflow run |
 | `ShopifyStoreEntity` | `shopify_stores` | `owner_user_id`, optional `team_id` | Store detection evidence; optionally linked to a promoted lead |
@@ -216,15 +239,28 @@ GET    /api/autoflow/leads/:id/timeline
 POST   /api/autoflow/leads/:id/activities
 ```
 
-### Planned Quote APIs
+### Planned Quote And FOP APIs
 
 ```text
 GET    /api/autoflow/leads/:id/quotes
 POST   /api/autoflow/leads/:id/quotes
 GET    /api/autoflow/quotes/:id
 PATCH  /api/autoflow/quotes/:id
-POST   /api/autoflow/quotes/:id/calculate
+POST   /api/autoflow/quotes/:id/product-cost-requests
+POST   /api/autoflow/quotes/:id/shipping-rate-requests
+POST   /api/autoflow/quotes/:id/compose
+POST   /api/autoflow/leads/:id/fop-handoffs
+GET    /api/autoflow/fop-handoffs/:id
 ```
+
+Contract rules:
+
+- The frontend calls AutoFlow APIs only; it never calls Kingdee Cloud Cosmic directly.
+- Product-cost requests contain product/SKU mapping references and ordered quantity tiers.
+- Shipping-rate requests contain explicit destination countries, package data, currency, weight units, and dimension units.
+- Combined quote cells reference immutable product-cost and shipping-rate snapshots.
+- Missing live FOP configuration returns a clear unavailable state; it does not return invented values.
+- Request and response shapes, idempotency, failure handling, and live-enablement gates are defined in `AUTOFLOW_FOP_INTEGRATION_SPEC.md`.
 
 ## 5. Frontend Pages
 
@@ -234,10 +270,10 @@ POST   /api/autoflow/quotes/:id/calculate
 | Workflows | Workflow list and workflow progress |
 | Discovery | Create workflow and run discovery |
 | Leads | Lead pool, filters, scoring |
-| Lead Detail | Store profile, contacts, timeline, outreach, quotes |
+| Lead Detail | Store evidence, contacts, local next action, outreach, quotes, and FOP handoff |
 | Outreach | Human-review message queue |
-| Quotes | Quote calculator and quote history |
-| CRM | Pipeline board and follow-up workload |
+| Quotes | Product tier editor, destination freight comparison, combined quote matrix, and history |
+| Follow-Up | Lightweight next-action queue and FOP synchronization state |
 | Admin | User/config/audit foundation |
 
 ## 6. Frontend Store Design
@@ -248,7 +284,8 @@ Current `useAutoFlowStore` can remain for the first round, but should be split a
 - `useLeadStore`
 - `useOutreachStore`
 - `useQuoteStore`
-- `useCrmStore`
+- `useFollowUpStore`
+- `useFopIntegrationStore` only when asynchronous handoff polling requires separate state
 
 Keep API types in `frontend/src/api/autoflow.ts`. Do not define AutoFlow contracts in `frontend/src/types/index.ts`.
 
@@ -282,25 +319,9 @@ Phase 3:
 
 ## 8. State Transition Rules
 
-### Lead Status
+### Lead And Follow-Up Status
 
-Allowed transitions:
-
-```text
-new → qualified
-new → invalid
-qualified → contacted
-qualified → quoted
-contacted → replied
-contacted → lost
-replied → quoted
-quoted → registered
-registered → store_connected
-store_connected → ordered
-ordered → won
-any non-terminal → lost
-any non-terminal → invalid
-```
+The existing P1 lead enum remains the compatibility state machine until a versioned migration is approved. It represents AutoFlow work progress only and must not mirror or overwrite FOP opportunity stages. FOP handoff/sync status is stored separately.
 
 ### Outreach Status
 
@@ -320,11 +341,18 @@ failed → ready
 Allowed transitions:
 
 ```text
-draft → ready
-ready → sent
-sent → approved
-sent → rejected
-sent → expired
+draft → awaiting_product_cost
+draft → awaiting_shipping_rate
+awaiting_product_cost → awaiting_shipping_rate
+awaiting_shipping_rate → ready
+ready → shared
+awaiting_product_cost → failed
+awaiting_shipping_rate → failed
+failed → awaiting_product_cost
+failed → awaiting_shipping_rate
+ready → awaiting_product_cost
+ready → awaiting_shipping_rate
+draft / ready / shared → expired
 ```
 
 ## 9. Engineering Ground Rules
@@ -333,6 +361,9 @@ sent → expired
 - Every new status update must validate allowed transitions.
 - Every persisted object must include owner or team ownership where relevant.
 - Every cross-module action should create an audit event.
+- Quote calculations must go through replaceable FOP provider ports; domain services must not import Kingdee transport DTOs.
+- Money uses decimal-safe storage and explicit currency; countries and measurement units are explicit.
+- Production quote providers fail closed when FOP is unavailable or not configured.
 - Search provider adapters must expose mock/dev behavior explicitly.
 - Production must not silently use mock data.
 - Test each module at service level first, then API level.

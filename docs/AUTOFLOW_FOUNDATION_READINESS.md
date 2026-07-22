@@ -88,11 +88,21 @@ A development task is done when:
 
 ## 7. Next Formal Development Recommendation
 
-P0, P0.5, P1, and P2 are complete. Continue with P3 AI Outreach:
+P0, P0.5, and the P1/P2 development baselines are complete. The production-startup and stored-rich-text security blockers identified by the 2026-07-22 audit were closed in the release-alignment pass. Continue with the remaining P2-D hardening and P3 AI Outreach work:
 
-1. Rewrite the AI prompt and context builder for Dropshipping sales outreach.
-2. Add WhatsApp and email templates with human review before sending.
-3. Generate outreach tasks from persistent lead context.
-4. Add unavailable-provider and task-persistence tests.
+1. Add channel-specific WhatsApp and email templates on top of the new sales-outreach AI method.
+2. Add contact enrichment and evidence-driven scoring before wider outreach use.
+3. Add next-action suggestions and WhatsApp deep-link sending after human review.
+4. Replace the process-local workflow guard with durable queue/lease execution before paid-provider or multi-instance use.
 
 Before horizontal scaling, replace the P2 in-process scheduler with a persistent queue worker. The current single-instance runner stores every step and error in PostgreSQL and can resume through the same start endpoint after a restart.
+
+Approved downstream scope:
+
+- P4 builds a quotation interaction and orchestration layer, not a local product-cost or logistics-rating engine.
+- Product quotation supports quantity tiers.
+- Freight quotation supports multiple destination countries and multiple FOP logistics channels.
+- Combined quotation supports product/SKU x quantity tier x destination country x shipping channel.
+- FOP, built on Kingdee Cloud Cosmic, remains authoritative for product cost, freight rating, formal leads, opportunities, stages, and follow-up records.
+- P5 is limited to lightweight AutoFlow next actions and explicit FOP handoff.
+- Live FOP enablement requires the inventory and acceptance gates in `AUTOFLOW_FOP_INTEGRATION_SPEC.md`.

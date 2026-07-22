@@ -13,8 +13,10 @@ Product keyword or product image
   -> Lead cleaning and scoring
   -> AI message generation
   -> Semi-automated outreach
-  -> WhatsApp conversion
-  -> CRM follow-up
+  -> Contact response and next action
+  -> Product tier + destination freight quote
+  -> Combined customer quote
+  -> FOP lead/opportunity handoff
 ```
 
 ## First-Version Goal
@@ -25,7 +27,8 @@ The first refactor should not attempt full automation. It should establish the d
 - Workflow creation and tracking.
 - Lead pool and lead detail model.
 - Outreach task surface.
-- CRM pipeline surface.
+- Lightweight follow-up and FOP handoff surface.
+- Quote workspace entry for quantity tiers, destination countries, and FOP-backed results.
 - Backend domain modules that can later absorb the existing Shopify, Facebook Ads, AI, and notes capabilities.
 
 ## Architectural Principles
@@ -50,7 +53,9 @@ store-detection
 lead-scoring
 ai-messaging
 outreach
-crm
+quote-orchestration
+follow-up
+fop-integration
 integrations
 admin
 legacy-notes
@@ -128,7 +133,9 @@ This module may use in-memory seed data for the first UI shell, but the data con
 /leads            Lead pool
 /leads/:id        Lead detail
 /outreach         Outreach tasks
-/crm              CRM pipeline
+/quotes           Product and freight quote workspace
+/follow-ups       Lightweight next actions and FOP handoff
+/crm              Compatibility route during transition
 /templates        Message templates
 /settings         Account and integrations
 /admin            Admin
@@ -137,7 +144,7 @@ This module may use in-memory seed data for the first UI shell, but the data con
 ## First Frontend Scope
 
 - Rename product shell to AutoFlow.
-- Add new dashboard, workflows, leads, outreach, and CRM pages.
+- Add dashboard, workflows, leads, outreach, quote, and lightweight follow-up pages.
 - Keep login/register/settings/admin routes functional.
 - Add an AutoFlow-specific API client and Pinia store.
 - Build a dense, operational UI suitable for daily sales work.
@@ -167,7 +174,7 @@ Owner: worker
 Owner: worker
 
 - Add AutoFlow API client and store.
-- Create dashboard, workflows, leads, outreach, CRM pages.
+- Create dashboard, workflows, leads, outreach, quote, and lightweight follow-up pages.
 - Update routes and main layout navigation.
 - Remove first known build blocker in AI chat import if touched.
 
@@ -203,5 +210,7 @@ Owner: worker or coordinator
 - Add background job queue for discovery/scoring/message generation.
 - Add lead scoring rules engine.
 - Add WhatsApp deep-link outreach.
-- Add CRM activity timeline.
+- Add product-tier, multi-country freight, and combined quote UI backed by FOP provider ports.
+- Reposition the CRM timeline as local next actions plus FOP handoff status.
+- Do not duplicate FOP lead, opportunity, stage, follow-up, product-cost, or freight-rating logic.
 - Add CSV/Excel export for leads.

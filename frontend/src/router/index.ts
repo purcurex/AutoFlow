@@ -40,10 +40,20 @@ const routes: RouteRecordRaw[] = [
     meta: { requiresAuth: true }
   },
   {
-    path: '/crm',
-    name: 'CRM',
-    component: () => import('@/views/autoflow/CrmView.vue'),
+    path: '/quotes',
+    name: 'Quotes',
+    component: () => import('@/views/autoflow/QuoteView.vue'),
     meta: { requiresAuth: true }
+  },
+  {
+    path: '/follow-ups',
+    name: 'FollowUps',
+    component: () => import('@/views/autoflow/FollowUpView.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/crm',
+    redirect: { name: 'FollowUps' }
   },
   {
     path: '/login',
@@ -87,6 +97,18 @@ const router = createRouter({
   routes
 })
 
+function getStoredRole(): string | null {
+  const user = localStorage.getItem('user')
+  if (!user) return null
+  try {
+    const parsed = JSON.parse(user) as { role?: unknown }
+    return typeof parsed.role === 'string' ? parsed.role : null
+  } catch {
+    localStorage.removeItem('user')
+    return null
+  }
+}
+
 router.beforeEach(async (to, _from, next) => {
   const token = localStorage.getItem('token')
 
@@ -95,13 +117,9 @@ router.beforeEach(async (to, _from, next) => {
   } else if (to.meta.guest && token) {
     next({ name: 'Dashboard' })
   } else if (to.meta.requiresAdmin) {
-    const userStr = localStorage.getItem('user')
-    if (userStr) {
-      const user = JSON.parse(userStr)
-      if (user.role !== 'admin') {
-        next({ name: 'Dashboard' })
-        return
-      }
+    if (getStoredRole() !== 'admin') {
+      next({ name: 'Dashboard' })
+      return
     }
     next()
   } else {

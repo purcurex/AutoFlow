@@ -78,7 +78,7 @@ export interface OutreachTask {
   owner: string
 }
 
-export interface CrmStage {
+export interface FollowUpStage {
   key: LeadStatus
   label: string
   count: number
@@ -93,7 +93,7 @@ export interface AutoFlowDashboard {
     replies: number
     opportunities: number
   }
-  funnel: CrmStage[]
+  funnel: FollowUpStage[]
   recentWorkflows: WorkflowRun[]
   topLeads: StoreLead[]
   nextTasks: OutreachTask[]
@@ -163,7 +163,7 @@ export const autoflowApi = {
   updateOutreachTask(id: string, data: UpdateOutreachTaskRequest): Promise<OutreachTask> {
     return api.patch(`/autoflow/outreach-tasks/${id}`, data)
   },
-  getCrm(): Promise<CrmStage[]> {
-    return api.get('/autoflow/crm')
+  getFollowUps(): Promise<FollowUpStage[]> {
+    return api.get('/autoflow/follow-ups')
   },
 }
