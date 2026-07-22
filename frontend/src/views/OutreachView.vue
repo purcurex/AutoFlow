@@ -28,7 +28,9 @@ onMounted(() => {
             <button class="btn btn-secondary text-xs" @click="autoFlowStore.updateOutreachTask(task.id, { status: 'sent' })">Mark sent</button>
           </div>
           <p class="mt-4 text-sm leading-6">{{ task.message }}</p>
-          <div class="mt-4 text-xs text-[var(--color-text-secondary)]">Next follow-up: {{ new Date(task.nextFollowUpAt).toLocaleString() }}</div>
+          <div class="mt-4 text-xs text-[var(--color-text-secondary)]">
+            Next follow-up: {{ task.nextFollowUpAt ? new Date(task.nextFollowUpAt).toLocaleString() : 'Not scheduled' }}
+          </div>
         </article>
       </div>
     </div>

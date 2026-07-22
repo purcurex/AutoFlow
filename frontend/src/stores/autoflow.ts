@@ -33,7 +33,8 @@ export const useAutoFlowStore = defineStore('autoflow', () => {
   }
 
   async function fetchWorkflows() {
-    workflows.value = await autoflowApi.getWorkflows()
+    const result = await autoflowApi.getWorkflows()
+    workflows.value = result.items
   }
 
   async function createWorkflow(data: CreateWorkflowRequest) {
@@ -43,7 +44,8 @@ export const useAutoFlowStore = defineStore('autoflow', () => {
   }
 
   async function fetchLeads(status?: LeadStatus) {
-    leads.value = await autoflowApi.getLeads(status)
+    const result = await autoflowApi.getLeads(status)
+    leads.value = result.items
   }
 
   async function fetchLead(id: string) {
@@ -58,7 +60,8 @@ export const useAutoFlowStore = defineStore('autoflow', () => {
   }
 
   async function fetchOutreachTasks() {
-    outreachTasks.value = await autoflowApi.getOutreachTasks()
+    const result = await autoflowApi.getOutreachTasks()
+    outreachTasks.value = result.items
   }
 
   async function updateOutreachTask(id: string, data: UpdateOutreachTaskRequest) {

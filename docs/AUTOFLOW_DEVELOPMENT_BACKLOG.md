@@ -71,20 +71,32 @@ When work is interrupted, resume in this order:
 
 ### P1-B Services
 
-- [ ] Replace in-memory workflow list with TypeORM repository.
-- [ ] Replace in-memory lead list with TypeORM repository.
-- [ ] Replace in-memory outreach queue with TypeORM repository.
-- [ ] Implement lead status transition guard.
-- [ ] Implement outreach status transition guard.
-- [ ] Create CRM activity on important status changes.
+- [x] Replace in-memory workflow list with TypeORM repository.
+- [x] Replace in-memory lead list with TypeORM repository.
+- [x] Replace in-memory outreach queue with TypeORM repository.
+- [x] Implement lead status transition guard.
+- [x] Implement outreach status transition guard.
+- [x] Create CRM activity on important status changes.
 
 ### P1-C Tests
 
-- [ ] Test workflow creation persistence.
-- [ ] Test lead list filtering.
-- [ ] Test lead detail not found.
-- [ ] Test outreach task update.
-- [ ] Test invalid status transition rejection.
+- [x] Test workflow creation persistence.
+- [x] Test lead list owner isolation.
+- [x] Test lead detail not found across owners.
+- [x] Test outreach task update.
+- [x] Test invalid status transition rejection.
+
+### P1-D Security And Engineering Gate
+
+- [x] Prevent profile role/property escalation with runtime DTO validation.
+- [x] Disable fixed-password admin creation by default.
+- [x] Fail closed when production email verification is unavailable.
+- [x] Add authentication and throttling to external search endpoints.
+- [x] Add normalized lead domains and workflow discovery links.
+- [x] Add backend/frontend lint commands.
+- [x] Add PostgreSQL API E2E tests.
+- [x] Add GitHub Actions CI and database health endpoint.
+- [x] Remove vulnerable frontend `xlsx` dependency and use backend export.
 
 ## 3. P2 Discovery Workflow Tasks
 

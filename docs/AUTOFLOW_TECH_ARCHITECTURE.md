@@ -112,7 +112,7 @@ PATCH /api/autoflow/outreach-tasks/:id
 GET   /api/autoflow/crm
 ```
 
-P1-A persistence entities and migrations are implemented. `AutoflowService` still returns in-memory scaffold data; P1-B replaces those collections with owner-scoped TypeORM repositories.
+P1 persistence is implemented. `AutoflowService` uses owner-scoped TypeORM repositories, paginated list contracts, explicit status transition maps, and transactions that synchronize outreach, lead status, and CRM activity.
 
 ## 5. Target Domain Model
 
@@ -198,11 +198,11 @@ Known Windows note:
 
 Priority order:
 
-1. Replace AutoFlow in-memory scaffold with owner-scoped TypeORM repository services.
-2. Convert Shopify/Facebook modules into workflow steps.
+1. Add `AdCreative`, `ShopifyStore`, and structured `LeadScore` persistence.
+2. Convert Shopify/Facebook modules into idempotent discovery adapters and workflow steps.
 3. Add background job queue for long-running discovery and scoring.
 4. Add lead scoring rules engine.
 5. Add WhatsApp deep-link outreach.
-6. Add CRM activity timeline.
+6. Add CRM activity timeline UI.
 7. Add CSV/Excel export for leads.
-8. Fix legacy Chinese encoding corruption in user-facing text.
+8. Continue legacy user-facing language cleanup.

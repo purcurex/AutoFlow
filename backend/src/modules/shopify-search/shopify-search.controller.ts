@@ -12,15 +12,18 @@ import { ShopifySearchService } from './shopify-search.service'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
 import * as fs from 'fs'
 import * as path from 'path'
+import { Throttle } from '@nestjs/throttler'
+import { ShopifyImageUrlSearchDto, ShopifyKeywordSearchDto } from './dto/shopify-search.dto'
 
 @Controller('shopify-search')
 @UseGuards(JwtAuthGuard)
+@Throttle({ default: { limit: 20, ttl: 60 * 1000 } })
 export class ShopifySearchController {
   private readonly logger = new Logger(ShopifySearchController.name)
   constructor(private readonly shopifySearchService: ShopifySearchService) {}
 
   @Post('by-image-url')
-  async searchByImageUrl(@Body() body: { imageUrl: string }) {
+  async searchByImageUrl(@Body() body: ShopifyImageUrlSearchDto) {
     this.logger.log(`收到图片URL搜索请求: ${body.imageUrl}`)
     try {
       const stores = await this.shopifySearchService.searchStoresByImageUrl(
@@ -40,17 +43,12 @@ export class ShopifySearchController {
       }
     } catch (error) {
       this.logger.error(`图片URL搜索失败: ${error.message}`)
-      return {
-        stores: [],
-        noteContent: '',
-        noteTitle: '',
-        error: error.message,
-      }
+      throw error
     }
   }
 
   @Post('by-keyword')
-  async searchByKeyword(@Body() body: { keyword: string }) {
+  async searchByKeyword(@Body() body: ShopifyKeywordSearchDto) {
     this.logger.log(`收到关键词搜索请求: ${body.keyword}`)
     try {
       const stores = await this.shopifySearchService.searchStoresByKeyword(
@@ -70,12 +68,7 @@ export class ShopifySearchController {
       }
     } catch (error) {
       this.logger.error(`关键词搜索失败: ${error.message}`)
-      return {
-        stores: [],
-        noteContent: '',
-        noteTitle: '',
-        error: error.message,
-      }
+      throw error
     }
   }
 
@@ -127,13 +120,6 @@ export class ShopifySearchController {
         noteContent,
         noteTitle,
         searchCountInfo,
-      }
-    } catch (error) {
-      return {
-        stores: [],
-        noteContent: '',
-        noteTitle: '',
-        error: error.message,
       }
     } finally {
       // 清理临时文件

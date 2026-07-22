@@ -112,6 +112,18 @@ SERPAPI_KEY=
 GOOGLE_API_KEY=
 GOOGLE_SEARCH_CX=
 HOSTIO_API_KEY=
+ENABLE_MOCK_SEARCH=false
+DAILY_SEARCH_LIMIT=250
+
+ENABLE_ADMIN_BOOTSTRAP=false
+ADMIN_BOOTSTRAP_EMAIL=
+ADMIN_BOOTSTRAP_USERNAME=
+ADMIN_BOOTSTRAP_PASSWORD=
+
+SMTP_HOST=
+SMTP_PORT=587
+SMTP_USER=
+SMTP_PASS=
 ```
 
 Note: the current local Docker PostgreSQL container is `hyperzone`, and the existing development database is still `noteflow`. Product-facing naming should be AutoFlow. Rename the physical database only after a backup and migration plan exists.
@@ -143,13 +155,14 @@ Run the local CI baseline:
 npm.cmd run ci:local
 ```
 
-This runs frontend tests, backend tests, frontend build, and backend build.
+This runs lint, frontend/backend unit tests, PostgreSQL E2E tests, production builds, and the production dependency audit. The E2E suite uses the separate `autoflow_test` database.
 
 Individual commands:
 
 ```powershell
 npm.cmd --workspace frontend run test
 npm.cmd --workspace backend run test
+npm.cmd run test:e2e
 npm.cmd --workspace frontend run build
 npm.cmd --workspace backend run build
 ```
@@ -183,16 +196,8 @@ Formal transformation documents:
 - `docs/AUTOFLOW_FOUNDATION_READINESS.md`
 - `docs/AUTOFLOW_TRANSFORMATION_PROPOSAL.md`
 
-## Default Admin For Fresh Seeds
+## First Admin Bootstrap
 
-Fresh seeded environments use:
+Automatic admin creation is disabled by default. For an intentional first-admin bootstrap, set `ENABLE_ADMIN_BOOTSTRAP=true` and provide `ADMIN_BOOTSTRAP_EMAIL`, `ADMIN_BOOTSTRAP_USERNAME`, and a password of at least 12 characters. Disable bootstrap after the account is created. Passwords are never printed to application logs.
 
-```text
-Email: admin@autoflow.local
-Username: admin
-Password: Admin@123456
-```
-
-Change the default password immediately after first login.
-
-Existing local databases created before the AutoFlow migration may still contain `admin@noteflow.com`.
+Health/readiness endpoint: `GET http://localhost:3000/api/health`.

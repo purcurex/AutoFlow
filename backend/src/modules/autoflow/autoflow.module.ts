@@ -9,6 +9,7 @@ import {
   OutreachTaskEntity,
   WorkflowRunEntity,
   WorkflowStepEntity,
+  WorkflowLeadEntity,
 } from './entities'
 
 @Module({
@@ -16,6 +17,7 @@ import {
     TypeOrmModule.forFeature([
       WorkflowRunEntity,
       WorkflowStepEntity,
+      WorkflowLeadEntity,
       LeadEntity,
       LeadContactEntity,
       OutreachTaskEntity,

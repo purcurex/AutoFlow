@@ -1,5 +1,11 @@
 import { validate } from 'class-validator'
-import { CreateWorkflowDto, GenerateMessageDto, UpdateOutreachTaskDto } from './autoflow.dto'
+import {
+  CreateWorkflowDto,
+  GenerateMessageDto,
+  ListLeadsQueryDto,
+  UpdateLeadStatusDto,
+  UpdateOutreachTaskDto,
+} from './autoflow.dto'
 
 describe('AutoFlow DTO contracts', () => {
   it('accepts the minimum workflow creation payload', async () => {
@@ -42,5 +48,13 @@ describe('AutoFlow DTO contracts', () => {
     const properties = errors.map((error) => error.property)
 
     expect(properties).toEqual(expect.arrayContaining(['status', 'nextFollowUpAt']))
+  })
+
+  it('validates lead list and status update contracts', async () => {
+    const query = Object.assign(new ListLeadsQueryDto(), { status: 'unsupported', pageSize: 1000 })
+    const status = Object.assign(new UpdateLeadStatusDto(), { status: 'quoted' })
+
+    await expect(validate(query)).resolves.not.toHaveLength(0)
+    await expect(validate(status)).resolves.not.toHaveLength(0)
   })
 })

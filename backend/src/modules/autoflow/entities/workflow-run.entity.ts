@@ -21,6 +21,7 @@ import {
 } from '../autoflow.types'
 import { LeadEntity } from './lead.entity'
 import { WorkflowStepEntity } from './workflow-step.entity'
+import { WorkflowLeadEntity } from './workflow-lead.entity'
 
 @Entity('workflow_runs')
 @Index('idx_workflow_runs_owner_created_at', ['ownerUserId', 'createdAt'])
@@ -88,6 +89,9 @@ export class WorkflowRunEntity {
 
   @OneToMany(() => LeadEntity, (lead) => lead.workflowRun)
   leads: LeadEntity[]
+
+  @OneToMany(() => WorkflowLeadEntity, (link) => link.workflowRun)
+  leadLinks: WorkflowLeadEntity[]
 
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date

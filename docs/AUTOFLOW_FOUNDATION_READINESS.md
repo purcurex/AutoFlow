@@ -15,7 +15,7 @@ This document defines the ground preparation required before formal AutoFlow tra
 | Backend Test Baseline | Ready | Jest + ts-jest installed with AutoFlow service smoke tests |
 | Frontend Build | Ready | Build passes with chunk size warning |
 | Backend Build | Ready | Nest build passes |
-| Root CI Script | Ready | `npm.cmd run ci:local` runs tests and builds |
+| Root CI Script | Ready | `npm.cmd run ci:local` runs lint, unit/E2E tests, builds, and production dependency audit |
 | Legacy Build Artifacts | Ready | Tracked `backend/public` frontend bundle removed and ignored |
 | Local Docker Database | Ready | Docker container `hyperzone` is running, `localhost:5432` is reachable, and database `noteflow` accepts the app credentials |
 | AutoFlow Product Spec | Ready | See `AUTOFLOW_PRODUCT_SPEC.md` |
@@ -25,7 +25,10 @@ This document defines the ground preparation required before formal AutoFlow tra
 | Development Backlog | Ready | See `AUTOFLOW_DEVELOPMENT_BACKLOG.md` |
 | Legacy Note Repositioning | Ready | UI uses business records and record categories while legacy routes and tables remain compatible |
 | AutoFlow API Contracts | Ready | Frontend types are centralized and backend write endpoints use validated DTO classes |
-| P1-A Persistence Schema | Ready | Six core entities and two versioned migrations are applied to `hyperzone/noteflow` |
+| P1 Persistence | Ready | Repository-backed owner-scoped services and four versioned migrations are applied to `hyperzone/noteflow` |
+| Security Gate | Ready | Profile allowlist, explicit admin bootstrap, production email fail-closed, endpoint guards, and throttling are active |
+| API Integration Tests | Ready | Supertest runs against isolated PostgreSQL database `autoflow_test` |
+| GitHub CI | Ready | Workflow provisions PostgreSQL and runs the complete local CI gate |
 
 ## 3. Required Before Coding Each Iteration
 
@@ -43,6 +46,7 @@ npm.cmd run ci:local
 npm.cmd --workspace frontend run test
 npm.cmd --workspace frontend run build
 npm.cmd --workspace backend run test
+npm.cmd run test:e2e
 npm.cmd --workspace backend run build
 docker exec hyperzone psql -U postgres -d noteflow -c "select current_database() as database, current_user as user_name;"
 ```
@@ -84,11 +88,9 @@ A development task is done when:
 
 ## 7. Next Formal Development Recommendation
 
-P0 and P1-A are complete. Continue with P1-B persistence services:
+P0, P0.5, and P1 are complete. Continue with P2 Discovery Workflow:
 
-1. Replace in-memory workflow, lead, and outreach collections with TypeORM repositories.
-2. Scope every query by authenticated owner or permitted team.
-3. Add lead and outreach status transition guards.
-4. Write CRM activities for significant state changes.
-
-Keep P1-B changes on top of the versioned P1-A schema; do not re-enable automatic synchronization.
+1. Add `AdCreative`, `ShopifyStore`, and structured `LeadScore` persistence.
+2. Wrap Shopify and Facebook search modules behind discovery adapters.
+3. Execute discovery asynchronously with idempotent workflow-step updates.
+4. Upsert leads by `owner_user_id + normalized_domain` and save `workflow_leads` evidence.

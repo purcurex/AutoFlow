@@ -69,14 +69,6 @@ export class NotesService {
                         (!data.content || data.content.trim() === '')
 
     if (isEmptyNote) {
-      // 查找是否已存在空笔记
-      const existingEmptyNote = await this.notesRepository.findOne({
-        where: {
-          userId,
-          isDeleted: false,
-        },
-      })
-
       // 查找标题为空或"无标题"且内容为空的笔记
       const allNotes = await this.notesRepository.find({
         where: { userId, isDeleted: false },

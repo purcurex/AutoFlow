@@ -39,6 +39,8 @@ DB_MIGRATIONS_RUN=false
 
 JWT_SECRET=
 JWT_EXPIRES_IN=7d
+
+ENABLE_ADMIN_BOOTSTRAP=false
 ```
 
 Optional integration variables:
@@ -50,6 +52,12 @@ GOOGLE_API_KEY=
 GOOGLE_SEARCH_CX=
 HOSTIO_API_KEY=
 ENABLE_MOCK_SEARCH=false
+DAILY_SEARCH_LIMIT=250
+
+SMTP_HOST=
+SMTP_PORT=587
+SMTP_USER=
+SMTP_PASS=
 ```
 
 Production must provide `JWT_SECRET`. Do not rely on a fallback secret.
@@ -128,3 +136,5 @@ After deployment:
 - PostgreSQL connection is healthy.
 - Search adapters fail clearly if provider keys are missing.
 - Production does not silently use mock search results.
+- `GET /api/health` reports `status=ok` and `database=up`.
+- Admin bootstrap is disabled after intentional first use.

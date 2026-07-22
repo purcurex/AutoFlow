@@ -23,7 +23,7 @@ onMounted(() => {
 const title = computed(() => props.create ? 'Create workflow' : 'Workflows')
 
 async function submitWorkflow() {
-  if (!form.name.trim() || !form.seedValue.trim()) return
+  if (!form.seedValue.trim()) return
   const workflow = await store.createWorkflow({ ...form })
   if (workflow) router.push('/workflows')
 }
@@ -85,7 +85,7 @@ async function submitWorkflow() {
             <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
               <tr v-for="workflow in store.workflows" :key="workflow.id">
                 <td class="px-4 py-3 font-medium">{{ workflow.name }}</td>
-                <td class="px-4 py-3">{{ workflow.seedType }} 路 {{ workflow.seedValue }}</td>
+                <td class="px-4 py-3">{{ workflow.seedType }} · {{ workflow.seedValue }}</td>
                 <td class="px-4 py-3">{{ workflow.targetMarket }}</td>
                 <td class="px-4 py-3">{{ workflow.currentStage }}</td>
                 <td class="px-4 py-3">{{ workflow.leadCount }}</td>

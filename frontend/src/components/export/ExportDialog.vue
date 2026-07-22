@@ -2,12 +2,12 @@
 import { ref, computed } from 'vue'
 import type { Note } from '@/types'
 import {
-  exportNoteToExcel,
+  downloadBlob,
   exportNoteToPdf,
-  exportNotesToExcel,
   exportNotesToPdf
 } from '@/utils/export'
 import { useUserStore } from '@/stores/user'
+import { notesApi } from '@/api/notes'
 
 const userStore = useUserStore()
 
@@ -43,11 +43,9 @@ async function handleExport() {
     await new Promise(resolve => setTimeout(resolve, 100))
 
     if (exportFormat.value === 'excel') {
-      if (props.notes.length === 1) {
-        exportNoteToExcel(props.notes[0])
-      } else {
-        exportNotesToExcel(props.notes)
-      }
+      const blob = await notesApi.exportExcel(props.notes.map(note => note.id))
+      const date = new Date().toISOString().slice(0, 10)
+      downloadBlob(blob, `业务记录导出_${props.notes.length}条_${date}.xlsx`)
     } else {
       if (props.notes.length === 1) {
         exportNoteToPdf(props.notes[0], userStore.username)

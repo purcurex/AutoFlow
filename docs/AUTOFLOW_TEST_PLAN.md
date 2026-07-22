@@ -32,9 +32,17 @@ Already added:
 
 Required next:
 
-- API test harness.
 - Quote calculation tests.
 - Route guard tests.
+
+Implemented P1 integration baseline:
+
+- Supertest API harness against isolated PostgreSQL database `autoflow_test`.
+- Workflow persistence and cross-owner isolation.
+- Profile escalation rejection.
+- Lead status transition rejection and owner-scoped not-found behavior.
+- Outreach-to-lead-to-CRM transaction flow.
+- Database-backed `/api/health` readiness check.
 
 ## 4. Test Case Matrix
 

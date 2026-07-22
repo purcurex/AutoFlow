@@ -1,7 +1,7 @@
 export const SEED_TYPES = ['keyword', 'image'] as const
 export type SeedType = (typeof SEED_TYPES)[number]
 
-export const WORKFLOW_STATUSES = ['draft', 'running', 'completed', 'failed'] as const
+export const WORKFLOW_STATUSES = ['draft', 'running', 'completed', 'failed', 'cancelled'] as const
 export type WorkflowStatus = (typeof WORKFLOW_STATUSES)[number]
 
 export const WORKFLOW_STAGES = [
@@ -34,10 +34,10 @@ export type LeadStatus = (typeof LEAD_STATUSES)[number]
 export const OUTREACH_CHANNELS = ['whatsapp', 'email', 'instagram', 'facebook'] as const
 export type OutreachChannel = (typeof OUTREACH_CHANNELS)[number]
 
-export const OUTREACH_STATUSES = ['draft', 'ready', 'sent', 'replied', 'skipped'] as const
+export const OUTREACH_STATUSES = ['draft', 'ready', 'sent', 'replied', 'skipped', 'failed'] as const
 export type OutreachStatus = (typeof OUTREACH_STATUSES)[number]
 
-export const LEAD_CONTACT_TYPES = [...OUTREACH_CHANNELS, 'website', 'phone'] as const
+export const LEAD_CONTACT_TYPES = [...OUTREACH_CHANNELS, 'linkedin', 'website', 'phone'] as const
 export type LeadContactType = (typeof LEAD_CONTACT_TYPES)[number]
 
 export const CRM_ACTIVITY_TYPES = [
@@ -51,6 +51,34 @@ export const CRM_ACTIVITY_TYPES = [
   'handoff',
 ] as const
 export type CrmActivityType = (typeof CRM_ACTIVITY_TYPES)[number]
+
+export const WORKFLOW_STATUS_TRANSITIONS: Record<WorkflowStatus, readonly WorkflowStatus[]> = {
+  draft: ['running', 'cancelled'],
+  running: ['completed', 'failed', 'cancelled'],
+  completed: [],
+  failed: ['running', 'cancelled'],
+  cancelled: [],
+}
+
+export const LEAD_STATUS_TRANSITIONS: Record<LeadStatus, readonly LeadStatus[]> = {
+  new: ['qualified', 'contacted', 'invalid'],
+  qualified: ['contacted', 'invalid'],
+  contacted: ['replied', 'opportunity', 'lost'],
+  replied: ['opportunity', 'lost'],
+  opportunity: ['won', 'lost'],
+  won: [],
+  lost: ['qualified'],
+  invalid: [],
+}
+
+export const OUTREACH_STATUS_TRANSITIONS: Record<OutreachStatus, readonly OutreachStatus[]> = {
+  draft: ['ready', 'skipped'],
+  ready: ['sent', 'skipped', 'failed'],
+  sent: ['replied', 'failed'],
+  replied: [],
+  skipped: [],
+  failed: ['ready', 'skipped'],
+}
 
 export interface WorkflowRun {
   id: string
@@ -74,7 +102,7 @@ export interface LeadContact {
 
 export interface StoreLead {
   id: string
-  workflowRunId: string
+  workflowRunId: string | null
   brandName: string
   domain: string
   storeUrl: string
@@ -100,7 +128,7 @@ export interface OutreachTask {
   channel: OutreachChannel
   status: OutreachStatus
   message: string
-  nextFollowUpAt: string
+  nextFollowUpAt: string | null
   owner: string
 }
 
@@ -123,4 +151,11 @@ export interface AutoFlowDashboard {
   recentWorkflows: WorkflowRun[]
   topLeads: StoreLead[]
   nextTasks: OutreachTask[]
+}
+
+export interface PaginatedResult<T> {
+  items: T[]
+  total: number
+  page: number
+  pageSize: number
 }

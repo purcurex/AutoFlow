@@ -1,4 +1,4 @@
-import { IsEmail, IsString, MinLength, IsNotEmpty, Length } from 'class-validator'
+import { IsEmail, IsString, MinLength, IsNotEmpty, Length, Matches, MaxLength } from 'class-validator'
 
 export class SendCodeDto {
   @IsEmail()
@@ -11,15 +11,18 @@ export class RegisterDto {
 
   @IsString()
   @MinLength(2)
+  @MaxLength(50)
   username: string
 
   @IsString()
-  @MinLength(6)
+  @MinLength(10)
+  @MaxLength(72)
   password: string
 
   @IsString()
   @IsNotEmpty({ message: '验证码不能为空' })
   @Length(6, 6, { message: '验证码必须是6位' })
+  @Matches(/^\d{6}$/, { message: '验证码必须是6位数字' })
   verificationCode: string
 }
 
@@ -28,5 +31,6 @@ export class LoginDto {
   email: string
 
   @IsString()
+  @MaxLength(72)
   password: string
 }

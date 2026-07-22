@@ -5,6 +5,10 @@ import { Folder } from '../modules/folders/folder.entity'
 import AppDataSource from './data-source'
 
 async function seed() {
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('Development seed data cannot run in production.')
+  }
+
   await AppDataSource.initialize()
   console.log('Database connected')
 
@@ -16,7 +20,8 @@ async function seed() {
     where: [{ email: 'test@autoflow.local' }, { username: 'sales_user' }],
   })
 
-  const hashedPassword = await bcrypt.hash('123456', 10)
+  const devPassword = process.env.DEV_SEED_PASSWORD || 'AutoFlowLocal123'
+  const hashedPassword = await bcrypt.hash(devPassword, 10)
 
   if (testUser) {
     testUser.email = 'test@autoflow.local'
@@ -35,7 +40,7 @@ async function seed() {
   }
 
   console.log('  email: test@autoflow.local')
-  console.log('  password: 123456')
+  console.log('  password: configured by DEV_SEED_PASSWORD (local default is documented in .env.example)')
 
   let salesFolder = await folderRepository.findOne({
     where: { name: 'Customer Development Records' },

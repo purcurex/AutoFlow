@@ -10,13 +10,26 @@ import { ShopifySearchModule } from './modules/shopify-search/shopify-search.mod
 import { FacebookAdsModule } from './modules/facebook-ads/facebook-ads.module'
 import { SeederModule } from './modules/seeder/seeder.module'
 import { AutoflowModule } from './modules/autoflow/autoflow.module'
+import { APP_GUARD } from '@nestjs/core'
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler'
+import { validateEnvironment } from './config/environment'
+import { HealthModule } from './modules/health/health.module'
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: '.env',
+      validate: validateEnvironment,
     }),
+
+    ThrottlerModule.forRoot([
+      {
+        name: 'default',
+        ttl: 60 * 1000,
+        limit: 120,
+      },
+    ]),
 
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
@@ -46,6 +59,8 @@ import { AutoflowModule } from './modules/autoflow/autoflow.module'
     FacebookAdsModule,
     AutoflowModule,
     SeederModule,
+    HealthModule,
   ],
+  providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
 export class AppModule {}

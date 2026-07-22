@@ -1,7 +1,7 @@
 import api from './index'
 
 export type SeedType = 'keyword' | 'image'
-export type WorkflowStatus = 'draft' | 'running' | 'completed' | 'failed'
+export type WorkflowStatus = 'draft' | 'running' | 'completed' | 'failed' | 'cancelled'
 export type WorkflowStage =
   | 'seed'
   | 'ad_discovery'
@@ -23,8 +23,8 @@ export type LeadStatus =
   | 'invalid'
 
 export type OutreachChannel = 'whatsapp' | 'email' | 'instagram' | 'facebook'
-export type OutreachStatus = 'draft' | 'ready' | 'sent' | 'replied' | 'skipped'
-export type LeadContactType = OutreachChannel | 'website' | 'phone'
+export type OutreachStatus = 'draft' | 'ready' | 'sent' | 'replied' | 'skipped' | 'failed'
+export type LeadContactType = OutreachChannel | 'linkedin' | 'website' | 'phone'
 
 export interface WorkflowRun {
   id: string
@@ -48,7 +48,7 @@ export interface LeadContact {
 
 export interface StoreLead {
   id: string
-  workflowRunId: string
+  workflowRunId: string | null
   brandName: string
   domain: string
   storeUrl: string
@@ -74,7 +74,7 @@ export interface OutreachTask {
   channel: OutreachChannel
   status: OutreachStatus
   message: string
-  nextFollowUpAt: string
+  nextFollowUpAt: string | null
   owner: string
 }
 
@@ -99,6 +99,13 @@ export interface AutoFlowDashboard {
   nextTasks: OutreachTask[]
 }
 
+export interface PaginatedResult<T> {
+  items: T[]
+  total: number
+  page: number
+  pageSize: number
+}
+
 export interface CreateWorkflowRequest {
   name?: string
   seedType: SeedType
@@ -116,20 +123,19 @@ export interface UpdateOutreachTaskRequest {
   status?: OutreachStatus
   message?: string
   nextFollowUpAt?: string
-  owner?: string
 }
 
 export const autoflowApi = {
   getDashboard(): Promise<AutoFlowDashboard> {
     return api.get('/autoflow/dashboard')
   },
-  getWorkflows(): Promise<WorkflowRun[]> {
+  getWorkflows(): Promise<PaginatedResult<WorkflowRun>> {
     return api.get('/autoflow/workflows')
   },
   createWorkflow(data: CreateWorkflowRequest): Promise<WorkflowRun> {
     return api.post('/autoflow/workflows', data)
   },
-  getLeads(status?: LeadStatus): Promise<StoreLead[]> {
+  getLeads(status?: LeadStatus): Promise<PaginatedResult<StoreLead>> {
     return api.get('/autoflow/leads', { params: { status } })
   },
   getLead(id: string): Promise<StoreLead> {
@@ -138,7 +144,10 @@ export const autoflowApi = {
   generateMessage(id: string, data: GenerateMessageRequest): Promise<OutreachTask> {
     return api.post(`/autoflow/leads/${id}/messages`, data)
   },
-  getOutreachTasks(): Promise<OutreachTask[]> {
+  updateLeadStatus(id: string, status: LeadStatus, note?: string): Promise<StoreLead> {
+    return api.patch(`/autoflow/leads/${id}/status`, { status, note })
+  },
+  getOutreachTasks(): Promise<PaginatedResult<OutreachTask>> {
     return api.get('/autoflow/outreach-tasks')
   },
   updateOutreachTask(id: string, data: UpdateOutreachTaskRequest): Promise<OutreachTask> {

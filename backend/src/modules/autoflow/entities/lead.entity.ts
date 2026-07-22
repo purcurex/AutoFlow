@@ -16,8 +16,10 @@ import { CrmActivityEntity } from './crm-activity.entity'
 import { LeadContactEntity } from './lead-contact.entity'
 import { OutreachTaskEntity } from './outreach-task.entity'
 import { WorkflowRunEntity } from './workflow-run.entity'
+import { WorkflowLeadEntity } from './workflow-lead.entity'
 
 @Entity('leads')
+@Index('uq_leads_owner_normalized_domain', ['ownerUserId', 'normalizedDomain'], { unique: true })
 @Index('idx_leads_owner_status', ['ownerUserId', 'status'])
 @Index('idx_leads_team_id', ['teamId'])
 @Index('idx_leads_workflow_run_id', ['workflowRunId'])
@@ -45,6 +47,9 @@ export class LeadEntity {
 
   @Column({ length: 255 })
   domain: string
+
+  @Column({ name: 'normalized_domain', length: 255 })
+  normalizedDomain: string
 
   @Column({ name: 'store_url', length: 500 })
   storeUrl: string
@@ -106,6 +111,9 @@ export class LeadEntity {
 
   @OneToMany(() => CrmActivityEntity, (activity) => activity.lead)
   activities: CrmActivityEntity[]
+
+  @OneToMany(() => WorkflowLeadEntity, (link) => link.lead)
+  workflowLinks: WorkflowLeadEntity[]
 
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date

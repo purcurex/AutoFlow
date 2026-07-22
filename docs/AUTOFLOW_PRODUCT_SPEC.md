@@ -89,11 +89,10 @@ Seed input
 - `seed`
 - `ad_discovery`
 - `store_detection`
-- `lead_enrichment`
+- `lead_cleaning`
 - `lead_scoring`
 - `message_generation`
 - `outreach`
-- `quote`
 - `crm`
 
 ### Lead Status
@@ -102,10 +101,7 @@ Seed input
 - `qualified`
 - `contacted`
 - `replied`
-- `quoted`
-- `registered`
-- `store_connected`
-- `ordered`
+- `opportunity`
 - `won`
 - `lost`
 - `invalid`
@@ -136,12 +132,12 @@ All user-facing editable product language should use AutoFlow. NoteFlow should n
 
 ### FR-002 Workflow Creation
 
-Sales reps can create a workflow from:
+P1 sales reps can create a workflow from:
 
 - Product keyword.
 - Product image URL.
-- Product URL.
-- Manual prospect/store URL.
+
+Product URL and manual prospect/store URL seeds are planned for P2 after discovery adapters are normalized.
 
 The workflow records owner, target market, seed type, seed value, status, current stage, progress, and timestamps.
 
@@ -206,4 +202,3 @@ Legacy notes can remain as internal records, but should be renamed in product la
 - A quote draft can calculate margin warning.
 - Frontend test and build pass.
 - Backend build passes.
-

@@ -1,5 +1,8 @@
-import { Controller, Post, Body, HttpException, HttpStatus } from '@nestjs/common'
+import { Controller, Post, Body, HttpException, HttpStatus, UseGuards } from '@nestjs/common'
 import { FacebookAdsService, FacebookAd, SearchCountInfo, SearchFilters } from './facebook-ads.service'
+import { JwtAuthGuard } from '../auth/jwt-auth.guard'
+import { Throttle } from '@nestjs/throttler'
+import { FacebookImageSearchDto, FacebookKeywordSearchDto } from './dto/facebook-ads.dto'
 
 /**
  * 默认搜索过滤条件
@@ -7,22 +10,6 @@ import { FacebookAdsService, FacebookAd, SearchCountInfo, SearchFilters } from '
 const DEFAULT_FILTERS: SearchFilters = {
   activeOnly: true,  // 正在投放的广告
   daysRange: 365,    // 近1年
-}
-
-/**
- * 图片URL搜索请求
- */
-export interface ImageUrlSearchRequest {
-  imageUrl: string
-  filters?: SearchFilters
-}
-
-/**
- * 关键词搜索请求
- */
-export interface KeywordSearchRequest {
-  keyword: string
-  filters?: SearchFilters
 }
 
 /**
@@ -40,6 +27,8 @@ export interface FacebookAdsSearchResult {
  * Facebook Ads搜索控制器
  */
 @Controller('facebook-ads')
+@UseGuards(JwtAuthGuard)
+@Throttle({ default: { limit: 20, ttl: 60 * 1000 } })
 export class FacebookAdsController {
   constructor(private readonly facebookAdsService: FacebookAdsService) {}
 
@@ -48,7 +37,7 @@ export class FacebookAdsController {
    */
   @Post('by-image-url')
   async searchByImageUrl(
-    @Body() request: ImageUrlSearchRequest
+    @Body() request: FacebookImageSearchDto
   ): Promise<FacebookAdsSearchResult> {
     if (!request.imageUrl || !request.imageUrl.trim()) {
       throw new HttpException('请输入图片URL', HttpStatus.BAD_REQUEST)
@@ -80,7 +69,7 @@ export class FacebookAdsController {
         searchCountInfo,
       }
     } catch (error: any) {
-      if (error.message === '已达今天搜索上限') {
+      if (error.message === 'Daily search limit reached') {
         throw new HttpException(error.message, HttpStatus.TOO_MANY_REQUESTS)
       }
       throw new HttpException(
@@ -95,7 +84,7 @@ export class FacebookAdsController {
    */
   @Post('by-keyword')
   async searchByKeyword(
-    @Body() request: KeywordSearchRequest
+    @Body() request: FacebookKeywordSearchDto
   ): Promise<FacebookAdsSearchResult> {
     if (!request.keyword || !request.keyword.trim()) {
       throw new HttpException('请输入搜索关键词', HttpStatus.BAD_REQUEST)
@@ -127,7 +116,7 @@ export class FacebookAdsController {
         searchCountInfo,
       }
     } catch (error: any) {
-      if (error.message === '已达今天搜索上限') {
+      if (error.message === 'Daily search limit reached') {
         throw new HttpException(error.message, HttpStatus.TOO_MANY_REQUESTS)
       }
       throw new HttpException(

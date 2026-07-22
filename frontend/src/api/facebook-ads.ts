@@ -1,4 +1,4 @@
-import axios from 'axios'
+import api from './index'
 
 /**
  * Facebook广告信息
@@ -33,34 +33,29 @@ export interface FacebookAdsSearchResult {
 /**
  * API基础路径
  */
-const API_BASE_URL = '/api/facebook-ads'
-
 /**
  * 通过图片URL搜索Facebook广告
  */
 export async function searchAdsByImageUrl(imageUrl: string): Promise<FacebookAdsSearchResult> {
-  const response = await axios.post<FacebookAdsSearchResult>(`${API_BASE_URL}/by-image-url`, {
+  return api.post('/facebook-ads/by-image-url', {
     imageUrl,
   })
-  return response.data
 }
 
 /**
  * 通过关键词搜索Facebook广告
  */
 export async function searchAdsByKeyword(keyword: string): Promise<FacebookAdsSearchResult> {
-  const response = await axios.post<FacebookAdsSearchResult>(`${API_BASE_URL}/by-keyword`, {
+  return api.post('/facebook-ads/by-keyword', {
     keyword,
   })
-  return response.data
 }
 
 /**
  * 获取搜索统计信息
  */
 export async function getSearchStats(): Promise<SearchCountInfo> {
-  const response = await axios.post<SearchCountInfo>(`${API_BASE_URL}/stats`)
-  return response.data
+  return api.post('/facebook-ads/stats')
 }
 
 /**

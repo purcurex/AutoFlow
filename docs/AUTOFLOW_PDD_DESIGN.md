@@ -148,6 +148,7 @@ Initial entities:
 | `LeadContactEntity` | `lead_contacts` | Inherited from lead | Belongs to one lead; unique by lead, type, and value |
 | `OutreachTaskEntity` | `outreach_tasks` | `owner_user_id`, optional `team_id` | Belongs to one lead |
 | `CrmActivityEntity` | `crm_activities` | `owner_user_id`, optional `team_id` | Belongs to one lead and records timeline/follow-up data |
+| `WorkflowLeadEntity` | `workflow_leads` | Inherited from workflow and lead | Many-to-many discovery evidence between workflows and stable leads |
 
 Persistence rules:
 
@@ -156,6 +157,7 @@ Persistence rules:
 - Query indexes cover ownership, workflow relation, lead status, follow-up time, and created/updated timestamps.
 - `team_id` remains nullable without a foreign key until a Team aggregate is introduced.
 - Legacy `notes` rows can optionally reference `workflow_runs` and `leads`; deleting a linked aggregate sets the legacy link to null.
+- Leads are deduplicated by `owner_user_id + normalized_domain`; repeated discovery is recorded in `workflow_leads` instead of creating duplicate customer assets.
 - `DB_SYNCHRONIZE` defaults to false. Versioned migrations are the schema authority.
 
 ## 4. API Contracts
@@ -168,6 +170,7 @@ GET    /api/autoflow/workflows
 POST   /api/autoflow/workflows
 GET    /api/autoflow/leads
 GET    /api/autoflow/leads/:id
+PATCH  /api/autoflow/leads/:id/status
 POST   /api/autoflow/leads/:id/messages
 GET    /api/autoflow/outreach-tasks
 PATCH  /api/autoflow/outreach-tasks/:id
@@ -179,6 +182,8 @@ Current contract rules:
 - `frontend/src/api/autoflow.ts` is the canonical frontend contract source.
 - Backend write endpoints use DTO classes from `backend/src/modules/autoflow/dto/autoflow.dto.ts`.
 - Current AutoFlow endpoints stay under the `/api/autoflow` namespace.
+- List APIs return `{ items, total, page, pageSize }` and are always scoped by the authenticated owner.
+- Status transitions and corresponding CRM activities commit in one database transaction.
 
 ### Planned Workflow APIs
 

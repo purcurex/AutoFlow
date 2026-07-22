@@ -15,13 +15,23 @@
     "test": "npm run test --workspace=frontend && npm run test --workspace=backend",
     "test:frontend": "npm run test --workspace=frontend",
     "test:backend": "npm run test --workspace=backend",
+    "test:e2e": "npm run test:e2e --workspace=backend",
+    "lint": "npm run lint --workspace=backend && npm run lint --workspace=frontend",
+    "lint:fix": "npm run lint:fix --workspace=backend && npm run lint:fix --workspace=frontend",
+    "audit:prod": "npm audit --omit=dev --audit-level=high --registry=https://registry.npmjs.org",
     "db:migrate": "npm run migration:run --workspace=backend",
     "db:migration:show": "npm run migration:show --workspace=backend",
     "db:migration:revert": "npm run migration:revert --workspace=backend",
-    "ci:local": "npm run test && npm run build",
+    "ci:local": "npm run lint && npm run test && npm run test:e2e && npm run build && npm run audit:prod",
     "start": "npm run start:prod --workspace=backend"
   },
   "devDependencies": {
-    "concurrently": "^8.2.2"
+    "@eslint/js": "^10.0.1",
+    "concurrently": "^8.2.2",
+    "eslint": "^10.7.0",
+    "eslint-plugin-vue": "^10.10.0",
+    "globals": "^17.7.0",
+    "typescript-eslint": "^8.65.0",
+    "vue-eslint-parser": "^10.4.0"
   }
 }

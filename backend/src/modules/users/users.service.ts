@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm'
 import { Repository } from 'typeorm'
 import * as bcrypt from 'bcrypt'
 import { User, UserRole } from './user.entity'
+import type { UpdateProfileDto } from './dto/update-profile.dto'
 
 @Injectable()
 export class UsersService {
@@ -42,18 +43,19 @@ export class UsersService {
     return this.usersRepository.find({ where: { role } })
   }
 
-  async update(id: string, updateData: Partial<User>): Promise<User> {
+  async updateProfile(id: string, updateData: UpdateProfileDto): Promise<User> {
     const user = await this.findById(id)
     if (!user) {
       throw new NotFoundException('用户不存在')
     }
 
-    if (updateData.password) {
-      updateData.password = await bcrypt.hash(updateData.password, 10)
-    }
-
-    Object.assign(user, updateData)
+    if (updateData.username !== undefined) user.username = updateData.username
+    if (updateData.avatarUrl !== undefined) user.avatarUrl = updateData.avatarUrl
     return this.usersRepository.save(user)
+  }
+
+  async updateAvatar(id: string, avatarUrl: string): Promise<User> {
+    return this.updateProfile(id, { avatarUrl })
   }
 
   async delete(id: string): Promise<void> {

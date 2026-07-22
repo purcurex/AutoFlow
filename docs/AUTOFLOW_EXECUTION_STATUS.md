@@ -77,7 +77,7 @@ npm.cmd run build --workspace=frontend
 - Root folder is now `E:\VSCode\AutoFlow`.
 - Main app folder is still `E:\VSCode\AutoFlow\note-app`.
 - Existing code still contains significant Chinese encoding corruption from the legacy NoteFlow version.
-- First AutoFlow API is scaffolded with in-memory data. Next iteration should replace it with TypeORM entities and migrations.
+- Historical note: the first scaffold used in-memory data; P1 now uses owner-scoped TypeORM repositories.
 - Actual layout currently imports `Header.vue` and `Sidebar.vue`; `AutoFlowHeader.vue` and `AutoFlowSidebar.vue` were added during integration and can be reviewed/removed or reused in the next cleanup pass.
 
 
@@ -112,8 +112,7 @@ Completed foundation implementation phase:
 
 Next implementation phase:
 
-- P1-B repository-backed services and status transitions.
-- P1-C persistence and transition integration tests.
+- P2 discovery persistence, adapters, and asynchronous workflow execution.
 
 
 ## Latest Optimization Pass - 2026-04-26 17:26:32
@@ -138,7 +137,7 @@ pm.cmd run build --workspace=frontend.
 
 Remaining high-priority work:
 
-- Replace in-memory AutoFlow scaffold with persistent storage.
+- Add discovery persistence and workflow execution on top of P1 repositories.
 - Add tests for auth, AutoFlow API, search fallback behavior, and outreach state updates.
 - Continue phased cleanup of legacy Chinese encoding corruption in user-facing files.
 
@@ -194,4 +193,44 @@ Database verification:
 - Backend: 5 test suites, 25 tests passed.
 - Nest `AppModule` initializes and closes cleanly against the migrated database with synchronization disabled.
 
-Resume from P1-B in `docs/AUTOFLOW_DEVELOPMENT_BACKLOG.md`.
+Resume from P2-A in `docs/AUTOFLOW_DEVELOPMENT_BACKLOG.md`.
+
+## P0.5 And P1 Closeout - 2026-07-22
+
+Completed:
+
+- Closed profile role escalation, fixed-password admin bootstrap, production verification-code leakage, anonymous Facebook Ads access, and unthrottled external endpoints.
+- Added production environment validation and a database-backed `/api/health` endpoint.
+- Removed frontend `xlsx`; Excel export now uses the authenticated backend ExcelJS endpoint.
+- Froze the P1 status model and added versioned enum alignment migration.
+- Added normalized lead domains and `workflow_leads` discovery evidence with a versioned migration.
+- Replaced all AutoFlow in-memory collections with owner-scoped TypeORM repositories.
+- Added paginated list contracts, transition guards, and transactional CRM activity updates.
+- Added ESLint, isolated PostgreSQL E2E tests, production dependency audit, and GitHub Actions CI.
+
+Verification target:
+
+```powershell
+npm.cmd run ci:local
+```
+
+Next phase: P2 Discovery Workflow.
+
+## P1 Quality Gate Verification - 2026-07-22
+
+Final verification completed after increasing the PostgreSQL E2E suite timeout to 30 seconds for migration and Nest application startup:
+
+- Frontend lint passed.
+- Backend lint passed.
+- Frontend: 2 test files, 3 tests passed.
+- Backend: 9 test suites, 38 tests passed.
+- PostgreSQL E2E: 1 test suite, 5 tests passed.
+- Frontend production build passed.
+- Backend production build passed.
+- All four TypeORM migrations are applied to `hyperzone/noteflow`.
+- The isolated `autoflow_test` database is empty after E2E cleanup.
+- `git diff --check` passed.
+
+Production dependency audit has no high or critical findings. Two moderate findings remain through ExcelJS's internal `uuid@8` dependency and are documented as an accepted, reviewed exception in `docs/AUTOFLOW_SECURITY_BASELINE.md`.
+
+P0.5 and P1 are ready to be committed as the baseline for P2-A Adapter Integration.

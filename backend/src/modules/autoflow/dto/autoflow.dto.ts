@@ -3,16 +3,23 @@ import {
   IsISO8601,
   IsOptional,
   IsString,
+  IsInt,
+  IsUUID,
+  Max,
   MaxLength,
+  Min,
   MinLength,
 } from 'class-validator'
+import { Type } from 'class-transformer'
 import {
+  LEAD_STATUSES,
   OUTREACH_CHANNELS,
   OUTREACH_STATUSES,
   SEED_TYPES,
   type OutreachChannel,
   type OutreachStatus,
   type SeedType,
+  type LeadStatus,
 } from '../autoflow.types'
 
 export class CreateWorkflowDto {
@@ -67,8 +74,54 @@ export class UpdateOutreachTaskDto {
   @IsISO8601()
   nextFollowUpAt?: string
 
+}
+
+export class UpdateLeadStatusDto {
+  @IsIn(LEAD_STATUSES)
+  status: LeadStatus
+
   @IsOptional()
   @IsString()
-  @MaxLength(80)
-  owner?: string
+  @MaxLength(1000)
+  note?: string
+}
+
+export class ListWorkflowsQueryDto {
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page?: number = 1
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  pageSize?: number = 20
+}
+
+export class ListLeadsQueryDto extends ListWorkflowsQueryDto {
+  @IsOptional()
+  @IsIn(LEAD_STATUSES)
+  status?: LeadStatus
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  search?: string
+
+  @IsOptional()
+  @IsUUID()
+  workflowRunId?: string
+}
+
+export class ListOutreachTasksQueryDto extends ListWorkflowsQueryDto {
+  @IsOptional()
+  @IsIn(OUTREACH_STATUSES)
+  status?: OutreachStatus
+
+  @IsOptional()
+  @IsUUID()
+  leadId?: string
 }

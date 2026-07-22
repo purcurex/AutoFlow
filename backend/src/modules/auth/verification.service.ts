@@ -1,10 +1,13 @@
-import { Injectable } from '@nestjs/common'
+import { Injectable, ServiceUnavailableException } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import * as nodemailer from 'nodemailer'
+import { createHash, randomBytes, randomInt, timingSafeEqual } from 'crypto'
 
 interface VerificationCode {
-  code: string
+  codeHash: Buffer
+  salt: string
   expiresAt: Date
+  failedAttempts: number
 }
 
 @Injectable()
@@ -36,7 +39,7 @@ export class VerificationService {
   }
 
   generateCode(): string {
-    return Math.floor(100000 + Math.random() * 900000).toString()
+    return randomInt(100000, 1000000).toString()
   }
 
   async sendVerificationCode(email: string): Promise<{ success: boolean; message: string }> {
@@ -44,6 +47,10 @@ export class VerificationService {
     this.storeCode(email, code)
 
     if (!this.transporter) {
+      if (this.configService.get<string>('NODE_ENV', 'development') === 'production') {
+        this.codes.delete(this.normalizeEmail(email))
+        throw new ServiceUnavailableException('Email verification service is not configured.')
+      }
       console.log(`[DEV] AutoFlow verification code for ${email}: ${code}`)
       return { success: true, message: `验证码已生成（开发模式：${code}）` }
     }
@@ -74,27 +81,56 @@ export class VerificationService {
   }
 
   private storeCode(email: string, code: string): void {
+    this.removeExpiredCodes()
+    const salt = randomBytes(16).toString('hex')
     const expiresAt = new Date(Date.now() + 5 * 60 * 1000)
-    this.codes.set(email, { code, expiresAt })
+    this.codes.set(this.normalizeEmail(email), {
+      codeHash: this.hashCode(code, salt),
+      salt,
+      expiresAt,
+      failedAttempts: 0,
+    })
   }
 
   verifyCode(email: string, code: string): { valid: boolean; message: string } {
-    const stored = this.codes.get(email)
+    const normalizedEmail = this.normalizeEmail(email)
+    const stored = this.codes.get(normalizedEmail)
 
     if (!stored) {
       return { valid: false, message: '验证码不存在或已过期，请重新获取' }
     }
 
     if (new Date() > stored.expiresAt) {
-      this.codes.delete(email)
+      this.codes.delete(normalizedEmail)
       return { valid: false, message: '验证码已过期，请重新获取' }
     }
 
-    if (stored.code !== code) {
+    const candidateHash = this.hashCode(code, stored.salt)
+    if (!timingSafeEqual(stored.codeHash, candidateHash)) {
+      stored.failedAttempts += 1
+      if (stored.failedAttempts >= 5) {
+        this.codes.delete(normalizedEmail)
+        return { valid: false, message: '验证码尝试次数过多，请重新获取' }
+      }
       return { valid: false, message: '验证码错误' }
     }
 
-    this.codes.delete(email)
+    this.codes.delete(normalizedEmail)
     return { valid: true, message: '验证成功' }
+  }
+
+  private hashCode(code: string, salt: string): Buffer {
+    return createHash('sha256').update(`${salt}:${code}`).digest()
+  }
+
+  private normalizeEmail(email: string): string {
+    return email.trim().toLowerCase()
+  }
+
+  private removeExpiredCodes(): void {
+    const now = Date.now()
+    for (const [email, verification] of this.codes.entries()) {
+      if (verification.expiresAt.getTime() <= now) this.codes.delete(email)
+    }
   }
 }

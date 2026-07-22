@@ -1,5 +1,7 @@
 import type { QueryRunner } from 'typeorm'
 import { AddAutoFlowCoreEntities1784700060000 } from '../migrations/1784700060000-AddAutoFlowCoreEntities'
+import { AlignP1Contracts1784709000000 } from '../migrations/1784709000000-AlignP1Contracts'
+import { AddLeadDiscoveryLinks1784709060000 } from '../migrations/1784709060000-AddLeadDiscoveryLinks'
 
 describe('AutoFlow core migration', () => {
   function createQueryRunner() {
@@ -42,5 +44,29 @@ describe('AutoFlow core migration', () => {
     expect(sql).toContain('DROP COLUMN IF EXISTS "workflow_run_id"')
     expect(sql).not.toContain('DROP TABLE IF EXISTS "notes"')
     expect(sql).not.toContain('DROP TABLE IF EXISTS "users"')
+  })
+})
+
+describe('P1 contract and discovery-link migrations', () => {
+  function createQueryRunner() {
+    return { query: jest.fn().mockResolvedValue(undefined) } as unknown as QueryRunner
+  }
+
+  it('adds the frozen P1 enum values', async () => {
+    const queryRunner = createQueryRunner()
+    await new AlignP1Contracts1784709000000().up(queryRunner)
+    const sql = (queryRunner.query as jest.Mock).mock.calls.map(([statement]) => statement).join('\n')
+    expect(sql).toContain("'cancelled'")
+    expect(sql).toContain("'failed'")
+    expect(sql).toContain("'linkedin'")
+  })
+
+  it('adds normalized-domain deduplication and workflow lead evidence', async () => {
+    const queryRunner = createQueryRunner()
+    await new AddLeadDiscoveryLinks1784709060000().up(queryRunner)
+    const sql = (queryRunner.query as jest.Mock).mock.calls.map(([statement]) => statement).join('\n')
+    expect(sql).toContain('"normalized_domain"')
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS "workflow_leads"')
+    expect(sql).toContain('"uq_leads_owner_normalized_domain"')
   })
 })
