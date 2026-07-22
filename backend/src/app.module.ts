@@ -14,6 +14,7 @@ import { APP_GUARD } from '@nestjs/core'
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler'
 import { validateEnvironment } from './config/environment'
 import { HealthModule } from './modules/health/health.module'
+import { DiscoveryModule } from './modules/discovery/discovery.module'
 
 @Module({
   imports: [
@@ -58,6 +59,7 @@ import { HealthModule } from './modules/health/health.module'
     ShopifySearchModule,
     FacebookAdsModule,
     AutoflowModule,
+    DiscoveryModule,
     SeederModule,
     HealthModule,
   ],

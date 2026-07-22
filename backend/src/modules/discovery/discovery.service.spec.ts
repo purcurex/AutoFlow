@@ -1,0 +1,93 @@
+import { NotFoundException } from '@nestjs/common'
+import type { ObjectLiteral, Repository } from 'typeorm'
+import { WorkflowRunEntity } from '../autoflow/entities'
+import { DiscoveryService } from './discovery.service'
+import type { AdDiscoveryAdapter, StoreDiscoveryAdapter } from './discovery.types'
+import { AdCreativeEntity, ShopifyStoreEntity } from './entities'
+
+describe('DiscoveryService', () => {
+  function repository<T extends ObjectLiteral>() {
+    return {
+      create: jest.fn((value) => value),
+      findOne: jest.fn(),
+      upsert: jest.fn().mockResolvedValue(undefined),
+    } as unknown as jest.Mocked<Repository<T>>
+  }
+
+  function createService() {
+    const workflows = repository<WorkflowRunEntity>()
+    const ads = repository<AdCreativeEntity>()
+    const stores = repository<ShopifyStoreEntity>()
+    const adAdapter = { discover: jest.fn() } as jest.Mocked<AdDiscoveryAdapter>
+    const storeAdapter = { discover: jest.fn() } as jest.Mocked<StoreDiscoveryAdapter>
+    const service = new DiscoveryService(workflows, ads, stores, adAdapter, storeAdapter)
+    return { service, workflows, ads, stores, adAdapter, storeAdapter }
+  }
+
+  it('checks workflow ownership before calling paid adapters', async () => {
+    const { service, workflows, adAdapter, storeAdapter } = createService()
+    workflows.findOne.mockResolvedValue(null)
+
+    await expect(service.discoverEvidence('owner-1', 'workflow-1')).rejects.toBeInstanceOf(NotFoundException)
+    expect(adAdapter.discover).not.toHaveBeenCalled()
+    expect(storeAdapter.discover).not.toHaveBeenCalled()
+  })
+
+  it('normalizes, deduplicates, and persists workflow evidence', async () => {
+    const { service, workflows, ads, stores, adAdapter, storeAdapter } = createService()
+    workflows.findOne.mockResolvedValue({
+      id: 'workflow-1',
+      ownerUserId: 'owner-1',
+      teamId: null,
+      seedType: 'keyword',
+      seedValue: 'pet brush',
+      targetMarket: 'United States',
+    } as WorkflowRunEntity)
+    const ad = {
+      provider: 'facebook_ads',
+      advertiserName: 'PawSpark',
+      sourceUrl: 'https://facebook.example/ad/1',
+      description: 'Pet brush ad',
+      imageUrl: null,
+      confidence: 60,
+      rawPayload: {},
+    }
+    adAdapter.discover.mockResolvedValue([ad, ad])
+    const store = {
+      name: 'PawSpark',
+      domain: 'pawspark.myshopify.com',
+      normalizedDomain: 'pawspark.myshopify.com',
+      url: 'https://pawspark.myshopify.com',
+      description: 'Pet products',
+      imageUrl: null,
+      detectionSource: 'shopify_search',
+      shopifyConfidence: 100,
+      traffic: { monthlyVisits: 50000 },
+      rawPayload: {},
+    }
+    storeAdapter.discover.mockResolvedValue([store, store])
+
+    const result = await service.discoverEvidence('owner-1', 'workflow-1')
+
+    expect(adAdapter.discover).toHaveBeenCalledWith({
+      type: 'keyword',
+      value: 'pet brush',
+      targetMarket: 'United States',
+    })
+    expect(result.ads).toHaveLength(1)
+    expect(result.stores).toHaveLength(1)
+    expect(result.candidates).toEqual([expect.objectContaining({
+      normalizedDomain: 'pawspark.myshopify.com',
+      shopifyConfidence: 100,
+      trafficScore: 85,
+    })])
+    expect(ads.upsert).toHaveBeenCalledWith(
+      [expect.objectContaining({ ownerUserId: 'owner-1', teamId: null, workflowRunId: 'workflow-1' })],
+      expect.objectContaining({ conflictPaths: ['workflowRunId', 'provider', 'deduplicationKey'] }),
+    )
+    expect(stores.upsert).toHaveBeenCalledWith(
+      [expect.objectContaining({ ownerUserId: 'owner-1', teamId: null, normalizedDomain: 'pawspark.myshopify.com' })],
+      expect.objectContaining({ conflictPaths: ['workflowRunId', 'normalizedDomain'] }),
+    )
+  })
+})

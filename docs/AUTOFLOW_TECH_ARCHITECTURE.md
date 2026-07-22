@@ -127,13 +127,18 @@ OutreachTask
 CrmActivity
 ```
 
+Implemented discovery entities:
+
+```text
+AdCreative
+ShopifyStore
+LeadScore
+```
+
 Planned entities:
 
 ```text
 ProductSeed
-AdCreative
-ShopifyStore
-LeadScore
 MessageDraft
 IntegrationAccount
 ```
@@ -196,10 +201,10 @@ Known Windows note:
 
 ## 8. Next Architecture Iterations
 
-Priority order:
+Priority order after P2-A:
 
-1. Add `AdCreative`, `ShopifyStore`, and structured `LeadScore` persistence.
-2. Convert Shopify/Facebook modules into idempotent discovery adapters and workflow steps.
+1. Add idempotent workflow-step execution around the discovery facade.
+2. Promote normalized candidates into deduplicated leads and workflow evidence links.
 3. Add background job queue for long-running discovery and scoring.
 4. Add lead scoring rules engine.
 5. Add WhatsApp deep-link outreach.

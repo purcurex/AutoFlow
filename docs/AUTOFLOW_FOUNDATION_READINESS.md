@@ -88,9 +88,9 @@ A development task is done when:
 
 ## 7. Next Formal Development Recommendation
 
-P0, P0.5, and P1 are complete. Continue with P2 Discovery Workflow:
+P0, P0.5, P1, and P2-A are complete. Continue with P2-B Workflow Execution:
 
-1. Add `AdCreative`, `ShopifyStore`, and structured `LeadScore` persistence.
-2. Wrap Shopify and Facebook search modules behind discovery adapters.
-3. Execute discovery asynchronously with idempotent workflow-step updates.
-4. Upsert leads by `owner_user_id + normalized_domain` and save `workflow_leads` evidence.
+1. Add `POST /api/autoflow/workflows/:id/start-discovery`.
+2. Execute discovery with idempotent workflow-step updates.
+3. Upsert leads by `owner_user_id + normalized_domain` and save `workflow_leads` evidence.
+4. Mark workflow completion or failure with recoverable error details.

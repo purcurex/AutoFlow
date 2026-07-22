@@ -8,7 +8,9 @@ import {
   WorkflowRunEntity,
   WorkflowStepEntity,
   WorkflowLeadEntity,
+  LeadScoreEntity,
 } from './index'
+import { AdCreativeEntity, ShopifyStoreEntity } from '../../discovery/entities'
 
 describe('AutoFlow persistence entities', () => {
   const storage = getMetadataArgsStorage()
@@ -21,13 +23,24 @@ describe('AutoFlow persistence entities', () => {
     [OutreachTaskEntity, 'outreach_tasks'],
     [CrmActivityEntity, 'crm_activities'],
     [WorkflowLeadEntity, 'workflow_leads'],
+    [LeadScoreEntity, 'lead_scores'],
+    [AdCreativeEntity, 'ad_creatives'],
+    [ShopifyStoreEntity, 'shopify_stores'],
   ])('maps %p to table %s', (entity, tableName) => {
     const table = storage.tables.find((metadata) => metadata.target === entity)
 
     expect(table?.name).toBe(tableName)
   })
 
-  it.each([WorkflowRunEntity, LeadEntity, OutreachTaskEntity, CrmActivityEntity])(
+  it.each([
+    WorkflowRunEntity,
+    LeadEntity,
+    OutreachTaskEntity,
+    CrmActivityEntity,
+    LeadScoreEntity,
+    AdCreativeEntity,
+    ShopifyStoreEntity,
+  ])(
     'adds user and optional team ownership to %p',
     (entity) => {
       const columns = storage.columns
@@ -60,6 +73,9 @@ describe('AutoFlow persistence entities', () => {
         'idx_crm_activities_lead_occurred_at',
         'uq_leads_owner_normalized_domain',
         'idx_workflow_leads_run_discovered_at',
+        'idx_ad_creatives_owner_discovered_at',
+        'idx_shopify_stores_owner_domain',
+        'idx_lead_scores_owner_total_score',
       ]),
     )
   })

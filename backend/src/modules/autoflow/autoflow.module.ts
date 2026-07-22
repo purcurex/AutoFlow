@@ -10,6 +10,7 @@ import {
   WorkflowRunEntity,
   WorkflowStepEntity,
   WorkflowLeadEntity,
+  LeadScoreEntity,
 } from './entities'
 
 @Module({
@@ -22,6 +23,7 @@ import {
       LeadContactEntity,
       OutreachTaskEntity,
       CrmActivityEntity,
+      LeadScoreEntity,
     ]),
   ],
   controllers: [AutoflowController],

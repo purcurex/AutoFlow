@@ -234,3 +234,32 @@ Final verification completed after increasing the PostgreSQL E2E suite timeout t
 Production dependency audit has no high or critical findings. Two moderate findings remain through ExcelJS's internal `uuid@8` dependency and are documented as an accepted, reviewed exception in `docs/AUTOFLOW_SECURITY_BASELINE.md`.
 
 P0.5 and P1 are ready to be committed as the baseline for P2-A Adapter Integration.
+
+## P2-A Discovery Adapter Foundation - 2026-07-22
+
+Completed:
+
+- Added `AdCreativeEntity`, `ShopifyStoreEntity`, and structured `LeadScoreEntity` persistence.
+- Added migration `AddDiscoveryEvidence1784710000000` with ownership, team extension fields, constraints, indexes, and reversible table creation.
+- Wrapped Facebook Ads and Shopify Search behind provider-neutral discovery adapter contracts.
+- Added an owner-scoped discovery facade that validates workflow ownership before external calls.
+- Added deterministic ad evidence keys and normalized-domain store deduplication.
+- Normalized Shopify detections into lead candidates without prematurely creating CRM leads.
+- Preserved provider evidence in JSONB for later scoring and audit work.
+
+Database verification:
+
+- All five TypeORM migrations are applied to `hyperzone/noteflow`.
+- TypeORM `schema:log` reports no schema drift.
+- Legacy row counts remain unchanged: 4 users, 5 folders, 66 business records.
+- New discovery tables are empty before P2-B workflow execution.
+
+Quality gate:
+
+- Frontend: 2 test files, 3 tests passed.
+- Backend: 11 test suites, 49 tests passed.
+- PostgreSQL E2E: 1 test suite, 5 tests passed.
+- Frontend and backend production builds passed.
+- Production dependency audit has no high or critical findings.
+
+Next phase: P2-B Workflow Execution.

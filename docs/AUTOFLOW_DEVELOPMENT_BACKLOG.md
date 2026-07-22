@@ -102,12 +102,12 @@ When work is interrupted, resume in this order:
 
 ### P2-A Adapter Integration
 
-- [ ] Create discovery service facade.
-- [ ] Wrap Shopify Search as store discovery adapter.
-- [ ] Wrap Facebook Ads Search as ad discovery adapter.
-- [ ] Normalize adapter results into lead candidates.
-- [ ] Save ad creative records.
-- [ ] Save Shopify store detection records.
+- [x] Create discovery service facade.
+- [x] Wrap Shopify Search as store discovery adapter.
+- [x] Wrap Facebook Ads Search as ad discovery adapter.
+- [x] Normalize adapter results into lead candidates.
+- [x] Save ad creative records.
+- [x] Save Shopify store detection records.
 
 ### P2-B Workflow Execution
 

@@ -149,6 +149,9 @@ Initial entities:
 | `OutreachTaskEntity` | `outreach_tasks` | `owner_user_id`, optional `team_id` | Belongs to one lead |
 | `CrmActivityEntity` | `crm_activities` | `owner_user_id`, optional `team_id` | Belongs to one lead and records timeline/follow-up data |
 | `WorkflowLeadEntity` | `workflow_leads` | Inherited from workflow and lead | Many-to-many discovery evidence between workflows and stable leads |
+| `AdCreativeEntity` | `ad_creatives` | `owner_user_id`, optional `team_id` | Immutable provider evidence scoped to a workflow run |
+| `ShopifyStoreEntity` | `shopify_stores` | `owner_user_id`, optional `team_id` | Store detection evidence; optionally linked to a promoted lead |
+| `LeadScoreEntity` | `lead_scores` | `owner_user_id`, optional `team_id` | Explainable score snapshots for a lead and optional workflow run |
 
 Persistence rules:
 
@@ -158,6 +161,9 @@ Persistence rules:
 - `team_id` remains nullable without a foreign key until a Team aggregate is introduced.
 - Legacy `notes` rows can optionally reference `workflow_runs` and `leads`; deleting a linked aggregate sets the legacy link to null.
 - Leads are deduplicated by `owner_user_id + normalized_domain`; repeated discovery is recorded in `workflow_leads` instead of creating duplicate customer assets.
+- Ad creatives are idempotent by workflow, provider, and a SHA-256 evidence key.
+- Shopify store detections are idempotent by workflow and normalized domain.
+- Discovery evidence remains separate from customer assets until P2-B promotes normalized candidates into leads.
 - `DB_SYNCHRONIZE` defaults to false. Versioned migrations are the schema authority.
 
 ## 4. API Contracts

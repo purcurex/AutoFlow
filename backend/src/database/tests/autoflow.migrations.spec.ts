@@ -2,6 +2,7 @@ import type { QueryRunner } from 'typeorm'
 import { AddAutoFlowCoreEntities1784700060000 } from '../migrations/1784700060000-AddAutoFlowCoreEntities'
 import { AlignP1Contracts1784709000000 } from '../migrations/1784709000000-AlignP1Contracts'
 import { AddLeadDiscoveryLinks1784709060000 } from '../migrations/1784709060000-AddLeadDiscoveryLinks'
+import { AddDiscoveryEvidence1784710000000 } from '../migrations/1784710000000-AddDiscoveryEvidence'
 
 describe('AutoFlow core migration', () => {
   function createQueryRunner() {
@@ -68,5 +69,15 @@ describe('P1 contract and discovery-link migrations', () => {
     expect(sql).toContain('"normalized_domain"')
     expect(sql).toContain('CREATE TABLE IF NOT EXISTS "workflow_leads"')
     expect(sql).toContain('"uq_leads_owner_normalized_domain"')
+  })
+
+  it('adds normalized P2 discovery evidence and score snapshot tables', async () => {
+    const queryRunner = createQueryRunner()
+    await new AddDiscoveryEvidence1784710000000().up(queryRunner)
+    const sql = (queryRunner.query as jest.Mock).mock.calls.map(([statement]) => statement).join('\n')
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS "ad_creatives"')
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS "shopify_stores"')
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS "lead_scores"')
+    expect(sql).toContain('"uq_shopify_stores_run_domain"')
   })
 })
