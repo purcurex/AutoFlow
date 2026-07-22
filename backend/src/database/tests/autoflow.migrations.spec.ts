@@ -7,6 +7,7 @@ import { AddWorkflowExecutionGuards1784711000000 } from '../migrations/178471100
 import { FixLeadScoreUniqueIndex1784711060000 } from '../migrations/1784711060000-FixLeadScoreUniqueIndex'
 import { AddWorkflowJobQueue1784712000000 } from '../migrations/1784712000000-AddWorkflowJobQueue'
 import { AddDiscoveryVerificationEvidence1784713000000 } from '../migrations/1784713000000-AddDiscoveryVerificationEvidence'
+import { AddQuotationSnapshots1784714000000 } from '../migrations/1784714000000-AddQuotationSnapshots'
 
 describe('AutoFlow core migration', () => {
   function createQueryRunner() {
@@ -120,5 +121,16 @@ describe('P1 contract and discovery-link migrations', () => {
     expect(sql).toContain('"contacts" jsonb')
     expect(sql).toContain('"source_url" varchar(1000)')
     expect(sql).toContain('"chk_lead_contacts_confidence"')
+  })
+
+  it('adds versioned quotation request and provider result snapshots', async () => {
+    const queryRunner = createQueryRunner()
+    await new AddQuotationSnapshots1784714000000().up(queryRunner)
+    const sql = (queryRunner.query as jest.Mock).mock.calls.map(([statement]) => statement).join('\n')
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS "quotations"')
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS "quotation_versions"')
+    expect(sql).toContain('"request_snapshot" jsonb NOT NULL')
+    expect(sql).toContain('"result_snapshot" jsonb')
+    expect(sql).toContain('"uq_quotation_versions_quote_version"')
   })
 })

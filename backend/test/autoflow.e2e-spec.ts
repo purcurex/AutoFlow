@@ -230,6 +230,59 @@ describe('AutoFlow persistence API', () => {
     expect(qualified.body.status).toBe('qualified')
   })
 
+  it('persists immutable quote versions and protects them by owner', async () => {
+    const quoteDraft = {
+      leadId,
+      title: 'PawSpark launch quote',
+      currency: 'USD',
+      products: [{
+        lineId: '78d81397-82c7-4e60-b106-d77fe5c96c70',
+        productReference: 'SKU-PET-001',
+        unit: 'piece',
+        quantityTiers: [
+          { minQuantity: 1, maxQuantity: 99, customerUnitPrice: '12.50' },
+          { minQuantity: 100, customerUnitPrice: '10.25' },
+        ],
+      }],
+      destinationCountries: ['US', 'GB'],
+      packages: [{
+        quantity: 1,
+        weight: 1.25,
+        weightUnit: 'kg',
+        length: 20,
+        width: 15,
+        height: 10,
+        dimensionUnit: 'cm',
+      }],
+    }
+    const created = await request(app.getHttpServer())
+      .post('/api/autoflow/quotes')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send(quoteDraft)
+      .expect(201)
+
+    expect(created.body).toMatchObject({ currentVersion: 1, currency: 'USD', status: 'draft' })
+    expect(created.body.versions[0]).toMatchObject({
+      version: 1,
+      productCostStatus: 'not_requested',
+      logisticsRateStatus: 'not_requested',
+      resultSnapshot: null,
+    })
+
+    await request(app.getHttpServer())
+      .get(`/api/autoflow/quotes/${created.body.id}`)
+      .set('Authorization', `Bearer ${otherToken}`)
+      .expect(404)
+
+    const revised = await request(app.getHttpServer())
+      .post(`/api/autoflow/quotes/${created.body.id}/versions`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ ...quoteDraft, leadId: undefined, title: undefined })
+      .expect(201)
+    expect(revised.body.currentVersion).toBe(2)
+    expect(revised.body.versions.map((version: { version: number }) => version.version)).toEqual([2, 1])
+  })
+
   it('reviews outreach before updating lead and local follow-up activity', async () => {
     const generated = await request(app.getHttpServer())
       .post(`/api/autoflow/leads/${leadId}/messages`)

@@ -53,10 +53,13 @@ export class WorkflowJobWorkerService implements OnApplicationBootstrap, OnAppli
     void this.drain()
   }
 
-  onApplicationShutdown(): void {
+  async onApplicationShutdown(): Promise<void> {
     this.shuttingDown = true
     if (this.pollingTimer) clearInterval(this.pollingTimer)
     this.pollingTimer = null
+    while (this.draining) {
+      await new Promise((resolve) => setTimeout(resolve, 20))
+    }
   }
 
   async runNextJob(): Promise<boolean> {

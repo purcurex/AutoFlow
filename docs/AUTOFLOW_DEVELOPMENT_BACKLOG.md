@@ -164,8 +164,8 @@ When work is interrupted, resume in this order:
 - [x] Add multi-country destination selector and package condition editor.
 - [ ] Add per-country logistics channel comparison.
 - [x] Add product/SKU x quantity tier x destination country x shipping channel matrix shell.
-- [ ] Define validated quote DTOs and decimal-safe monetary fields.
-- [ ] Persist quote/provider snapshots only after the quote migration is reviewed.
+- [x] Define validated quote DTOs and decimal-safe monetary fields.
+- [x] Persist immutable quote request/provider snapshots through reviewed migrations.
 
 ### P4-B FOP Provider Ports And Placeholder Adapters
 

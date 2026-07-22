@@ -135,6 +135,8 @@ Lead
 LeadContact
 OutreachTask
 CrmActivity
+Quotation
+QuotationVersion
 ```
 
 Implemented discovery entities:

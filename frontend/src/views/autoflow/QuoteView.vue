@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import { Calculator, Plus, RefreshCcw, Trash2 } from 'lucide-vue-next'
+import { Calculator, Plus, RefreshCcw, Save, Trash2 } from 'lucide-vue-next'
 import { AppLayout } from '@/components/layout'
 import { fopApi, type FopCapabilities } from '@/api/fop'
+import { quotationApi, type QuoteDraftPayload } from '@/api/quotation'
 
 interface ProductTier {
   id: number
@@ -24,6 +25,11 @@ const tiers = ref<ProductTier[]>([
   { id: 3, minQuantity: 500, maxQuantity: null, customerUnitPrice: '' },
 ])
 const nextTierId = ref(4)
+const productLineId = crypto.randomUUID()
+const quotationId = ref('')
+const savedVersion = ref(0)
+const saveError = ref('')
+const isSaving = ref(false)
 const countries = ['US', 'GB', 'DE', 'FR', 'CA', 'AU']
 const selectedCountries = ref(['US'])
 const packageData = reactive({ quantity: 1, weight: 1, weightUnit: 'kg', length: 20, width: 15, height: 10, dimensionUnit: 'cm' })
@@ -53,6 +59,7 @@ const validationMessages = computed(() => {
   return messages
 })
 const quoteRequestEnabled = computed(() => quoteAvailable.value && validationMessages.value.length === 0)
+const draftSaveEnabled = computed(() => validationMessages.value.length === 0 && !isSaving.value)
 
 async function loadCapabilities() {
   capabilityError.value = ''
@@ -77,6 +84,43 @@ function toggleCountry(country: string) {
   selectedCountries.value = selectedCountries.value.includes(country)
     ? selectedCountries.value.filter((item) => item !== country)
     : [...selectedCountries.value, country]
+}
+
+function draftPayload(): QuoteDraftPayload {
+  return {
+    ...(leadId.value ? { leadId: leadId.value } : {}),
+    title: productReference.value.trim() ? `${productReference.value.trim()} quotation` : 'Customer quotation',
+    currency: currency.value,
+    products: [{
+      lineId: productLineId,
+      productReference: productReference.value.trim(),
+      unit: unit.value,
+      quantityTiers: tiers.value.map((tier) => ({
+        minQuantity: tier.minQuantity,
+        ...(tier.maxQuantity === null ? {} : { maxQuantity: tier.maxQuantity }),
+        customerUnitPrice: tier.customerUnitPrice,
+      })),
+    }],
+    destinationCountries: [...selectedCountries.value],
+    packages: [{ ...packageData }],
+  }
+}
+
+async function saveDraft() {
+  if (!draftSaveEnabled.value) return
+  isSaving.value = true
+  saveError.value = ''
+  try {
+    const quotation = quotationId.value
+      ? await quotationApi.createVersion(quotationId.value, draftPayload())
+      : await quotationApi.create(draftPayload())
+    quotationId.value = quotation.id
+    savedVersion.value = quotation.currentVersion
+  } catch {
+    saveError.value = 'Unable to save quotation draft.'
+  } finally {
+    isSaving.value = false
+  }
 }
 
 onMounted(loadCapabilities)
@@ -166,7 +210,16 @@ onMounted(loadCapabilities)
       <section class="mt-6 overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
         <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-4 dark:border-slate-800">
           <div><h2 class="font-semibold">Combined quote matrix</h2><p class="mt-1 text-sm text-slate-500">Product tier × destination × FOP channel</p></div>
-          <button class="btn btn-primary text-sm" :disabled="!quoteRequestEnabled" :title="quoteAvailable ? 'Complete all required quote conditions' : 'Live FOP adapters are not implemented'">Request FOP quote</button>
+          <div class="flex flex-wrap gap-2">
+            <button class="btn btn-secondary gap-2 text-sm" :disabled="!draftSaveEnabled" title="Save an immutable quotation version" @click="saveDraft">
+              <Save class="h-4 w-4" />
+              {{ savedVersion ? `Save version ${savedVersion + 1}` : 'Save draft' }}
+            </button>
+            <button class="btn btn-primary text-sm" :disabled="!quoteRequestEnabled" :title="quoteAvailable ? 'Complete all required quote conditions' : 'Live FOP adapters are not implemented'">Request FOP quote</button>
+          </div>
+        </div>
+        <div v-if="savedVersion || saveError" class="border-b border-slate-200 px-5 py-3 text-sm dark:border-slate-800" :class="saveError ? 'text-red-600' : 'text-emerald-700 dark:text-emerald-300'">
+          {{ saveError || `Draft saved as version ${savedVersion}. FOP cost and freight have not been requested.` }}
         </div>
         <div v-if="validationMessages.length" class="border-b border-slate-200 bg-amber-50 px-5 py-3 text-sm text-amber-800 dark:border-slate-800 dark:bg-amber-950 dark:text-amber-200">
           {{ validationMessages[0] }}<span v-if="validationMessages.length > 1"> +{{ validationMessages.length - 1 }} more</span>

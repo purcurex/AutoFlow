@@ -399,3 +399,23 @@ Verification:
 - Discovery, adapter, worker, migration, entity, and SSRF-control tests: 37 passed.
 - PostgreSQL E2E: 7 passed with three persisted contact evidence records and evidence-driven score snapshots.
 - Local database migration `AddDiscoveryVerificationEvidence1784713000000` applied successfully.
+
+## 18. 2026-07-22 Versioned Quotation Foundation
+
+Completed quote-domain work:
+
+- Added owner-scoped `quotations` and immutable `quotation_versions` entities.
+- Added validated product/SKU, ordered quantity-tier, multi-country, and package DTOs.
+- Kept customer prices as decimal strings in API snapshots to avoid binary floating-point money errors.
+- Added request snapshots, provider result snapshots, independent product-cost/logistics statuses, source version, effective time, and expiration fields.
+- Added create, list, detail, and create-new-version APIs under `/api/autoflow/quotes`.
+- Added pessimistic locking when allocating the next quotation version.
+- Connected the quote workspace Save action; each subsequent save creates a new immutable version.
+- Kept FOP request controls unavailable until real capabilities exist; saving a draft never invents provider results.
+
+Verification:
+
+- Migration/entity tests: 32 passed.
+- PostgreSQL E2E: 8 passed, including owner isolation and version 1 to version 2 snapshots.
+- Full backend/frontend lint and production build passed.
+- Local database migration `AddQuotationSnapshots1784714000000` applied successfully.
