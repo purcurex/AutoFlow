@@ -81,6 +81,36 @@ npm.cmd run build --workspace=frontend
 - Actual layout currently imports `Header.vue` and `Sidebar.vue`; `AutoFlowHeader.vue` and `AutoFlowSidebar.vue` were added during integration and can be reviewed/removed or reused in the next cleanup pass.
 
 
+## Formal Transformation Foundation - 2026-07-22
+
+Completed the pre-development foundation for the accepted AutoFlow transformation proposal.
+
+New planning and execution documents:
+
+- `docs/AUTOFLOW_PRODUCT_SPEC.md`
+- `docs/AUTOFLOW_BDD_SCENARIOS.md`
+- `docs/AUTOFLOW_PDD_DESIGN.md`
+- `docs/AUTOFLOW_TEST_PLAN.md`
+- `docs/AUTOFLOW_DEVELOPMENT_BACKLOG.md`
+- `docs/AUTOFLOW_FOUNDATION_READINESS.md`
+
+Resume order for formal transformation work:
+
+1. Read `docs/AUTOFLOW_PRODUCT_SPEC.md`.
+2. Read `docs/AUTOFLOW_PDD_DESIGN.md`.
+3. Read `docs/AUTOFLOW_BDD_SCENARIOS.md`.
+4. Read `docs/AUTOFLOW_TEST_PLAN.md`.
+5. Read `docs/AUTOFLOW_DEVELOPMENT_BACKLOG.md`.
+6. Start from P0-A Brand And Positioning.
+
+Current recommended first implementation phase:
+
+- P0-A Brand And Positioning.
+- P0-B Legacy Note Repositioning.
+- P0-C Development Workflow.
+- P0-D Contract Cleanup.
+
+
 ## Latest Optimization Pass - 2026-04-26 17:26:32
 
 Completed high-priority optimizations:

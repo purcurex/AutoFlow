@@ -1,0 +1,107 @@
+# AutoFlow Test Plan
+
+## 1. Testing Goals
+
+- Verify the AutoFlow sales workflow behaves correctly.
+- Prevent legacy NoteFlow cleanup from breaking authentication, routing, and record features.
+- Ensure workflow, lead, outreach, and quote status transitions are controlled.
+- Keep future integrations testable through adapters and mocks.
+
+## 2. Test Layers
+
+| Layer | Tooling | Purpose |
+|---|---|---|
+| Frontend unit / component | Vitest, Vue Test Utils, jsdom | Components, stores, route shell |
+| Backend unit | Jest or Nest testing utilities | Services, scoring, quote calculation |
+| Backend API | Supertest or Nest e2e | Auth-protected endpoints and DTO validation |
+| Integration adapter | Mocked providers | Shopify/Facebook/AI adapter behavior |
+| Manual smoke | Browser + local dev server | Login, dashboard, workflow creation |
+
+## 3. Current Test Baseline
+
+Already added:
+
+- `frontend/src/tests/App.test.ts`
+- `npm --workspace frontend run test`
+- `npm --workspace frontend run test:watch`
+
+Required next:
+
+- Backend test dependency check.
+- API test harness.
+- AutoFlow service tests.
+- Quote calculation tests.
+- Route guard tests.
+
+## 4. Test Case Matrix
+
+| ID | Area | Case | Priority | Automation |
+|---|---|---|---|---|
+| TC-001 | Brand | Login page shows AutoFlow positioning | P0 | Frontend component |
+| TC-002 | Brand | Register page shows AutoFlow positioning | P0 | Frontend component |
+| TC-003 | Routing | Unauthenticated user redirects to login | P0 | Frontend unit |
+| TC-004 | Auth | Admin role can access admin page | P1 | Frontend/API |
+| TC-005 | Workflow | Create workflow with keyword | P0 | API + frontend store |
+| TC-006 | Workflow | Reject empty seed value | P0 | API |
+| TC-007 | Workflow | Created workflow persists after reload | P0 | API |
+| TC-008 | Discovery | Shopify adapter maps stores to leads | P1 | Backend unit |
+| TC-009 | Discovery | Facebook adapter maps ads to ad creatives | P1 | Backend unit |
+| TC-010 | Discovery | Development fallback returns mock results | P1 | Backend unit |
+| TC-011 | Discovery | Production missing provider key fails | P1 | Backend unit |
+| TC-012 | Lead | Lead list filters by status | P0 | API |
+| TC-013 | Lead | Lead detail returns contacts and score | P0 | API |
+| TC-014 | Lead | Invalid lead status transition rejected | P0 | Backend unit/API |
+| TC-015 | Scoring | Complete lead receives higher contact score | P1 | Backend unit |
+| TC-016 | Scoring | Risk signal lowers recommendation | P1 | Backend unit |
+| TC-017 | Outreach | Generate WhatsApp message creates ready task | P0 | API |
+| TC-018 | Outreach | Mark sent updates task and lead status | P0 | API |
+| TC-019 | Outreach | Mark replied creates CRM activity | P1 | API |
+| TC-020 | Outreach | Missing AI config produces clear error | P1 | Backend unit |
+| TC-021 | Quote | Quote margin calculated correctly | P0 | Backend unit |
+| TC-022 | Quote | Margin below 15% shows warning | P0 | Backend unit |
+| TC-023 | Quote | Margin below 10% requires approval | P0 | Backend unit |
+| TC-024 | Quote | Quote expiration date is calculated | P1 | Backend unit |
+| TC-025 | CRM | Add follow-up record to lead timeline | P0 | API |
+| TC-026 | CRM | Next follow-up time can be updated | P1 | API |
+| TC-027 | Audit | Workflow create writes audit event | P1 | Backend unit/API |
+| TC-028 | Build | Frontend build passes | P0 | CI script |
+| TC-029 | Build | Backend build passes | P0 | CI script |
+| TC-030 | Regression | Legacy record export still works if retained | P2 | Manual/API |
+
+## 5. BDD To Test Mapping
+
+| BDD Feature | Test IDs |
+|---|---|
+| Brand Positioning | TC-001, TC-002 |
+| Workflow Creation | TC-005, TC-006, TC-007 |
+| Discovery And Lead Generation | TC-008, TC-009, TC-010, TC-011 |
+| Lead Scoring | TC-015, TC-016 |
+| AI Outreach | TC-017, TC-020 |
+| Outreach Queue | TC-018, TC-019 |
+| Quote Foundation | TC-021, TC-022, TC-023, TC-024 |
+| CRM Follow-Up | TC-025, TC-026, TC-027 |
+
+## 6. Local Verification Commands
+
+```powershell
+npm.cmd --workspace frontend run test
+npm.cmd --workspace frontend run build
+npm.cmd --workspace backend run build
+```
+
+Future backend test command:
+
+```powershell
+npm.cmd --workspace backend run test
+```
+
+## 7. Definition Of Done For Each Feature
+
+- Requirement is linked to a BDD scenario.
+- API contract is documented or updated.
+- DTO validation is implemented for backend write endpoints.
+- Status transition rules are tested.
+- Frontend state path is tested or manually verified.
+- Build passes.
+- Relevant docs and task checklist are updated.
+
