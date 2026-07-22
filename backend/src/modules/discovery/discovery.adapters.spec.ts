@@ -47,7 +47,8 @@ describe('discovery adapters', () => {
     expect(result).toHaveLength(1)
     expect(result[0]).toEqual(expect.objectContaining({
       normalizedDomain: 'pawspark.myshopify.com',
-      shopifyConfidence: 100,
+      shopifyConfidence: 90,
+      verificationStatus: 'probable',
     }))
   })
 })

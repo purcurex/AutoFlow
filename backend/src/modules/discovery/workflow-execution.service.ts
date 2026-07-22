@@ -4,6 +4,7 @@ import { DataSource, In, Repository } from 'typeorm'
 import type { QueryDeepPartialEntity } from 'typeorm/query-builder/QueryPartialEntity'
 import {
   LeadEntity,
+  LeadContactEntity,
   LeadScoreEntity,
   WorkflowJobEntity,
   WorkflowLeadEntity,
@@ -182,6 +183,7 @@ export class WorkflowExecutionService {
       const leadRepository = manager.getRepository(LeadEntity)
       const linkRepository = manager.getRepository(WorkflowLeadEntity)
       const storeRepository = manager.getRepository(ShopifyStoreEntity)
+      const contactRepository = manager.getRepository(LeadContactEntity)
       const promoted: PromotedLead[] = []
 
       for (const candidate of evidence.candidates) {
@@ -237,6 +239,28 @@ export class WorkflowExecutionService {
           { workflowRunId: workflow.id, normalizedDomain: candidate.normalizedDomain },
           { leadId: lead.id },
         )
+        if (candidate.contacts.length > 0) {
+          const contactRows = candidate.contacts.map((contact, index) => contactRepository.create({
+            leadId: lead.id,
+            type: contact.type,
+            value: contact.value.slice(0, 500),
+            label: contact.label,
+            verified: contact.verificationStatus === 'verified',
+            isPrimary: index === 0,
+            sourceUrl: contact.sourceUrl.slice(0, 1000),
+            sourceType: contact.sourceType,
+            verificationStatus: contact.verificationStatus,
+            confidence: contact.confidence,
+            evidence: contact.evidence,
+          }))
+          await contactRepository.upsert(
+            contactRows as unknown as QueryDeepPartialEntity<LeadContactEntity>[],
+            {
+              conflictPaths: ['leadId', 'type', 'value'],
+              skipUpdateIfNoValuesChanged: true,
+            },
+          )
+        }
         promoted.push({ lead, candidate })
       }
 
@@ -287,11 +311,31 @@ export class WorkflowExecutionService {
     evidence: DiscoveryEvidenceResult,
     candidate: LeadCandidate,
   ) {
-    const categoryFitScore = workflow.seedType === 'keyword' ? 70 : 50
-    const dropshippingFitScore = 60
-    const riskScore = 20
-    const adActivityScore = 0
-    const contactScore = 0
+    const seedTokens = this.scoreTokens(workflow.seedValue)
+    const candidateTokens = new Set(this.scoreTokens(
+      `${candidate.brandName} ${candidate.domain} ${candidate.description}`,
+    ))
+    const matchedSeedTokens = seedTokens.filter((token) => candidateTokens.has(token)).length
+    const categoryFitScore = workflow.seedType === 'keyword'
+      ? Math.min(100, 45 + matchedSeedTokens * 20)
+      : 55
+    const adActivityScore = candidate.adEvidence.length === 0
+      ? 0
+      : Math.min(100, Math.round(
+          candidate.adEvidence.reduce((sum, item) => sum + item.confidence, 0) / candidate.adEvidence.length
+          + Math.min(15, (candidate.adEvidence.length - 1) * 5),
+        ))
+    const contactScore = this.calculateContactScore(candidate)
+    const dropshippingFitScore = Math.round(
+      candidate.shopifyConfidence * 0.5 + candidate.trafficScore * 0.25 + adActivityScore * 0.25,
+    )
+    const riskScore = ({
+      verified: 10,
+      probable: 20,
+      mock: 25,
+      unverified: 55,
+      failed: 75,
+    } as const)[candidate.verificationStatus]
     const totalScore = Math.max(0, Math.min(100, Math.round(
       candidate.shopifyConfidence * 0.25
       + adActivityScore * 0.15
@@ -312,13 +356,42 @@ export class WorkflowExecutionService {
       riskScore,
       totalScore,
       grade: totalScore >= 80 ? 'A' : totalScore >= 65 ? 'B' : totalScore >= 50 ? 'C' : 'D',
-      modelVersion: 'rules-v1',
+      modelVersion: 'rules-v2-evidence',
       reasons: {
         adEvidenceCount: evidence.ads.length,
-        adEvidenceLinkedToStore: false,
-        note: 'Seed-level ad evidence is retained but not attributed to a store without a verified match.',
+        linkedAdEvidenceCount: candidate.adEvidence.length,
+        adEvidence: candidate.adEvidence,
+        contactEvidenceCount: candidate.contacts.length,
+        contactTypes: [...new Set(candidate.contacts.map((contact) => contact.type))],
+        storeVerificationStatus: candidate.verificationStatus,
+        matchedSeedTokens,
       },
     }
+  }
+
+  private calculateContactScore(candidate: LeadCandidate): number {
+    let score = 0
+    for (const contact of candidate.contacts) {
+      const channelWeight = ({
+        email: 85,
+        whatsapp: 100,
+        phone: 80,
+        instagram: 65,
+        facebook: 55,
+        linkedin: 60,
+        website: 30,
+      } as const)[contact.type]
+      const verificationWeight = contact.verificationStatus === 'verified'
+        ? 1
+        : contact.verificationStatus === 'observed' ? 0.8 : 0.45
+      score = Math.max(score, Math.round(channelWeight * verificationWeight * (contact.confidence / 100)))
+    }
+    const channelBonus = Math.min(15, Math.max(0, candidate.contacts.length - 1) * 5)
+    return Math.min(100, score + channelBonus)
+  }
+
+  private scoreTokens(value: string): string[] {
+    return value.toLowerCase().split(/[^a-z0-9]+/).filter((token) => token.length >= 3)
   }
 
   private async requireWorkflow(ownerUserId: string, workflowRunId: string): Promise<WorkflowRunEntity> {

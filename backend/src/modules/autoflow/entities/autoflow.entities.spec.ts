@@ -80,6 +80,8 @@ describe('AutoFlow persistence entities', () => {
         'idx_lead_scores_owner_total_score',
         'idx_workflow_jobs_status_available_at',
         'idx_workflow_jobs_lease_expires_at',
+        'idx_lead_contacts_verification_status',
+        'idx_shopify_stores_verification_status',
       ]),
     )
   })

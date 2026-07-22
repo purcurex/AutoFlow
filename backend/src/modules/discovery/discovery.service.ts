@@ -6,6 +6,7 @@ import type { QueryDeepPartialEntity } from 'typeorm/query-builder/QueryPartialE
 import { WorkflowRunEntity } from '../autoflow/entities'
 import { AdCreativeEntity, ShopifyStoreEntity } from './entities'
 import { trafficScore } from './discovery-normalizer'
+import { StorefrontEnrichmentService } from './storefront-enrichment.service'
 import {
   AD_DISCOVERY_ADAPTER,
   STORE_DISCOVERY_ADAPTER,
@@ -30,6 +31,7 @@ export class DiscoveryService {
     private readonly adAdapter: AdDiscoveryAdapter,
     @Inject(STORE_DISCOVERY_ADAPTER)
     private readonly storeAdapter: StoreDiscoveryAdapter,
+    private readonly storefrontEnrichmentService: StorefrontEnrichmentService,
   ) {}
 
   async discoverEvidence(ownerUserId: string, workflowRunId: string): Promise<DiscoveryEvidenceResult> {
@@ -46,7 +48,8 @@ export class DiscoveryService {
       this.storeAdapter.discover(seed),
     ])
     const ads = [...new Map(adapterAds.map((ad) => [this.adKey(ad), ad])).values()]
-    const stores = [...new Map(adapterStores.map((store) => [store.normalizedDomain, store])).values()]
+    const deduplicatedStores = [...new Map(adapterStores.map((store) => [store.normalizedDomain, store])).values()]
+    const stores = await this.storefrontEnrichmentService.enrich(deduplicatedStores)
 
     await Promise.all([
       this.persistAds(ownerUserId, workflow.teamId, workflowRunId, ads),
@@ -57,7 +60,7 @@ export class DiscoveryService {
       workflowRunId,
       ads,
       stores,
-      candidates: stores.map((store) => this.toLeadCandidate(store)),
+      candidates: stores.map((store) => this.toLeadCandidate(store, ads)),
     }
   }
 
@@ -96,6 +99,10 @@ export class DiscoveryService {
       imageUrl: store.imageUrl,
       detectionSource: store.detectionSource,
       shopifyConfidence: store.shopifyConfidence,
+      verificationStatus: store.verificationStatus,
+      verificationEvidence: store.verificationEvidence || {},
+      verifiedAt: store.verifiedAt?.toISOString() || null,
+      contacts: store.contacts || [],
       traffic: store.traffic,
       rawPayload: store.rawPayload || {},
     }))
@@ -104,7 +111,7 @@ export class DiscoveryService {
       workflowRunId,
       ads,
       stores,
-      candidates: stores.map((store) => this.toLeadCandidate(store)),
+      candidates: stores.map((store) => this.toLeadCandidate(store, ads)),
     }
   }
 
@@ -160,6 +167,10 @@ export class DiscoveryService {
       imageUrl: store.imageUrl,
       detectionSource: store.detectionSource,
       shopifyConfidence: store.shopifyConfidence,
+      verificationStatus: store.verificationStatus,
+      verificationEvidence: store.verificationEvidence,
+      verifiedAt: store.verifiedAt ? new Date(store.verifiedAt) : null,
+      contacts: store.contacts,
       traffic: store.traffic,
       rawPayload: store.rawPayload,
     }))
@@ -173,7 +184,10 @@ export class DiscoveryService {
     )
   }
 
-  private toLeadCandidate(store: NormalizedShopifyStore): LeadCandidate {
+  private toLeadCandidate(
+    store: NormalizedShopifyStore,
+    ads: NormalizedAdCreative[],
+  ): LeadCandidate {
     const monthlyVisits = typeof store.traffic?.monthlyVisits === 'number'
       ? store.traffic.monthlyVisits
       : undefined
@@ -186,7 +200,46 @@ export class DiscoveryService {
       source: store.detectionSource,
       shopifyConfidence: store.shopifyConfidence,
       trafficScore: trafficScore(monthlyVisits),
+      verificationStatus: store.verificationStatus,
+      description: store.description,
+      contacts: store.contacts,
+      adEvidence: this.matchAds(store, ads),
     }
+  }
+
+  private matchAds(store: NormalizedShopifyStore, ads: NormalizedAdCreative[]): LeadCandidate['adEvidence'] {
+    const storeIdentity = this.normalizeIdentity(store.name)
+    const domainIdentity = this.normalizeIdentity(store.normalizedDomain.split('.')[0])
+    const storeTokens = new Set(this.identityTokens(`${store.name} ${store.description} ${domainIdentity}`))
+
+    return ads.flatMap((ad) => {
+      const adIdentity = this.normalizeIdentity(ad.advertiserName.replace(/\s+ads?$/i, ''))
+      const adTokens = this.identityTokens(`${ad.advertiserName} ${ad.description}`)
+      const sharedTokens = adTokens.filter((token) => storeTokens.has(token))
+      const directIdentityMatch = Boolean(adIdentity && (
+        adIdentity === storeIdentity
+        || adIdentity === domainIdentity
+        || (adIdentity.length >= 5 && storeIdentity.includes(adIdentity))
+      ))
+      if (!directIdentityMatch && sharedTokens.length < 2) return []
+
+      return [{
+        provider: ad.provider,
+        sourceUrl: ad.sourceUrl,
+        confidence: directIdentityMatch ? Math.max(ad.confidence, 80) : ad.confidence,
+        matchReasons: directIdentityMatch ? ['advertiser_identity'] : sharedTokens.map((token) => `token:${token}`),
+      }]
+    })
+  }
+
+  private normalizeIdentity(value: string): string {
+    return value.toLowerCase().replace(/[^a-z0-9]+/g, '')
+  }
+
+  private identityTokens(value: string): string[] {
+    const ignored = new Set(['shop', 'store', 'online', 'official', 'with', 'from', 'your', 'products'])
+    return value.toLowerCase().split(/[^a-z0-9]+/)
+      .filter((token) => token.length >= 4 && !ignored.has(token))
   }
 
   private hash(value: string): string {

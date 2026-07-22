@@ -13,6 +13,7 @@ import {
 import { LeadEntity } from '../../autoflow/entities/lead.entity'
 import { WorkflowRunEntity } from '../../autoflow/entities/workflow-run.entity'
 import { User } from '../../users/user.entity'
+import type { NormalizedContactEvidence, StoreVerificationStatus } from '../discovery.types'
 
 @Entity('shopify_stores')
 @Unique('uq_shopify_stores_run_domain', ['workflowRunId', 'normalizedDomain'])
@@ -20,6 +21,7 @@ import { User } from '../../users/user.entity'
 @Index('idx_shopify_stores_team_id', ['teamId'])
 @Index('idx_shopify_stores_workflow_run_id', ['workflowRunId'])
 @Index('idx_shopify_stores_lead_id', ['leadId'])
+@Index('idx_shopify_stores_verification_status', ['verificationStatus'])
 @Check('chk_shopify_stores_confidence', 'shopify_confidence >= 0 AND shopify_confidence <= 100')
 export class ShopifyStoreEntity {
   @PrimaryGeneratedColumn('uuid')
@@ -60,6 +62,18 @@ export class ShopifyStoreEntity {
 
   @Column({ name: 'shopify_confidence', type: 'double precision', default: 0 })
   shopifyConfidence: number
+
+  @Column({ name: 'verification_status', type: 'varchar', length: 24, default: 'unverified' })
+  verificationStatus: StoreVerificationStatus
+
+  @Column({ name: 'verification_evidence', type: 'jsonb', default: () => "'{}'::jsonb" })
+  verificationEvidence: Record<string, unknown>
+
+  @Column({ name: 'verified_at', type: 'timestamptz', nullable: true })
+  verifiedAt: Date | null
+
+  @Column({ type: 'jsonb', default: () => "'[]'::jsonb" })
+  contacts: NormalizedContactEvidence[]
 
   @Column({ type: 'jsonb', nullable: true })
   traffic: Record<string, unknown> | null

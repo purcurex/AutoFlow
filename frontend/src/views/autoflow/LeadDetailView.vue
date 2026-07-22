@@ -83,9 +83,14 @@ async function approveDraft() {
             <h2 class="font-semibold">Contacts</h2>
             <div class="mt-3 grid gap-3 md:grid-cols-2">
               <div v-for="contact in lead.contacts" :key="`${contact.type}-${contact.value}`" class="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
-                <p class="text-xs uppercase text-slate-500">{{ contact.type }}</p>
+                <div class="flex items-center justify-between gap-3">
+                  <p class="text-xs uppercase text-slate-500">{{ contact.type }}</p>
+                  <span class="text-xs capitalize text-slate-500">{{ contact.verificationStatus }} · {{ contact.confidence }}%</span>
+                </div>
                 <p class="mt-1 break-all font-medium">{{ contact.value }}</p>
+                <a v-if="contact.sourceUrl" :href="contact.sourceUrl" target="_blank" rel="noopener noreferrer" class="mt-2 inline-block text-xs text-blue-600 hover:underline dark:text-blue-400">Evidence source</a>
               </div>
+              <p v-if="lead.contacts.length === 0" class="text-sm text-slate-500">No verified contact evidence yet.</p>
             </div>
           </div>
         </section>

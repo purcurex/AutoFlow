@@ -16,6 +16,7 @@ import {
 } from '../autoflow/entities'
 import { WorkflowExecutionService } from './workflow-execution.service'
 import { WorkflowJobWorkerService } from './workflow-job-worker.service'
+import { StorefrontEnrichmentService } from './storefront-enrichment.service'
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { WorkflowJobWorkerService } from './workflow-job-worker.service'
     DiscoveryService,
     WorkflowExecutionService,
     WorkflowJobWorkerService,
+    StorefrontEnrichmentService,
     { provide: AD_DISCOVERY_ADAPTER, useClass: FacebookAdsDiscoveryAdapter },
     { provide: STORE_DISCOVERY_ADAPTER, useClass: ShopifyStoreDiscoveryAdapter },
   ],

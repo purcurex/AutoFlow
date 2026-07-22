@@ -98,6 +98,10 @@ export interface LeadContact {
   type: LeadContactType
   value: string
   verified: boolean
+  sourceUrl: string | null
+  sourceType: string
+  verificationStatus: 'verified' | 'observed' | 'unverified'
+  confidence: number
 }
 
 export interface StoreLead {

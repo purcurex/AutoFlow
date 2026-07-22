@@ -5,6 +5,7 @@ import * as request from 'supertest'
 import { UsersService } from '../src/modules/users/users.service'
 import { LeadEntity } from '../src/modules/autoflow/entities/lead.entity'
 import { CrmActivityEntity } from '../src/modules/autoflow/entities/crm-activity.entity'
+import { LeadContactEntity } from '../src/modules/autoflow/entities/lead-contact.entity'
 import {
   LeadScoreEntity,
   WorkflowJobEntity,
@@ -155,19 +156,24 @@ describe('AutoFlow persistence API', () => {
     }
 
     expect(workflow).toMatchObject({ status: 'completed', progress: 100, leadCount: 3 })
-    const [ads, stores, links, scores, steps, job] = await Promise.all([
+    const [ads, stores, links, scores, steps, job, contacts] = await Promise.all([
       dataSource.getRepository(AdCreativeEntity).findBy({ workflowRunId: created.body.id }),
       dataSource.getRepository(ShopifyStoreEntity).findBy({ workflowRunId: created.body.id }),
       dataSource.getRepository(WorkflowLeadEntity).findBy({ workflowRunId: created.body.id }),
       dataSource.getRepository(LeadScoreEntity).findBy({ workflowRunId: created.body.id }),
       dataSource.getRepository(WorkflowStepEntity).findBy({ workflowRunId: created.body.id }),
       dataSource.getRepository(WorkflowJobEntity).findOneBy({ workflowRunId: created.body.id }),
+      dataSource.getRepository(LeadContactEntity).find(),
     ])
     expect(ads).toHaveLength(3)
     expect(stores).toHaveLength(3)
     expect(stores.every((store) => store.leadId)).toBe(true)
     expect(links).toHaveLength(3)
     expect(scores).toHaveLength(3)
+    expect(scores.every((score) => score.modelVersion === 'rules-v2-evidence')).toBe(true)
+    expect(scores.every((score) => score.contactScore > 0)).toBe(true)
+    expect(contacts).toHaveLength(3)
+    expect(contacts.every((contact) => contact.sourceType === 'search_result')).toBe(true)
     expect(job).toMatchObject({ status: 'completed', attempts: 1, lastError: null })
     expect(steps.filter((step) => step.status === 'completed').map((step) => step.stage)).toEqual(
       expect.arrayContaining(['seed', 'ad_discovery', 'store_detection', 'lead_cleaning', 'lead_scoring']),

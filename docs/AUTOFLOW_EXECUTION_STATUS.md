@@ -380,3 +380,22 @@ Verification:
 - Queue-focused unit and metadata tests: 30 passed.
 - PostgreSQL E2E: 7 passed, including `workflow_jobs.status = completed` and `attempts = 1`.
 - Backend build and lint passed.
+
+## 17. 2026-07-22 Discovery Evidence And Scoring
+
+Completed discovery-quality work:
+
+- Added store verification status, timestamp, evidence, and persisted contact evidence.
+- Added production storefront HTML verification with Shopify marker detection and bounded response size/time.
+- Added outbound URL controls that reject localhost, private IPv4, link-local, and private IPv6 targets before requests.
+- Added Email, WhatsApp, Instagram, Facebook, LinkedIn, and website extraction with source URL, source type, verification state, and confidence.
+- Added conservative ad-to-store matching based on advertiser identity or multiple shared evidence tokens.
+- Replaced fixed ad/contact/risk values with `rules-v2-evidence` scoring.
+- Kept local provider fixtures explicitly marked `mock`; they do not become verified storefronts.
+- Exposed contact evidence status, confidence, and source in the lead detail UI.
+
+Verification:
+
+- Discovery, adapter, worker, migration, entity, and SSRF-control tests: 37 passed.
+- PostgreSQL E2E: 7 passed with three persisted contact evidence records and evidence-driven score snapshots.
+- Local database migration `AddDiscoveryVerificationEvidence1784713000000` applied successfully.

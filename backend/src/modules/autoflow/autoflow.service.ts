@@ -410,6 +410,10 @@ export class AutoflowService {
         type: contact.type,
         value: contact.value,
         verified: contact.verified,
+        sourceUrl: contact.sourceUrl,
+        sourceType: contact.sourceType,
+        verificationStatus: contact.verificationStatus,
+        confidence: contact.confidence,
       })),
       createdAt: lead.createdAt.toISOString(),
     }

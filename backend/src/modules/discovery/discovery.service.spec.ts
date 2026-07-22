@@ -4,6 +4,7 @@ import { WorkflowRunEntity } from '../autoflow/entities'
 import { DiscoveryService } from './discovery.service'
 import type { AdDiscoveryAdapter, StoreDiscoveryAdapter } from './discovery.types'
 import { AdCreativeEntity, ShopifyStoreEntity } from './entities'
+import type { StorefrontEnrichmentService } from './storefront-enrichment.service'
 
 describe('DiscoveryService', () => {
   function repository<T extends ObjectLiteral>() {
@@ -20,7 +21,10 @@ describe('DiscoveryService', () => {
     const stores = repository<ShopifyStoreEntity>()
     const adAdapter = { discover: jest.fn() } as jest.Mocked<AdDiscoveryAdapter>
     const storeAdapter = { discover: jest.fn() } as jest.Mocked<StoreDiscoveryAdapter>
-    const service = new DiscoveryService(workflows, ads, stores, adAdapter, storeAdapter)
+    const enrichment = {
+      enrich: jest.fn().mockImplementation(async (values) => values),
+    } as unknown as jest.Mocked<StorefrontEnrichmentService>
+    const service = new DiscoveryService(workflows, ads, stores, adAdapter, storeAdapter, enrichment)
     return { service, workflows, ads, stores, adAdapter, storeAdapter }
   }
 
@@ -62,6 +66,10 @@ describe('DiscoveryService', () => {
       imageUrl: null,
       detectionSource: 'shopify_search',
       shopifyConfidence: 100,
+      verificationStatus: 'verified' as const,
+      verificationEvidence: { source: 'test' },
+      verifiedAt: '2026-07-22T00:00:00.000Z',
+      contacts: [],
       traffic: { monthlyVisits: 50000 },
       rawPayload: {},
     }
@@ -80,6 +88,7 @@ describe('DiscoveryService', () => {
       normalizedDomain: 'pawspark.myshopify.com',
       shopifyConfidence: 100,
       trafficScore: 85,
+      adEvidence: [expect.objectContaining({ matchReasons: ['advertiser_identity'] })],
     })])
     expect(ads.upsert).toHaveBeenCalledWith(
       [expect.objectContaining({ ownerUserId: 'owner-1', teamId: null, workflowRunId: 'workflow-1' })],

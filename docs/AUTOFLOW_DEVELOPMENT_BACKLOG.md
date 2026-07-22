@@ -138,9 +138,9 @@ When work is interrupted, resume in this order:
 - [x] Add startup recovery, heartbeat, expired-lease recovery, and bounded retry budgets.
 - [ ] Add provider request idempotency and provider telemetry before enabling paid providers.
 - [ ] Replace search-hint advertising records with approved real ad evidence where provider access allows.
-- [ ] Strengthen Shopify verification and ad-to-store linkage confidence.
-- [ ] Add contact enrichment with source and verification state.
-- [ ] Recalibrate scoring so ad activity and contact completeness are evidence-driven rather than fixed values.
+- [x] Strengthen Shopify verification and ad-to-store linkage confidence.
+- [x] Add contact enrichment with source and verification state.
+- [x] Recalibrate scoring so ad activity and contact completeness are evidence-driven rather than fixed values.
 
 ## 4. P3 AI Outreach Tasks
 
