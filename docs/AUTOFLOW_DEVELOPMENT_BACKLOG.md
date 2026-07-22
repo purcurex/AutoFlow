@@ -26,17 +26,17 @@ When work is interrupted, resume in this order:
 - [x] Update DEPLOY product naming where safe.
 - [x] Update email verification product copy.
 - [x] Update seed admin email/domain decision.
-- [ ] Review all visible navigation labels.
-- [ ] Keep migration notes where historical NoteFlow references are useful.
+- [x] Review all visible navigation labels.
+- [x] Keep migration notes where historical NoteFlow references are useful.
 
 ### P0-B Legacy Note Repositioning
 
-- [ ] Decide final UI term: `Records`, `Materials`, or `Customer Notes`.
-- [ ] Hide `/notes/:id` from primary navigation.
-- [ ] Reword note export to business record export.
-- [ ] Reword folders as record categories where visible.
-- [ ] Keep backend `notes` module until record migration is implemented.
-- [ ] Document whether old notes link to leads/workflows in P1 or P2.
+- [x] Decide final UI term: `Business Records` (`业务记录`).
+- [x] Hide `/notes/:id` from primary navigation.
+- [x] Reword note export to business record export.
+- [x] Reword folders as record categories where visible.
+- [x] Keep backend `notes` module until record migration is implemented.
+- [x] Document whether old notes link to leads/workflows in P1 or P2.
 
 ### P0-C Development Workflow
 
@@ -51,10 +51,10 @@ When work is interrupted, resume in this order:
 
 ### P0-D Contract Cleanup
 
-- [ ] Choose one source for AutoFlow frontend API types.
-- [ ] Remove or align duplicate AutoFlow interfaces in `frontend/src/types/index.ts`.
-- [ ] Define backend DTOs for workflow creation and outreach updates.
-- [ ] Ensure controller methods use DTO classes instead of plain interfaces for writes.
+- [x] Choose one source for AutoFlow frontend API types.
+- [x] Remove or align duplicate AutoFlow interfaces in `frontend/src/types/index.ts`.
+- [x] Define backend DTOs for workflow creation and outreach updates.
+- [x] Ensure controller methods use DTO classes instead of plain interfaces for writes.
 
 ## 2. P1 Persistence Tasks
 
@@ -193,3 +193,14 @@ docker ps --format "{{.Names}}\t{{.Status}}\t{{.Ports}}"
 Test-NetConnection -ComputerName localhost -Port 5432
 docker exec hyperzone psql -U postgres -d noteflow -c "select current_database() as database, current_user as user_name;"
 ```
+
+## 9. P0-B And P0-D Closeout Decisions
+
+- User-facing legacy note terminology is `Business Records` (`业务记录`).
+- User-facing legacy folder terminology is `Record Categories` (`记录分类`).
+- The `/notes/:id` route remains a compatibility route and is not present in primary navigation.
+- Backend `notes` and `folders` modules and their database tables remain unchanged until a versioned migration exists.
+- P1 defines nullable record relationships to workflow runs and leads after the new entities exist.
+- P2 exposes those relationships in discovery workflows and can create linked records automatically.
+- `frontend/src/api/autoflow.ts` is the single source for current AutoFlow frontend API types.
+- AutoFlow backend write endpoints use DTO classes from `backend/src/modules/autoflow/dto/autoflow.dto.ts`.

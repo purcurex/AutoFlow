@@ -1,20 +1,21 @@
 import {
-  IsEnum,
+  IsIn,
   IsISO8601,
   IsOptional,
   IsString,
   MaxLength,
   MinLength,
 } from 'class-validator'
-import { OutreachChannel, OutreachStatus, SeedType } from '../autoflow.types'
+import type { OutreachChannel, OutreachStatus, SeedType } from '../autoflow.types'
 
 export class CreateWorkflowDto {
+  @IsOptional()
   @IsString()
   @MinLength(2)
   @MaxLength(120)
-  name: string
+  name?: string
 
-  @IsEnum(['keyword', 'image'])
+  @IsIn(['keyword', 'image'])
   seedType: SeedType
 
   @IsString()
@@ -22,26 +23,32 @@ export class CreateWorkflowDto {
   @MaxLength(500)
   seedValue: string
 
+  @IsOptional()
   @IsString()
   @MinLength(2)
   @MaxLength(80)
-  targetMarket: string
+  targetMarket?: string
 }
 
-export class CreateLeadMessageDto {
+export class GenerateMessageDto {
   @IsOptional()
-  @IsEnum(['whatsapp', 'email', 'instagram', 'facebook'])
+  @IsIn(['whatsapp', 'email', 'instagram', 'facebook'])
   channel?: OutreachChannel
 
   @IsOptional()
   @IsString()
+  @MaxLength(40)
+  language?: string
+
+  @IsOptional()
+  @IsString()
   @MaxLength(500)
-  angle?: string
+  offer?: string
 }
 
 export class UpdateOutreachTaskDto {
   @IsOptional()
-  @IsEnum(['draft', 'ready', 'sent', 'replied', 'skipped'])
+  @IsIn(['draft', 'ready', 'sent', 'replied', 'skipped'])
   status?: OutreachStatus
 
   @IsOptional()

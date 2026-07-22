@@ -27,7 +27,7 @@ export interface AuthResponse {
   user: User
 }
 
-// 笔记相关类型
+// 兼容业务记录类型（后端仍使用 Note 命名）
 export type EditorType = 'markdown' | 'richtext'
 
 export interface Note {
@@ -68,7 +68,7 @@ export interface ReorderNotesRequest {
   noteIds: string[]
 }
 
-// 文件夹相关类型
+// 兼容记录分类类型（后端仍使用 Folder 命名）
 export interface Folder {
   id: string
   userId: string
@@ -126,103 +126,4 @@ export interface AIResponse {
     promptTokens: number
     completionTokens: number
   }
-}
-
-export type WorkflowSeedType = 'keyword' | 'image'
-export type WorkflowStatus = 'draft' | 'running' | 'completed' | 'failed'
-export type LeadStatus = 'new' | 'qualified' | 'contacted' | 'replied' | 'opportunity' | 'won' | 'lost' | 'invalid'
-export type OutreachChannel = 'whatsapp' | 'email' | 'instagram' | 'facebook'
-export type OutreachStatus = 'draft' | 'ready' | 'sent' | 'replied' | 'skipped'
-
-export interface WorkflowRun {
-  id: string
-  name: string
-  seedType: WorkflowSeedType
-  seedValue: string
-  targetMarket: string
-  status: WorkflowStatus
-  currentStage: string
-  progress: number
-  leadCount: number
-  createdAt: string
-  updatedAt: string
-}
-
-export interface StoreLeadContact {
-  type: OutreachChannel | 'website'
-  value: string
-  label?: string
-}
-
-export interface StoreLead {
-  id: string
-  workflowRunId: string
-  brandName: string
-  domain: string
-  storeUrl: string
-  source: string
-  country: string
-  language: string
-  category: string
-  shopifyConfidence: number
-  adActivityScore: number
-  trafficScore: number
-  contactScore: number
-  totalScore: number
-  status: LeadStatus
-  recommendedAngle: string
-  contacts: StoreLeadContact[]
-  createdAt: string
-}
-
-export interface OutreachTask {
-  id: string
-  leadId: string
-  channel: OutreachChannel
-  status: OutreachStatus
-  message: string
-  nextFollowUpAt: string
-  owner: string
-  lead?: StoreLead
-}
-
-export interface AutoFlowDashboard {
-  metrics: {
-    activeWorkflows: number
-    leadsDiscovered: number
-    qualifiedLeads: number
-    outreachReady: number
-    replyRate: number
-    pipelineValue: number
-  }
-  workflows: WorkflowRun[]
-  topLeads: StoreLead[]
-  outreachTasks: OutreachTask[]
-}
-
-export interface AutoFlowCrmStage {
-  id: LeadStatus
-  name: string
-  leads: StoreLead[]
-}
-
-export interface AutoFlowCrmBoard {
-  stages: AutoFlowCrmStage[]
-}
-
-export interface CreateWorkflowRunRequest {
-  name: string
-  seedType: WorkflowSeedType
-  seedValue: string
-  targetMarket: string
-}
-
-export interface AutoFlowMessageRequest {
-  channel?: OutreachChannel
-  tone?: string
-}
-
-export interface AutoFlowMessageResponse {
-  message: string
-  leadId: string
 }

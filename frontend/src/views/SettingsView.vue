@@ -27,7 +27,7 @@ onMounted(async () => {
     email.value = userStore.user.email
   }
   isDarkMode.value = document.documentElement.classList.contains('dark')
-  // 获取笔记列表
+  // 获取兼容层中的业务记录列表
   await noteStore.fetchNotes()
 })
 
@@ -109,14 +109,14 @@ async function logout() {
   router.push('/login')
 }
 
-// 导出所有笔记
+// 导出所有业务记录
 async function exportAllNotes() {
   if (isExporting.value) return
 
-  // 获取所有笔记
+  // 获取所有业务记录
   const notes = noteStore.notes as Note[]
   if (!notes || notes.length === 0) {
-    saveMessage.value = '没有笔记可导出'
+    saveMessage.value = '没有业务记录可导出'
     setTimeout(() => { saveMessage.value = '' }, 2000)
     return
   }
@@ -127,7 +127,7 @@ async function exportAllNotes() {
   try {
     // 导出 PDF
     await exportNotesToPdf(notes, userStore.user?.username)
-    saveMessage.value = `已导出 ${notes.length} 篇笔记`
+    saveMessage.value = `已导出 ${notes.length} 条业务记录`
     setTimeout(() => { saveMessage.value = '' }, 3000)
   } catch (error) {
     console.error('导出失败:', error)
@@ -147,7 +147,7 @@ async function exportAllNotes() {
         <button
           @click="goBack"
           class="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-          title="返回笔记"
+          title="返回工作台"
         >
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
@@ -264,13 +264,13 @@ async function exportAllNotes() {
             <svg v-else class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
             </svg>
-            {{ isExporting ? '导出中...' : '导出所有笔记 (PDF)' }}
+            {{ isExporting ? '导出中...' : '导出所有业务记录 (PDF)' }}
           </button>
           <button class="btn btn-secondary w-full justify-start gap-2" disabled>
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
             </svg>
-            导入笔记 (开发中)
+            导入业务记录 (开发中)
           </button>
         </div>
         <p v-if="saveMessage" class="text-sm mt-2" :class="saveMessage.includes('导出') ? 'text-green-500' : 'text-red-500'">

@@ -23,6 +23,8 @@ This document defines the ground preparation required before formal AutoFlow tra
 | PDD Design | Ready | See `AUTOFLOW_PDD_DESIGN.md` |
 | Test Plan | Ready | See `AUTOFLOW_TEST_PLAN.md` |
 | Development Backlog | Ready | See `AUTOFLOW_DEVELOPMENT_BACKLOG.md` |
+| Legacy Note Repositioning | Ready | UI uses business records and record categories while legacy routes and tables remain compatible |
+| AutoFlow API Contracts | Ready | Frontend types are centralized and backend write endpoints use validated DTO classes |
 
 ## 3. Required Before Coding Each Iteration
 
@@ -79,13 +81,13 @@ A development task is done when:
 - Documentation and backlog status are updated.
 - No generated build artifacts or archives are committed.
 
-## 7. First Formal Development Recommendation
+## 7. Next Formal Development Recommendation
 
-Start with P0-A and P0-B:
+P0 foundation work is complete. Start with P1 persistence:
 
-1. Replace product-facing NoteFlow language with AutoFlow.
-2. Reposition legacy notes as business records.
-3. Keep the existing routes stable while changing visible product meaning.
-4. Run frontend test/build and backend build.
+1. Add workflow, lead, outreach, and CRM entities in dependency order.
+2. Add ownership fields and indexes before repository-backed services.
+3. Define nullable business-record links after workflow and lead entities exist.
+4. Add migrations and repository integration tests before replacing in-memory fixtures.
 
-This gives the team a clean product foundation before deeper persistence and workflow refactoring.
+This preserves the completed P0 compatibility boundary while moving AutoFlow onto durable workflow data.

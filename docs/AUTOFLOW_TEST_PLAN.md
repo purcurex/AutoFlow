@@ -22,14 +22,14 @@
 Already added:
 
 - `frontend/src/tests/App.test.ts`
-- `npm --workspace frontend run test`
-- `npm --workspace frontend run test:watch`
+- `frontend/src/tests/legacy-records.test.ts`
+- `backend/src/modules/autoflow/autoflow.service.spec.ts`
+- `backend/src/modules/autoflow/dto/autoflow.dto.spec.ts`
+- Root `npm.cmd run ci:local` verification command.
 
 Required next:
 
-- Backend test dependency check.
 - API test harness.
-- AutoFlow service tests.
 - Quote calculation tests.
 - Route guard tests.
 
@@ -66,7 +66,8 @@ Required next:
 | TC-027 | Audit | Workflow create writes audit event | P1 | Backend unit/API |
 | TC-028 | Build | Frontend build passes | P0 | CI script |
 | TC-029 | Build | Backend build passes | P0 | CI script |
-| TC-030 | Regression | Legacy record export still works if retained | P2 | Manual/API |
+| TC-030 | Regression | Legacy record route stays out of primary navigation and export uses business-record terminology | P0 | Frontend component |
+| TC-031 | Contract | AutoFlow write DTOs accept supported fields and reject invalid enum/date values | P0 | Backend unit |
 
 ## 5. BDD To Test Mapping
 
@@ -86,13 +87,9 @@ Required next:
 ```powershell
 npm.cmd --workspace frontend run test
 npm.cmd --workspace frontend run build
-npm.cmd --workspace backend run build
-```
-
-Future backend test command:
-
-```powershell
 npm.cmd --workspace backend run test
+npm.cmd --workspace backend run build
+npm.cmd run ci:local
 ```
 
 ## 7. Definition Of Done For Each Feature
@@ -104,4 +101,3 @@ npm.cmd --workspace backend run test
 - Frontend state path is tested or manually verified.
 - Build passes.
 - Relevant docs and task checklist are updated.
-

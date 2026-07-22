@@ -8,6 +8,7 @@ import type {
   LeadStatus,
   OutreachTask,
   StoreLead,
+  UpdateOutreachTaskRequest,
   WorkflowRun,
 } from '@/api/autoflow'
 
@@ -60,7 +61,7 @@ export const useAutoFlowStore = defineStore('autoflow', () => {
     outreachTasks.value = await autoflowApi.getOutreachTasks()
   }
 
-  async function updateOutreachTask(id: string, data: Partial<OutreachTask>) {
+  async function updateOutreachTask(id: string, data: UpdateOutreachTaskRequest) {
     const task = await autoflowApi.updateOutreachTask(id, data)
     const index = outreachTasks.value.findIndex((item) => item.id === id)
     if (index !== -1) {

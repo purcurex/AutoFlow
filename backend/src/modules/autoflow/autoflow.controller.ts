@@ -1,12 +1,8 @@
 import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
 import { AutoflowService } from './autoflow.service'
-import {
-  CreateWorkflowRequest,
-  GenerateMessageRequest,
-  LeadStatus,
-  UpdateOutreachTaskRequest,
-} from './autoflow.types'
+import { CreateWorkflowDto, GenerateMessageDto, UpdateOutreachTaskDto } from './dto/autoflow.dto'
+import type { LeadStatus } from './autoflow.types'
 
 @Controller('autoflow')
 @UseGuards(JwtAuthGuard)
@@ -24,7 +20,7 @@ export class AutoflowController {
   }
 
   @Post('workflows')
-  createWorkflow(@Body() body: CreateWorkflowRequest) {
+  createWorkflow(@Body() body: CreateWorkflowDto) {
     return this.autoflowService.createWorkflow(body)
   }
 
@@ -39,7 +35,7 @@ export class AutoflowController {
   }
 
   @Post('leads/:id/messages')
-  generateMessage(@Param('id') id: string, @Body() body: GenerateMessageRequest) {
+  generateMessage(@Param('id') id: string, @Body() body: GenerateMessageDto) {
     return this.autoflowService.generateMessage(id, body)
   }
 
@@ -49,7 +45,7 @@ export class AutoflowController {
   }
 
   @Patch('outreach-tasks/:id')
-  updateOutreachTask(@Param('id') id: string, @Body() body: UpdateOutreachTaskRequest) {
+  updateOutreachTask(@Param('id') id: string, @Body() body: UpdateOutreachTaskDto) {
     return this.autoflowService.updateOutreachTask(id, body)
   }
 

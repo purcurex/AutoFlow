@@ -105,6 +105,19 @@ export interface CreateWorkflowRequest {
   targetMarket?: string
 }
 
+export interface GenerateMessageRequest {
+  channel?: OutreachChannel
+  language?: string
+  offer?: string
+}
+
+export interface UpdateOutreachTaskRequest {
+  status?: OutreachStatus
+  message?: string
+  nextFollowUpAt?: string
+  owner?: string
+}
+
 export const autoflowApi = {
   getDashboard(): Promise<AutoFlowDashboard> {
     return api.get('/autoflow/dashboard')
@@ -121,13 +134,13 @@ export const autoflowApi = {
   getLead(id: string): Promise<StoreLead> {
     return api.get(`/autoflow/leads/${id}`)
   },
-  generateMessage(id: string, data: { channel?: OutreachChannel; language?: string; offer?: string }): Promise<OutreachTask> {
+  generateMessage(id: string, data: GenerateMessageRequest): Promise<OutreachTask> {
     return api.post(`/autoflow/leads/${id}/messages`, data)
   },
   getOutreachTasks(): Promise<OutreachTask[]> {
     return api.get('/autoflow/outreach-tasks')
   },
-  updateOutreachTask(id: string, data: Partial<Pick<OutreachTask, 'status' | 'nextFollowUpAt' | 'owner'>>): Promise<OutreachTask> {
+  updateOutreachTask(id: string, data: UpdateOutreachTaskRequest): Promise<OutreachTask> {
     return api.patch(`/autoflow/outreach-tasks/${id}`, data)
   },
   getCrm(): Promise<CrmStage[]> {

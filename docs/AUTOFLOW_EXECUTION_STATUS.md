@@ -103,12 +103,17 @@ Resume order for formal transformation work:
 5. Read `docs/AUTOFLOW_DEVELOPMENT_BACKLOG.md`.
 6. Start from P0-A Brand And Positioning.
 
-Current recommended first implementation phase:
+Completed foundation implementation phase:
 
 - P0-A Brand And Positioning.
 - P0-B Legacy Note Repositioning.
 - P0-C Development Workflow.
 - P0-D Contract Cleanup.
+
+Next implementation phase:
+
+- P1-A AutoFlow persistence entities and indexes.
+- P1-B repository-backed services and migrations.
 
 
 ## Latest Optimization Pass - 2026-04-26 17:26:32
@@ -137,3 +142,33 @@ Remaining high-priority work:
 - Replace in-memory AutoFlow scaffold with persistent storage.
 - Add tests for auth, AutoFlow API, search fallback behavior, and outreach state updates.
 - Continue phased cleanup of legacy Chinese encoding corruption in user-facing files.
+
+## P0 Foundation Closeout - 2026-07-22
+
+Completed P0-B Legacy Note Repositioning:
+
+- Selected `Business Records` (`业务记录`) and `Record Categories` (`记录分类`) as user-facing terms.
+- Kept `/notes/:id` as a compatibility route and out of primary navigation.
+- Kept backend `notes` and `folders` modules unchanged pending a versioned migration.
+- Reworded record editing, administration, settings, and export surfaces.
+- Assigned relationship modeling to P1 and discovery-facing linkage to P2.
+
+Completed P0-D Contract Cleanup:
+
+- Centralized frontend AutoFlow API contracts in `frontend/src/api/autoflow.ts`.
+- Removed conflicting AutoFlow interfaces from `frontend/src/types/index.ts`.
+- Switched AutoFlow controller write methods to validated DTO classes.
+- Aligned workflow, message-generation, and outreach-update request fields across frontend, controller, and service.
+- Added DTO contract tests and legacy-record frontend regression tests.
+
+Verification:
+
+```powershell
+npm.cmd run ci:local
+```
+
+- Frontend: 2 test files, 3 tests passed; production build passed.
+- Backend: 2 test suites, 8 tests passed; Nest production build passed.
+- Known non-blocking warning: legacy record/export routes still produce frontend chunks over 500 kB.
+
+Resume from the first unchecked P1-A task in `docs/AUTOFLOW_DEVELOPMENT_BACKLOG.md`.

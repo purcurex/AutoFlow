@@ -26,7 +26,7 @@ onMounted(async () => {
       content.value = noteStore.currentNote.content
     }
   } catch (error) {
-    console.error('加载笔记失败:', error)
+    console.error('加载业务记录失败:', error)
     router.push('/')
   } finally {
     isLoading.value = false
@@ -66,7 +66,7 @@ async function toggleFavorite() {
 }
 
 async function deleteNote() {
-  if (noteStore.currentNote && confirm('确定要删除这篇笔记吗？')) {
+  if (noteStore.currentNote && confirm('确定要删除这条业务记录吗？')) {
     await noteStore.deleteNote(noteStore.currentNote.id)
     router.push('/')
   }
@@ -99,7 +99,7 @@ function formatLastSaved() {
           <input
             v-model="title"
             type="text"
-            placeholder="笔记标题"
+            placeholder="业务记录标题"
             class="text-xl font-semibold bg-transparent border-none outline-none flex-1"
             @input="onContentChange"
           />
@@ -148,7 +148,7 @@ function formatLastSaved() {
 
     <div v-else class="flex items-center justify-center h-full">
       <div class="text-center text-gray-400">
-        <p>笔记不存在</p>
+        <p>业务记录不存在</p>
         <button @click="router.push('/')" class="mt-4 btn btn-primary">
           返回首页
         </button>

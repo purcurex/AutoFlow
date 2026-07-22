@@ -138,47 +138,54 @@ Initial entities:
 
 - `AuditEventEntity`
 
-## 4. API Contract Draft
+## 4. API Contracts
 
-### Workflow
+### Current P0 Scaffold
 
 ```text
 GET    /api/autoflow/dashboard
 GET    /api/autoflow/workflows
 POST   /api/autoflow/workflows
+GET    /api/autoflow/leads
+GET    /api/autoflow/leads/:id
+POST   /api/autoflow/leads/:id/messages
+GET    /api/autoflow/outreach-tasks
+PATCH  /api/autoflow/outreach-tasks/:id
+GET    /api/autoflow/crm
+```
+
+Current contract rules:
+
+- `frontend/src/api/autoflow.ts` is the canonical frontend contract source.
+- Backend write endpoints use DTO classes from `backend/src/modules/autoflow/dto/autoflow.dto.ts`.
+- Current AutoFlow endpoints stay under the `/api/autoflow` namespace.
+
+### Planned Workflow APIs
+
+```text
 GET    /api/autoflow/workflows/:id
 POST   /api/autoflow/workflows/:id/start-discovery
 GET    /api/autoflow/workflows/:id/steps
 ```
 
-### Leads
+### Planned Lead APIs
 
 ```text
-GET    /api/leads
-POST   /api/leads
-GET    /api/leads/:id
-PATCH  /api/leads/:id
-POST   /api/leads/:id/score
-GET    /api/leads/:id/timeline
-POST   /api/leads/:id/activities
+POST   /api/autoflow/leads
+PATCH  /api/autoflow/leads/:id
+POST   /api/autoflow/leads/:id/score
+GET    /api/autoflow/leads/:id/timeline
+POST   /api/autoflow/leads/:id/activities
 ```
 
-### Outreach
+### Planned Quote APIs
 
 ```text
-GET    /api/outreach/tasks
-POST   /api/leads/:id/messages
-PATCH  /api/outreach/tasks/:id
-```
-
-### Quotes
-
-```text
-GET    /api/leads/:id/quotes
-POST   /api/leads/:id/quotes
-GET    /api/quotes/:id
-PATCH  /api/quotes/:id
-POST   /api/quotes/:id/calculate
+GET    /api/autoflow/leads/:id/quotes
+POST   /api/autoflow/leads/:id/quotes
+GET    /api/autoflow/quotes/:id
+PATCH  /api/autoflow/quotes/:id
+POST   /api/autoflow/quotes/:id/calculate
 ```
 
 ## 5. Frontend Pages
@@ -205,7 +212,7 @@ Current `useAutoFlowStore` can remain for the first round, but should be split a
 - `useQuoteStore`
 - `useCrmStore`
 
-Keep API types in one source. Avoid defining the same AutoFlow contracts in both `api/autoflow.ts` and `types/index.ts`.
+Keep API types in `frontend/src/api/autoflow.ts`. Do not define AutoFlow contracts in `frontend/src/types/index.ts`.
 
 ## 7. Data Migration Strategy
 
@@ -215,11 +222,21 @@ Phase 1:
 - Keep legacy `notes` and `folders` tables.
 - Do not rename the physical database immediately.
 
+P0 compatibility layer (completed):
+
+- Rename user-facing note concepts to business records and record categories.
+- Keep legacy routes, modules, and physical tables stable.
+
 Phase 2:
 
-- Rename user-facing note concepts to records/materials.
 - Optionally add `record_type` to legacy notes.
-- Link records to leads or workflows.
+- Expose record-to-lead and record-to-workflow links in discovery workflows.
+
+P1 persistence decision:
+
+- Define nullable legacy record relationships to `WorkflowRunEntity` and `LeadEntity` after those entities exist.
+- Keep current `notes` and `folders` API paths and physical tables unchanged until a versioned migration is available.
+- Use `Business Records` (`业务记录`) and `Record Categories` (`记录分类`) in user-facing interfaces.
 
 Phase 3:
 
@@ -281,4 +298,3 @@ sent → expired
 - Search provider adapters must expose mock/dev behavior explicitly.
 - Production must not silently use mock data.
 - Test each module at service level first, then API level.
-

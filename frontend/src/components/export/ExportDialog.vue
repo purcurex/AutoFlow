@@ -28,7 +28,7 @@ const noteCount = computed(() => props.notes.length)
 
 const noteTitle = computed(() => {
   if (props.notes.length === 1) {
-    return props.notes[0].title || '无标题笔记'
+    return props.notes[0].title || '无标题业务记录'
   }
   return null
 })
@@ -81,11 +81,11 @@ function closeDialog() {
     >
       <div class="bg-white dark:bg-gray-800 rounded-xl p-6 w-96 shadow-xl">
         <h3 class="text-lg font-semibold mb-4">
-          {{ isMultipleNotes ? `导出 ${noteCount} 篇笔记` : '导出笔记' }}
+          {{ isMultipleNotes ? `导出 ${noteCount} 条业务记录` : '导出业务记录' }}
         </h3>
 
         <div v-if="noteTitle" class="mb-4 text-sm text-gray-500">
-          笔记: {{ noteTitle }}
+          业务记录: {{ noteTitle }}
         </div>
 
         <!-- 格式选择 -->
@@ -114,7 +114,7 @@ function closeDialog() {
 
           <div class="mt-3 text-xs text-gray-400">
             <template v-if="exportFormat === 'pdf'">
-              PDF 格式保留笔记排版，适合打印和分享
+              PDF 格式保留业务记录排版，适合打印和分享
             </template>
             <template v-else>
               Excel 格式便于数据整理和后续编辑

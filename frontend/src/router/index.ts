@@ -61,7 +61,7 @@ const routes: RouteRecordRaw[] = [
     path: '/notes/:id',
     name: 'NoteDetail',
     component: () => import('@/views/NoteDetailView.vue'),
-    meta: { requiresAuth: true }
+    meta: { requiresAuth: true, legacySupport: true }
   },
   {
     path: '/settings',

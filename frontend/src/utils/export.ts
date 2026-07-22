@@ -47,7 +47,7 @@ export function htmlToPlainText(html: string): string {
 }
 
 /**
- * 从笔记 HTML 内容中解析店铺信息和搜索元信息
+ * 从业务记录 HTML 内容中解析店铺信息和搜索元信息
  */
 export function parseStoreInfoFromHtml(html: string, noteTitle: string): { stores: StoreInfo[]; meta: SearchMeta } {
   const stores: StoreInfo[] = []
@@ -172,7 +172,7 @@ export function parseStoreInfoFromHtml(html: string, noteTitle: string): { store
 }
 
 /**
- * 从笔记中解析所有店铺信息
+ * 从业务记录中解析所有店铺信息
  */
 export function parseStoresFromNotes(notes: Note[]): { stores: StoreInfo[]; metas: SearchMeta[] } {
   const allStores: StoreInfo[] = []
@@ -218,7 +218,7 @@ export function formatDateForExport(dateString: string): string {
 }
 
 /**
- * 检查笔记是否是 Shopify 搜索结果
+ * 检查业务记录是否是 Shopify 搜索结果
  */
 function isShopifySearchNote(note: Note): boolean {
   const content = note.content || ''
@@ -241,17 +241,17 @@ function setLeftAlignment(ws: XLSX.WorkSheet, rows: number, cols: number): void 
 }
 
 /**
- * 导出单个笔记为 Excel
+ * 导出单条业务记录为 Excel
  */
 export function exportNoteToExcel(note: Note): void {
-  // 检查是否是 Shopify 搜索结果笔记
+  // 检查是否是 Shopify 搜索结果业务记录
   if (isShopifySearchNote(note)) {
     const { stores, meta } = parseStoreInfoFromHtml(note.content, note.title || '无标题')
 
     if (stores.length > 0) {
       // 构建数据 - 表头区域存放元信息
       const data: (string | number)[][] = [
-        ['笔记名称', meta.noteName, '', '', '', ''],
+        ['业务记录名称', meta.noteName, '', '', '', ''],
         ['搜索关键词', meta.keyword, '', '', '', ''],
         ['搜索时间', meta.searchTime, '', '', '', ''],
         ['店铺总数', meta.totalStores, '', '', '', ''],
@@ -283,7 +283,7 @@ export function exportNoteToExcel(note: Note): void {
 
       // 合并表头区域的单元格（元信息行）
       ws['!merges'] = [
-        { s: { r: 0, c: 1 }, e: { r: 0, c: 4 } },  // 笔记名称
+        { s: { r: 0, c: 1 }, e: { r: 0, c: 4 } },  // 业务记录名称
         { s: { r: 1, c: 1 }, e: { r: 1, c: 4 } },  // 搜索关键词
         { s: { r: 2, c: 1 }, e: { r: 2, c: 4 } },  // 搜索时间
         { s: { r: 3, c: 1 }, e: { r: 3, c: 4 } },  // 店铺总数
@@ -301,7 +301,7 @@ export function exportNoteToExcel(note: Note): void {
     }
   }
 
-  // 普通笔记导出
+  // 普通业务记录导出
   const plainContent = htmlToPlainText(note.content)
 
   const data = [
@@ -329,17 +329,17 @@ export function exportNoteToExcel(note: Note): void {
   ]
 
   const wb = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(wb, ws, '笔记')
+  XLSX.utils.book_append_sheet(wb, ws, '业务记录')
 
-  const filename = `${note.title || '无标题笔记'}_${new Date().toISOString().slice(0, 10)}.xlsx`
+  const filename = `${note.title || '无标题业务记录'}_${new Date().toISOString().slice(0, 10)}.xlsx`
   XLSX.writeFile(wb, filename)
 }
 
 /**
- * 导出多个笔记为 Excel
+ * 导出多条业务记录为 Excel
  */
 export function exportNotesToExcel(notes: Note[]): void {
-  // 检查是否包含 Shopify 搜索结果笔记
+  // 检查是否包含 Shopify 搜索结果业务记录
   const shopifyNotes = notes.filter(isShopifySearchNote)
   const regularNotes = notes.filter(n => !isShopifySearchNote(n))
 
@@ -351,11 +351,11 @@ export function exportNotesToExcel(notes: Note[]): void {
       // 构建数据
       const data: (string | number)[][] = []
 
-      // 如果只有一篇搜索笔记，显示完整元信息
+      // 如果只有一条搜索业务记录，显示完整元信息
       if (metas.length === 1) {
         const meta = metas[0]
         data.push(
-          ['笔记名称', meta.noteName, '', '', '', ''],
+          ['业务记录名称', meta.noteName, '', '', '', ''],
           ['搜索关键词', meta.keyword, '', '', '', ''],
           ['搜索时间', meta.searchTime, '', '', '', ''],
           ['店铺总数', meta.totalStores, '', '', '', ''],
@@ -363,9 +363,9 @@ export function exportNotesToExcel(notes: Note[]): void {
           ['序号', '店铺名称', '店铺URL', '流量数据', '备注', '']
         )
       } else {
-        // 多篇搜索笔记，显示汇总信息
+        // 多条搜索业务记录，显示汇总信息
         data.push(
-          ['笔记名称', `${metas.length} 篇搜索笔记`, '', '', '', ''],
+          ['业务记录名称', `${metas.length} 条搜索业务记录`, '', '', '', ''],
           ['店铺总数', stores.length, '', '', '', ''],
           ['', '', '', '', '', ''],
           ['序号', '店铺名称', '店铺URL', '流量数据', '备注', '']
@@ -383,7 +383,7 @@ export function exportNotesToExcel(notes: Note[]): void {
         ])
       })
 
-      // 如果还有普通笔记，追加到新工作表
+      // 如果还有普通业务记录，追加到新工作表
       let wb: XLSX.WorkBook
       const ws = XLSX.utils.aoa_to_sheet(data)
 
@@ -416,7 +416,7 @@ export function exportNotesToExcel(notes: Note[]): void {
       wb = XLSX.utils.book_new()
       XLSX.utils.book_append_sheet(wb, ws, '店铺列表')
 
-      // 添加普通笔记工作表
+      // 添加普通业务记录工作表
       if (regularNotes.length > 0) {
         const noteData = [
           ['标题', '内容', '标签', '创建时间', '更新时间', '是否收藏']
@@ -443,7 +443,7 @@ export function exportNotesToExcel(notes: Note[]): void {
           { wch: 20 },
           { wch: 10 }
         ]
-        XLSX.utils.book_append_sheet(wb, noteWs, '普通笔记')
+        XLSX.utils.book_append_sheet(wb, noteWs, '普通业务记录')
       }
 
       const filename = `店铺导出_${stores.length}家_${new Date().toISOString().slice(0, 10)}.xlsx`
@@ -452,7 +452,7 @@ export function exportNotesToExcel(notes: Note[]): void {
     }
   }
 
-  // 普通笔记批量导出
+  // 普通业务记录批量导出
   const data = [
     ['标题', '内容', '标签', '创建时间', '更新时间', '是否收藏']
   ]
@@ -481,14 +481,14 @@ export function exportNotesToExcel(notes: Note[]): void {
   ]
 
   const wb = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(wb, ws, '笔记')
+  XLSX.utils.book_append_sheet(wb, ws, '业务记录')
 
-  const filename = `笔记导出_${notes.length}篇_${new Date().toISOString().slice(0, 10)}.xlsx`
+  const filename = `业务记录导出_${notes.length}条_${new Date().toISOString().slice(0, 10)}.xlsx`
   XLSX.writeFile(wb, filename)
 }
 
 /**
- * 导出单个笔记为 PDF
+ * 导出单条业务记录为 PDF
  */
 export function exportNoteToPdf(note: Note, username?: string): void {
   const plainContent = htmlToPlainText(note.content)
@@ -498,7 +498,7 @@ export function exportNoteToPdf(note: Note, username?: string): void {
   element.innerHTML = `
     <div style="padding: 20px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
       <h1 style="font-size: 24px; font-weight: bold; margin-bottom: 16px; color: #1a1a1a;">
-        ${note.title || '无标题笔记'}
+        ${note.title || '无标题业务记录'}
       </h1>
       <div style="display: flex; gap: 24px; margin-bottom: 24px; font-size: 12px; color: #666;">
         <span>创建人：${creatorName}</span>
@@ -515,7 +515,7 @@ export function exportNoteToPdf(note: Note, username?: string): void {
 
   const opt = {
     margin: [15, 15, 15, 15] as [number, number, number, number],
-    filename: `${note.title || '无标题笔记'}_${new Date().toISOString().slice(0, 10)}.pdf`,
+    filename: `${note.title || '无标题业务记录'}_${new Date().toISOString().slice(0, 10)}.pdf`,
     image: { type: 'jpeg' as const, quality: 0.98 },
     html2canvas: { scale: 2, useCORS: true },
     jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' as const }
@@ -525,7 +525,7 @@ export function exportNoteToPdf(note: Note, username?: string): void {
 }
 
 /**
- * 创建笔记 HTML 元素
+ * 创建业务记录 HTML 元素
  */
 function createNoteElement(note: Note, creatorName: string): HTMLElement {
   const plainContent = htmlToPlainText(note.content)
@@ -533,7 +533,7 @@ function createNoteElement(note: Note, creatorName: string): HTMLElement {
   element.innerHTML = `
     <div style="padding: 20px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: white;">
       <h1 style="font-size: 22px; font-weight: bold; margin-bottom: 12px; color: #1a1a1a;">
-        ${note.title || '无标题笔记'}
+        ${note.title || '无标题业务记录'}
       </h1>
       <div style="display: flex; gap: 20px; margin-bottom: 16px; font-size: 11px; color: #666;">
         <span>创建人：${creatorName}</span>
@@ -549,7 +549,7 @@ function createNoteElement(note: Note, creatorName: string): HTMLElement {
 }
 
 /**
- * 导出多个笔记为 PDF（每篇笔记单独一页）
+ * 导出多条业务记录为 PDF（每条业务记录单独一页）
  */
 export async function exportNotesToPdf(notes: Note[], username?: string): Promise<void> {
   const creatorName = username || '未知用户'
@@ -569,7 +569,7 @@ export async function exportNotesToPdf(notes: Note[], username?: string): Promis
   const margin = 15
   const contentWidth = pageWidth - margin * 2
 
-  // 逐个处理每篇笔记
+  // 逐个处理每条业务记录
   for (let i = 0; i < notes.length; i++) {
     const note = notes[i]
     const element = createNoteElement(note, creatorName)
@@ -597,7 +597,7 @@ export async function exportNotesToPdf(notes: Note[], username?: string): Promis
     const imgWidth = contentWidth
     const imgHeight = (canvas.height * imgWidth) / canvas.width
 
-    // 如果不是第一篇笔记，添加新页面
+    // 如果不是第一条业务记录，添加新页面
     if (i > 0) {
       pdf.addPage()
     }
@@ -619,5 +619,5 @@ export async function exportNotesToPdf(notes: Note[], username?: string): Promis
   }
 
   // 保存 PDF
-  pdf.save(`笔记导出_${notes.length}篇_${new Date().toISOString().slice(0, 10)}.pdf`)
+  pdf.save(`业务记录导出_${notes.length}条_${new Date().toISOString().slice(0, 10)}.pdf`)
 }

@@ -13,7 +13,7 @@
       <div class="flex gap-6 mb-6">
         <div class="bg-gradient-to-r from-primary-500 to-purple-600 px-6 py-5 rounded-xl shadow-lg min-w-[150px]">
           <div class="text-3xl font-bold text-white">{{ notes.length }}</div>
-          <div class="text-white/90 mt-1 text-sm">笔记总数</div>
+          <div class="text-white/90 mt-1 text-sm">业务记录总数</div>
         </div>
         <div class="bg-gradient-to-r from-green-500 to-emerald-600 px-6 py-5 rounded-xl shadow-lg min-w-[150px]">
           <div class="text-3xl font-bold text-white">{{ uniqueUsers }}</div>
@@ -21,16 +21,16 @@
         </div>
       </div>
 
-      <!-- 笔记表格 -->
+      <!-- 业务记录表格 -->
       <div class="bg-white dark:bg-gray-800 rounded-xl shadow p-6 transition-colors">
-        <h2 class="text-lg font-semibold m-0 mb-4 text-gray-800 dark:text-gray-100">所有笔记</h2>
+        <h2 class="text-lg font-semibold m-0 mb-4 text-gray-800 dark:text-gray-100">所有业务记录</h2>
 
         <!-- 搜索栏 -->
         <div class="mb-4">
           <input
             v-model="searchQuery"
             type="text"
-            placeholder="搜索笔记标题或作者..."
+            placeholder="搜索业务记录标题或作者..."
             class="px-4 py-2 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:border-primary-500 transition-colors w-80"
           />
         </div>
@@ -100,7 +100,7 @@
         </div>
 
         <div v-if="filteredAndSortedNotes.length === 0" class="text-center py-12 text-gray-400 dark:text-gray-500">
-          暂无笔记
+          暂无业务记录
         </div>
       </div>
     </div>
@@ -109,7 +109,7 @@
     <div v-if="showDeleteDialog" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
       <div class="bg-white dark:bg-gray-800 p-6 rounded-xl max-w-md w-[90%] shadow-xl">
         <h3 class="text-lg font-semibold m-0 mb-2 text-gray-800 dark:text-gray-100">确认删除</h3>
-        <p class="text-gray-600 dark:text-gray-300 mb-4">确定要删除笔记「{{ noteToDelete?.title || '无标题' }}」吗？此操作不可恢复。</p>
+        <p class="text-gray-600 dark:text-gray-300 mb-4">确定要删除业务记录「{{ noteToDelete?.title || '无标题' }}」吗？此操作不可恢复。</p>
         <div class="flex justify-end gap-3">
           <button @click="showDeleteDialog = false" class="px-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors">取消</button>
           <button @click="deleteNote" class="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors">删除</button>
@@ -117,7 +117,7 @@
       </div>
     </div>
 
-    <!-- 笔记预览对话框 -->
+    <!-- 业务记录预览对话框 -->
     <div v-if="showViewDialog" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
       <div class="bg-white dark:bg-gray-800 p-6 rounded-xl max-w-3xl w-[90%] max-h-[80vh] overflow-y-auto shadow-xl">
         <h3 class="text-lg font-semibold m-0 mb-2 text-gray-800 dark:text-gray-100">{{ viewingNote?.title || '无标题' }}</h3>
@@ -155,7 +155,7 @@ const uniqueUsers = computed(() => {
   return userIds.size
 })
 
-// 筛选后的笔记
+// 筛选后的业务记录
 const filteredNotes = computed(() => {
   if (!searchQuery.value) return notes.value
 
@@ -166,7 +166,7 @@ const filteredNotes = computed(() => {
   )
 })
 
-// 排序后的笔记
+// 排序后的业务记录
 const filteredAndSortedNotes = computed(() => {
   const result = [...filteredNotes.value]
 
@@ -259,7 +259,7 @@ async function fetchNotes() {
   try {
     notes.value = await notesApi.adminGetAll()
   } catch (error) {
-    console.error('获取笔记列表失败:', error)
+    console.error('获取业务记录列表失败:', error)
   }
 }
 

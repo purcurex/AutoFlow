@@ -95,22 +95,3 @@ export interface AutoFlowDashboard {
   topLeads: StoreLead[]
   nextTasks: OutreachTask[]
 }
-
-export interface CreateWorkflowRequest {
-  name?: string
-  seedType: SeedType
-  seedValue: string
-  targetMarket?: string
-}
-
-export interface GenerateMessageRequest {
-  channel?: OutreachChannel
-  language?: string
-  offer?: string
-}
-
-export interface UpdateOutreachTaskRequest {
-  status?: OutreachStatus
-  nextFollowUpAt?: string
-  owner?: string
-}

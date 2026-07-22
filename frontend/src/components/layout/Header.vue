@@ -21,6 +21,7 @@ const pageTitle = computed(() => {
     LeadDetail: 'Lead detail',
     Outreach: 'Outreach',
     CRM: 'CRM',
+    NoteDetail: 'Business record',
     Settings: 'Settings',
     Admin: 'Admin',
   }

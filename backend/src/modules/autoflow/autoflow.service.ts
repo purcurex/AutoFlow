@@ -1,12 +1,10 @@
 import { Injectable, NotFoundException } from '@nestjs/common'
+import type { CreateWorkflowDto, GenerateMessageDto, UpdateOutreachTaskDto } from './dto/autoflow.dto'
 import {
   AutoFlowDashboard,
-  CreateWorkflowRequest,
-  GenerateMessageRequest,
   LeadStatus,
   OutreachTask,
   StoreLead,
-  UpdateOutreachTaskRequest,
   WorkflowRun,
 } from './autoflow.types'
 
@@ -152,7 +150,7 @@ export class AutoflowService {
     return this.workflows
   }
 
-  createWorkflow(data: CreateWorkflowRequest): WorkflowRun {
+  createWorkflow(data: CreateWorkflowDto): WorkflowRun {
     const now = new Date().toISOString()
     const workflow: WorkflowRun = {
       id: `wf-${Date.now()}`,
@@ -184,7 +182,7 @@ export class AutoflowService {
     return lead
   }
 
-  generateMessage(leadId: string, data: GenerateMessageRequest): OutreachTask {
+  generateMessage(leadId: string, data: GenerateMessageDto): OutreachTask {
     const lead = this.getLead(leadId)
     const task: OutreachTask = {
       id: `task-${Date.now()}`,
@@ -204,7 +202,7 @@ export class AutoflowService {
     return this.outreachTasks
   }
 
-  updateOutreachTask(id: string, data: UpdateOutreachTaskRequest): OutreachTask {
+  updateOutreachTask(id: string, data: UpdateOutreachTaskDto): OutreachTask {
     const task = this.outreachTasks.find((item) => item.id === id)
     if (!task) {
       throw new NotFoundException('Outreach task not found')
@@ -230,7 +228,7 @@ export class AutoflowService {
     }))
   }
 
-  private buildMessage(lead: StoreLead, data: GenerateMessageRequest): string {
+  private buildMessage(lead: StoreLead, data: GenerateMessageDto): string {
     const offer = data.offer || 'low-MOQ sourcing, fast fulfillment, and product testing support'
     return `Hi ${lead.brandName} team, I noticed your ${lead.category.toLowerCase()} ads and ${lead.domain} store. We help Shopify sellers with ${offer}. Would you like me to share a short product sheet for your next test campaign?`
   }
