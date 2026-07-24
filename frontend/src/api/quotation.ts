@@ -12,7 +12,9 @@ export interface QuoteDraftPayload {
       minQuantity: number
       maxQuantity?: number
       customerUnitPrice: string
+      purchaseCost?: string
     }>
+    productProfitMarginRate: number
   }>
   destinationCountries: string[]
   packages: Array<{
@@ -23,6 +25,14 @@ export interface QuoteDraftPayload {
     width: number
     height: number
     dimensionUnit: string
+  }>
+  logisticsChannels: Array<{
+    customChannelCode: string
+    customChannelName: string
+    actualChannelCode: string
+    actualChannelName: string
+    carrierName?: string
+    logisticsProfitMarginRate: number
   }>
 }
 
@@ -56,5 +66,13 @@ export const quotationApi = {
   },
   get(id: string): Promise<Quotation> {
     return api.get(`/autoflow/quotes/${id}`)
+  },
+  requestFop(id: string): Promise<Quotation> {
+    return api.post(`/autoflow/quotes/${id}/request-fop`)
+  },
+  exportExcel(id: string, version: number): Promise<Blob> {
+    return api.get(`/autoflow/quotes/${id}/versions/${version}/export.xlsx`, {
+      responseType: 'blob',
+    })
   },
 }

@@ -5,10 +5,13 @@ import {
   CrmActivityEntity,
   LeadEntity,
   OutreachTaskEntity,
+  WorkflowJobEntity,
   WorkflowRunEntity,
   WorkflowStepEntity,
 } from './entities'
 import type { AiService } from '../ai/ai.service'
+import type { PromptTemplateService } from '../ai/prompt-template.service'
+import type { StorefrontEnrichmentService } from '../discovery/storefront-enrichment.service'
 
 describe('AutoflowService persistence boundaries', () => {
   function repository<T extends ObjectLiteral>() {
@@ -26,6 +29,8 @@ describe('AutoflowService persistence boundaries', () => {
   function createService() {
     const workflows = repository<WorkflowRunEntity>()
     const steps = repository<WorkflowStepEntity>()
+    const jobs = repository<WorkflowJobEntity>()
+    jobs.find.mockResolvedValue([])
     const leads = repository<LeadEntity>()
     const outreach = repository<OutreachTaskEntity>()
     const activities = repository<CrmActivityEntity>()
@@ -33,16 +38,46 @@ describe('AutoflowService persistence boundaries', () => {
     const aiService = {
       generateSalesOutreach: jest.fn().mockResolvedValue('Draft outreach message'),
     } as unknown as jest.Mocked<AiService>
-    const service = new AutoflowService(workflows, steps, leads, outreach, activities, dataSource, aiService)
-    return { service, workflows, steps, leads, outreach, activities, dataSource, aiService }
+    const promptTemplateService = {
+      resolve: jest.fn().mockResolvedValue(['Resolved prompt module']),
+    } as unknown as jest.Mocked<PromptTemplateService>
+    const storefrontEnrichmentService = {
+      enrichStore: jest.fn(),
+    } as unknown as jest.Mocked<StorefrontEnrichmentService>
+    const service = new AutoflowService(
+      workflows,
+      steps,
+      jobs,
+      leads,
+      outreach,
+      activities,
+      dataSource,
+      aiService,
+      promptTemplateService,
+      storefrontEnrichmentService,
+    )
+    return {
+      service,
+      workflows,
+      steps,
+      jobs,
+      leads,
+      outreach,
+      activities,
+      dataSource,
+      aiService,
+      promptTemplateService,
+      storefrontEnrichmentService,
+    }
   }
 
   it('scopes workflow lists to the authenticated owner', async () => {
-    const { service, workflows } = createService()
+    const { service, workflows, jobs } = createService()
     const createdAt = new Date('2026-07-22T00:00:00.000Z')
     workflows.findAndCount.mockResolvedValue([
       [{
         id: 'workflow-1',
+        displayId: '01',
         name: 'Prospecting',
         seedType: 'keyword',
         seedValue: 'pet brush',
@@ -56,13 +91,23 @@ describe('AutoflowService persistence boundaries', () => {
       } as WorkflowRunEntity],
       1,
     ])
+    jobs.find.mockResolvedValue([{
+      workflowRunId: 'workflow-1',
+      ownerUserId: 'owner-1',
+      lastError: 'PipiAds credits are insufficient',
+    } as WorkflowJobEntity])
 
     const result = await service.getWorkflows('owner-1', { page: 1, pageSize: 20 })
 
     expect(workflows.findAndCount).toHaveBeenCalledWith(expect.objectContaining({
-      where: { ownerUserId: 'owner-1' },
+      where: expect.objectContaining({ ownerUserId: 'owner-1' }),
     }))
     expect(result.items[0].id).toBe('workflow-1')
+    expect(result.items[0].displayId).toBe('01')
+    expect(result.items[0].failureReason).toBe('PipiAds credits are insufficient')
+    expect(result.items[0].failureCode).toBe('insufficient_credits')
+    expect(result.items[0].failureProvider).toBe('pipiads')
+    expect(result.items[0].failureRetryable).toBe(false)
   })
 
   it('does not return a lead outside the owner scope', async () => {
@@ -100,7 +145,7 @@ describe('AutoflowService persistence boundaries', () => {
       category: 'Pet supplies',
       country: 'US',
       recommendedAngle: 'Verified Shopify store',
-    } as LeadEntity)
+    } as unknown as LeadEntity)
     outreach.save.mockImplementation(async (task) => ({ id: 'task-1', ...task }) as OutreachTaskEntity)
     outreach.findOne.mockResolvedValue({
       id: 'task-1',
@@ -112,6 +157,7 @@ describe('AutoflowService persistence boundaries', () => {
       nextFollowUpAt: null,
       lead: { brandName: 'Example Store' },
       owner: { username: 'owner' },
+      createdAt: new Date('2026-07-24T00:00:00.000Z'),
     } as OutreachTaskEntity)
 
     const task = await service.generateMessage('owner-1', 'lead-1', { channel: 'whatsapp' })
@@ -125,13 +171,34 @@ describe('AutoflowService persistence boundaries', () => {
   })
 
   it('does not create an outreach task when the AI provider fails', async () => {
-    const { service, leads, outreach, aiService } = createService()
+    const { service, leads, outreach, aiService, promptTemplateService } = createService()
     leads.findOne.mockResolvedValue({
       id: 'lead-1', ownerUserId: 'owner-1', brandName: 'Store', domain: 'store.test',
     } as LeadEntity)
     aiService.generateSalesOutreach.mockRejectedValue(new Error('provider unavailable'))
 
     await expect(service.generateMessage('owner-1', 'lead-1', {})).rejects.toThrow('provider unavailable')
+    expect(promptTemplateService.resolve).toHaveBeenCalledWith(
+      'owner-1',
+      expect.arrayContaining(['channel_facebook']),
+      expect.objectContaining({ channel: 'facebook' }),
+    )
+    expect(outreach.save).not.toHaveBeenCalled()
+  })
+
+  it('blocks quote and product-image templates that lack verified inputs', async () => {
+    const { service, leads, outreach, aiService } = createService()
+    leads.findOne.mockResolvedValue({
+      id: 'lead-1', ownerUserId: 'owner-1', brandName: 'Store', domain: 'store.test', contacts: [],
+    } as unknown as LeadEntity)
+
+    await expect(service.generateMessage('owner-1', 'lead-1', {
+      quoteMode: 'product',
+    })).rejects.toThrow('Verified quote context is required')
+    await expect(service.generateMessage('owner-1', 'lead-1', {
+      includeProductVisual: true,
+    })).rejects.toThrow('A product image URL is required')
+    expect(aiService.generateSalesOutreach).not.toHaveBeenCalled()
     expect(outreach.save).not.toHaveBeenCalled()
   })
 })

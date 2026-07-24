@@ -39,15 +39,16 @@ NestJS API
   - Discovery adapters and workflow executor
   - Legacy Notes / Folders
   - Shopify Search provider client
-  - Facebook Ads provider client
+  - PipiAds/PipiSpy advertising-intelligence client
   - AI service
         |
         v
 PostgreSQL via TypeORM
 
 External services:
-  - Anthropic API for AI writing
-  - SerpAPI for search and Google Lens
+  - Zhipu GLM API for AI writing and reviewed outreach drafts
+  - PipiAds/PipiSpy API for keyword/image ad discovery and landing-page evidence
+  - SerpAPI for retained standalone search utilities
   - Host.io / OpenPageRank for traffic estimates
   - Kingdee Cloud Cosmic FOP for formal CRM records, product cost, and logistics rates
 ```
@@ -100,6 +101,8 @@ backend/src/modules/autoflow/
 backend/src/modules/auth/
 backend/src/modules/shopify-search/
 backend/src/modules/facebook-ads/
+backend/src/modules/alibaba1688/
+backend/src/modules/sourcing/
 backend/src/modules/ai/
 backend/src/app.module.ts
 ```
@@ -111,6 +114,8 @@ GET   /api/autoflow/dashboard
 GET   /api/autoflow/workflows
 POST  /api/autoflow/workflows
 POST  /api/autoflow/workflows/:id/start-discovery
+GET   /api/autoflow/workflows/:id/sourcing
+POST  /api/autoflow/workflows/:id/sourcing/search
 GET   /api/autoflow/leads
 GET   /api/autoflow/leads/:id
 POST  /api/autoflow/leads/:id/messages
@@ -123,6 +128,8 @@ P1 and P2 persistence are implemented. `AutoflowService` uses owner-scoped TypeO
 
 Discovery execution is scheduled through the PostgreSQL-backed `workflow_jobs` queue. Workers claim work with `FOR UPDATE SKIP LOCKED`, renew time-bounded leases with heartbeats, retry failures with bounded exponential backoff, and reclaim expired leases after process interruption. Persisted workflow steps remain the business-level checkpoints, so a retried job resumes completed discovery stages instead of discarding evidence.
 
+Workflow identity uses two identifiers. The UUID is the internal relational key; `workflow_runs.display_id` is the user-facing owner-scoped sequence. `users.next_workflow_number` is incremented under a pessimistic user-row lock in the same transaction that creates the workflow. A unique `(owner_user_id, display_id)` constraint and numeric range checks provide the database boundary. Historical rows are deterministically numbered by `created_at, id`, deleted numbers are not reused, and `created_at` remains the authoritative creation timestamp.
+
 ## 5. Target Domain Model
 
 Current persistent entities:
@@ -134,9 +141,15 @@ WorkflowJob
 Lead
 LeadContact
 OutreachTask
+AiOutreachConversation
+AiOutreachMessage
+OutreachDraftVersion
 CrmActivity
 Quotation
 QuotationVersion
+SourcingSearch
+SourcingSupplier
+SourcingOffer
 ```
 
 Implemented discovery entities:
@@ -151,7 +164,6 @@ Planned entities:
 
 ```text
 ProductSeed
-MessageDraft
 IntegrationAccount
 QuoteDraft
 ProductQuoteLine
@@ -167,10 +179,12 @@ Recommended ownership:
 
 ```text
 workflow-runs       Orchestrates a prospecting run
-ad-discovery        Calls ad/search providers
+ad-discovery        Calls PipiAds for keyword/image ad evidence and derives store candidates
 store-detection     Detects Shopify/DTC stores
 lead-scoring        Computes lead quality
-ai-messaging        Generates outreach copy
+sourcing            Persists independently scored 1688 procurement candidates
+alibaba1688         Signs and calls the cross-border keyword/image/detail API family
+ai-messaging        Persists owner-scoped GLM conversations and versioned bilingual drafts
 outreach            Manages semi-automated sending
 follow-up           Tracks only local next actions and handoff state
 quote-orchestration Builds reproducible customer quote views from FOP snapshots
@@ -191,7 +205,7 @@ Vue Quote / Lead Detail pages
 
 Architecture boundary:
 
-- AutoFlow owns discovery evidence, contact review, outreach preparation, quote interaction, and reproducible snapshots.
+- AutoFlow phase 1 owns product/ad/store discovery evidence, storefront verification, contact review, and human-reviewed outreach preparation.
 - FOP owns formal leads, opportunities, stages, follow-up history, customer records, product-cost rules, and logistics-rating rules.
 - The browser never receives FOP credentials or calls FOP directly.
 - Domain code depends on `FopProductCostPort`, `FopLogisticsRatePort`, and `FopCrmHandoffPort`.
@@ -258,11 +272,11 @@ Known Windows note:
 
 Priority order after P2:
 
-1. Rewrite AI message generation around persistent lead context and human review.
+1. Operate Zhipu GLM message generation around persistent lead context and human review.
 2. Add WhatsApp deep-link outreach and channel templates.
 3. Add provider idempotency keys and telemetry before paid provider calls.
-4. Expand discovery with verified ad-to-store matching and contact enrichment.
+4. Reconcile PipiAds ad-to-store evidence with live provider samples and contact enrichment.
 5. Add quote navigation, product-tier editor, destination selector, result states, and combined matrix shell.
-6. Implement FOP provider ports and contract-test adapters without inventing live Kingdee endpoints.
+6. Preserve FOP provider ports and contract-test adapters for phase 2 without inventing live Kingdee endpoints.
 7. Replace the CRM-oriented page with a lightweight follow-up and FOP handoff queue.
-8. Enable live FOP adapters only after the interface inventory and sandbox reconciliation pass.
+8. Begin phase 2 quote/FOP work only after the interface inventory and sandbox reconciliation pass.

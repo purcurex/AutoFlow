@@ -4,6 +4,7 @@ import { InjectRepository } from '@nestjs/typeorm'
 import { Repository } from 'typeorm'
 import type { QueryDeepPartialEntity } from 'typeorm/query-builder/QueryPartialEntity'
 import { WorkflowRunEntity } from '../autoflow/entities'
+import { DEFAULT_GOOGLE_SEARCH_OPTIONS } from '../autoflow/autoflow.types'
 import { AdCreativeEntity, ShopifyStoreEntity } from './entities'
 import { trafficScore } from './discovery-normalizer'
 import { StorefrontEnrichmentService } from './storefront-enrichment.service'
@@ -42,6 +43,10 @@ export class DiscoveryService {
       type: workflow.seedType,
       value: workflow.seedValue,
       targetMarket: workflow.targetMarket,
+      searchOptions: {
+        ...DEFAULT_GOOGLE_SEARCH_OPTIONS,
+        ...(workflow.searchOptions || {}),
+      },
     }
     const [adapterAds, adapterStores] = await Promise.all([
       this.adAdapter.discover(seed),
@@ -49,7 +54,10 @@ export class DiscoveryService {
     ])
     const ads = [...new Map(adapterAds.map((ad) => [this.adKey(ad), ad])).values()]
     const deduplicatedStores = [...new Map(adapterStores.map((store) => [store.normalizedDomain, store])).values()]
-    const stores = await this.storefrontEnrichmentService.enrich(deduplicatedStores)
+    const enrichedStores = await this.storefrontEnrichmentService.enrich(deduplicatedStores)
+    const stores = enrichedStores
+      .filter((store) => ['verified', 'probable', 'mock'].includes(store.verificationStatus))
+      .sort((left, right) => right.validityScore - left.validityScore)
 
     await Promise.all([
       this.persistAds(ownerUserId, workflow.teamId, workflowRunId, ads),
@@ -83,8 +91,14 @@ export class DiscoveryService {
     ])
     const ads: NormalizedAdCreative[] = adEntities.map((ad) => ({
       provider: ad.provider,
+      evidenceSource: typeof ad.rawPayload?.evidenceSource === 'string'
+        ? ad.rawPayload.evidenceSource
+        : ad.provider,
+      platform: this.adPlatform(ad.rawPayload?.platform),
+      adId: typeof ad.rawPayload?.adId === 'string' ? ad.rawPayload.adId : null,
       advertiserName: ad.advertiserName,
       sourceUrl: ad.sourceUrl,
+      isDirectAdLink: ad.rawPayload?.isDirectAdLink === true,
       description: ad.description,
       imageUrl: ad.imageUrl,
       confidence: ad.confidence,
@@ -95,9 +109,12 @@ export class DiscoveryService {
       domain: store.domain,
       normalizedDomain: store.normalizedDomain,
       url: store.url,
+      productUrl: store.productUrl,
       description: store.description,
       imageUrl: store.imageUrl,
       detectionSource: store.detectionSource,
+      discoverySources: store.discoverySources || [],
+      validityScore: store.validityScore || 0,
       shopifyConfidence: store.shopifyConfidence,
       verificationStatus: store.verificationStatus,
       verificationEvidence: store.verificationEvidence || {},
@@ -163,9 +180,12 @@ export class DiscoveryService {
       domain: store.domain,
       normalizedDomain: store.normalizedDomain,
       url: store.url,
+      productUrl: store.productUrl,
       description: store.description,
       imageUrl: store.imageUrl,
       detectionSource: store.detectionSource,
+      discoverySources: store.discoverySources,
+      validityScore: store.validityScore,
       shopifyConfidence: store.shopifyConfidence,
       verificationStatus: store.verificationStatus,
       verificationEvidence: store.verificationEvidence,
@@ -197,6 +217,9 @@ export class DiscoveryService {
       domain: store.domain,
       normalizedDomain: store.normalizedDomain,
       storeUrl: store.url,
+      productUrl: store.productUrl,
+      discoverySources: store.discoverySources,
+      validityScore: store.validityScore,
       source: store.detectionSource,
       shopifyConfidence: store.shopifyConfidence,
       trafficScore: trafficScore(monthlyVisits),
@@ -225,7 +248,11 @@ export class DiscoveryService {
 
       return [{
         provider: ad.provider,
+        evidenceSource: ad.evidenceSource,
+        platform: ad.platform,
+        adId: ad.adId,
         sourceUrl: ad.sourceUrl,
+        isDirectAdLink: ad.isDirectAdLink,
         confidence: directIdentityMatch ? Math.max(ad.confidence, 80) : ad.confidence,
         matchReasons: directIdentityMatch ? ['advertiser_identity'] : sharedTokens.map((token) => `token:${token}`),
       }]
@@ -248,5 +275,11 @@ export class DiscoveryService {
 
   private adKey(ad: NormalizedAdCreative): string {
     return this.hash(`${ad.provider}|${ad.advertiserName.toLowerCase()}|${ad.sourceUrl}`)
+  }
+
+  private adPlatform(value: unknown): NormalizedAdCreative['platform'] {
+    return ['facebook', 'instagram', 'tiktok'].includes(String(value))
+      ? value as NormalizedAdCreative['platform']
+      : 'unknown'
   }
 }

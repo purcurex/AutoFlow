@@ -1,5 +1,6 @@
 import {
   IsIn,
+  IsBoolean,
   IsISO8601,
   IsOptional,
   IsString,
@@ -9,18 +10,41 @@ import {
   MaxLength,
   Min,
   MinLength,
+  ValidateNested,
+  IsUrl,
 } from 'class-validator'
 import { Type } from 'class-transformer'
 import {
   LEAD_STATUSES,
+  DEFAULT_GOOGLE_SEARCH_OPTIONS,
   OUTREACH_CHANNELS,
   OUTREACH_STATUSES,
+  OUTREACH_QUOTE_MODES,
   SEED_TYPES,
   type OutreachChannel,
   type OutreachStatus,
+  type OutreachQuoteMode,
   type SeedType,
   type LeadStatus,
 } from '../autoflow.types'
+
+export class GoogleSearchOptionsDto {
+  @IsOptional()
+  @IsBoolean()
+  exactPhrase?: boolean = DEFAULT_GOOGLE_SEARCH_OPTIONS.exactPhrase
+
+  @IsOptional()
+  @IsBoolean()
+  titleMatch?: boolean = DEFAULT_GOOGLE_SEARCH_OPTIONS.titleMatch
+
+  @IsOptional()
+  @IsBoolean()
+  excludeMarketplaces?: boolean = DEFAULT_GOOGLE_SEARCH_OPTIONS.excludeMarketplaces
+
+  @IsOptional()
+  @IsBoolean()
+  findOwnerFacebook?: boolean = DEFAULT_GOOGLE_SEARCH_OPTIONS.findOwnerFacebook
+}
 
 export class CreateWorkflowDto {
   @IsOptional()
@@ -42,7 +66,14 @@ export class CreateWorkflowDto {
   @MinLength(2)
   @MaxLength(80)
   targetMarket?: string
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => GoogleSearchOptionsDto)
+  searchOptions?: GoogleSearchOptionsDto
 }
+
+export class CreateWorkflowRevisionDto extends CreateWorkflowDto {}
 
 export class GenerateMessageDto {
   @IsOptional()
@@ -58,6 +89,37 @@ export class GenerateMessageDto {
   @IsString()
   @MaxLength(500)
   offer?: string
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  targetContact?: string
+
+  @IsOptional()
+  @IsIn(OUTREACH_QUOTE_MODES)
+  quoteMode?: OutreachQuoteMode
+
+  @IsOptional()
+  @IsBoolean()
+  includeProductVisual?: boolean
+
+  @IsOptional()
+  @IsBoolean()
+  emphasizeSupplier?: boolean
+
+  @IsOptional()
+  @IsBoolean()
+  emphasizeLogistics?: boolean
+
+  @IsOptional()
+  @IsUrl({ protocols: ['https'], require_protocol: true })
+  @MaxLength(1000)
+  productImageUrl?: string
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  verifiedQuoteContext?: string
 }
 
 export class UpdateOutreachTaskDto {

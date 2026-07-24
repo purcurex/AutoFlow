@@ -1,4 +1,9 @@
-import type { LeadContactType, SeedType } from '../autoflow/autoflow.types'
+import type {
+  DiscoverySource,
+  GoogleSearchOptions,
+  LeadContactType,
+  SeedType,
+} from '../autoflow/autoflow.types'
 
 export const STORE_VERIFICATION_STATUSES = [
   'verified',
@@ -27,12 +32,17 @@ export interface DiscoverySeed {
   type: SeedType
   value: string
   targetMarket: string
+  searchOptions?: GoogleSearchOptions
 }
 
 export interface NormalizedAdCreative {
   provider: string
+  evidenceSource: string
+  platform: 'facebook' | 'instagram' | 'tiktok' | 'unknown'
+  adId: string | null
   advertiserName: string
   sourceUrl: string
+  isDirectAdLink: boolean
   description: string
   imageUrl: string | null
   confidence: number
@@ -44,9 +54,12 @@ export interface NormalizedShopifyStore {
   domain: string
   normalizedDomain: string
   url: string
+  productUrl: string | null
   description: string
   imageUrl: string | null
   detectionSource: string
+  discoverySources: DiscoverySource[]
+  validityScore: number
   shopifyConfidence: number
   verificationStatus: StoreVerificationStatus
   verificationEvidence: Record<string, unknown>
@@ -61,6 +74,9 @@ export interface LeadCandidate {
   domain: string
   normalizedDomain: string
   storeUrl: string
+  productUrl: string | null
+  discoverySources: DiscoverySource[]
+  validityScore: number
   source: string
   shopifyConfidence: number
   trafficScore: number
@@ -69,7 +85,11 @@ export interface LeadCandidate {
   contacts: NormalizedContactEvidence[]
   adEvidence: Array<{
     provider: string
+    evidenceSource: string
+    platform: 'facebook' | 'instagram' | 'tiktok' | 'unknown'
+    adId: string | null
     sourceUrl: string
+    isDirectAdLink: boolean
     confidence: number
     matchReasons: string[]
   }>

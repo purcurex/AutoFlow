@@ -1,6 +1,7 @@
 ﻿<script setup lang="ts">
-import { nextTick, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { aiApi } from '@/api'
+import { useI18n } from 'vue-i18n'
 
 interface Props {
   visible: boolean
@@ -14,6 +15,7 @@ interface Message {
 }
 
 const props = defineProps<Props>()
+const { t } = useI18n()
 const emit = defineEmits<{
   'update:visible': [value: boolean]
   'insert-text': [text: string]
@@ -24,18 +26,18 @@ const inputText = ref('')
 const isLoading = ref(false)
 const messagesContainer = ref<HTMLElement | null>(null)
 
-const quickActions = [
-  { action: 'continue' as const, label: 'Continue' },
-  { action: 'polish' as const, label: 'Polish' },
-  { action: 'summarize' as const, label: 'Summarize' },
-]
+const quickActions = computed(() => [
+  { action: 'continue' as const, label: t('assistant.continue') },
+  { action: 'polish' as const, label: t('assistant.polish') },
+  { action: 'summarize' as const, label: t('assistant.summarize') },
+])
 
 watch(() => props.visible, (visible) => {
   if (visible && messages.value.length === 0) {
     messages.value.push({
       id: 'welcome',
       role: 'assistant',
-      content: 'Hi, I can help draft, polish, summarize, or answer questions about the current note.',
+      content: t('assistant.welcome'),
     })
   }
 })
@@ -62,7 +64,7 @@ async function sendMessage() {
     messages.value.push({ id: `${Date.now()}-ai`, role: 'assistant', content: response.result })
   } catch (error) {
     console.error('AI request failed:', error)
-    messages.value.push({ id: `${Date.now()}-error`, role: 'assistant', content: 'AI service is unavailable. Please try again later.' })
+    messages.value.push({ id: `${Date.now()}-error`, role: 'assistant', content: t('assistant.unavailable') })
   } finally {
     isLoading.value = false
     scrollToBottom()
@@ -79,7 +81,7 @@ async function handleQuickAction(action: 'continue' | 'polish' | 'summarize') {
     messages.value.push({ id: `${Date.now()}-ai`, role: 'assistant', content: response.result })
   } catch (error) {
     console.error('AI request failed:', error)
-    messages.value.push({ id: `${Date.now()}-error`, role: 'assistant', content: 'AI service is unavailable. Please try again later.' })
+    messages.value.push({ id: `${Date.now()}-error`, role: 'assistant', content: t('assistant.unavailable') })
   } finally {
     isLoading.value = false
     scrollToBottom()
@@ -112,9 +114,9 @@ function handleKeydown(event: KeyboardEvent) {
         class="fixed right-4 top-16 z-50 flex max-h-[80vh] w-96 max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900"
       >
         <div class="flex items-center justify-between border-b border-slate-200 px-4 py-3 dark:border-slate-700">
-          <span class="font-semibold text-slate-900 dark:text-slate-100">AI assistant</span>
+          <span class="font-semibold text-slate-900 dark:text-slate-100">{{ t('assistant.title') }}</span>
           <button class="rounded p-1 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800" @click="closePanel">
-            <span class="sr-only">Close</span>
+            <span class="sr-only">{{ t('common.close') }}</span>
             <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
             </svg>
@@ -140,11 +142,11 @@ function handleKeydown(event: KeyboardEvent) {
                 class="mt-2 text-xs font-medium text-primary-600 dark:text-primary-300"
                 @click="insertText(message)"
               >
-                Insert
+                {{ t('assistant.insert') }}
               </button>
             </div>
           </div>
-          <p v-if="isLoading" class="text-sm text-slate-500">Generating...</p>
+          <p v-if="isLoading" class="text-sm text-slate-500">{{ t('assistant.generating') }}</p>
         </div>
 
         <div class="border-t border-slate-200 p-3 dark:border-slate-700">
@@ -164,11 +166,11 @@ function handleKeydown(event: KeyboardEvent) {
               v-model="inputText"
               class="input min-h-11 resize-none text-sm"
               rows="1"
-              placeholder="Ask AI..."
+              :placeholder="t('assistant.placeholder')"
               :disabled="isLoading"
               @keydown="handleKeydown"
             ></textarea>
-            <button class="btn btn-primary px-3" :disabled="!inputText.trim() || isLoading" @click="sendMessage">Send</button>
+            <button class="btn btn-primary px-3" :disabled="!inputText.trim() || isLoading" @click="sendMessage">{{ t('assistant.send') }}</button>
           </div>
         </div>
       </div>

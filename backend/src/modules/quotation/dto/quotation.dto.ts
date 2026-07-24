@@ -32,6 +32,11 @@ export class QuoteTierDto {
   @IsString()
   @Matches(MONEY_PATTERN, { message: 'customerUnitPrice must be a positive decimal with up to 4 places' })
   customerUnitPrice: string
+
+  @IsOptional()
+  @IsString()
+  @Matches(MONEY_PATTERN, { message: 'purchaseCost must be a positive decimal with up to 4 places' })
+  purchaseCost?: string
 }
 
 export class QuoteProductDto {
@@ -46,12 +51,45 @@ export class QuoteProductDto {
   @MaxLength(40)
   unit: string
 
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(99.99)
+  productProfitMarginRate: number
+
   @IsArray()
   @ArrayMinSize(1)
   @ArrayMaxSize(20)
   @ValidateNested({ each: true })
   @Type(() => QuoteTierDto)
   quantityTiers: QuoteTierDto[]
+}
+
+export class QuoteLogisticsChannelDto {
+  @IsString()
+  @MaxLength(80)
+  customChannelCode: string
+
+  @IsString()
+  @MaxLength(160)
+  customChannelName: string
+
+  @IsString()
+  @MaxLength(80)
+  actualChannelCode: string
+
+  @IsString()
+  @MaxLength(160)
+  actualChannelName: string
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(160)
+  carrierName?: string
+
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(99.99)
+  logisticsProfitMarginRate: number
 }
 
 export class QuotePackageDto {
@@ -110,6 +148,14 @@ export class QuoteDraftDto {
   @ValidateNested({ each: true })
   @Type(() => QuotePackageDto)
   packages: QuotePackageDto[]
+
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(50)
+  @ArrayUnique((channel: QuoteLogisticsChannelDto) => `${channel.customChannelCode}:${channel.actualChannelCode}`)
+  @ValidateNested({ each: true })
+  @Type(() => QuoteLogisticsChannelDto)
+  logisticsChannels: QuoteLogisticsChannelDto[]
 }
 
 export class CreateQuotationDto extends QuoteDraftDto {

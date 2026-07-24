@@ -33,9 +33,25 @@ describe('AutoFlow DTO contracts', () => {
       channel: 'whatsapp',
       language: 'English',
       offer: 'low-MOQ sourcing and fast fulfillment',
+      quoteMode: 'combined',
+      includeProductVisual: true,
+      emphasizeSupplier: true,
+      emphasizeLogistics: true,
+      productImageUrl: 'https://cdn.example.test/product.jpg',
+      verifiedQuoteContext: 'Product USD 12; US freight USD 8',
     })
 
     await expect(validate(dto)).resolves.toHaveLength(0)
+  })
+
+  it('rejects unsupported quote modes and non-HTTPS product image URLs', async () => {
+    const dto = Object.assign(new GenerateMessageDto(), {
+      quoteMode: 'discount_bundle',
+      productImageUrl: 'http://example.test/product.jpg',
+    })
+
+    const properties = (await validate(dto)).map((error) => error.property)
+    expect(properties).toEqual(expect.arrayContaining(['quoteMode', 'productImageUrl']))
   })
 
   it('rejects invalid outreach status and follow-up date values', async () => {

@@ -6,7 +6,7 @@
 - Production startup validates JWT, database, SMTP, and synchronization settings.
 - Admin bootstrap is disabled by default and requires explicit environment credentials.
 - Verification codes use cryptographic randomness, hashed in-memory storage, expiry, and attempt limits.
-- Auth, AI, Shopify search, and Facebook Ads search are throttled; external search requires JWT authentication.
+- Auth, AI, Shopify verification, and PipiAds discovery are throttled; external discovery requires authenticated access.
 - Production search does not silently fall back to mock data.
 - Frontend `xlsx` was removed; authenticated backend ExcelJS export is used instead.
 

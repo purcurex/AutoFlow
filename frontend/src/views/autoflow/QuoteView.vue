@@ -1,79 +1,208 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { Calculator, Plus, RefreshCcw, Save, Trash2 } from 'lucide-vue-next'
+import {
+  Calculator,
+  CheckCircle2,
+  Download,
+  Info,
+  LoaderCircle,
+  PackageSearch,
+  Percent,
+  Plus,
+  RefreshCcw,
+  Save,
+  Trash2,
+  Truck,
+} from 'lucide-vue-next'
+import { useI18n } from 'vue-i18n'
 import { AppLayout } from '@/components/layout'
-import { fopApi, type FopCapabilities } from '@/api/fop'
-import { quotationApi, type QuoteDraftPayload } from '@/api/quotation'
-
-interface ProductTier {
-  id: number
-  minQuantity: number
-  maxQuantity: number | null
-  customerUnitPrice: string
-}
+import { PageHeader, ReturnButton } from '@/components/ui'
+import {
+  fopApi,
+  type FopActualLogisticsChannel,
+  type FopCapabilities,
+  type FopCustomLogisticsChannel,
+} from '@/api/fop'
+import {
+  quotationApi,
+  type Quotation,
+  type QuoteDraftPayload,
+} from '@/api/quotation'
+import { downloadBlob } from '@/utils/export'
+import {
+  QUOTE_COUNTRIES,
+  createDefaultProductTiers,
+  customerAmountFromMargin,
+  type ProductTierDraft,
+  type SelectedLogisticsChannelDraft,
+} from '@/utils/quoteOptions'
 
 const route = useRoute()
+const { t } = useI18n()
 const capabilities = ref<FopCapabilities | null>(null)
 const capabilityError = ref('')
 const productReference = ref('')
 const unit = ref('piece')
 const currency = ref('USD')
-const tiers = ref<ProductTier[]>([
-  { id: 1, minQuantity: 1, maxQuantity: 99, customerUnitPrice: '' },
-  { id: 2, minQuantity: 100, maxQuantity: 499, customerUnitPrice: '' },
-  { id: 3, minQuantity: 500, maxQuantity: null, customerUnitPrice: '' },
-])
+const productProfitMarginRate = ref(20)
+const tiers = ref<ProductTierDraft[]>(createDefaultProductTiers())
 const nextTierId = ref(4)
 const productLineId = crypto.randomUUID()
 const quotationId = ref('')
 const savedVersion = ref(0)
 const saveError = ref('')
+const actionMessage = ref('')
 const isSaving = ref(false)
-const countries = ['US', 'GB', 'DE', 'FR', 'CA', 'AU']
+const isRequesting = ref(false)
+const isExporting = ref(false)
+const costLoading = ref(false)
+const costError = ref('')
+const latestQuotation = ref<Quotation | null>(null)
+const countries = QUOTE_COUNTRIES
 const selectedCountries = ref(['US'])
-const packageData = reactive({ quantity: 1, weight: 1, weightUnit: 'kg', length: 20, width: 15, height: 10, dimensionUnit: 'cm' })
+const packageData = reactive({
+  quantity: 1,
+  weight: 1,
+  weightUnit: 'kg',
+  length: 20,
+  width: 15,
+  height: 10,
+  dimensionUnit: 'cm',
+})
+const customChannels = ref<FopCustomLogisticsChannel[]>([])
+const actualChannels = ref<FopActualLogisticsChannel[]>([])
+const selectedCustomChannelCode = ref('')
+const selectedLogisticsChannels = ref<SelectedLogisticsChannelDraft[]>([])
+const defaultLogisticsProfitMarginRate = ref(20)
+const channelLoading = ref(false)
+const channelError = ref('')
 
 const leadId = computed(() => typeof route.query.leadId === 'string' ? route.query.leadId : '')
-const quoteAvailable = computed(() => Boolean(capabilities.value?.productCost.available && capabilities.value?.logisticsRate.available))
-const matrixRows = computed(() => tiers.value.flatMap((tier) => selectedCountries.value.map((country) => ({ tier, country }))))
+const quoteAvailable = computed(() => Boolean(
+  capabilities.value?.productCost.available
+  && capabilities.value?.logisticsCatalog.available
+  && capabilities.value?.logisticsRate.available,
+))
+const selectedCustomChannel = computed(() =>
+  customChannels.value.find((channel) => channel.code === selectedCustomChannelCode.value))
+const resultMatrix = computed<Array<Record<string, unknown>>>(() => {
+  const result = latestQuotation.value?.versions[0]?.resultSnapshot
+  return Array.isArray(result?.combinedMatrix) ? result.combinedMatrix as Array<Record<string, unknown>> : []
+})
+const matrixRows = computed(() => tiers.value.flatMap((tier) =>
+  selectedCountries.value.flatMap((countryCode) =>
+    selectedLogisticsChannels.value.map((channel) => ({
+      tier,
+      country: countries.find((item) => item.code === countryCode),
+      channel,
+    })),
+  ),
+).filter((row) => row.country))
 const validationMessages = computed(() => {
   const messages: string[] = []
-  if (!productReference.value.trim()) messages.push('FOP product / SKU reference is required.')
-  if (selectedCountries.value.length === 0) messages.push('Select at least one destination country.')
+  if (!productReference.value.trim()) messages.push(t('quotes.validationSku'))
+  if (productProfitMarginRate.value < 0 || productProfitMarginRate.value >= 100) messages.push(t('quotes.validationProductMargin'))
+  if (!selectedCountries.value.length) messages.push(t('quotes.validationCountry'))
+  if (!selectedLogisticsChannels.value.length) messages.push(t('quotes.validationChannel'))
   if (packageData.quantity < 1 || packageData.weight <= 0 || packageData.length <= 0 || packageData.width <= 0 || packageData.height <= 0) {
-    messages.push('Package quantity, weight and dimensions must be greater than zero.')
+    messages.push(t('quotes.validationPackage'))
   }
   tiers.value.forEach((tier, index) => {
-    if (!Number.isInteger(tier.minQuantity) || tier.minQuantity < 1) messages.push(`Tier ${index + 1} has an invalid minimum quantity.`)
+    const number = { index: index + 1 }
+    if (!Number.isInteger(tier.minQuantity) || tier.minQuantity < 1) messages.push(t('quotes.validationMin', number))
     if (tier.maxQuantity !== null && (!Number.isInteger(tier.maxQuantity) || tier.maxQuantity < tier.minQuantity)) {
-      messages.push(`Tier ${index + 1} has an invalid maximum quantity.`)
+      messages.push(t('quotes.validationMax', number))
     }
-    if (index < tiers.value.length - 1 && tier.maxQuantity === null) messages.push(`Tier ${index + 1} must have a maximum quantity.`)
+    if (index < tiers.value.length - 1 && tier.maxQuantity === null) messages.push(t('quotes.validationCap', number))
     const previous = tiers.value[index - 1]
     if (previous?.maxQuantity !== null && previous?.maxQuantity !== undefined && tier.minQuantity <= previous.maxQuantity) {
-      messages.push(`Tier ${index + 1} overlaps the previous tier.`)
+      messages.push(t('quotes.validationOverlap', number))
     }
-    if (!tier.customerUnitPrice.trim() || Number(tier.customerUnitPrice) <= 0) messages.push(`Tier ${index + 1} needs a positive customer unit price.`)
+    if (!tier.customerUnitPrice.trim() || Number(tier.customerUnitPrice) <= 0) {
+      messages.push(t('quotes.validationPrice', number))
+    }
+  })
+  selectedLogisticsChannels.value.forEach((channel) => {
+    if (channel.logisticsProfitMarginRate < 0 || channel.logisticsProfitMarginRate >= 100) {
+      messages.push(t('quotes.validationLogisticsMargin', { channel: channel.actualChannelName }))
+    }
   })
   return messages
 })
-const quoteRequestEnabled = computed(() => quoteAvailable.value && validationMessages.value.length === 0)
+const quoteRequestEnabled = computed(() =>
+  quoteAvailable.value
+  && validationMessages.value.length === 0
+  && !isRequesting.value)
 const draftSaveEnabled = computed(() => validationMessages.value.length === 0 && !isSaving.value)
+
+watch(productProfitMarginRate, () => {
+  tiers.value = tiers.value.map((tier) => ({
+    ...tier,
+    customerUnitPrice: tier.purchaseCost
+      ? customerAmountFromMargin(tier.purchaseCost, productProfitMarginRate.value)
+      : tier.customerUnitPrice,
+  }))
+})
+
+watch(selectedCustomChannelCode, loadActualChannels)
 
 async function loadCapabilities() {
   capabilityError.value = ''
+  channelError.value = ''
   try {
     capabilities.value = await fopApi.getCapabilities()
+    if (capabilities.value.logisticsCatalog.available) await loadCustomChannels()
   } catch {
-    capabilityError.value = 'Unable to read FOP integration status.'
+    capabilityError.value = t('quotes.statusError')
+  }
+}
+
+async function loadCustomChannels() {
+  channelLoading.value = true
+  channelError.value = ''
+  try {
+    const result = await fopApi.getCustomLogisticsChannels()
+    customChannels.value = result.channels
+      .filter((channel) => channel.enabled)
+      .sort((left, right) => (left.sortOrder || 0) - (right.sortOrder || 0))
+    if (!selectedCustomChannelCode.value && customChannels.value.length) {
+      selectedCustomChannelCode.value = customChannels.value[0].code
+    }
+  } catch {
+    channelError.value = t('quotes.channelLoadFailed')
+  } finally {
+    channelLoading.value = false
+  }
+}
+
+async function loadActualChannels() {
+  actualChannels.value = []
+  if (!selectedCustomChannelCode.value) return
+  channelLoading.value = true
+  channelError.value = ''
+  try {
+    const result = await fopApi.getActualLogisticsChannels(selectedCustomChannelCode.value)
+    actualChannels.value = result.channels.filter((channel) => channel.enabled)
+  } catch {
+    channelError.value = t('quotes.actualChannelLoadFailed')
+  } finally {
+    channelLoading.value = false
   }
 }
 
 function addTier() {
   const previous = tiers.value.at(-1)
-  const minQuantity = previous?.maxQuantity ? previous.maxQuantity + 1 : Math.max(1, previous?.minQuantity || 1)
-  tiers.value.push({ id: nextTierId.value++, minQuantity, maxQuantity: null, customerUnitPrice: '' })
+  const minQuantity = previous?.maxQuantity
+    ? previous.maxQuantity + 1
+    : Math.max(1, previous?.minQuantity || 1)
+  tiers.value.push({
+    id: nextTierId.value++,
+    minQuantity,
+    maxQuantity: null,
+    customerUnitPrice: '',
+    purchaseCost: '',
+  })
 }
 
 function removeTier(id: number) {
@@ -86,41 +215,166 @@ function toggleCountry(country: string) {
     : [...selectedCountries.value, country]
 }
 
+function isChannelSelected(channel: FopActualLogisticsChannel) {
+  return selectedLogisticsChannels.value.some((selected) =>
+    selected.customChannelCode === channel.customChannelCode
+    && selected.actualChannelCode === channel.code)
+}
+
+function toggleActualChannel(channel: FopActualLogisticsChannel) {
+  const index = selectedLogisticsChannels.value.findIndex((selected) =>
+    selected.customChannelCode === channel.customChannelCode
+    && selected.actualChannelCode === channel.code)
+  if (index >= 0) {
+    selectedLogisticsChannels.value.splice(index, 1)
+    return
+  }
+  selectedLogisticsChannels.value.push({
+    customChannelCode: channel.customChannelCode,
+    customChannelName: selectedCustomChannel.value?.name || channel.customChannelCode,
+    actualChannelCode: channel.code,
+    actualChannelName: channel.name,
+    ...(channel.carrierName ? { carrierName: channel.carrierName } : {}),
+    logisticsProfitMarginRate: defaultLogisticsProfitMarginRate.value,
+  })
+}
+
+function removeSelectedChannel(channel: SelectedLogisticsChannelDraft) {
+  selectedLogisticsChannels.value = selectedLogisticsChannels.value.filter((selected) =>
+    selected.customChannelCode !== channel.customChannelCode
+    || selected.actualChannelCode !== channel.actualChannelCode)
+}
+
+async function lookupPurchaseCosts() {
+  if (!productReference.value.trim() || !capabilities.value?.productCost.available || costLoading.value) return
+  costLoading.value = true
+  costError.value = ''
+  try {
+    const result = await fopApi.getProductPurchaseCosts({
+      lineId: productLineId,
+      productReference: productReference.value.trim(),
+      unit: unit.value,
+      currency: currency.value,
+      productProfitMarginRate: productProfitMarginRate.value,
+      quantityTiers: tiers.value.map((tier) => ({
+        minQuantity: tier.minQuantity,
+        ...(tier.maxQuantity === null ? {} : { maxQuantity: tier.maxQuantity }),
+      })),
+    })
+    const resultTiers = result.items.find((item) => item.lineId === productLineId)?.tiers || []
+    tiers.value = tiers.value.map((tier) => {
+      const matched = resultTiers.find((resultTier) =>
+        resultTier.minQuantity === tier.minQuantity
+        && (resultTier.maxQuantity ?? null) === tier.maxQuantity)
+      return matched
+        ? {
+            ...tier,
+            purchaseCost: matched.unitCost,
+            customerUnitPrice: matched.customerUnitPrice
+              || customerAmountFromMargin(matched.unitCost, productProfitMarginRate.value),
+          }
+        : tier
+    })
+    actionMessage.value = t('quotes.costLoaded')
+  } catch {
+    costError.value = t('quotes.costLoadFailed')
+  } finally {
+    costLoading.value = false
+  }
+}
+
 function draftPayload(): QuoteDraftPayload {
   return {
     ...(leadId.value ? { leadId: leadId.value } : {}),
-    title: productReference.value.trim() ? `${productReference.value.trim()} quotation` : 'Customer quotation',
+    title: productReference.value.trim()
+      ? `${productReference.value.trim()} Quotation`
+      : 'Customer Quotation',
     currency: currency.value,
     products: [{
       lineId: productLineId,
       productReference: productReference.value.trim(),
       unit: unit.value,
+      productProfitMarginRate: productProfitMarginRate.value,
       quantityTiers: tiers.value.map((tier) => ({
         minQuantity: tier.minQuantity,
         ...(tier.maxQuantity === null ? {} : { maxQuantity: tier.maxQuantity }),
         customerUnitPrice: tier.customerUnitPrice,
+        ...(tier.purchaseCost ? { purchaseCost: tier.purchaseCost } : {}),
       })),
     }],
     destinationCountries: [...selectedCountries.value],
     packages: [{ ...packageData }],
+    logisticsChannels: selectedLogisticsChannels.value.map((channel) => ({ ...channel })),
   }
 }
 
-async function saveDraft() {
-  if (!draftSaveEnabled.value) return
+async function saveDraft(): Promise<boolean> {
+  if (!draftSaveEnabled.value) return false
   isSaving.value = true
   saveError.value = ''
+  actionMessage.value = ''
   try {
     const quotation = quotationId.value
       ? await quotationApi.createVersion(quotationId.value, draftPayload())
       : await quotationApi.create(draftPayload())
     quotationId.value = quotation.id
     savedVersion.value = quotation.currentVersion
+    latestQuotation.value = quotation
+    return true
   } catch {
-    saveError.value = 'Unable to save quotation draft.'
+    saveError.value = t('quotes.saveFailed')
+    return false
   } finally {
     isSaving.value = false
   }
+}
+
+async function requestFopQuote() {
+  if (!quoteRequestEnabled.value) return
+  isRequesting.value = true
+  actionMessage.value = ''
+  saveError.value = ''
+  try {
+    const saved = await saveDraft()
+    if (!saved || !quotationId.value) return
+    latestQuotation.value = await quotationApi.requestFop(quotationId.value)
+    savedVersion.value = latestQuotation.value.currentVersion
+    const version = latestQuotation.value.versions[0]
+    actionMessage.value = version.productCostStatus === 'succeeded'
+      && version.logisticsRateStatus === 'succeeded'
+      ? t('quotes.fopQuoteCompleted')
+      : t('quotes.fopQuotePartial')
+  } catch {
+    saveError.value = t('quotes.fopQuoteFailed')
+  } finally {
+    isRequesting.value = false
+  }
+}
+
+async function exportQuote() {
+  if (!quotationId.value || !savedVersion.value || isExporting.value) return
+  isExporting.value = true
+  saveError.value = ''
+  actionMessage.value = ''
+  try {
+    const blob = await quotationApi.exportExcel(quotationId.value, savedVersion.value)
+    const safeReference = productReference.value.trim().replace(/[^\w.-]+/g, '_') || 'Quotation'
+    downloadBlob(blob, `AutoFlow_${safeReference}_V${savedVersion.value}.xlsx`)
+    actionMessage.value = t('quotes.exportCompleted')
+  } catch {
+    saveError.value = t('quotes.exportFailed')
+  } finally {
+    isExporting.value = false
+  }
+}
+
+function resultFor(row: typeof matrixRows.value[number]) {
+  return resultMatrix.value.find((result) =>
+    result.minQuantity === row.tier.minQuantity
+    && (result.maxQuantity ?? null) === row.tier.maxQuantity
+    && result.countryCode === row.country?.code
+    && result.customChannelCode === row.channel.customChannelCode
+    && result.actualChannelCode === row.channel.actualChannelCode)
 }
 
 onMounted(loadCapabilities)
@@ -128,57 +382,104 @@ onMounted(loadCapabilities)
 
 <template>
   <AppLayout>
-    <div class="min-h-full bg-slate-50 p-4 text-slate-900 dark:bg-slate-950 dark:text-slate-100 sm:p-6">
-      <div class="flex flex-wrap items-end justify-between gap-4 border-b border-slate-200 pb-5 dark:border-slate-800">
-        <div>
-          <p class="text-sm font-medium text-slate-500">FOP-backed quotation</p>
-          <h1 class="mt-1 text-2xl font-semibold">Quote workspace</h1>
-          <p v-if="leadId" class="mt-1 text-xs text-slate-500">Lead {{ leadId }}</p>
-        </div>
-        <button class="btn btn-secondary gap-2 text-sm" title="Refresh FOP integration status" @click="loadCapabilities">
-          <RefreshCcw class="h-4 w-4" />
-          Refresh status
-        </button>
-      </div>
-
-      <div class="mt-5 flex items-start gap-3 border-l-4 px-4 py-3 text-sm"
-        :class="quoteAvailable ? 'border-emerald-500 bg-emerald-50 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200' : 'border-amber-500 bg-amber-50 text-amber-800 dark:bg-amber-950 dark:text-amber-200'">
-        <Calculator class="mt-0.5 h-4 w-4 shrink-0" />
-        <p v-if="capabilityError">{{ capabilityError }}</p>
-        <p v-else-if="quoteAvailable">FOP product-cost and logistics-rate capabilities are available.</p>
-        <p v-else>Quote controls are ready. Live Kingdee Cloud Cosmic cost and freight adapters are not implemented yet.</p>
-      </div>
-
-      <section class="mt-6 border-y border-slate-200 bg-white py-5 dark:border-slate-800 dark:bg-slate-900">
-        <div class="flex flex-wrap items-center justify-between gap-3 px-4 sm:px-5">
-          <div>
-            <h2 class="font-semibold">Product quotation</h2>
-            <p class="mt-1 text-sm text-slate-500">Quantity tiers and customer-facing unit prices</p>
-          </div>
-          <button class="btn btn-secondary gap-2 text-sm" @click="addTier">
-            <Plus class="h-4 w-4" />
-            Add tier
+    <div class="app-page">
+      <PageHeader :eyebrow="t('quotes.eyebrow')" :title="t('quotes.title')" :description="t('quotes.description')">
+        <template #actions>
+          <ReturnButton v-if="leadId" fallback="/leads" />
+          <button class="btn btn-secondary" @click="loadCapabilities">
+            <RefreshCcw class="h-4 w-4" />{{ t('quotes.refreshStatus') }}
           </button>
-        </div>
+        </template>
+      </PageHeader>
 
-        <div class="mt-4 grid gap-3 px-4 sm:grid-cols-3 sm:px-5">
-          <label class="text-sm">FOP product / SKU reference<input v-model="productReference" class="input mt-1" placeholder="Required for live pricing" /></label>
-          <label class="text-sm">Unit<select v-model="unit" class="input mt-1"><option value="piece">Piece</option><option value="set">Set</option><option value="carton">Carton</option></select></label>
-          <label class="text-sm">Currency<select v-model="currency" class="input mt-1"><option>USD</option><option>EUR</option><option>GBP</option></select></label>
-        </div>
+      <div
+        class="notice mb-5"
+        :class="quoteAvailable
+          ? 'border-emerald-500 bg-emerald-50 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200'
+          : 'border-amber-500 bg-amber-50 text-amber-800 dark:bg-amber-950 dark:text-amber-200'"
+      >
+        <CheckCircle2 v-if="quoteAvailable" class="mt-0.5 h-4 w-4 shrink-0" />
+        <Info v-else class="mt-0.5 h-4 w-4 shrink-0" />
+        <p>{{ capabilityError || (quoteAvailable ? t('quotes.available') : t('quotes.unavailable')) }}</p>
+      </div>
 
-        <div class="mt-4 overflow-x-auto border-t border-slate-200 dark:border-slate-800">
-          <table class="w-full min-w-[680px] text-left text-sm">
-            <thead class="bg-slate-50 text-xs uppercase text-slate-500 dark:bg-slate-950">
-              <tr><th class="px-5 py-3">Min quantity</th><th class="px-5 py-3">Max quantity</th><th class="px-5 py-3">Customer unit price</th><th class="w-16 px-5 py-3"></th></tr>
+      <section class="panel overflow-hidden">
+        <div class="panel-header">
+          <div>
+            <h2 class="panel-title">{{ t('quotes.productQuotation') }}</h2>
+            <p class="panel-description">{{ t('quotes.productHint') }}</p>
+          </div>
+          <div class="flex flex-wrap gap-2">
+            <button
+              class="btn btn-secondary"
+              :disabled="!productReference.trim() || !capabilities?.productCost.available || costLoading"
+              @click="lookupPurchaseCosts"
+            >
+              <LoaderCircle v-if="costLoading" class="h-4 w-4 animate-spin" />
+              <PackageSearch v-else class="h-4 w-4" />
+              {{ t('quotes.getPurchaseCost') }}
+            </button>
+            <button class="btn btn-secondary" @click="addTier">
+              <Plus class="h-4 w-4" />{{ t('quotes.addTier') }}
+            </button>
+          </div>
+        </div>
+        <div class="grid gap-4 p-5 sm:grid-cols-2 xl:grid-cols-4">
+          <label>
+            <span class="field-label">{{ t('quotes.sku') }}</span>
+            <input v-model="productReference" class="input" :placeholder="t('quotes.skuPlaceholder')" />
+          </label>
+          <label>
+            <span class="field-label">{{ t('quotes.unit') }}</span>
+            <select v-model="unit" class="input">
+              <option value="piece">{{ t('quotes.piece') }}</option>
+              <option value="set">{{ t('quotes.set') }}</option>
+              <option value="carton">{{ t('quotes.carton') }}</option>
+            </select>
+          </label>
+          <label>
+            <span class="field-label">{{ t('quotes.currency') }}</span>
+            <select v-model="currency" class="input"><option>USD</option><option>EUR</option><option>GBP</option></select>
+          </label>
+          <label>
+            <span class="field-label">{{ t('quotes.productProfitMargin') }}</span>
+            <span class="relative block">
+              <input v-model.number="productProfitMarginRate" type="number" min="0" max="99.99" step="0.01" class="input pr-10" />
+              <Percent class="pointer-events-none absolute right-3 top-3 h-4 w-4 text-slate-400" />
+            </span>
+            <span class="field-help">{{ t('quotes.marginFormulaHint') }}</span>
+          </label>
+        </div>
+        <div v-if="costError" class="border-t border-red-200 bg-red-50 px-5 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300">{{ costError }}</div>
+        <div class="overflow-x-auto border-t" style="border-color: var(--color-border)">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>{{ t('quotes.minQty') }}</th>
+                <th>{{ t('quotes.maxQty') }}</th>
+                <th>{{ t('quotes.purchaseCost') }}</th>
+                <th>{{ t('quotes.customerPrice') }}</th>
+                <th class="w-16" />
+              </tr>
             </thead>
             <tbody>
-              <tr v-for="tier in tiers" :key="tier.id" class="border-t border-slate-200 dark:border-slate-800">
-                <td class="px-5 py-3"><input v-model.number="tier.minQuantity" type="number" min="1" class="input" /></td>
-                <td class="px-5 py-3"><input v-model.number="tier.maxQuantity" type="number" :min="tier.minQuantity" class="input" placeholder="No limit" /></td>
-                <td class="px-5 py-3"><input v-model="tier.customerUnitPrice" inputmode="decimal" class="input" :placeholder="currency" /></td>
-                <td class="px-5 py-3">
-                  <button class="rounded-lg p-2 text-slate-500 hover:bg-red-50 hover:text-red-600 disabled:opacity-30 dark:hover:bg-red-950" title="Remove tier" :disabled="tiers.length === 1" @click="removeTier(tier.id)">
+              <tr v-for="tier in tiers" :key="tier.id">
+                <td><input v-model.number="tier.minQuantity" type="number" min="1" class="input" /></td>
+                <td><input v-model.number="tier.maxQuantity" type="number" :min="tier.minQuantity" class="input" :placeholder="t('quotes.noLimit')" /></td>
+                <td>
+                  <div class="relative min-w-36">
+                    <input :value="tier.purchaseCost" readonly class="input bg-slate-50 pr-14 dark:bg-[#11151a]" :placeholder="t('quotes.pendingFop')" />
+                    <span class="absolute right-3 top-3 text-xs font-semibold text-slate-400">{{ currency }}</span>
+                  </div>
+                </td>
+                <td>
+                  <div class="relative min-w-36">
+                    <input v-model="tier.customerUnitPrice" inputmode="decimal" class="input pr-14" :placeholder="currency" />
+                    <span class="absolute right-3 top-3 text-xs font-semibold text-slate-400">{{ currency }}</span>
+                  </div>
+                </td>
+                <td>
+                  <button class="icon-btn h-9 w-9 text-slate-400 hover:text-red-600" :title="t('quotes.removeTier')" :disabled="tiers.length === 1" @click="removeTier(tier.id)">
                     <Trash2 class="h-4 w-4" />
                   </button>
                 </td>
@@ -188,55 +489,161 @@ onMounted(loadCapabilities)
         </div>
       </section>
 
-      <section class="mt-6 border-y border-slate-200 bg-white px-4 py-5 dark:border-slate-800 dark:bg-slate-900 sm:px-5">
-        <h2 class="font-semibold">Destination freight</h2>
-        <div class="mt-4 flex flex-wrap gap-2">
-          <label v-for="country in countries" :key="country" class="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm dark:border-slate-700">
-            <input type="checkbox" :checked="selectedCountries.includes(country)" @change="toggleCountry(country)" />
-            {{ country }}
-          </label>
+      <section class="panel mt-5 overflow-hidden">
+        <div class="panel-header">
+          <div>
+            <h2 class="panel-title">{{ t('quotes.freight') }}</h2>
+            <p class="panel-description">{{ t('quotes.freightHint') }}</p>
+          </div>
         </div>
-        <div class="mt-4 grid gap-3 sm:grid-cols-3 xl:grid-cols-7">
-          <label class="text-sm">Packages<input v-model.number="packageData.quantity" type="number" min="1" class="input mt-1" /></label>
-          <label class="text-sm">Weight<input v-model.number="packageData.weight" type="number" min="0.001" step="0.001" class="input mt-1" /></label>
-          <label class="text-sm">Weight unit<select v-model="packageData.weightUnit" class="input mt-1"><option>kg</option><option>lb</option></select></label>
-          <label class="text-sm">Length<input v-model.number="packageData.length" type="number" min="0.1" step="0.1" class="input mt-1" /></label>
-          <label class="text-sm">Width<input v-model.number="packageData.width" type="number" min="0.1" step="0.1" class="input mt-1" /></label>
-          <label class="text-sm">Height<input v-model.number="packageData.height" type="number" min="0.1" step="0.1" class="input mt-1" /></label>
-          <label class="text-sm">Dimension unit<select v-model="packageData.dimensionUnit" class="input mt-1"><option>cm</option><option>in</option></select></label>
+        <div class="p-5">
+          <p class="field-label">{{ t('quotes.destinationCountries') }}</p>
+          <div class="flex flex-wrap gap-2">
+            <label v-for="country in countries" :key="country.code" class="cursor-pointer">
+              <input type="checkbox" class="peer sr-only" :checked="selectedCountries.includes(country.code)" @change="toggleCountry(country.code)" />
+              <span class="inline-flex h-10 min-w-16 items-center justify-center gap-2 rounded-md border border-slate-200 px-3 text-sm font-semibold text-slate-500 transition peer-checked:border-orange-500 peer-checked:bg-orange-50 peer-checked:text-orange-700 dark:border-slate-700 dark:peer-checked:bg-orange-500/10 dark:peer-checked:text-orange-300">
+                <img :src="country.flagUrl" alt="" class="h-4 w-5 rounded-[2px] object-cover shadow-sm ring-1 ring-black/10" />{{ country.code }}
+              </span>
+            </label>
+          </div>
+          <div class="mt-5 grid gap-3 sm:grid-cols-3 xl:grid-cols-7">
+            <label><span class="field-label">{{ t('quotes.packages') }}</span><input v-model.number="packageData.quantity" type="number" min="1" class="input" /></label>
+            <label><span class="field-label">{{ t('quotes.weight') }}</span><input v-model.number="packageData.weight" type="number" min="0.001" step="0.001" class="input" /></label>
+            <label><span class="field-label">{{ t('quotes.weightUnit') }}</span><select v-model="packageData.weightUnit" class="input"><option>kg</option><option>lb</option></select></label>
+            <label><span class="field-label">{{ t('quotes.length') }}</span><input v-model.number="packageData.length" type="number" min="0.1" step="0.1" class="input" /></label>
+            <label><span class="field-label">{{ t('quotes.width') }}</span><input v-model.number="packageData.width" type="number" min="0.1" step="0.1" class="input" /></label>
+            <label><span class="field-label">{{ t('quotes.height') }}</span><input v-model.number="packageData.height" type="number" min="0.1" step="0.1" class="input" /></label>
+            <label><span class="field-label">{{ t('quotes.dimensionUnit') }}</span><select v-model="packageData.dimensionUnit" class="input"><option>cm</option><option>in</option></select></label>
+          </div>
+        </div>
+
+        <div class="border-t p-5" style="border-color: var(--color-border)">
+          <div class="mb-4 flex items-center gap-2">
+            <Truck class="h-5 w-5 text-orange-600" />
+            <div>
+              <h3 class="text-sm font-bold text-slate-950 dark:text-white">{{ t('quotes.logisticsChannels') }}</h3>
+              <p class="text-xs text-slate-500">{{ t('quotes.logisticsChannelHint') }}</p>
+            </div>
+          </div>
+          <div class="grid gap-4 lg:grid-cols-2">
+            <label>
+              <span class="field-label">{{ t('quotes.customLogisticsChannel') }}</span>
+              <select v-model="selectedCustomChannelCode" class="input" :disabled="channelLoading || !customChannels.length">
+                <option value="">{{ t('quotes.selectCustomChannel') }}</option>
+                <option v-for="channel in customChannels" :key="channel.code" :value="channel.code">{{ channel.name }} · {{ channel.code }}</option>
+              </select>
+            </label>
+            <label>
+              <span class="field-label">{{ t('quotes.defaultLogisticsMargin') }}</span>
+              <span class="relative block">
+                <input v-model.number="defaultLogisticsProfitMarginRate" type="number" min="0" max="99.99" step="0.01" class="input pr-10" />
+                <Percent class="pointer-events-none absolute right-3 top-3 h-4 w-4 text-slate-400" />
+              </span>
+            </label>
+          </div>
+
+          <div v-if="channelLoading" class="mt-4 flex items-center gap-2 text-sm text-slate-500">
+            <LoaderCircle class="h-4 w-4 animate-spin" />{{ t('quotes.loadingChannels') }}
+          </div>
+          <div v-else-if="channelError" class="notice mt-4 border-red-300 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300">{{ channelError }}</div>
+          <div v-else-if="selectedCustomChannelCode" class="mt-4">
+            <p class="field-label">{{ t('quotes.actualLogisticsChannels') }}</p>
+            <div class="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+              <label
+                v-for="channel in actualChannels"
+                :key="`${channel.customChannelCode}:${channel.code}`"
+                class="flex cursor-pointer items-start gap-3 rounded-md border p-3 transition"
+                :class="isChannelSelected(channel)
+                  ? 'border-orange-500 bg-orange-50 dark:bg-orange-500/10'
+                  : 'border-slate-200 hover:border-slate-300 dark:border-slate-700'"
+              >
+                <input type="checkbox" class="mt-1 h-4 w-4 accent-orange-600" :checked="isChannelSelected(channel)" @change="toggleActualChannel(channel)" />
+                <span class="min-w-0">
+                  <strong class="block text-sm text-slate-950 dark:text-white">{{ channel.name }}</strong>
+                  <span class="mt-0.5 block text-xs text-slate-500">{{ channel.code }}<template v-if="channel.carrierName"> · {{ channel.carrierName }}</template></span>
+                </span>
+              </label>
+            </div>
+            <p v-if="!actualChannels.length" class="mt-3 text-sm text-slate-500">{{ t('quotes.noActualChannels') }}</p>
+          </div>
+
+          <div v-if="selectedLogisticsChannels.length" class="mt-5 overflow-x-auto rounded-md border" style="border-color: var(--color-border)">
+            <table class="data-table">
+              <thead><tr><th>{{ t('quotes.customChannel') }}</th><th>{{ t('quotes.actualChannel') }}</th><th>{{ t('quotes.logisticsProfitMargin') }}</th><th class="w-16" /></tr></thead>
+              <tbody>
+                <tr v-for="channel in selectedLogisticsChannels" :key="`${channel.customChannelCode}:${channel.actualChannelCode}`">
+                  <td><strong>{{ channel.customChannelName }}</strong><p class="text-xs text-slate-500">{{ channel.customChannelCode }}</p></td>
+                  <td><strong>{{ channel.actualChannelName }}</strong><p class="text-xs text-slate-500">{{ channel.actualChannelCode }}</p></td>
+                  <td><div class="relative max-w-40"><input v-model.number="channel.logisticsProfitMarginRate" type="number" min="0" max="99.99" step="0.01" class="input pr-10" /><Percent class="pointer-events-none absolute right-3 top-3 h-4 w-4 text-slate-400" /></div></td>
+                  <td><button class="icon-btn text-slate-400 hover:text-red-600" :title="t('common.delete')" @click="removeSelectedChannel(channel)"><Trash2 class="h-4 w-4" /></button></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p v-else class="mt-4 text-sm text-slate-500">{{ t('quotes.noSelectedChannels') }}</p>
         </div>
       </section>
 
-      <section class="mt-6 overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-        <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-4 dark:border-slate-800">
-          <div><h2 class="font-semibold">Combined quote matrix</h2><p class="mt-1 text-sm text-slate-500">Product tier × destination × FOP channel</p></div>
+      <section class="panel mt-5 overflow-hidden">
+        <div class="panel-header">
+          <div>
+            <h2 class="panel-title">{{ t('quotes.matrix') }}</h2>
+            <p class="panel-description">{{ t('quotes.matrixHint') }}</p>
+          </div>
           <div class="flex flex-wrap gap-2">
-            <button class="btn btn-secondary gap-2 text-sm" :disabled="!draftSaveEnabled" title="Save an immutable quotation version" @click="saveDraft">
-              <Save class="h-4 w-4" />
-              {{ savedVersion ? `Save version ${savedVersion + 1}` : 'Save draft' }}
+            <button
+              class="btn btn-secondary"
+              :disabled="!quotationId || !savedVersion || isExporting"
+              @click="exportQuote"
+            >
+              <LoaderCircle v-if="isExporting" class="h-4 w-4 animate-spin" />
+              <Download v-else class="h-4 w-4" />
+              {{ isExporting ? t('quotes.exportingExcel') : t('quotes.exportExcel') }}
             </button>
-            <button class="btn btn-primary text-sm" :disabled="!quoteRequestEnabled" :title="quoteAvailable ? 'Complete all required quote conditions' : 'Live FOP adapters are not implemented'">Request FOP quote</button>
+            <button class="btn btn-secondary" :disabled="!draftSaveEnabled" @click="saveDraft">
+              <LoaderCircle v-if="isSaving" class="h-4 w-4 animate-spin" />
+              <Save v-else class="h-4 w-4" />
+              {{ savedVersion ? t('quotes.saveVersion', { version: savedVersion + 1 }) : t('quotes.saveDraft') }}
+            </button>
+            <button class="btn btn-primary" :disabled="!quoteRequestEnabled" @click="requestFopQuote">
+              <LoaderCircle v-if="isRequesting" class="h-4 w-4 animate-spin" />
+              <Calculator v-else class="h-4 w-4" />
+              {{ t('quotes.requestFop') }}
+            </button>
           </div>
         </div>
-        <div v-if="savedVersion || saveError" class="border-b border-slate-200 px-5 py-3 text-sm dark:border-slate-800" :class="saveError ? 'text-red-600' : 'text-emerald-700 dark:text-emerald-300'">
-          {{ saveError || `Draft saved as version ${savedVersion}. FOP cost and freight have not been requested.` }}
+        <div v-if="savedVersion || saveError || actionMessage" class="border-b px-5 py-3 text-sm" :class="saveError ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300' : 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-300'">
+          {{ saveError || actionMessage || t('quotes.draftSaved', { version: savedVersion }) }}
         </div>
-        <div v-if="validationMessages.length" class="border-b border-slate-200 bg-amber-50 px-5 py-3 text-sm text-amber-800 dark:border-slate-800 dark:bg-amber-950 dark:text-amber-200">
-          {{ validationMessages[0] }}<span v-if="validationMessages.length > 1"> +{{ validationMessages.length - 1 }} more</span>
+        <div v-if="validationMessages.length" class="border-b border-amber-200 bg-amber-50 px-5 py-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
+          {{ validationMessages[0] }}<span v-if="validationMessages.length > 1"> · {{ t('quotes.moreErrors', { count: validationMessages.length - 1 }) }}</span>
         </div>
         <div class="overflow-x-auto">
-          <table class="w-full min-w-[760px] text-left text-sm">
-            <thead class="bg-slate-50 text-xs uppercase text-slate-500 dark:bg-slate-950"><tr><th class="px-5 py-3">Quantity tier</th><th class="px-5 py-3">Destination</th><th class="px-5 py-3">Channel</th><th class="px-5 py-3">Product</th><th class="px-5 py-3">Freight</th><th class="px-5 py-3">Combined</th></tr></thead>
-            <tbody>
-              <tr v-for="row in matrixRows" :key="`${row.tier.id}-${row.country}`" class="border-t border-slate-200 dark:border-slate-800">
-                <td class="px-5 py-3">{{ row.tier.minQuantity }} - {{ row.tier.maxQuantity || '∞' }} {{ unit }}</td>
-                <td class="px-5 py-3">{{ row.country }}</td>
-                <td class="px-5 py-3 text-slate-500">Pending FOP</td>
-                <td class="px-5 py-3">{{ row.tier.customerUnitPrice || '—' }} {{ currency }}</td>
-                <td class="px-5 py-3">—</td>
-                <td class="px-5 py-3">—</td>
+          <table class="data-table min-w-[1240px]">
+            <thead>
+              <tr>
+                <th>{{ t('quotes.quantityTier') }}</th>
+                <th>{{ t('quotes.destination') }}</th>
+                <th>{{ t('quotes.customChannel') }}</th>
+                <th>{{ t('quotes.actualChannel') }}</th>
+                <th>{{ t('quotes.product') }}</th>
+                <th>{{ t('quotes.baseFreight') }}</th>
+                <th>{{ t('quotes.customerFreight') }}</th>
+                <th>{{ t('quotes.combined') }}</th>
               </tr>
-              <tr v-if="matrixRows.length === 0"><td colspan="6" class="px-5 py-8 text-center text-slate-500">Select at least one destination country.</td></tr>
+            </thead>
+            <tbody>
+              <tr v-for="row in matrixRows" :key="`${row.tier.id}-${row.country?.code}-${row.channel.customChannelCode}-${row.channel.actualChannelCode}`">
+                <td>{{ row.tier.minQuantity }} - {{ row.tier.maxQuantity || '∞' }} {{ t(`quotes.${unit}`) }}</td>
+                <td><span v-if="row.country" class="inline-flex items-center gap-2 font-semibold"><img :src="row.country.flagUrl" alt="" class="h-4 w-5 rounded-[2px] object-cover shadow-sm ring-1 ring-black/10" />{{ row.country.code }}</span></td>
+                <td><strong>{{ row.channel.customChannelName }}</strong><p class="text-xs text-slate-500">{{ row.channel.customChannelCode }}</p></td>
+                <td><strong>{{ row.channel.actualChannelName }}</strong><p class="text-xs text-slate-500">{{ row.channel.actualChannelCode }} · {{ row.channel.logisticsProfitMarginRate }}%</p></td>
+                <td>{{ resultFor(row)?.customerProductUnitPrice || row.tier.customerUnitPrice || '—' }} {{ currency }}</td>
+                <td>{{ resultFor(row)?.baseFreightAmount || '—' }}<template v-if="resultFor(row)?.baseFreightAmount"> {{ currency }}</template></td>
+                <td>{{ resultFor(row)?.customerFreightAmount || '—' }}<template v-if="resultFor(row)?.customerFreightAmount"> {{ currency }}</template></td>
+                <td class="font-bold text-slate-950 dark:text-white">{{ resultFor(row)?.combinedAmount || '—' }}<template v-if="resultFor(row)?.combinedAmount"> {{ currency }}</template></td>
+              </tr>
+              <tr v-if="!matrixRows.length"><td colspan="8" class="text-center text-slate-500">{{ t('quotes.selectCountryAndChannel') }}</td></tr>
             </tbody>
           </table>
         </div>

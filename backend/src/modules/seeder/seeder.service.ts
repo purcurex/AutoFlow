@@ -19,7 +19,7 @@ export class SeederService {
     }
 
     const adminEmail = this.configService.getOrThrow<string>('ADMIN_BOOTSTRAP_EMAIL')
-    const adminUsername = this.configService.getOrThrow<string>('ADMIN_BOOTSTRAP_USERNAME')
+    const adminUsername = this.configService.get<string>('ADMIN_BOOTSTRAP_USERNAME', 'Admin').trim() || 'Admin'
     const adminPassword = this.configService.getOrThrow<string>('ADMIN_BOOTSTRAP_PASSWORD')
 
     try {
@@ -37,6 +37,7 @@ export class SeederService {
         adminUsername,
         adminPassword,
         UserRole.ADMIN,
+        '000001',
       )
       this.logger.log('AutoFlow admin account created')
       this.logger.log(`Email: ${adminEmail}`)

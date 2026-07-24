@@ -8,8 +8,10 @@ import {
 } from '@/utils/export'
 import { useUserStore } from '@/stores/user'
 import { notesApi } from '@/api/notes'
+import { useI18n } from 'vue-i18n'
 
 const userStore = useUserStore()
+const { t } = useI18n()
 
 const props = defineProps<{
   visible: boolean
@@ -28,7 +30,7 @@ const noteCount = computed(() => props.notes.length)
 
 const noteTitle = computed(() => {
   if (props.notes.length === 1) {
-    return props.notes[0].title || '无标题业务记录'
+    return props.notes[0].title || t('exportDialog.untitled')
   }
   return null
 })
@@ -57,7 +59,7 @@ async function handleExport() {
     emit('close')
   } catch (error) {
     console.error('导出失败:', error)
-    alert('导出失败，请重试')
+    alert(t('exportDialog.failed'))
   } finally {
     isExporting.value = false
   }
@@ -79,16 +81,16 @@ function closeDialog() {
     >
       <div class="bg-white dark:bg-gray-800 rounded-xl p-6 w-96 shadow-xl">
         <h3 class="text-lg font-semibold mb-4">
-          {{ isMultipleNotes ? `导出 ${noteCount} 条业务记录` : '导出业务记录' }}
+          {{ isMultipleNotes ? t('exportDialog.titleCount', { count: noteCount }) : t('exportDialog.title') }}
         </h3>
 
         <div v-if="noteTitle" class="mb-4 text-sm text-gray-500">
-          业务记录: {{ noteTitle }}
+          {{ t('exportDialog.record', { title: noteTitle }) }}
         </div>
 
         <!-- 格式选择 -->
         <div class="mb-6">
-          <label class="block text-sm font-medium mb-2">导出格式</label>
+          <label class="block text-sm font-medium mb-2">{{ t('exportDialog.format') }}</label>
           <div class="flex gap-4">
             <label class="flex items-center gap-2 cursor-pointer">
               <input
@@ -97,7 +99,7 @@ function closeDialog() {
                 value="pdf"
                 class="text-primary-500"
               />
-              <span class="text-sm">PDF 文档</span>
+              <span class="text-sm">{{ t('exportDialog.pdf') }}</span>
             </label>
             <label class="flex items-center gap-2 cursor-pointer">
               <input
@@ -106,16 +108,16 @@ function closeDialog() {
                 value="excel"
                 class="text-primary-500"
               />
-              <span class="text-sm">Excel 表格</span>
+              <span class="text-sm">{{ t('exportDialog.excel') }}</span>
             </label>
           </div>
 
           <div class="mt-3 text-xs text-gray-400">
             <template v-if="exportFormat === 'pdf'">
-              PDF 格式保留业务记录排版，适合打印和分享
+              {{ t('exportDialog.pdfHint') }}
             </template>
             <template v-else>
-              Excel 格式便于数据整理和后续编辑
+              {{ t('exportDialog.excelHint') }}
             </template>
           </div>
         </div>
@@ -127,7 +129,7 @@ function closeDialog() {
             class="btn btn-secondary"
             :disabled="isExporting"
           >
-            取消
+            {{ t('common.cancel') }}
           </button>
           <button
             @click="handleExport"
@@ -146,7 +148,7 @@ function closeDialog() {
             <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
             </svg>
-            {{ isExporting ? '导出中...' : '导出' }}
+            {{ isExporting ? t('exportDialog.exporting') : t('exportDialog.export') }}
           </button>
         </div>
       </div>

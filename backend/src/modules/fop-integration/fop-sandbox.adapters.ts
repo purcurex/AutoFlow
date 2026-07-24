@@ -1,10 +1,13 @@
 import { ServiceUnavailableException } from '@nestjs/common'
 import {
   FopCrmHandoffPort,
+  FopLogisticsCatalogPort,
   FopLogisticsRatePort,
   FopProductCostPort,
   type ProductCostRequest,
   type ProductCostResult,
+  type FopActualLogisticsChannelResult,
+  type FopCustomLogisticsChannelResult,
   type ProspectHandoffRequest,
   type ProspectHandoffResult,
   type ShippingRateRequest,
@@ -17,16 +20,87 @@ export class SandboxFopProductCostAdapter extends FopProductCostPort {
       provider: 'fop',
       externalRequestId: `sandbox-product-${request.idempotencyKey}`,
       sourceVersion: 'sandbox-fixture-v1',
+      pricingPolicyVersion: 'sandbox-pricing-policy-v1',
       effectiveAt: '2026-01-01T00:00:00.000Z',
       currency: request.currency,
       items: request.items.map((item) => ({
         lineId: item.lineId,
         productReference: item.productReference,
-        tiers: item.quantityTiers.map((tier, index) => ({
-          ...tier,
-          unitCost: (8.5 - Math.min(index, 5) * 0.5).toFixed(2),
-        })),
+        tiers: item.quantityTiers.map((tier, index) => {
+          const unitCost = 8.5 - Math.min(index, 5) * 0.5
+          const profitMarginRate = item.productProfitMarginRate ?? 20
+          const customerUnitPrice = unitCost / (1 - profitMarginRate / 100)
+          return {
+            ...tier,
+            unitCost: unitCost.toFixed(2),
+            suggestedCustomerUnitPrice: customerUnitPrice.toFixed(2),
+            costComponents: [{ code: 'purchase_cost', name: 'Synthetic purchase cost', amount: unitCost.toFixed(2) }],
+            grossMarginRate: (profitMarginRate / 100).toFixed(4),
+            appliedProfitMarginRate: profitMarginRate,
+            customerUnitPrice: customerUnitPrice.toFixed(2),
+            pricePolicyReference: request.pricingContext?.pricePolicyReference || 'sandbox-standard-margin',
+            approvalStatus: 'not_required' as const,
+          }
+        }),
       })),
+      warnings: ['Synthetic sandbox pricing. Do not use for customer commitments.'],
+    }
+  }
+}
+
+export class SandboxFopLogisticsCatalogAdapter extends FopLogisticsCatalogPort {
+  async getCustomChannels(): Promise<FopCustomLogisticsChannelResult> {
+    return {
+      provider: 'fop',
+      sourceVersion: 'sandbox-fixture-v1',
+      effectiveAt: '2026-01-01T00:00:00.000Z',
+      channels: [
+        { code: 'SANDBOX-ECONOMY', name: 'Sandbox Economy', enabled: true, sortOrder: 10 },
+        { code: 'SANDBOX-EXPRESS', name: 'Sandbox Express', enabled: true, sortOrder: 20 },
+      ],
+      warnings: ['Synthetic sandbox channel catalog. Do not use for customer commitments.'],
+    }
+  }
+
+  async getActualChannels(customChannelCode: string): Promise<FopActualLogisticsChannelResult> {
+    const channelMap: Record<string, FopActualLogisticsChannelResult['channels']> = {
+      'SANDBOX-ECONOMY': [
+        {
+          customChannelCode,
+          code: 'SANDBOX-POST',
+          name: 'Sandbox Postal Packet',
+          enabled: true,
+          carrierName: 'Sandbox Post',
+          serviceLevel: 'economy',
+          supportedCountries: ['US', 'GB', 'DE', 'FR', 'CA', 'AU'],
+        },
+        {
+          customChannelCode,
+          code: 'SANDBOX-LINE',
+          name: 'Sandbox Dedicated Line',
+          enabled: true,
+          carrierName: 'Sandbox Logistics',
+          serviceLevel: 'standard',
+          supportedCountries: ['US', 'GB', 'DE', 'FR'],
+        },
+      ],
+      'SANDBOX-EXPRESS': [{
+        customChannelCode,
+        code: 'SANDBOX-EXPRESS-A',
+        name: 'Sandbox Express A',
+        enabled: true,
+        carrierName: 'Sandbox Express',
+        serviceLevel: 'express',
+        supportedCountries: ['US', 'GB', 'DE', 'FR', 'CA', 'AU'],
+      }],
+    }
+    return {
+      provider: 'fop',
+      sourceVersion: 'sandbox-fixture-v1',
+      effectiveAt: '2026-01-01T00:00:00.000Z',
+      customChannelCode,
+      channels: channelMap[customChannelCode] || [],
+      warnings: ['Synthetic sandbox channel catalog. Do not use for customer commitments.'],
     }
   }
 }
@@ -42,15 +116,27 @@ export class SandboxFopLogisticsRateAdapter extends FopLogisticsRatePort {
       currency: request.currency,
       destinations: request.destinationCountries.map((countryCode, countryIndex) => ({
         countryCode,
-        options: [{
-          channelCode: 'SANDBOX-STD',
-          channelName: 'Sandbox Standard',
-          chargeableWeight: totalWeight,
-          freightAmount: (6 + totalWeight * 4 + countryIndex).toFixed(2),
-          minTransitDays: 7,
-          maxTransitDays: 12,
-        }],
+        status: 'available',
+        options: request.selectedChannels.map((channel, channelIndex) => {
+          const freightAmount = 6 + totalWeight * 4 + countryIndex + channelIndex
+          const customerFreightAmount = freightAmount / (1 - channel.logisticsProfitMarginRate / 100)
+          return {
+            customChannelCode: channel.customChannelCode,
+            customChannelName: channel.customChannelName,
+            channelCode: channel.actualChannelCode,
+            channelName: channel.actualChannelName,
+            chargeableWeight: totalWeight,
+            freightAmount: freightAmount.toFixed(2),
+            logisticsProfitMarginRate: channel.logisticsProfitMarginRate,
+            customerFreightAmount: customerFreightAmount.toFixed(2),
+            returnedFees: [],
+            minTransitDays: 7,
+            maxTransitDays: 12,
+            restrictions: [],
+          }
+        }),
       })),
+      warnings: ['Synthetic sandbox freight. Do not use for customer commitments.'],
     }
   }
 }
@@ -75,6 +161,16 @@ export class UnavailableFopProductCostAdapter extends FopProductCostPort {
 export class UnavailableFopLogisticsRateAdapter extends FopLogisticsRatePort {
   async getShippingRates(_request: ShippingRateRequest): Promise<ShippingRateResult> {
     throw new ServiceUnavailableException('FOP logistics-rate capability is unavailable')
+  }
+}
+
+export class UnavailableFopLogisticsCatalogAdapter extends FopLogisticsCatalogPort {
+  async getCustomChannels(): Promise<FopCustomLogisticsChannelResult> {
+    throw new ServiceUnavailableException('FOP logistics-channel catalog is unavailable')
+  }
+
+  async getActualChannels(_customChannelCode: string): Promise<FopActualLogisticsChannelResult> {
+    throw new ServiceUnavailableException('FOP logistics-channel catalog is unavailable')
   }
 }
 

@@ -1,7 +1,9 @@
 import { flushPromises, mount } from '@vue/test-utils'
+import { createPinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import AdminView from '@/views/AdminView.vue'
 import router from '@/router'
+import { i18n } from '@/i18n'
 
 const { adminGetAll } = vi.hoisted(() => ({ adminGetAll: vi.fn() }))
 
@@ -30,7 +32,12 @@ describe('security and compatibility routing', () => {
       user: { username: 'admin', email: 'admin@autoflow.test' },
     }])
 
-    const wrapper = mount(AdminView, { global: { plugins: [router] } })
+    const wrapper = mount(AdminView, {
+      global: {
+        plugins: [createPinia(), router, i18n],
+        stubs: { AppLayout: { template: '<div><slot /></div>' } },
+      },
+    })
     await flushPromises()
     await wrapper.get('button.bg-blue-100').trigger('click')
 
@@ -54,5 +61,13 @@ describe('security and compatibility routing', () => {
     await router.push('/crm')
 
     expect(router.currentRoute.value.name).toBe('FollowUps')
+  })
+
+  it('exposes AI prompt templates as an authenticated top-level route', async () => {
+    localStorage.setItem('user', JSON.stringify({ role: 'user' }))
+
+    await router.push('/prompt-templates')
+
+    expect(router.currentRoute.value.name).toBe('PromptTemplates')
   })
 })

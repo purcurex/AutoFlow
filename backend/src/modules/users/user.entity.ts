@@ -1,4 +1,5 @@
 import {
+  Check,
   Entity,
   PrimaryGeneratedColumn,
   Column,
@@ -15,9 +16,30 @@ export enum UserRole {
 }
 
 @Entity('users')
+@Check(
+  'chk_users_next_workflow_number',
+  'next_workflow_number >= 1 AND next_workflow_number <= 1000000',
+)
 export class User {
   @PrimaryGeneratedColumn('uuid')
   id: string
+
+  @Column({
+    name: 'display_id',
+    type: 'varchar',
+    length: 6,
+    unique: true,
+    default: () => "LPAD(nextval('users_display_id_seq')::text, 6, '0')",
+  })
+  displayId: string
+
+  @Column({
+    name: 'next_workflow_number',
+    type: 'integer',
+    default: 1,
+    select: false,
+  })
+  nextWorkflowNumber: number
 
   @Column({ unique: true })
   email: string

@@ -12,13 +12,20 @@ export class UsersService {
     private usersRepository: Repository<User>,
   ) {}
 
-  async create(email: string, username: string, password: string, role: UserRole = UserRole.USER): Promise<User> {
+  async create(
+    email: string,
+    username: string,
+    password: string,
+    role: UserRole = UserRole.USER,
+    displayId?: string,
+  ): Promise<User> {
     const hashedPassword = await bcrypt.hash(password, 10)
     const user = this.usersRepository.create({
       email,
       username,
       password: hashedPassword,
       role,
+      displayId,
     })
     return this.usersRepository.save(user)
   }

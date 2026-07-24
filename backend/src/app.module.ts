@@ -22,7 +22,7 @@ import { ObservabilityModule } from './modules/observability/observability.modul
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: '.env',
+      envFilePath: ['.env.alibaba1688.local', '.env.providers.local', '.env'],
       validate: validateEnvironment,
     }),
 

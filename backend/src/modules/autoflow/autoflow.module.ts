@@ -15,6 +15,7 @@ import {
 } from './entities'
 import { DiscoveryModule } from '../discovery/discovery.module'
 import { AiModule } from '../ai/ai.module'
+import { WorkflowSeedAssetService } from './workflow-seed-asset.service'
 
 @Module({
   imports: [
@@ -33,7 +34,7 @@ import { AiModule } from '../ai/ai.module'
     ]),
   ],
   controllers: [AutoflowController],
-  providers: [AutoflowService],
+  providers: [AutoflowService, WorkflowSeedAssetService],
   exports: [AutoflowService],
 })
 export class AutoflowModule {}

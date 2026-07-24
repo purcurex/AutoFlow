@@ -2,113 +2,116 @@
 @tailwind components;
 @tailwind utilities;
 
-/* 自定义基础样式 */
 @layer base {
   :root {
-    --color-primary: #0ea5e9;
-    --color-primary-dark: #0284c7;
-    --color-background: #ffffff;
-    --color-background-secondary: #f8fafc;
-    --color-text: #1e293b;
-    --color-text-secondary: #64748b;
-    --color-border: #e2e8f0;
+    --color-primary: #f26a21;
+    --color-primary-strong: #d94d0b;
+    --color-accent: #079b83;
+    --color-background: #f5f7fa;
+    --color-surface: #ffffff;
+    --color-surface-muted: #f8fafc;
+    --color-text: #172033;
+    --color-text-secondary: #657083;
+    --color-border: #dde3eb;
+    --color-border-strong: #c8d1de;
+    --shadow-panel: 0 1px 2px rgb(15 23 42 / 0.04), 0 8px 24px rgb(15 23 42 / 0.04);
   }
 
   .dark {
-    --color-primary: #38bdf8;
-    --color-primary-dark: #0ea5e9;
-    --color-background: #0f172a;
-    --color-background-secondary: #1e293b;
-    --color-text: #f1f5f9;
-    --color-text-secondary: #94a3b8;
-    --color-border: #334155;
+    --color-primary: #ff812f;
+    --color-primary-strong: #ff9b55;
+    --color-accent: #21c9ad;
+    --color-background: #090b0f;
+    --color-surface: #111419;
+    --color-surface-muted: #171b21;
+    --color-text: #f3f5f7;
+    --color-text-secondary: #99a3b1;
+    --color-border: #282d35;
+    --color-border-strong: #3a414c;
+    --shadow-panel: 0 1px 2px rgb(0 0 0 / 0.3), 0 12px 32px rgb(0 0 0 / 0.18);
   }
 
-  html {
-    @apply scroll-smooth;
-  }
-
+  html { @apply scroll-smooth; }
   body {
-    @apply bg-[var(--color-background)] text-[var(--color-text)] font-sans antialiased;
+    @apply m-0 min-w-80 font-sans antialiased;
+    background: var(--color-background);
+    color: var(--color-text);
+  }
+  button, input, select, textarea { font: inherit; }
+  button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
   }
 }
 
-/* 自定义组件样式 */
 @layer components {
-  .btn {
-    @apply inline-flex items-center justify-center px-4 py-2 rounded-lg font-medium transition-colors duration-200;
-  }
+  .app-page { @apply min-h-full px-4 py-5 sm:px-6 lg:px-8 lg:py-7; }
+  .page-header { @apply mb-6 flex flex-col gap-4 border-b pb-5 sm:flex-row sm:items-end sm:justify-between; border-color: var(--color-border); }
+  .page-eyebrow { @apply text-xs font-bold uppercase text-orange-600 dark:text-orange-400; letter-spacing: 0; }
+  .page-title { @apply mt-1 text-2xl font-bold tracking-normal text-slate-950 dark:text-white; }
+  .page-description { @apply mt-1 max-w-3xl text-sm leading-6 text-slate-500 dark:text-slate-400; }
 
-  .btn-primary {
-    @apply bg-primary-600 text-white hover:bg-primary-700;
-  }
+  .panel { @apply rounded-lg border; border-color: var(--color-border); background: var(--color-surface); box-shadow: var(--shadow-panel); }
+  .panel-header { @apply flex flex-wrap items-center justify-between gap-3 border-b px-5 py-4; border-color: var(--color-border); }
+  .panel-title { @apply text-sm font-semibold text-slate-900 dark:text-slate-100; }
+  .panel-description { @apply mt-1 text-xs text-slate-500 dark:text-slate-400; }
 
-  .btn-secondary {
-    @apply bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700;
-  }
+  .btn { @apply inline-flex min-h-10 items-center justify-center gap-2 rounded-md border px-4 py-2 text-sm font-semibold transition duration-150 disabled:cursor-not-allowed disabled:opacity-45; letter-spacing: 0; }
+  .btn-primary { @apply border-orange-600 bg-orange-600 text-white shadow-sm hover:border-orange-700 hover:bg-orange-700 active:translate-y-px dark:border-orange-500 dark:bg-orange-500 dark:text-black dark:hover:bg-orange-400; }
+  .btn-secondary { @apply border-slate-300 bg-white text-slate-700 hover:border-slate-400 hover:bg-slate-50 dark:border-slate-700 dark:bg-[#171b21] dark:text-slate-200 dark:hover:border-slate-600 dark:hover:bg-[#20252d]; }
+  .btn-danger { @apply border-red-600 bg-red-600 text-white hover:bg-red-700; }
+  .btn-ghost { @apply border-transparent bg-transparent text-slate-600 hover:bg-slate-100 hover:text-slate-950 dark:text-slate-300 dark:hover:bg-white/5 dark:hover:text-white; }
+  .icon-btn { @apply inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-950 dark:border-slate-700 dark:bg-[#15181d] dark:text-slate-300 dark:hover:bg-[#20242b] dark:hover:text-white; }
 
-  .input {
-    @apply w-full px-3 py-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-background)] text-[var(--color-text)] placeholder-[var(--color-text-secondary)] focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all duration-200;
-  }
+  .input { @apply min-h-10 w-full rounded-md border px-3 py-2 text-sm transition placeholder:text-slate-400 focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500/15 dark:placeholder:text-slate-600; border-color: var(--color-border-strong); background: var(--color-surface); color: var(--color-text); }
+  .control-select { @apply inline-flex h-10 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-600 dark:border-slate-700 dark:bg-[#15181d] dark:text-slate-300; }
+  .control-select select { @apply cursor-pointer appearance-none bg-transparent pr-1 text-xs font-semibold outline-none; }
+  .field-label { @apply mb-1.5 block text-sm font-semibold text-slate-700 dark:text-slate-200; }
+  .field-help { @apply mt-1.5 text-xs leading-5 text-slate-500 dark:text-slate-400; }
 
-  .card {
-    @apply bg-[var(--color-background)] rounded-xl border border-[var(--color-border)] shadow-sm;
-  }
+  .metric-card { @apply relative min-h-28 overflow-hidden rounded-lg border p-4; border-color: var(--color-border); background: var(--color-surface); box-shadow: var(--shadow-panel); }
+  .metric-label { @apply text-xs font-semibold text-slate-500 dark:text-slate-400; }
+  .metric-value { @apply mt-3 text-3xl font-bold tabular-nums text-slate-950 dark:text-white; }
+  .metric-icon { @apply absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-md bg-orange-50 text-orange-600 dark:bg-orange-500/10 dark:text-orange-400; }
+
+  .data-table { @apply w-full min-w-[720px] text-left text-sm; }
+  .data-table thead { background: var(--color-surface-muted); }
+  .data-table th { @apply whitespace-nowrap border-b px-4 py-3.5 text-sm font-bold text-slate-800 dark:text-slate-200; border-color: var(--color-border); }
+  .data-table td { @apply border-b px-4 py-3 align-middle text-slate-700 dark:text-slate-300; border-color: var(--color-border); }
+  .data-table tbody tr { @apply transition-colors hover:bg-slate-50 dark:hover:bg-white/[0.025]; }
+  .data-table tbody tr:last-child td { @apply border-b-0; }
+
+  .status-badge { @apply inline-flex items-center whitespace-nowrap rounded-full border px-2.5 py-1 text-xs font-semibold; }
+  .status-success { @apply border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300; }
+  .status-info { @apply border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-800 dark:bg-sky-950 dark:text-sky-300; }
+  .status-warning { @apply border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300; }
+  .status-danger { @apply border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300; }
+  .status-neutral { @apply border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300; }
+
+  .empty-state { @apply flex min-h-48 flex-col items-center justify-center gap-3 px-6 py-10 text-center text-sm text-slate-500 dark:text-slate-400; }
+  .empty-state-icon { @apply flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400; }
+  .brand-mark { @apply flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-md border border-slate-200 bg-white p-1 shadow-sm; }
+  .brand-mark img { @apply h-full w-full object-contain; }
+  .notice { @apply flex items-start gap-3 rounded-md border-l-4 px-4 py-3 text-sm leading-6; }
+
+  .card { @apply rounded-lg border; border-color: var(--color-border); background: var(--color-surface); box-shadow: var(--shadow-panel); }
+  .segmented { @apply inline-flex rounded-md border p-1; border-color: var(--color-border); background: var(--color-surface-muted); }
+  .segmented button { @apply rounded px-3 py-1.5 text-xs font-semibold text-slate-500 transition dark:text-slate-400; }
+  .segmented button.active { @apply bg-white text-slate-950 shadow-sm dark:bg-slate-700 dark:text-white; }
 }
 
-/* 编辑器样式 */
 @layer utilities {
-  .editor-container {
-    @apply min-h-[500px] p-4 focus:outline-none;
-  }
-
-  .editor-toolbar {
-    @apply flex items-center gap-1 p-2 border-b border-[var(--color-border)] bg-[var(--color-background-secondary)];
-  }
-
-  .editor-toolbar-btn {
-    @apply p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors;
-  }
-
-  .editor-toolbar-btn.active {
-    @apply bg-primary-100 text-primary-600 dark:bg-primary-900 dark:text-primary-300;
-  }
+  .editor-container { @apply min-h-[500px] p-4 focus:outline-none; }
+  .editor-toolbar { @apply flex items-center gap-1 border-b p-2; border-color: var(--color-border); background: var(--color-surface-muted); }
+  .editor-toolbar-btn { @apply rounded p-2 transition-colors hover:bg-slate-100 dark:hover:bg-slate-700; }
+  .editor-toolbar-btn.active { @apply bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300; }
 }
 
-/* 自定义滚动条样式 */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-::-webkit-scrollbar-thumb {
-  background: #d1d5db;
-  border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: #9ca3af;
-}
-
-/* 深色模式滚动条 */
-.dark ::-webkit-scrollbar-thumb {
-  background: #475569;
-}
-
-.dark ::-webkit-scrollbar-thumb:hover {
-  background: #64748b;
-}
-
-/* Firefox 滚动条 */
-* {
-  scrollbar-width: thin;
-  scrollbar-color: #d1d5db transparent;
-}
-
-.dark * {
-  scrollbar-color: #475569 transparent;
-}
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+.dark ::-webkit-scrollbar-thumb { background: #3f4651; }
+.dark ::-webkit-scrollbar-thumb:hover { background: #596170; }
+* { scrollbar-width: thin; scrollbar-color: #cbd5e1 transparent; }
+.dark * { scrollbar-color: #3f4651 transparent; }

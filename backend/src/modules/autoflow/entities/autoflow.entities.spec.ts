@@ -75,6 +75,7 @@ describe('AutoFlow persistence entities', () => {
     expect(indexNames).toEqual(
       expect.arrayContaining([
         'idx_workflow_runs_owner_created_at',
+        'uq_workflow_runs_owner_display_id',
         'idx_workflow_steps_run_sequence',
         'idx_leads_owner_status',
         'idx_leads_workflow_run_id',

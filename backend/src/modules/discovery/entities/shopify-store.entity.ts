@@ -13,6 +13,7 @@ import {
 import { LeadEntity } from '../../autoflow/entities/lead.entity'
 import { WorkflowRunEntity } from '../../autoflow/entities/workflow-run.entity'
 import { User } from '../../users/user.entity'
+import type { DiscoverySource } from '../../autoflow/autoflow.types'
 import type { NormalizedContactEvidence, StoreVerificationStatus } from '../discovery.types'
 
 @Entity('shopify_stores')
@@ -51,6 +52,9 @@ export class ShopifyStoreEntity {
   @Column({ length: 1000 })
   url: string
 
+  @Column({ name: 'product_url', type: 'varchar', length: 1000, nullable: true })
+  productUrl: string | null
+
   @Column({ type: 'text', default: '' })
   description: string
 
@@ -59,6 +63,12 @@ export class ShopifyStoreEntity {
 
   @Column({ name: 'detection_source', length: 80 })
   detectionSource: string
+
+  @Column({ name: 'discovery_sources', type: 'jsonb', default: () => "'[]'::jsonb" })
+  discoverySources: DiscoverySource[]
+
+  @Column({ name: 'validity_score', type: 'double precision', default: 0 })
+  validityScore: number
 
   @Column({ name: 'shopify_confidence', type: 'double precision', default: 0 })
   shopifyConfidence: number

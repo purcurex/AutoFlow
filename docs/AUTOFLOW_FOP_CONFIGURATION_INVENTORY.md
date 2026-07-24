@@ -2,7 +2,7 @@
 
 ## 1. Purpose
 
-This document is the production enablement checklist for Kingdee Cloud Cosmic FOP integration. No live adapter may be enabled until every mandatory item is confirmed against the FOP environment and sandbox responses are reconciled with approved fixtures.
+This document is the Phase 2 production enablement checklist for Kingdee Cloud Cosmic FOP integration. Phase 1 does not call live FOP quote or CRM APIs. No live adapter may be enabled until every mandatory item is confirmed against the FOP environment and sandbox responses are reconciled with approved fixtures. See `AUTOFLOW_PHASE_2_PLAN.md` for the phase boundary and entry gate.
 
 ## 2. Runtime Modes
 
@@ -24,6 +24,7 @@ Production rejects `sandbox` capability advertisement. Synthetic values must nev
 | `FOP_APP_ID` | Application identity | Treat as sensitive | Awaiting FOP value |
 | `FOP_APP_SECRET` | Application credential | Yes | Awaiting secret injection |
 | `FOP_PRODUCT_COST_OPERATION` | Product-cost operation/endpoint ID | No | Awaiting FOP inventory |
+| `FOP_LOGISTICS_CHANNEL_OPERATION` | Custom and actual logistics-channel catalogue operation/endpoint ID | No | Awaiting FOP inventory |
 | `FOP_LOGISTICS_RATE_OPERATION` | Freight-rating operation/endpoint ID | No | Awaiting FOP inventory |
 | `FOP_CRM_HANDOFF_OPERATION` | Lead/opportunity handoff operation/endpoint ID | No | Awaiting FOP inventory |
 | `FOP_REQUEST_TIMEOUT_MS` | Provider timeout budget | No | Default 15000 ms |
@@ -78,4 +79,4 @@ Before implementing or enabling `live`:
 
 ## 9. Current Conclusion
 
-AutoFlow now has fail-closed runtime modes and deterministic contract fixtures. Live FOP enablement remains blocked by the external interface inventory and approved Kingdee Cloud Cosmic sandbox evidence, not by local quote persistence.
+AutoFlow now has fail-closed runtime modes and deterministic contract fixtures. The two P0 contract gaps for product pricing context and shipment product/origin context are represented in the canonical types. Live FOP enablement and quote UI expansion are intentionally deferred to Phase 2 and remain blocked by the external interface inventory and approved Kingdee Cloud Cosmic sandbox evidence.

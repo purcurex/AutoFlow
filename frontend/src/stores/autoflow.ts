@@ -6,6 +6,7 @@ import type {
   CreateWorkflowRequest,
   FollowUpStage,
   LeadStatus,
+  GenerateMessageRequest,
   OutreachTask,
   StoreLead,
   UpdateOutreachTaskRequest,
@@ -43,6 +44,28 @@ export const useAutoFlowStore = defineStore('autoflow', () => {
     return workflow
   }
 
+  async function getWorkflow(id: string) {
+    return autoflowApi.getWorkflow(id)
+  }
+
+  async function reviseWorkflow(id: string, data: CreateWorkflowRequest) {
+    const workflow = await autoflowApi.createWorkflowRevision(id, data)
+    workflows.value.unshift(workflow)
+    return workflow
+  }
+
+  async function deleteWorkflow(id: string) {
+    const result = await autoflowApi.deleteWorkflow(id)
+    workflows.value = workflows.value.filter((item) => item.id !== id)
+    return result
+  }
+
+  async function archiveWorkflow(id: string) {
+    const workflow = await autoflowApi.archiveWorkflow(id)
+    workflows.value = workflows.value.filter((item) => item.id !== id)
+    return workflow
+  }
+
   async function startDiscovery(id: string) {
     const result = await autoflowApi.startDiscovery(id)
     const workflow = workflows.value.find((item) => item.id === id)
@@ -55,8 +78,16 @@ export const useAutoFlowStore = defineStore('autoflow', () => {
   }
 
   async function fetchLeads(status?: LeadStatus) {
-    const result = await autoflowApi.getLeads(status)
-    leads.value = result.items
+    const firstPage = await autoflowApi.getLeads(status, 1, 100)
+    const items = [...firstPage.items]
+    let page = 2
+    while (items.length < firstPage.total) {
+      const nextPage = await autoflowApi.getLeads(status, page, 100)
+      if (!nextPage.items.length) break
+      items.push(...nextPage.items)
+      page += 1
+    }
+    leads.value = items
   }
 
   async function fetchLead(id: string) {
@@ -64,8 +95,13 @@ export const useAutoFlowStore = defineStore('autoflow', () => {
     return currentLead.value
   }
 
-  async function generateMessage(id: string) {
-    const task = await autoflowApi.generateMessage(id, { channel: 'whatsapp' })
+  async function analyzeLeadContacts(id: string) {
+    currentLead.value = await autoflowApi.analyzeLeadContacts(id)
+    return currentLead.value
+  }
+
+  async function generateMessage(id: string, data: GenerateMessageRequest) {
+    const task = await autoflowApi.generateMessage(id, data)
     outreachTasks.value.unshift(task)
     return task
   }
@@ -110,9 +146,14 @@ export const useAutoFlowStore = defineStore('autoflow', () => {
     fetchDashboard,
     fetchWorkflows,
     createWorkflow,
+    getWorkflow,
+    reviseWorkflow,
+    deleteWorkflow,
+    archiveWorkflow,
     startDiscovery,
     fetchLeads,
     fetchLead,
+    analyzeLeadContacts,
     generateMessage,
     fetchOutreachTasks,
     updateOutreachTask,

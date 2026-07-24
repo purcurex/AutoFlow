@@ -16,6 +16,7 @@ describe('FopIntegrationService', () => {
       mode: 'disabled',
       syntheticData: false,
       productCost: expect.objectContaining({ status: 'not_implemented', available: false }),
+      logisticsCatalog: expect.objectContaining({ status: 'not_implemented', available: false }),
       logisticsRate: expect.objectContaining({ status: 'not_implemented', available: false }),
       crmHandoff: expect.objectContaining({ status: 'not_implemented', available: false }),
     })
@@ -27,6 +28,7 @@ describe('FopIntegrationService', () => {
       mode: 'sandbox',
       syntheticData: true,
       productCost: { status: 'available', available: true },
+      logisticsCatalog: { status: 'available', available: true },
       logisticsRate: { status: 'available', available: true },
       crmHandoff: { status: 'available', available: true },
     })

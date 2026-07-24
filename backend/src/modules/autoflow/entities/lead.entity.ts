@@ -11,7 +11,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm'
 import { User } from '../../users/user.entity'
-import { LEAD_STATUSES, type LeadStatus } from '../autoflow.types'
+import { LEAD_STATUSES, type DiscoverySource, type LeadStatus } from '../autoflow.types'
 import { CrmActivityEntity } from './crm-activity.entity'
 import { LeadContactEntity } from './lead-contact.entity'
 import { OutreachTaskEntity } from './outreach-task.entity'
@@ -53,6 +53,12 @@ export class LeadEntity {
 
   @Column({ name: 'store_url', length: 500 })
   storeUrl: string
+
+  @Column({ name: 'product_url', type: 'varchar', length: 1000, nullable: true })
+  productUrl: string | null
+
+  @Column({ name: 'discovery_sources', type: 'jsonb', default: () => "'[]'::jsonb" })
+  discoverySources: DiscoverySource[]
 
   @Column({ length: 120 })
   source: string
@@ -114,6 +120,8 @@ export class LeadEntity {
 
   @OneToMany(() => WorkflowLeadEntity, (link) => link.lead)
   workflowLinks: WorkflowLeadEntity[]
+
+  discoveryCount?: number
 
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date

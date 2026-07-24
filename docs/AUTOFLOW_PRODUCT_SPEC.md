@@ -4,7 +4,7 @@
 
 AutoFlow is a Dropshipping customer-development workflow for outbound sales teams serving overseas small-business customers.
 
-It focuses on the work before and around the first customer quotation: product and store discovery, contact enrichment, rapid qualification, outreach preparation, and quotation assembly. After a lead becomes a formal lead or opportunity, Kingdee Cloud Cosmic FOP is the business system of record.
+Phase 1 focuses on the work before quotation: product and ad discovery, store discovery, contact enrichment, rapid qualification, and human-reviewed outreach preparation. Customer quotation and live Kingdee Cloud Cosmic FOP integration are retained as phase 2 foundations and are not phase 1 delivery claims.
 
 AutoFlow is not a full CRM, a replacement for FOP, or a local logistics-rating engine. Legacy note capabilities remain only as supporting business records, research notes, customer materials, and quotation remarks.
 
@@ -138,21 +138,31 @@ All editable user-facing product language uses AutoFlow and describes a customer
 
 Sales reps can create customer-development workflows from a product keyword or image URL. Product URL and manual store URL seeds are planned after discovery adapters are normalized.
 
+Every workflow receives an owner-scoped display ID and an immutable creation timestamp. The display ID is a numeric sequence rendered as `01` through `99`, then `100` through `999999`. Each user has an independent sequence, concurrent creation must not allocate duplicates, deleted IDs are never reused, and creation is rejected after the user's sequence exceeds `999999`. Existing workflows are backfilled per owner by creation time and internal UUID. Lists and dashboard activity display the workflow ID and creation date in `YYYY-MM-DD` format; the UUID remains the internal relational identifier.
+
 ### FR-003 Discovery And Evidence
 
 The system calls approved ad/store discovery adapters and persists provider, source type, confidence, request time, and evidence. Mock or estimated data is visibly labelled and cannot silently become production quotation input.
 
 ### FR-004 Contact Enrichment
 
-Sales reps can quickly review discovered email, WhatsApp, social, phone, and website contacts with source and verification status. Contact evidence contributes to qualification but does not create a formal FOP customer automatically.
+Sales reps can analyze a storefront and selected same-origin Contact, Support, About, and policy pages for public email, telephone, WhatsApp, Facebook, Instagram, and LinkedIn contact evidence. Every contact preserves its normalized value, source page, page title, extraction method, verification status, and confidence.
+
+The lead detail page presents readable contact identities with direct contact and evidence-source actions. Storefront and product-detail URLs remain quick-access resources and are not misrepresented or scored as customer contact records. Contact evidence contributes to qualification but does not create a formal FOP customer automatically.
 
 ### FR-005 Lead Qualification
 
 The lead pool supports owner-scoped filtering, deduplication, evidence review, explainable scoring, and a recommended next action.
 
+The lead pool groups discovery occurrences by source workflow. Each occurrence preserves the workflow's owner-scoped short display ID and name, internal workflow UUID, workflow creation time, lead discovery time, and the score calculated for that workflow. The group heading visibly presents the workflow name and short ID together. A globally deduplicated prospect may therefore appear under every workflow that discovered it. Workflow groups are ordered by workflow creation time; leads inside a workflow are ordered by workflow-specific score descending and discovery time descending as the tie-breaker.
+
 ### FR-006 AI Outreach
 
-Sales reps can generate WhatsApp or email drafts from persistent lead context. Every generated draft is editable and requires explicit human approval before being marked ready or sent.
+Sales reps can start an owner-scoped AI collaboration session from persistent lead context and refine the intended product, value proposition, tone, quotation mode, and call to action through multiple turns with Zhipu GLM.
+
+The final result is a versioned bilingual draft containing an English outbound version and a Simplified Chinese semantic-reference version. English is the outbound source of truth; Chinese is retained for internal review. Both versions remain editable and require explicit human acceptance before the English version creates a ready outreach task.
+
+The immutable system prompt enforces anti-fabrication and structured bilingual output. Per-user active prompt modules continue to control business style, channel guidance, quotation mode, product visuals, supplier strengths, and logistics strengths without overriding the system safety boundary.
 
 ### FR-007 Lightweight Follow-Up
 
@@ -160,15 +170,15 @@ AutoFlow stores only the local actions needed to complete discovery, outreach, q
 
 ### FR-008 Product Tier Quotation
 
-Sales reps can create one or more product lines and define ordered, non-overlapping quantity tiers. Each tier supports quantity range, unit, currency, customer-facing unit price, and an FOP product-cost reference when available.
+Sales reps can create one or more product lines and define ordered, non-overlapping quantity tiers. Each tier supports quantity range, unit, currency, an FOP-returned purchase cost, and a customer-facing unit price. The product line also stores a user-defined gross-margin percentage.
 
-AutoFlow calls the product-cost port instead of reproducing FOP cost rules. Returned values are stored with source, version/effective time, currency, and request snapshot.
+AutoFlow calls the product-cost port instead of reproducing FOP cost rules. Returned values are stored with source, version/effective time, currency, and request snapshot. AutoFlow may transparently calculate the proposed customer price as `purchase cost / (1 - product gross margin rate)`; the FOP purchase cost remains immutable evidence and the resulting customer price remains reviewable.
 
 ### FR-009 Destination Freight Quotation
 
-Sales reps can request freight quotations for one or more destination countries using package, weight, and product quantity context. Results are grouped by destination country and may contain multiple FOP logistics channels, freight amounts, chargeable weight, ETA, surcharges, currency, and validity.
+Sales reps can request freight quotations for one or more destination countries using package, weight, and product quantity context. Logistics-channel selection is two-level: first select an FOP custom logistics channel group, then select one or more actual FOP logistics channels under that group. Selections from more than one group may coexist in one quotation.
 
-AutoFlow calls the logistics-rate port instead of implementing the FOP rating model.
+Each selected actual channel stores its custom-channel code/name, actual-channel code/name, and a user-defined logistics gross-margin percentage. AutoFlow calls the logistics-rate port instead of implementing the FOP rating model. It may transparently calculate customer freight as `FOP freight cost / (1 - logistics gross margin rate)`.
 
 ### FR-010 Combined Quotation
 
@@ -178,9 +188,12 @@ The quote workspace can present a multidimensional matrix across:
 - Product quantity tier.
 - Destination country.
 - Selected logistics channel.
-- Product amount, freight amount, optional returned fees, and combined customer amount.
+- FOP purchase cost, product gross margin, and customer product amount.
+- FOP freight cost, logistics gross margin, customer freight, optional returned fees, and combined customer amount.
 
 Every matrix cell must be reproducible from immutable cost/rate snapshots. AutoFlow may perform transparent arithmetic for presentation, but pricing policy and logistics-rating rules remain in FOP.
+
+The sales rep can export a saved quotation version as an Excel workbook. The export follows the approved HyperZone quotation layout: branded header, quotation notes, quantity-tier rows, destination and logistics-channel dimensions, internal cost/margin review fields, customer product amount, customer freight, and emphasized total price. The workbook records the quotation ID, immutable version, source version, and generation date. Missing FOP values remain blank and must never be replaced by simulated amounts.
 
 ### FR-011 FOP Handoff
 
@@ -194,9 +207,38 @@ When FOP is unavailable or not configured, AutoFlow preserves the draft and requ
 
 Legacy records can remain as research notes, customer materials, and quotation remarks, linked to workflows or leads where useful.
 
-## 8. Current-Phase Delivery Scope
+### FR-014 Alibaba 1688 Product Sourcing
 
-This phase establishes the quotation and FOP integration foundation without claiming a live FOP connection:
+AutoFlow can search official Alibaba 1688 Open Platform offers by product keyword or a provider-ready product image. Results are presented as a separate `1688货源` procurement area with product, price tier, MOQ, seller, shop, delivery, customization, and source evidence.
+
+1688 suppliers are procurement candidates rather than overseas prospects. Sourcing records are linked to the workflow product signal, are not stored as customer contacts, and never affect the customer contact score or customer total score. AutoFlow maintains a separate, explainable sourcing score for offer suitability.
+
+### FR-015 Independent AI Prompt Template Workspace
+
+AI outreach prompt templates are a top-level user capability rather than a personal-profile setting. System defaults, user-created versions, and the active per-user module binding remain independently persisted in `ai_prompt_templates` and `ai_prompt_bindings`. Removing a user template restores the immutable system fallback.
+
+### FR-016 Customer-Linked Outreach Workspace
+
+Outreach prioritizes Facebook direct messages, followed by WhatsApp, email, Instagram, and a user-specified other channel. Every outreach task remains linked to one owner-scoped customer lead and presents current customer basics and available contact channels from the customer profile rather than duplicating a stale contact snapshot.
+
+Dashboard and follow-up metric cards navigate to the corresponding workflow, lead, or outreach list. Status-specific cards include a URL filter that the destination list applies on entry.
+
+## 8. Current Phase 1 Delivery Scope
+
+Phase 1 delivers the customer-development workflow:
+
+- Use PipiAds/PipiSpy as the primary keyword/image advertising-intelligence source.
+- Treat PipiAds as secondary discovery evidence, not as authoritative platform performance data.
+- Derive candidate store domains from ad details and landing pages.
+- Verify storefront accessibility and Shopify evidence before promoting a candidate.
+- Extract and preserve contact evidence with source, confidence, and verification state.
+- Prioritize phone, WhatsApp, and store-owner Facebook profile evidence during contact discovery and scoring.
+- Cap the contact score at 50 when email is the only available contact channel.
+- Preserve attributable customer ad links, prioritize Facebook Ads Library destinations, and label PipiAds API evidence explicitly.
+- Discover suitable 1688 procurement offers by keyword or image through an independently scored `1688货源` capability.
+- Generate Zhipu GLM outreach drafts that require explicit human review.
+
+The following implemented foundations remain available but further delivery is deferred to phase 2:
 
 - Add quote entry points from lead detail and primary navigation.
 - Add the product-tier editor, destination-country selector, shipping-option result area, and combined quote matrix shell.
@@ -221,6 +263,9 @@ This phase establishes the quotation and FOP integration foundation without clai
 
 - AutoFlow is presented as the customer-development and quotation workbench, not as a CRM replacement.
 - A sales rep can move from discovery evidence to verified contact review and outreach preparation.
+- A sales rep can maintain GLM prompt modules from an independent top-level workspace.
+- Outreach tasks display their linked customer profile and current available contact channels.
+- Dashboard metrics navigate to their corresponding filtered object lists.
 - The quote page can capture product quantity tiers and multiple destination countries.
 - Internal APIs can invoke replaceable product-cost and logistics-rate provider ports.
 - Combined quotation output is derived only from selected, traceable provider results.

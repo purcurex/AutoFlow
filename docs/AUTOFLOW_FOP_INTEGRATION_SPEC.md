@@ -51,7 +51,7 @@ interface FopCrmHandoffPort {
 
 Transport DTOs, Kingdee dynamic-object fields, bill identifiers, and authentication are adapter concerns and must not leak into the quote domain.
 
-## 5. Product Cost Contract
+## 5. Product Pricing Contract
 
 ### Request
 
@@ -61,10 +61,15 @@ idempotencyKey
 correlationId
 leadId
 currency
+pricingContext (optional)
+  customerReference (optional)
+  salesOrganizationReference (optional)
+  pricePolicyReference (optional)
 items[]
   lineId
   fopProductId or SKU mapping reference
   unit
+  productProfitMarginRate
   quantityTiers[]
     minQuantity
     maxQuantity (optional)
@@ -84,9 +89,16 @@ Rules:
 provider = fop
 externalRequestId
 sourceVersion
+pricingPolicyVersion
 effectiveAt
 expiresAt (optional)
 currency
+exchangeRate (optional)
+  sourceCurrency
+  targetCurrency
+  rate
+  sourceVersion
+  effectiveAt
 items[]
   lineId
   fopProductId or SKU
@@ -94,13 +106,46 @@ items[]
     minQuantity
     maxQuantity (optional)
     unitCost
+    suggestedCustomerUnitPrice
+    appliedProfitMarginRate
+    customerUnitPrice
+    costComponents[]
+      code
+      name
+      amount
+    grossMarginRate
+    pricePolicyReference (optional)
+    approvalStatus
     returnedFees[] (optional)
 warnings[]
 ```
 
-AutoFlow stores the result snapshot used by the quote. It does not reconstruct FOP cost rules.
+AutoFlow stores the result snapshot used by the quote. FOP remains authoritative for purchase cost, exchange rate, price policy, and approval rules. AutoFlow's user-defined product gross margin is a presentation input and uses the explicit formula `customerUnitPrice = unitCost / (1 - productProfitMarginRate)`.
 
-## 6. Logistics Rate Contract
+## 6. Logistics Channel Catalog Contract
+
+FOP owns both levels of logistics master data:
+
+```text
+customLogisticsChannels[]
+  code
+  name
+  enabled
+  sortOrder (optional)
+
+actualLogisticsChannels[]
+  customChannelCode
+  code
+  name
+  enabled
+  carrierName (optional)
+  serviceLevel (optional)
+  supportedCountries[] (optional)
+```
+
+AutoFlow first loads custom logistics channels and then loads actual channels for the selected custom channel. Only actual channel codes may be submitted for freight calculation. AutoFlow stores names as display snapshots but treats FOP codes as the integration identity.
+
+## 7. Logistics Rate Contract
 
 ### Request
 
@@ -123,6 +168,13 @@ packages[]
 productContext[]
   SKU or FOP product reference
   quantity
+  unit
+selectedChannels[]
+  customChannelCode
+  customChannelName
+  actualChannelCode
+  actualChannelName
+  logisticsProfitMarginRate
 ```
 
 Rules:
@@ -145,10 +197,14 @@ destinations[]
   countryCode
   status
   options[]
+    customChannelCode
+    customChannelName
     channelCode
     channelName
     chargeableWeight
     freightAmount
+    logisticsProfitMarginRate
+    customerFreightAmount
     returnedFees[] (optional)
     minTransitDays (optional)
     maxTransitDays (optional)
@@ -156,9 +212,9 @@ destinations[]
 warnings[]
 ```
 
-AutoFlow displays options grouped by destination country and records the user's selected channel. It does not duplicate the FOP logistics-rating algorithm.
+AutoFlow displays options grouped by destination country and records all selected actual channels. It does not duplicate the FOP logistics-rating algorithm. FOP `freightAmount` is preserved as the base logistics cost; AutoFlow calculates `customerFreightAmount = freightAmount / (1 - logisticsProfitMarginRate)` and stores both values.
 
-## 7. Combined Quote Contract
+## 8. Combined Quote Contract
 
 A combined quote is a presentation model built from selected immutable snapshots:
 
@@ -180,7 +236,21 @@ Each result cell stores references to:
 
 If currencies differ, AutoFlow must request a normalized FOP result or an approved exchange-rate source. It must not apply an undocumented exchange rate.
 
-## 8. Lead And Opportunity Handoff
+### 8.1 Excel Export Contract
+
+Excel export is generated from one selected immutable quotation version, never from an untracked provider response. The workbook maps:
+
+- Product/SKU, unit, and quantity tier.
+- Destination country.
+- FOP custom logistics channel, actual logistics channel, and carrier.
+- FOP purchase cost and freight cost.
+- Product and logistics gross-margin percentages.
+- Customer product price, customer freight, total price, and currency.
+- Quotation ID, quotation version, FOP source version, and generation date.
+
+Missing provider amounts remain blank. The export generator may format and group rows, but it may not recalculate FOP cost or logistics rates. The workbook is an internal quotation-review artifact because it contains cost and margin columns; the user must remove internal columns before external sharing.
+
+## 9. Lead And Opportunity Handoff
 
 ### Request
 
@@ -216,25 +286,28 @@ Handoff rules:
 - AutoFlow stores FOP identifiers and conflicts but does not silently overwrite FOP master data.
 - Subsequent AutoFlow changes are not assumed to synchronize bidirectionally until a separate sync contract is approved.
 
-## 9. AutoFlow Backend API Surface
+## 10. AutoFlow Backend API Surface
 
 These are stable AutoFlow-facing endpoints. They do not prescribe the external FOP URL shape.
 
 ```text
-GET    /api/autoflow/leads/:leadId/quotes
-POST   /api/autoflow/leads/:leadId/quotes
+GET    /api/autoflow/integrations/fop/capabilities
+POST   /api/autoflow/integrations/fop/products/purchase-costs
+GET    /api/autoflow/integrations/fop/logistics/custom-channels
+GET    /api/autoflow/integrations/fop/logistics/custom-channels/:customChannelCode/actual-channels
+GET    /api/autoflow/quotes
+POST   /api/autoflow/quotes
 GET    /api/autoflow/quotes/:quoteId
-PATCH  /api/autoflow/quotes/:quoteId
-POST   /api/autoflow/quotes/:quoteId/product-cost-requests
-POST   /api/autoflow/quotes/:quoteId/shipping-rate-requests
-POST   /api/autoflow/quotes/:quoteId/compose
-POST   /api/autoflow/leads/:leadId/fop-handoffs
-GET    /api/autoflow/fop-handoffs/:handoffId
+POST   /api/autoflow/quotes/:quoteId/versions
+GET    /api/autoflow/quotes/:quoteId/versions/:version/export.xlsx
+POST   /api/autoflow/quotes/:quoteId/request-fop
+GET    /api/autoflow/leads/:leadId/fop-handoff
+POST   /api/autoflow/leads/:leadId/fop-handoff
 ```
 
 All write endpoints require authenticated ownership checks and validated DTOs.
 
-## 10. Failure And Retry Model
+## 11. Failure And Retry Model
 
 Integration call status:
 
@@ -251,7 +324,7 @@ succeeded -> superseded
 - UI errors show the failed capability, retry state, correlation ID, and actionable message.
 - Logs redact credentials, personal contact values where required, and unbounded raw payloads.
 
-## 11. Current-Phase Placeholder Rules
+## 12. Current-Phase Placeholder Rules
 
 Before live FOP integration:
 
@@ -261,19 +334,20 @@ Before live FOP integration:
 - Placeholder responses must never be saved or displayed as real FOP prices.
 - Exact FOP endpoint, authentication, bill/form IDs, field mappings, and error codes remain `TBD` until the FOP API inventory is supplied.
 
-## 12. FOP Inventory Required Before Live Integration
+## 13. FOP Inventory Required Before Live Integration
 
 - Kingdee Cloud Cosmic environment and API base URL per environment.
 - Authentication mechanism, token lifetime, and credential rotation process.
 - Product/SKU master identifiers and AutoFlow mapping source.
 - Product-cost calculation operation and required fields.
+- Custom-logistics-channel and actual-logistics-channel query operations, status fields, ordering, and code stability rules.
 - Logistics-rate calculation operation, country/channel codes, package rules, and returned fee fields.
 - Lead/opportunity create-or-update operations and duplicate/ownership behavior.
 - Opportunity-stage and follow-up operations needed for handoff confirmation.
 - Rate limits, timeout guidance, idempotency support, and error-code catalogue.
 - Test tenant, approved fixtures, and data-desensitization requirements.
 
-## 13. Acceptance Gate For Live FOP Enablement
+## 14. Acceptance Gate For Live FOP Enablement
 
 - Contract fixtures are approved by both AutoFlow and FOP owners.
 - Sandbox requests are traceable end to end with correlation IDs.

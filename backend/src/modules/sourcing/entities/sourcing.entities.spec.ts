@@ -1,0 +1,177 @@
+import { getMetadataArgsStorage, type QueryRunner } from 'typeorm'
+import { AddAlibaba1688Sourcing1784724000000 } from '../../../database/migrations/1784724000000-AddAlibaba1688Sourcing'
+import {
+  SourcingOfferEntity,
+  SourcingSearchEntity,
+  SourcingSupplierEntity,
+} from './index'
+
+describe('sourcing persistence entities', () => {
+  const storage = getMetadataArgsStorage()
+  const entities = [SourcingSearchEntity, SourcingSupplierEntity, SourcingOfferEntity]
+
+  it.each([
+    [SourcingSearchEntity, 'sourcing_searches'],
+    [SourcingSupplierEntity, 'sourcing_suppliers'],
+    [SourcingOfferEntity, 'sourcing_offers'],
+  ])('maps %p to table %s', (entity, tableName) => {
+    const table = storage.tables.find((metadata) => metadata.target === entity)
+
+    expect(table?.name).toBe(tableName)
+  })
+
+  it.each(entities)('adds owner, workflow, and auditable provider scope to %p', (entity) => {
+    const columns = storage.columns
+      .filter((metadata) => metadata.target === entity)
+      .map((metadata) => metadata.propertyName)
+
+    expect(columns).toEqual(
+      expect.arrayContaining(['ownerUserId', 'workflowRunId', 'provider']),
+    )
+    expect(columns).not.toEqual(
+      expect.arrayContaining(['leadId', 'leadContactId', 'contactScore', 'totalScore']),
+    )
+  })
+
+  it('persists the search lifecycle and request audit fields', () => {
+    const columns = storage.columns
+      .filter((metadata) => metadata.target === SourcingSearchEntity)
+      .map((metadata) => metadata.propertyName)
+
+    expect(columns).toEqual(
+      expect.arrayContaining([
+        'searchMode',
+        'status',
+        'requestId',
+        'providerRequestId',
+        'providerMethod',
+        'requestPayload',
+        'errorCode',
+        'errorMessage',
+        'requestedAt',
+        'startedAt',
+        'completedAt',
+      ]),
+    )
+  })
+
+  it('persists independent offer scoring and supplier sourcing attributes', () => {
+    const offerColumns = storage.columns
+      .filter((metadata) => metadata.target === SourcingOfferEntity)
+      .map((metadata) => metadata.propertyName)
+    const supplierColumns = storage.columns
+      .filter((metadata) => metadata.target === SourcingSupplierEntity)
+      .map((metadata) => metadata.propertyName)
+
+    expect(offerColumns).toEqual(
+      expect.arrayContaining([
+        'offerId',
+        'offerUrl',
+        'priceTiers',
+        'sourcingScore',
+        'sourcingScoreReasons',
+        'rawSnapshot',
+      ]),
+    )
+    expect(supplierColumns).toEqual(
+      expect.arrayContaining([
+        'memberId',
+        'openId',
+        'companyName',
+        'shopName',
+        'supplierRating',
+        'yearsInBusiness',
+        'capabilities',
+      ]),
+    )
+  })
+
+  it('defines deduplication, scope, and score metadata', () => {
+    const uniqueNames = storage.uniques
+      .filter((metadata) => entities.includes(metadata.target as typeof entities[number]))
+      .map((metadata) => metadata.name)
+    const indexNames = storage.indices
+      .filter((metadata) => entities.includes(metadata.target as typeof entities[number]))
+      .map((metadata) => metadata.name)
+    const checkNames = storage.checks
+      .filter((metadata) => entities.includes(metadata.target as typeof entities[number]))
+      .map((metadata) => metadata.name)
+
+    expect(uniqueNames).toEqual(
+      expect.arrayContaining([
+        'uq_sourcing_searches_owner_request',
+        'uq_sourcing_suppliers_search_provider_key',
+        'uq_sourcing_offers_search_provider_offer',
+      ]),
+    )
+    expect(indexNames).toEqual(
+      expect.arrayContaining([
+        'idx_sourcing_searches_owner_created',
+        'idx_sourcing_searches_workflow_status',
+        'idx_sourcing_suppliers_owner_rating',
+        'idx_sourcing_offers_owner_score',
+        'idx_sourcing_offers_provider_offer',
+      ]),
+    )
+    expect(checkNames).toEqual(
+      expect.arrayContaining([
+        'chk_sourcing_searches_provider',
+        'chk_sourcing_searches_mode',
+        'chk_sourcing_searches_status',
+        'chk_sourcing_suppliers_rating',
+        'chk_sourcing_offers_score',
+        'chk_sourcing_offers_repurchase_rate',
+      ]),
+    )
+  })
+
+  it('cascades search and workflow cleanup without lead relations', () => {
+    const relations = storage.relations.filter((metadata) =>
+      entities.includes(metadata.target as typeof entities[number]),
+    )
+    const relation = (entity: typeof entities[number], propertyName: string) =>
+      relations.find(
+        (metadata) => metadata.target === entity && metadata.propertyName === propertyName,
+      )
+
+    expect(relation(SourcingSearchEntity, 'workflowRun')?.options.onDelete).toBe('CASCADE')
+    expect(relation(SourcingSupplierEntity, 'search')?.options.onDelete).toBe('CASCADE')
+    expect(relation(SourcingOfferEntity, 'search')?.options.onDelete).toBe('CASCADE')
+    expect(relation(SourcingOfferEntity, 'supplier')?.options.onDelete).toBe('SET NULL')
+    expect(relations.map((metadata) => metadata.propertyName)).not.toContain('lead')
+  })
+})
+
+describe('AddAlibaba1688Sourcing migration', () => {
+  it('creates only independent sourcing tables and reverses them in dependency order', async () => {
+    const upQueries: string[] = []
+    const downQueries: string[] = []
+    const migration = new AddAlibaba1688Sourcing1784724000000()
+    const upRunner = {
+      query: jest.fn(async (query: string) => {
+        upQueries.push(query)
+      }),
+    } as unknown as QueryRunner
+    const downRunner = {
+      query: jest.fn(async (query: string) => {
+        downQueries.push(query)
+      }),
+    } as unknown as QueryRunner
+
+    await migration.up(upRunner)
+    await migration.down(downRunner)
+
+    const upSql = upQueries.join('\n').toLowerCase()
+    expect(upSql).toContain('create table "sourcing_searches"')
+    expect(upSql).toContain('create table "sourcing_suppliers"')
+    expect(upSql).toContain('create table "sourcing_offers"')
+    expect(upSql).toContain('check ("sourcing_score" >= 0 and "sourcing_score" <= 100)')
+    expect(upSql).not.toContain('lead_contacts')
+    expect(upSql).not.toContain('lead_scores')
+    expect(downQueries).toEqual([
+      'DROP TABLE IF EXISTS "sourcing_offers"',
+      'DROP TABLE IF EXISTS "sourcing_suppliers"',
+      'DROP TABLE IF EXISTS "sourcing_searches"',
+    ])
+  })
+})

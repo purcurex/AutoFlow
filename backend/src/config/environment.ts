@@ -10,6 +10,18 @@ function requireValue(config: Record<string, unknown>, key: string): string {
   return value
 }
 
+function requireHttpsUrl(config: Record<string, unknown>, key: string): string {
+  const value = requireValue(config, key)
+  let url: URL
+  try {
+    url = new URL(value)
+  } catch {
+    throw new Error(`${key} must be a valid URL.`)
+  }
+  if (url.protocol !== 'https:') throw new Error(`${key} must use HTTPS.`)
+  return value
+}
+
 export function validateEnvironment(config: Record<string, unknown>): Record<string, unknown> {
   const nodeEnv = String(config.NODE_ENV ?? 'development')
 
@@ -30,9 +42,15 @@ export function validateEnvironment(config: Record<string, unknown>): Record<str
 
   if (enabled(config.ENABLE_ADMIN_BOOTSTRAP)) {
     requireValue(config, 'ADMIN_BOOTSTRAP_EMAIL')
-    requireValue(config, 'ADMIN_BOOTSTRAP_USERNAME')
     const password = requireValue(config, 'ADMIN_BOOTSTRAP_PASSWORD')
     if (password.length < 12) throw new Error('ADMIN_BOOTSTRAP_PASSWORD must contain at least 12 characters.')
+  }
+
+  if (enabled(config.ALIBABA_1688_ENABLED)) {
+    requireValue(config, 'ALIBABA_1688_APP_KEY')
+    requireValue(config, 'ALIBABA_1688_APP_SECRET')
+    requireValue(config, 'ALIBABA_1688_ACCESS_TOKEN')
+    requireHttpsUrl(config, 'ALIBABA_1688_GATEWAY_URL')
   }
 
   return config

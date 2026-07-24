@@ -1,17 +1,11 @@
 <script setup lang="ts">
-import { useRouter } from 'vue-router'
-
-const router = useRouter()
+import { ArrowLeft } from 'lucide-vue-next'
+import { BrandLogo, LanguageSwitch, ThemeToggle } from '@/components/ui'
 </script>
 
 <template>
-  <div class="min-h-screen flex items-center justify-center bg-[var(--color-background)]">
-    <div class="text-center">
-      <h1 class="text-6xl font-bold text-gray-300 mb-4">404</h1>
-      <p class="text-xl text-gray-500 mb-8">页面不存在</p>
-      <button @click="router.push('/')" class="btn btn-primary">
-        返回首页
-      </button>
-    </div>
-  </div>
+  <main class="flex min-h-screen flex-col bg-white p-5 dark:bg-[#090b0f]">
+    <div class="flex items-center justify-between"><BrandLogo /><div class="flex gap-2"><LanguageSwitch /><ThemeToggle /></div></div>
+    <div class="m-auto max-w-lg text-center"><p class="text-8xl font-bold text-orange-500">404</p><h1 class="mt-4 text-2xl font-bold text-slate-950 dark:text-white">{{ $t('notFound.title') }}</h1><p class="mt-2 text-slate-500">{{ $t('notFound.description') }}</p><RouterLink to="/" class="btn btn-primary mt-6"><ArrowLeft class="h-4 w-4" />{{ $t('notFound.home') }}</RouterLink></div>
+  </main>
 </template>

@@ -16,7 +16,6 @@ describe('SeederService', () => {
     return new ConfigService({
       ENABLE_ADMIN_BOOTSTRAP: enabled ? 'true' : 'false',
       ADMIN_BOOTSTRAP_EMAIL: 'bootstrap@autoflow.local',
-      ADMIN_BOOTSTRAP_USERNAME: 'bootstrap-admin',
       ADMIN_BOOTSTRAP_PASSWORD: 'StrongBootstrapPassword',
     })
   }
@@ -59,9 +58,10 @@ describe('SeederService', () => {
 
     expect(usersService.create).toHaveBeenCalledWith(
       'bootstrap@autoflow.local',
-      'bootstrap-admin',
+      'Admin',
       'StrongBootstrapPassword',
       UserRole.ADMIN,
+      '000001',
     )
   })
 })

@@ -29,4 +29,36 @@ describe('production environment validation', () => {
       validateEnvironment({ ENABLE_ADMIN_BOOTSTRAP: 'true' }),
     ).toThrow('ADMIN_BOOTSTRAP_EMAIL')
   })
+
+  it('allows the Alibaba 1688 provider to remain disabled without credentials', () => {
+    expect(validateEnvironment({ ALIBABA_1688_ENABLED: 'false' })).toMatchObject({
+      ALIBABA_1688_ENABLED: 'false',
+    })
+  })
+
+  it('requires server credentials and an access token when Alibaba 1688 is enabled', () => {
+    expect(() =>
+      validateEnvironment({ ALIBABA_1688_ENABLED: 'true' }),
+    ).toThrow('ALIBABA_1688_APP_KEY')
+
+    expect(() =>
+      validateEnvironment({
+        ALIBABA_1688_ENABLED: 'true',
+        ALIBABA_1688_APP_KEY: 'app-key',
+        ALIBABA_1688_APP_SECRET: 'app-secret',
+      }),
+    ).toThrow('ALIBABA_1688_ACCESS_TOKEN')
+  })
+
+  it('requires the Alibaba 1688 gateway to use HTTPS', () => {
+    expect(() =>
+      validateEnvironment({
+        ALIBABA_1688_ENABLED: 'true',
+        ALIBABA_1688_APP_KEY: 'app-key',
+        ALIBABA_1688_APP_SECRET: 'app-secret',
+        ALIBABA_1688_ACCESS_TOKEN: 'access-token',
+        ALIBABA_1688_GATEWAY_URL: 'http://gw.open.1688.com/openapi',
+      }),
+    ).toThrow('ALIBABA_1688_GATEWAY_URL must use HTTPS')
+  })
 })

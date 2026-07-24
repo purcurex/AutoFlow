@@ -68,6 +68,8 @@ When work is interrupted, resume in this order:
 - [x] Create `CrmActivityEntity`.
 - [x] Add ownership fields: `ownerUserId`, optional `teamId`.
 - [x] Add indexes for owner, workflow, lead status, and timestamps.
+- [x] Add owner-scoped workflow display IDs from `01` to `999999`.
+- [x] Backfill historical workflow IDs deterministically and preserve creation timestamps.
 
 ### P1-B Services
 
@@ -85,6 +87,7 @@ When work is interrupted, resume in this order:
 - [x] Test lead detail not found across owners.
 - [x] Test outreach task update.
 - [x] Test invalid status transition rejection.
+- [x] Test concurrent workflow ID allocation and cross-owner sequence isolation.
 
 ### P1-D Security And Engineering Gate
 
@@ -116,6 +119,10 @@ When work is interrupted, resume in this order:
 - [x] Add discovery progress state.
 - [x] Create leads from normalized discovery results.
 - [x] Mark workflow completed or failed.
+- [x] Return workflow short ID, workflow name, workflow creation time, discovery time, and workflow-specific score for every lead discovery occurrence.
+- [x] Group the lead pool by source workflow and sort score first, discovery time second.
+- [x] Display the workflow name and owner-scoped short ID together in each lead-pool group heading.
+- [x] Add a composite workflow/score/discovery-time index for lead-pool retrieval.
 
 ### P2-C Tests
 
@@ -148,6 +155,36 @@ When work is interrupted, resume in this order:
 - [x] Add contact enrichment with source and verification state.
 - [x] Recalibrate scoring so ad activity and contact completeness are evidence-driven rather than fixed values.
 
+### P2-E PipiAds Production Discovery
+
+- [x] Confirm PipiAds/PipiSpy as the primary phase 1 advertising-intelligence provider.
+- [x] Add keyword ad discovery through the documented AdSpy list API.
+- [x] Add image submission, status polling, similar-ad search, and detail hydration.
+- [x] Derive store candidates from landing-page and advertiser-domain evidence.
+- [x] Label PipiAds data as secondary evidence requiring official/source-page verification.
+- [x] Fail closed in production when `PIPIADS_API_KEY` is unavailable.
+- [ ] Obtain the commercial API agreement and written persistence/display rights.
+- [ ] Configure the production API key through the deployment secret store.
+- [ ] Complete a 14-day latency, coverage, duplicate-rate, and landing-page-validity PoC.
+
+### P2-F Alibaba 1688 Product Sourcing
+
+- [x] Select the official keyword and image-search capabilities from the current Alibaba Open Platform console.
+- [x] Add a Git-ignored server-side 1688 credential file and tracked configuration template.
+- [x] Require AppKey, AppSecret, access token, and HTTPS gateway when the provider is enabled.
+- [x] Freeze the boundary that `1688货源` does not affect customer contact or total scoring.
+- [ ] Confirm application approval for `跨境ERP/独立站SaaS数字化解决方案` or the buyer-edition fallback.
+- [ ] Confirm `图搜跨境商品` permission for the image-search API.
+- [ ] Obtain an authorized 1688 buyer access token and record its expiry/refresh behavior.
+- [ ] Capture redacted real responses for keyword search and image search.
+- [x] Freeze the cross-border keyword, image, and product-detail API contracts from the downloaded Ocean SDK.
+- [ ] Verify the request-signature implementation against the official online API tool.
+- [x] Add the TypeScript Param2 client and cross-border keyword/image/detail adapters.
+- [x] Add sourcing search, offer, and supplier entities with a reviewed migration.
+- [x] Add workflow-sidecar execution, idempotent reuse, manual force retry, and redacted provider telemetry.
+- [x] Add the workflow `1688货源` result section and independent sourcing-score explanation.
+- [x] Prove through automated tests that sourcing records never alter `contactScore` or customer `totalScore`.
+
 ## 4. P3 AI Outreach Tasks
 
 - [x] Rewrite AI system prompt for Dropshipping sales outreach.
@@ -158,25 +195,46 @@ When work is interrupted, resume in this order:
 - [x] Add next follow-up suggestion.
 - [x] Test AI unavailable behavior.
 - [x] Test outreach task creation.
+- [x] Replace Anthropic with the China-region Zhipu GLM REST API.
+- [x] Add configurable GLM model, timeout, token limit, and fail-closed behavior.
+- [x] Upgrade the default text model to the latest account-authorized flagship `glm-5.2`.
+- [x] Keep thinking disabled for short outreach by default and expose validated opt-in reasoning configuration.
+- [x] Persist owner-scoped multi-turn outreach conversations and ordered messages.
+- [x] Generate strict English and Simplified Chinese draft structures with facts and warnings.
+- [x] Preserve immutable bilingual draft versions and supersede prior working drafts.
+- [x] Allow human editing before acceptance and create the ready outreach task from English.
+- [x] Restore saved conversation options in the lead-detail AI workspace.
+- [x] Lock accepted conversations against further messages or draft generation.
+- [x] Cover owner isolation, bilingual validation, acceptance, queue creation, and UI restoration.
+- [ ] Configure and validate the production `ZHIPU_API_KEY` without committing it.
 
-## 5. P4 FOP-Backed Quote Workspace Tasks
+## 5. Phase 2: P4 FOP-Backed Quote Workspace Tasks
+
+Status: internal contracts and UI foundation active; live Kingdee Cloud Cosmic adapters remain gated by the FOP interface inventory.
 
 ### P4-A Quote Surface And Domain Contracts
 
 - [x] Add Quotes navigation and lead-detail entry.
-- [ ] Add quote draft, version, source, validity, and provider-status UI states.
-- [ ] Add product/SKU line editor.
+- [x] Add quote draft, version, source, validity, and provider-status UI states.
+- [x] Add product/SKU line editor.
 - [x] Add ordered, non-overlapping quantity-tier editor with explicit unit and currency.
 - [x] Add multi-country destination selector and package condition editor.
-- [ ] Add per-country logistics channel comparison.
+- [x] Add two-level FOP custom/actual logistics-channel selection with actual-channel multi-select.
+- [x] Add per-country and per-selected-channel logistics comparison.
+- [x] Add FOP purchase-cost fields and user-defined product gross margin.
+- [x] Add per-selected-channel logistics gross margin.
 - [x] Add product/SKU x quantity tier x destination country x shipping channel matrix shell.
 - [x] Define validated quote DTOs and decimal-safe monetary fields.
 - [x] Persist immutable quote request/provider snapshots through reviewed migrations.
+- [x] Export a selected immutable quotation version as a HyperZone template-style Excel workbook.
+- [x] Preserve cost, margin, channel, carrier, country, customer amount, source version, and quote version in the export.
+- [x] Protect quotation exports with the same owner scope as quotation detail APIs.
 
 ### P4-B FOP Provider Ports And Placeholder Adapters
 
 - [x] Define `FopProductCostPort`.
 - [x] Define `FopLogisticsRatePort`.
+- [x] Define `FopLogisticsCatalogPort` for custom and actual channel master data.
 - [x] Define integration-call status, idempotency, correlation, timeout, and retry contracts.
 - [x] Add explicit test adapters and fixtures for development/test only.
 - [x] Return a clear unavailable response when production FOP configuration is absent.
@@ -190,9 +248,11 @@ When work is interrupted, resume in this order:
 
 - [ ] Inventory Kingdee Cloud Cosmic authentication, endpoints/operations, bill/form IDs, and field mappings.
 - [ ] Confirm FOP product/SKU mapping source and cost contract.
-- [ ] Confirm FOP country/channel/package fields and logistics-rate contract.
+- [ ] Confirm FOP custom-channel/actual-channel codes, status fields, country/channel/package fields, and logistics-rate contract.
 - [ ] Reconcile approved sandbox fixtures against FOP results.
 - [ ] Configure secrets, redaction, metrics, alerts, rollback, and production enablement flag.
+- [ ] Obtain Kingdee Cloud Cosmic authentication, operation/form IDs, field mappings, and error envelopes.
+- [ ] Confirm lightweight SKU/product reference synchronization and real-time pricing/freight ownership.
 
 Live FOP integration is blocked by the interface inventory, not by the quote UI work. The canonical contract is `AUTOFLOW_FOP_INTEGRATION_SPEC.md`.
 
@@ -272,3 +332,16 @@ docker exec hyperzone psql -U postgres -d noteflow -c "select current_database()
 - P2 exposes those relationships in discovery workflows and can create linked records automatically.
 - `frontend/src/api/autoflow.ts` is the single source for current AutoFlow frontend API types.
 - AutoFlow backend write endpoints use DTO classes from `backend/src/modules/autoflow/dto/autoflow.dto.ts`.
+
+## 10. P3 Outreach Workspace And Navigation Closeout
+
+- [x] Move AI prompt templates from personal settings to an authenticated top-level route and sidebar entry.
+- [x] Preserve independent `ai_prompt_templates` and `ai_prompt_bindings` persistence with per-user active bindings.
+- [x] Make Facebook the default outreach channel, followed by WhatsApp, email, Instagram, and other.
+- [x] Add an explicit manual target for the other outreach channel.
+- [x] Return linked customer basics and current contact channels with each outreach task.
+- [x] Display the linked customer profile, store entry, score, status, and contact channels on the outreach board.
+- [x] Make dashboard and follow-up metric cards navigate to corresponding lists.
+- [x] Apply lead and outreach status filters from route query parameters.
+- [x] Add and apply the PostgreSQL `other` channel enum migration.
+- [ ] Update the operation manual only after the user confirms feature optimization is complete.

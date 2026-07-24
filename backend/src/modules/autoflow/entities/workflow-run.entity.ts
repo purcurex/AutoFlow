@@ -18,6 +18,8 @@ import {
   type SeedType,
   type WorkflowStage,
   type WorkflowStatus,
+  type GoogleSearchOptions,
+  DEFAULT_GOOGLE_SEARCH_OPTIONS,
 } from '../autoflow.types'
 import { LeadEntity } from './lead.entity'
 import { WorkflowStepEntity } from './workflow-step.entity'
@@ -29,16 +31,37 @@ import { WorkflowJobEntity } from './workflow-job.entity'
 @Index('idx_workflow_runs_team_id', ['teamId'])
 @Index('idx_workflow_runs_status', ['status'])
 @Index('idx_workflow_runs_updated_at', ['updatedAt'])
+@Index('idx_workflow_runs_parent_id', ['parentWorkflowRunId'])
+@Index('idx_workflow_runs_root_revision', ['rootWorkflowRunId', 'revisionNo'])
+@Index('idx_workflow_runs_owner_archived_at', ['ownerUserId', 'archivedAt'])
+@Index('uq_workflow_runs_owner_display_id', ['ownerUserId', 'displayId'], { unique: true })
 @Check('chk_workflow_runs_progress', 'progress >= 0 AND progress <= 100')
+@Check('chk_workflow_runs_revision_no', 'revision_no >= 1')
+@Check(
+  'chk_workflow_runs_display_id',
+  "display_id ~ '^[0-9]{2,6}$' AND display_id::integer BETWEEN 1 AND 999999",
+)
 export class WorkflowRunEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string
+
+  @Column({ name: 'display_id', type: 'varchar', length: 6 })
+  displayId: string
 
   @Column({ name: 'owner_user_id', type: 'uuid' })
   ownerUserId: string
 
   @Column({ name: 'team_id', type: 'uuid', nullable: true })
   teamId: string | null
+
+  @Column({ name: 'parent_workflow_run_id', type: 'uuid', nullable: true })
+  parentWorkflowRunId: string | null
+
+  @Column({ name: 'root_workflow_run_id', type: 'uuid', nullable: true })
+  rootWorkflowRunId: string | null
+
+  @Column({ name: 'revision_no', type: 'integer', default: 1 })
+  revisionNo: number
 
   @Column({ length: 120 })
   name: string
@@ -51,6 +74,9 @@ export class WorkflowRunEntity {
 
   @Column({ name: 'target_market', length: 80, default: 'United States' })
   targetMarket: string
+
+  @Column({ name: 'search_options', type: 'jsonb', default: () => `'${JSON.stringify(DEFAULT_GOOGLE_SEARCH_OPTIONS)}'::jsonb` })
+  searchOptions: GoogleSearchOptions
 
   @Column({
     type: 'enum',
@@ -80,6 +106,9 @@ export class WorkflowRunEntity {
 
   @Column({ name: 'completed_at', type: 'timestamptz', nullable: true })
   completedAt: Date | null
+
+  @Column({ name: 'archived_at', type: 'timestamptz', nullable: true })
+  archivedAt: Date | null
 
   @ManyToOne(() => User, { onDelete: 'RESTRICT' })
   @JoinColumn({ name: 'owner_user_id', foreignKeyConstraintName: 'fk_workflow_runs_owner' })

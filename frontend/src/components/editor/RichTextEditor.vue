@@ -9,6 +9,9 @@ import { Highlight } from '@tiptap/extension-highlight'
 import { TextStyle } from '@tiptap/extension-text-style'
 import { Link } from '@tiptap/extension-link'
 import { common, createLowlight } from 'lowlight'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 // 自定义字体大小扩展
 const FontSize = TextStyle.extend({
@@ -63,6 +66,8 @@ const editor = useEditor({
       openOnClick: false,
       HTMLAttributes: {
         class: 'editor-link',
+        target: '_blank',
+        rel: 'noopener noreferrer',
       },
     }),
   ],
@@ -155,7 +160,7 @@ function toggleFormatPainter() {
 
   // 检查是否有选中文本
   if (from === to) {
-    alert('请先选中带有格式的文本')
+    alert(t('editor.painterSelect'))
     return
   }
 
@@ -163,7 +168,7 @@ function toggleFormatPainter() {
   const format = getSelectionFormat()
 
   if (!format) {
-    alert('选中的文本没有特殊格式')
+    alert(t('editor.painterEmpty'))
     return
   }
 
@@ -384,7 +389,7 @@ function unsetFontSize() {
         @click="undo"
         class="editor-toolbar-btn"
         :disabled="!editor?.can().undo()"
-        title="撤销 (Ctrl+Z)"
+        :title="`${t('editor.undo')} (Ctrl+Z)`"
       >
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
@@ -394,7 +399,7 @@ function unsetFontSize() {
         @click="redo"
         class="editor-toolbar-btn"
         :disabled="!editor?.can().redo()"
-        title="重做 (Ctrl+Shift+Z)"
+        :title="`${t('editor.redo')} (Ctrl+Shift+Z)`"
       >
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 10h-10a8 8 0 00-8 8v2M21 10l-6 6m6-6l-6-6" />
@@ -407,7 +412,7 @@ function unsetFontSize() {
         @click="toggleFormatPainter"
         class="editor-toolbar-btn format-painter-btn"
         :class="{ active: isFormatPainterActive }"
-        :title="isFormatPainterActive ? '点击取消格式刷' : '格式刷：选中有格式的文本后点击，再选其他文本应用格式'"
+        :title="isFormatPainterActive ? t('editor.painterCancel') : t('editor.painter')"
       >
         <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
           <!-- 刷子柄 -->
@@ -427,7 +432,7 @@ function unsetFontSize() {
         @click="toggleBold"
         class="editor-toolbar-btn"
         :class="{ active: editor?.isActive('bold') }"
-        title="加粗"
+        :title="t('editor.bold')"
       >
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M6 4h8a4 4 0 014 4 4 4 0 01-4 4H6z M6 12h9a4 4 0 014 4 4 4 0 01-4 4H6z" />
@@ -437,7 +442,7 @@ function unsetFontSize() {
         @click="toggleItalic"
         class="editor-toolbar-btn"
         :class="{ active: editor?.isActive('italic') }"
-        title="斜体"
+        :title="t('editor.italic')"
       >
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 4h4m-2 0v16m4 0h-4" />
@@ -447,7 +452,7 @@ function unsetFontSize() {
         @click="toggleStrike"
         class="editor-toolbar-btn"
         :class="{ active: editor?.isActive('strike') }"
-        title="删除线"
+        :title="t('editor.strike')"
       >
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9.5c0-2.485-2.239-4.5-5-4.5S7 7.015 7 9.5c0 1.379.655 2.61 1.685 3.5H4m16 0h-4.685c1.03-.89 1.685-2.121 1.685-3.5M7 14.5c0 2.485 2.239 4.5 5 4.5s5-2.015 5-4.5" />
@@ -458,19 +463,19 @@ function unsetFontSize() {
         @click="toggleHeading(1)"
         class="editor-toolbar-btn text-sm font-bold"
         :class="{ active: editor?.isActive('heading', { level: 1 }) }"
-        title="标题1"
+        :title="t('editor.heading1')"
       >H1</button>
       <button
         @click="toggleHeading(2)"
         class="editor-toolbar-btn text-sm font-bold"
         :class="{ active: editor?.isActive('heading', { level: 2 }) }"
-        title="标题2"
+        :title="t('editor.heading2')"
       >H2</button>
       <button
         @click="toggleHeading(3)"
         class="editor-toolbar-btn text-sm font-bold"
         :class="{ active: editor?.isActive('heading', { level: 3 }) }"
-        title="标题3"
+        :title="t('editor.heading3')"
       >H3</button>
       <div class="w-px h-6 bg-[var(--color-border)] mx-1"></div>
 
@@ -480,7 +485,7 @@ function unsetFontSize() {
           @click.stop="showFontSizePicker = !showFontSizePicker; showColorPicker = false; showHighlightPicker = false"
           class="editor-toolbar-btn text-sm"
           :class="{ active: showFontSizePicker }"
-          title="字体大小"
+          :title="t('editor.fontSize')"
         >
           Aa
         </button>
@@ -509,7 +514,7 @@ function unsetFontSize() {
           @click.stop="showColorPicker = !showColorPicker; showFontSizePicker = false; showHighlightPicker = false"
           class="editor-toolbar-btn"
           :class="{ active: showColorPicker }"
-          title="文字颜色"
+          :title="t('editor.textColor')"
         >
           <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
             <path d="M11 2L5.5 16h2.25l1.12-3h6.25l1.13 3h2.25L13 2h-2zm-1.38 9L12 4.67 14.38 11H9.62z"/>
@@ -534,7 +539,7 @@ function unsetFontSize() {
           @click.stop="showHighlightPicker = !showHighlightPicker; showColorPicker = false; showFontSizePicker = false"
           class="editor-toolbar-btn"
           :class="{ active: showHighlightPicker }"
-          title="高亮颜色"
+          :title="t('editor.highlight')"
         >
           <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
             <path d="M15.243 4.515l-6.738 6.737-.707 2.121-1.04 1.041 2.828 2.829 1.04-1.041 2.122-.707 6.737-6.738-4.242-4.242zm6.364 3.535a1 1 0 010 1.414l-7.778 7.778-2.122.707-1.414 1.414a1 1 0 01-1.414 0l-4.243-4.243a1 1 0 010-1.414l1.414-1.414.707-2.121 7.778-7.778a1 1 0 011.414 0l5.657 5.657z"/>
@@ -558,7 +563,7 @@ function unsetFontSize() {
         @click="toggleBulletList"
         class="editor-toolbar-btn"
         :class="{ active: editor?.isActive('bulletList') }"
-        title="无序列表"
+        :title="t('editor.bulletList')"
       >
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
@@ -568,7 +573,7 @@ function unsetFontSize() {
         @click="toggleOrderedList"
         class="editor-toolbar-btn"
         :class="{ active: editor?.isActive('orderedList') }"
-        title="有序列表"
+        :title="t('editor.orderedList')"
       >
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 20V4m10 16V4M4 8h6m4 0h6M4 16h6m4 0h6" />
@@ -578,7 +583,7 @@ function unsetFontSize() {
         @click="toggleCodeBlock"
         class="editor-toolbar-btn"
         :class="{ active: editor?.isActive('codeBlock') }"
-        title="代码块"
+        :title="t('editor.codeBlock')"
       >
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
@@ -588,7 +593,7 @@ function unsetFontSize() {
         @click="toggleBlockquote"
         class="editor-toolbar-btn"
         :class="{ active: editor?.isActive('blockquote') }"
-        title="引用"
+        :title="t('editor.quote')"
       >
         <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
           <path d="M6 17h3l2-4V7H5v6h3zm8 0h3l2-4V7h-6v6h3z" />
@@ -599,7 +604,7 @@ function unsetFontSize() {
         @click="setLink"
         class="editor-toolbar-btn"
         :class="{ active: editor?.isActive('link') }"
-        :title="editor?.isActive('link') ? '取消链接' : '插入链接'"
+        :title="editor?.isActive('link') ? t('editor.removeLink') : t('editor.insertLink')"
       >
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />

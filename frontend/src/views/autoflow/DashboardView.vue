@@ -1,136 +1,67 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { computed, onMounted } from 'vue'
-import { RouterLink } from 'vue-router'
+import { ArrowRight, CheckCircle2, MessageSquareReply, PlayCircle, Target, Users } from 'lucide-vue-next'
+import { useI18n } from 'vue-i18n'
+import { useRoute } from 'vue-router'
 import { useAutoFlowStore } from '@/stores'
 import { AppLayout } from '@/components/layout'
+import { EmptyState, PageHeader, StatusBadge } from '@/components/ui'
+import { withReturnTo } from '@/composables/useReturnNavigation'
+import { workflowCreatedDate } from '@/utils/workflowDisplay'
 
 const store = useAutoFlowStore()
-
-onMounted(() => {
-  store.fetchDashboard()
-})
-
+const route = useRoute()
+const { t } = useI18n()
+onMounted(() => store.fetchDashboard())
 const metrics = computed(() => store.dashboard?.metrics)
 const workflows = computed(() => store.dashboard?.recentWorkflows || store.workflows)
 const topLeads = computed(() => store.dashboard?.topLeads || store.leads.slice(0, 5))
 const tasks = computed(() => store.dashboard?.nextTasks || store.outreachTasks.slice(0, 4))
-
+const metricCards = computed(() => [
+  { label: t('dashboard.activeRuns'), value: metrics.value?.activeWorkflows ?? 0, icon: PlayCircle, to: '/workflows' },
+  { label: t('dashboard.newLeads'), value: metrics.value?.newLeads ?? 0, icon: Users, to: '/leads?status=new' },
+  { label: t('dashboard.topQualified'), value: store.topLeads.filter((lead) => lead.status === 'qualified').length, icon: Target, to: '/leads?status=qualified' },
+  { label: t('dashboard.readyTasks'), value: metrics.value?.readyOutreach ?? 0, icon: CheckCircle2, to: '/outreach?status=ready' },
+  { label: t('dashboard.replies'), value: metrics.value?.replies ?? 0, icon: MessageSquareReply, to: '/leads?status=replied' },
+  { label: t('dashboard.leadRecords'), value: store.followUpStages.reduce((sum, stage) => sum + stage.count, 0), icon: Users, to: '/leads' },
+])
 </script>
 
 <template>
   <AppLayout>
-    <div class="min-h-full bg-slate-50 p-6 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
-      <div class="mb-6 flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <p class="text-sm font-medium text-slate-500 dark:text-slate-400">Sales command center</p>
-          <h1 class="mt-1 text-2xl font-semibold">Dashboard</h1>
-        </div>
-        <RouterLink to="/workflows/new" class="btn btn-primary">New workflow</RouterLink>
+    <div class="app-page">
+      <PageHeader :eyebrow="t('dashboard.eyebrow')" :title="t('dashboard.title')" :description="t('dashboard.subtitle')" />
+
+      <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+        <RouterLink v-for="item in metricCards" :key="item.label" :to="item.to" class="metric-card group focus:outline-none focus:ring-2 focus:ring-orange-500"><p class="metric-label">{{ item.label }}</p><p class="metric-value">{{ item.value }}</p><span class="metric-icon transition group-hover:bg-orange-100 group-hover:text-orange-700 dark:group-hover:bg-orange-950"><component :is="item.icon" class="h-4 w-4" /></span><ArrowRight class="absolute bottom-4 right-4 h-4 w-4 text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-orange-500" /></RouterLink>
       </div>
 
-      <div class="grid gap-4 md:grid-cols-3 xl:grid-cols-6">
-        <div class="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-          <p class="text-xs font-medium uppercase text-slate-500">Active runs</p>
-          <p class="mt-2 text-2xl font-semibold">{{ metrics?.activeWorkflows ?? 0 }}</p>
-        </div>
-        <div class="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-          <p class="text-xs font-medium uppercase text-slate-500">New leads</p>
-          <p class="mt-2 text-2xl font-semibold">{{ metrics?.newLeads ?? 0 }}</p>
-        </div>
-        <div class="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-          <p class="text-xs font-medium uppercase text-slate-500">Top qualified</p>
-          <p class="mt-2 text-2xl font-semibold">{{ store.topLeads.filter((lead) => lead.status === 'qualified').length }}</p>
-        </div>
-        <div class="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-          <p class="text-xs font-medium uppercase text-slate-500">Ready tasks</p>
-          <p class="mt-2 text-2xl font-semibold">{{ metrics?.readyOutreach ?? 0 }}</p>
-        </div>
-        <div class="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-          <p class="text-xs font-medium uppercase text-slate-500">Replies</p>
-          <p class="mt-2 text-2xl font-semibold">{{ metrics?.replies ?? 0 }}</p>
-        </div>
-        <div class="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-          <p class="text-xs font-medium uppercase text-slate-500">Lead records</p>
-          <p class="mt-2 text-2xl font-semibold">{{ store.followUpStages.reduce((sum, stage) => sum + stage.count, 0) }}</p>
-        </div>
-      </div>
-
-      <div class="mt-6 grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-        <section class="rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-          <div class="flex items-center justify-between border-b border-slate-200 p-4 dark:border-slate-800">
-            <h2 class="font-semibold">Workflow activity</h2>
-            <RouterLink to="/workflows" class="text-sm font-medium text-primary-600">View all</RouterLink>
-          </div>
-          <div class="divide-y divide-slate-100 dark:divide-slate-800">
-            <div v-for="workflow in workflows.slice(0, 5)" :key="workflow.id" class="p-4">
-              <div class="flex items-center justify-between gap-4">
-                <div class="min-w-0">
-                  <p class="truncate font-medium">{{ workflow.name }}</p>
-                  <p class="mt-1 text-sm text-slate-500">{{ workflow.currentStage }} · {{ workflow.targetMarket }}</p>
-                </div>
-                <span class="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium capitalize text-slate-700 dark:bg-slate-800 dark:text-slate-200">
-                  {{ workflow.status }}
-                </span>
-              </div>
-              <div class="mt-3 h-2 rounded-full bg-slate-100 dark:bg-slate-800">
-                <div class="h-2 rounded-full bg-teal-500" :style="{ width: `${workflow.progress}%` }"></div>
-              </div>
+      <div class="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1.25fr)_minmax(340px,0.75fr)]">
+        <section class="panel overflow-hidden">
+          <div class="panel-header"><div><h2 class="panel-title">{{ t('dashboard.workflowActivity') }}</h2><p class="panel-description">{{ t('workflows.description') }}</p></div><RouterLink to="/workflows" class="btn btn-ghost">{{ t('dashboard.viewAll') }}<ArrowRight class="h-4 w-4" /></RouterLink></div>
+          <div v-if="workflows.length" class="divide-y divide-slate-100 dark:divide-slate-800">
+            <div v-for="workflow in workflows.slice(0, 5)" :key="workflow.id" class="px-5 py-4">
+              <div class="flex items-start justify-between gap-4"><div class="min-w-0"><p class="truncate text-sm font-semibold text-slate-900 dark:text-white">{{ workflow.name }}</p><p class="mt-1 text-xs text-slate-500">ID {{ workflow.displayId }} · {{ workflowCreatedDate(workflow.createdAt) }} · {{ $te(`status.${workflow.currentStage}`) ? $t(`status.${workflow.currentStage}`) : workflow.currentStage }} · {{ workflow.targetMarket }}</p></div><StatusBadge :status="workflow.status" /></div>
+              <div class="mt-3 flex items-center gap-3"><div class="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800"><div class="h-full rounded-full bg-gradient-to-r from-orange-500 to-amber-400" :style="{ width: `${workflow.progress}%` }" /></div><span class="w-9 text-right text-xs font-semibold tabular-nums text-slate-500">{{ workflow.progress }}%</span></div>
             </div>
-            <div v-if="workflows.length === 0" class="p-6 text-sm text-slate-500">No workflow data yet.</div>
           </div>
+          <EmptyState v-else :message="t('dashboard.noWorkflow')"><RouterLink to="/workflows/new" class="btn btn-secondary">{{ t('nav.newWorkflow') }}</RouterLink></EmptyState>
         </section>
 
-        <section class="rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-          <div class="flex items-center justify-between border-b border-slate-200 p-4 dark:border-slate-800">
-            <h2 class="font-semibold">Outreach queue</h2>
-            <RouterLink to="/outreach" class="text-sm font-medium text-primary-600">Open queue</RouterLink>
+        <section class="panel overflow-hidden">
+          <div class="panel-header"><div><h2 class="panel-title">{{ t('dashboard.outreachQueue') }}</h2><p class="panel-description">{{ t('outreach.reviewHint') }}</p></div><RouterLink to="/outreach" class="btn btn-ghost">{{ t('dashboard.openQueue') }}<ArrowRight class="h-4 w-4" /></RouterLink></div>
+          <div v-if="tasks.length" class="divide-y divide-slate-100 dark:divide-slate-800">
+            <div v-for="task in tasks" :key="task.id" class="px-5 py-4"><div class="flex items-center justify-between gap-3"><p class="text-sm font-semibold capitalize text-slate-900 dark:text-white">{{ task.channel }}</p><StatusBadge :status="task.status" /></div><p class="mt-2 line-clamp-2 text-sm leading-6 text-slate-600 dark:text-slate-400">{{ task.message }}</p></div>
           </div>
-          <div class="divide-y divide-slate-100 dark:divide-slate-800">
-            <div v-for="task in tasks" :key="task.id" class="p-4">
-              <div class="flex items-center justify-between">
-                <p class="font-medium capitalize">{{ task.channel }}</p>
-                <span class="text-xs text-slate-500">{{ task.owner }}</span>
-              </div>
-              <p class="mt-2 line-clamp-2 text-sm text-slate-600 dark:text-slate-300">{{ task.message }}</p>
-            </div>
-            <div v-if="tasks.length === 0" class="p-6 text-sm text-slate-500">No outreach tasks ready.</div>
-          </div>
+          <EmptyState v-else :message="t('dashboard.noOutreach')" />
         </section>
       </div>
 
-      <section class="mt-6 rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-        <div class="flex items-center justify-between border-b border-slate-200 p-4 dark:border-slate-800">
-          <h2 class="font-semibold">Highest scoring leads</h2>
-          <RouterLink to="/leads" class="text-sm font-medium text-primary-600">Lead pool</RouterLink>
-        </div>
-        <div class="overflow-x-auto">
-          <table class="w-full text-sm">
-            <thead class="bg-slate-50 text-left text-xs uppercase text-slate-500 dark:bg-slate-900">
-              <tr>
-                <th class="px-4 py-3">Brand</th>
-                <th class="px-4 py-3">Market</th>
-                <th class="px-4 py-3">Category</th>
-                <th class="px-4 py-3">Score</th>
-                <th class="px-4 py-3">Status</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
-              <tr v-for="lead in topLeads" :key="lead.id" class="hover:bg-slate-50 dark:hover:bg-slate-800/60">
-                <td class="px-4 py-3 font-medium"><RouterLink :to="`/leads/${lead.id}`">{{ lead.brandName }}</RouterLink></td>
-                <td class="px-4 py-3">{{ lead.country }}</td>
-                <td class="px-4 py-3">{{ lead.category }}</td>
-                <td class="px-4 py-3 font-semibold">{{ lead.totalScore }}</td>
-                <td class="px-4 py-3 capitalize">{{ lead.status }}</td>
-              </tr>
-              <tr v-if="topLeads.length === 0">
-                <td colspan="5" class="px-4 py-6 text-center text-slate-500">No leads discovered yet.</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+      <section class="panel mt-5 overflow-hidden">
+        <div class="panel-header"><div><h2 class="panel-title">{{ t('dashboard.highestLeads') }}</h2><p class="panel-description">{{ t('leads.description') }}</p></div><RouterLink to="/leads" class="btn btn-ghost">{{ t('dashboard.leadPool') }}<ArrowRight class="h-4 w-4" /></RouterLink></div>
+        <div v-if="topLeads.length" class="overflow-x-auto"><table class="data-table"><thead><tr><th>{{ t('dashboard.brand') }}</th><th>{{ t('common.market') }}</th><th>{{ t('common.category') }}</th><th>{{ t('common.score') }}</th><th>{{ t('common.status') }}</th></tr></thead><tbody><tr v-for="lead in topLeads" :key="lead.id"><td><RouterLink :to="withReturnTo(`/leads/${lead.id}`, route.fullPath)" class="font-semibold text-orange-600 hover:underline dark:text-orange-400">{{ lead.brandName }}</RouterLink><p class="mt-0.5 text-xs text-slate-500">{{ lead.domain }}</p></td><td>{{ lead.country }}</td><td>{{ lead.category }}</td><td><span class="font-bold text-slate-950 dark:text-white">{{ lead.totalScore }}</span></td><td><StatusBadge :status="lead.status" /></td></tr></tbody></table></div>
+        <EmptyState v-else :message="t('dashboard.noLeads')" />
       </section>
     </div>
   </AppLayout>
 </template>
-
-

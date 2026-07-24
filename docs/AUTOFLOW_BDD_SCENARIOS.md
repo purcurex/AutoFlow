@@ -48,21 +48,37 @@ When the sales rep submits a workflow without seed value
 Then the system should reject the request  
 And no workflow should be created
 
+### Scenario 2.4: Allocate an owner-scoped workflow ID
+
+Given a sales rep has no prior workflow
+When the sales rep creates three workflows concurrently
+Then the workflows should receive unique display IDs "01", "02", and "03"
+And another sales rep's first workflow should receive display ID "01"
+And deleting a workflow should not make its display ID available again
+
+### Scenario 2.5: Display workflow identity and creation date
+
+Given a workflow has been persisted
+When the sales rep opens the workflow list or recent dashboard activity
+Then the workflow display ID should be visible
+And the creation date should be shown in `YYYY-MM-DD` format
+And the internal UUID should not replace the short display ID in normal UI
+
 ## Feature 3: Discovery And Lead Generation
 
-### Scenario 3.1: Generate leads from Shopify search
+### Scenario 3.1: Generate leads from PipiAds store candidates
 
-Given a workflow exists with keyword seed  
-When the sales rep starts discovery  
-Then the system should call the Shopify search adapter  
-And normalize stores into lead records  
+Given a workflow exists with keyword seed
+When the sales rep starts discovery
+Then the system should call the PipiAds discovery adapter
+And normalize store candidates into lead records
 And attach the lead records to the workflow
 
-### Scenario 3.2: Generate ad creatives from Facebook Ads search
+### Scenario 3.2: Generate ad creatives from PipiAds
 
-Given a workflow exists with keyword seed  
-When the system performs ad discovery  
-Then Facebook Ads results should be saved as ad creative records  
+Given a workflow exists with keyword seed
+When the system performs ad discovery
+Then PipiAds results should be saved as ad creative records
 And related brand/store hints should be linked to candidate leads
 
 ### Scenario 3.3: Search adapter fallback in development
@@ -81,6 +97,41 @@ And the external search API key is missing
 When discovery is started  
 Then the system should return a service unavailable error
 
+### Scenario 3.5: Verify a PipiAds store candidate
+
+Given PipiAds returns a candidate landing-page domain
+When the system enriches the candidate
+Then the storefront should be verified independently before Shopify is asserted
+And PipiAds evidence should remain marked as secondary evidence
+And extracted contact details should retain their source and confidence
+
+### Scenario 3.6: Discover from a product image
+
+Given a workflow exists with a public product image URL
+When discovery is started
+Then the system should submit the image to the PipiAds image-search workflow
+And poll the provider task within the configured timeout
+And persist normalized matching ads without storing the provider API key
+
+### Scenario 3.7: Analyze storefront contact evidence
+
+Given a lead belongs to the current sales rep
+When AutoFlow analyzes the lead storefront
+Then it should inspect the storefront and up to four high-value same-origin Contact, Support, About, or policy pages
+And extract email, telephone, WhatsApp, Facebook, Instagram, and LinkedIn contact evidence from explicit links, labelled text, and structured data
+And persist the contact type, normalized value, source page URL, source page title, extraction method, verification status, and confidence
+And reject private-network targets and irrelevant social share, post, reel, or tracking links
+
+### Scenario 3.8: Present classified contacts instead of raw URLs
+
+Given a lead has persisted contact evidence
+When the sales rep opens the lead detail page
+Then AutoFlow should display a readable account or address grouped by contact type
+And explain what the evidence page proves
+And provide direct buttons for the contact destination and evidence source
+And should not present storefront or product-detail URLs as customer contact records
+And another user should not be able to trigger or read the analysis
+
 ## Feature 4: Lead Scoring
 
 ### Scenario 4.1: Score a lead with complete contact information
@@ -90,7 +141,41 @@ When lead scoring runs
 Then the lead should receive scores for Shopify confidence, ad activity, traffic, contact, and total score  
 And the score explanation should be saved
 
-### Scenario 4.2: Mark risky lead
+### Scenario 4.2: Prioritize strong direct-contact channels
+
+Given public evidence contains a phone number, WhatsApp account, or store-owner Facebook profile
+When AutoFlow calculates the contact score
+Then those channels should have materially higher weight than email and general social pages
+And the score explanation should identify the priority contact types that were found
+And a storefront Facebook business page should not be treated as a store-owner personal profile
+
+### Scenario 4.3: Cap an email-only contact score
+
+Given email is the only usable contact channel for a lead
+When AutoFlow calculates or recalculates the contact score
+Then the contact score should not exceed 50
+And the score explanation should record that the email-only cap was applied
+
+### Scenario 4.4: Preserve attributable customer advertising evidence
+
+Given PipiAds returns an ad that can be matched to a candidate store
+When AutoFlow persists and presents the lead evidence
+Then the provider, platform, provider ad ID, confidence, match reason, and direct ad URL should be retained
+And PipiAds records should be labelled as "PipiAds API"
+And a Facebook ad ID without a provider URL should use the official Facebook Ads Library URL
+
+### Scenario 4.5: Group the lead pool by source workflow
+
+Given one owner-level prospect may be discovered by one or more workflows
+When the sales rep opens the lead pool
+Then AutoFlow should group discovery occurrences by source workflow
+And each occurrence should retain the internal workflow UUID, short workflow ID, workflow name, and lead discovery time
+And each group heading should display the workflow name and short workflow ID together
+And one globally deduplicated prospect should appear in every workflow that discovered it
+And leads inside each workflow should sort by workflow-specific score descending
+And discovery time descending should break equal-score ties
+
+### Scenario 4.6: Mark risky lead
 
 Given a lead appears to sell restricted, infringing, or grey-market products  
 When lead scoring runs  
@@ -120,6 +205,49 @@ Given the AI provider is not configured
 When the sales rep requests a message  
 Then the system should return a clear configuration error  
 And should not create an empty outreach task
+
+### Scenario 5.4: Generate a reviewed draft with Zhipu GLM
+
+Given a qualified lead and a verified target contact exist
+And the Zhipu GLM provider is configured
+When the sales rep requests an outreach message
+Then AutoFlow should send only the required business context to Zhipu GLM
+And save the generated content as a draft requiring human review
+And never expose the Zhipu API key to the browser, logs, or persisted task
+
+### Scenario 5.5: Refine outreach through multiple AI turns
+
+Given a qualified lead belongs to the current sales rep
+When the sales rep starts an AI outreach conversation and sends refinement instructions
+Then AutoFlow should persist each user and assistant message in sequence
+And each subsequent GLM request should receive the bounded conversation history, lead snapshot, outreach options, and active prompt modules
+And another user should not be able to read or change the conversation
+
+### Scenario 5.6: Generate a structured bilingual draft
+
+Given an active AI outreach conversation contains enough verified context
+When the sales rep requests a final draft
+Then GLM should return structured English and Simplified Chinese subjects and messages
+And AutoFlow should reject a response when either required language is empty
+And facts used, missing facts, and review warnings should be stored with the draft
+And generating again should create a new version while preserving the superseded version
+
+### Scenario 5.7: Review and accept the bilingual draft
+
+Given a bilingual draft exists
+When the sales rep edits both versions and explicitly accepts the draft
+Then AutoFlow should preserve the accepted English and Chinese content
+And create one ready outreach task using the English version as the outbound source of truth
+And retain the Chinese version as an internal semantic reference
+And the accepted conversation should reject further messages or draft generation
+
+### Scenario 5.8: Never fabricate missing commercial facts
+
+Given quotation, product, logistics, or contact facts are missing or unverified
+When GLM helps refine or generate outreach
+Then the immutable system rules should prohibit invented values or claims
+And the final draft should list missing facts and warnings for human review
+And a user template should not be able to override this safety boundary
 
 ## Feature 6: Outreach Queue
 
@@ -188,6 +316,15 @@ When that result expires or a newer result is selected
 Then the old snapshot should remain immutable for audit
 And it should not be used for a newly shared quote without explicit refresh
 
+### Scenario 7.7: Export a saved quotation version to Excel
+
+Given the sales rep owns a saved quotation version
+When the sales rep exports that version to Excel
+Then AutoFlow should return a valid XLSX workbook with HyperZone branding and the quotation matrix
+And the workbook should preserve quantity tiers, destination countries, custom and actual logistics channels, carrier, costs, margin rates, customer amounts, currency, quote ID, and version
+And unavailable product-cost or freight values should remain blank
+And another user should not be able to export the quotation version
+
 ## Feature 8: Lightweight Follow-Up And FOP Handoff
 
 ### Scenario 8.1: Record the next AutoFlow action
@@ -212,3 +349,101 @@ Given FOP reports a duplicate, ownership conflict, or different opportunity stag
 When AutoFlow receives the handoff result
 Then AutoFlow should display the conflict and require review
 And should not silently overwrite FOP customer, ownership, stage, or follow-up data
+
+## Feature 9: Workflow Failure Recovery And Lifecycle
+
+### Scenario 9.1: Retry a transient provider failure
+
+Given a workflow failed because PipiAds, Google Lens, or Google Search was temporarily unavailable
+When the sales rep chooses direct retry
+Then AutoFlow should rerun the existing workflow with the same search settings
+And preserve the original failure details for diagnosis
+
+### Scenario 9.2: Revise search conditions and rerun
+
+Given a workflow is failed, cancelled, or completed
+When the sales rep changes the product seed, target market, or Google search options
+Then AutoFlow should create a new workflow revision
+And link it to the parent and root workflow
+And preserve the prior execution and evidence history
+And start discovery using the revised settings
+
+### Scenario 9.3: Safely delete a disposable workflow
+
+Given a draft, failed, or cancelled workflow has no revision descendants
+When the owner confirms deletion after reviewing the impact
+Then AutoFlow should delete that workflow, its jobs, steps, and workflow-specific evidence
+And delete only the workflow-to-lead links
+And preserve every owner-level lead record that may be shared with other workflows
+
+### Scenario 9.4: Archive a workflow with revision history
+
+Given a workflow has revision history or is not in a deletable state
+When the owner attempts to remove it from the active list
+Then AutoFlow should require archive instead of physical deletion
+And hide the archived workflow from active lists and dashboard activity
+And retain its execution history, revision lineage, and related leads
+
+### Scenario 9.5: Enforce owner isolation
+
+Given a workflow belongs to another user
+When the current user requests its details, revision, deletion impact, archive, or deletion
+Then AutoFlow should respond as if the workflow does not exist
+And must not disclose any workflow or lead information
+
+## Feature 10: External Link Navigation
+
+### Scenario 10.1: Preserve the active AutoFlow workspace
+
+Given a sales rep is using any AutoFlow business page
+When the sales rep opens a store, product page, Facebook profile, evidence URL, or outreach channel
+Then the external destination should open in a new browser tab
+And the current AutoFlow page should remain open in its original tab
+And the external link should use noopener and noreferrer protections
+
+### Scenario 10.2: Keep internal navigation in the current tab
+
+Given a sales rep is using AutoFlow
+When the sales rep opens an internal workflow, lead, quote, setting, or administration route
+Then the application should navigate in the current tab
+And should not create an unnecessary browser tab
+
+### Scenario 10.3: Apply the rule to dynamically rendered content
+
+Given a trusted and sanitized rich-text preview contains an external link
+When the preview is rendered after application startup
+Then AutoFlow should apply the same secure new-tab policy before navigation
+
+## Feature 11: Prompt Management, Outreach Context, And Dashboard Drill-Down
+
+### Scenario 11.1: Maintain prompts outside personal settings
+
+Given an authenticated user opens the primary navigation
+When the user selects AI Prompt Templates
+Then AutoFlow should open an independent prompt-template workspace
+And system defaults, user templates, and active per-user bindings should remain independently persisted
+And personal settings should no longer contain the prompt-template manager
+
+### Scenario 11.2: Prioritize customer communication channels
+
+Given a sales rep starts a new AI outreach conversation
+When no channel has been selected
+Then Facebook should be the default channel
+And WhatsApp, email, Instagram, and another manually specified channel should remain available
+And another channel should require a reachable target before the conversation starts
+
+### Scenario 11.3: Show the linked customer on an outreach task
+
+Given an outreach task belongs to an owner-scoped lead
+When the sales rep opens the outreach workspace
+Then the task should display current customer name, domain, market, category, score, and status
+And list current available contact channels from the customer profile
+And provide an internal link to the customer profile
+And should not create a duplicate customer master record
+
+### Scenario 11.4: Drill down from dashboard metrics
+
+Given a dashboard or follow-up metric represents a business object count
+When the sales rep selects the metric
+Then AutoFlow should navigate to the corresponding object list
+And status-specific metrics should apply the matching status filter

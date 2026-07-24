@@ -15,6 +15,7 @@ import { WorkflowRunEntity } from './workflow-run.entity'
 @Entity('workflow_leads')
 @Unique('uq_workflow_leads_run_lead', ['workflowRunId', 'leadId'])
 @Index('idx_workflow_leads_run_discovered_at', ['workflowRunId', 'discoveredAt'])
+@Index('idx_workflow_leads_run_score_discovered', ['workflowRunId', 'sourceScore', 'discoveredAt'])
 @Index('idx_workflow_leads_lead_id', ['leadId'])
 @Check('chk_workflow_leads_source_score', 'source_score >= 0 AND source_score <= 100')
 export class WorkflowLeadEntity {

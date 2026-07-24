@@ -2,7 +2,7 @@ import { NotFoundException } from '@nestjs/common'
 import type { ObjectLiteral, Repository } from 'typeorm'
 import { WorkflowRunEntity } from '../autoflow/entities'
 import { DiscoveryService } from './discovery.service'
-import type { AdDiscoveryAdapter, StoreDiscoveryAdapter } from './discovery.types'
+import type { AdDiscoveryAdapter, NormalizedShopifyStore, StoreDiscoveryAdapter } from './discovery.types'
 import { AdCreativeEntity, ShopifyStoreEntity } from './entities'
 import type { StorefrontEnrichmentService } from './storefront-enrichment.service'
 
@@ -49,22 +49,29 @@ describe('DiscoveryService', () => {
     } as WorkflowRunEntity)
     const ad = {
       provider: 'facebook_ads',
+      evidenceSource: 'facebook_ads_search',
+      platform: 'facebook' as const,
+      adId: 'ad-1',
       advertiserName: 'PawSpark',
       sourceUrl: 'https://facebook.example/ad/1',
+      isDirectAdLink: true,
       description: 'Pet brush ad',
       imageUrl: null,
       confidence: 60,
       rawPayload: {},
     }
     adAdapter.discover.mockResolvedValue([ad, ad])
-    const store = {
+    const store: NormalizedShopifyStore = {
       name: 'PawSpark',
       domain: 'pawspark.myshopify.com',
       normalizedDomain: 'pawspark.myshopify.com',
       url: 'https://pawspark.myshopify.com',
+      productUrl: 'https://pawspark.myshopify.com/products/pet-brush',
       description: 'Pet products',
       imageUrl: null,
       detectionSource: 'shopify_search',
+      discoverySources: ['google_search'],
+      validityScore: 90,
       shopifyConfidence: 100,
       verificationStatus: 'verified' as const,
       verificationEvidence: { source: 'test' },
@@ -77,11 +84,11 @@ describe('DiscoveryService', () => {
 
     const result = await service.discoverEvidence('owner-1', 'workflow-1')
 
-    expect(adAdapter.discover).toHaveBeenCalledWith({
+    expect(adAdapter.discover).toHaveBeenCalledWith(expect.objectContaining({
       type: 'keyword',
       value: 'pet brush',
       targetMarket: 'United States',
-    })
+    }))
     expect(result.ads).toHaveLength(1)
     expect(result.stores).toHaveLength(1)
     expect(result.candidates).toEqual([expect.objectContaining({

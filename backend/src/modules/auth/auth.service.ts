@@ -51,6 +51,7 @@ export class AuthService {
       token,
       user: {
         id: user.id,
+        displayId: user.displayId,
         email: user.email,
         username: user.username,
         avatarUrl: user.avatarUrl,
@@ -78,6 +79,7 @@ export class AuthService {
       token,
       user: {
         id: user.id,
+        displayId: user.displayId,
         email: user.email,
         username: user.username,
         avatarUrl: user.avatarUrl,

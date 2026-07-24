@@ -15,6 +15,8 @@ import type { WorkflowStage } from '../autoflow/autoflow.types'
 import { DiscoveryService } from './discovery.service'
 import type { DiscoveryEvidenceResult, LeadCandidate } from './discovery.types'
 import { ShopifyStoreEntity } from './entities'
+import { calculateContactScore } from './contact-scoring'
+import { SourcingService } from '../sourcing/sourcing.service'
 
 export interface DiscoveryStartResult {
   workflowRunId: string
@@ -38,6 +40,7 @@ export class WorkflowExecutionService {
     @InjectRepository(WorkflowStepEntity)
     private readonly workflowStepRepository: Repository<WorkflowStepEntity>,
     private readonly discoveryService: DiscoveryService,
+    private readonly sourcingService: SourcingService,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -125,6 +128,7 @@ export class WorkflowExecutionService {
         await this.completeStep(workflowRunId, 'ad_discovery', { count: evidence.ads.length })
         await this.completeStep(workflowRunId, 'store_detection', { count: evidence.stores.length })
       }
+      await this.sourcingService.runForWorkflow(ownerUserId, workflowRunId)
       await this.updateWorkflow(ownerUserId, workflowRunId, 'lead_cleaning', 55)
 
       activeStages = ['lead_cleaning']
@@ -195,6 +199,8 @@ export class WorkflowExecutionService {
           domain: candidate.domain,
           normalizedDomain: candidate.normalizedDomain,
           storeUrl: candidate.storeUrl,
+          productUrl: candidate.productUrl,
+          discoverySources: candidate.discoverySources,
           source: candidate.source,
           country: '',
           language: 'English',
@@ -213,7 +219,7 @@ export class WorkflowExecutionService {
           .into(LeadEntity)
           .values(values as unknown as QueryDeepPartialEntity<LeadEntity>)
           .orUpdate(
-            ['brand_name', 'domain', 'store_url', 'source', 'shopify_confidence', 'traffic_score'],
+            ['brand_name', 'domain', 'store_url', 'product_url', 'source', 'discovery_sources', 'shopify_confidence', 'traffic_score'],
             ['owner_user_id', 'normalized_domain'],
             { skipUpdateIfNoValuesChanged: true },
           )
@@ -222,19 +228,29 @@ export class WorkflowExecutionService {
         const lead = await leadRepository.findOneOrFail({
           where: { ownerUserId: workflow.ownerUserId, normalizedDomain: candidate.normalizedDomain },
         })
-        const existingLink = await linkRepository.findOne({
-          where: { workflowRunId: workflow.id, leadId: lead.id },
-        })
-        await linkRepository.save(linkRepository.create({
-          ...existingLink,
-          workflowRunId: workflow.id,
-          leadId: lead.id,
-          source: candidate.source,
-          sourceReference: candidate.storeUrl,
-          sourceScore: candidate.shopifyConfidence,
-          metadata: { normalizedDomain: candidate.normalizedDomain },
-          discoveredAt: existingLink?.discoveredAt || new Date(),
-        }))
+        await linkRepository
+          .createQueryBuilder()
+          .insert()
+          .into(WorkflowLeadEntity)
+          .values({
+            workflowRunId: workflow.id,
+            leadId: lead.id,
+            source: candidate.source,
+            sourceReference: candidate.storeUrl,
+            sourceScore: candidate.shopifyConfidence,
+            metadata: {
+              normalizedDomain: candidate.normalizedDomain,
+              productUrl: candidate.productUrl,
+              discoverySources: candidate.discoverySources,
+              validityScore: candidate.validityScore,
+            },
+          } as QueryDeepPartialEntity<WorkflowLeadEntity>)
+          .orUpdate(
+            ['source', 'source_reference', 'source_score', 'metadata'],
+            ['workflow_run_id', 'lead_id'],
+            { skipUpdateIfNoValuesChanged: true },
+          )
+          .execute()
         await storeRepository.update(
           { workflowRunId: workflow.id, normalizedDomain: candidate.normalizedDomain },
           { leadId: lead.id },
@@ -292,15 +308,18 @@ export class WorkflowExecutionService {
           { conflictPaths: ['leadId', 'workflowRunId'], skipUpdateIfNoValuesChanged: true },
         )
 
-        lead.shopifyConfidence = Math.max(lead.shopifyConfidence, dimensions.shopifyConfidence)
-        lead.adActivityScore = Math.max(lead.adActivityScore, dimensions.adActivityScore)
-        lead.trafficScore = Math.max(lead.trafficScore, dimensions.trafficScore)
-        lead.contactScore = Math.max(lead.contactScore, dimensions.contactScore)
-        lead.totalScore = Math.max(lead.totalScore, dimensions.totalScore)
+        lead.shopifyConfidence = dimensions.shopifyConfidence
+        lead.adActivityScore = dimensions.adActivityScore
+        lead.trafficScore = dimensions.trafficScore
+        lead.contactScore = dimensions.contactScore
+        lead.totalScore = dimensions.totalScore
         await leadRepository.save(lead)
         await linkRepository.update(
           { workflowRunId: workflow.id, leadId: lead.id },
-          { sourceScore: dimensions.totalScore, metadata: dimensions.reasons },
+          {
+            sourceScore: dimensions.totalScore,
+            metadata: dimensions.reasons,
+          } as unknown as QueryDeepPartialEntity<WorkflowLeadEntity>,
         )
       }
     })
@@ -325,7 +344,8 @@ export class WorkflowExecutionService {
           candidate.adEvidence.reduce((sum, item) => sum + item.confidence, 0) / candidate.adEvidence.length
           + Math.min(15, (candidate.adEvidence.length - 1) * 5),
         ))
-    const contactScore = this.calculateContactScore(candidate)
+    const contactScoreResult = calculateContactScore(candidate.contacts)
+    const contactScore = contactScoreResult.score
     const dropshippingFitScore = Math.round(
       candidate.shopifyConfidence * 0.5 + candidate.trafficScore * 0.25 + adActivityScore * 0.25,
     )
@@ -337,12 +357,13 @@ export class WorkflowExecutionService {
       failed: 75,
     } as const)[candidate.verificationStatus]
     const totalScore = Math.max(0, Math.min(100, Math.round(
-      candidate.shopifyConfidence * 0.25
+      candidate.shopifyConfidence * 0.2
       + adActivityScore * 0.15
-      + candidate.trafficScore * 0.15
-      + contactScore * 0.1
-      + categoryFitScore * 0.15
-      + dropshippingFitScore * 0.2
+      + candidate.trafficScore * 0.1
+      + contactScore * 0.25
+      + categoryFitScore * 0.1
+      + dropshippingFitScore * 0.1
+      + candidate.validityScore * 0.1
       - riskScore * 0.1,
     )))
 
@@ -356,38 +377,24 @@ export class WorkflowExecutionService {
       riskScore,
       totalScore,
       grade: totalScore >= 80 ? 'A' : totalScore >= 65 ? 'B' : totalScore >= 50 ? 'C' : 'D',
-      modelVersion: 'rules-v2-evidence',
+      modelVersion: 'rules-v3-priority-contact-ads',
       reasons: {
         adEvidenceCount: evidence.ads.length,
         linkedAdEvidenceCount: candidate.adEvidence.length,
         adEvidence: candidate.adEvidence,
         contactEvidenceCount: candidate.contacts.length,
         contactTypes: [...new Set(candidate.contacts.map((contact) => contact.type))],
+        priorityContactTypes: contactScoreResult.priorityTypes,
+        priorityContactCount: contactScoreResult.priorityCount,
+        hasOwnerFacebookProfile: contactScoreResult.hasOwnerFacebookProfile,
+        emailOnlyCapApplied: contactScoreResult.emailOnlyCapApplied,
         storeVerificationStatus: candidate.verificationStatus,
+        productUrl: candidate.productUrl,
+        discoverySources: candidate.discoverySources,
+        validityScore: candidate.validityScore,
         matchedSeedTokens,
       },
     }
-  }
-
-  private calculateContactScore(candidate: LeadCandidate): number {
-    let score = 0
-    for (const contact of candidate.contacts) {
-      const channelWeight = ({
-        email: 85,
-        whatsapp: 100,
-        phone: 80,
-        instagram: 65,
-        facebook: 55,
-        linkedin: 60,
-        website: 30,
-      } as const)[contact.type]
-      const verificationWeight = contact.verificationStatus === 'verified'
-        ? 1
-        : contact.verificationStatus === 'observed' ? 0.8 : 0.45
-      score = Math.max(score, Math.round(channelWeight * verificationWeight * (contact.confidence / 100)))
-    }
-    const channelBonus = Math.min(15, Math.max(0, candidate.contacts.length - 1) * 5)
-    return Math.min(100, score + channelBonus)
   }
 
   private scoreTokens(value: string): string[] {

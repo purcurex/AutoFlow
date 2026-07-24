@@ -1,23 +1,24 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { Calculator, LayoutDashboard, ListTodo, MessageSquareText, Settings, Shield, Users, Workflow } from 'lucide-vue-next'
+import { Calculator, LayoutDashboard, ListTodo, MessageSquareText, Settings, Shield, Sparkles, Users, Workflow } from 'lucide-vue-next'
+import { useI18n } from 'vue-i18n'
 import { useUserStore } from '@/stores'
+import { BrandLogo } from '@/components/ui'
 
-defineProps<{
-  collapsed: boolean
-}>()
-
+const props = defineProps<{ collapsed: boolean }>()
+const emit = defineEmits<{ navigate: [] }>()
 const route = useRoute()
 const userStore = useUserStore()
+const { t } = useI18n()
 
 const navItems = computed(() => [
-  { label: 'Dashboard', to: '/', match: ['Dashboard'], icon: LayoutDashboard },
-  { label: 'Workflows', to: '/workflows', match: ['Workflows', 'NewWorkflow'], icon: Workflow },
-  { label: 'Leads', to: '/leads', match: ['Leads', 'LeadDetail'], icon: Users },
-  { label: 'Outreach', to: '/outreach', match: ['Outreach'], icon: MessageSquareText },
-  { label: 'Quotes', to: '/quotes', match: ['Quotes'], icon: Calculator },
-  { label: 'Follow-up', to: '/follow-ups', match: ['FollowUps'], icon: ListTodo },
+  { label: t('nav.dashboard'), to: '/', match: ['Dashboard'], icon: LayoutDashboard },
+  { label: t('nav.workflows'), to: '/workflows', match: ['Workflows', 'NewWorkflow'], icon: Workflow },
+  { label: t('nav.leads'), to: '/leads', match: ['Leads', 'LeadDetail'], icon: Users },
+  { label: t('nav.outreach'), to: '/outreach', match: ['Outreach'], icon: MessageSquareText },
+  { label: t('nav.quotes'), to: '/quotes', match: ['Quotes'], icon: Calculator },
+  { label: t('nav.followUps'), to: '/follow-ups', match: ['FollowUps'], icon: ListTodo },
 ])
 
 function isActive(item: { match: string[] }) {
@@ -27,49 +28,45 @@ function isActive(item: { match: string[] }) {
 
 <template>
   <aside
-    class="h-full border-r border-[var(--color-border)] bg-white text-slate-900 transition-all dark:bg-slate-950 dark:text-slate-100"
-    :class="collapsed ? 'w-0 overflow-hidden' : 'w-64'"
+    class="fixed inset-y-0 left-0 z-40 flex shrink-0 flex-col border-r bg-white transition-all duration-200 dark:bg-[#0d0f13] md:relative"
+    :class="props.collapsed ? '-translate-x-full md:w-20 md:translate-x-0' : 'w-72 translate-x-0 md:w-64'"
+    style="border-color: var(--color-border)"
   >
-    <div class="flex h-full flex-col">
-      <div class="border-b border-[var(--color-border)] px-5 py-4">
-        <RouterLink to="/" class="block">
-          <div class="text-lg font-semibold tracking-tight text-primary-600">AutoFlow</div>
-          <div class="mt-1 text-xs font-medium text-slate-500">Outbound sales workspace</div>
-        </RouterLink>
-      </div>
+    <div class="flex h-[72px] items-center border-b px-4" style="border-color: var(--color-border)">
+      <BrandLogo :compact="props.collapsed" />
+    </div>
 
-      <nav class="flex-1 space-y-1 px-3 py-4">
-        <RouterLink
-          v-for="item in navItems"
-          :key="item.to"
-          :to="item.to"
-          class="flex items-center rounded-lg px-3 py-2.5 text-sm font-medium transition-colors"
-          :class="isActive(item)
-            ? 'bg-primary-50 text-primary-700 dark:bg-primary-950 dark:text-primary-200'
-            : 'text-slate-600 hover:bg-slate-100 hover:text-slate-950 dark:text-slate-300 dark:hover:bg-slate-900 dark:hover:text-white'"
-        >
-          <component :is="item.icon" class="mr-3 h-4 w-4 shrink-0" />
-          {{ item.label }}
-        </RouterLink>
-      </nav>
+    <nav class="flex-1 space-y-1.5 overflow-y-auto px-3 py-5">
+      <RouterLink
+        v-for="item in navItems"
+        :key="item.to"
+        :to="item.to"
+        :title="props.collapsed ? item.label : undefined"
+        class="group relative flex h-11 items-center rounded-md text-sm font-semibold transition"
+        :class="[
+          props.collapsed ? 'justify-center px-2' : 'px-3',
+          isActive(item)
+            ? 'bg-orange-50 text-orange-700 dark:bg-orange-500/10 dark:text-orange-300'
+            : 'text-slate-600 hover:bg-slate-100 hover:text-slate-950 dark:text-slate-400 dark:hover:bg-white/5 dark:hover:text-white',
+        ]"
+        @click="emit('navigate')"
+      >
+        <component :is="item.icon" class="h-[18px] w-[18px] shrink-0" :class="props.collapsed ? '' : 'mr-3'" />
+        <span v-if="!props.collapsed" class="truncate">{{ item.label }}</span>
+        <span v-if="isActive(item)" class="h-1.5 w-1.5 rounded-full bg-orange-500" :class="props.collapsed ? 'absolute right-2' : 'ml-auto'" />
+      </RouterLink>
+    </nav>
 
-      <div class="space-y-1 border-t border-[var(--color-border)] p-3">
-        <RouterLink
-          to="/settings"
-          class="flex items-center rounded-lg px-3 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-900"
-        >
-          <Settings class="mr-3 h-4 w-4" />
-          Settings
-        </RouterLink>
-        <RouterLink
-          v-if="userStore.isAdmin"
-          to="/admin"
-          class="flex items-center rounded-lg px-3 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-900"
-        >
-          <Shield class="mr-3 h-4 w-4" />
-          Admin
-        </RouterLink>
-      </div>
+    <div class="space-y-1 border-t p-3" style="border-color: var(--color-border)">
+      <RouterLink to="/prompt-templates" :title="props.collapsed ? t('nav.promptTemplates') : undefined" class="flex h-10 items-center rounded-md text-sm font-semibold transition" :class="[props.collapsed ? 'justify-center' : 'px-3', route.name === 'PromptTemplates' ? 'bg-orange-50 text-orange-700 dark:bg-orange-500/10 dark:text-orange-300' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-white/5 dark:hover:text-white']" @click="emit('navigate')">
+        <Sparkles class="h-[18px] w-[18px]" :class="props.collapsed ? '' : 'mr-3'" /><span v-if="!props.collapsed">{{ t('nav.promptTemplates') }}</span>
+      </RouterLink>
+      <RouterLink to="/settings" :title="props.collapsed ? t('nav.settings') : undefined" class="flex h-10 items-center rounded-md text-sm font-semibold text-slate-600 transition hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-white/5 dark:hover:text-white" :class="props.collapsed ? 'justify-center' : 'px-3'" @click="emit('navigate')">
+        <Settings class="h-[18px] w-[18px]" :class="props.collapsed ? '' : 'mr-3'" /><span v-if="!props.collapsed">{{ t('nav.settings') }}</span>
+      </RouterLink>
+      <RouterLink v-if="userStore.isAdmin" to="/admin" :title="props.collapsed ? t('nav.admin') : undefined" class="flex h-10 items-center rounded-md text-sm font-semibold text-slate-600 transition hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-white/5 dark:hover:text-white" :class="props.collapsed ? 'justify-center' : 'px-3'" @click="emit('navigate')">
+        <Shield class="h-[18px] w-[18px]" :class="props.collapsed ? '' : 'mr-3'" /><span v-if="!props.collapsed">{{ t('nav.admin') }}</span>
+      </RouterLink>
     </div>
   </aside>
 </template>

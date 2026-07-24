@@ -19,9 +19,12 @@ describe('StorefrontEnrichmentService', () => {
     domain: 'pawspark.example',
     normalizedDomain: 'pawspark.example',
     url: 'https://pawspark.example',
+    productUrl: 'https://pawspark.example/products/pet-brush',
     description: 'Pet products',
     imageUrl: null,
     detectionSource: 'shopify_search',
+    discoverySources: ['google_search'],
+    validityScore: 75,
     shopifyConfidence: 65,
     verificationStatus: 'unverified',
     verificationEvidence: {},
@@ -55,9 +58,57 @@ describe('StorefrontEnrichmentService', () => {
     expect(result.verificationStatus).toBe('verified')
     expect(result.shopifyConfidence).toBe(95)
     expect(result.contacts).toEqual(expect.arrayContaining([
-      expect.objectContaining({ type: 'email', value: 'sales@pawspark.example', verificationStatus: 'verified' }),
+      expect.objectContaining({
+        type: 'email',
+        value: 'sales@pawspark.example',
+        verificationStatus: 'verified',
+        sourceType: 'storefront_mailto_link',
+        evidence: expect.objectContaining({ proves: 'email', sourcePageKind: 'storefront' }),
+      }),
       expect.objectContaining({ type: 'whatsapp', verificationStatus: 'verified' }),
     ]))
+  })
+
+  it('crawls high-value same-origin pages and classifies contact evidence', async () => {
+    dnsLookup.mockResolvedValue([{ address: '93.184.216.34', family: 4 }])
+    axiosGet
+      .mockResolvedValueOnce({
+        status: 200,
+        data: '<html><head><title>PawSpark Store</title></head><body class="shopify-section"><script src="https://cdn.shopify.com/theme.js"></script><a href="/pages/contact-us">Contact Us</a><a href="https://facebook.com/sharer.php?u=x">Share</a><a href="https://instagram.com/p/promo">Post</a></body></html>',
+      })
+      .mockResolvedValueOnce({
+        status: 200,
+        data: '<html><head><title>Contact PawSpark</title></head><body><a href="mailto:hello@pawspark.example">Email Sales</a><a href="tel:+1 (555) 123-4567">Call Us</a><a href="https://api.whatsapp.com/send?phone=15557654321">WhatsApp</a><script type="application/ld+json">{"@type":"Organization","sameAs":["https://www.facebook.com/pawspark/","https://www.instagram.com/pawspark/"]}</script></body></html>',
+      })
+
+    const [result] = await service(true).enrich([store])
+
+    expect(result.contacts).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        type: 'email',
+        value: 'hello@pawspark.example',
+        sourceUrl: 'https://pawspark.example/pages/contact-us',
+        evidence: expect.objectContaining({
+          sourcePageTitle: 'Contact PawSpark',
+          sourcePageKind: 'contact',
+          proves: 'email',
+        }),
+      }),
+      expect.objectContaining({ type: 'phone', value: '+15551234567' }),
+      expect.objectContaining({ type: 'whatsapp', value: 'https://wa.me/15557654321' }),
+      expect.objectContaining({ type: 'facebook', value: 'https://facebook.com/pawspark' }),
+      expect.objectContaining({ type: 'instagram', value: 'https://instagram.com/pawspark' }),
+    ]))
+    expect(result.contacts).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ value: expect.stringContaining('sharer.php') }),
+      expect.objectContaining({ value: expect.stringContaining('/p/promo') }),
+    ]))
+    expect(result.verificationEvidence).toEqual(expect.objectContaining({
+      analyzedPages: expect.arrayContaining([
+        expect.objectContaining({ kind: 'storefront', title: 'PawSpark Store' }),
+        expect.objectContaining({ kind: 'contact', title: 'Contact PawSpark' }),
+      ]),
+    }))
   })
 
   it('rejects private storefront targets without making an HTTP request', async () => {

@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 import ExportDialog from '@/components/export/ExportDialog.vue'
 import Sidebar from '@/components/layout/Sidebar.vue'
 import router from '@/router'
+import { i18n } from '@/i18n'
 
 describe('legacy business record compatibility', () => {
   it('keeps the legacy detail route out of primary navigation', async () => {
@@ -12,7 +13,7 @@ describe('legacy business record compatibility', () => {
 
     const wrapper = mount(Sidebar, {
       props: { collapsed: false },
-      global: { plugins: [createPinia(), router] },
+      global: { plugins: [createPinia(), router, i18n] },
     })
 
     const route = router.getRoutes().find((item) => item.name === 'NoteDetail')
@@ -25,7 +26,7 @@ describe('legacy business record compatibility', () => {
     const wrapper = mount(ExportDialog, {
       props: { visible: true, notes: [] },
       global: {
-        plugins: [createPinia()],
+        plugins: [createPinia(), i18n],
         stubs: { Teleport: true },
       },
     })

@@ -28,6 +28,7 @@ export class FopIntegrationService {
       mode,
       syntheticData: sandboxAllowed,
       productCost: { ...capability },
+      logisticsCatalog: { ...capability },
       logisticsRate: { ...capability },
       crmHandoff: { ...capability },
     }
@@ -50,6 +51,7 @@ export class FopIntegrationService {
       'FOP_APP_ID',
       'FOP_APP_SECRET',
       'FOP_PRODUCT_COST_OPERATION',
+      'FOP_LOGISTICS_CHANNEL_OPERATION',
       'FOP_LOGISTICS_RATE_OPERATION',
       'FOP_CRM_HANDOFF_OPERATION',
     ].filter((key) => !String(this.configService.get(key, '')).trim())

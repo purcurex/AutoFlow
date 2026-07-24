@@ -1,6 +1,11 @@
-import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common'
+import { BadRequestException, Injectable, Logger, ServiceUnavailableException } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import axios from 'axios'
+import {
+  DEFAULT_GOOGLE_SEARCH_OPTIONS,
+  type DiscoverySource,
+  type GoogleSearchOptions,
+} from '../autoflow/autoflow.types'
 
 export interface DomainTraffic {
   monthlyVisits?: number
@@ -14,9 +19,13 @@ export interface DomainTraffic {
 export interface ShopifyStore {
   name: string
   url: string
+  productUrl: string | null
   description?: string
   imageUrl?: string
   traffic?: DomainTraffic
+  source: DiscoverySource
+  validityScore: number
+  searchPosition: number | null
 }
 
 @Injectable()
@@ -45,19 +54,11 @@ export class ShopifySearchService {
     return this.fallbackToMockResults('Image file search is not wired to a production provider yet')
   }
 
-  async searchStoresByImageUrl(imageUrl: string): Promise<ShopifyStore[]> {
-    this.assertSearchAllowed()
-    this.incrementSearchCount()
-
-    if (!this.getSerpApiKey()) {
-      return this.fallbackToMockResults('SERPAPI_KEY is not configured')
-    }
-
-    const query = `"${imageUrl}" Shopify OR "myshopify.com" OR "collections/all"`
-    return this.searchStoresByQuery(query)
+  isGoogleLensConfigured(): boolean {
+    return Boolean(this.getSerpApiKey())
   }
 
-  async searchStoresByKeyword(keyword: string): Promise<ShopifyStore[]> {
+  async searchStoresByImageUrl(imageUrl: string, targetMarket?: string): Promise<ShopifyStore[]> {
     this.assertSearchAllowed()
     this.incrementSearchCount()
 
@@ -65,7 +66,67 @@ export class ShopifySearchService {
       return this.fallbackToMockResults('SERPAPI_KEY is not configured')
     }
 
-    return this.searchStoresByQuery(`"${keyword}" allinurl:/collections/all`)
+    return this.searchStoresByGoogleLens(imageUrl, targetMarket)
+  }
+
+  async searchStoresByKeyword(
+    keyword: string,
+    targetMarket?: string,
+    options: GoogleSearchOptions = DEFAULT_GOOGLE_SEARCH_OPTIONS,
+  ): Promise<ShopifyStore[]> {
+    this.assertSearchAllowed()
+    this.incrementSearchCount()
+
+    if (!this.getSerpApiKey()) {
+      return this.fallbackToMockResults('SERPAPI_KEY is not configured')
+    }
+
+    return this.searchStoresByQuery(
+      this.buildShopifyProductQuery(keyword, options),
+      targetMarket,
+    )
+  }
+
+  buildShopifyProductQuery(keyword: string, options: GoogleSearchOptions): string {
+    const normalized = keyword.trim().replace(/["\r\n]/g, ' ').replace(/\s+/g, ' ')
+    const term = options.titleMatch
+      ? `intitle:"${normalized}"`
+      : options.exactPhrase ? `"${normalized}"` : normalized
+    const exclusions = options.excludeMarketplaces
+      ? ' -site:amazon.com -site:ebay.com -site:walmart.com -site:aliexpress.com -site:temu.com'
+      : ''
+    return `${term} inurl:/products/ "Powered by Shopify"${exclusions}`
+  }
+
+  async findOwnerFacebookProfile(
+    storeName: string,
+    domain: string,
+    targetMarket?: string,
+  ): Promise<string | null> {
+    if (!this.getSerpApiKey()) return null
+    this.assertSearchAllowed()
+    this.incrementSearchCount()
+    const identity = storeName.trim().replace(/["\r\n]/g, ' ').replace(/\s+/g, ' ')
+    try {
+      const response = await axios.get('https://serpapi.com/search.json', {
+        params: {
+          engine: 'google',
+          q: `site:facebook.com "${identity}" (owner OR founder) "${domain}"`,
+          api_key: this.getSerpApiKey(),
+          num: 5,
+          hl: 'en',
+          ...(this.countryCode(targetMarket) ? { gl: this.countryCode(targetMarket) } : {}),
+        },
+        timeout: 30000,
+      })
+      const results = Array.isArray(response.data?.organic_results) ? response.data.organic_results : []
+      return results.map((item: Record<string, unknown>) => String(item.link || ''))
+        .find((link: string) => this.isFacebookProfileUrl(link)) || null
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error)
+      this.logger.warn(`Facebook owner lookup failed for ${domain}: ${message}`)
+      return null
+    }
   }
 
   formatResultsAsNoteContent(
@@ -98,7 +159,7 @@ export class ShopifySearchService {
     return `Shopify leads - ${searchType || 'search'} - ${dateTime}`
   }
 
-  private async searchStoresByQuery(query: string): Promise<ShopifyStore[]> {
+  private async searchStoresByQuery(query: string, targetMarket?: string): Promise<ShopifyStore[]> {
     try {
       const response = await axios.get('https://serpapi.com/search', {
         params: {
@@ -106,12 +167,14 @@ export class ShopifySearchService {
           q: query,
           api_key: this.getSerpApiKey(),
           num: 20,
+          hl: 'en',
+          ...(this.countryCode(targetMarket) ? { gl: this.countryCode(targetMarket) } : {}),
         },
         timeout: 30000,
       })
 
       const results = response.data?.organic_results || []
-      const stores = this.extractStores(results)
+      const stores = this.extractStores(results, 'google_search')
       if (stores.length === 0) {
         return this.fallbackToMockResults('No Shopify stores were found')
       }
@@ -122,7 +185,44 @@ export class ShopifySearchService {
     }
   }
 
-  private extractStores(items: any[]): ShopifyStore[] {
+  private async searchStoresByGoogleLens(imageUrl: string, targetMarket?: string): Promise<ShopifyStore[]> {
+    try {
+      const url = new URL(imageUrl)
+      if (!['http:', 'https:'].includes(url.protocol)) throw new Error('Unsupported image URL protocol')
+    } catch {
+      throw new BadRequestException('Google Lens requires a public HTTP(S) image URL.')
+    }
+
+    try {
+      const response = await axios.get('https://serpapi.com/search.json', {
+        params: {
+          engine: 'google_lens',
+          type: 'visual_matches',
+          url: imageUrl,
+          q: 'Shopify product',
+          auto_crop: true,
+          api_key: this.getSerpApiKey(),
+          hl: 'en',
+          safe: 'active',
+          ...(this.countryCode(targetMarket) ? { country: this.countryCode(targetMarket) } : {}),
+        },
+        timeout: 30000,
+      })
+      if (response.data?.error) throw new Error(String(response.data.error))
+
+      const matches = Array.isArray(response.data?.visual_matches)
+        ? response.data.visual_matches
+        : []
+      return this.extractStores(matches, 'google_lens')
+    } catch (error: unknown) {
+      if (error instanceof BadRequestException) throw error
+      const message = error instanceof Error ? error.message : 'Unknown Google Lens error'
+      this.logger.error(`Google Lens search failed: ${message}`)
+      throw new ServiceUnavailableException(`Google Lens search failed: ${message}`)
+    }
+  }
+
+  private extractStores(items: any[], source: DiscoverySource): ShopifyStore[] {
     const seen = new Set<string>()
     const stores: ShopifyStore[] = []
 
@@ -133,28 +233,72 @@ export class ShopifySearchService {
       try {
         const url = new URL(link)
         const hostname = url.hostname.replace(/^www\./, '')
-        const looksLikeStore =
-          hostname.endsWith('myshopify.com') ||
-          url.pathname.includes('/collections/') ||
-          url.pathname.includes('/products/') ||
-          url.pathname.includes('/cart')
+        if (this.isMarketplaceHost(hostname)) continue
+        const productUrl = this.productDetailUrl(url)
+        const looksLikeStore = Boolean(productUrl)
 
         if (!looksLikeStore || seen.has(hostname)) continue
         seen.add(hostname)
 
         stores.push({
-          name: this.cleanStoreName(item.title || hostname, hostname),
-          url: `${url.protocol}//${hostname}`,
+          name: source === 'google_lens' && item.source
+            ? this.cleanStoreName(String(item.source), hostname)
+            : this.storeNameFromHostname(hostname),
+          url: url.origin,
+          productUrl,
           description: item.snippet || '',
-          imageUrl: item.thumbnail,
-          traffic: { monthlyVisits: 1000, source: 'estimated' },
+          imageUrl: item.image || item.thumbnail,
+          traffic: { source: `serpapi_${source}` },
+          source,
+          validityScore: this.searchValidityScore(item, url, source),
+          searchPosition: typeof item.position === 'number' ? item.position : null,
         })
       } catch {
         continue
       }
     }
 
-    return stores.slice(0, 20)
+    return stores.sort((left, right) => right.validityScore - left.validityScore).slice(0, 20)
+  }
+
+  private productDetailUrl(url: URL): string | null {
+    if (!/\/products\/[^/?#]+/i.test(url.pathname)) return null
+    url.hash = ''
+    return url.toString()
+  }
+
+  private searchValidityScore(item: Record<string, unknown>, url: URL, source: DiscoverySource): number {
+    const text = `${String(item.title || '')} ${String(item.snippet || '')}`.toLowerCase()
+    const position = typeof item.position === 'number' ? item.position : 20
+    let score = source === 'google_lens'
+      ? Math.max(0, 45 - position * 4)
+      : Math.max(5, 30 - position)
+    if (this.productDetailUrl(url)) score += 35
+    if (url.hostname.endsWith('myshopify.com')) score += 15
+    if (text.includes('shopify') || text.includes('powered by')) score += 15
+    if (source === 'google_lens' && item.exact_matches === true) score += 25
+    if (typeof item.rating === 'number' || typeof item.reviews === 'number' || typeof item.in_stock === 'boolean') score += 5
+    return Math.min(100, score)
+  }
+
+  private isMarketplaceHost(hostname: string): boolean {
+    const blocked = [
+      'amazon.com', 'ebay.com', 'etsy.com', 'walmart.com', 'aliexpress.com',
+      'temu.com', 'joom.com', 'dhgate.com', 'alibaba.com', '1688.com',
+    ]
+    return blocked.some((domain) => hostname === domain || hostname.endsWith(`.${domain}`))
+  }
+
+  private isFacebookProfileUrl(value: string): boolean {
+    try {
+      const url = new URL(value)
+      if (!/(^|\.)facebook\.com$/i.test(url.hostname)) return false
+      const blocked = ['/pages/', '/groups/', '/watch', '/reel/', '/marketplace/', '/share/']
+      return !blocked.some((path) => url.pathname.toLowerCase().startsWith(path))
+        && (url.pathname.split('/').filter(Boolean).length === 1 || url.pathname === '/profile.php')
+    } catch {
+      return false
+    }
   }
 
   private cleanStoreName(title: string, hostname: string): string {
@@ -162,6 +306,13 @@ export class ShopifySearchService {
       .replace(/\s*[-|]\s*(Shopify|Online Store|Official|Buy).*$/i, '')
       .trim()
     return cleaned.length >= 2 && cleaned.length <= 100 ? cleaned : hostname
+  }
+
+  private storeNameFromHostname(hostname: string): string {
+    const labels = hostname.split('.')
+    const identity = (hostname.endsWith('.myshopify.com') ? labels[0] : labels[labels.length - 2]) || hostname
+    const name = identity.replace(/[-_]+/g, ' ').replace(/\b\w/g, (letter: string) => letter.toUpperCase()).trim()
+    return name.length >= 2 ? name : hostname
   }
 
   private assertSearchAllowed(): void {
@@ -182,7 +333,20 @@ export class ShopifySearchService {
   }
 
   private getSerpApiKey(): string | undefined {
-    return this.configService.get<string>('SERPAPI_KEY')
+    const value = this.configService.get<string>('SERPAPI_KEY')?.trim()
+    return value && value !== 'your-serpapi-key' ? value : undefined
+  }
+
+  private countryCode(value?: string): string | undefined {
+    if (!value) return undefined
+    const normalized = value.trim().toLowerCase()
+    if (/^[a-z]{2}$/.test(normalized)) return normalized
+    return ({
+      'united states': 'us',
+      'european union': 'de',
+      canada: 'ca',
+      australia: 'au',
+    } as Record<string, string>)[normalized]
   }
 
   private shouldUseMockResults(): boolean {
@@ -205,20 +369,32 @@ export class ShopifySearchService {
       {
         name: 'PawSpark',
         url: 'https://pawspark.myshopify.com',
+        productUrl: 'https://pawspark.myshopify.com/products/pet-grooming-brush',
         description: 'Pet grooming and care products',
         traffic: { monthlyVisits: 50000, rank: 150000, source: 'mock' },
+        source: 'google_search',
+        validityScore: 80,
+        searchPosition: 1,
       },
       {
         name: 'BlendJetty',
         url: 'https://blendjetty.myshopify.com',
+        productUrl: 'https://blendjetty.myshopify.com/products/portable-blender',
         description: 'Portable blender and kitchen gadgets',
         traffic: { monthlyVisits: 35000, rank: 200000, source: 'mock' },
+        source: 'google_search',
+        validityScore: 75,
+        searchPosition: 2,
       },
       {
         name: 'Home Decor Plus',
         url: 'https://home-decor-plus.myshopify.com',
+        productUrl: 'https://home-decor-plus.myshopify.com/products/home-decor-set',
         description: 'Home decor and furniture accessories',
         traffic: { monthlyVisits: 25000, rank: 250000, source: 'mock' },
+        source: 'google_search',
+        validityScore: 70,
+        searchPosition: 3,
       },
     ]
   }

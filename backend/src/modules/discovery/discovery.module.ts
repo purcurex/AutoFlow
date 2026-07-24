@@ -1,10 +1,9 @@
 import { Module } from '@nestjs/common'
 import { TypeOrmModule } from '@nestjs/typeorm'
 import { WorkflowJobEntity, WorkflowRunEntity } from '../autoflow/entities'
-import { FacebookAdsModule } from '../facebook-ads/facebook-ads.module'
-import { ShopifySearchModule } from '../shopify-search/shopify-search.module'
-import { FacebookAdsDiscoveryAdapter } from './adapters/facebook-ads-discovery.adapter'
-import { ShopifyStoreDiscoveryAdapter } from './adapters/shopify-store-discovery.adapter'
+import { PipiAdsModule } from '../pipiads/pipiads.module'
+import { PipiAdsAdDiscoveryAdapter } from './adapters/pipiads-ad-discovery.adapter'
+import { PipiAdsStoreDiscoveryAdapter } from './adapters/pipiads-store-discovery.adapter'
 import { DiscoveryService } from './discovery.service'
 import { AD_DISCOVERY_ADAPTER, STORE_DISCOVERY_ADAPTER } from './discovery.types'
 import { AdCreativeEntity, ShopifyStoreEntity } from './entities'
@@ -17,6 +16,9 @@ import {
 import { WorkflowExecutionService } from './workflow-execution.service'
 import { WorkflowJobWorkerService } from './workflow-job-worker.service'
 import { StorefrontEnrichmentService } from './storefront-enrichment.service'
+import { ShopifySearchModule } from '../shopify-search/shopify-search.module'
+import { ShopifyStoreDiscoveryAdapter } from './adapters/shopify-store-discovery.adapter'
+import { SourcingModule } from '../sourcing/sourcing.module'
 
 @Module({
   imports: [
@@ -30,17 +32,19 @@ import { StorefrontEnrichmentService } from './storefront-enrichment.service'
       AdCreativeEntity,
       ShopifyStoreEntity,
     ]),
-    FacebookAdsModule,
+    PipiAdsModule,
     ShopifySearchModule,
+    SourcingModule,
   ],
   providers: [
     DiscoveryService,
     WorkflowExecutionService,
     WorkflowJobWorkerService,
     StorefrontEnrichmentService,
-    { provide: AD_DISCOVERY_ADAPTER, useClass: FacebookAdsDiscoveryAdapter },
-    { provide: STORE_DISCOVERY_ADAPTER, useClass: ShopifyStoreDiscoveryAdapter },
+    ShopifyStoreDiscoveryAdapter,
+    { provide: AD_DISCOVERY_ADAPTER, useClass: PipiAdsAdDiscoveryAdapter },
+    { provide: STORE_DISCOVERY_ADAPTER, useClass: PipiAdsStoreDiscoveryAdapter },
   ],
-  exports: [DiscoveryService, WorkflowExecutionService],
+  exports: [DiscoveryService, WorkflowExecutionService, StorefrontEnrichmentService],
 })
 export class DiscoveryModule {}

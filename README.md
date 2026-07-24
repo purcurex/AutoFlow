@@ -33,6 +33,8 @@ Product keyword or image
 
 The canonical FOP boundary and placeholder API contract are documented in [`docs/AUTOFLOW_FOP_INTEGRATION_SPEC.md`](docs/AUTOFLOW_FOP_INTEGRATION_SPEC.md).
 
+The current Simplified Chinese operation guide with architecture diagrams, business flows, and real interface screenshots is available in [`HTML`](docs/AUTOFLOW_USER_MANUAL_ZH-CN.html) and [`Markdown`](docs/AUTOFLOW_USER_MANUAL_ZH-CN.md).
+
 ## Tech Stack
 
 | Layer | Technology |
@@ -105,14 +107,24 @@ DB_HOST=localhost
 DB_PORT=5432
 DB_USERNAME=postgres
 DB_PASSWORD=postgres
-DB_DATABASE=noteflow
+DB_DATABASE=autoflow
 DB_SYNCHRONIZE=false
 DB_MIGRATIONS_RUN=false
 
 JWT_SECRET=change-me
 JWT_EXPIRES_IN=7d
 
-ANTHROPIC_API_KEY=
+ZHIPU_API_KEY=
+ZHIPU_BASE_URL=https://open.bigmodel.cn/api/paas/v4
+ZHIPU_MODEL=glm-5.2
+ZHIPU_TEMPERATURE=1.0
+ZHIPU_THINKING_TYPE=disabled
+ZHIPU_REASONING_EFFORT=high
+
+PIPIADS_API_KEY=
+PIPIADS_BASE_URL=https://www.pipispy.com/open-api/v1
+PIPIADS_PAGE_SIZE=20
+
 SERPAPI_KEY=
 GOOGLE_API_KEY=
 GOOGLE_SEARCH_CX=
@@ -131,7 +143,17 @@ SMTP_USER=
 SMTP_PASS=
 ```
 
-Note: the current local Docker PostgreSQL container is `hyperzone`, and the existing development database is still `noteflow`. Product-facing naming should be AutoFlow. Rename the physical database only after a backup and migration plan exists.
+The local Docker PostgreSQL container is `hyperzone`, and the current development database is `autoflow`.
+
+`ZHIPU_API_KEY` and `PIPIADS_API_KEY` are server-side secrets. Do not commit real values or expose them to frontend code. Without these keys, local development may use visibly synthetic evidence; production fails closed.
+
+For local provider integration, enter the real keys in `backend/.env.providers.local`. This ignored file is loaded before `backend/.env`; the tracked template is `backend/.env.providers.local.example`. After both keys are configured, run:
+
+```powershell
+npm.cmd run test:providers:live
+```
+
+The live smoke sends one minimal GLM request and requests at most one PipiAds record. It prints provider status, model/request identity, record count, and remaining PipiAds credits, but never prints either API key.
 
 ## Database Migrations
 

@@ -22,6 +22,20 @@ const routes: RouteRecordRaw[] = [
     meta: { requiresAuth: true }
   },
   {
+    path: '/workflows/:id/revise',
+    name: 'ReviseWorkflow',
+    component: () => import('@/views/autoflow/WorkflowsView.vue'),
+    props: (route) => ({ create: true, reviseId: String(route.params.id) }),
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/workflows/:id/sourcing',
+    name: 'WorkflowSourcing',
+    component: () => import('@/views/autoflow/SourcingView.vue'),
+    props: true,
+    meta: { requiresAuth: true }
+  },
+  {
     path: '/leads',
     name: 'Leads',
     component: () => import('@/views/autoflow/LeadsView.vue'),
@@ -72,6 +86,12 @@ const routes: RouteRecordRaw[] = [
     name: 'NoteDetail',
     component: () => import('@/views/NoteDetailView.vue'),
     meta: { requiresAuth: true, legacySupport: true }
+  },
+  {
+    path: '/prompt-templates',
+    name: 'PromptTemplates',
+    component: () => import('@/views/PromptTemplatesView.vue'),
+    meta: { requiresAuth: true }
   },
   {
     path: '/settings',

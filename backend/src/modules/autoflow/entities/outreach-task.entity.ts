@@ -14,6 +14,7 @@ import {
   OUTREACH_STATUSES,
   type OutreachChannel,
   type OutreachStatus,
+  type OutreachTemplateOptions,
 } from '../autoflow.types'
 import { LeadEntity } from './lead.entity'
 
@@ -63,6 +64,9 @@ export class OutreachTaskEntity {
 
   @Column({ name: 'template_key', type: 'varchar', length: 80 })
   templateKey: string
+
+  @Column({ name: 'template_options', type: 'jsonb', default: () => "'{}'::jsonb" })
+  templateOptions: OutreachTemplateOptions
 
   @Column({ name: 'next_follow_up_at', type: 'timestamptz', nullable: true })
   nextFollowUpAt: Date | null
