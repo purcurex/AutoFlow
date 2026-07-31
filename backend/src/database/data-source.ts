@@ -11,6 +11,9 @@ const AppDataSource = new DataSource({
   username: process.env.DB_USERNAME || 'postgres',
   password: process.env.DB_PASSWORD || 'postgres',
   database: process.env.DB_DATABASE || 'autoflow',
+  ssl: process.env.DB_SSL === 'true'
+    ? { rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false' }
+    : false,
   entities: [resolve(__dirname, '../modules/**/*.entity{.ts,.js}')],
   migrations: [resolve(__dirname, 'migrations/[0-9]*{.ts,.js}')],
   migrationsTableName: 'typeorm_migrations',

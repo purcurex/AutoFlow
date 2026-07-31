@@ -43,6 +43,12 @@ import { ObservabilityModule } from './modules/observability/observability.modul
         username: configService.get('DB_USERNAME', 'postgres'),
         password: configService.get('DB_PASSWORD', 'postgres'),
         database: configService.get('DB_DATABASE', 'autoflow'),
+        ssl: configService.get('DB_SSL', 'false') === 'true'
+          ? {
+              rejectUnauthorized:
+                configService.get('DB_SSL_REJECT_UNAUTHORIZED', 'true') !== 'false',
+            }
+          : false,
         entities: [__dirname + '/**/*.entity{.ts,.js}'],
         migrations: [__dirname + '/database/migrations/[0-9]*{.ts,.js}'],
         migrationsTableName: 'typeorm_migrations',
