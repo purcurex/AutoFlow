@@ -305,8 +305,8 @@ export interface SourcingSummary {
 
 export interface StartSourcingRequest {
   force?: boolean
-  priceMin?: number
-  priceMax?: number
+  priceMin?: string
+  priceMax?: string
   pageSize?: number
 }
 

@@ -18,8 +18,8 @@ export const SOURCING_PAGE_STATUSES = ['pending', 'running', 'succeeded', 'faile
 export type SourcingPageStatus = (typeof SOURCING_PAGE_STATUSES)[number]
 
 export interface SourcingPriceTier {
-  minimumQuantity: number
-  maximumQuantity?: number | null
+  minimumQuantity: string
+  maximumQuantity?: string | null
   unitPrice: string
   currency: string
 }

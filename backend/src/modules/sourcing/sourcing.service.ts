@@ -19,6 +19,7 @@ import {
   calculateSourcingScore,
   type SourcingScoreInput,
 } from './sourcing-scoring'
+import { decimalCompare, decimalMinMax, decimalOrNull } from './sourcing-decimal'
 import type {
   SourcingOfferResponse,
   SourcingSearchResponse,
@@ -75,7 +76,7 @@ export class SourcingService {
     if (
       options.priceMin !== undefined
       && options.priceMax !== undefined
-      && options.priceMin > options.priceMax
+      && decimalCompare(options.priceMin, options.priceMax) === 1
     ) {
       throw new BadRequestException('priceMin cannot be greater than priceMax')
     }
@@ -296,10 +297,9 @@ export class SourcingService {
           source.price.amount,
           ...(detail?.skus.flatMap((sku) => [sku.consignPrice, sku.price]) ?? []),
         ]
-          .map((value) => this.decimalValue(value))
-          .filter((value): value is number => value !== null)
-        const priceMin = prices.length > 0 ? Math.min(...prices) : null
-        const priceMax = prices.length > 0 ? Math.max(...prices) : null
+          .map((value) => decimalOrNull(value))
+          .filter((value): value is string => value !== null)
+        const { minimum: priceMin, maximum: priceMax } = decimalMinMax(prices)
         const supportsCustomization = this.supportsCustomization(identities, detail?.sellingPoints)
         const scoreInput: SourcingScoreInput = {
           query: workflow.seedType === 'keyword' ? workflow.seedValue : '',
@@ -313,7 +313,9 @@ export class SourcingService {
           priceRanges: prices.map((price) => ({ price })),
           targetPriceMin: options.priceMin,
           targetPriceMax: options.priceMax,
-          minimumOrderQuantity: detail?.minOrderQuantity ?? source.minOrderQuantity,
+          minimumOrderQuantity: decimalOrNull(
+            detail?.minOrderQuantity ?? source.minOrderQuantity,
+          ),
           sellerCompositeScore: supplierRating,
           sellerTradeScore: this.ratingValue(source.tradeScore),
           repeatPurchasePercent: this.percentValue(
@@ -348,16 +350,18 @@ export class SourcingService {
           titleEn: detail?.translatedTitle || source.translatedTitle,
           categoryId: detail?.categoryId ?? null,
           categoryName: detail?.categoryName ?? null,
-          minimumOrderQuantity: this.optionalDecimal(
+          minimumOrderQuantity: decimalOrNull(
             detail?.minOrderQuantity ?? source.minOrderQuantity,
           ),
           quantityUnit: null,
-          priceMin: this.optionalDecimal(priceMin),
-          priceMax: this.optionalDecimal(priceMax),
+          priceMin,
+          priceMax,
           currency: 'CNY',
           priceTiers: prices.map((price) => ({
-            minimumQuantity: detail?.minOrderQuantity ?? source.minOrderQuantity ?? 1,
-            unitPrice: String(price),
+            minimumQuantity: decimalOrNull(
+              detail?.minOrderQuantity ?? source.minOrderQuantity ?? '1',
+            ) || '1.0000',
+            unitPrice: price,
             currency: 'CNY',
           })),
           salesVolume: source.monthSold === null ? null : String(source.monthSold),
@@ -477,8 +481,8 @@ export class SourcingService {
     return workflow
   }
 
-  private optionalPrice(value: number | undefined): string | undefined {
-    return value === undefined ? undefined : String(value)
+  private optionalPrice(value: string | undefined): string | undefined {
+    return value
   }
 
   private imageUploadRequired(): Alibaba1688Exception {
@@ -514,8 +518,7 @@ export class SourcingService {
   }
 
   private optionalDecimal(value: string | number | null | undefined): string | null {
-    const parsed = this.decimalValue(value)
-    return parsed === null ? null : String(parsed)
+    return decimalOrNull(value)
   }
 
   private supportsCustomization(

@@ -113,7 +113,7 @@ describe('SourcingService', () => {
         minimumOrderQuantity: '2',
         quantityUnit: null,
         salesVolume: '500',
-        repurchaseRate: 32,
+        repurchaseRate: '32.0000',
         sourcingScoreReasons: [
           { code: 'high_product_relevance', label: 'High product relevance', score: 35 },
         ],
@@ -122,7 +122,7 @@ describe('SourcingService', () => {
           companyName: 'Example Supplier',
           shopName: 'Example Shop',
           shopUrl: 'https://example.1688.com',
-          supplierRating: 90,
+          supplierRating: '90.0000',
           capabilities: { identities: ['verified'] },
         } as unknown as SourcingSupplierEntity,
       },
@@ -144,7 +144,7 @@ describe('SourcingService', () => {
     const { service, alibaba1688Service } = createService()
 
     await expect(
-      service.startSearch(ownerUserId, workflowRunId, { priceMin: 20, priceMax: 10 }),
+      service.startSearch(ownerUserId, workflowRunId, { priceMin: '20', priceMax: '10' }),
     ).rejects.toBeInstanceOf(BadRequestException)
     expect(alibaba1688Service.getReadiness).not.toHaveBeenCalled()
   })

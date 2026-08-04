@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer'
-import { IsBoolean, IsInt, IsNumber, IsOptional, Max, Min } from 'class-validator'
+import { IsBoolean, IsIn, IsInt, IsOptional, IsString, Matches } from 'class-validator'
 
 export class StartSourcingDto {
   @IsOptional()
@@ -7,22 +7,19 @@ export class StartSourcingDto {
   force?: boolean
 
   @IsOptional()
-  @Type(() => Number)
-  @IsNumber({ maxDecimalPlaces: 4 })
-  @Min(0)
-  priceMin?: number
+  @IsString()
+  @Matches(/^(?:0|[1-9]\d*)(?:\.\d{1,4})?$/)
+  priceMin?: string
 
   @IsOptional()
-  @Type(() => Number)
-  @IsNumber({ maxDecimalPlaces: 4 })
-  @Min(0)
-  priceMax?: number
+  @IsString()
+  @Matches(/^(?:0|[1-9]\d*)(?:\.\d{1,4})?$/)
+  priceMax?: string
 
   @IsOptional()
   @Type(() => Number)
   @IsInt()
-  @Min(1)
-  @Max(50)
+  @IsIn([10, 20, 50])
   pageSize?: number
 
 }
