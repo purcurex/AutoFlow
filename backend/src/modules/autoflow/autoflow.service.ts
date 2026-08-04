@@ -47,6 +47,7 @@ import { StorefrontEnrichmentService } from '../discovery/storefront-enrichment.
 import type { NormalizedContactEvidence, NormalizedShopifyStore } from '../discovery/discovery.types'
 import { calculateContactScore } from '../discovery/contact-scoring'
 import { User } from '../users/user.entity'
+import { WorkflowSeedAssetService } from './workflow-seed-asset.service'
 
 @Injectable()
 export class AutoflowService {
@@ -67,6 +68,7 @@ export class AutoflowService {
     private readonly aiService: AiService,
     private readonly promptTemplateService: PromptTemplateService,
     private readonly storefrontEnrichmentService: StorefrontEnrichmentService,
+    private readonly workflowSeedAssetService: WorkflowSeedAssetService,
   ) {}
 
   async getDashboard(ownerUserId: string): Promise<AutoFlowDashboard> {
@@ -138,6 +140,7 @@ export class AutoflowService {
   }
 
   async createWorkflow(ownerUserId: string, data: CreateWorkflowDto): Promise<WorkflowRun> {
+    await this.validateWorkflowSeedAsset(ownerUserId, data)
     return this.dataSource.transaction(async (manager) => {
       const workflow = await this.createWorkflowRecord(manager, ownerUserId, data)
       return this.mapWorkflow(workflow)
@@ -183,6 +186,7 @@ export class AutoflowService {
     sourceId: string,
     data: CreateWorkflowRevisionDto,
   ): Promise<WorkflowRun> {
+    await this.validateWorkflowSeedAsset(ownerUserId, data)
     return this.dataSource.transaction(async (manager) => {
       const workflowRepository = manager.getRepository(WorkflowRunEntity)
       const source = await workflowRepository.findOne({
@@ -665,6 +669,12 @@ export class AutoflowService {
         name: data.name?.trim() || `${seedValue} prospect workflow`,
         seedType: data.seedType,
         seedValue,
+        seedAssetPath: data.seedType === 'image' ? data.seedAssetPath || null : null,
+        seedAssetMimeType: data.seedType === 'image' ? data.seedAssetMimeType || null : null,
+        seedAssetSize: data.seedType === 'image' && data.seedAssetSize
+          ? String(data.seedAssetSize)
+          : null,
+        seedAssetSha256: data.seedType === 'image' ? data.seedAssetSha256 || null : null,
         targetMarket: data.targetMarket?.trim() || 'United States',
         searchOptions: {
           ...DEFAULT_GOOGLE_SEARCH_OPTIONS,
@@ -726,6 +736,10 @@ export class AutoflowService {
       name: workflow.name,
       seedType: workflow.seedType,
       seedValue: workflow.seedValue,
+      seedAssetPath: workflow.seedAssetPath || null,
+      seedAssetMimeType: workflow.seedAssetMimeType || null,
+      seedAssetSize: workflow.seedAssetSize || null,
+      seedAssetSha256: workflow.seedAssetSha256 || null,
       targetMarket: workflow.targetMarket,
       searchOptions: {
         ...DEFAULT_GOOGLE_SEARCH_OPTIONS,
@@ -743,6 +757,15 @@ export class AutoflowService {
       createdAt: workflow.createdAt.toISOString(),
       updatedAt: workflow.updatedAt.toISOString(),
     }
+  }
+
+  /** 本地图片引用在进入事务前完成文件归属校验，外部HTTPS图片不带本地资产字段。 */
+  private async validateWorkflowSeedAsset(
+    ownerUserId: string,
+    data: CreateWorkflowDto,
+  ): Promise<void> {
+    if (data.seedType !== 'image' || !data.seedAssetPath) return
+    await this.workflowSeedAssetService.assertOwnedAsset(ownerUserId, data.seedAssetPath)
   }
 
   private classifyWorkflowFailure(failureReason: string | null): {

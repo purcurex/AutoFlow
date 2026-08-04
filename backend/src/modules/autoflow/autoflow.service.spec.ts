@@ -12,6 +12,7 @@ import {
 import type { AiService } from '../ai/ai.service'
 import type { PromptTemplateService } from '../ai/prompt-template.service'
 import type { StorefrontEnrichmentService } from '../discovery/storefront-enrichment.service'
+import type { WorkflowSeedAssetService } from './workflow-seed-asset.service'
 
 describe('AutoflowService persistence boundaries', () => {
   function repository<T extends ObjectLiteral>() {
@@ -44,6 +45,9 @@ describe('AutoflowService persistence boundaries', () => {
     const storefrontEnrichmentService = {
       enrichStore: jest.fn(),
     } as unknown as jest.Mocked<StorefrontEnrichmentService>
+    const workflowSeedAssetService = {
+      assertOwnedAsset: jest.fn(),
+    } as unknown as jest.Mocked<WorkflowSeedAssetService>
     const service = new AutoflowService(
       workflows,
       steps,
@@ -55,6 +59,7 @@ describe('AutoflowService persistence boundaries', () => {
       aiService,
       promptTemplateService,
       storefrontEnrichmentService,
+      workflowSeedAssetService,
     )
     return {
       service,
@@ -68,6 +73,7 @@ describe('AutoflowService persistence boundaries', () => {
       aiService,
       promptTemplateService,
       storefrontEnrichmentService,
+      workflowSeedAssetService,
     }
   }
 

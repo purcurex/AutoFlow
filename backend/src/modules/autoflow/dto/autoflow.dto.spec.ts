@@ -28,6 +28,42 @@ describe('AutoFlow DTO contracts', () => {
     expect(errors.some((error) => error.property === 'seedType')).toBe(true)
   })
 
+  it('accepts controlled image asset metadata and rejects it for keyword workflows', async () => {
+    const asset = {
+      seedAssetPath: '/uploads/workflow-seeds/11111111-1111-4111-8111-111111111111/image.png',
+      seedAssetMimeType: 'image/png',
+      seedAssetSize: 128,
+      seedAssetSha256: 'a'.repeat(64),
+    }
+    const imageDto = Object.assign(new CreateWorkflowDto(), {
+      seedType: 'image',
+      seedValue: 'https://assets.example.test/image.png',
+      ...asset,
+    })
+    const keywordDto = Object.assign(new CreateWorkflowDto(), {
+      seedType: 'keyword',
+      seedValue: 'pet grooming brush',
+      ...asset,
+    })
+
+    await expect(validate(imageDto)).resolves.toHaveLength(0)
+    expect((await validate(keywordDto)).map((error) => error.property)).toContain(
+      'seedAssetPath',
+    )
+  })
+
+  it('rejects uncontrolled or incomplete image asset metadata', async () => {
+    const dto = Object.assign(new CreateWorkflowDto(), {
+      seedType: 'image',
+      seedValue: 'https://assets.example.test/image.png',
+      seedAssetPath: '/tmp/image.png',
+    })
+
+    expect((await validate(dto)).map((error) => error.property)).toContain(
+      'seedAssetPath',
+    )
+  })
+
   it('accepts the message fields used by the frontend and service', async () => {
     const dto = Object.assign(new GenerateMessageDto(), {
       channel: 'whatsapp',

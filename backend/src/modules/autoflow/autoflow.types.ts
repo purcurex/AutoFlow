@@ -124,6 +124,10 @@ export interface WorkflowRun {
   name: string
   seedType: SeedType
   seedValue: string
+  seedAssetPath: string | null
+  seedAssetMimeType: string | null
+  seedAssetSize: string | null
+  seedAssetSha256: string | null
   targetMarket: string
   searchOptions: GoogleSearchOptions
   status: WorkflowStatus

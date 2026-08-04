@@ -4,10 +4,10 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
-import { randomUUID } from 'crypto'
+import { createHash, randomUUID } from 'crypto'
 import type { Request } from 'express'
-import { mkdir, writeFile } from 'fs/promises'
-import { join } from 'path'
+import { mkdir, stat, writeFile } from 'fs/promises'
+import { isAbsolute, join, relative, resolve } from 'path'
 
 export const WORKFLOW_IMAGE_MAX_BYTES = 8 * 1024 * 1024
 
@@ -24,7 +24,9 @@ export interface WorkflowSeedAsset {
   publicUrl: string
   providerReady: boolean
   originalName: string
+  mimeType: 'image/jpeg' | 'image/png' | 'image/webp'
   size: number
+  sha256: string
 }
 
 @Injectable()
@@ -61,8 +63,37 @@ export class WorkflowSeedAssetService {
       publicUrl: `${publicBaseUrl}${assetPath}`,
       providerReady: this.isPublicProviderUrl(publicBaseUrl),
       originalName: file.originalname || 'clipboard-image',
+      mimeType: `image/${imageType}` as WorkflowSeedAsset['mimeType'],
       size: file.size,
+      sha256: createHash('sha256').update(file.buffer).digest('hex'),
     }
+  }
+
+  /**
+   * 校验工作流引用的本地图片确实位于当前用户的受控上传目录中。
+   * 返回解析后的绝对路径，供后续1688图片解析器读取；任何越权路径均按非法请求拒绝。
+   */
+  async assertOwnedAsset(ownerUserId: string, assetPath: string): Promise<string> {
+    const normalizedAssetPath = assetPath.replace(/\\/g, '/')
+    const expectedPrefix = `/uploads/workflow-seeds/${ownerUserId}/`
+    if (!normalizedAssetPath.startsWith(expectedPrefix)) {
+      throw new BadRequestException('Workflow image asset does not belong to the current user.')
+    }
+
+    const ownedRoot = resolve(process.cwd(), 'uploads', 'workflow-seeds', ownerUserId)
+    const absolutePath = resolve(process.cwd(), normalizedAssetPath.replace(/^\/+/, ''))
+    const relativePath = relative(ownedRoot, absolutePath)
+    if (!relativePath || relativePath.startsWith('..') || isAbsolute(relativePath)) {
+      throw new BadRequestException('Workflow image asset path is invalid.')
+    }
+
+    try {
+      const fileStat = await stat(absolutePath)
+      if (!fileStat.isFile()) throw new Error('Not a regular file')
+    } catch {
+      throw new BadRequestException('Workflow image asset is unavailable.')
+    }
+    return absolutePath
   }
 
   private resolvePublicBaseUrl(request: Request): string {

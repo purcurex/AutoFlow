@@ -12,6 +12,8 @@ import {
   MinLength,
   ValidateNested,
   IsUrl,
+  registerDecorator,
+  type ValidationArguments,
 } from 'class-validator'
 import { Type } from 'class-transformer'
 import {
@@ -27,6 +29,58 @@ import {
   type SeedType,
   type LeadStatus,
 } from '../autoflow.types'
+
+const WORKFLOW_ASSET_FIELDS = [
+  'seedAssetPath',
+  'seedAssetMimeType',
+  'seedAssetSize',
+  'seedAssetSha256',
+] as const
+
+type WorkflowAssetField = (typeof WORKFLOW_ASSET_FIELDS)[number]
+
+/**
+ * 工作流图片资产四项元数据必须成组出现，且只允许图片工作流提交。
+ * 这里在HTTP入口完成结构校验，真实文件归属仍由服务层基于当前用户再次确认。
+ */
+function IsWorkflowAssetField(field: WorkflowAssetField): PropertyDecorator {
+  return (target, propertyKey) => {
+    registerDecorator({
+      name: 'isWorkflowAssetField',
+      target: target.constructor,
+      propertyName: propertyKey.toString(),
+      constraints: [field],
+      validator: {
+        validate(value: unknown, arguments_: ValidationArguments): boolean {
+          const workflow = arguments_.object as CreateWorkflowDto
+          const hasAnyAssetField = WORKFLOW_ASSET_FIELDS.some(
+            (assetField) => workflow[assetField] !== undefined && workflow[assetField] !== null,
+          )
+          if (workflow.seedType !== 'image') return value === undefined || value === null
+          if (!hasAnyAssetField) return true
+          if (value === undefined || value === null) return false
+          if (field === 'seedAssetPath') {
+            return typeof value === 'string'
+              && /^\/uploads\/workflow-seeds\/[0-9a-f-]{36}\/[A-Za-z0-9._-]+$/i.test(value)
+          }
+          if (field === 'seedAssetMimeType') {
+            return ['image/jpeg', 'image/png', 'image/webp'].includes(String(value))
+          }
+          if (field === 'seedAssetSize') {
+            return typeof value === 'number'
+              && Number.isInteger(value)
+              && value > 0
+              && value <= 8 * 1024 * 1024
+          }
+          return typeof value === 'string' && /^[a-f0-9]{64}$/i.test(value)
+        },
+        defaultMessage(arguments_: ValidationArguments): string {
+          return `${arguments_.property} is invalid for the selected workflow seed type`
+        },
+      },
+    })
+  }
+}
 
 export class GoogleSearchOptionsDto {
   @IsOptional()
@@ -60,6 +114,18 @@ export class CreateWorkflowDto {
   @MinLength(1)
   @MaxLength(500)
   seedValue: string
+
+  @IsWorkflowAssetField('seedAssetPath')
+  seedAssetPath?: string
+
+  @IsWorkflowAssetField('seedAssetMimeType')
+  seedAssetMimeType?: 'image/jpeg' | 'image/png' | 'image/webp'
+
+  @IsWorkflowAssetField('seedAssetSize')
+  seedAssetSize?: number
+
+  @IsWorkflowAssetField('seedAssetSha256')
+  seedAssetSha256?: string
 
   @IsOptional()
   @IsString()

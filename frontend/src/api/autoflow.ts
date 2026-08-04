@@ -59,6 +59,10 @@ export interface WorkflowRun {
   name: string
   seedType: SeedType
   seedValue: string
+  seedAssetPath: string | null
+  seedAssetMimeType: string | null
+  seedAssetSize: string | null
+  seedAssetSha256: string | null
   targetMarket: string
   searchOptions: GoogleSearchOptions
   status: WorkflowStatus
@@ -213,6 +217,10 @@ export interface CreateWorkflowRequest {
   name?: string
   seedType: SeedType
   seedValue: string
+  seedAssetPath?: string
+  seedAssetMimeType?: 'image/jpeg' | 'image/png' | 'image/webp'
+  seedAssetSize?: number
+  seedAssetSha256?: string
   targetMarket?: string
   searchOptions?: GoogleSearchOptions
 }
@@ -222,7 +230,9 @@ export interface WorkflowImageUpload {
   publicUrl: string
   providerReady: boolean
   originalName: string
+  mimeType: 'image/jpeg' | 'image/png' | 'image/webp'
   size: number
+  sha256: string
 }
 
 export interface DiscoveryStartResult {

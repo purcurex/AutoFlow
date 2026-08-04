@@ -68,6 +68,10 @@ const form = reactive({
   name: '',
   seedType: 'keyword' as SeedType,
   seedValue: '',
+  seedAssetPath: undefined as string | undefined,
+  seedAssetMimeType: undefined as WorkflowImageUpload['mimeType'] | undefined,
+  seedAssetSize: undefined as number | undefined,
+  seedAssetSha256: undefined as string | undefined,
   targetMarket: 'United States',
   searchOptions: {
     exactPhrase: true,
@@ -109,6 +113,10 @@ onMounted(async () => {
     form.name = source.name
     form.seedType = source.seedType
     form.seedValue = source.seedValue
+    form.seedAssetPath = source.seedAssetPath || undefined
+    form.seedAssetMimeType = source.seedAssetMimeType as WorkflowImageUpload['mimeType'] || undefined
+    form.seedAssetSize = source.seedAssetSize ? Number(source.seedAssetSize) : undefined
+    form.seedAssetSha256 = source.seedAssetSha256 || undefined
     seedValues[source.seedType] = source.seedValue
     form.targetMarket = source.targetMarket
     Object.assign(form.searchOptions, source.searchOptions)
@@ -138,12 +146,14 @@ watch(() => form.seedType, (nextType, previousType) => {
   seedValues[previousType] = form.seedValue
   form.seedValue = seedValues[nextType]
   imageUploadError.value = ''
+  if (nextType !== 'image') clearImageAssetMetadata()
 })
 
 watch(() => form.seedValue, (value) => {
   seedValues[form.seedType] = value
   if (form.seedType === 'image' && imageUpload.value && value !== imageUpload.value.publicUrl) {
     imageUpload.value = null
+    clearImageAssetMetadata()
     if (imagePreviewUrl.value) URL.revokeObjectURL(imagePreviewUrl.value)
     imagePreviewUrl.value = ''
   }
@@ -159,6 +169,7 @@ function removeImage() {
   imageUpload.value = null
   imageUploadError.value = ''
   form.seedValue = ''
+  clearImageAssetMetadata()
   if (imageInput.value) imageInput.value.value = ''
 }
 
@@ -179,11 +190,22 @@ async function uploadImage(file: File) {
     const result = await autoflowApi.uploadWorkflowImage(file)
     imageUpload.value = result
     form.seedValue = result.publicUrl
+    form.seedAssetPath = result.assetPath
+    form.seedAssetMimeType = result.mimeType
+    form.seedAssetSize = result.size
+    form.seedAssetSha256 = result.sha256
   } catch {
     imageUploadError.value = t('workflows.imageUploadFailed')
   } finally {
     isUploadingImage.value = false
   }
+}
+
+function clearImageAssetMetadata() {
+  form.seedAssetPath = undefined
+  form.seedAssetMimeType = undefined
+  form.seedAssetSize = undefined
+  form.seedAssetSha256 = undefined
 }
 
 function handleImageSelection(event: Event) {
