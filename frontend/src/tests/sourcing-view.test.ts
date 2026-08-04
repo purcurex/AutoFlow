@@ -126,7 +126,7 @@ describe('1688 sourcing view', () => {
     const wrapper = mountView()
     await flushPromises()
 
-    expect(wrapper.get('[data-test="provider-not-configured"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="provider-not-configured"]').exists()).toBe(true)
     expect(wrapper.get('[data-test="sourcing-status"]').text())
       .toContain('sourcing.status_not_configured')
     expect(wrapper.get('[data-test="restart-sourcing"]').text())
