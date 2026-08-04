@@ -82,4 +82,17 @@ describe('SourcingWorkerService', () => {
       }),
     )
   })
+
+  it('does not overwrite search status after another worker takes the lease', async () => {
+    const invalid = Object.assign(new Error('invalid'), {
+      code: 'INVALID_RESPONSE',
+      retryable: false,
+    })
+    const { worker, pages, searches } = setup(invalid)
+    pages.update.mockResolvedValueOnce({ affected: 0, raw: {}, generatedMaps: [] })
+
+    await worker.runNextPage()
+
+    expect(searches.update).not.toHaveBeenCalled()
+  })
 })

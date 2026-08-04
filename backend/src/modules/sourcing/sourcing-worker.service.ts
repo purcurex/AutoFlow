@@ -176,7 +176,7 @@ export class SourcingWorkerService implements OnModuleInit, OnModuleDestroy {
       return
     }
 
-    await this.pageRepository.update(
+    const failedPageUpdate = await this.pageRepository.update(
       { id: page.id, status: 'running', leaseOwner: page.leaseOwner },
       {
         status: 'failed',
@@ -188,6 +188,8 @@ export class SourcingWorkerService implements OnModuleInit, OnModuleDestroy {
         completedAt: new Date(),
       },
     )
+    // 租约已被其他实例接管时，旧 Worker 不得覆盖新 Worker 正在维护的搜索状态。
+    if (failedPageUpdate.affected !== 1) return
     const succeededPages = await this.pageRepository.count({
       where: { searchId: page.searchId, ownerUserId: page.ownerUserId, status: 'succeeded' },
     })
