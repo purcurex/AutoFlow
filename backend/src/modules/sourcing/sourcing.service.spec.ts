@@ -31,6 +31,8 @@ describe('SourcingService', () => {
         missing: ['ALIBABA_1688_ENABLED'],
         provider: 'alibaba_1688',
       }),
+      searchByKeyword: jest.fn(),
+      searchByImage: jest.fn(),
     }
     const dataSource = {
       transaction: jest.fn(),
@@ -145,6 +147,60 @@ describe('SourcingService', () => {
       service.startSearch(ownerUserId, workflowRunId, { priceMin: 20, priceMax: 10 }),
     ).rejects.toBeInstanceOf(BadRequestException)
     expect(alibaba1688Service.getReadiness).not.toHaveBeenCalled()
+  })
+
+  it('fails closed for an image workflow before passing its URL to Alibaba 1688', async () => {
+    const {
+      service,
+      workflowRepository,
+      searchRepository,
+      alibaba1688Service,
+      dataSource,
+    } = createService()
+    const workflow = {
+      id: workflowRunId,
+      ownerUserId,
+      seedType: 'image',
+      seedValue: 'https://assets.example.test/product.jpg',
+    } as WorkflowRunEntity
+    const search = { id: 'search-1' } as SourcingSearchEntity
+    const queryBuilder = {
+      setLock: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      getOne: jest.fn().mockResolvedValue(workflow),
+    }
+    const transactionWorkflowRepository = {
+      ...workflowRepository,
+      createQueryBuilder: jest.fn().mockReturnValue(queryBuilder),
+    }
+    const transactionSearchRepository = {
+      ...searchRepository,
+      create: jest.fn((value) => ({ ...search, ...value })),
+    }
+    searchRepository.save.mockImplementation(async (value) => value)
+    dataSource.transaction.mockImplementation(async (callback) => callback({
+      getRepository: jest.fn()
+        .mockReturnValueOnce(transactionWorkflowRepository)
+        .mockReturnValueOnce(transactionSearchRepository),
+    }))
+    alibaba1688Service.getReadiness.mockReturnValue({
+      ready: true,
+      enabled: true,
+      missing: [],
+      provider: 'alibaba_1688',
+    })
+
+    await service.startSearch(ownerUserId, workflowRunId)
+
+    expect(alibaba1688Service.searchByImage).not.toHaveBeenCalled()
+    const failedSearch = searchRepository.save.mock.calls[searchRepository.save.mock.calls.length - 1][0]
+    expect(failedSearch).toMatchObject({
+      status: 'failed',
+      errorCode: 'INVALID_REQUEST',
+      errorMessage: 'Image sourcing requires secure image upload before querying Alibaba 1688.',
+    })
+    expect(failedSearch.errorMessage).not.toContain(workflow.seedValue)
   })
 
   it('keeps automatic workflow discovery alive when sourcing raises an error', async () => {

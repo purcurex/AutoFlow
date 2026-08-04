@@ -96,24 +96,18 @@ export class SourcingService {
       search.startedAt = new Date()
       await this.searchRepository.save(search)
 
-      const result = prepared.workflow.seedType === 'keyword'
-        ? await this.alibaba1688Service.searchByKeyword({
-            keyword: prepared.workflow.seedValue,
-            beginPage: 1,
-            pageSize: options.pageSize,
-            priceStart: this.optionalPrice(options.priceMin),
-            priceEnd: this.optionalPrice(options.priceMax),
-            country: 'en',
-            keywordTranslate: false,
-          })
-        : await this.alibaba1688Service.searchByImage({
-            imageAddress: prepared.workflow.seedValue,
-            beginPage: 1,
-            pageSize: options.pageSize,
-            priceStart: this.optionalPrice(options.priceMin),
-            priceEnd: this.optionalPrice(options.priceMax),
-            country: 'en',
-          })
+      if (prepared.workflow.seedType === 'image') {
+        throw this.imageUploadRequired()
+      }
+      const result = await this.alibaba1688Service.searchByKeyword({
+        keyword: prepared.workflow.seedValue,
+        beginPage: 1,
+        pageSize: options.pageSize,
+        priceStart: this.optionalPrice(options.priceMin),
+        priceEnd: this.optionalPrice(options.priceMax),
+        country: 'en',
+        keywordTranslate: false,
+      })
 
       search.providerRequestId = result.metadata.requestId
       await this.persistResults(prepared.workflow, search, result.normalized, options)
@@ -485,6 +479,18 @@ export class SourcingService {
 
   private optionalPrice(value: number | undefined): string | undefined {
     return value === undefined ? undefined : String(value)
+  }
+
+  private imageUploadRequired(): Alibaba1688Exception {
+    return new Alibaba1688Exception({
+      provider: 'alibaba_1688',
+      code: 'INVALID_REQUEST',
+      message: 'Image sourcing requires secure image upload before querying Alibaba 1688.',
+      retryable: false,
+      httpStatus: null,
+      providerCode: null,
+      requestId: null,
+    })
   }
 
   private decimalValue(value: string | number | null | undefined): number | null {
