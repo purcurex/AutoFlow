@@ -16,10 +16,12 @@ import {
 import { DiscoveryModule } from '../discovery/discovery.module'
 import { AiModule } from '../ai/ai.module'
 import { WorkflowSeedAssetService } from './workflow-seed-asset.service'
+import { SourcingModule } from '../sourcing/sourcing.module'
 
 @Module({
   imports: [
     DiscoveryModule,
+    SourcingModule,
     AiModule,
     TypeOrmModule.forFeature([
       WorkflowRunEntity,

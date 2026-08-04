@@ -35,6 +35,7 @@ import {
   WORKFLOW_IMAGE_MAX_BYTES,
   WorkflowSeedAssetService,
 } from './workflow-seed-asset.service'
+import { SourcingService } from '../sourcing/sourcing.service'
 
 @Controller('autoflow')
 @UseGuards(JwtAuthGuard)
@@ -43,6 +44,7 @@ export class AutoflowController {
     private readonly autoflowService: AutoflowService,
     private readonly workflowExecutionService: WorkflowExecutionService,
     private readonly workflowSeedAssetService: WorkflowSeedAssetService,
+    private readonly sourcingService: SourcingService,
   ) {}
 
   @Get('dashboard')
@@ -56,8 +58,11 @@ export class AutoflowController {
   }
 
   @Post('workflows')
-  createWorkflow(@Request() req: ExpressRequest, @Body() body: CreateWorkflowDto) {
-    return this.autoflowService.createWorkflow(req.user!.userId, body)
+  async createWorkflow(@Request() req: ExpressRequest, @Body() body: CreateWorkflowDto) {
+    const workflow = await this.autoflowService.createWorkflow(req.user!.userId, body)
+    // 工作流持久化成功后只创建1688分页任务；真实网络查询由后台Worker异步执行，不阻塞前端保存响应。
+    await this.sourcingService.runForWorkflow(req.user!.userId, workflow.id)
+    return workflow
   }
 
   @Get('workflows/:id')
@@ -77,12 +82,15 @@ export class AutoflowController {
   }
 
   @Post('workflows/:id/revisions')
-  createWorkflowRevision(
+  async createWorkflowRevision(
     @Request() req: ExpressRequest,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() body: CreateWorkflowRevisionDto,
   ) {
-    return this.autoflowService.createWorkflowRevision(req.user!.userId, id, body)
+    const workflow = await this.autoflowService.createWorkflowRevision(req.user!.userId, id, body)
+    // 修订会生成新的工作流记录，必须按新记录的字段类型和参数独立发起寻源。
+    await this.sourcingService.runForWorkflow(req.user!.userId, workflow.id)
+    return workflow
   }
 
   @Post('workflows/:id/archive')
