@@ -76,9 +76,7 @@ export const imageUploadProviderFixture: Alibaba1688ImageUploadProviderResponse 
     success: true,
     code: '200',
     message: 'success',
-    result: {
-      imageId: 'image-1688-1',
-    },
+    result: 'image-1688-1',
   },
 }
 

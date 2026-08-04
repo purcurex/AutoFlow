@@ -151,11 +151,7 @@ export interface Alibaba1688ProviderProductDetail {
 export type Alibaba1688KeywordProviderResponse = Alibaba1688ProviderEnvelope<Alibaba1688ProviderPage>
 export type Alibaba1688ImageProviderResponse = Alibaba1688ProviderEnvelope<Alibaba1688ProviderPage>
 export type Alibaba1688DetailProviderResponse = Alibaba1688ProviderEnvelope<Alibaba1688ProviderProductDetail>
-export interface Alibaba1688ProviderImageUpload {
-  imageId?: string
-  [key: string]: unknown
-}
-export type Alibaba1688ImageUploadProviderResponse = Alibaba1688ProviderEnvelope<Alibaba1688ProviderImageUpload>
+export type Alibaba1688ImageUploadProviderResponse = Alibaba1688ProviderEnvelope<string>
 
 export interface Alibaba1688StablePrice {
   currency: 'CNY'

@@ -30,7 +30,6 @@ import type {
   Alibaba1688Operation,
   Alibaba1688ProviderEnvelope,
   Alibaba1688ProviderOffer,
-  Alibaba1688ProviderImageUpload,
   Alibaba1688ProviderOperationResult,
   Alibaba1688ProviderPage,
   Alibaba1688ProviderProductDetail,
@@ -140,7 +139,7 @@ export class Alibaba1688Service {
   ): Promise<Alibaba1688CallResult<Alibaba1688ImageUploadProviderResponse, Alibaba1688StableImageUploadResult>> {
     const config = this.requireReady()
     const imageBase64 = this.requiredText(input.imageBase64, 'imageBase64')
-    const provider = await this.invoke<Alibaba1688ProviderImageUpload, Alibaba1688ImageUploadProviderResponse>(
+    const provider = await this.invoke<string, Alibaba1688ImageUploadProviderResponse>(
       'image_upload',
       this.endpoint('upload'),
       {
@@ -154,7 +153,7 @@ export class Alibaba1688Service {
     )
     return this.callResult('image_upload', provider, {
       provider: ALIBABA_1688_PROVIDER,
-      imageId: this.requiredText(provider.result?.result?.imageId, 'imageId'),
+      imageId: this.requiredText(provider.result?.result, 'imageId'),
     })
   }
 

@@ -164,6 +164,36 @@ describe('Alibaba1688Service', () => {
     expect(result.metadata.traceId).toBe('image-upload-trace-1')
   })
 
+  it('rejects an empty upload result before it can be used as an imageId', async () => {
+    const imageBase64 = Buffer.from('verified-image').toString('base64')
+    jest.spyOn(axios, 'post').mockResolvedValue({
+      status: 200,
+      data: {
+        ...imageUploadProviderFixture,
+        result: {
+          ...imageUploadProviderFixture.result,
+          result: '',
+        },
+      },
+    })
+
+    let caught: unknown
+    try {
+      await service().uploadImage({ imageBase64 })
+    } catch (error) {
+      caught = error
+    }
+
+    expect(caught).toBeInstanceOf(Alibaba1688Exception)
+    expect(caught).toMatchObject({
+      normalized: {
+        code: 'INVALID_REQUEST',
+        message: 'imageId is required',
+      },
+    })
+    expect(JSON.stringify(caught)).not.toContain(imageBase64)
+  })
+
   it('uses the configured imageQuery method with imageId input', async () => {
     jest.spyOn(axios, 'post').mockResolvedValue({
       status: 200,
