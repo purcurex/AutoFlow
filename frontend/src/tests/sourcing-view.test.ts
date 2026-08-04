@@ -105,25 +105,39 @@ describe('1688 sourcing view', () => {
     vi.useRealTimers()
   })
 
-  it('shows the provider-not-configured state without starting a search', async () => {
+  it('shows not configured without a running label or pagination polling', async () => {
+    vi.useFakeTimers()
     apiMock.getWorkflowSourcing.mockResolvedValue({
       workflowId: 'workflow-1688',
       providerConfigured: false,
       status: 'not_configured',
+      pagination: {
+        page: 1,
+        pageSize: 20,
+        totalRecords: null,
+        totalPages: null,
+        resultCount: 0,
+        loaded: false,
+        status: 'pending',
+      },
       offers: [],
     } satisfies SourcingSummary)
 
     const wrapper = mountView()
     await flushPromises()
 
-    expect(apiMock.getWorkflowSourcing).toHaveBeenCalledWith('workflow-1688', {
-      searchId: undefined,
-      page: 1,
-      pageSize: 20,
-    })
-    expect(wrapper.find('[data-test="provider-not-configured"]').exists()).toBe(true)
-    expect(wrapper.find('[data-test="sourcing-status"]').text()).toContain('sourcing.status_not_configured')
-    expect(wrapper.find<HTMLButtonElement>('[data-test="restart-sourcing"]').element.disabled).toBe(true)
+    expect(wrapper.get('[data-test="provider-not-configured"]').exists()).toBe(true)
+    expect(wrapper.get('[data-test="sourcing-status"]').text())
+      .toContain('sourcing.status_not_configured')
+    expect(wrapper.get('[data-test="restart-sourcing"]').text())
+      .toContain('sourcing.restartAction')
+    expect(wrapper.get('[data-test="restart-sourcing"]').text())
+      .not.toContain('sourcing.runningAction')
+
+    await vi.advanceTimersByTimeAsync(3_000)
+    await flushPromises()
+    expect(apiMock.getWorkflowSourcing).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
   })
 
   it('renders sourcing offers and keeps sourcing score separate', async () => {

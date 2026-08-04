@@ -157,6 +157,7 @@ async function changePageSize(event: Event) {
 
 function schedulePollingIfNeeded() {
   stopPolling()
+  if (status.value === 'not_configured') return
   if (!pagination.value || !['pending', 'running'].includes(pagination.value.status)) return
   pollTimer = setTimeout(async () => {
     pollTimer = null
