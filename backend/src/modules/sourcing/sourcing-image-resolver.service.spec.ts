@@ -115,6 +115,26 @@ describe('SourcingImageResolverService', () => {
     expect(result.sourceHost).toBe('example.test')
   })
 
+  it('returns an address array when the HTTPS client requests all DNS results', async () => {
+    const png = await sharp({
+      create: { width: 2, height: 2, channels: 3, background: '#ffffff' },
+    }).png().toBuffer()
+    const resolvedAddress = { address: '93.184.216.34', family: 4 }
+    jest.spyOn(dns, 'lookup').mockResolvedValue([resolvedAddress] as never)
+    axiosGet.mockImplementation(async (_url, config) => {
+      const lookup = config.httpsAgent.options.lookup
+      const callback = jest.fn()
+
+      lookup('example.test', { all: true }, callback)
+
+      expect(callback).toHaveBeenCalledWith(null, [resolvedAddress])
+      return { status: 200, headers: { 'content-type': 'image/png' }, data: png }
+    })
+
+    await expect(resolver.resolve(workflow('https://example.test/image.png')))
+      .resolves.toMatchObject({ mimeType: 'image/png' })
+  })
+
   it('classifies timeout and temporary provider failures as retryable', async () => {
     jest.spyOn(dns, 'lookup').mockResolvedValue([
       { address: '93.184.216.34', family: 4 },

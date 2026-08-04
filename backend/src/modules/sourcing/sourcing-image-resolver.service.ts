@@ -127,7 +127,12 @@ export class SourcingImageResolverService {
 
       const address = await this.resolvePublicAddress(currentUrl.hostname)
       const httpsAgent = new Agent({
-        lookup: (_hostname, _options, callback) => {
+        lookup: (_hostname, options, callback) => {
+          // Node 20+ 的HTTPS客户端可能以 all=true 请求地址数组；返回单个字符串会触发 ERR_INVALID_IP_ADDRESS。
+          if (typeof options === 'object' && options.all) {
+            callback(null, [{ address: address.address, family: address.family }])
+            return
+          }
           callback(null, address.address, address.family)
         },
       })
