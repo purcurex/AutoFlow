@@ -268,7 +268,9 @@ pending, running, succeeded, partial, failed, cancelled
 | `attempts` | integer | 已执行次数 |
 | `max_attempts` | integer | 固定为3 |
 | `available_at` | timestamptz | 下次可领取时间 |
+| `lease_owner` | varchar(255), nullable | 当前Worker实例标识 |
 | `lease_expires_at` | timestamptz, nullable | Worker租约 |
+| `heartbeat_at` | timestamptz, nullable | 最近一次租约续期时间 |
 | `provider_request_id` | varchar(128), nullable | 远端请求标识 |
 | `provider_trace_id` | varchar(128), nullable | 远端追踪标识 |
 | `result_count` | integer | 本页实际结果数 |
@@ -369,6 +371,7 @@ OFFSET :offset
 
 - Controller 创建任务的事务只负责搜索和第一页任务，不调用第三方。
 - Worker 通过 `FOR UPDATE SKIP LOCKED` 原子领取一个可执行页面并设置租约。
+- Worker 完成、续租和失败更新必须同时匹配分页ID、`running`状态和 `lease_owner`，防止旧Worker覆盖已被重新领取的任务。
 - 同一页重复点击由唯一约束和状态判断返回现有任务。
 - 页面写入事务包含供应商、商品、分页成功状态和搜索汇总字段。
 - 页面只有全部目标记录写入成功后才能标记 `succeeded`。
