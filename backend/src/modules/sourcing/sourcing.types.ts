@@ -28,4 +28,6 @@ export interface SourcingScoreReason {
 }
 
 export type SourcingSupplierCapabilities = Record<string, unknown>
+
+/** 1688原始响应必须先完成递归脱敏，再写入该快照字段。 */
 export type SourcingRawSnapshot = Record<string, unknown>
