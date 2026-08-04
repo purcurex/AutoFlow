@@ -82,6 +82,36 @@ function IsWorkflowAssetField(field: WorkflowAssetField): PropertyDecorator {
   }
 }
 
+/**
+ * 工作流种子由显式 seedType 决定含义；图片种子必须是可由后端处理的 HTTP/HTTPS URL。
+ * 这里仅校验 URL 结构，图片可达性、类型、大小和 SSRF 防护仍由寻源图片解析服务执行。
+ */
+function IsWorkflowSeedValue(): PropertyDecorator {
+  return (target, propertyKey) => {
+    registerDecorator({
+      name: 'isWorkflowSeedValue',
+      target: target.constructor,
+      propertyName: propertyKey.toString(),
+      validator: {
+        validate(value: unknown, arguments_: ValidationArguments): boolean {
+          if (typeof value !== 'string') return false
+          const workflow = arguments_.object as CreateWorkflowDto
+          if (workflow.seedType !== 'image') return true
+          try {
+            const imageUrl = new URL(value.trim())
+            return imageUrl.protocol === 'http:' || imageUrl.protocol === 'https:'
+          } catch {
+            return false
+          }
+        },
+        defaultMessage(): string {
+          return 'seedValue must be a public HTTP or HTTPS image URL for an image workflow'
+        },
+      },
+    })
+  }
+}
+
 export class GoogleSearchOptionsDto {
   @IsOptional()
   @IsBoolean()
@@ -113,6 +143,7 @@ export class CreateWorkflowDto {
   @IsString()
   @MinLength(1)
   @MaxLength(500)
+  @IsWorkflowSeedValue()
   seedValue: string
 
   @IsWorkflowAssetField('seedAssetPath')

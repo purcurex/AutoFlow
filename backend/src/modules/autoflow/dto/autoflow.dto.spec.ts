@@ -28,6 +28,33 @@ describe('AutoFlow DTO contracts', () => {
     expect(errors.some((error) => error.property === 'seedType')).toBe(true)
   })
 
+  it('requires image workflow seeds to be public HTTP or HTTPS URLs', async () => {
+    const validImage = Object.assign(new CreateWorkflowDto(), {
+      seedType: 'image',
+      seedValue: 'https://cdn.example.test/products/pet-brush.jpg',
+    })
+    const invalidImageValues = [
+      'pet grooming brush',
+      'file:///tmp/pet-brush.jpg',
+      'data:image/png;base64,AAAA',
+      'ftp://cdn.example.test/pet-brush.jpg',
+    ]
+    const keyword = Object.assign(new CreateWorkflowDto(), {
+      seedType: 'keyword',
+      seedValue: 'pet grooming brush',
+    })
+
+    await expect(validate(validImage)).resolves.toHaveLength(0)
+    await expect(validate(keyword)).resolves.toHaveLength(0)
+    for (const seedValue of invalidImageValues) {
+      const dto = Object.assign(new CreateWorkflowDto(), {
+        seedType: 'image',
+        seedValue,
+      })
+      expect((await validate(dto)).map((error) => error.property)).toContain('seedValue')
+    }
+  })
+
   it('accepts controlled image asset metadata and rejects it for keyword workflows', async () => {
     const asset = {
       seedAssetPath: '/uploads/workflow-seeds/11111111-1111-4111-8111-111111111111/image.png',
