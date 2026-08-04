@@ -52,6 +52,9 @@ describe('SourcingPageExecutorService', () => {
     } as WorkflowRunEntity
     searches.findOne.mockResolvedValue(search)
     workflows.findOne.mockResolvedValue(workflow)
+    pages.count
+      .mockResolvedValueOnce(1)
+      .mockResolvedValueOnce(0)
     const normalized = {
       provider: 'alibaba_1688',
       sourceTag: '1688货源',
@@ -120,7 +123,7 @@ describe('SourcingPageExecutorService', () => {
       maxAttempts: 3,
       leaseOwner: 'worker-1',
     }
-    return { service, page, provider, imageResolver, searches, pages }
+    return { service, page, provider, imageResolver, searches, pages, search }
   }
 
   it('requests the claimed keyword page and completes it under the same lease', async () => {
@@ -178,6 +181,23 @@ describe('SourcingPageExecutorService', () => {
     expect(provider.searchByImage).toHaveBeenCalledWith(expect.objectContaining({
       imageId: 'existing-image',
       beginPage: 2,
+    }))
+  })
+
+  it('returns a partial search to succeeded after its last failed page succeeds', async () => {
+    const { service, page, pages, searches, search } = setup('keyword')
+    search.status = 'partial'
+    pages.count
+      .mockReset()
+      .mockResolvedValueOnce(2)
+      .mockResolvedValueOnce(0)
+
+    await service.executePage(page)
+
+    expect(searches.save).toHaveBeenCalledWith(expect.objectContaining({
+      status: 'succeeded',
+      errorCode: null,
+      errorMessage: null,
     }))
   })
 })

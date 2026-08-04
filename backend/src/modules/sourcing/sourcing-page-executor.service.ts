@@ -332,9 +332,14 @@ export class SourcingPageExecutorService {
         throw new Error('Sourcing page lease was lost before completion')
       }
 
-      const loadedPageCount = await pageRepository.count({
-        where: { searchId: search.id, ownerUserId: page.ownerUserId, status: 'succeeded' },
-      })
+      const [loadedPageCount, failedPageCount] = await Promise.all([
+        pageRepository.count({
+          where: { searchId: search.id, ownerUserId: page.ownerUserId, status: 'succeeded' },
+        }),
+        pageRepository.count({
+          where: { searchId: search.id, ownerUserId: page.ownerUserId, status: 'failed' },
+        }),
+      ])
       if (
         page.pageNumber > 1
         && search.totalRecords !== null
@@ -350,7 +355,8 @@ export class SourcingPageExecutorService {
         : String(result.normalized.totalRecords)
       search.totalPages = result.normalized.totalPages ?? search.totalPages
       search.loadedPageCount = loadedPageCount
-      search.status = search.status === 'partial' ? 'partial' : 'succeeded'
+      // 失败页重新执行成功后必须恢复搜索状态，避免页面永久停留在“部分完成”。
+      search.status = failedPageCount > 0 ? 'partial' : 'succeeded'
       search.providerRequestId = result.metadata.requestId
       search.startedAt ||= now
       search.completedAt = now
