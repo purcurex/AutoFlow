@@ -100,11 +100,12 @@ function resolveTargetMarket(value: string) {
     || { code: value.slice(0, 2).toUpperCase(), flagUrl: unFlag }
 }
 
-onMounted(async () => {
-  await store.fetchWorkflows()
-  if (!props.reviseId) return
+/**
+ * 修订页只依赖指定工作流详情完成表单回显，避免列表接口失败阻断详情请求。
+ */
+async function loadRevisionSource(reviseId: string) {
   try {
-    const source = await store.getWorkflow(props.reviseId)
+    const source = await store.getWorkflow(reviseId)
     if (!canReviseWorkflow(source.status)) {
       actionMessage.value = t('workflows.revisionUnavailable')
       return
@@ -123,6 +124,15 @@ onMounted(async () => {
   } catch {
     actionMessage.value = t('workflows.loadFailed')
   }
+}
+
+onMounted(async () => {
+  // 不同页面只加载自身必需的数据，修订页不再等待工作流列表请求。
+  if (props.reviseId) {
+    await loadRevisionSource(props.reviseId)
+    return
+  }
+  if (!props.create) await store.fetchWorkflows()
 })
 onBeforeUnmount(() => {
   disposed = true
