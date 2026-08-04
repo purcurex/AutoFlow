@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   Archive,
@@ -64,6 +64,8 @@ const lifecycleMode = ref<'delete' | 'archive' | null>(null)
 const deletionImpact = ref<WorkflowDeletionImpact | null>(null)
 const lifecycleBusy = ref(false)
 let disposed = false
+let revisionLoadSequence = 0
+let isSynchronizingForm = false
 const form = reactive({
   name: '',
   seedType: 'keyword' as SeedType,
@@ -103,14 +105,49 @@ function resolveTargetMarket(value: string) {
 /**
  * 修订页只依赖指定工作流详情完成表单回显，避免列表接口失败阻断详情请求。
  */
+/**
+ * 重置新建/修订共用表单，避免 Vue Router 复用组件时残留上一条工作流的数据。
+ */
+async function resetWorkflowForm() {
+  revisionLoadSequence += 1
+  isSynchronizingForm = true
+  revisionSource.value = null
+  actionMessage.value = ''
+  seedValues.keyword = ''
+  seedValues.image = ''
+  form.name = ''
+  form.seedType = 'keyword'
+  form.seedValue = ''
+  clearImageAssetMetadata()
+  form.targetMarket = 'United States'
+  Object.assign(form.searchOptions, {
+    exactPhrase: true,
+    titleMatch: false,
+    excludeMarketplaces: true,
+    findOwnerFacebook: true,
+  })
+  imageUpload.value = null
+  imageUploadError.value = ''
+  if (imagePreviewUrl.value) URL.revokeObjectURL(imagePreviewUrl.value)
+  imagePreviewUrl.value = ''
+  if (imageInput.value) imageInput.value.value = ''
+  await nextTick()
+  isSynchronizingForm = false
+}
+
 async function loadRevisionSource(reviseId: string) {
+  const requestSequence = ++revisionLoadSequence
   try {
     const source = await store.getWorkflow(reviseId)
+    if (disposed || requestSequence !== revisionLoadSequence) return
     if (!canReviseWorkflow(source.status)) {
       actionMessage.value = t('workflows.revisionUnavailable')
       return
     }
+    isSynchronizingForm = true
     revisionSource.value = source
+    seedValues.keyword = source.seedType === 'keyword' ? source.seedValue : ''
+    seedValues.image = source.seedType === 'image' ? source.seedValue : ''
     form.name = source.name
     form.seedType = source.seedType
     form.seedValue = source.seedValue
@@ -118,22 +155,36 @@ async function loadRevisionSource(reviseId: string) {
     form.seedAssetMimeType = source.seedAssetMimeType as WorkflowImageUpload['mimeType'] || undefined
     form.seedAssetSize = source.seedAssetSize ? Number(source.seedAssetSize) : undefined
     form.seedAssetSha256 = source.seedAssetSha256 || undefined
-    seedValues[source.seedType] = source.seedValue
     form.targetMarket = source.targetMarket
     Object.assign(form.searchOptions, source.searchOptions)
+    await nextTick()
+    isSynchronizingForm = false
   } catch {
-    actionMessage.value = t('workflows.loadFailed')
+    if (!disposed && requestSequence === revisionLoadSequence) {
+      actionMessage.value = t('workflows.loadFailed')
+    }
   }
 }
 
-onMounted(async () => {
-  // 不同页面只加载自身必需的数据，修订页不再等待工作流列表请求。
-  if (props.reviseId) {
+const viewMode = computed(() => props.reviseId
+  ? `revise:${props.reviseId}`
+  : props.create ? 'create' : 'list')
+
+watch(viewMode, async (mode) => {
+  // 同一个页面组件会被路由复用，因此必须按路由模式变化重新初始化，而不能只依赖 onMounted。
+  await resetWorkflowForm()
+  if (mode.startsWith('revise:') && props.reviseId) {
     await loadRevisionSource(props.reviseId)
     return
   }
-  if (!props.create) await store.fetchWorkflows()
-})
+  if (mode === 'list') {
+    try {
+      await store.fetchWorkflows()
+    } catch {
+      if (!disposed && viewMode.value === mode) actionMessage.value = t('workflows.loadFailed')
+    }
+  }
+}, { immediate: true })
 onBeforeUnmount(() => {
   disposed = true
   if (imagePreviewUrl.value) URL.revokeObjectURL(imagePreviewUrl.value)
@@ -153,6 +204,7 @@ const googleQueryPreview = computed(() => {
 })
 
 watch(() => form.seedType, (nextType, previousType) => {
+  if (isSynchronizingForm) return
   seedValues[previousType] = form.seedValue
   form.seedValue = seedValues[nextType]
   imageUploadError.value = ''
@@ -160,6 +212,7 @@ watch(() => form.seedType, (nextType, previousType) => {
 })
 
 watch(() => form.seedValue, (value) => {
+  if (isSynchronizingForm) return
   seedValues[form.seedType] = value
   if (form.seedType === 'image' && imageUpload.value && value !== imageUpload.value.publicUrl) {
     imageUpload.value = null
