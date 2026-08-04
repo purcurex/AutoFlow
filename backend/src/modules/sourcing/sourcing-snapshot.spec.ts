@@ -4,20 +4,28 @@ describe('sanitizeSourcingSnapshot', () => {
   it('removes nested authentication, signature, image, token, and trace fields case-insensitively', () => {
     const result = sanitizeSourcingSnapshot({
       access_token: 'test-access-token',
-      AccessToken: 'test-access-token-camel',
-      REFRESH_TOKEN: 'test-refresh-token',
+      'access-token': 'test-access-token-hyphen',
+      accessToken: 'test-access-token-camel',
+      refresh_token: 'test-refresh-token',
+      'refresh-token': 'test-refresh-token-hyphen',
       refreshToken: 'test-refresh-token-camel',
+      app_secret: 'test-app-secret-underscore',
       appSecret: 'test-app-secret',
       _AOP_SIGNATURE: 'test-signature',
+      image_base64: 'test-image-payload-underscore',
       imageBase64: 'test-image-payload',
+      trace_info: { requestId: 'test-trace-id-underscore' },
+      traceInfo: { requestId: 'test-trace-id' },
+      token: 'test-root-token',
+      accessTokenExpiresAt: '2026-08-04T06:00:00.000Z',
       nested: {
         token: 'test-temporary-token',
-        traceInfo: { requestId: 'test-trace-id' },
         offerId: 1688,
       },
     })
 
     expect(result).toEqual({
+      accessTokenExpiresAt: '2026-08-04T06:00:00.000Z',
       nested: {
         offerId: 1688,
       },
@@ -38,6 +46,19 @@ describe('sanitizeSourcingSnapshot', () => {
       callbackUrl: 'http://api.1688.test/result',
       relativePath: '/offer/1.html?token=keep-as-non-url',
     })
+  })
+
+  it.each([
+    '  HtTpS://test-user:test-password@[invalid::ipv6]/offer?token=test-query  ',
+    'https://test-user:test-password@detail.1688.test:99999/offer?access_token=test-query',
+  ])('replaces a malformed HTTP(S) URL with a fixed marker: %s', (url) => {
+    const result = sanitizeSourcingSnapshot({ url })
+    const serialized = JSON.stringify(result)
+
+    expect(result.url).toBe('[invalid-http-url]')
+    expect(serialized).not.toContain('test-user')
+    expect(serialized).not.toContain('test-password')
+    expect(serialized).not.toContain('test-query')
   })
 
   it('recursively sanitizes arrays and nested objects', () => {
@@ -82,7 +103,10 @@ describe('sanitizeSourcingSnapshot', () => {
     })
 
     expect(result.description).toBe(
-      `${'x'.repeat(64 * 1024)}...[truncated]`,
+      `${'x'.repeat(65_522)}...[truncated]`,
+    )
+    expect(Buffer.byteLength(result.description as string, 'utf8')).toBe(
+      65_536,
     )
     expect(result.exactBoundary).toBe('y'.repeat(64 * 1024))
   })
@@ -94,11 +118,14 @@ describe('sanitizeSourcingSnapshot', () => {
       description: oversizedDescription,
     })
 
-    expect(Buffer.byteLength(result.description as string, 'utf8')).toBe(
-      65_535 + Buffer.byteLength('...[truncated]', 'utf8'),
-    )
     expect(result.description).toBe(
-      `${'汉'.repeat(21_845)}...[truncated]`,
+      `${'汉'.repeat(21_840)}...[truncated]`,
+    )
+    expect(Buffer.byteLength(result.description as string, 'utf8')).toBe(
+      65_534,
+    )
+    expect(Buffer.byteLength(result.description as string, 'utf8')).toBeLessThanOrEqual(
+      65_536,
     )
   })
 
@@ -133,6 +160,93 @@ describe('sanitizeSourcingSnapshot', () => {
       quantitySteps: ['1', '10'],
     })
     expect(() => JSON.stringify(result)).not.toThrow()
+  })
+
+  it('normalizes non-finite numbers to JSON null values', () => {
+    const result = sanitizeSourcingSnapshot({
+      notANumber: Number.NaN,
+      positiveInfinity: Number.POSITIVE_INFINITY,
+      negativeInfinity: Number.NEGATIVE_INFINITY,
+      finiteNumber: 1688,
+    })
+
+    expect(result).toEqual({
+      notANumber: null,
+      positiveInfinity: null,
+      negativeInfinity: null,
+      finiteNumber: 1688,
+    })
+  })
+
+  it('normalizes non-JSON values without executing an own toJSON function', () => {
+    let toJsonCalls = 0
+    const input = {
+      callable: () => 'unsafe-result',
+      symbol: Symbol('unsafe-symbol'),
+      undefinedValue: undefined,
+      values: [undefined, Symbol('array-symbol'), () => 'array-callable'],
+      providerPayload: {
+        offerId: 1688,
+        toJSON() {
+          toJsonCalls += 1
+          return { token: 'test-token-from-to-json', offerId: 1n }
+        },
+      },
+    }
+
+    const result = sanitizeSourcingSnapshot(input)
+
+    expect(result).toEqual({
+      callable: null,
+      symbol: null,
+      undefinedValue: null,
+      values: [null, null, null],
+      providerPayload: {
+        offerId: 1688,
+        toJSON: null,
+      },
+    })
+    expect(toJsonCalls).toBe(0)
+    expect(() => JSON.stringify(result)).not.toThrow()
+    expect(JSON.stringify(result)).not.toContain('token')
+    expect(toJsonCalls).toBe(0)
+  })
+
+  it('normalizes valid and invalid Date values without invoking Date serialization later', () => {
+    const result = sanitizeSourcingSnapshot({
+      createdAt: new Date('2026-08-04T06:00:00.000Z'),
+      invalidDate: new Date(Number.NaN),
+    })
+
+    expect(result).toEqual({
+      createdAt: '2026-08-04T06:00:00.000Z',
+      invalidDate: null,
+    })
+    expect(() => JSON.stringify(result)).not.toThrow()
+  })
+
+  it('converts class instances to plain sanitized records without prototype methods', () => {
+    class ProviderOffer {
+      constructor(
+        public readonly offerId: number,
+        public readonly token: string,
+      ) {}
+
+      getDisplayName(): string {
+        return `offer-${this.offerId}`
+      }
+    }
+
+    const result = sanitizeSourcingSnapshot({
+      offer: new ProviderOffer(1688, 'test-provider-token'),
+    })
+    const offer = result.offer as Record<string, unknown>
+
+    expect(offer).toEqual({ offerId: 1688 })
+    expect(Object.getPrototypeOf(offer)).toBe(Object.prototype)
+    expect(Object.prototype.hasOwnProperty.call(offer, 'getDisplayName')).toBe(
+      false,
+    )
   })
 
   it('does not mutate the input object or its nested collections', () => {
