@@ -296,6 +296,12 @@ export interface SourcingSearch {
 
 export interface SourcingSummary {
   workflowId?: string
+  workflowInput?: {
+    name: string
+    seedType: SeedType
+    seedValue: string
+    targetMarket: string
+  }
   provider?: 'alibaba_1688'
   providerConfigured: boolean
   status?: SourcingSearchStatus

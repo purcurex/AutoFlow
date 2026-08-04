@@ -73,8 +73,16 @@ export interface SourcingOfferResponse {
   recommendationReasons: string[]
 }
 
+export interface SourcingWorkflowInputResponse {
+  name: string
+  seedType: SourcingSearchMode
+  seedValue: string
+  targetMarket: string
+}
+
 export interface SourcingSummaryResponse {
   workflowId: string
+  workflowInput: SourcingWorkflowInputResponse
   provider: 'alibaba_1688'
   providerConfigured: boolean
   status: SourcingApiStatus

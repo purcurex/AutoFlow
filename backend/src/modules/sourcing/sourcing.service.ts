@@ -53,7 +53,8 @@ export class SourcingService {
     workflowRunId: string,
     query: ListSourcingDto = new ListSourcingDto(),
   ): Promise<SourcingSummaryResponse> {
-    await this.requireWorkflow(ownerUserId, workflowRunId)
+    const workflow = await this.requireWorkflow(ownerUserId, workflowRunId)
+    const workflowInput = this.mapWorkflowInput(workflow)
     const readiness = this.alibaba1688Service.getReadiness()
     const pageNumber = query.page || 1
     const requestedPageSize = query.pageSize || 20
@@ -68,6 +69,7 @@ export class SourcingService {
     if (!search) {
       return {
         workflowId: workflowRunId,
+        workflowInput,
         provider: SOURCING_PROVIDER,
         providerConfigured: readiness.ready,
         status: readiness.ready ? 'idle' : 'not_configured',
@@ -111,6 +113,7 @@ export class SourcingService {
 
     return {
       workflowId: workflowRunId,
+      workflowInput,
       provider: SOURCING_PROVIDER,
       providerConfigured: readiness.ready,
       status: this.apiStatus(search.status),
@@ -332,6 +335,18 @@ export class SourcingService {
           error instanceof Error ? error.message : 'unknown'
         }`,
       )
+    }
+  }
+
+  /**
+   * 返回创建工作流时的原始匹配字段，让前端明确展示本次1688查询依据。
+   */
+  private mapWorkflowInput(workflow: WorkflowRunEntity) {
+    return {
+      name: workflow.name,
+      seedType: workflow.seedType,
+      seedValue: workflow.seedValue,
+      targetMarket: workflow.targetMarket,
     }
   }
 

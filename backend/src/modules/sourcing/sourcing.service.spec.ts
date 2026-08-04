@@ -221,9 +221,30 @@ describe('SourcingService asynchronous pagination', () => {
       loaded: true,
       status: 'succeeded',
     })
+    expect(result.workflowInput).toEqual({
+      name: 'Pet brush prospecting',
+      seedType: 'keyword',
+      seedValue: 'pet brush',
+      targetMarket: 'United States',
+    })
     expect(offers.find).toHaveBeenCalledWith(expect.objectContaining({
       where: { ownerUserId, workflowRunId, searchId, pageNumber: 1 },
       order: { rankInPage: 'ASC' },
     }))
+  })
+
+  it('returns workflow matching input before the first sourcing task exists', async () => {
+    const { service } = createService()
+
+    const result = await service.getSummary(ownerUserId, workflowRunId)
+
+    expect(result.status).toBe('idle')
+    expect(result.search).toBeNull()
+    expect(result.workflowInput).toEqual({
+      name: 'Pet brush prospecting',
+      seedType: 'keyword',
+      seedValue: 'pet brush',
+      targetMarket: 'United States',
+    })
   })
 })

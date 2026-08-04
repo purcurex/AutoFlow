@@ -37,6 +37,12 @@ const completedSummary: SourcingSummary = {
   workflowId: 'workflow-1688',
   provider: 'alibaba_1688',
   providerConfigured: true,
+  workflowInput: {
+    name: 'Pet brush prospecting',
+    seedType: 'keyword',
+    seedValue: 'pet brush',
+    targetMarket: 'United States',
+  },
   latestSearch: {
     id: 'search-1',
     status: 'completed',
@@ -130,7 +136,7 @@ describe('1688 sourcing view', () => {
     expect(wrapper.get('[data-test="sourcing-status"]').text())
       .toContain('sourcing.status_not_configured')
     expect(wrapper.get('[data-test="restart-sourcing"]').text())
-      .toContain('sourcing.restartAction')
+      .toContain('sourcing.startAction')
     expect(wrapper.get('[data-test="restart-sourcing"]').text())
       .not.toContain('sourcing.runningAction')
 
@@ -155,6 +161,45 @@ describe('1688 sourcing view', () => {
     expect(wrapper.text()).toContain('Verified Factory')
     expect(wrapper.text()).toContain('Strong visual match')
     expect(wrapper.text()).toContain('sourcing.boundaryDescription')
+    expect(wrapper.get('[data-test="sourcing-match-context"]').text()).toContain('Pet brush prospecting')
+    expect(wrapper.get('[data-test="sourcing-match-context"]').text()).toContain('pet brush')
+  })
+
+  it('shows the image matching input and a first-run action before a search exists', async () => {
+    apiMock.getWorkflowSourcing.mockResolvedValue({
+      workflowId: 'workflow-1688',
+      provider: 'alibaba_1688',
+      providerConfigured: true,
+      status: 'idle',
+      workflowInput: {
+        name: 'Pet brush image sourcing',
+        seedType: 'image',
+        seedValue: 'https://cdn.example.com/pet-brush.png',
+        targetMarket: 'Canada',
+      },
+      search: null,
+      latestSearch: null,
+      pagination: {
+        page: 1,
+        pageSize: 20,
+        totalRecords: null,
+        totalPages: null,
+        resultCount: 0,
+        loaded: false,
+        status: 'pending',
+      },
+      items: [],
+      offers: [],
+    } satisfies SourcingSummary)
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const context = wrapper.get('[data-test="sourcing-match-context"]')
+    expect(context.text()).toContain('Pet brush image sourcing')
+    expect(context.text()).toContain('https://cdn.example.com/pet-brush.png')
+    expect(context.text()).toContain('Canada')
+    expect(wrapper.get('[data-test="restart-sourcing"]').text()).toContain('sourcing.startAction')
   })
 
   it('opens 1688 product and shop links in secure new tabs', async () => {

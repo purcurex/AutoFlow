@@ -214,7 +214,9 @@ function offerLink(offer: SourcingOffer) {
           >
             <LoaderCircle v-if="starting || running" class="h-4 w-4 animate-spin" />
             <RefreshCw v-else class="h-4 w-4" />
-            {{ starting || running ? t('sourcing.runningAction') : t('sourcing.restartAction') }}
+            {{ starting || running
+              ? t('sourcing.runningAction')
+              : search ? t('sourcing.restartAction') : t('sourcing.startAction') }}
           </button>
         </template>
       </PageHeader>
@@ -249,6 +251,34 @@ function offerLink(offer: SourcingOffer) {
             <BadgeCheck v-else-if="status === 'completed'" class="h-3.5 w-3.5" />
             {{ t(`sourcing.status_${status}`) }}
           </span>
+        </div>
+
+        <div
+          v-if="!loading && summary?.workflowInput"
+          class="grid gap-3 border-b bg-slate-50 px-5 py-4 text-sm dark:bg-[#171b21] sm:grid-cols-2 xl:grid-cols-4"
+          style="border-color: var(--color-border)"
+          data-test="sourcing-match-context"
+        >
+          <div>
+            <p class="text-xs font-semibold text-slate-500">{{ t('sourcing.workflowName') }}</p>
+            <p class="mt-1 font-semibold text-slate-950 dark:text-white">{{ summary.workflowInput.name }}</p>
+          </div>
+          <div>
+            <p class="text-xs font-semibold text-slate-500">{{ t('sourcing.matchType') }}</p>
+            <p class="mt-1 font-semibold text-slate-950 dark:text-white">
+              {{ t(`sourcing.matchType_${summary.workflowInput.seedType}`) }}
+            </p>
+          </div>
+          <div class="min-w-0">
+            <p class="text-xs font-semibold text-slate-500">{{ t('sourcing.query') }}</p>
+            <p class="mt-1 truncate font-semibold text-slate-950 dark:text-white" :title="summary.workflowInput.seedValue">
+              {{ summary.workflowInput.seedValue }}
+            </p>
+          </div>
+          <div>
+            <p class="text-xs font-semibold text-slate-500">{{ t('sourcing.targetMarket') }}</p>
+            <p class="mt-1 font-semibold text-slate-950 dark:text-white">{{ summary.workflowInput.targetMarket }}</p>
+          </div>
         </div>
 
         <div v-if="loading" class="empty-state" data-test="sourcing-loading">
