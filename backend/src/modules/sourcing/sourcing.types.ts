@@ -35,3 +35,21 @@ export type SourcingSupplierCapabilities = Record<string, unknown>
 
 /** 1688原始响应必须先完成递归脱敏，再写入该快照字段。 */
 export type SourcingRawSnapshot = Record<string, unknown>
+
+export type SourcingExecutionErrorCode =
+  | 'NOT_CONFIGURED'
+  | 'AUTHENTICATION_FAILED'
+  | 'PERMISSION_DENIED'
+  | 'RATE_LIMITED'
+  | 'PROVIDER_TIMEOUT'
+  | 'PROVIDER_UNAVAILABLE'
+  | 'INVALID_IMAGE'
+  | 'INVALID_REQUEST'
+  | 'INVALID_RESPONSE'
+
+export interface SourcingExecutionFailure {
+  code: SourcingExecutionErrorCode
+  message: string
+  retryable: boolean
+  retryAfterMs: number | null
+}

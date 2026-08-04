@@ -12,6 +12,7 @@ import { SourcingController } from './sourcing.controller'
 import { SourcingService } from './sourcing.service'
 import { SourcingImageResolverService } from './sourcing-image-resolver.service'
 import { SourcingPageExecutorService } from './sourcing-page-executor.service'
+import { SourcingWorkerService } from './sourcing-worker.service'
 
 @Module({
   imports: [
@@ -25,7 +26,12 @@ import { SourcingPageExecutorService } from './sourcing-page-executor.service'
     ]),
   ],
   controllers: [SourcingController],
-  providers: [SourcingService, SourcingImageResolverService, SourcingPageExecutorService],
+  providers: [
+    SourcingService,
+    SourcingImageResolverService,
+    SourcingPageExecutorService,
+    SourcingWorkerService,
+  ],
   exports: [SourcingService],
 })
 export class SourcingModule {}
