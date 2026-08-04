@@ -6,8 +6,12 @@ import { readFile, stat } from 'fs/promises'
 import { Agent } from 'https'
 import { isIP } from 'net'
 import { isAbsolute, relative, resolve } from 'path'
-const sharp = require('sharp') as (typeof import('sharp'))['sharp']
+import * as sharpModule from 'sharp'
 import { WorkflowRunEntity } from '../autoflow/entities'
+
+type SharpFactory = (typeof import('sharp'))['sharp']
+const sharp = (sharpModule as unknown as { default?: SharpFactory }).default
+  ?? sharpModule as unknown as SharpFactory
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024
 const MAX_REDIRECTS = 3

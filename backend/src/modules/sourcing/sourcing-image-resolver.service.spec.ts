@@ -2,11 +2,15 @@ import axios from 'axios'
 import { promises as dns } from 'dns'
 import { mkdir, rm, writeFile } from 'fs/promises'
 import { join } from 'path'
-const sharp = require('sharp') as (typeof import('sharp'))['sharp']
+import * as sharpModule from 'sharp'
 import { WorkflowRunEntity } from '../autoflow/entities'
 import {
   SourcingImageResolverService,
 } from './sourcing-image-resolver.service'
+
+type SharpFactory = (typeof import('sharp'))['sharp']
+const sharp = (sharpModule as unknown as { default?: SharpFactory }).default
+  ?? sharpModule as unknown as SharpFactory
 
 jest.mock('axios')
 

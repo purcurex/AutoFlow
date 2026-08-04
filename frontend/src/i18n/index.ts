@@ -262,7 +262,7 @@ const en = {
     noOffersHint: 'Revise the workflow keyword or product image, then run sourcing again.',
     pageFailed: 'The Current Sourcing Page Failed',
     retryPage: 'Reload This Page',
-    resultRange: 'Items {start}-{end} of {total}',
+    resultRange: 'Items {start}-{end} / Total {total}',
     previousPage: 'Previous',
     nextPage: 'Next',
     status_not_configured: 'Not Configured',
