@@ -247,6 +247,7 @@ export type SourcingSearchStatus =
   | 'idle'
   | 'running'
   | 'failed'
+  | 'partial'
   | 'completed'
 
 export interface SourcingOffer {
@@ -300,7 +301,34 @@ export interface SourcingSummary {
   status?: SourcingSearchStatus
   latestSearch?: SourcingSearch | null
   search?: SourcingSearch | null
+  pagination?: SourcingPagination
+  items?: SourcingOffer[]
   offers: SourcingOffer[]
+}
+
+export interface SourcingPagination {
+  page: number
+  pageSize: 10 | 20 | 50
+  totalRecords: number | null
+  totalPages: number | null
+  resultCount: number
+  loaded: boolean
+  status: 'pending' | 'running' | 'succeeded' | 'failed'
+  errorCode?: string | null
+  errorMessage?: string | null
+}
+
+export interface SourcingStartResponse {
+  searchId: string
+  status: 'pending' | 'running' | 'succeeded' | 'partial'
+  page: number
+  pageSize: 10 | 20 | 50
+}
+
+export interface SourcingQuery {
+  searchId?: string
+  page: number
+  pageSize: 10 | 20 | 50
 }
 
 export interface StartSourcingRequest {
@@ -364,14 +392,21 @@ export const autoflowApi = {
   startDiscovery(id: string): Promise<DiscoveryStartResult> {
     return api.post(`/autoflow/workflows/${id}/start-discovery`)
   },
-  getWorkflowSourcing(id: string): Promise<SourcingSummary> {
-    return api.get(`/autoflow/workflows/${id}/sourcing`)
+  getWorkflowSourcing(id: string, query?: SourcingQuery): Promise<SourcingSummary> {
+    return api.get(`/autoflow/workflows/${id}/sourcing`, { params: query })
   },
   startWorkflowSourcing(
     id: string,
     data: StartSourcingRequest = {},
-  ): Promise<SourcingSummary> {
+  ): Promise<SourcingStartResponse> {
     return api.post(`/autoflow/workflows/${id}/sourcing/search`, data)
+  },
+  requestWorkflowSourcingPage(
+    id: string,
+    searchId: string,
+    page: number,
+  ): Promise<SourcingStartResponse> {
+    return api.post(`/autoflow/workflows/${id}/sourcing/searches/${searchId}/pages/${page}`)
   },
   getLeads(status?: LeadStatus, page = 1, pageSize = 100): Promise<PaginatedResult<StoreLead>> {
     return api.get('/autoflow/leads', { params: { status, page, pageSize } })

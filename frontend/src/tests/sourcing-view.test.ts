@@ -1,11 +1,17 @@
 import { flushPromises, mount } from '@vue/test-utils'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import SourcingView from '@/views/autoflow/SourcingView.vue'
 import type { SourcingSummary } from '@/utils/sourcing'
 
 const apiMock = vi.hoisted(() => ({
   getWorkflowSourcing: vi.fn(),
   startWorkflowSourcing: vi.fn(),
+  requestWorkflowSourcingPage: vi.fn(),
+}))
+const routerMock = vi.hoisted(() => ({ replace: vi.fn() }))
+const routeMock = vi.hoisted(() => ({
+  params: { id: 'workflow-1688' },
+  query: {} as Record<string, string>,
 }))
 
 vi.mock('@/api/autoflow', () => ({
@@ -13,7 +19,8 @@ vi.mock('@/api/autoflow', () => ({
 }))
 
 vi.mock('vue-router', () => ({
-  useRoute: () => ({ params: { id: 'workflow-1688' } }),
+  useRoute: () => routeMock,
+  useRouter: () => routerMock,
 }))
 
 vi.mock('vue-i18n', async (importOriginal) => {
@@ -35,6 +42,15 @@ const completedSummary: SourcingSummary = {
     status: 'completed',
     searchMode: 'keyword',
     query: 'pet brush',
+  },
+  pagination: {
+    page: 1,
+    pageSize: 20,
+    totalRecords: 1,
+    totalPages: 1,
+    resultCount: 1,
+    loaded: true,
+    status: 'succeeded',
   },
   offers: [
     {
@@ -82,6 +98,11 @@ function mountView() {
 describe('1688 sourcing view', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    routeMock.query = {}
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
   })
 
   it('shows the provider-not-configured state without starting a search', async () => {
@@ -95,7 +116,11 @@ describe('1688 sourcing view', () => {
     const wrapper = mountView()
     await flushPromises()
 
-    expect(apiMock.getWorkflowSourcing).toHaveBeenCalledWith('workflow-1688')
+    expect(apiMock.getWorkflowSourcing).toHaveBeenCalledWith('workflow-1688', {
+      searchId: undefined,
+      page: 1,
+      pageSize: 20,
+    })
     expect(wrapper.find('[data-test="provider-not-configured"]').exists()).toBe(true)
     expect(wrapper.find('[data-test="sourcing-status"]').text()).toContain('sourcing.status_not_configured')
     expect(wrapper.find<HTMLButtonElement>('[data-test="restart-sourcing"]').element.disabled).toBe(true)
@@ -140,11 +165,19 @@ describe('1688 sourcing view', () => {
       .mockResolvedValueOnce({
         ...completedSummary,
         latestSearch: { id: 'search-2', status: 'running' },
+        pagination: {
+          ...completedSummary.pagination!,
+          loaded: false,
+          status: 'pending',
+          resultCount: 0,
+        },
         offers: [],
       } satisfies SourcingSummary)
     apiMock.startWorkflowSourcing.mockResolvedValue({
-      id: 'search-2',
-      status: 'running',
+      searchId: 'search-2',
+      status: 'pending',
+      page: 1,
+      pageSize: 20,
     })
 
     const wrapper = mountView()
@@ -152,9 +185,175 @@ describe('1688 sourcing view', () => {
     await wrapper.get('[data-test="restart-sourcing"]').trigger('click')
     await flushPromises()
 
-    expect(apiMock.startWorkflowSourcing).toHaveBeenCalledWith('workflow-1688', { force: true })
+    expect(apiMock.startWorkflowSourcing).toHaveBeenCalledWith('workflow-1688', {
+      force: true,
+      pageSize: 20,
+    })
     expect(apiMock.getWorkflowSourcing).toHaveBeenCalledTimes(2)
     expect(wrapper.find('[data-test="sourcing-running"]').exists()).toBe(true)
     expect(wrapper.find<HTMLButtonElement>('[data-test="restart-sourcing"]').element.disabled).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('requests an unloaded next page, polls it, and keeps URL state in sync', async () => {
+    vi.useFakeTimers()
+    apiMock.getWorkflowSourcing
+      .mockResolvedValueOnce({
+        ...completedSummary,
+        pagination: { ...completedSummary.pagination!, totalRecords: 25, totalPages: 2 },
+      })
+      .mockResolvedValueOnce({
+        ...completedSummary,
+        offers: [],
+        pagination: {
+          ...completedSummary.pagination!,
+          page: 2,
+          totalRecords: 25,
+          totalPages: 2,
+          loaded: false,
+          status: 'pending',
+          resultCount: 0,
+        },
+      })
+      .mockResolvedValueOnce({
+        ...completedSummary,
+        pagination: {
+          ...completedSummary.pagination!,
+          page: 2,
+          totalRecords: 25,
+          totalPages: 2,
+        },
+      })
+    apiMock.requestWorkflowSourcingPage.mockResolvedValue({
+      searchId: 'search-1', status: 'pending', page: 2, pageSize: 20,
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.get('[data-test="next-sourcing-page"]').trigger('click')
+    await flushPromises()
+
+    expect(apiMock.requestWorkflowSourcingPage).toHaveBeenCalledWith(
+      'workflow-1688', 'search-1', 2,
+    )
+    await vi.advanceTimersByTimeAsync(1_500)
+    await flushPromises()
+    expect(apiMock.getWorkflowSourcing).toHaveBeenLastCalledWith('workflow-1688', {
+      searchId: 'search-1', page: 2, pageSize: 20,
+    })
+    expect(routerMock.replace).toHaveBeenLastCalledWith(expect.objectContaining({
+      query: expect.objectContaining({ searchId: 'search-1', page: '2', pageSize: '20' }),
+    }))
+    wrapper.unmount()
+  })
+
+  it('restores the requested search page from the URL', async () => {
+    routeMock.query = { searchId: 'search-route', page: '2', pageSize: '50' }
+    apiMock.getWorkflowSourcing.mockResolvedValue({
+      ...completedSummary,
+      latestSearch: { ...completedSummary.latestSearch!, id: 'search-route' },
+      pagination: {
+        ...completedSummary.pagination!,
+        page: 2,
+        pageSize: 50,
+        totalRecords: 75,
+        totalPages: 2,
+      },
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(apiMock.getWorkflowSourcing).toHaveBeenCalledWith('workflow-1688', {
+      searchId: 'search-route', page: 2, pageSize: 50,
+    })
+    wrapper.unmount()
+  })
+
+  it('requeues a failed page without replacing the current search', async () => {
+    apiMock.getWorkflowSourcing
+      .mockResolvedValueOnce({
+        ...completedSummary,
+        pagination: {
+          ...completedSummary.pagination!,
+          loaded: false,
+          status: 'failed',
+        },
+        offers: [],
+      })
+      .mockResolvedValueOnce({
+        ...completedSummary,
+        pagination: {
+          ...completedSummary.pagination!,
+          loaded: false,
+          status: 'pending',
+          resultCount: 0,
+        },
+        offers: [],
+      })
+    apiMock.requestWorkflowSourcingPage.mockResolvedValue({
+      searchId: 'search-1', status: 'pending', page: 1, pageSize: 20,
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.get('[data-test="retry-sourcing-page"]').trigger('click')
+    await flushPromises()
+
+    expect(apiMock.requestWorkflowSourcingPage).toHaveBeenCalledWith(
+      'workflow-1688', 'search-1', 1,
+    )
+    expect(apiMock.startWorkflowSourcing).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('starts a new search when the page size changes', async () => {
+    apiMock.getWorkflowSourcing
+      .mockResolvedValueOnce(completedSummary)
+      .mockResolvedValueOnce({
+        ...completedSummary,
+        latestSearch: { ...completedSummary.latestSearch!, id: 'search-50' },
+        pagination: {
+          ...completedSummary.pagination!,
+          pageSize: 50,
+        },
+      })
+    apiMock.startWorkflowSourcing.mockResolvedValue({
+      searchId: 'search-50', status: 'pending', page: 1, pageSize: 50,
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.get('[data-test="sourcing-page-size"]').setValue('50')
+    await flushPromises()
+
+    expect(apiMock.startWorkflowSourcing).toHaveBeenCalledWith('workflow-1688', {
+      force: true, pageSize: 50,
+    })
+    expect(apiMock.getWorkflowSourcing).toHaveBeenLastCalledWith('workflow-1688', {
+      searchId: 'search-50', page: 1, pageSize: 50,
+    })
+    wrapper.unmount()
+  })
+
+  it('stops polling after the view is unmounted', async () => {
+    vi.useFakeTimers()
+    apiMock.getWorkflowSourcing.mockResolvedValue({
+      ...completedSummary,
+      pagination: {
+        ...completedSummary.pagination!,
+        loaded: false,
+        status: 'pending',
+        resultCount: 0,
+      },
+      offers: [],
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+    wrapper.unmount()
+    await vi.advanceTimersByTimeAsync(1_500)
+
+    expect(apiMock.getWorkflowSourcing).toHaveBeenCalledTimes(1)
   })
 })
