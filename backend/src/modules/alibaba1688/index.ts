@@ -15,5 +15,6 @@ export type {
   Alibaba1688NormalizedError,
   Alibaba1688Readiness,
   Alibaba1688StableProductDetail,
+  Alibaba1688StableOffer,
   Alibaba1688StableSearchResult,
 } from './alibaba1688.types'
