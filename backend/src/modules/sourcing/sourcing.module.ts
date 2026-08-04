@@ -9,6 +9,7 @@ import {
 } from './entities'
 import { SourcingController } from './sourcing.controller'
 import { SourcingService } from './sourcing.service'
+import { SourcingImageResolverService } from './sourcing-image-resolver.service'
 
 @Module({
   imports: [
@@ -21,7 +22,7 @@ import { SourcingService } from './sourcing.service'
     ]),
   ],
   controllers: [SourcingController],
-  providers: [SourcingService],
+  providers: [SourcingService, SourcingImageResolverService],
   exports: [SourcingService],
 })
 export class SourcingModule {}
