@@ -4,6 +4,7 @@ import axios from 'axios'
 import {
   detailProviderFixture,
   imageProviderFixture,
+  imageUploadProviderFixture,
   keywordProviderFixture,
 } from './__fixtures__/provider-responses'
 import { Alibaba1688Exception } from './alibaba1688.error'
@@ -21,6 +22,8 @@ const readyConfig: Record<string, unknown> = {
   ALIBABA_1688_KEYWORD_METHOD: 'product.search.keywordQuery',
   ALIBABA_1688_IMAGE_NAMESPACE: 'com.alibaba.fenxiao.crossborder',
   ALIBABA_1688_IMAGE_METHOD: 'product.search.imageQuery',
+  ALIBABA_1688_UPLOAD_NAMESPACE: 'com.alibaba.fenxiao.crossborder',
+  ALIBABA_1688_UPLOAD_METHOD: 'product.image.upload',
   ALIBABA_1688_DETAIL_NAMESPACE: 'com.alibaba.fenxiao.crossborder',
   ALIBABA_1688_DETAIL_METHOD: 'product.search.queryProductDetail',
 }
@@ -137,17 +140,38 @@ describe('Alibaba1688Service', () => {
       }],
     })
     expect(result.metadata.requestId).toBe('keyword-request-1')
+    expect(result.metadata.traceId).toBe('keyword-trace-1')
   })
 
-  it('uses the configured imageQuery method and supports imageAddress input', async () => {
+  it('uploads a normalized image through product.image.upload-1', async () => {
+    jest.spyOn(axios, 'post').mockResolvedValue({
+      status: 200,
+      data: imageUploadProviderFixture,
+    })
+
+    const result = await service().uploadImage({
+      imageBase64: Buffer.from('verified-image').toString('base64'),
+    })
+
+    expect(result.normalized.imageId).toBe('image-1688-1')
+    expect(jest.mocked(axios.post).mock.calls[0][0]).toContain(
+      '/param2/1/com.alibaba.fenxiao.crossborder/product.image.upload/',
+    )
+    expect(JSON.parse(requestParameters().get('uploadImageParam') ?? '')).toEqual({
+      appKey: 4270841,
+      imageBase64: Buffer.from('verified-image').toString('base64'),
+    })
+    expect(result.metadata.traceId).toBe('image-upload-trace-1')
+  })
+
+  it('uses the configured imageQuery method with imageId input', async () => {
     jest.spyOn(axios, 'post').mockResolvedValue({
       status: 200,
       data: imageProviderFixture,
     })
 
     const result = await service().searchByImage({
-      imageAddress: 'https://assets.example/product.jpg',
-      auxiliaryText: '热卖的',
+      imageId: 'image-1688-1',
       beginPage: 2,
       pageSize: 10,
     })
@@ -156,10 +180,9 @@ describe('Alibaba1688Service', () => {
       '/com.alibaba.fenxiao.crossborder/product.search.imageQuery/4270841',
     )
     expect(JSON.parse(requestParameters().get('offerQueryParam') ?? '')).toEqual({
-      auxiliaryText: '热卖的',
       beginPage: 2,
       country: 'en',
-      imageAddress: 'https://assets.example/product.jpg',
+      imageId: 'image-1688-1',
       pageSize: 10,
     })
     expect(result.normalized).toMatchObject({
@@ -170,6 +193,12 @@ describe('Alibaba1688Service', () => {
         price: { amount: '8.88' },
       }],
       affectsContactConfidence: false,
+    })
+  })
+
+  it('requires imageId for product.search.imageQuery-1', async () => {
+    await expect(service().searchByImage({ imageId: '' })).rejects.toMatchObject({
+      normalized: { code: 'INVALID_REQUEST' },
     })
   })
 
@@ -290,10 +319,10 @@ describe('Alibaba1688Service', () => {
       })
   })
 
-  it('rejects invalid image URLs before any network request', async () => {
+  it('rejects a missing imageId before any network request', async () => {
     const post = jest.spyOn(axios, 'post')
 
-    await expect(service().searchByImage({ imageAddress: 'file:///private/product.jpg' }))
+    await expect(service().searchByImage({ imageId: '   ' }))
       .rejects.toMatchObject({
         normalized: { code: 'INVALID_REQUEST' },
       })

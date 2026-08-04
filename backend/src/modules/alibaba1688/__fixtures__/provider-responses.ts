@@ -1,11 +1,13 @@
 import type {
   Alibaba1688DetailProviderResponse,
   Alibaba1688ImageProviderResponse,
+  Alibaba1688ImageUploadProviderResponse,
   Alibaba1688KeywordProviderResponse,
 } from '../alibaba1688.types'
 
 export const keywordProviderFixture: Alibaba1688KeywordProviderResponse = {
   _aop_response_id: 'keyword-request-1',
+  traceId: 'keyword-trace-1',
   result: {
     success: true,
     code: '200',
@@ -46,6 +48,7 @@ export const keywordProviderFixture: Alibaba1688KeywordProviderResponse = {
 }
 export const imageProviderFixture: Alibaba1688ImageProviderResponse = {
   _aop_response_id: 'image-request-1',
+  trace_id: 'image-trace-1',
   result: {
     success: 'true',
     code: '200',
@@ -66,8 +69,22 @@ export const imageProviderFixture: Alibaba1688ImageProviderResponse = {
   },
 }
 
+export const imageUploadProviderFixture: Alibaba1688ImageUploadProviderResponse = {
+  _aop_response_id: 'image-upload-request-1',
+  traceId: 'image-upload-trace-1',
+  result: {
+    success: true,
+    code: '200',
+    message: 'success',
+    result: {
+      imageId: 'image-1688-1',
+    },
+  },
+}
+
 export const detailProviderFixture: Alibaba1688DetailProviderResponse = {
   _aop_response_id: 'detail-request-1',
+  traceId: 'detail-trace-1',
   result: {
     success: true,
     code: '200',
