@@ -302,6 +302,12 @@ describe('AutoFlow persistence API', () => {
       .expect(200)
     expect(summary.body).toEqual({
       workflowId: created.body.id,
+      workflowInput: {
+        name: 'pet grooming brush prospect workflow',
+        seedType: 'keyword',
+        seedValue: 'pet grooming brush',
+        targetMarket: 'United States',
+      },
       provider: 'alibaba_1688',
       providerConfigured: false,
       status: 'not_configured',
