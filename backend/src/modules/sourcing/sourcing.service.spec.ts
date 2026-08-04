@@ -32,8 +32,10 @@ describe('SourcingService asynchronous pagination', () => {
     const workflow = {
       id: workflowRunId,
       ownerUserId,
+      name: 'Pet brush prospecting',
       seedType: 'keyword',
       seedValue: 'pet brush',
+      targetMarket: 'United States',
     } as WorkflowRunEntity
     workflows.findOne.mockResolvedValue(workflow)
     const provider = {
@@ -81,7 +83,37 @@ describe('SourcingService asynchronous pagination', () => {
       status: 'pending',
     }))
     expect(searches.save).toHaveBeenCalledWith(expect.objectContaining({
+      searchMode: 'keyword',
+      keyword: 'pet brush',
+      imageUrl: null,
       queryFingerprint: expect.stringMatching(/^[a-f0-9]{64}$/),
+      requestPayload: expect.objectContaining({
+        workflowName: 'Pet brush prospecting',
+        targetMarket: 'United States',
+      }),
+    }))
+  })
+
+  it('maps an image workflow URL to image sourcing and keeps its workflow context', async () => {
+    const { service, searches, workflow } = createService()
+    Object.assign(workflow, {
+      name: 'Pet brush image sourcing',
+      seedType: 'image',
+      seedValue: 'https://cdn.example.com/pet-brush.png',
+      targetMarket: 'Canada',
+    })
+    searches.save.mockImplementation(async (value) => ({ id: searchId, ...value }) as SourcingSearchEntity)
+
+    await service.startSearch(ownerUserId, workflowRunId, { pageSize: 20 })
+
+    expect(searches.save).toHaveBeenCalledWith(expect.objectContaining({
+      searchMode: 'image',
+      keyword: null,
+      imageUrl: 'https://cdn.example.com/pet-brush.png',
+      requestPayload: expect.objectContaining({
+        workflowName: 'Pet brush image sourcing',
+        targetMarket: 'Canada',
+      }),
     }))
   })
 

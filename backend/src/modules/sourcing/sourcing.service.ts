@@ -212,6 +212,9 @@ export class SourcingService {
         loadedPageCount: 0,
         queryFingerprint,
         requestPayload: {
+          // 业务上下文仅用于审计和前端回显；1688检索分支严格由seedType/seedValue决定。
+          workflowName: workflow.name,
+          targetMarket: workflow.targetMarket,
           pageSize,
           priceMin: options.priceMin || null,
           priceMax: options.priceMax || null,
