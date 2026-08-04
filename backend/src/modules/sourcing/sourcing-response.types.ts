@@ -5,6 +5,7 @@ export type SourcingApiStatus =
   | 'idle'
   | 'running'
   | 'failed'
+  | 'partial'
   | 'completed'
 
 export interface SourcingSearchResponse {
@@ -33,12 +34,12 @@ export interface SourcingOfferResponse {
   moq: string | null
   unit: string | null
   salesVolume: string | null
-  repurchaseRate: number | null
+  repurchaseRate: string | null
   supplier: {
     companyName: string | null
     shopName: string | null
     shopUrl: string | null
-    score: number | null
+    score: string | null
     identities: string[]
     badges: string[]
   } | null

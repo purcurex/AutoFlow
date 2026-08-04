@@ -113,8 +113,29 @@ export class SourcingOfferEntity {
   @Column({ name: 'sales_volume', type: 'bigint', nullable: true })
   salesVolume: string | null
 
-  @Column({ name: 'repurchase_rate', type: 'double precision', nullable: true })
-  repurchaseRate: number | null
+  @Column({ name: 'repurchase_rate', type: 'decimal', precision: 9, scale: 4, nullable: true })
+  repurchaseRate: string | null
+
+  @Column({ name: 'page_number', type: 'integer', default: 1 })
+  pageNumber: number
+
+  @Column({ name: 'rank_in_page', type: 'integer', default: 1 })
+  rankInPage: number
+
+  @Column({ name: 'absolute_rank', type: 'integer', default: 1 })
+  absoluteRank: number
+
+  @Column({ name: 'detail_status', type: 'varchar', length: 24, default: 'not_requested' })
+  detailStatus: 'not_requested' | 'succeeded' | 'failed'
+
+  @Column({ name: 'detail_retrieved_at', type: 'timestamptz', nullable: true })
+  detailRetrievedAt: Date | null
+
+  @Column({ name: 'score_version', type: 'varchar', length: 32, default: 'v1' })
+  scoreVersion: string
+
+  @Column({ name: 'score_dimensions', type: 'jsonb', default: () => "'{}'::jsonb" })
+  scoreDimensions: Record<string, unknown>
 
   @Column({ type: 'jsonb', default: () => "'[]'::jsonb" })
   tags: string[]

@@ -1,7 +1,9 @@
 import { getMetadataArgsStorage, type QueryRunner } from 'typeorm'
 import { AddAlibaba1688Sourcing1784724000000 } from '../../../database/migrations/1784724000000-AddAlibaba1688Sourcing'
+import { AddAlibaba1688SourcingPagination1784728000000 } from '../../../database/migrations/1784728000000-AddAlibaba1688SourcingPagination'
 import {
   SourcingOfferEntity,
+  SourcingSearchPageEntity,
   SourcingSearchEntity,
   SourcingSupplierEntity,
 } from './index'
@@ -9,6 +11,21 @@ import {
 describe('sourcing persistence entities', () => {
   const storage = getMetadataArgsStorage()
   const entities = [SourcingSearchEntity, SourcingSupplierEntity, SourcingOfferEntity]
+
+  it('maps leased sourcing page jobs with pagination and retry fields', () => {
+    const table = storage.tables.find((metadata) => metadata.target === SourcingSearchPageEntity)
+    const columns = storage.columns
+      .filter((metadata) => metadata.target === SourcingSearchPageEntity)
+      .map((metadata) => metadata.propertyName)
+
+    expect(table?.name).toBe('sourcing_search_pages')
+    expect(columns).toEqual(expect.arrayContaining([
+      'searchId', 'ownerUserId', 'pageNumber', 'pageSize', 'status',
+      'attempts', 'maxAttempts', 'availableAt', 'leaseOwner', 'leaseExpiresAt',
+      'heartbeatAt', 'providerRequestId', 'providerTraceId', 'resultCount',
+      'errorCode', 'errorMessage', 'startedAt', 'completedAt',
+    ]))
+  })
 
   it.each([
     [SourcingSearchEntity, 'sourcing_searches'],
@@ -139,6 +156,27 @@ describe('sourcing persistence entities', () => {
     expect(relation(SourcingOfferEntity, 'search')?.options.onDelete).toBe('CASCADE')
     expect(relation(SourcingOfferEntity, 'supplier')?.options.onDelete).toBe('SET NULL')
     expect(relations.map((metadata) => metadata.propertyName)).not.toContain('lead')
+  })
+})
+
+describe('AddAlibaba1688SourcingPagination migration', () => {
+  it('adds the leased page table, precision fields, and a reversible partial state', async () => {
+    const upRunner = { query: jest.fn().mockResolvedValue(undefined) } as unknown as QueryRunner
+    const downRunner = { query: jest.fn().mockResolvedValue(undefined) } as unknown as QueryRunner
+    const migration = new AddAlibaba1688SourcingPagination1784728000000()
+
+    await migration.up(upRunner)
+    await migration.down(downRunner)
+
+    const upSql = (upRunner.query as jest.Mock).mock.calls.map(([sql]) => sql).join('\n')
+    const downSql = (downRunner.query as jest.Mock).mock.calls.map(([sql]) => sql).join('\n')
+    expect(upSql).toContain('CREATE TABLE "sourcing_search_pages"')
+    expect(upSql).toContain('UNIQUE ("search_id", "page_number")')
+    expect(upSql).toContain('"heartbeat_at" timestamptz')
+    expect(upSql).toContain("'partial'")
+    expect(upSql).toContain('numeric(9,4)')
+    expect(downSql).toContain("WHERE \"status\" = 'partial'")
+    expect(downSql).toContain('DROP TABLE IF EXISTS "sourcing_search_pages"')
   })
 })
 

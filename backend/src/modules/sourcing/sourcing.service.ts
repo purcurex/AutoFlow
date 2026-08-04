@@ -282,7 +282,7 @@ export class SourcingService {
             companyName: seller.companyName,
             shopName: seller.companyName,
             shopUrl: seller.shopUrl,
-            supplierRating,
+            supplierRating: this.optionalDecimal(supplierRating),
             yearsInBusiness: null,
             capabilities,
           }))
@@ -361,9 +361,9 @@ export class SourcingService {
             currency: 'CNY',
           })),
           salesVolume: source.monthSold === null ? null : String(source.monthSold),
-          repurchaseRate: this.percentValue(
+          repurchaseRate: this.optionalDecimal(this.percentValue(
             source.repurchaseRate ?? seller.repeatPurchasePercent,
-          ),
+          )),
           tags: identities,
           sourcingScore: score.score,
           sourcingScoreReasons: scoreReasons,

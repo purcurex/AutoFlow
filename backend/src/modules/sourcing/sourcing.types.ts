@@ -8,10 +8,14 @@ export const SOURCING_SEARCH_STATUSES = [
   'pending',
   'running',
   'succeeded',
+  'partial',
   'failed',
   'cancelled',
 ] as const
 export type SourcingSearchStatus = (typeof SOURCING_SEARCH_STATUSES)[number]
+
+export const SOURCING_PAGE_STATUSES = ['pending', 'running', 'succeeded', 'failed'] as const
+export type SourcingPageStatus = (typeof SOURCING_PAGE_STATUSES)[number]
 
 export interface SourcingPriceTier {
   minimumQuantity: number

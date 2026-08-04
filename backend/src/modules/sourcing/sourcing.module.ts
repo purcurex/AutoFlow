@@ -4,6 +4,7 @@ import { Alibaba1688Module } from '../alibaba1688'
 import { WorkflowRunEntity } from '../autoflow/entities'
 import {
   SourcingOfferEntity,
+  SourcingSearchPageEntity,
   SourcingSearchEntity,
   SourcingSupplierEntity,
 } from './entities'
@@ -17,6 +18,7 @@ import { SourcingImageResolverService } from './sourcing-image-resolver.service'
     TypeOrmModule.forFeature([
       WorkflowRunEntity,
       SourcingSearchEntity,
+      SourcingSearchPageEntity,
       SourcingSupplierEntity,
       SourcingOfferEntity,
     ]),
