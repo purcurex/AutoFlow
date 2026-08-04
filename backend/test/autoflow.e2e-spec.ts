@@ -305,7 +305,20 @@ describe('AutoFlow persistence API', () => {
       provider: 'alibaba_1688',
       providerConfigured: false,
       status: 'not_configured',
+      search: null,
       latestSearch: null,
+      pagination: {
+        page: 1,
+        pageSize: 20,
+        totalRecords: null,
+        totalPages: null,
+        resultCount: 0,
+        loaded: false,
+        status: 'pending',
+        errorCode: null,
+        errorMessage: null,
+      },
+      items: [],
       offers: [],
     })
 
@@ -313,11 +326,9 @@ describe('AutoFlow persistence API', () => {
       .post(`/api/autoflow/workflows/${created.body.id}/sourcing/search`)
       .set('Cookie', ownerCookie)
       .send({ force: true })
-      .expect(202)
+      .expect(503)
     expect(started.body).toMatchObject({
-      providerConfigured: false,
-      status: 'not_configured',
-      offers: [],
+      code: 'NOT_CONFIGURED',
     })
   })
 
