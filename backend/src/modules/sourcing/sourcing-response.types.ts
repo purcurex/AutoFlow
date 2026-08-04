@@ -15,8 +15,35 @@ export interface SourcingSearchResponse {
   query: string | null
   failureCode: string | null
   failureMessage: string | null
+  requestedAt: string
   startedAt: string | null
   completedAt: string | null
+}
+
+export interface SourcingStartResponse {
+  searchId: string
+  status: 'pending' | 'running' | 'succeeded' | 'partial'
+  page: 1
+  pageSize: 10 | 20 | 50
+}
+
+export interface SourcingPageRequestResponse {
+  searchId: string
+  status: 'pending' | 'running' | 'succeeded'
+  page: number
+  pageSize: 10 | 20 | 50
+}
+
+export interface SourcingPagination {
+  page: number
+  pageSize: 10 | 20 | 50
+  totalRecords: number | null
+  totalPages: number | null
+  resultCount: number
+  loaded: boolean
+  status: 'pending' | 'running' | 'succeeded' | 'failed'
+  errorCode: string | null
+  errorMessage: string | null
 }
 
 export interface SourcingOfferResponse {
@@ -51,6 +78,9 @@ export interface SourcingSummaryResponse {
   provider: 'alibaba_1688'
   providerConfigured: boolean
   status: SourcingApiStatus
+  search: SourcingSearchResponse | null
   latestSearch: SourcingSearchResponse | null
+  pagination: SourcingPagination
+  items: SourcingOfferResponse[]
   offers: SourcingOfferResponse[]
 }
