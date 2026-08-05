@@ -3,8 +3,9 @@ import axios, { AxiosError } from 'axios'
 import { createHash } from 'crypto'
 import { promises as dns } from 'dns'
 import { readFile, stat } from 'fs/promises'
-import { Agent } from 'https'
-import { isIP } from 'net'
+import { Agent as HttpAgent } from 'http'
+import { Agent as HttpsAgent } from 'https'
+import { isIP, type LookupFunction } from 'net'
 import { isAbsolute, relative, resolve } from 'path'
 import * as sharpModule from 'sharp'
 import { WorkflowRunEntity } from '../autoflow/entities'
@@ -13,7 +14,8 @@ type SharpFactory = (typeof import('sharp'))['sharp']
 const sharp = (sharpModule as unknown as { default?: SharpFactory }).default
   ?? sharpModule as unknown as SharpFactory
 
-const MAX_IMAGE_BYTES = 5 * 1024 * 1024
+const MAX_SOURCE_IMAGE_BYTES = 8 * 1024 * 1024
+const MAX_PROVIDER_IMAGE_BYTES = 5 * 1024 * 1024
 const MAX_REDIRECTS = 3
 const REMOTE_TIMEOUT_MS = 10_000
 
@@ -93,8 +95,8 @@ export class SourcingImageResolverService {
 
     try {
       const fileStat = await stat(absolutePath)
-      if (!fileStat.isFile() || fileStat.size <= 0 || fileStat.size > MAX_IMAGE_BYTES) {
-        throw this.invalidImage('Workflow image must be a file no larger than 5 MB.')
+      if (!fileStat.isFile() || fileStat.size <= 0 || fileStat.size > MAX_SOURCE_IMAGE_BYTES) {
+        throw this.invalidImage('Workflow image must be a file no larger than 8 MB.')
       }
       if (workflow.seedAssetSize && BigInt(workflow.seedAssetSize) !== BigInt(fileStat.size)) {
         throw this.invalidImage('Workflow image size no longer matches its stored metadata.')
@@ -126,25 +128,27 @@ export class SourcingImageResolverService {
       }
 
       const address = await this.resolvePublicAddress(currentUrl.hostname)
-      const httpsAgent = new Agent({
-        lookup: (_hostname, options, callback) => {
+      const lookup: LookupFunction = (_hostname, options, callback) => {
           // Node 20+ 的HTTPS客户端可能以 all=true 请求地址数组；返回单个字符串会触发 ERR_INVALID_IP_ADDRESS。
           if (typeof options === 'object' && options.all) {
             callback(null, [{ address: address.address, family: address.family }])
             return
           }
           callback(null, address.address, address.family)
-        },
-      })
+      }
+      const agentOptions = { lookup }
+      const requestAgent = currentUrl.protocol === 'https:'
+        ? { httpsAgent: new HttpsAgent(agentOptions) }
+        : { httpAgent: new HttpAgent(agentOptions) }
 
       try {
         const response = await axios.get<ArrayBuffer>(currentUrl.toString(), {
-          httpsAgent,
+          ...requestAgent,
           maxRedirects: 0,
           responseType: 'arraybuffer',
           timeout: remainingTimeoutMs,
-          maxContentLength: MAX_IMAGE_BYTES,
-          maxBodyLength: MAX_IMAGE_BYTES,
+          maxContentLength: MAX_SOURCE_IMAGE_BYTES,
+          maxBodyLength: MAX_SOURCE_IMAGE_BYTES,
           validateStatus: () => true,
         })
 
@@ -168,12 +172,12 @@ export class SourcingImageResolverService {
         }
 
         const contentLength = Number(response.headers['content-length'] || 0)
-        if (Number.isFinite(contentLength) && contentLength > MAX_IMAGE_BYTES) {
-          throw this.invalidImage('Remote workflow image exceeds 5 MB.')
+        if (Number.isFinite(contentLength) && contentLength > MAX_SOURCE_IMAGE_BYTES) {
+          throw this.invalidImage('Remote workflow image exceeds 8 MB.')
         }
         const bytes = Buffer.from(response.data)
-        if (!bytes.length || bytes.length > MAX_IMAGE_BYTES) {
-          throw this.invalidImage('Remote workflow image must be no larger than 5 MB.')
+        if (!bytes.length || bytes.length > MAX_SOURCE_IMAGE_BYTES) {
+          throw this.invalidImage('Remote workflow image must be no larger than 8 MB.')
         }
         const responseContentType = String(response.headers['content-type'] || '')
           .split(';', 1)[0]
@@ -209,14 +213,15 @@ export class SourcingImageResolverService {
     } catch {
       throw this.invalidRequest('Workflow image URL is invalid.')
     }
-    if (url.protocol !== 'https:') {
-      throw this.invalidRequest('Workflow image URL must use HTTPS.')
+    if (!['http:', 'https:'].includes(url.protocol)) {
+      throw this.invalidRequest('Workflow image URL must use HTTP or HTTPS.')
     }
     if (url.username || url.password) {
       throw this.invalidRequest('Workflow image URL cannot contain credentials.')
     }
-    if (url.port && url.port !== '443') {
-      throw this.invalidRequest('Workflow image URL must use the standard HTTPS port.')
+    const standardPort = url.protocol === 'https:' ? '443' : '80'
+    if (url.port && url.port !== standardPort) {
+      throw this.invalidRequest('Workflow image URL must use the standard HTTP(S) port.')
     }
     return url
   }
@@ -283,15 +288,32 @@ export class SourcingImageResolverService {
       throw this.invalidImage('Workflow image cannot be decoded.')
     }
 
-    const bytes = detectedMimeType === 'image/webp'
-      ? await sharp(inputBytes).rotate().jpeg({ quality: 90, mozjpeg: true }).toBuffer()
-      : inputBytes
-    if (bytes.length > MAX_IMAGE_BYTES) {
-      throw this.invalidImage('Normalized workflow image exceeds 5 MB.')
+    let bytes = inputBytes
+    let outputMimeType: 'image/jpeg' | 'image/png' = detectedMimeType === 'image/png'
+      ? 'image/png'
+      : 'image/jpeg'
+    if (detectedMimeType === 'image/webp' || inputBytes.length > MAX_PROVIDER_IMAGE_BYTES) {
+      bytes = await sharp(inputBytes)
+        .rotate()
+        .resize({ width: 4_096, height: 4_096, fit: 'inside', withoutEnlargement: true })
+        .jpeg({ quality: 85, mozjpeg: true })
+        .toBuffer()
+      outputMimeType = 'image/jpeg'
+    }
+    if (bytes.length > MAX_PROVIDER_IMAGE_BYTES) {
+      bytes = await sharp(inputBytes)
+        .rotate()
+        .resize({ width: 2_048, height: 2_048, fit: 'inside', withoutEnlargement: true })
+        .jpeg({ quality: 75, mozjpeg: true })
+        .toBuffer()
+      outputMimeType = 'image/jpeg'
+    }
+    if (bytes.length > MAX_PROVIDER_IMAGE_BYTES) {
+      throw this.invalidImage('Normalized workflow image exceeds the 1688 upload limit.')
     }
     return {
       bytes,
-      mimeType: detectedMimeType === 'image/webp' ? 'image/jpeg' : detectedMimeType,
+      mimeType: outputMimeType,
       byteLength: bytes.length,
       sha256: createHash('sha256').update(bytes).digest('hex'),
       sourceType,

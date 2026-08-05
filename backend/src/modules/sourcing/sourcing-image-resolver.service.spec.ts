@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { randomBytes } from 'crypto'
 import { promises as dns } from 'dns'
 import { mkdir, rm, writeFile } from 'fs/promises'
 import { join } from 'path'
@@ -62,6 +63,28 @@ describe('SourcingImageResolverService', () => {
     })
   })
 
+  it('accepts an uploaded source image up to 8 MB and compacts it for the provider', async () => {
+    const width = 2_000
+    const height = 1_100
+    const bytes = await sharp(randomBytes(width * height * 3), {
+      raw: { width, height, channels: 3 },
+    }).png({ compressionLevel: 0 }).toBuffer()
+    expect(bytes.length).toBeGreaterThan(5 * 1024 * 1024)
+    expect(bytes.length).toBeLessThanOrEqual(8 * 1024 * 1024)
+    await mkdir(uploadRoot, { recursive: true })
+    await writeFile(join(uploadRoot, 'large-image.png'), bytes)
+
+    const result = await resolver.resolve(workflow('http://localhost/large-image.png', {
+      seedAssetPath: `/uploads/workflow-seeds/${ownerUserId}/large-image.png`,
+      seedAssetMimeType: 'image/png',
+      seedAssetSize: String(bytes.length),
+    }))
+
+    expect(result.mimeType).toBe('image/jpeg')
+    expect(result.byteLength).toBeLessThanOrEqual(5 * 1024 * 1024)
+    expect(result.bytes.subarray(0, 3)).toEqual(Buffer.from([0xff, 0xd8, 0xff]))
+  })
+
   it('rejects local directory escape and private remote addresses', async () => {
     await expect(resolver.resolve(workflow('https://example.test/image.png', {
       seedAssetPath: `/uploads/workflow-seeds/${ownerUserId}/../another-user/image.png`,
@@ -71,11 +94,32 @@ describe('SourcingImageResolverService', () => {
       .rejects.toMatchObject({ code: 'INVALID_REQUEST', retryable: false })
   })
 
-  it('rejects HTTP, URL credentials, and non-standard ports', async () => {
+  it('downloads a public HTTP image on the standard port', async () => {
+    const png = await sharp({
+      create: { width: 2, height: 2, channels: 3, background: '#ffffff' },
+    }).png().toBuffer()
+    jest.spyOn(dns, 'lookup').mockResolvedValue([
+      { address: '93.184.216.34', family: 4 },
+    ] as never)
+    axiosGet.mockResolvedValue({
+      status: 200,
+      headers: { 'content-type': 'image/png' },
+      data: png,
+    })
+
+    await expect(resolver.resolve(workflow('http://example.test/image.png')))
+      .resolves.toMatchObject({
+        mimeType: 'image/png',
+        sourceType: 'remote',
+        sourceHost: 'example.test',
+      })
+  })
+
+  it('rejects URL credentials and non-standard ports', async () => {
     for (const url of [
-      'http://example.test/image.png',
       'https://user:password@example.test/image.png',
       'https://example.test:8443/image.png',
+      'http://example.test:8080/image.png',
     ]) {
       await expect(resolver.resolve(workflow(url))).rejects.toMatchObject({
         code: 'INVALID_REQUEST',

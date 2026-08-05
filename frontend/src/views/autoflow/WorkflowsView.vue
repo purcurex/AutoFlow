@@ -38,6 +38,7 @@ import {
 } from '@/utils/workflowLifecycle'
 import { withReturnTo } from '@/composables/useReturnNavigation'
 import { workflowCreatedDate } from '@/utils/workflowDisplay'
+import { safeExternalUrl } from '@/utils/sourcing'
 import usFlag from 'flag-icons/flags/4x3/us.svg'
 import euFlag from 'flag-icons/flags/4x3/eu.svg'
 import caFlag from 'flag-icons/flags/4x3/ca.svg'
@@ -202,6 +203,13 @@ const googleQueryPreview = computed(() => {
     : ''
   return `${term} inurl:/products/ "Powered by Shopify"${exclusions}`
 })
+const resolvedImagePreviewUrl = computed(() => imagePreviewUrl.value
+  || (form.seedType === 'image' ? safeExternalUrl(form.seedValue) || '' : ''))
+const imageReady = computed(() => Boolean(
+  imageUpload.value
+  || form.seedAssetPath
+  || (form.seedType === 'image' && safeExternalUrl(form.seedValue)),
+))
 
 watch(() => form.seedType, (nextType, previousType) => {
   if (isSynchronizingForm) return
@@ -426,7 +434,7 @@ async function confirmLifecycleAction() {
               <input ref="imageInput" type="file" accept="image/png,image/jpeg,image/webp" class="sr-only" @change="handleImageSelection" />
               <div
                 class="flex min-h-44 cursor-pointer items-center justify-center rounded-md border border-dashed p-4 text-center transition focus:outline-none focus:ring-2 focus:ring-orange-500/30"
-                :class="imagePreviewUrl ? 'border-slate-300 bg-slate-50 dark:border-slate-700 dark:bg-[#11151a]' : 'border-slate-300 bg-white hover:border-orange-400 hover:bg-orange-50/40 dark:border-slate-700 dark:bg-[#171b21] dark:hover:border-orange-500'"
+                :class="resolvedImagePreviewUrl ? 'border-slate-300 bg-slate-50 dark:border-slate-700 dark:bg-[#11151a]' : 'border-slate-300 bg-white hover:border-orange-400 hover:bg-orange-50/40 dark:border-slate-700 dark:bg-[#171b21] dark:hover:border-orange-500'"
                 role="button"
                 tabindex="0"
                 @click="openImagePicker"
@@ -436,11 +444,11 @@ async function confirmLifecycleAction() {
                 @dragover.prevent
                 @drop.prevent="handleImageDrop"
               >
-                <div v-if="imagePreviewUrl" class="flex w-full flex-col items-center gap-3 sm:flex-row sm:text-left">
-                  <img :src="imagePreviewUrl" :alt="t('workflows.imagePreview')" class="h-28 w-40 rounded-md border border-slate-200 bg-white object-contain dark:border-slate-700" />
+                <div v-if="resolvedImagePreviewUrl" class="flex w-full flex-col items-center gap-3 sm:flex-row sm:text-left">
+                  <img :src="resolvedImagePreviewUrl" :alt="t('workflows.imagePreview')" class="h-28 w-40 rounded-md border border-slate-200 bg-white object-contain dark:border-slate-700" />
                   <div class="min-w-0 flex-1">
                     <p class="truncate text-sm font-semibold text-slate-950 dark:text-white">{{ imageUpload?.originalName || t('workflows.localImage') }}</p>
-                    <p class="mt-1 text-xs text-slate-500">{{ isUploadingImage ? t('workflows.imageUploading') : imageUpload ? t('workflows.imageUploaded') : t('workflows.imageWaiting') }}</p>
+                    <p class="mt-1 text-xs text-slate-500">{{ isUploadingImage ? t('workflows.imageUploading') : imageReady ? t('workflows.imageUploaded') : t('workflows.imageWaiting') }}</p>
                     <button type="button" class="btn btn-secondary mt-3" :disabled="isUploadingImage" @click.stop="openImagePicker"><Upload class="h-4 w-4" />{{ t('workflows.replaceImage') }}</button>
                   </div>
                   <button type="button" class="icon-btn self-start" :title="t('workflows.removeImage')" :disabled="isUploadingImage" @click.stop="removeImage"><Trash2 class="h-4 w-4" /></button>

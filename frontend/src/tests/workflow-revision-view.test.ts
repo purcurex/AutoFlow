@@ -60,6 +60,16 @@ const workflowFixture: WorkflowRun = {
   updatedAt: '2026-08-04T00:00:00.000Z',
 }
 
+const imageWorkflowFixture: WorkflowRun = {
+  ...workflowFixture,
+  seedType: 'image',
+  seedValue: 'https://assets.example.test/products/pet-brush.jpg',
+  seedAssetPath: '/uploads/workflow-seeds/11111111-1111-4111-8111-111111111111/pet-brush.jpg',
+  seedAssetMimeType: 'image/jpeg',
+  seedAssetSize: '209829',
+  seedAssetSha256: 'a'.repeat(64),
+}
+
 function mountWorkflowView(props: { create?: boolean; reviseId?: string }) {
   return mount(WorkflowsView, {
     props,
@@ -140,5 +150,28 @@ describe('workflow revision form', () => {
       .toBe('')
     expect(wrapper.get<HTMLInputElement>('input[name="target-market"][value="United States"]').element.checked)
       .toBe(true)
+  })
+
+  it('shows the persisted product image when revising an image workflow', async () => {
+    storeMock.getWorkflow.mockResolvedValue(imageWorkflowFixture)
+    const wrapper = mountWorkflowView({ create: true, reviseId: imageWorkflowFixture.id })
+    await flushPromises()
+
+    expect(wrapper.get<HTMLImageElement>('img[alt="workflows.imagePreview"]').attributes('src'))
+      .toBe(imageWorkflowFixture.seedValue)
+    expect(wrapper.get<HTMLInputElement>('input[placeholder="workflows.imagePastePlaceholder"]').element.value)
+      .toBe(imageWorkflowFixture.seedValue)
+  })
+
+  it('previews a public image URL while creating an image workflow', async () => {
+    const wrapper = mountWorkflowView({ create: true })
+    await flushPromises()
+    await wrapper.get<HTMLInputElement>('input[type="radio"][value="image"]').setValue()
+    const imageUrl = 'https://cdn.example.test/products/storage-box.webp'
+    await wrapper.get<HTMLInputElement>('input[placeholder="workflows.imagePastePlaceholder"]').setValue(imageUrl)
+    await flushPromises()
+
+    expect(wrapper.get<HTMLImageElement>('img[alt="workflows.imagePreview"]').attributes('src'))
+      .toBe(imageUrl)
   })
 })

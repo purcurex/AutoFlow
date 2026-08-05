@@ -18,6 +18,23 @@
 
 ---
 
+### Task 0: Repair image workflow input and sourcing
+
+**Files:**
+- Modify: `backend/src/modules/sourcing/sourcing-image-resolver.service.ts`
+- Test: `backend/src/modules/sourcing/sourcing-image-resolver.service.spec.ts`
+- Modify: `frontend/src/views/autoflow/WorkflowsView.vue`
+- Test: `frontend/src/tests/workflow-revision-view.test.ts`
+
+**Interfaces:**
+- Consumes: PNG/JPG/WebP source bytes up to 8MB or a public HTTP/HTTPS URL.
+- Produces: provider-ready JPEG/PNG bytes no larger than 5MB and a visible persisted/public URL preview.
+
+- [x] Trace the live image workflow, sourcing search, and page records to separate PipiAds failure from successful 1688 imageId search.
+- [x] Write and verify failing tests for 5-8MB inputs, public HTTP input, revision preview, and typed-URL preview.
+- [x] Implement size normalization, SSRF-safe HTTP support, and unified preview derivation.
+- [x] Run the resolver, executor, image-input, and revision-view tests.
+
 ### Task 1: Persist and derive the result window
 
 **Files:**
