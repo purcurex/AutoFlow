@@ -88,9 +88,11 @@ describe('SourcingService asynchronous pagination', () => {
       keyword: 'pet brush',
       imageUrl: null,
       queryFingerprint: expect.stringMatching(/^[a-f0-9]{64}$/),
+      cacheFingerprint: expect.stringMatching(/^[a-f0-9]{64}$/),
       requestPayload: expect.objectContaining({
         workflowName: 'Pet brush prospecting',
         targetMarket: 'United States',
+        forceRefresh: false,
       }),
     }))
   })
@@ -134,6 +136,26 @@ describe('SourcingService asynchronous pagination', () => {
     searches.save.mockImplementation(async (value) => ({ id: 'new-search', ...value }) as SourcingSearchEntity)
     await expect(service.startSearch(ownerUserId, workflowRunId, { pageSize: 20, force: true }))
       .resolves.toMatchObject({ searchId: 'new-search', status: 'pending' })
+    expect(searches.save).toHaveBeenLastCalledWith(expect.objectContaining({
+      requestPayload: expect.objectContaining({ forceRefresh: true }),
+    }))
+  })
+
+  it('shares the cache fingerprint across workflows without changing request idempotency', async () => {
+    const { service, searches, workflow } = createService()
+    searches.save.mockImplementation(async (value) => ({
+      id: `search-${searches.save.mock.calls.length}`,
+      ...value,
+    }) as SourcingSearchEntity)
+
+    await service.startSearch(ownerUserId, workflowRunId, { pageSize: 20, force: true })
+    const first = searches.save.mock.calls[0][0]
+    workflow.id = '77777777-7777-4777-8777-777777777777'
+    await service.startSearch(ownerUserId, workflow.id, { pageSize: 20, force: true })
+    const second = searches.save.mock.calls[1][0]
+
+    expect(first.queryFingerprint).not.toBe(second.queryFingerprint)
+    expect(first.cacheFingerprint).toBe(second.cacheFingerprint)
   })
 
   it('rejects page access outside owner and workflow scope', async () => {

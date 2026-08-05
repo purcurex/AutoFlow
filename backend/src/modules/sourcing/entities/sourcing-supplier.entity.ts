@@ -28,6 +28,11 @@ import { SourcingSearchEntity } from './sourcing-search.entity'
 @Index('idx_sourcing_suppliers_search', ['searchId'])
 @Index('idx_sourcing_suppliers_member', ['provider', 'memberId'])
 @Index('idx_sourcing_suppliers_open_id', ['provider', 'openId'])
+@Index(
+  'idx_sourcing_suppliers_owner_provider_open_recent',
+  ['ownerUserId', 'provider', 'openId', 'updatedAt'],
+  { where: '"open_id" IS NOT NULL' },
+)
 @Check('chk_sourcing_suppliers_provider', "provider = 'alibaba_1688'")
 @Check(
   'chk_sourcing_suppliers_rating',

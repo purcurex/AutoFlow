@@ -28,6 +28,11 @@ import { SourcingSearchPageEntity } from './sourcing-search-page.entity'
 @Index('idx_sourcing_searches_owner_created', ['ownerUserId', 'createdAt'])
 @Index('idx_sourcing_searches_workflow_status', ['workflowRunId', 'status'])
 @Index('idx_sourcing_searches_provider_request', ['provider', 'providerRequestId'])
+@Index(
+  'idx_sourcing_searches_cache_lookup',
+  ['ownerUserId', 'provider', 'cacheFingerprint', 'createdAt'],
+  { where: '"cache_fingerprint" IS NOT NULL' },
+)
 @Check('chk_sourcing_searches_provider', "provider = 'alibaba_1688'")
 @Check('chk_sourcing_searches_mode', "search_mode IN ('keyword', 'image')")
 @Check(
@@ -94,6 +99,9 @@ export class SourcingSearchEntity {
 
   @Column({ name: 'query_fingerprint', type: 'varchar', length: 128 })
   queryFingerprint: string
+
+  @Column({ name: 'cache_fingerprint', type: 'varchar', length: 64, nullable: true })
+  cacheFingerprint: string | null
 
   @Column({ name: 'request_payload', type: 'jsonb', default: () => "'{}'::jsonb" })
   requestPayload: Record<string, unknown>

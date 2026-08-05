@@ -172,6 +172,10 @@ export class SourcingService {
         ...options,
         pageSize,
       }, languageCode)
+      const cacheFingerprint = this.buildCacheFingerprint(ownerUserId, workflow, {
+        ...options,
+        pageSize,
+      }, languageCode)
       if (!options.force) {
         const existing = await searchRepository.findOne({
           where: {
@@ -214,6 +218,7 @@ export class SourcingService {
         pageSize,
         loadedPageCount: 0,
         queryFingerprint,
+        cacheFingerprint,
         requestPayload: {
           // 业务上下文仅用于审计和前端回显；1688检索分支严格由seedType/seedValue决定。
           workflowName: workflow.name,
@@ -222,6 +227,7 @@ export class SourcingService {
           priceMin: options.priceMin || null,
           priceMax: options.priceMax || null,
           languageCode,
+          forceRefresh: options.force === true,
         },
         errorCode: null,
         errorMessage: null,
@@ -361,6 +367,28 @@ export class SourcingService {
       workflowRunId: workflow.id,
       searchMode: workflow.seedType,
       seed: workflow.seedValue.trim().toLocaleLowerCase(),
+      languageCode,
+      pageSize: options.pageSize || 20,
+      priceMin: options.priceMin || null,
+      priceMax: options.priceMax || null,
+    })).digest('hex')
+  }
+
+  /**
+   * 生成跨工作流可复用的短期缓存指纹；不包含工作流ID，但始终包含用户ID，禁止跨租户复用。
+   */
+  private buildCacheFingerprint(
+    ownerUserId: string,
+    workflow: WorkflowRunEntity,
+    options: StartSourcingDto,
+    languageCode: string,
+  ): string {
+    return createHash('sha256').update(JSON.stringify({
+      ownerUserId,
+      provider: SOURCING_PROVIDER,
+      searchMode: workflow.seedType,
+      seed: workflow.seedValue.trim().toLocaleLowerCase(),
+      targetMarket: workflow.targetMarket,
       languageCode,
       pageSize: options.pageSize || 20,
       priceMin: options.priceMin || null,

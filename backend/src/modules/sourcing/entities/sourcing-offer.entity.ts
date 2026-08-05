@@ -30,6 +30,10 @@ import { SourcingSupplierEntity } from './sourcing-supplier.entity'
 @Index('idx_sourcing_offers_supplier', ['supplierId'])
 @Index('idx_sourcing_offers_provider_offer', ['provider', 'offerId'])
 @Index(
+  'idx_sourcing_offers_owner_provider_offer_recent',
+  ['ownerUserId', 'provider', 'offerId', 'retrievedAt'],
+)
+@Index(
   'uq_sourcing_offers_search_provider_fingerprint',
   ['searchId', 'provider', 'productFingerprint'],
   { unique: true, where: '"product_fingerprint" IS NOT NULL' },

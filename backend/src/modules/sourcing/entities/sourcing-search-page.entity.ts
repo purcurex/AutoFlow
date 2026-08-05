@@ -20,6 +20,10 @@ import { SourcingSearchEntity } from './sourcing-search.entity'
 @Index('idx_sourcing_search_pages_search_page', ['searchId', 'pageNumber'])
 @Index('idx_sourcing_search_pages_owner_search', ['ownerUserId', 'searchId'])
 @Index('idx_sourcing_search_pages_lease_expires', ['leaseExpiresAt'])
+@Index(
+  'idx_sourcing_pages_cache_lookup',
+  ['pageNumber', 'pageSize', 'status', 'completedAt'],
+)
 @Check('chk_sourcing_search_pages_page_number', 'page_number >= 1')
 @Check('chk_sourcing_search_pages_page_size', 'page_size IN (10, 20, 50)')
 @Check(
@@ -71,6 +75,12 @@ export class SourcingSearchPageEntity {
 
   @Column({ name: 'result_count', type: 'integer', default: 0 })
   resultCount: number
+
+  @Column({ name: 'cache_hit', type: 'boolean', default: false })
+  cacheHit: boolean
+
+  @Column({ name: 'cache_source_page_id', type: 'uuid', nullable: true })
+  cacheSourcePageId: string | null
 
   @Column({ name: 'error_code', type: 'varchar', length: 80, nullable: true })
   errorCode: string | null
