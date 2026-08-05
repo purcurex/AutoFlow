@@ -1,4 +1,4 @@
-import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common'
+import { BadRequestException, Injectable, Logger, ServiceUnavailableException } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import axios from 'axios'
 import type { PipiAdsDiscoveryInput, PipiAdsEvidence } from './pipiads.types'
@@ -54,6 +54,16 @@ export class PipiAdsService {
       if (providerCode === '442' || /credits? not enough|insufficient credits|balance/i.test(errorMessage)) {
         throw new ServiceUnavailableException(
           'PipiAds credits are insufficient (provider code 442). Add credits and retry.',
+        )
+      }
+      // PipiAds 4000083 表示第三方服务器无法下载提交的图片。该错误通常由 localhost、
+      // 内网地址或失效链接导致，重复调用不会恢复，必须保留为明确的输入错误供前端提示。
+      if (input.type === 'image' && (
+        providerCode === '4000083'
+        || /获取图片失败|image[^)]*(fetch|download).*(failed|failure)/i.test(errorMessage)
+      )) {
+        throw new BadRequestException(
+          'PipiAds product image fetch failed. Use a publicly reachable HTTPS image URL or configure PUBLIC_ASSET_BASE_URL.',
         )
       }
       throw new ServiceUnavailableException('PipiAds provider is unavailable. Check provider status and retry.')

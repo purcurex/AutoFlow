@@ -116,6 +116,40 @@ describe('AutoflowService persistence boundaries', () => {
     expect(result.items[0].failureRetryable).toBe(false)
   })
 
+  it('exposes a PipiAds image fetch rejection as a non-retryable unreachable image', async () => {
+    const { service, workflows, jobs } = createService()
+    const createdAt = new Date('2026-08-05T00:00:00.000Z')
+    workflows.findAndCount.mockResolvedValue([[
+      {
+        id: 'workflow-image',
+        displayId: '10',
+        name: 'Pet product image sourcing',
+        seedType: 'image',
+        seedValue: 'http://localhost:3000/uploads/workflow-seeds/owner/product.jpg',
+        targetMarket: 'United States',
+        status: 'failed',
+        currentStage: 'ad_discovery',
+        progress: 10,
+        leadCount: 0,
+        createdAt,
+        updatedAt: createdAt,
+      } as WorkflowRunEntity,
+    ], 1])
+    jobs.find.mockResolvedValue([{
+      workflowRunId: 'workflow-image',
+      ownerUserId: 'owner-1',
+      lastError: 'PipiAds product image fetch failed. Use a publicly reachable HTTPS image URL or configure PUBLIC_ASSET_BASE_URL.',
+    } as WorkflowJobEntity])
+
+    const result = await service.getWorkflows('owner-1', { page: 1, pageSize: 20 })
+
+    expect(result.items[0]).toMatchObject({
+      failureCode: 'image_unreachable',
+      failureProvider: 'pipiads',
+      failureRetryable: false,
+    })
+  })
+
   it('does not return a lead outside the owner scope', async () => {
     const { service, leads } = createService()
     leads.findOne.mockResolvedValue(null)
