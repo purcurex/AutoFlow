@@ -10,6 +10,7 @@ import {
   type Alibaba1688StableOffer,
   type Alibaba1688StableProductDetail,
   type Alibaba1688StableSearchResult,
+  type Alibaba1688StableSeller,
 } from '../alibaba1688'
 import { WorkflowRunEntity } from '../autoflow/entities'
 import {
@@ -23,6 +24,10 @@ import { SourcingImageResolverService } from './sourcing-image-resolver.service'
 import { calculateSourcingScore } from './sourcing-scoring'
 import { sanitizeSourcingSnapshot } from './sourcing-snapshot'
 import { SOURCING_PROVIDER, type SourcingScoreReason } from './sourcing.types'
+import {
+  SourcingSupplierNameCacheService,
+  type CachedSupplierIdentity,
+} from './sourcing-supplier-name-cache.service'
 
 export interface ClaimedSourcingPage {
   id: string
@@ -40,6 +45,7 @@ interface HydratedOffer {
   offer: Alibaba1688StableOffer
   rawOffer: unknown
   supplierDetail: Alibaba1688StableProductDetail | null
+  supplierIdentity: Alibaba1688StableSeller
   detail: Alibaba1688StableProductDetail | null
   rawDetail: unknown
   detailStatus: 'not_requested' | 'succeeded' | 'failed'
@@ -67,6 +73,7 @@ export class SourcingPageExecutorService {
     private readonly alibaba1688Service: Alibaba1688Service,
     private readonly imageResolver: SourcingImageResolverService,
     private readonly dataSource: DataSource,
+    private readonly supplierNameCache: SourcingSupplierNameCacheService,
   ) {}
 
   async executePage(page: ClaimedSourcingPage): Promise<void> {
@@ -131,33 +138,50 @@ export class SourcingPageExecutorService {
 
     const rawOffers = this.rawOffers(result.provider)
     const pageOffers = result.normalized.offers.slice(0, page.pageSize)
-    // 每个商品的供应商名称只存在于详情响应；固定并发为 5，避免大分页产生无界并发。
-    const detailResults = await this.settleWithConcurrency(
+    const cachedSuppliers = await this.supplierNameCache.findRecent(
+      page.ownerUserId,
       pageOffers,
+    )
+    const detailTargets = pageOffers
+      .map((offer, index) => ({ offer, index }))
+      .filter(({ offer, index }) => (
+        index < 5 || !this.resolveSupplierIdentity(offer, cachedSuppliers).companyName
+      ))
+    // 前5条保持商品增强；其余商品只有在供应商名称仍缺失时才查询详情。
+    const detailResults = await this.settleWithConcurrency(
+      detailTargets,
       5,
-      (offer) => offer.offerId
+      ({ offer }) => offer.offerId
         ? this.alibaba1688Service.getProductDetail({
             offerId: offer.offerId,
             country: search.languageCode,
           })
         : Promise.reject(new Error('Offer ID is missing')),
     )
+    const detailByIndex = new Map(
+      detailTargets.map((target, index) => [target.index, detailResults[index]]),
+    )
     const hydrated: HydratedOffer[] = pageOffers
       .map((offer, index) => {
-        const detailResult = detailResults[index]
+        const detailResult = detailByIndex.get(index)
         const supplierDetail = detailResult?.status === 'fulfilled'
           ? detailResult.value.normalized
           : null
+        const supplierIdentity = supplierDetail?.seller
+          || this.resolveSupplierIdentity(offer, cachedSuppliers)
         return {
           offer,
           rawOffer: rawOffers[index] || null,
           supplierDetail,
+          supplierIdentity,
           // 保持既有产品增强边界：第 6 条以后只补供应商名称，不改变商品标题、价格或评分。
           detail: index < 5 ? supplierDetail : null,
           rawDetail: index < 5 && detailResult?.status === 'fulfilled'
             ? detailResult.value.provider
             : null,
-          detailStatus: detailResult?.status === 'fulfilled' ? 'succeeded' : 'failed',
+          detailStatus: !detailResult
+            ? 'not_requested'
+            : detailResult.status === 'fulfilled' ? 'succeeded' : 'failed',
         }
       })
 
@@ -198,7 +222,7 @@ export class SourcingPageExecutorService {
 
         const detail = item.detail
         const seller = detail?.seller || source.seller
-        const supplierIdentity = item.supplierDetail?.seller || seller
+        const supplierIdentity = item.supplierIdentity
         const supplierKey = (
           supplierIdentity.openId
           || supplierIdentity.companyName
@@ -258,7 +282,7 @@ export class SourcingPageExecutorService {
             openId: supplierIdentity.openId,
             companyName: supplierIdentity.companyName,
             shopName: supplierIdentity.companyName,
-            shopUrl: seller.shopUrl,
+            shopUrl: supplierIdentity.shopUrl || seller.shopUrl,
             supplierRating: decimalOrNull(supplierRating),
             yearsInBusiness: null,
             capabilities: {
@@ -440,7 +464,6 @@ export class SourcingPageExecutorService {
       !supplierIdentity
       || !title
       || !imageUrl
-      || !categoryId
       || !input.priceMinimum
       || !input.minimumOrderQuantity
     ) {
@@ -471,6 +494,23 @@ export class SourcingPageExecutorService {
       return normalized.toString()
     } catch {
       return null
+    }
+  }
+
+  /** 当前搜索有名称时优先使用；否则按offerId、openId顺序复用近期供应商名称。 */
+  private resolveSupplierIdentity(
+    offer: Alibaba1688StableOffer,
+    cache: Map<string, CachedSupplierIdentity>,
+  ): Alibaba1688StableSeller {
+    if (offer.seller.companyName?.trim()) return offer.seller
+    const cached = (offer.offerId ? cache.get(`offer:${offer.offerId}`) : undefined)
+      || (offer.seller.openId ? cache.get(`open:${offer.seller.openId}`) : undefined)
+    if (!cached) return offer.seller
+    return {
+      ...offer.seller,
+      openId: offer.seller.openId || cached.openId,
+      companyName: cached.companyName,
+      shopUrl: offer.seller.shopUrl || cached.shopUrl,
     }
   }
 

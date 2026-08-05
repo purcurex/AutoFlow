@@ -13,6 +13,7 @@ import {
   SourcingSupplierEntity,
 } from './entities'
 import type { SourcingImageResolverService } from './sourcing-image-resolver.service'
+import type { SourcingSupplierNameCacheService } from './sourcing-supplier-name-cache.service'
 import {
   SourcingPageExecutorService,
   type ClaimedSourcingPage,
@@ -180,12 +181,16 @@ describe('SourcingPageExecutorService', () => {
     const dataSource = {
       transaction: jest.fn(async (callback) => callback(manager)),
     } as unknown as jest.Mocked<DataSource>
+    const supplierNameCache = {
+      findRecent: jest.fn().mockResolvedValue(new Map()),
+    } as unknown as jest.Mocked<SourcingSupplierNameCacheService>
     const service = new SourcingPageExecutorService(
       searches,
       workflows,
       provider,
       imageResolver,
       dataSource,
+      supplierNameCache,
     )
     const page: ClaimedSourcingPage = {
       id: 'page-2',
@@ -209,6 +214,7 @@ describe('SourcingPageExecutorService', () => {
       suppliers,
       search,
       normalized,
+      supplierNameCache,
     }
   }
 
@@ -315,6 +321,60 @@ describe('SourcingPageExecutorService', () => {
     }))
     expect(suppliers.save).toHaveBeenLastCalledWith(expect.objectContaining({
       companyName: 'Supplier offer-6',
+    }))
+  })
+
+  it('skips the sixth detail request when the search response already has a supplier name', async () => {
+    const { service, page, provider, normalized, offers, suppliers } = setup('keyword')
+    normalized.offers = Array.from({ length: 6 }, (_, index) => stableOffer(index + 1))
+    normalized.offers[5].seller.companyName = 'Search Supplier'
+    normalized.offers[5].seller.openId = 'search-supplier-6'
+    provider.getProductDetail.mockImplementation(async ({ offerId }) => ({
+      provider: {},
+      normalized: stableDetail(String(offerId)),
+      metadata: { requestId: `detail-${offerId}`, traceId: null },
+    }) as Awaited<ReturnType<Alibaba1688Service['getProductDetail']>>)
+
+    await service.executePage(page)
+
+    expect(provider.getProductDetail).toHaveBeenCalledTimes(5)
+    expect(suppliers.save).toHaveBeenLastCalledWith(expect.objectContaining({
+      companyName: 'Search Supplier',
+    }))
+    expect(offers.save).toHaveBeenLastCalledWith(expect.objectContaining({
+      offerId: 'offer-6',
+      title: 'Pet brush 6',
+      detailStatus: 'not_requested',
+      productFingerprint: expect.stringMatching(/^[a-f0-9]{64}$/),
+    }))
+  })
+
+  it('uses a recent supplier name cache for the sixth offer without requesting detail', async () => {
+    const {
+      service,
+      page,
+      provider,
+      normalized,
+      suppliers,
+      supplierNameCache,
+    } = setup('keyword')
+    normalized.offers = Array.from({ length: 6 }, (_, index) => stableOffer(index + 1))
+    supplierNameCache.findRecent.mockResolvedValue(new Map([[
+      'offer:offer-6',
+      { openId: 'cached-supplier-6', companyName: 'Cached Supplier', shopUrl: null },
+    ]]))
+    provider.getProductDetail.mockImplementation(async ({ offerId }) => ({
+      provider: {},
+      normalized: stableDetail(String(offerId)),
+      metadata: { requestId: `detail-${offerId}`, traceId: null },
+    }) as Awaited<ReturnType<Alibaba1688Service['getProductDetail']>>)
+
+    await service.executePage(page)
+
+    expect(provider.getProductDetail).toHaveBeenCalledTimes(5)
+    expect(suppliers.save).toHaveBeenLastCalledWith(expect.objectContaining({
+      openId: 'cached-supplier-6',
+      companyName: 'Cached Supplier',
     }))
   })
 
