@@ -63,6 +63,14 @@ const dashboardFixture: AutoFlowDashboard = {
   nextTasks: [],
 }
 
+function createDashboardFixture(): AutoFlowDashboard {
+  return {
+    ...dashboardFixture,
+    metrics: { ...dashboardFixture.metrics },
+    recentWorkflows: dashboardFixture.recentWorkflows.map((workflow) => ({ ...workflow })),
+  }
+}
+
 describe('autoflow workflow state synchronization', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -70,7 +78,7 @@ describe('autoflow workflow state synchronization', () => {
   })
 
   it('synchronizes refreshed workflows into dashboard activity without replacing metrics', async () => {
-    vi.mocked(autoflowApi.getDashboard).mockResolvedValue(dashboardFixture)
+    vi.mocked(autoflowApi.getDashboard).mockResolvedValue(createDashboardFixture())
     vi.mocked(autoflowApi.getWorkflows).mockResolvedValue({
       items: [{
         ...workflowFixture,
@@ -93,5 +101,52 @@ describe('autoflow workflow state synchronization', () => {
       currentStage: 'lead_cleaning',
     })
     expect(store.dashboard?.metrics).toEqual(dashboardFixture.metrics)
+  })
+
+  it('keeps the newer workflow list when an older dashboard response arrives last', async () => {
+    let resolveDashboard!: (dashboard: AutoFlowDashboard) => void
+    vi.mocked(autoflowApi.getDashboard).mockReturnValue(new Promise((resolve) => {
+      resolveDashboard = resolve
+    }))
+    vi.mocked(autoflowApi.getWorkflows).mockResolvedValue({
+      items: [{
+        ...workflowFixture,
+        currentStage: 'lead_scoring',
+        progress: 75,
+        updatedAt: '2026-08-05T00:02:00.000Z',
+      }],
+      total: 1,
+      page: 1,
+      pageSize: 20,
+    })
+    const store = useAutoFlowStore()
+
+    const dashboardRequest = store.fetchDashboard()
+    await store.fetchWorkflows()
+    resolveDashboard(createDashboardFixture())
+    await dashboardRequest
+
+    expect(store.workflows[0]).toMatchObject({ progress: 75, currentStage: 'lead_scoring' })
+    expect(store.dashboard?.recentWorkflows[0]).toMatchObject({
+      progress: 75,
+      currentStage: 'lead_scoring',
+    })
+  })
+
+  it('clears stale dashboard activity when the refreshed workflow list is empty', async () => {
+    vi.mocked(autoflowApi.getDashboard).mockResolvedValue(createDashboardFixture())
+    vi.mocked(autoflowApi.getWorkflows).mockResolvedValue({
+      items: [],
+      total: 0,
+      page: 1,
+      pageSize: 20,
+    })
+    const store = useAutoFlowStore()
+
+    await store.fetchDashboard()
+    await store.fetchWorkflows()
+
+    expect(store.workflows).toEqual([])
+    expect(store.dashboard?.recentWorkflows).toEqual([])
   })
 })

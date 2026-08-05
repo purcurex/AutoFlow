@@ -21,13 +21,14 @@ export const useAutoFlowStore = defineStore('autoflow', () => {
   const outreachTasks = ref<OutreachTask[]>([])
   const followUpStages = ref<FollowUpStage[]>([])
   const isLoading = ref(false)
+  let workflowsLoaded = false
 
   const topLeads = computed(() => [...leads.value].sort((a, b) => b.totalScore - a.totalScore).slice(0, 10))
   const readyTasks = computed(() => outreachTasks.value.filter((task) => task.status === 'ready'))
 
   async function fetchDashboard() {
     dashboard.value = await autoflowApi.getDashboard()
-    workflows.value = dashboard.value.recentWorkflows
+    synchronizeDashboardWorkflows()
     leads.value = dashboard.value.topLeads
     outreachTasks.value = dashboard.value.nextTasks
     followUpStages.value = dashboard.value.funnel
@@ -36,10 +37,16 @@ export const useAutoFlowStore = defineStore('autoflow', () => {
   async function fetchWorkflows() {
     const result = await autoflowApi.getWorkflows()
     workflows.value = result.items
-    if (dashboard.value) {
-      // 首页与列表必须使用同一批最新工作流，保留仪表盘统计和其他业务数据不变。
-      dashboard.value.recentWorkflows = result.items.slice(0, 5)
-    }
+    workflowsLoaded = true
+    synchronizeDashboardWorkflows()
+  }
+
+  /**
+   * 无论首页还是列表接口后返回，都以完整工作流列表作为最新状态，消除并发响应覆盖。
+   */
+  function synchronizeDashboardWorkflows() {
+    if (!dashboard.value || !workflowsLoaded) return
+    dashboard.value.recentWorkflows = workflows.value.slice(0, 5)
   }
 
   async function createWorkflow(data: CreateWorkflowRequest) {
