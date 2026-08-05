@@ -1,10 +1,12 @@
 import { createHash } from 'crypto'
-import { Inject, Injectable, NotFoundException } from '@nestjs/common'
+import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common'
+import { ConfigService } from '@nestjs/config'
 import { InjectRepository } from '@nestjs/typeorm'
 import { Repository } from 'typeorm'
 import type { QueryDeepPartialEntity } from 'typeorm/query-builder/QueryPartialEntity'
 import { WorkflowRunEntity } from '../autoflow/entities'
 import { DEFAULT_GOOGLE_SEARCH_OPTIONS } from '../autoflow/autoflow.types'
+import { isPublicProviderUrl } from '../autoflow/workflow-seed-asset.service'
 import { AdCreativeEntity, ShopifyStoreEntity } from './entities'
 import { trafficScore } from './discovery-normalizer'
 import { StorefrontEnrichmentService } from './storefront-enrichment.service'
@@ -33,6 +35,7 @@ export class DiscoveryService {
     @Inject(STORE_DISCOVERY_ADAPTER)
     private readonly storeAdapter: StoreDiscoveryAdapter,
     private readonly storefrontEnrichmentService: StorefrontEnrichmentService,
+    private readonly configService: ConfigService,
   ) {}
 
   async discoverEvidence(ownerUserId: string, workflowRunId: string): Promise<DiscoveryEvidenceResult> {
@@ -41,7 +44,7 @@ export class DiscoveryService {
 
     const seed = {
       type: workflow.seedType,
-      value: workflow.seedValue,
+      value: this.resolveProviderSeedValue(workflow),
       targetMarket: workflow.targetMarket,
       searchOptions: {
         ...DEFAULT_GOOGLE_SEARCH_OPTIONS,
@@ -70,6 +73,30 @@ export class DiscoveryService {
       stores,
       candidates: stores.map((store) => this.toLeadCandidate(store, ads)),
     }
+  }
+
+  /**
+   * 外部客户发现服务无法访问 localhost。本地上传图片仅在调用时转换为受控公网地址；
+   * 公开图片工作流继续使用原始 seedValue，关键词工作流不受影响。
+   */
+  private resolveProviderSeedValue(workflow: WorkflowRunEntity): string {
+    if (workflow.seedType !== 'image' || !workflow.seedAssetPath) return workflow.seedValue
+
+    const publicBaseUrl = this.configService.get<string>('PUBLIC_ASSET_BASE_URL')?.trim()
+    if (!publicBaseUrl || !isPublicProviderUrl(publicBaseUrl)) {
+      throw new BadRequestException(
+        'Workflow product image is only available locally. Configure a publicly reachable PUBLIC_ASSET_BASE_URL.',
+      )
+    }
+
+    // 资产路径必须仍归属当前工作流用户，阻断数据库异常值借助 URL 拼接切换到其他主机或用户目录。
+    const normalizedAssetPath = workflow.seedAssetPath.replace(/\\/g, '/')
+    const expectedPrefix = `/uploads/workflow-seeds/${workflow.ownerUserId}/`
+    if (!normalizedAssetPath.startsWith(expectedPrefix) || normalizedAssetPath.startsWith('//')) {
+      throw new BadRequestException('Workflow image asset path is invalid.')
+    }
+
+    return new URL(normalizedAssetPath, `${publicBaseUrl.replace(/\/$/, '')}/`).toString()
   }
 
   async getPersistedEvidence(

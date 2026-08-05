@@ -1,4 +1,5 @@
 import { NotFoundException } from '@nestjs/common'
+import { ConfigService } from '@nestjs/config'
 import type { ObjectLiteral, Repository } from 'typeorm'
 import { WorkflowRunEntity } from '../autoflow/entities'
 import { DiscoveryService } from './discovery.service'
@@ -15,7 +16,7 @@ describe('DiscoveryService', () => {
     } as unknown as jest.Mocked<Repository<T>>
   }
 
-  function createService() {
+  function createService(config: Record<string, string> = {}) {
     const workflows = repository<WorkflowRunEntity>()
     const ads = repository<AdCreativeEntity>()
     const stores = repository<ShopifyStoreEntity>()
@@ -24,7 +25,15 @@ describe('DiscoveryService', () => {
     const enrichment = {
       enrich: jest.fn().mockImplementation(async (values) => values),
     } as unknown as jest.Mocked<StorefrontEnrichmentService>
-    const service = new DiscoveryService(workflows, ads, stores, adAdapter, storeAdapter, enrichment)
+    const service = new DiscoveryService(
+      workflows,
+      ads,
+      stores,
+      adAdapter,
+      storeAdapter,
+      enrichment,
+      new ConfigService(config),
+    )
     return { service, workflows, ads, stores, adAdapter, storeAdapter }
   }
 
@@ -105,5 +114,50 @@ describe('DiscoveryService', () => {
       [expect.objectContaining({ ownerUserId: 'owner-1', teamId: null, normalizedDomain: 'pawspark.myshopify.com' })],
       expect.objectContaining({ conflictPaths: ['workflowRunId', 'normalizedDomain'] }),
     )
+  })
+
+  it('converts an owned local image path to the configured public provider URL', async () => {
+    const { service, workflows, adAdapter, storeAdapter } = createService({
+      PUBLIC_ASSET_BASE_URL: 'https://assets.example.com/',
+    })
+    workflows.findOne.mockResolvedValue({
+      id: 'workflow-image',
+      ownerUserId: 'owner-1',
+      teamId: null,
+      seedType: 'image',
+      seedValue: 'http://localhost:3000/uploads/workflow-seeds/owner-1/product.jpg',
+      seedAssetPath: '/uploads/workflow-seeds/owner-1/product.jpg',
+      targetMarket: 'United States',
+    } as WorkflowRunEntity)
+    adAdapter.discover.mockResolvedValue([])
+    storeAdapter.discover.mockResolvedValue([])
+
+    await service.discoverEvidence('owner-1', 'workflow-image')
+
+    expect(adAdapter.discover).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'image',
+      value: 'https://assets.example.com/uploads/workflow-seeds/owner-1/product.jpg',
+    }))
+    expect(storeAdapter.discover).toHaveBeenCalledWith(expect.objectContaining({
+      value: 'https://assets.example.com/uploads/workflow-seeds/owner-1/product.jpg',
+    }))
+  })
+
+  it('rejects a local image before calling paid adapters when no public asset base is configured', async () => {
+    const { service, workflows, adAdapter, storeAdapter } = createService()
+    workflows.findOne.mockResolvedValue({
+      id: 'workflow-image',
+      ownerUserId: 'owner-1',
+      teamId: null,
+      seedType: 'image',
+      seedValue: 'http://localhost:3000/uploads/workflow-seeds/owner-1/product.jpg',
+      seedAssetPath: '/uploads/workflow-seeds/owner-1/product.jpg',
+      targetMarket: 'United States',
+    } as WorkflowRunEntity)
+
+    await expect(service.discoverEvidence('owner-1', 'workflow-image'))
+      .rejects.toThrow('PUBLIC_ASSET_BASE_URL')
+    expect(adAdapter.discover).not.toHaveBeenCalled()
+    expect(storeAdapter.discover).not.toHaveBeenCalled()
   })
 })

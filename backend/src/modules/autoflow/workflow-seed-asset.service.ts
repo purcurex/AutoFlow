@@ -11,6 +11,38 @@ import { isAbsolute, join, relative, resolve } from 'path'
 
 export const WORKFLOW_IMAGE_MAX_BYTES = 8 * 1024 * 1024
 
+/**
+ * 判断地址是否可交给位于公网的图片检索服务访问。
+ * 该校验拒绝本机、回环、链路本地和常见私网地址，避免把确定不可达的地址发送给付费接口。
+ */
+export function isPublicProviderUrl(value: string): boolean {
+  try {
+    const url = new URL(value)
+    if (!['http:', 'https:'].includes(url.protocol)) return false
+
+    const hostname = url.hostname.toLowerCase().replace(/^\[|\]$/g, '')
+    if (
+      hostname === 'localhost'
+      || hostname === '::'
+      || hostname === '::1'
+      || hostname.endsWith('.local')
+    ) return false
+    if (
+      /^0\./.test(hostname)
+      || /^127\./.test(hostname)
+      || /^10\./.test(hostname)
+      || /^169\.254\./.test(hostname)
+      || /^192\.168\./.test(hostname)
+    ) return false
+    if (/^(fc|fd)/.test(hostname) || /^fe[89ab]/.test(hostname)) return false
+
+    const private172 = hostname.match(/^172\.(\d{1,3})\./)
+    return !private172 || Number(private172[1]) < 16 || Number(private172[1]) > 31
+  } catch {
+    return false
+  }
+}
+
 const extensionByType = {
   jpeg: '.jpg',
   png: '.png',
@@ -61,7 +93,7 @@ export class WorkflowSeedAssetService {
     return {
       assetPath,
       publicUrl: `${publicBaseUrl}${assetPath}`,
-      providerReady: this.isPublicProviderUrl(publicBaseUrl),
+      providerReady: isPublicProviderUrl(publicBaseUrl),
       originalName: file.originalname || 'clipboard-image',
       mimeType: `image/${imageType}` as WorkflowSeedAsset['mimeType'],
       size: file.size,
@@ -134,14 +166,5 @@ export class WorkflowSeedAssetService {
     ) return 'webp'
 
     return null
-  }
-
-  private isPublicProviderUrl(baseUrl: string): boolean {
-    const hostname = new URL(baseUrl).hostname.toLowerCase()
-    if (hostname === 'localhost' || hostname === '::1' || hostname.endsWith('.local')) return false
-    if (/^127\./.test(hostname) || /^10\./.test(hostname) || /^192\.168\./.test(hostname)) return false
-
-    const private172 = hostname.match(/^172\.(\d{1,3})\./)
-    return !private172 || Number(private172[1]) < 16 || Number(private172[1]) > 31
   }
 }

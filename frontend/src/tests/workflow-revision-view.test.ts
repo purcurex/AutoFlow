@@ -158,7 +158,7 @@ describe('workflow revision form', () => {
     await flushPromises()
 
     expect(wrapper.get<HTMLImageElement>('img[alt="workflows.imagePreview"]').attributes('src'))
-      .toBe(imageWorkflowFixture.seedValue)
+      .toBe(imageWorkflowFixture.seedAssetPath)
     expect(wrapper.get<HTMLInputElement>('input[placeholder="workflows.imagePastePlaceholder"]').element.value)
       .toBe(imageWorkflowFixture.seedValue)
   })

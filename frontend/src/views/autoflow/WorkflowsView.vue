@@ -204,7 +204,10 @@ const googleQueryPreview = computed(() => {
   return `${term} inurl:/products/ "Powered by Shopify"${exclusions}`
 })
 const resolvedImagePreviewUrl = computed(() => imagePreviewUrl.value
-  || (form.seedType === 'image' ? safeExternalUrl(form.seedValue) || '' : ''))
+  // 历史上传图片优先走同源资产路径，避免持久化的 localhost 地址因访问端变化而失效。
+  || (form.seedType === 'image'
+    ? form.seedAssetPath || safeExternalUrl(form.seedValue) || ''
+    : ''))
 const imageReady = computed(() => Boolean(
   imageUpload.value
   || form.seedAssetPath
