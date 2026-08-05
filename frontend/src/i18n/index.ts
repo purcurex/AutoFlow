@@ -50,6 +50,7 @@ const zhCN = {
     seedValue: '关键词或图片地址', seedPlaceholder: '例如：pet hair remover，或公开图片 URL', targetMarket: '目标市场', targetMarketHint: '按业务优先级选择一个主要客户市场。选择“其他”时将执行不限地区搜索。',
     marketUnitedStates: '美国', marketEuropeanUnion: '欧盟', marketCanada: '加拿大', marketAustralia: '澳洲', marketOther: '其他',
     create: '创建工作流', seed: '起始线索', stage: '当前阶段', leads: '发现线索', progress: '进度', start: '开始发现', running: '执行中', retry: '重新执行',
+    progressPercent: '{progress}%', progressPendingConfiguration: '待配置',
     noWorkflows: '暂无工作流。先创建一个客户发现任务。', completed: '客户发现已完成。', stopped: '客户发现已停止，请检查工作流状态。', startFailed: '无法启动客户发现。', failureReason: '失败原因',
     helperKeyword: '输入具体英文产品词，可获得更准确的广告结果。', helperImage: '支持 PNG、JPG、WebP，最大 8 MB；也可直接填写无需登录的公开图片 URL。',
     productImage: '产品截图', imageDropTitle: '点击上传、拖入截图，或按 Ctrl+V 粘贴', imageDropHint: '从剪贴板粘贴时，请先单击此区域或下方图片地址输入框。',
@@ -375,6 +376,8 @@ Object.assign(zhCN.quotes, {
 Object.assign(en.workflows, {
   workflowId: 'Workflow ID',
   createdDate: 'Created Date',
+  progressPercent: '{progress}%',
+  progressPendingConfiguration: 'Needs configuration',
 })
 
 Object.assign(zhCN.workflows, {

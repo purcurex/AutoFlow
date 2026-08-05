@@ -36,6 +36,10 @@ export const useAutoFlowStore = defineStore('autoflow', () => {
   async function fetchWorkflows() {
     const result = await autoflowApi.getWorkflows()
     workflows.value = result.items
+    if (dashboard.value) {
+      // 首页与列表必须使用同一批最新工作流，保留仪表盘统计和其他业务数据不变。
+      dashboard.value.recentWorkflows = result.items.slice(0, 5)
+    }
   }
 
   async function createWorkflow(data: CreateWorkflowRequest) {

@@ -38,6 +38,7 @@ import {
 } from '@/utils/workflowLifecycle'
 import { withReturnTo } from '@/composables/useReturnNavigation'
 import { workflowCreatedDate } from '@/utils/workflowDisplay'
+import { workflowProgressDisplay } from '@/utils/workflowProgress'
 import { safeExternalUrl } from '@/utils/sourcing'
 import usFlag from 'flag-icons/flags/4x3/us.svg'
 import euFlag from 'flag-icons/flags/4x3/eu.svg'
@@ -549,7 +550,7 @@ async function confirmLifecycleAction() {
                 <td><span class="inline-flex items-center gap-2 font-semibold text-slate-800 dark:text-slate-100"><img :src="resolveTargetMarket(workflow.targetMarket).flagUrl" alt="" class="h-4 w-6 rounded-[2px] object-cover shadow-sm ring-1 ring-black/10" aria-hidden="true" />{{ resolveTargetMarket(workflow.targetMarket).code }}</span></td>
                 <td>{{ $te(`status.${workflow.currentStage}`) ? $t(`status.${workflow.currentStage}`) : workflow.currentStage }}</td>
                 <td class="font-semibold tabular-nums">{{ workflow.leadCount }}</td>
-                <td><div class="flex min-w-32 items-center gap-2"><div class="h-1.5 flex-1 rounded-full bg-slate-100 dark:bg-slate-800"><div class="h-full rounded-full bg-orange-500" :style="{ width: `${workflow.progress}%` }" /></div><span class="text-xs tabular-nums text-slate-500">{{ workflow.progress }}%</span></div></td>
+                <td><div class="flex min-w-32 items-center gap-2"><div class="h-1.5 flex-1 rounded-full bg-slate-100 dark:bg-slate-800"><div class="h-full rounded-full bg-orange-500" :style="{ width: `${workflowProgressDisplay(workflow).percent}%` }" /></div><span class="whitespace-nowrap text-xs tabular-nums text-slate-500">{{ t(workflowProgressDisplay(workflow).labelKey, workflowProgressDisplay(workflow).labelParams) }}</span></div></td>
                 <td><StatusBadge :status="workflow.status" /></td>
                 <td class="min-w-72 text-right">
                   <div class="flex items-center justify-end gap-2">
