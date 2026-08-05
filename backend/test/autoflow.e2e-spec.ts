@@ -305,6 +305,7 @@ describe('AutoFlow persistence API', () => {
       .expect(200)
     expect(summary.body).toEqual({
       workflowId: created.body.id,
+      customerDiscoveryStatus: 'not_started',
       workflowInput: {
         name: 'pet grooming brush prospect workflow',
         seedType: 'keyword',
