@@ -165,6 +165,45 @@ describe('1688 sourcing view', () => {
     expect(wrapper.get('[data-test="sourcing-match-context"]').text()).toContain('pet brush')
   })
 
+  it('loads an existing 10-item search without guessing a 20-item page size', async () => {
+    apiMock.getWorkflowSourcing.mockImplementation(async (_workflowId, query) => {
+      if (query?.pageSize !== undefined) throw new Error('pageSize mismatch')
+      return {
+        ...completedSummary,
+        pagination: { ...completedSummary.pagination!, pageSize: 10 },
+      } satisfies SourcingSummary
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.find('[data-test="sourcing-error"]').exists()).toBe(false)
+    expect(wrapper.findAll('[data-test="sourcing-offer"]')).toHaveLength(1)
+    expect(wrapper.get<HTMLSelectElement>('[data-test="sourcing-page-size"]').element.value).toBe('10')
+  })
+
+  it('reloads after an initial failure without repeating a guessed page size', async () => {
+    let attempt = 0
+    apiMock.getWorkflowSourcing.mockImplementation(async (_workflowId, query) => {
+      attempt += 1
+      if (attempt === 1) throw new Error('temporary load failure')
+      if (query?.pageSize !== undefined) throw new Error('pageSize mismatch')
+      return {
+        ...completedSummary,
+        pagination: { ...completedSummary.pagination!, pageSize: 10 },
+      } satisfies SourcingSummary
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.get('[data-test="sourcing-error"] button').trigger('click')
+    await flushPromises()
+
+    expect(attempt).toBe(2)
+    expect(wrapper.find('[data-test="sourcing-error"]').exists()).toBe(false)
+    expect(wrapper.findAll('[data-test="sourcing-offer"]')).toHaveLength(1)
+  })
+
   it('shows the image matching input and a first-run action before a search exists', async () => {
     apiMock.getWorkflowSourcing.mockResolvedValue({
       workflowId: 'workflow-1688',

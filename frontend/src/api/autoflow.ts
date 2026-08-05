@@ -334,7 +334,7 @@ export interface SourcingStartResponse {
 export interface SourcingQuery {
   searchId?: string
   page: number
-  pageSize: 10 | 20 | 50
+  pageSize?: 10 | 20 | 50
 }
 
 export interface StartSourcingRequest {

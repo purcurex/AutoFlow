@@ -21,4 +21,11 @@ describe('ListSourcingDto', () => {
       expect.arrayContaining(['page', 'pageSize']),
     )
   })
+
+  it('keeps pageSize absent so an existing search can supply its persisted page size', async () => {
+    const dto = plainToInstance(ListSourcingDto, { page: 1 })
+
+    await expect(validate(dto)).resolves.toHaveLength(0)
+    expect(dto.pageSize).toBeUndefined()
+  })
 })

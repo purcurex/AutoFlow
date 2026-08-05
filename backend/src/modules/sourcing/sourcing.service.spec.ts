@@ -8,6 +8,7 @@ import {
   SourcingSearchPageEntity,
 } from './entities'
 import { SourcingService } from './sourcing.service'
+import { ListSourcingDto } from './dto/list-sourcing.dto'
 
 describe('SourcingService asynchronous pagination', () => {
   const ownerUserId = 'd90f3d90-7f2b-45e7-9c8f-88fa0d915c8d'
@@ -231,6 +232,47 @@ describe('SourcingService asynchronous pagination', () => {
       where: { ownerUserId, workflowRunId, searchId, pageNumber: 1 },
       order: { rankInPage: 'ASC' },
     }))
+  })
+
+  it('uses the persisted page size when the summary request does not specify one', async () => {
+    const { service, searches, pages, offers } = createService()
+    searches.findOne.mockResolvedValue({
+      id: searchId,
+      ownerUserId,
+      workflowRunId,
+      searchMode: 'keyword',
+      status: 'succeeded',
+      pageSize: 10,
+      totalRecords: '574',
+      totalPages: 58,
+      loadedPageCount: 1,
+      keyword: 'pet brush',
+      imageUrl: null,
+      errorCode: null,
+      errorMessage: null,
+      requestedAt: new Date('2026-08-04T00:00:00.000Z'),
+      startedAt: null,
+      completedAt: null,
+    } as SourcingSearchEntity)
+    pages.findOne.mockResolvedValue({
+      searchId,
+      ownerUserId,
+      pageNumber: 1,
+      pageSize: 10,
+      status: 'succeeded',
+      resultCount: 10,
+      errorCode: null,
+      errorMessage: null,
+    } as SourcingSearchPageEntity)
+    offers.find.mockResolvedValue([])
+
+    const result = await service.getSummary(ownerUserId, workflowRunId, {
+      searchId,
+      page: 1,
+    } as ListSourcingDto)
+
+    expect(result.pagination.pageSize).toBe(10)
+    expect(result.pagination.totalRecords).toBe(574)
   })
 
   it('returns workflow matching input before the first sourcing task exists', async () => {

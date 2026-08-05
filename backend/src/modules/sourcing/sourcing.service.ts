@@ -57,7 +57,7 @@ export class SourcingService {
     const workflowInput = this.mapWorkflowInput(workflow)
     const readiness = this.alibaba1688Service.getReadiness()
     const pageNumber = query.page || 1
-    const requestedPageSize = query.pageSize || 20
+    const requestedPageSize = query.pageSize
     const search = await this.searchRepository.findOne({
       where: query.searchId
         ? { id: query.searchId, ownerUserId, workflowRunId }
@@ -77,7 +77,7 @@ export class SourcingService {
         latestSearch: null,
         pagination: {
           page: pageNumber,
-          pageSize: requestedPageSize as 10 | 20 | 50,
+          pageSize: (requestedPageSize || 20) as 10 | 20 | 50,
           totalRecords: null,
           totalPages: null,
           resultCount: 0,
@@ -91,7 +91,7 @@ export class SourcingService {
       }
     }
 
-    if (requestedPageSize !== search.pageSize) {
+    if (requestedPageSize !== undefined && requestedPageSize !== search.pageSize) {
       throw new BadRequestException('pageSize must match the sourcing search page size')
     }
     if (search.totalPages !== null && pageNumber > search.totalPages) {

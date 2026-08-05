@@ -15,5 +15,5 @@ export class ListSourcingDto {
   @IsOptional()
   @Type(() => Number)
   @IsIn([10, 20, 50])
-  pageSize = 20
+  pageSize?: 10 | 20 | 50
 }

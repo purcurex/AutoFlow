@@ -44,11 +44,13 @@ const starting = ref(false)
 const loadError = ref('')
 const searchId = ref(typeof route.query?.searchId === 'string' ? route.query.searchId : '')
 const parsedPage = Number(route.query?.page || 1)
-const parsedPageSize = Number(route.query?.pageSize || 20)
+const parsedPageSize = Number(route.query?.pageSize)
+const hasRoutePageSize = [10, 20, 50].includes(parsedPageSize)
 const page = ref(Number.isInteger(parsedPage) && parsedPage > 0 ? parsedPage : 1)
-const pageSize = ref<10 | 20 | 50>([10, 20, 50].includes(parsedPageSize)
+const pageSize = ref<10 | 20 | 50>(hasRoutePageSize
   ? parsedPageSize as 10 | 20 | 50
   : 20)
+const pageSizeResolved = ref(hasRoutePageSize)
 const pageCache = new Map<number, SourcingSummary>()
 let pollTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -84,9 +86,13 @@ async function loadSourcing(showLoading = true) {
     const result = await sourcingApi.getWorkflowSourcing(workflowId.value, {
       searchId: searchId.value || undefined,
       page: page.value,
-      pageSize: pageSize.value,
+      pageSize: pageSizeResolved.value ? pageSize.value : undefined,
     })
     summary.value = result
+    if (result.pagination?.pageSize) {
+      pageSize.value = result.pagination.pageSize
+      pageSizeResolved.value = true
+    }
     const resolvedSearch = currentSourcingSearch(result)
     if (resolvedSearch?.id) searchId.value = resolvedSearch.id
     if (result.pagination?.loaded) pageCache.set(page.value, result)
