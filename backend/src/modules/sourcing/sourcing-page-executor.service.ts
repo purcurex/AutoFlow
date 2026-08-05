@@ -1,5 +1,6 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common'
 import { InjectRepository } from '@nestjs/typeorm'
+import { createHash } from 'crypto'
 import { DataSource, Repository } from 'typeorm'
 import {
   Alibaba1688Service,
@@ -38,6 +39,7 @@ export interface ClaimedSourcingPage {
 interface HydratedOffer {
   offer: Alibaba1688StableOffer
   rawOffer: unknown
+  supplierDetail: Alibaba1688StableProductDetail | null
   detail: Alibaba1688StableProductDetail | null
   rawDetail: unknown
   detailStatus: 'not_requested' | 'succeeded' | 'failed'
@@ -128,32 +130,34 @@ export class SourcingPageExecutorService {
     }
 
     const rawOffers = this.rawOffers(result.provider)
-    const detailResults = await Promise.allSettled(
-      result.normalized.offers.slice(0, 5).map((offer) =>
-        offer.offerId
-          ? this.alibaba1688Service.getProductDetail({
-              offerId: offer.offerId,
-              country: search.languageCode,
-            })
-          : Promise.reject(new Error('Offer ID is missing')),
-      ),
+    const pageOffers = result.normalized.offers.slice(0, page.pageSize)
+    // 每个商品的供应商名称只存在于详情响应；固定并发为 5，避免大分页产生无界并发。
+    const detailResults = await this.settleWithConcurrency(
+      pageOffers,
+      5,
+      (offer) => offer.offerId
+        ? this.alibaba1688Service.getProductDetail({
+            offerId: offer.offerId,
+            country: search.languageCode,
+          })
+        : Promise.reject(new Error('Offer ID is missing')),
     )
-    const hydrated: HydratedOffer[] = result.normalized.offers
-      .slice(0, page.pageSize)
+    const hydrated: HydratedOffer[] = pageOffers
       .map((offer, index) => {
         const detailResult = detailResults[index]
+        const supplierDetail = detailResult?.status === 'fulfilled'
+          ? detailResult.value.normalized
+          : null
         return {
           offer,
           rawOffer: rawOffers[index] || null,
-          detail: detailResult?.status === 'fulfilled'
-            ? detailResult.value.normalized
-            : null,
-          rawDetail: detailResult?.status === 'fulfilled'
+          supplierDetail,
+          // 保持既有产品增强边界：第 6 条以后只补供应商名称，不改变商品标题、价格或评分。
+          detail: index < 5 ? supplierDetail : null,
+          rawDetail: index < 5 && detailResult?.status === 'fulfilled'
             ? detailResult.value.provider
             : null,
-          detailStatus: index >= 5
-            ? 'not_requested'
-            : detailResult?.status === 'fulfilled' ? 'succeeded' : 'failed',
+          detailStatus: detailResult?.status === 'fulfilled' ? 'succeeded' : 'failed',
         }
       })
 
@@ -182,6 +186,7 @@ export class SourcingPageExecutorService {
       })
 
       let persistedCount = 0
+      const pageProductFingerprints = new Set<string>()
       for (let index = 0; index < hydrated.length; index += 1) {
         const item = hydrated[index]
         const source = item.offer
@@ -193,15 +198,55 @@ export class SourcingPageExecutorService {
 
         const detail = item.detail
         const seller = detail?.seller || source.seller
-        const supplierKey = (seller.openId || seller.companyName || `offer:${source.offerId}`)
+        const supplierIdentity = item.supplierDetail?.seller || seller
+        const supplierKey = (
+          supplierIdentity.openId
+          || supplierIdentity.companyName
+          || `offer:${source.offerId}`
+        )
           .slice(0, 255)
-        let supplier = await supplierRepository.findOne({
-          where: { searchId: search.id, provider: SOURCING_PROVIDER, supplierKey },
-        })
         const identities = [...new Set([...seller.identities, ...source.offerIdentities])]
         const supplierRating = this.ratingValue(
           seller.compositeServiceScore || source.tradeScore,
         )
+        const prices = [
+          source.price.promotionAmount,
+          source.price.selectedSupplyAmount,
+          source.price.consignAmount,
+          source.price.amount,
+          ...(detail?.skus.flatMap((sku) => [sku.consignPrice, sku.price]) || []),
+        ].map((value) => decimalOrNull(value)).filter((value): value is string => value !== null)
+        const priceRange = decimalMinMax(prices)
+        const minimumOrderQuantity = decimalOrNull(
+          detail?.minOrderQuantity ?? source.minOrderQuantity,
+        )
+        const productFingerprint = this.buildProductFingerprint({
+          supplierOpenId: supplierIdentity.openId,
+          supplierCompanyName: supplierIdentity.companyName,
+          title: item.supplierDetail?.title || source.title || source.translatedTitle,
+          imageUrl: item.supplierDetail?.imageUrls[0] || source.imageUrl,
+          categoryId: item.supplierDetail?.categoryId || null,
+          priceMinimum: priceRange.minimum,
+          priceMaximum: priceRange.maximum,
+          minimumOrderQuantity,
+        })
+        if (productFingerprint) {
+          const fingerprintDuplicate = pageProductFingerprints.has(productFingerprint)
+            || Boolean(await offerRepository.findOne({
+              where: {
+                searchId: search.id,
+                provider: SOURCING_PROVIDER,
+                productFingerprint,
+              },
+            }))
+          // 只有同一搜索内供应商和核心商品信息均一致时才过滤，不能按供应商单独去重。
+          if (fingerprintDuplicate) continue
+          pageProductFingerprints.add(productFingerprint)
+        }
+
+        let supplier = await supplierRepository.findOne({
+          where: { searchId: search.id, provider: SOURCING_PROVIDER, supplierKey },
+        })
         if (!supplier) {
           supplier = await supplierRepository.save(supplierRepository.create({
             searchId: search.id,
@@ -210,9 +255,9 @@ export class SourcingPageExecutorService {
             provider: SOURCING_PROVIDER,
             supplierKey,
             memberId: null,
-            openId: seller.openId,
-            companyName: seller.companyName,
-            shopName: seller.companyName,
+            openId: supplierIdentity.openId,
+            companyName: supplierIdentity.companyName,
+            shopName: supplierIdentity.companyName,
             shopUrl: seller.shopUrl,
             supplierRating: decimalOrNull(supplierRating),
             yearsInBusiness: null,
@@ -228,17 +273,6 @@ export class SourcingPageExecutorService {
           }))
         }
 
-        const prices = [
-          source.price.promotionAmount,
-          source.price.selectedSupplyAmount,
-          source.price.consignAmount,
-          source.price.amount,
-          ...(detail?.skus.flatMap((sku) => [sku.consignPrice, sku.price]) || []),
-        ].map((value) => decimalOrNull(value)).filter((value): value is string => value !== null)
-        const priceRange = decimalMinMax(prices)
-        const minimumOrderQuantity = decimalOrNull(
-          detail?.minOrderQuantity ?? source.minOrderQuantity,
-        )
         const score = calculateSourcingScore({
           query: workflow.seedType === 'keyword' ? workflow.seedValue : '',
           title: [detail?.title, detail?.translatedTitle, source.title, source.translatedTitle]
@@ -271,6 +305,7 @@ export class SourcingPageExecutorService {
           workflowRunId: page.workflowRunId,
           provider: SOURCING_PROVIDER,
           offerId: source.offerId,
+          productFingerprint,
           offerUrl: detail?.offerUrl || source.offerUrl
             || `https://detail.1688.com/offer/${source.offerId}.html`,
           imageUrl: detail?.imageUrls[0] || source.imageUrl,
@@ -347,13 +382,19 @@ export class SourcingPageExecutorService {
         && search.totalRecords !== String(result.normalized.totalRecords)
       ) {
         this.logger.warn(
-          `1688 sourcing total changed search=${search.id} page=${page.pageNumber}`,
+          `1688 sourcing total changed search=${search.id} page=${page.pageNumber}`
+          + ` stored=${search.totalRecords} provider=${result.normalized.totalRecords}`,
         )
       }
-      search.totalRecords = result.normalized.totalRecords === null
-        ? search.totalRecords
-        : String(result.normalized.totalRecords)
-      search.totalPages = result.normalized.totalPages ?? search.totalPages
+      // 单次搜索使用第一页作为分页快照；后续页只在原值缺失时补写，避免总数随翻页跳动。
+      if (page.pageNumber === 1 || search.totalRecords === null) {
+        search.totalRecords = result.normalized.totalRecords === null
+          ? search.totalRecords
+          : String(result.normalized.totalRecords)
+      }
+      if (page.pageNumber === 1 || search.totalPages === null) {
+        search.totalPages = result.normalized.totalPages ?? search.totalPages
+      }
       search.loadedPageCount = loadedPageCount
       // 失败页重新执行成功后必须恢复搜索状态，避免页面永久停留在“部分完成”。
       search.status = failedPageCount > 0 ? 'partial' : 'succeeded'
@@ -371,6 +412,96 @@ export class SourcingPageExecutorService {
   ): unknown[] {
     const data = provider.result?.result?.data
     return Array.isArray(data) ? data : []
+  }
+
+  /**
+   * 生成搜索内的保守商品指纹。供应商身份或任一核心字段缺失时不推断重复，
+   * 避免把不同供应商或信息不完整的相似商品错误合并。
+   */
+  private buildProductFingerprint(input: {
+    supplierOpenId: string | null
+    supplierCompanyName: string | null
+    title: string | null
+    imageUrl: string | null
+    categoryId: string | null
+    priceMinimum: string | null
+    priceMaximum: string | null
+    minimumOrderQuantity: string | null
+  }): string | null {
+    const supplierIdentity = input.supplierOpenId
+      ? `open:${this.normalizeFingerprintText(input.supplierOpenId)}`
+      : input.supplierCompanyName
+        ? `company:${this.normalizeFingerprintText(input.supplierCompanyName)}`
+        : null
+    const title = this.normalizeFingerprintText(input.title)
+    const imageUrl = this.normalizeFingerprintUrl(input.imageUrl)
+    const categoryId = this.normalizeFingerprintText(input.categoryId)
+    if (
+      !supplierIdentity
+      || !title
+      || !imageUrl
+      || !categoryId
+      || !input.priceMinimum
+      || !input.minimumOrderQuantity
+    ) {
+      return null
+    }
+    return createHash('sha256').update(JSON.stringify([
+      supplierIdentity,
+      title,
+      imageUrl,
+      categoryId,
+      input.priceMinimum,
+      input.priceMaximum,
+      input.minimumOrderQuantity,
+    ])).digest('hex')
+  }
+
+  private normalizeFingerprintText(value: string | null): string | null {
+    if (!value?.trim()) return null
+    return value.trim().toLocaleLowerCase().replace(/\s+/g, ' ')
+  }
+
+  private normalizeFingerprintUrl(value: string | null): string | null {
+    if (!value) return null
+    try {
+      const normalized = new URL(value)
+      normalized.search = ''
+      normalized.hash = ''
+      return normalized.toString()
+    } catch {
+      return null
+    }
+  }
+
+  /**
+   * 按固定并发数执行外部详情请求，并保持结果顺序与商品顺序一致。
+   * 单个请求失败只写入 rejected 结果，由调用方将该商品标记为详情失败。
+   */
+  private async settleWithConcurrency<T, R>(
+    items: T[],
+    concurrency: number,
+    operation: (item: T, index: number) => Promise<R>,
+  ): Promise<PromiseSettledResult<R>[]> {
+    const results = new Array<PromiseSettledResult<R>>(items.length)
+    let nextIndex = 0
+    const workerCount = Math.min(Math.max(1, concurrency), items.length)
+    const workers = Array.from({ length: workerCount }, async () => {
+      while (nextIndex < items.length) {
+        const currentIndex = nextIndex
+        nextIndex += 1
+        try {
+          results[currentIndex] = {
+            status: 'fulfilled',
+            value: await operation(items[currentIndex], currentIndex),
+          }
+        } catch (reason) {
+          results[currentIndex] = { status: 'rejected', reason }
+        }
+      }
+    })
+    await Promise.all(workers)
+    return results
   }
 
   private requestText(search: SourcingSearchEntity, key: string): string | null {

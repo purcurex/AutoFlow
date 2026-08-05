@@ -29,6 +29,11 @@ import { SourcingSupplierEntity } from './sourcing-supplier.entity'
 @Index('idx_sourcing_offers_search', ['searchId'])
 @Index('idx_sourcing_offers_supplier', ['supplierId'])
 @Index('idx_sourcing_offers_provider_offer', ['provider', 'offerId'])
+@Index(
+  'uq_sourcing_offers_search_provider_fingerprint',
+  ['searchId', 'provider', 'productFingerprint'],
+  { unique: true, where: '"product_fingerprint" IS NOT NULL' },
+)
 @Check('chk_sourcing_offers_provider', "provider = 'alibaba_1688'")
 @Check('chk_sourcing_offers_score', 'sourcing_score >= 0 AND sourcing_score <= 100')
 @Check(
@@ -64,6 +69,9 @@ export class SourcingOfferEntity {
 
   @Column({ name: 'offer_id', type: 'varchar', length: 128 })
   offerId: string
+
+  @Column({ name: 'product_fingerprint', type: 'varchar', length: 64, nullable: true })
+  productFingerprint: string | null
 
   @Column({ name: 'offer_url', type: 'varchar', length: 1000 })
   offerUrl: string

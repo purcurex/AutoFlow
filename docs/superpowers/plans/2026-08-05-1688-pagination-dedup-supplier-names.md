@@ -56,7 +56,7 @@ const detailResults = await this.mapWithConcurrency(
 )
 ```
 
-所有成功结果标记 `succeeded`，失败标记 `failed`。持久化分页总数时，仅第一页或原值为空时写入；后续差异日志包含旧值和新值。
+所有成功结果标记 `succeeded`，失败标记 `failed`。详情响应单独保留为 `supplierDetail`；只有前 5 个同时作为现有产品增强 `detail`，第 6 个以后只读取供应商身份和公司名称。持久化分页总数时，仅第一页或原值为空时写入；后续差异日志包含旧值和新值。
 
 - [ ] **Step 4: 运行测试确认通过**
 
@@ -168,4 +168,3 @@ fix: stabilize 1688 sourcing pagination and suppliers
 - [ ] **Step 4: 合并到 dev_01 并复验**
 
 确认主工作区 `dev_01` 无用户新增改动后执行 fast-forward 合并。合并后重新运行相关后端和前端测试；除非用户另行要求，不推送远端。
-

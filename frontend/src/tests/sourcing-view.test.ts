@@ -345,6 +345,54 @@ describe('1688 sourcing view', () => {
     wrapper.unmount()
   })
 
+  it('shows a loading state immediately and while an unloaded page is pending', async () => {
+    let resolvePageRequest!: (value: {
+      searchId: string
+      status: 'pending'
+      page: number
+      pageSize: 20
+    }) => void
+    apiMock.getWorkflowSourcing
+      .mockResolvedValueOnce({
+        ...completedSummary,
+        pagination: { ...completedSummary.pagination!, totalRecords: 25, totalPages: 2 },
+      })
+      .mockResolvedValueOnce({
+        ...completedSummary,
+        offers: [],
+        pagination: {
+          ...completedSummary.pagination!,
+          page: 2,
+          totalRecords: 25,
+          totalPages: 2,
+          loaded: false,
+          status: 'pending',
+          resultCount: 0,
+        },
+      })
+    apiMock.requestWorkflowSourcingPage.mockImplementation(() => new Promise((resolve) => {
+      resolvePageRequest = resolve
+    }))
+
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.get('[data-test="next-sourcing-page"]').trigger('click')
+
+    expect(wrapper.find('[data-test="sourcing-running"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="sourcing-offer"]').exists()).toBe(false)
+    expect(wrapper.get<HTMLButtonElement>('[data-test="previous-sourcing-page"]').element.disabled)
+      .toBe(true)
+    expect(wrapper.get<HTMLSelectElement>('[data-test="sourcing-page-size"]').element.disabled)
+      .toBe(true)
+
+    resolvePageRequest({ searchId: 'search-1', status: 'pending', page: 2, pageSize: 20 })
+    await flushPromises()
+
+    expect(wrapper.find('[data-test="sourcing-running"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="sourcing-empty"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
   it('restores the requested search page from the URL', async () => {
     routeMock.query = { searchId: 'search-route', page: '2', pageSize: '50' }
     apiMock.getWorkflowSourcing.mockResolvedValue({

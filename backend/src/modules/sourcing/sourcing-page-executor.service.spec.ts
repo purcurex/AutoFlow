@@ -1,5 +1,10 @@
 import type { DataSource, EntityManager, ObjectLiteral, Repository } from 'typeorm'
-import type { Alibaba1688Service } from '../alibaba1688'
+import type {
+  Alibaba1688Service,
+  Alibaba1688StableOffer,
+  Alibaba1688StableProductDetail,
+  Alibaba1688StableSearchResult,
+} from '../alibaba1688'
 import { WorkflowRunEntity } from '../autoflow/entities'
 import {
   SourcingOfferEntity,
@@ -14,6 +19,74 @@ import {
 } from './sourcing-page-executor.service'
 
 describe('SourcingPageExecutorService', () => {
+  function stableOffer(index: number): Alibaba1688StableOffer {
+    return {
+      provider: 'alibaba_1688',
+      sourceTag: '1688货源',
+      offerId: `offer-${index}`,
+      offerUrl: `https://detail.1688.com/offer/offer-${index}.html`,
+      title: `Pet brush ${index}`,
+      translatedTitle: `Pet brush ${index}`,
+      imageUrl: `https://cbu01.alicdn.com/offer-${index}.jpg`,
+      price: {
+        currency: 'CNY',
+        amount: '8.80',
+        consignAmount: null,
+        selectedSupplyAmount: null,
+        promotionAmount: null,
+      },
+      minOrderQuantity: 1,
+      monthSold: 20,
+      repurchaseRate: '0.25',
+      onePieceDropshipping: true,
+      selectedSupply: false,
+      tradeScore: '4.5',
+      offerIdentities: [],
+      seller: {
+        openId: null,
+        companyName: null,
+        shopUrl: null,
+        identities: [],
+        tradeMedalLevel: null,
+        compositeServiceScore: null,
+        logisticsExperienceScore: null,
+        repeatPurchasePercent: null,
+      },
+    }
+  }
+
+  function stableDetail(offerId: string): Alibaba1688StableProductDetail {
+    return {
+      provider: 'alibaba_1688',
+      sourceTag: '1688货源',
+      offerId,
+      offerUrl: `https://detail.1688.com/offer/${offerId}.html`,
+      title: `Detail ${offerId}`,
+      translatedTitle: `Detail ${offerId}`,
+      description: null,
+      categoryId: 'pet-care',
+      categoryName: 'Pet care',
+      imageUrls: [`https://cbu01.alicdn.com/${offerId}.jpg`],
+      minOrderQuantity: 1,
+      status: 'published',
+      sold: 100,
+      tradeScore: '4.8',
+      sellingPoints: [],
+      skus: [],
+      seller: {
+        openId: `supplier-${offerId}`,
+        companyName: `Supplier ${offerId}`,
+        shopUrl: null,
+        identities: [],
+        tradeMedalLevel: null,
+        compositeServiceScore: '4.8',
+        logisticsExperienceScore: null,
+        repeatPurchasePercent: null,
+      },
+      affectsContactConfidence: false,
+    }
+  }
+
   function repository<T extends ObjectLiteral>() {
     return {
       count: jest.fn().mockResolvedValue(1),
@@ -41,6 +114,8 @@ describe('SourcingPageExecutorService', () => {
       imageId,
       languageCode: 'en',
       pageSize: 20,
+      totalRecords: null,
+      totalPages: null,
       requestPayload: { priceMin: '1.0000', priceMax: '10.0000' },
       status: 'running',
     } as unknown as SourcingSearchEntity
@@ -55,7 +130,7 @@ describe('SourcingPageExecutorService', () => {
     pages.count
       .mockResolvedValueOnce(1)
       .mockResolvedValueOnce(0)
-    const normalized = {
+    const normalized: Alibaba1688StableSearchResult = {
       provider: 'alibaba_1688',
       sourceTag: '1688货源',
       searchMode,
@@ -65,7 +140,7 @@ describe('SourcingPageExecutorService', () => {
       totalPages: 2,
       offers: [],
       affectsContactConfidence: false,
-    } as const
+    }
     const provider = {
       searchByKeyword: jest.fn().mockResolvedValue({
         provider: { result: { result: { data: [] } } },
@@ -123,7 +198,18 @@ describe('SourcingPageExecutorService', () => {
       maxAttempts: 3,
       leaseOwner: 'worker-1',
     }
-    return { service, page, provider, imageResolver, searches, pages, search }
+    return {
+      service,
+      page,
+      provider,
+      imageResolver,
+      searches,
+      pages,
+      offers,
+      suppliers,
+      search,
+      normalized,
+    }
   }
 
   it('requests the claimed keyword page and completes it under the same lease', async () => {
@@ -199,5 +285,119 @@ describe('SourcingPageExecutorService', () => {
       errorCode: null,
       errorMessage: null,
     }))
+  })
+
+  it('loads supplier details for every offer with at most five concurrent requests', async () => {
+    const { service, page, provider, normalized, offers, suppliers } = setup('keyword')
+    normalized.offers = Array.from({ length: 6 }, (_, index) => stableOffer(index + 1))
+    let activeRequests = 0
+    let maximumActiveRequests = 0
+    provider.getProductDetail.mockImplementation(async ({ offerId }) => {
+      activeRequests += 1
+      maximumActiveRequests = Math.max(maximumActiveRequests, activeRequests)
+      await new Promise<void>((resolve) => setImmediate(resolve))
+      activeRequests -= 1
+      return {
+        provider: {},
+        normalized: stableDetail(String(offerId)),
+        metadata: { requestId: `detail-${offerId}`, traceId: null },
+      } as Awaited<ReturnType<Alibaba1688Service['getProductDetail']>>
+    })
+
+    await service.executePage(page)
+
+    expect(provider.getProductDetail).toHaveBeenCalledTimes(6)
+    expect(maximumActiveRequests).toBe(5)
+    expect(offers.save).toHaveBeenCalledTimes(6)
+    expect(offers.save).toHaveBeenLastCalledWith(expect.objectContaining({
+      detailStatus: 'succeeded',
+      title: 'Pet brush 6',
+    }))
+    expect(suppliers.save).toHaveBeenLastCalledWith(expect.objectContaining({
+      companyName: 'Supplier offer-6',
+    }))
+  })
+
+  it('keeps the first-page total snapshot when a later page reports a different total', async () => {
+    const { service, search, searches, normalized } = setup('keyword')
+    search.totalRecords = '100'
+    search.totalPages = 5
+    normalized.totalRecords = 140
+    normalized.totalPages = 7
+
+    await service.executePage({
+      id: 'page-2',
+      searchId: 'search-1',
+      workflowRunId: 'workflow-1',
+      ownerUserId: 'owner-1',
+      pageNumber: 2,
+      pageSize: 20,
+      attempts: 1,
+      maxAttempts: 3,
+      leaseOwner: 'worker-1',
+    })
+
+    expect(searches.save).toHaveBeenCalledWith(expect.objectContaining({
+      totalRecords: '100',
+      totalPages: 5,
+    }))
+  })
+
+  it('persists the page when one supplier detail request fails', async () => {
+    const { service, page, provider, normalized, offers, pages } = setup('keyword')
+    normalized.offers = [stableOffer(1), stableOffer(2)]
+    provider.getProductDetail
+      .mockResolvedValueOnce({
+        provider: {},
+        normalized: stableDetail('offer-1'),
+        metadata: { requestId: 'detail-1', traceId: null },
+      } as Awaited<ReturnType<Alibaba1688Service['getProductDetail']>>)
+      .mockRejectedValueOnce(new Error('detail unavailable'))
+
+    await service.executePage(page)
+
+    expect(offers.save).toHaveBeenCalledTimes(2)
+    expect(offers.save).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      detailStatus: 'succeeded',
+    }))
+    expect(offers.save).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      detailStatus: 'failed',
+    }))
+    expect(pages.update).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'page-2' }),
+      expect.objectContaining({ status: 'succeeded', resultCount: 2 }),
+    )
+  })
+
+  it('deduplicates only identical products from the same supplier', async () => {
+    const { service, page, provider, normalized, offers } = setup('keyword')
+    normalized.offers = [stableOffer(1), stableOffer(2), stableOffer(3), stableOffer(4)]
+    const details = new Map<string, Alibaba1688StableProductDetail>()
+    for (const offerId of ['offer-1', 'offer-2', 'offer-3', 'offer-4']) {
+      const detail = stableDetail(offerId)
+      detail.title = offerId === 'offer-4' ? 'Different pet brush' : 'Identical pet brush'
+      detail.translatedTitle = detail.title
+      detail.imageUrls = ['https://cbu01.alicdn.com/identical-pet-brush.jpg']
+      detail.seller.openId = offerId === 'offer-3' ? 'supplier-other' : 'supplier-same'
+      detail.seller.companyName = offerId === 'offer-3' ? 'Other Supplier' : 'Same Supplier'
+      details.set(offerId, detail)
+    }
+    provider.getProductDetail.mockImplementation(async ({ offerId }) => ({
+      provider: {},
+      normalized: details.get(String(offerId))!,
+      metadata: { requestId: `detail-${offerId}`, traceId: null },
+    }) as Awaited<ReturnType<Alibaba1688Service['getProductDetail']>>)
+
+    await service.executePage(page)
+
+    const savedOffers = offers.save.mock.calls.map(([offer]) => offer)
+    expect(savedOffers).toHaveLength(3)
+    expect(savedOffers.map((offer) => offer.offerId)).toEqual([
+      'offer-1',
+      'offer-3',
+      'offer-4',
+    ])
+    expect(savedOffers.every((offer) => /^[a-f0-9]{64}$/.test(offer.productFingerprint!)))
+      .toBe(true)
   })
 })

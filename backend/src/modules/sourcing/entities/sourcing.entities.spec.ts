@@ -1,6 +1,7 @@
 import { getMetadataArgsStorage, type QueryRunner } from 'typeorm'
 import { AddAlibaba1688Sourcing1784724000000 } from '../../../database/migrations/1784724000000-AddAlibaba1688Sourcing'
 import { AddAlibaba1688SourcingPagination1784728000000 } from '../../../database/migrations/1784728000000-AddAlibaba1688SourcingPagination'
+import { AddSourcingOfferProductFingerprint1784729000000 } from '../../../database/migrations/1784729000000-AddSourcingOfferProductFingerprint'
 import {
   SourcingOfferEntity,
   SourcingSearchPageEntity,
@@ -85,6 +86,7 @@ describe('sourcing persistence entities', () => {
         'offerId',
         'offerUrl',
         'priceTiers',
+        'productFingerprint',
         'sourcingScore',
         'sourcingScoreReasons',
         'rawSnapshot',
@@ -128,6 +130,7 @@ describe('sourcing persistence entities', () => {
         'idx_sourcing_suppliers_owner_rating',
         'idx_sourcing_offers_owner_score',
         'idx_sourcing_offers_provider_offer',
+        'uq_sourcing_offers_search_provider_fingerprint',
       ]),
     )
     expect(checkNames).toEqual(
@@ -156,6 +159,25 @@ describe('sourcing persistence entities', () => {
     expect(relation(SourcingOfferEntity, 'search')?.options.onDelete).toBe('CASCADE')
     expect(relation(SourcingOfferEntity, 'supplier')?.options.onDelete).toBe('SET NULL')
     expect(relations.map((metadata) => metadata.propertyName)).not.toContain('lead')
+  })
+})
+
+describe('AddSourcingOfferProductFingerprint migration', () => {
+  it('adds a nullable fingerprint with a reversible search-scoped unique index', async () => {
+    const upRunner = { query: jest.fn().mockResolvedValue(undefined) } as unknown as QueryRunner
+    const downRunner = { query: jest.fn().mockResolvedValue(undefined) } as unknown as QueryRunner
+    const migration = new AddSourcingOfferProductFingerprint1784729000000()
+
+    await migration.up(upRunner)
+    await migration.down(downRunner)
+
+    const upSql = (upRunner.query as jest.Mock).mock.calls.map(([sql]) => sql).join('\n')
+    const downSql = (downRunner.query as jest.Mock).mock.calls.map(([sql]) => sql).join('\n')
+    expect(upSql).toContain('ADD COLUMN "product_fingerprint" varchar(64)')
+    expect(upSql).toContain('"search_id", "provider", "product_fingerprint"')
+    expect(upSql).toContain('WHERE "product_fingerprint" IS NOT NULL')
+    expect(downSql).toContain('DROP INDEX IF EXISTS "uq_sourcing_offers_search_provider_fingerprint"')
+    expect(downSql).toContain('DROP COLUMN IF EXISTS "product_fingerprint"')
   })
 })
 

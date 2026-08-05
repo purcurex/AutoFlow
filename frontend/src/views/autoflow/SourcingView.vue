@@ -41,6 +41,7 @@ const { t } = useI18n()
 const summary = ref<SourcingSummary | null>(null)
 const loading = ref(true)
 const starting = ref(false)
+const pageChanging = ref(false)
 const loadError = ref('')
 const searchId = ref(typeof route.query?.searchId === 'string' ? route.query.searchId : '')
 const parsedPage = Number(route.query?.page || 1)
@@ -63,10 +64,11 @@ const search = computed(() => currentSourcingSearch(summary.value))
 const offers = computed(() => summary.value?.items ?? summary.value?.offers ?? [])
 const pagination = computed(() => summary.value?.pagination)
 const running = computed(() => isSourcingRunning(summary.value))
+const pageBusy = computed(() => pageChanging.value || running.value)
 const canStart = computed(() => Boolean(
   workflowId.value
   && summary.value?.providerConfigured
-  && !running.value
+  && !pageBusy.value
   && !starting.value,
 ))
 
@@ -129,7 +131,12 @@ async function restartSourcing() {
 
 async function changePage(targetPage: number) {
   const totalPages = pagination.value?.totalPages
-  if (!searchId.value || targetPage < 1 || (totalPages !== null && totalPages !== undefined && targetPage > totalPages)) return
+  if (
+    pageBusy.value
+    || !searchId.value
+    || targetPage < 1
+    || (totalPages !== null && totalPages !== undefined && targetPage > totalPages)
+  ) return
   stopPolling()
   page.value = targetPage
   const cached = pageCache.get(targetPage)
@@ -138,25 +145,36 @@ async function changePage(targetPage: number) {
     syncRoute()
     return
   }
+  pageChanging.value = true
   loadError.value = ''
   try {
     await sourcingApi.requestWorkflowSourcingPage(workflowId.value, searchId.value, targetPage)
     await loadSourcing(false)
   } catch (error) {
     loadError.value = error instanceof Error ? error.message : t('sourcing.loadFailed')
+  } finally {
+    pageChanging.value = false
   }
 }
 
 async function retryCurrentPage() {
-  if (!searchId.value) return
+  if (!searchId.value || pageBusy.value) return
   pageCache.delete(page.value)
-  await sourcingApi.requestWorkflowSourcingPage(workflowId.value, searchId.value, page.value)
-  await loadSourcing(false)
+  pageChanging.value = true
+  loadError.value = ''
+  try {
+    await sourcingApi.requestWorkflowSourcingPage(workflowId.value, searchId.value, page.value)
+    await loadSourcing(false)
+  } catch (error) {
+    loadError.value = error instanceof Error ? error.message : t('sourcing.loadFailed')
+  } finally {
+    pageChanging.value = false
+  }
 }
 
 async function changePageSize(event: Event) {
   const value = Number((event.target as HTMLSelectElement).value)
-  if (![10, 20, 50].includes(value) || value === pageSize.value) return
+  if (pageBusy.value || ![10, 20, 50].includes(value) || value === pageSize.value) return
   pageSize.value = value as 10 | 20 | 50
   await restartSourcing()
 }
@@ -328,7 +346,7 @@ function offerLink(offer: SourcingOffer) {
           <p>{{ search?.failureMessage || t('sourcing.searchFailedHint') }}</p>
         </div>
 
-        <div v-else-if="status === 'running' && !offers.length" class="empty-state" data-test="sourcing-running">
+        <div v-else-if="pageBusy" class="empty-state" data-test="sourcing-running">
           <LoaderCircle class="h-7 w-7 animate-spin text-orange-500" />
           <p class="font-bold text-slate-950 dark:text-white">{{ t('sourcing.searchRunning') }}</p>
           <p>{{ t('sourcing.searchRunningHint') }}</p>
@@ -483,6 +501,7 @@ function offerLink(offer: SourcingOffer) {
           <div class="flex items-center gap-2">
             <select
               :value="pageSize"
+              :disabled="pageBusy || starting"
               class="input h-9 w-20 py-1"
               data-test="sourcing-page-size"
               @change="changePageSize"
@@ -495,7 +514,7 @@ function offerLink(offer: SourcingOffer) {
               type="button"
               class="btn btn-secondary"
               data-test="previous-sourcing-page"
-              :disabled="page <= 1"
+              :disabled="pageBusy || page <= 1"
               @click="changePage(page - 1)"
             >
               {{ t('sourcing.previousPage') }}
@@ -505,7 +524,7 @@ function offerLink(offer: SourcingOffer) {
               type="button"
               class="btn btn-secondary"
               data-test="next-sourcing-page"
-              :disabled="pagination?.totalPages === null || page >= (pagination?.totalPages ?? page)"
+              :disabled="pageBusy || pagination?.totalPages === null || page >= (pagination?.totalPages ?? page)"
               @click="changePage(page + 1)"
             >
               {{ t('sourcing.nextPage') }}
