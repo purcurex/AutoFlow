@@ -27,6 +27,7 @@ import {
   WORKFLOW_STAGES,
   WorkflowDeletionImpact,
   WorkflowFailureCode,
+  WorkflowFailureProvider,
   WorkflowRun,
 } from './autoflow.types'
 import {
@@ -48,6 +49,7 @@ import type { NormalizedContactEvidence, NormalizedShopifyStore } from '../disco
 import { calculateContactScore } from '../discovery/contact-scoring'
 import { User } from '../users/user.entity'
 import { WorkflowSeedAssetService } from './workflow-seed-asset.service'
+import { deriveCustomerDiscoveryStatus } from './customer-discovery-status'
 
 @Injectable()
 export class AutoflowService {
@@ -81,6 +83,7 @@ export class AutoflowService {
         this.leadRepository.count({ where: { ownerUserId, status: 'opportunity' } }),
         this.workflowRepository.find({
           where: { ownerUserId, archivedAt: IsNull() },
+          relations: { steps: true },
           order: { createdAt: 'DESC' },
           take: 5,
         }),
@@ -122,16 +125,33 @@ export class AutoflowService {
       skip: (page - 1) * pageSize,
       take: pageSize,
     })
-    const jobs = items.length > 0
-      ? await this.workflowJobRepository.find({
-          where: { ownerUserId, workflowRunId: In(items.map((workflow) => workflow.id)) },
-        })
-      : []
+    const workflowIds = items.map((workflow) => workflow.id)
+    const [jobs, steps] = items.length > 0
+      ? await Promise.all([
+          this.workflowJobRepository.find({
+            where: { ownerUserId, workflowRunId: In(workflowIds) },
+          }),
+          // 当前页一次性读取客户发现步骤，避免列表按工作流逐条查询产生 N+1。
+          this.workflowStepRepository.find({
+            where: {
+              workflowRunId: In(workflowIds),
+              stage: In(['ad_discovery', 'store_detection']),
+            },
+          }),
+        ])
+      : [[], []]
     const failureReasonByWorkflow = new Map(jobs.map((job) => [job.workflowRunId, job.lastError]))
+    const stepsByWorkflow = new Map<string, WorkflowStepEntity[]>()
+    for (const step of steps) {
+      const workflowSteps = stepsByWorkflow.get(step.workflowRunId) || []
+      workflowSteps.push(step)
+      stepsByWorkflow.set(step.workflowRunId, workflowSteps)
+    }
     return {
       items: items.map((workflow) => this.mapWorkflow(
         workflow,
         failureReasonByWorkflow.get(workflow.id) || null,
+        stepsByWorkflow.get(workflow.id) || [],
       )),
       total,
       page,
@@ -148,12 +168,18 @@ export class AutoflowService {
   }
 
   async getWorkflow(ownerUserId: string, id: string): Promise<WorkflowRun> {
-    const [workflow, job] = await Promise.all([
-      this.workflowRepository.findOne({ where: { id, ownerUserId } }),
-      this.workflowJobRepository.findOne({ where: { workflowRunId: id, ownerUserId } }),
-    ])
+    const workflow = await this.workflowRepository.findOne({ where: { id, ownerUserId } })
     if (!workflow) throw new NotFoundException('Workflow not found')
-    return this.mapWorkflow(workflow, job?.lastError || null)
+    const [job, steps] = await Promise.all([
+      this.workflowJobRepository.findOne({ where: { workflowRunId: id, ownerUserId } }),
+      this.workflowStepRepository.find({
+        where: {
+          workflowRunId: id,
+          stage: In(['ad_discovery', 'store_detection']),
+        },
+      }),
+    ])
+    return this.mapWorkflow(workflow, job?.lastError || null, steps)
   }
 
   async getWorkflowDeletionImpact(ownerUserId: string, id: string): Promise<WorkflowDeletionImpact> {
@@ -725,7 +751,11 @@ export class AutoflowService {
     return null
   }
 
-  private mapWorkflow(workflow: WorkflowRunEntity, failureReason: string | null = null): WorkflowRun {
+  private mapWorkflow(
+    workflow: WorkflowRunEntity,
+    failureReason: string | null = null,
+    steps: WorkflowStepEntity[] = workflow.steps || [],
+  ): WorkflowRun {
     const failure = this.classifyWorkflowFailure(failureReason)
     return {
       id: workflow.id,
@@ -749,6 +779,7 @@ export class AutoflowService {
       currentStage: workflow.currentStage,
       progress: workflow.progress,
       leadCount: workflow.leadCount,
+      customerDiscoveryStatus: deriveCustomerDiscoveryStatus(workflow.status, steps),
       failureReason,
       failureCode: failure?.code || null,
       failureProvider: failure?.provider || null,
@@ -770,7 +801,7 @@ export class AutoflowService {
 
   private classifyWorkflowFailure(failureReason: string | null): {
     code: WorkflowFailureCode
-    provider: 'pipiads' | 'google_lens' | 'google_search' | null
+    provider: WorkflowFailureProvider | null
     retryable: boolean
   } | null {
     if (!failureReason) return null
@@ -778,11 +809,15 @@ export class AutoflowService {
       ? 'pipiads'
       : /google lens/i.test(failureReason)
         ? 'google_lens'
-        : /google search|serpapi/i.test(failureReason) ? 'google_search' : null
+        : /google search|serpapi/i.test(failureReason)
+          ? 'google_search'
+          : /PUBLIC_ASSET_BASE_URL|only available locally|publicly reachable/i.test(failureReason)
+            ? 'customer_discovery'
+            : null
     if (/442|credits? (are )?insufficient|balance|余额不足/i.test(failureReason)) {
       return { code: 'insufficient_credits', provider, retryable: false }
     }
-    if (/image.*(fetch|download|unreachable|failed)|获取图片失败|public asset/i.test(failureReason)) {
+    if (/image.*(fetch|download|unreachable|failed|only available locally)|获取图片失败|public[_\s]asset|publicly reachable/i.test(failureReason)) {
       return { code: 'image_unreachable', provider, retryable: false }
     }
     if (/no results|returned no|not returned any results|zero results/i.test(failureReason)) {

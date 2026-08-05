@@ -1,3 +1,4 @@
+import type { CustomerDiscoveryStatus } from '../autoflow/autoflow.types'
 import type { SourcingSearchMode } from './sourcing.types'
 
 export type SourcingApiStatus =
@@ -95,6 +96,7 @@ export interface SourcingWorkflowInputResponse {
 export interface SourcingSummaryResponse {
   workflowId: string
   workflowInput: SourcingWorkflowInputResponse
+  customerDiscoveryStatus: CustomerDiscoveryStatus
   provider: 'alibaba_1688'
   providerConfigured: boolean
   status: SourcingApiStatus

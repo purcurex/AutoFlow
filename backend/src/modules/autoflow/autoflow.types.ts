@@ -33,6 +33,19 @@ export type WorkflowStage = (typeof WORKFLOW_STAGES)[number]
 export const WORKFLOW_STEP_STATUSES = ['pending', 'running', 'completed', 'failed', 'skipped'] as const
 export type WorkflowStepStatus = (typeof WORKFLOW_STEP_STATUSES)[number]
 
+export type CustomerDiscoveryStatus =
+  | 'not_started'
+  | 'running'
+  | 'completed'
+  | 'pending_public_image'
+  | 'failed'
+
+export type WorkflowFailureProvider =
+  | 'pipiads'
+  | 'google_lens'
+  | 'google_search'
+  | 'customer_discovery'
+
 export const WORKFLOW_FAILURE_CODES = [
   'provider_unavailable',
   'insufficient_credits',
@@ -134,9 +147,10 @@ export interface WorkflowRun {
   currentStage: WorkflowStage
   progress: number
   leadCount: number
+  customerDiscoveryStatus: CustomerDiscoveryStatus
   failureReason: string | null
   failureCode: WorkflowFailureCode | null
-  failureProvider: 'pipiads' | 'google_lens' | 'google_search' | null
+  failureProvider: WorkflowFailureProvider | null
   failureRetryable: boolean
   archivedAt: string | null
   createdAt: string

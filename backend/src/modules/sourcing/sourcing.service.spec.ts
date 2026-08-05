@@ -528,12 +528,20 @@ describe('SourcingService asynchronous pagination', () => {
   })
 
   it('returns workflow matching input before the first sourcing task exists', async () => {
-    const { service } = createService()
+    const { service, workflow } = createService()
+    workflow.status = 'completed'
+    workflow.steps = [{
+      workflowRunId,
+      stage: 'ad_discovery',
+      status: 'skipped',
+      output: { reasonCode: 'public_image_not_configured' },
+    } as never]
 
     const result = await service.getSummary(ownerUserId, workflowRunId)
 
     expect(result.status).toBe('idle')
     expect(result.search).toBeNull()
+    expect(result.customerDiscoveryStatus).toBe('pending_public_image')
     expect(result.workflowInput).toEqual({
       name: 'Pet brush prospecting',
       seedType: 'keyword',

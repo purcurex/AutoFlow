@@ -10,6 +10,7 @@ import { createHash, randomUUID } from 'crypto'
 import { DataSource, In, Repository } from 'typeorm'
 import { Alibaba1688Service } from '../alibaba1688'
 import { WorkflowRunEntity } from '../autoflow/entities'
+import { deriveCustomerDiscoveryStatus } from '../autoflow/customer-discovery-status'
 import { ListSourcingDto } from './dto/list-sourcing.dto'
 import { StartSourcingDto } from './dto/start-sourcing.dto'
 import {
@@ -68,6 +69,10 @@ export class SourcingService {
   ): Promise<SourcingSummaryResponse> {
     const workflow = await this.requireWorkflow(ownerUserId, workflowRunId)
     const workflowInput = this.mapWorkflowInput(workflow)
+    const customerDiscoveryStatus = deriveCustomerDiscoveryStatus(
+      workflow.status,
+      workflow.steps || [],
+    )
     const readiness = this.alibaba1688Service.getReadiness()
     const pageNumber = query.page || 1
     const requestedPageSize = query.pageSize
@@ -83,6 +88,7 @@ export class SourcingService {
       return {
         workflowId: workflowRunId,
         workflowInput,
+        customerDiscoveryStatus,
         provider: SOURCING_PROVIDER,
         providerConfigured: readiness.ready,
         status: readiness.ready ? 'idle' : 'not_configured',
@@ -131,6 +137,7 @@ export class SourcingService {
     return {
       workflowId: workflowRunId,
       workflowInput,
+      customerDiscoveryStatus,
       provider: SOURCING_PROVIDER,
       providerConfigured: readiness.ready,
       status: this.apiStatus(search.status),
@@ -442,6 +449,7 @@ export class SourcingService {
   ): Promise<WorkflowRunEntity> {
     const workflow = await this.workflowRepository.findOne({
       where: { id: workflowRunId, ownerUserId },
+      relations: { steps: true },
     })
     if (!workflow) throw new NotFoundException('Workflow not found')
     return workflow
