@@ -283,7 +283,7 @@ const en = {
     retryPage: 'Reload This Page',
     resultRange: 'Items {start}-{end} / Total {total}',
     resultWindowLimit: 'Current accessible limit',
-    providerResultEstimate: 'Estimated by 1688',
+    providerResultEstimate: '1688 Estimated Matches',
     continueResults: 'Find 100 More',
     continuingResults: 'Finding More…',
     extendFailed: 'Unable to find more results. Try again.',
