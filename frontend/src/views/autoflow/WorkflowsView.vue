@@ -68,6 +68,9 @@ const lifecycleBusy = ref(false)
 let disposed = false
 let revisionLoadSequence = 0
 let isSynchronizingForm = false
+let workflowRefreshTimer: ReturnType<typeof setTimeout> | null = null
+let workflowRefreshInFlight = false
+const WORKFLOW_REFRESH_INTERVAL_MS = 1_000
 const form = reactive({
   name: '',
   seedType: 'keyword' as SeedType,
@@ -182,6 +185,7 @@ const viewMode = computed(() => props.reviseId
   : props.create ? 'create' : 'list')
 
 watch(viewMode, async (mode) => {
+  stopWorkflowRefresh()
   // 同一个页面组件会被路由复用，因此必须按路由模式变化重新初始化，而不能只依赖 onMounted。
   await resetWorkflowForm()
   if (mode.startsWith('revise:') && props.reviseId) {
@@ -193,11 +197,14 @@ watch(viewMode, async (mode) => {
       await store.fetchWorkflows()
     } catch {
       if (!disposed && viewMode.value === mode) actionMessage.value = t('workflows.loadFailed')
+    } finally {
+      scheduleWorkflowRefresh()
     }
   }
 }, { immediate: true })
 onBeforeUnmount(() => {
   disposed = true
+  stopWorkflowRefresh()
   if (imagePreviewUrl.value) URL.revokeObjectURL(imagePreviewUrl.value)
 })
 const title = computed(() => props.reviseId
@@ -330,20 +337,68 @@ async function startDiscovery(workflowId: string) {
   actionMessage.value = ''
   try {
     await store.startDiscovery(workflowId)
-    for (let attempt = 0; attempt < 60 && !disposed; attempt += 1) {
-      await new Promise((resolve) => setTimeout(resolve, 500))
-      await store.fetchWorkflows()
-      const workflow = store.workflows.find((item) => item.id === workflowId)
-      if (!workflow || workflow.status !== 'running') {
-        actionMessage.value = workflow?.status === 'completed'
-          ? t('workflows.completed')
-          : workflow?.failureReason || t('workflows.stopped')
-        break
-      }
-    }
+    scheduleWorkflowRefresh()
   } catch (error) {
+    activeWorkflowIds.delete(workflowId)
     actionMessage.value = error instanceof Error ? error.message : t('workflows.startFailed')
+  }
+}
+
+/**
+ * 只要列表中仍有运行任务，就持续安排下一次刷新；同一时刻只保留一个定时器。
+ */
+function scheduleWorkflowRefresh() {
+  stopWorkflowRefresh()
+  if (
+    disposed
+    || viewMode.value !== 'list'
+    || !store.workflows.some((workflow) => workflow.status === 'running')
+  ) return
+
+  workflowRefreshTimer = setTimeout(() => {
+    void refreshRunningWorkflows()
+  }, WORKFLOW_REFRESH_INTERVAL_MS)
+}
+
+function stopWorkflowRefresh() {
+  if (!workflowRefreshTimer) return
+  clearTimeout(workflowRefreshTimer)
+  workflowRefreshTimer = null
+}
+
+/**
+ * 串行刷新运行中工作流，接口短暂失败时保留现有数据并在下一周期重试。
+ */
+async function refreshRunningWorkflows() {
+  workflowRefreshTimer = null
+  if (disposed || viewMode.value !== 'list') return
+  if (workflowRefreshInFlight) {
+    scheduleWorkflowRefresh()
+    return
+  }
+
+  workflowRefreshInFlight = true
+  try {
+    await store.fetchWorkflows()
+    resolveStartedWorkflowMessages()
+  } catch {
+    // 后台刷新失败不覆盖当前页面数据；运行状态仍在时会继续安排下一次刷新。
   } finally {
+    workflowRefreshInFlight = false
+    scheduleWorkflowRefresh()
+  }
+}
+
+/**
+ * 用户从当前页面启动的工作流结束后，补充原有完成/失败提示并解除按钮占用状态。
+ */
+function resolveStartedWorkflowMessages() {
+  for (const workflowId of [...activeWorkflowIds]) {
+    const workflow = store.workflows.find((item) => item.id === workflowId)
+    if (workflow?.status === 'running') continue
+    actionMessage.value = workflow?.status === 'completed'
+      ? t('workflows.completed')
+      : workflow?.failureReason || t('workflows.stopped')
     activeWorkflowIds.delete(workflowId)
   }
 }

@@ -1,5 +1,5 @@
 import { flushPromises, mount } from '@vue/test-utils'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import WorkflowsView from '@/views/autoflow/WorkflowsView.vue'
 import type { WorkflowRun } from '@/api/autoflow'
 
@@ -253,5 +253,62 @@ describe('workflow dual-mode status', () => {
       .toContain('workflows.failureProvider_customer_discovery')
     expect(wrapper.get('[data-test="workflow-failure-provider"]').text())
       .not.toContain('common.unknown')
+  })
+})
+
+describe('workflow running progress refresh', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    vi.clearAllMocks()
+    storeMock.workflows = []
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('keeps refreshing an already-running workflow and stops after it completes', async () => {
+    let refreshCount = 0
+    storeMock.fetchWorkflows.mockImplementation(async () => {
+      refreshCount += 1
+      storeMock.workflows = [{
+        ...workflowFixture,
+        status: refreshCount === 1 ? 'running' : 'completed',
+        progress: refreshCount === 1 ? 55 : 100,
+        customerDiscoveryStatus: refreshCount === 1 ? 'running' : 'completed',
+      }]
+    })
+    const wrapper = mountWorkflowView({})
+    await flushPromises()
+
+    expect(storeMock.fetchWorkflows).toHaveBeenCalledTimes(1)
+    await vi.advanceTimersByTimeAsync(1_000)
+    await flushPromises()
+    expect(storeMock.fetchWorkflows).toHaveBeenCalledTimes(2)
+
+    await vi.advanceTimersByTimeAsync(3_000)
+    await flushPromises()
+    expect(storeMock.fetchWorkflows).toHaveBeenCalledTimes(2)
+    wrapper.unmount()
+  })
+
+  it('cancels the running-workflow refresh when leaving the page', async () => {
+    storeMock.fetchWorkflows.mockImplementation(async () => {
+      storeMock.workflows = [{
+        ...workflowFixture,
+        status: 'running',
+        progress: 55,
+        customerDiscoveryStatus: 'running',
+      }]
+    })
+    const wrapper = mountWorkflowView({})
+    await flushPromises()
+    expect(storeMock.fetchWorkflows).toHaveBeenCalledTimes(1)
+
+    wrapper.unmount()
+    await vi.advanceTimersByTimeAsync(3_000)
+    await flushPromises()
+
+    expect(storeMock.fetchWorkflows).toHaveBeenCalledTimes(1)
   })
 })
