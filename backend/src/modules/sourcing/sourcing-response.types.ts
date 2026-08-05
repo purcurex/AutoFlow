@@ -34,11 +34,23 @@ export interface SourcingPageRequestResponse {
   pageSize: 10 | 20 | 50
 }
 
+export interface SourcingWindowResponse {
+  searchId: string
+  totalRecords: number | null
+  totalPages: number | null
+  providerTotalRecords: number | null
+  resultLimit: number
+  canExpand: boolean
+}
+
 export interface SourcingPagination {
   page: number
   pageSize: 10 | 20 | 50
   totalRecords: number | null
   totalPages: number | null
+  providerTotalRecords: number | null
+  resultLimit: number
+  canExpand: boolean
   resultCount: number
   loaded: boolean
   status: 'pending' | 'running' | 'succeeded' | 'failed'

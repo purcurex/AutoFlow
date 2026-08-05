@@ -39,6 +39,7 @@ import { SourcingSearchPageEntity } from './sourcing-search-page.entity'
   'chk_sourcing_searches_status',
   "status IN ('pending', 'running', 'succeeded', 'partial', 'failed', 'cancelled')",
 )
+@Check('chk_sourcing_searches_result_limit', 'result_limit >= 100 AND result_limit % 100 = 0')
 export class SourcingSearchEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string
@@ -93,6 +94,9 @@ export class SourcingSearchEntity {
 
   @Column({ name: 'page_size', type: 'integer', default: 20 })
   pageSize: number
+
+  @Column({ name: 'result_limit', type: 'integer', default: 100 })
+  resultLimit: number
 
   @Column({ name: 'loaded_page_count', type: 'integer', default: 0 })
   loadedPageCount: number

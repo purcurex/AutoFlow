@@ -11,6 +11,22 @@ import { SourcingService } from './sourcing.service'
 import { ListSourcingDto } from './dto/list-sourcing.dto'
 import type { SourcingPageCacheService } from './sourcing-page-cache.service'
 
+interface ResultWindowService {
+  extendResultWindow(
+    ownerUserId: string,
+    workflowRunId: string,
+    searchId: string,
+    targetLimit: number,
+  ): Promise<{
+    searchId: string
+    totalRecords: number | null
+    totalPages: number | null
+    providerTotalRecords: number | null
+    resultLimit: number
+    canExpand: boolean
+  }>
+}
+
 describe('SourcingService asynchronous pagination', () => {
   const ownerUserId = 'd90f3d90-7f2b-45e7-9c8f-88fa0d915c8d'
   const otherOwnerUserId = '11111111-1111-4111-8111-111111111111'
@@ -92,6 +108,7 @@ describe('SourcingService asynchronous pagination', () => {
       searchMode: 'keyword',
       keyword: 'pet brush',
       imageUrl: null,
+      resultLimit: 100,
       queryFingerprint: expect.stringMatching(/^[a-f0-9]{64}$/),
       cacheFingerprint: expect.stringMatching(/^[a-f0-9]{64}$/),
       requestPayload: expect.objectContaining({
@@ -190,6 +207,8 @@ describe('SourcingService asynchronous pagination', () => {
       workflowRunId,
       pageSize: 20,
       totalPages: 3,
+      totalRecords: '60',
+      resultLimit: 100,
     } as SourcingSearchEntity)
     pages.findOne.mockResolvedValue({
       searchId,
@@ -200,6 +219,107 @@ describe('SourcingService asynchronous pagination', () => {
     await expect(service.requestPage(ownerUserId, workflowRunId, searchId, 2))
       .resolves.toMatchObject({ searchId, page: 2, status: 'pending' })
     expect(pages.save).not.toHaveBeenCalled()
+  })
+
+  it('rejects provider pages that are outside the current 100-item result window', async () => {
+    const { service, searches, pages } = createService()
+    searches.findOne.mockResolvedValue({
+      id: searchId,
+      ownerUserId,
+      workflowRunId,
+      pageSize: 20,
+      totalRecords: '574',
+      totalPages: 29,
+      resultLimit: 100,
+    } as SourcingSearchEntity)
+
+    await expect(service.requestPage(ownerUserId, workflowRunId, searchId, 6))
+      .rejects.toBeInstanceOf(BadRequestException)
+    expect(pages.findOne).not.toHaveBeenCalled()
+  })
+
+  it('extends the accessible result window by exactly 100 records', async () => {
+    const { service, searches } = createService()
+    const search = {
+      id: searchId,
+      ownerUserId,
+      workflowRunId,
+      pageSize: 20,
+      totalRecords: '574',
+      totalPages: 29,
+      resultLimit: 100,
+    } as SourcingSearchEntity
+    searches.findOne.mockResolvedValue(search)
+
+    const result = await (service as unknown as ResultWindowService)
+      .extendResultWindow(ownerUserId, workflowRunId, searchId, 200)
+
+    expect(result).toEqual({
+      searchId,
+      totalRecords: 200,
+      totalPages: 10,
+      providerTotalRecords: 574,
+      resultLimit: 200,
+      canExpand: true,
+    })
+    expect(searches.findOne).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: searchId, ownerUserId, workflowRunId },
+      lock: { mode: 'pessimistic_write' },
+    }))
+    expect(searches.save).toHaveBeenCalledWith(expect.objectContaining({ resultLimit: 200 }))
+  })
+
+  it('treats a repeated target result limit as an idempotent retry', async () => {
+    const { service, searches } = createService()
+    searches.findOne.mockResolvedValue({
+      id: searchId,
+      ownerUserId,
+      workflowRunId,
+      pageSize: 20,
+      totalRecords: '574',
+      totalPages: 29,
+      resultLimit: 200,
+    } as SourcingSearchEntity)
+
+    await expect((service as unknown as ResultWindowService)
+      .extendResultWindow(ownerUserId, workflowRunId, searchId, 200))
+      .resolves.toMatchObject({ resultLimit: 200, totalRecords: 200 })
+    expect(searches.save).not.toHaveBeenCalled()
+  })
+
+  it('rejects skipping more than one 100-item result window', async () => {
+    const { service, searches } = createService()
+    searches.findOne.mockResolvedValue({
+      id: searchId,
+      ownerUserId,
+      workflowRunId,
+      pageSize: 20,
+      totalRecords: '574',
+      totalPages: 29,
+      resultLimit: 100,
+    } as SourcingSearchEntity)
+
+    await expect((service as unknown as ResultWindowService)
+      .extendResultWindow(ownerUserId, workflowRunId, searchId, 300))
+      .rejects.toBeInstanceOf(BadRequestException)
+    expect(searches.save).not.toHaveBeenCalled()
+  })
+
+  it('requires the first provider page before extending the result window', async () => {
+    const { service, searches } = createService()
+    searches.findOne.mockResolvedValue({
+      id: searchId,
+      ownerUserId,
+      workflowRunId,
+      pageSize: 20,
+      totalRecords: null,
+      totalPages: null,
+      resultLimit: 100,
+    } as SourcingSearchEntity)
+
+    await expect((service as unknown as ResultWindowService)
+      .extendResultWindow(ownerUserId, workflowRunId, searchId, 200))
+      .rejects.toBeInstanceOf(BadRequestException)
   })
 
   it('returns a restored cache page without queuing a worker page', async () => {
@@ -290,6 +410,7 @@ describe('SourcingService asynchronous pagination', () => {
       pageSize: 20,
       totalRecords: '25',
       totalPages: 2,
+      resultLimit: 100,
       loadedPageCount: 1,
       keyword: 'pet brush',
       imageUrl: null,
@@ -323,6 +444,9 @@ describe('SourcingService asynchronous pagination', () => {
       pageSize: 20,
       totalRecords: 25,
       totalPages: 2,
+      providerTotalRecords: 25,
+      resultLimit: 100,
+      canExpand: false,
       loaded: true,
       status: 'succeeded',
     })
@@ -349,6 +473,7 @@ describe('SourcingService asynchronous pagination', () => {
       pageSize: 10,
       totalRecords: '574',
       totalPages: 58,
+      resultLimit: 100,
       loadedPageCount: 1,
       keyword: 'pet brush',
       imageUrl: null,
@@ -376,7 +501,13 @@ describe('SourcingService asynchronous pagination', () => {
     } as ListSourcingDto)
 
     expect(result.pagination.pageSize).toBe(10)
-    expect(result.pagination.totalRecords).toBe(574)
+    expect(result.pagination).toMatchObject({
+      totalRecords: 100,
+      totalPages: 10,
+      providerTotalRecords: 574,
+      resultLimit: 100,
+      canExpand: true,
+    })
   })
 
   it('returns workflow matching input before the first sourcing task exists', async () => {

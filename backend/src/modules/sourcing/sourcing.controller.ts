@@ -16,6 +16,7 @@ import type { Request as ExpressRequest } from 'express'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
 import { StartSourcingDto } from './dto/start-sourcing.dto'
 import { ListSourcingDto } from './dto/list-sourcing.dto'
+import { ExtendSourcingWindowDto } from './dto/extend-sourcing-window.dto'
 import { SourcingService } from './sourcing.service'
 
 @Controller('autoflow/workflows/:workflowRunId/sourcing')
@@ -55,6 +56,22 @@ export class SourcingController {
       workflowRunId,
       searchId,
       pageNumber,
+    )
+  }
+
+  @Post('searches/:searchId/window')
+  @HttpCode(HttpStatus.OK)
+  extendResultWindow(
+    @Request() request: ExpressRequest,
+    @Param('workflowRunId', ParseUUIDPipe) workflowRunId: string,
+    @Param('searchId', ParseUUIDPipe) searchId: string,
+    @Body() body: ExtendSourcingWindowDto,
+  ) {
+    return this.sourcingService.extendResultWindow(
+      request.user!.userId,
+      workflowRunId,
+      searchId,
+      body.targetLimit,
     )
   }
 }

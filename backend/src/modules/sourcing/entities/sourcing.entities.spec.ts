@@ -3,6 +3,7 @@ import { AddAlibaba1688Sourcing1784724000000 } from '../../../database/migration
 import { AddAlibaba1688SourcingPagination1784728000000 } from '../../../database/migrations/1784728000000-AddAlibaba1688SourcingPagination'
 import { AddSourcingOfferProductFingerprint1784729000000 } from '../../../database/migrations/1784729000000-AddSourcingOfferProductFingerprint'
 import { AddSourcingResponseCacheMetadata1784730000000 } from '../../../database/migrations/1784730000000-AddSourcingResponseCacheMetadata'
+import { AddSourcingResultLimit1784731000000 } from '../../../database/migrations/1784731000000-AddSourcingResultLimit'
 import {
   SourcingOfferEntity,
   SourcingSearchPageEntity,
@@ -66,6 +67,7 @@ describe('sourcing persistence entities', () => {
         'providerRequestId',
         'providerMethod',
         'cacheFingerprint',
+        'resultLimit',
         'requestPayload',
         'errorCode',
         'errorMessage',
@@ -186,6 +188,24 @@ describe('AddSourcingResponseCacheMetadata migration', () => {
     expect(downSql).toContain('DROP COLUMN IF EXISTS "cache_fingerprint"')
     expect(downSql).toContain('DROP COLUMN IF EXISTS "cache_hit"')
     expect(downSql).toContain('DROP COLUMN IF EXISTS "cache_source_page_id"')
+  })
+})
+
+describe('AddSourcingResultLimit migration', () => {
+  it('adds a reversible 100-item result window constraint', async () => {
+    const upRunner = { query: jest.fn().mockResolvedValue(undefined) } as unknown as QueryRunner
+    const downRunner = { query: jest.fn().mockResolvedValue(undefined) } as unknown as QueryRunner
+    const migration = new AddSourcingResultLimit1784731000000()
+
+    await migration.up(upRunner)
+    await migration.down(downRunner)
+
+    const upSql = (upRunner.query as jest.Mock).mock.calls.map(([sql]) => sql).join('\n')
+    const downSql = (downRunner.query as jest.Mock).mock.calls.map(([sql]) => sql).join('\n')
+    expect(upSql).toContain('ADD COLUMN "result_limit" integer NOT NULL DEFAULT 100')
+    expect(upSql).toContain('CHECK ("result_limit" >= 100 AND "result_limit" % 100 = 0)')
+    expect(downSql).toContain('DROP CONSTRAINT IF EXISTS "chk_sourcing_searches_result_limit"')
+    expect(downSql).toContain('DROP COLUMN IF EXISTS "result_limit"')
   })
 })
 

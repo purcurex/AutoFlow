@@ -24,9 +24,20 @@ import type {
   SourcingSearchResponse,
   SourcingStartResponse,
   SourcingSummaryResponse,
+  SourcingWindowResponse,
 } from './sourcing-response.types'
 import { SOURCING_PROVIDER } from './sourcing.types'
 import { SourcingPageCacheService } from './sourcing-page-cache.service'
+
+export const SOURCING_RESULT_WINDOW_STEP = 100
+
+interface SourcingResultWindow {
+  totalRecords: number | null
+  totalPages: number | null
+  providerTotalRecords: number | null
+  resultLimit: number
+  canExpand: boolean
+}
 
 /**
  * 寻源命令与查询服务。
@@ -82,6 +93,9 @@ export class SourcingService {
           pageSize: (requestedPageSize || 20) as 10 | 20 | 50,
           totalRecords: null,
           totalPages: null,
+          providerTotalRecords: null,
+          resultLimit: SOURCING_RESULT_WINDOW_STEP,
+          canExpand: false,
           resultCount: 0,
           loaded: false,
           status: 'pending',
@@ -96,7 +110,8 @@ export class SourcingService {
     if (requestedPageSize !== undefined && requestedPageSize !== search.pageSize) {
       throw new BadRequestException('pageSize must match the sourcing search page size')
     }
-    if (search.totalPages !== null && pageNumber > search.totalPages) {
+    const resultWindow = this.resultWindow(search)
+    if (resultWindow.totalPages !== null && pageNumber > resultWindow.totalPages) {
       throw new BadRequestException('Requested sourcing page exceeds total pages')
     }
 
@@ -124,8 +139,7 @@ export class SourcingService {
       pagination: {
         page: pageNumber,
         pageSize: search.pageSize as 10 | 20 | 50,
-        totalRecords: search.totalRecords === null ? null : Number(search.totalRecords),
-        totalPages: search.totalPages,
+        ...resultWindow,
         resultCount: page?.resultCount || 0,
         loaded: page?.status === 'succeeded',
         status: page?.status || 'pending',
@@ -218,6 +232,7 @@ export class SourcingService {
         totalRecords: null,
         totalPages: null,
         pageSize,
+        resultLimit: SOURCING_RESULT_WINDOW_STEP,
         loadedPageCount: 0,
         queryFingerprint,
         cacheFingerprint,
@@ -277,7 +292,8 @@ export class SourcingService {
     if (search.totalPages === null && pageNumber > 1) {
       throw new BadRequestException('Load the first sourcing page before requesting later pages')
     }
-    if (search.totalPages !== null && pageNumber > search.totalPages) {
+    const resultWindow = this.resultWindow(search)
+    if (resultWindow.totalPages !== null && pageNumber > resultWindow.totalPages) {
       throw new BadRequestException('Requested sourcing page exceeds total pages')
     }
 
@@ -445,6 +461,87 @@ export class SourcingService {
       requestedAt: search.requestedAt.toISOString(),
       startedAt: search.startedAt?.toISOString() ?? null,
       completedAt: search.completedAt?.toISOString() ?? null,
+    }
+  }
+
+  /**
+   * 只开放下一批100条结果，不预取商品。targetLimit采用目标值语义，同一请求重复到达时保持幂等。
+   * 行锁确保并发请求按数据库中的最新窗口判断，避免一次双击意外增加两个窗口。
+   */
+  async extendResultWindow(
+    ownerUserId: string,
+    workflowRunId: string,
+    searchId: string,
+    targetLimit: number,
+  ): Promise<SourcingWindowResponse> {
+    if (
+      !Number.isInteger(targetLimit)
+      || targetLimit < SOURCING_RESULT_WINDOW_STEP
+      || targetLimit % SOURCING_RESULT_WINDOW_STEP !== 0
+    ) {
+      throw new BadRequestException('Sourcing result limit must be a positive multiple of 100')
+    }
+
+    return this.dataSource.transaction(async (manager) => {
+      const searchRepository = manager.getRepository(SourcingSearchEntity)
+      const search = await searchRepository.findOne({
+        where: { id: searchId, ownerUserId, workflowRunId },
+        lock: { mode: 'pessimistic_write' },
+      })
+      if (!search) throw new NotFoundException('Sourcing search not found')
+      if (search.totalRecords === null) {
+        throw new BadRequestException('Load the first sourcing page before extending results')
+      }
+
+      const currentLimit = Number.isInteger(search.resultLimit) && search.resultLimit >= 100
+        ? search.resultLimit
+        : SOURCING_RESULT_WINDOW_STEP
+      search.resultLimit = currentLimit
+      if (targetLimit <= currentLimit || Number(search.totalRecords) <= currentLimit) {
+        return { searchId, ...this.resultWindow(search) }
+      }
+      if (targetLimit !== currentLimit + SOURCING_RESULT_WINDOW_STEP) {
+        throw new BadRequestException('Only the next 100 sourcing results can be opened')
+      }
+
+      search.resultLimit = targetLimit
+      await searchRepository.save(search)
+      return { searchId, ...this.resultWindow(search) }
+    })
+  }
+
+  /**
+   * 保留1688第一页返回的原始总量，只把当前获准浏览的结果窗口暴露给前端分页。
+   * 历史测试夹具或迁移前对象没有resultLimit时按100条兼容，数据库迁移后实体始终有值。
+   */
+  private resultWindow(search: SourcingSearchEntity): SourcingResultWindow {
+    const providerTotalRecords = search.totalRecords === null
+      ? null
+      : Number(search.totalRecords)
+    const resultLimit = Number.isInteger(search.resultLimit) && search.resultLimit >= 100
+      ? search.resultLimit
+      : SOURCING_RESULT_WINDOW_STEP
+    if (providerTotalRecords === null || !Number.isFinite(providerTotalRecords)) {
+      return {
+        totalRecords: null,
+        totalPages: null,
+        providerTotalRecords: null,
+        resultLimit,
+        canExpand: false,
+      }
+    }
+
+    const totalRecords = Math.min(Math.max(0, providerTotalRecords), resultLimit)
+    const derivedPages = totalRecords === 0 ? 0 : Math.ceil(totalRecords / search.pageSize)
+    const totalPages = search.totalPages === null
+      ? derivedPages
+      : Math.min(search.totalPages, derivedPages)
+    return {
+      totalRecords,
+      totalPages,
+      providerTotalRecords,
+      resultLimit,
+      canExpand: providerTotalRecords > resultLimit,
     }
   }
 
