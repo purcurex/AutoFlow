@@ -377,7 +377,7 @@ Object.assign(en.workflows, {
   workflowId: 'Workflow ID',
   createdDate: 'Created Date',
   progressPercent: '{progress}%',
-  progressPendingConfiguration: 'Needs configuration',
+  progressPendingConfiguration: 'Needs Configuration',
 })
 
 Object.assign(zhCN.workflows, {
