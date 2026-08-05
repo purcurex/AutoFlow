@@ -51,6 +51,7 @@ const workflowFixture: WorkflowRun = {
   currentStage: 'crm',
   progress: 100,
   leadCount: 0,
+  customerDiscoveryStatus: 'completed',
   failureReason: null,
   failureCode: null,
   failureProvider: null,
@@ -74,6 +75,10 @@ function mountWorkflowView(props: { create?: boolean; reviseId?: string }) {
   return mount(WorkflowsView, {
     props,
     global: {
+      mocks: {
+        $te: () => true,
+        $t: (key: string) => key,
+      },
       stubs: {
         AppLayout: { template: '<main><slot /></main>' },
         PageHeader: { template: '<header><slot name="actions" /></header>' },
@@ -201,5 +206,52 @@ describe('workflow revision form', () => {
 
     expect(wrapper.get<HTMLImageElement>('img[alt="workflows.imagePreview"]').attributes('src'))
       .toBe(imageUrl)
+  })
+})
+
+describe('workflow dual-mode status', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    storeMock.workflows = []
+    storeMock.fetchWorkflows.mockResolvedValue(undefined)
+  })
+
+  it('shows a non-failure pending-public-image notice for a completed workflow', async () => {
+    storeMock.workflows = [{
+      ...imageWorkflowFixture,
+      status: 'completed',
+      customerDiscoveryStatus: 'pending_public_image',
+    }]
+
+    const wrapper = mountWorkflowView({})
+    await flushPromises()
+
+    expect(wrapper.get('[data-test="workflow-customer-discovery-pending"]').text())
+      .toContain('workflows.customerDiscoveryPendingPublicImage')
+    expect(wrapper.find('[data-test="workflow-failure-details"]').exists()).toBe(false)
+  })
+
+  it('labels a historical local-image failure as customer discovery instead of unknown', async () => {
+    storeMock.workflows = [{
+      ...imageWorkflowFixture,
+      status: 'failed',
+      customerDiscoveryStatus: 'failed',
+      failureReason: 'Workflow product image is only available locally.',
+      failureCode: 'image_unreachable',
+      failureProvider: 'customer_discovery',
+    }]
+
+    const wrapper = mountWorkflowView({})
+    await flushPromises()
+    const failureButton = wrapper.findAll('button').find((button) => (
+      button.text().includes('workflows.failure_image_unreachable')
+    ))
+    expect(failureButton).toBeDefined()
+    await failureButton!.trigger('click')
+
+    expect(wrapper.get('[data-test="workflow-failure-provider"]').text())
+      .toContain('workflows.failureProvider_customer_discovery')
+    expect(wrapper.get('[data-test="workflow-failure-provider"]').text())
+      .not.toContain('common.unknown')
   })
 })

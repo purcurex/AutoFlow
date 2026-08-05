@@ -42,6 +42,8 @@ export interface OutreachTemplateOptions {
 }
 export type LeadContactType = OutreachChannel | 'linkedin' | 'website' | 'phone'
 export type DiscoverySource = 'pipiads' | 'google_lens' | 'google_search'
+export type CustomerDiscoveryStatus = 'not_started' | 'running' | 'completed' | 'pending_public_image' | 'failed'
+export type WorkflowFailureProvider = 'pipiads' | 'google_lens' | 'google_search' | 'customer_discovery'
 
 export interface GoogleSearchOptions {
   exactPhrase: boolean
@@ -69,9 +71,10 @@ export interface WorkflowRun {
   currentStage: WorkflowStage
   progress: number
   leadCount: number
+  customerDiscoveryStatus: CustomerDiscoveryStatus
   failureReason: string | null
   failureCode: WorkflowFailureCode | null
-  failureProvider: 'pipiads' | 'google_lens' | 'google_search' | null
+  failureProvider: WorkflowFailureProvider | null
   failureRetryable: boolean
   archivedAt: string | null
   createdAt: string
@@ -296,6 +299,7 @@ export interface SourcingSearch {
 
 export interface SourcingSummary {
   workflowId?: string
+  customerDiscoveryStatus?: CustomerDiscoveryStatus
   workflowInput?: {
     name: string
     seedType: SeedType

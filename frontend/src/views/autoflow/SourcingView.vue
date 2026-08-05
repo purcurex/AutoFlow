@@ -61,6 +61,22 @@ const workflowId = computed(() => {
   return Array.isArray(value) ? value[0] || '' : String(value || '')
 })
 const status = computed(() => sourcingStatus(summary.value))
+const customerDiscoveryPending = computed(() => (
+  summary.value?.customerDiscoveryStatus === 'pending_public_image'
+))
+/**
+ * 客户发现待配置时仍按 1688 的真实执行状态给出明确结果，不混淆两个独立业务链路。
+ */
+const customerDiscoveryPendingMessageKey = computed(() => {
+  switch (status.value) {
+    case 'completed': return 'sourcing.customerDiscoveryPending_completed'
+    case 'running': return 'sourcing.customerDiscoveryPending_running'
+    case 'failed': return 'sourcing.customerDiscoveryPending_failed'
+    case 'partial': return 'sourcing.customerDiscoveryPending_partial'
+    case 'not_configured': return 'sourcing.customerDiscoveryPending_notConfigured'
+    default: return 'sourcing.customerDiscoveryPending_idle'
+  }
+})
 const search = computed(() => currentSourcingSearch(summary.value))
 const offers = computed(() => summary.value?.items ?? summary.value?.offers ?? [])
 const pagination = computed(() => summary.value?.pagination)
@@ -310,6 +326,14 @@ function offerLink(offer: SourcingOffer) {
         <div>
           <p class="font-bold">{{ t('sourcing.boundaryTitle') }}</p>
           <p>{{ t('sourcing.boundaryDescription') }}</p>
+        </div>
+      </section>
+
+      <section v-if="!loading && customerDiscoveryPending" data-test="customer-discovery-pending" class="notice mb-5 border-amber-400 bg-amber-50 text-amber-900 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-200">
+        <AlertTriangle class="mt-0.5 h-5 w-5 shrink-0" />
+        <div>
+          <p class="font-bold">{{ t('sourcing.customerDiscoveryPendingTitle') }}</p>
+          <p>{{ t(customerDiscoveryPendingMessageKey) }}</p>
         </div>
       </section>
 

@@ -104,6 +104,15 @@ function resolveTargetMarket(value: string) {
 }
 
 /**
+ * 将后端失败提供方转换为可读业务名称，避免历史图片配置错误显示为“未知”。
+ */
+function failureProviderLabel(workflow: WorkflowRun) {
+  return workflow.failureProvider
+    ? t(`workflows.failureProvider_${workflow.failureProvider}`)
+    : t('common.unknown')
+}
+
+/**
  * 修订页只依赖指定工作流详情完成表单回显，避免列表接口失败阻断详情请求。
  */
 /**
@@ -530,6 +539,10 @@ async function confirmLifecycleAction() {
                     <CircleAlert class="h-3.5 w-3.5 shrink-0" />
                     <span>{{ failureLabel(workflow) }}</span>
                   </button>
+                  <p v-else-if="workflow.customerDiscoveryStatus === 'pending_public_image'" data-test="workflow-customer-discovery-pending" class="mt-1 flex max-w-72 items-center gap-1 text-xs leading-5 text-amber-700 dark:text-amber-300">
+                    <CircleAlert class="h-3.5 w-3.5 shrink-0" />
+                    <span>{{ t('workflows.customerDiscoveryPendingPublicImage') }}</span>
+                  </p>
                 </td>
                 <td class="whitespace-nowrap font-medium tabular-nums text-slate-600 dark:text-slate-300">{{ workflowCreatedDate(workflow.createdAt) }}</td>
                 <td><span class="inline-flex items-center gap-1.5"><component :is="workflow.seedType === 'image' ? Image : KeyRound" class="h-3.5 w-3.5 text-slate-400" /><span class="max-w-52 truncate">{{ workflow.seedValue }}</span></span></td>
@@ -553,7 +566,7 @@ async function confirmLifecycleAction() {
                       <RefreshCw v-if="workflow.status !== 'draft'" class="h-4 w-4" :class="{ 'animate-spin': workflow.status === 'running' }" />
                       <Play v-else class="h-4 w-4" />
                     </button>
-                    <button v-if="workflow.status === 'failed'" type="button" class="icon-btn" :title="t('workflows.failureDetails')" @click="openFailureDetails(workflow)"><Info class="h-4 w-4" /></button>
+                    <button v-if="workflow.status === 'failed'" type="button" class="icon-btn" data-test="workflow-failure-details" :title="t('workflows.failureDetails')" @click="openFailureDetails(workflow)"><Info class="h-4 w-4" /></button>
                     <button v-if="canDeleteWorkflow(workflow.status)" type="button" class="icon-btn hover:border-red-300 hover:text-red-600" :title="t('workflows.deleteWorkflow')" :disabled="lifecycleBusy" @click="prepareDelete(workflow)"><Trash2 class="h-4 w-4" /></button>
                     <button v-else-if="canArchiveWorkflow(workflow.status)" type="button" class="icon-btn" :title="t('workflows.archiveWorkflow')" @click="prepareArchive(workflow)"><Archive class="h-4 w-4" /></button>
                   </div>
@@ -571,7 +584,7 @@ async function confirmLifecycleAction() {
           <div class="space-y-4 p-5">
             <div class="notice border-red-300 bg-red-50 text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200"><CircleAlert class="h-5 w-5 shrink-0" /><div><p class="font-semibold">{{ failureLabel(detailWorkflow) }}</p><p class="mt-1 text-sm">{{ t('workflows.failureGuidance') }}</p></div></div>
             <dl class="grid gap-3 text-sm sm:grid-cols-2">
-              <div><dt class="field-label">{{ t('workflows.failureProvider') }}</dt><dd class="font-medium">{{ detailWorkflow.failureProvider || t('common.unknown') }}</dd></div>
+              <div><dt class="field-label">{{ t('workflows.failureProvider') }}</dt><dd class="font-medium" data-test="workflow-failure-provider">{{ failureProviderLabel(detailWorkflow) }}</dd></div>
               <div><dt class="field-label">{{ t('workflows.stage') }}</dt><dd class="font-medium">{{ $te(`status.${detailWorkflow.currentStage}`) ? $t(`status.${detailWorkflow.currentStage}`) : detailWorkflow.currentStage }}</dd></div>
             </dl>
             <div><p class="field-label">{{ t('workflows.technicalDetails') }}</p><pre class="max-h-36 overflow-auto whitespace-pre-wrap rounded-md bg-slate-100 p-3 text-xs leading-5 text-slate-700 dark:bg-[#0e1115] dark:text-slate-300">{{ detailWorkflow.failureReason }}</pre></div>

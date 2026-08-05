@@ -38,6 +38,7 @@ const completedSummary: SourcingSummary = {
   workflowId: 'workflow-1688',
   provider: 'alibaba_1688',
   providerConfigured: true,
+  customerDiscoveryStatus: 'completed',
   workflowInput: {
     name: 'Pet brush prospecting',
     seedType: 'keyword',
@@ -165,6 +166,37 @@ describe('1688 sourcing view', () => {
     expect(wrapper.get('[data-test="sourcing-match-context"]').text()).toContain('Pet brush prospecting')
     expect(wrapper.get('[data-test="sourcing-match-context"]').text()).toContain('pet brush')
   })
+
+  it.each([
+    ['completed', 'succeeded', 'sourcing.customerDiscoveryPending_completed'],
+    ['running', 'pending', 'sourcing.customerDiscoveryPending_running'],
+    ['failed', 'failed', 'sourcing.customerDiscoveryPending_failed'],
+  ] as const)(
+    'shows the combined %s sourcing and pending customer-discovery state',
+    async (searchStatus, pageStatus, expectedKey) => {
+      apiMock.getWorkflowSourcing.mockResolvedValue({
+        ...completedSummary,
+        customerDiscoveryStatus: 'pending_public_image',
+        status: searchStatus,
+        latestSearch: {
+          ...completedSummary.latestSearch!,
+          status: searchStatus,
+        },
+        pagination: {
+          ...completedSummary.pagination!,
+          loaded: pageStatus === 'succeeded',
+          status: pageStatus,
+        },
+      } satisfies SourcingSummary)
+
+      const wrapper = mountView()
+      await flushPromises()
+
+      expect(wrapper.get('[data-test="customer-discovery-pending"]').text())
+        .toContain(expectedKey)
+      wrapper.unmount()
+    },
+  )
 
   it('loads an existing 10-item search without guessing a 20-item page size', async () => {
     apiMock.getWorkflowSourcing.mockImplementation(async (_workflowId, query) => {
