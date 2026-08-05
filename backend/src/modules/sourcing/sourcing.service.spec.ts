@@ -269,6 +269,23 @@ describe('SourcingService asynchronous pagination', () => {
     expect(searches.save).toHaveBeenCalledWith(expect.objectContaining({ resultLimit: 200 }))
   })
 
+  it('derives accessible pages from provider records when the stored page count is stale', async () => {
+    const { service, searches } = createService()
+    searches.findOne.mockResolvedValue({
+      id: searchId,
+      ownerUserId,
+      workflowRunId,
+      pageSize: 20,
+      totalRecords: '574',
+      totalPages: 3,
+      resultLimit: 100,
+    } as SourcingSearchEntity)
+
+    await expect((service as unknown as ResultWindowService)
+      .extendResultWindow(ownerUserId, workflowRunId, searchId, 200))
+      .resolves.toMatchObject({ totalRecords: 200, totalPages: 10 })
+  })
+
   it('treats a repeated target result limit as an idempotent retry', async () => {
     const { service, searches } = createService()
     searches.findOne.mockResolvedValue({

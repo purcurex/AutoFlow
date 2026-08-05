@@ -532,10 +532,7 @@ export class SourcingService {
     }
 
     const totalRecords = Math.min(Math.max(0, providerTotalRecords), resultLimit)
-    const derivedPages = totalRecords === 0 ? 0 : Math.ceil(totalRecords / search.pageSize)
-    const totalPages = search.totalPages === null
-      ? derivedPages
-      : Math.min(search.totalPages, derivedPages)
+    const totalPages = totalRecords === 0 ? 0 : Math.ceil(totalRecords / search.pageSize)
     return {
       totalRecords,
       totalPages,

@@ -16,6 +16,8 @@ const sharp = (sharpModule as unknown as { default?: SharpFactory }).default
 
 const MAX_SOURCE_IMAGE_BYTES = 8 * 1024 * 1024
 const MAX_PROVIDER_IMAGE_BYTES = 5 * 1024 * 1024
+const MAX_SOURCE_IMAGE_PIXELS = 40_000_000
+const MAX_SOURCE_IMAGE_EDGE = 16_384
 const MAX_REDIRECTS = 3
 const REMOTE_TIMEOUT_MS = 10_000
 
@@ -282,8 +284,17 @@ export class SourcingImageResolverService {
     }
 
     try {
-      const metadata = await sharp(inputBytes, { failOn: 'error' }).metadata()
-      if (!metadata.width || !metadata.height) throw new Error('Missing image dimensions')
+      const metadata = await sharp(inputBytes, {
+        failOn: 'error',
+        limitInputPixels: MAX_SOURCE_IMAGE_PIXELS,
+      }).metadata()
+      if (
+        !metadata.width
+        || !metadata.height
+        || metadata.width > MAX_SOURCE_IMAGE_EDGE
+        || metadata.height > MAX_SOURCE_IMAGE_EDGE
+        || metadata.width * metadata.height > MAX_SOURCE_IMAGE_PIXELS
+      ) throw new Error('Unsafe image dimensions')
     } catch {
       throw this.invalidImage('Workflow image cannot be decoded.')
     }
@@ -293,7 +304,10 @@ export class SourcingImageResolverService {
       ? 'image/png'
       : 'image/jpeg'
     if (detectedMimeType === 'image/webp' || inputBytes.length > MAX_PROVIDER_IMAGE_BYTES) {
-      bytes = await sharp(inputBytes)
+      bytes = await sharp(inputBytes, {
+        failOn: 'error',
+        limitInputPixels: MAX_SOURCE_IMAGE_PIXELS,
+      })
         .rotate()
         .resize({ width: 4_096, height: 4_096, fit: 'inside', withoutEnlargement: true })
         .jpeg({ quality: 85, mozjpeg: true })
@@ -301,7 +315,10 @@ export class SourcingImageResolverService {
       outputMimeType = 'image/jpeg'
     }
     if (bytes.length > MAX_PROVIDER_IMAGE_BYTES) {
-      bytes = await sharp(inputBytes)
+      bytes = await sharp(inputBytes, {
+        failOn: 'error',
+        limitInputPixels: MAX_SOURCE_IMAGE_PIXELS,
+      })
         .rotate()
         .resize({ width: 2_048, height: 2_048, fit: 'inside', withoutEnlargement: true })
         .jpeg({ quality: 75, mozjpeg: true })

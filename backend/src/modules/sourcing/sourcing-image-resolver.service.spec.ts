@@ -85,6 +85,23 @@ describe('SourcingImageResolverService', () => {
     expect(result.bytes.subarray(0, 3)).toEqual(Buffer.from([0xff, 0xd8, 0xff]))
   })
 
+  it('rejects a compressed image whose declared pixel dimensions exceed the safe limit', async () => {
+    const png = await sharp({
+      create: { width: 1, height: 1, channels: 3, background: '#ffffff' },
+    }).png().toBuffer()
+    png.writeUInt32BE(10_000, 16)
+    png.writeUInt32BE(10_000, 20)
+    png.writeUInt32BE(crc32(png.subarray(12, 29)), 29)
+    await mkdir(uploadRoot, { recursive: true })
+    await writeFile(join(uploadRoot, 'pixel-bomb.png'), png)
+
+    await expect(resolver.resolve(workflow('http://localhost/pixel-bomb.png', {
+      seedAssetPath: `/uploads/workflow-seeds/${ownerUserId}/pixel-bomb.png`,
+      seedAssetMimeType: 'image/png',
+      seedAssetSize: String(png.length),
+    }))).rejects.toMatchObject({ code: 'INVALID_IMAGE', retryable: false })
+  })
+
   it('rejects local directory escape and private remote addresses', async () => {
     await expect(resolver.resolve(workflow('https://example.test/image.png', {
       seedAssetPath: `/uploads/workflow-seeds/${ownerUserId}/../another-user/image.png`,
@@ -192,3 +209,15 @@ describe('SourcingImageResolverService', () => {
       .rejects.toMatchObject({ code: 'PROVIDER_UNAVAILABLE', retryable: true })
   })
 })
+
+/** 仅用于构造带合法 IHDR 校验和的极端尺寸 PNG 测试数据。 */
+function crc32(bytes: Buffer): number {
+  let crc = 0xffffffff
+  for (const byte of bytes) {
+    crc ^= byte
+    for (let bit = 0; bit < 8; bit += 1) {
+      crc = (crc >>> 1) ^ ((crc & 1) ? 0xedb88320 : 0)
+    }
+  }
+  return (crc ^ 0xffffffff) >>> 0
+}

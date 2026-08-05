@@ -222,7 +222,9 @@ watch(() => form.seedType, (nextType, previousType) => {
 watch(() => form.seedValue, (value) => {
   if (isSynchronizingForm) return
   seedValues[form.seedType] = value
-  if (form.seedType === 'image' && imageUpload.value && value !== imageUpload.value.publicUrl) {
+  const assetBackedUrl = imageUpload.value?.publicUrl
+    || (form.seedAssetPath ? revisionSource.value?.seedValue : undefined)
+  if (form.seedType === 'image' && assetBackedUrl && value !== assetBackedUrl) {
     imageUpload.value = null
     clearImageAssetMetadata()
     if (imagePreviewUrl.value) URL.revokeObjectURL(imagePreviewUrl.value)

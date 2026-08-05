@@ -163,6 +163,34 @@ describe('workflow revision form', () => {
       .toBe(imageWorkflowFixture.seedValue)
   })
 
+  it('drops stale uploaded-asset metadata when a revision switches to a public image URL', async () => {
+    storeMock.getWorkflow.mockResolvedValue(imageWorkflowFixture)
+    storeMock.reviseWorkflow.mockResolvedValue({
+      ...imageWorkflowFixture,
+      id: 'revision-image-workflow',
+    })
+    storeMock.startDiscovery.mockResolvedValue(undefined)
+    const wrapper = mountWorkflowView({ create: true, reviseId: imageWorkflowFixture.id })
+    await flushPromises()
+
+    const replacementUrl = 'https://cdn.example.test/products/replacement.webp'
+    await wrapper.get<HTMLInputElement>('input[placeholder="workflows.imagePastePlaceholder"]')
+      .setValue(replacementUrl)
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+
+    expect(storeMock.reviseWorkflow).toHaveBeenCalledWith(
+      imageWorkflowFixture.id,
+      expect.objectContaining({
+        seedValue: replacementUrl,
+        seedAssetPath: undefined,
+        seedAssetMimeType: undefined,
+        seedAssetSize: undefined,
+        seedAssetSha256: undefined,
+      }),
+    )
+  })
+
   it('previews a public image URL while creating an image workflow', async () => {
     const wrapper = mountWorkflowView({ create: true })
     await flushPromises()
