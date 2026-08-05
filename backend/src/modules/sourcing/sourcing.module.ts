@@ -13,6 +13,7 @@ import { SourcingService } from './sourcing.service'
 import { SourcingImageResolverService } from './sourcing-image-resolver.service'
 import { SourcingPageExecutorService } from './sourcing-page-executor.service'
 import { SourcingWorkerService } from './sourcing-worker.service'
+import { SourcingPageCacheService } from './sourcing-page-cache.service'
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { SourcingWorkerService } from './sourcing-worker.service'
     SourcingService,
     SourcingImageResolverService,
     SourcingPageExecutorService,
+    SourcingPageCacheService,
     SourcingWorkerService,
   ],
   exports: [SourcingService],

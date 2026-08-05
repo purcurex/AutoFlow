@@ -26,6 +26,7 @@ import type {
   SourcingSummaryResponse,
 } from './sourcing-response.types'
 import { SOURCING_PROVIDER } from './sourcing.types'
+import { SourcingPageCacheService } from './sourcing-page-cache.service'
 
 /**
  * 寻源命令与查询服务。
@@ -46,6 +47,7 @@ export class SourcingService {
     private readonly offerRepository: Repository<SourcingOfferEntity>,
     private readonly alibaba1688Service: Alibaba1688Service,
     private readonly dataSource: DataSource,
+    private readonly pageCache: SourcingPageCacheService,
   ) {}
 
   async getSummary(
@@ -304,26 +306,48 @@ export class SourcingService {
       }
     }
 
-    const created = await this.pageRepository.save(this.pageRepository.create({
-      searchId,
-      ownerUserId,
-      pageNumber,
-      pageSize: search.pageSize,
-      status: 'pending',
-      attempts: 0,
-      maxAttempts: 3,
-      availableAt: new Date(),
-      leaseOwner: null,
-      leaseExpiresAt: null,
-      heartbeatAt: null,
-      providerRequestId: null,
-      providerTraceId: null,
-      resultCount: 0,
-      errorCode: null,
-      errorMessage: null,
-      startedAt: null,
-      completedAt: null,
-    }))
+    const cachedPage = await this.pageCache.restore(ownerUserId, search, pageNumber)
+    if (cachedPage) {
+      return {
+        searchId,
+        status: cachedPage.status as 'pending' | 'running' | 'succeeded',
+        page: pageNumber,
+        pageSize: search.pageSize as 10 | 20 | 50,
+      }
+    }
+
+    let created: SourcingSearchPageEntity
+    try {
+      created = await this.pageRepository.save(this.pageRepository.create({
+        searchId,
+        ownerUserId,
+        pageNumber,
+        pageSize: search.pageSize,
+        status: 'pending',
+        attempts: 0,
+        maxAttempts: 3,
+        availableAt: new Date(),
+        leaseOwner: null,
+        leaseExpiresAt: null,
+        heartbeatAt: null,
+        providerRequestId: null,
+        providerTraceId: null,
+        resultCount: 0,
+        cacheHit: false,
+        cacheSourcePageId: null,
+        errorCode: null,
+        errorMessage: null,
+        startedAt: null,
+        completedAt: null,
+      }))
+    } catch (error) {
+      // 唯一约束竞争发生时返回并发请求已经创建的分页；没有目标页则保留原异常。
+      const racedPage = await this.pageRepository.findOne({
+        where: { ownerUserId, searchId, pageNumber },
+      })
+      if (!racedPage) throw error
+      created = racedPage
+    }
     return {
       searchId,
       status: created.status as 'pending' | 'running' | 'succeeded',

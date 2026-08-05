@@ -9,6 +9,7 @@ import {
 } from './entities'
 import { SourcingService } from './sourcing.service'
 import { ListSourcingDto } from './dto/list-sourcing.dto'
+import type { SourcingPageCacheService } from './sourcing-page-cache.service'
 
 describe('SourcingService asynchronous pagination', () => {
   const ownerUserId = 'd90f3d90-7f2b-45e7-9c8f-88fa0d915c8d'
@@ -58,6 +59,9 @@ describe('SourcingService asynchronous pagination', () => {
     const dataSource = {
       transaction: jest.fn(async (callback) => callback(manager)),
     } as unknown as jest.Mocked<DataSource>
+    const pageCache = {
+      restore: jest.fn().mockResolvedValue(null),
+    } as unknown as jest.Mocked<SourcingPageCacheService>
     const service = new SourcingService(
       workflows,
       searches,
@@ -65,8 +69,9 @@ describe('SourcingService asynchronous pagination', () => {
       offers,
       provider,
       dataSource,
+      pageCache,
     )
-    return { service, workflows, searches, pages, offers, provider, workflow }
+    return { service, workflows, searches, pages, offers, provider, workflow, pageCache }
   }
 
   it('creates a search and only queues its first page', async () => {
@@ -195,6 +200,83 @@ describe('SourcingService asynchronous pagination', () => {
     await expect(service.requestPage(ownerUserId, workflowRunId, searchId, 2))
       .resolves.toMatchObject({ searchId, page: 2, status: 'pending' })
     expect(pages.save).not.toHaveBeenCalled()
+  })
+
+  it('returns a restored cache page without queuing a worker page', async () => {
+    const { service, searches, pages, pageCache } = createService()
+    const search = {
+      id: searchId,
+      ownerUserId,
+      workflowRunId,
+      provider: 'alibaba_1688',
+      cacheFingerprint: 'a'.repeat(64),
+      pageSize: 20,
+      totalPages: 3,
+    } as SourcingSearchEntity
+    searches.findOne.mockResolvedValue(search)
+    pages.findOne.mockResolvedValue(null)
+    pageCache.restore.mockResolvedValue({
+      id: 'cached-page-2',
+      searchId,
+      ownerUserId,
+      pageNumber: 2,
+      pageSize: 20,
+      status: 'succeeded',
+    } as SourcingSearchPageEntity)
+
+    await expect(service.requestPage(ownerUserId, workflowRunId, searchId, 2))
+      .resolves.toEqual({ searchId, status: 'succeeded', page: 2, pageSize: 20 })
+    expect(pages.save).not.toHaveBeenCalled()
+  })
+
+  it('queues an uncached page after the cache service misses', async () => {
+    const { service, searches, pages, pageCache } = createService()
+    searches.findOne.mockResolvedValue({
+      id: searchId,
+      ownerUserId,
+      workflowRunId,
+      provider: 'alibaba_1688',
+      cacheFingerprint: 'a'.repeat(64),
+      pageSize: 20,
+      totalPages: 3,
+    } as SourcingSearchEntity)
+    pages.findOne.mockResolvedValue(null)
+    pages.save.mockImplementation(async (value) => value as SourcingSearchPageEntity)
+
+    await expect(service.requestPage(ownerUserId, workflowRunId, searchId, 2))
+      .resolves.toEqual({ searchId, status: 'pending', page: 2, pageSize: 20 })
+    expect(pageCache.restore).toHaveBeenCalledTimes(1)
+    expect(pages.save).toHaveBeenCalledWith(expect.objectContaining({
+      searchId,
+      pageNumber: 2,
+      status: 'pending',
+    }))
+  })
+
+  it('returns a page created by a concurrent request instead of failing', async () => {
+    const { service, searches, pages } = createService()
+    searches.findOne.mockResolvedValue({
+      id: searchId,
+      ownerUserId,
+      workflowRunId,
+      provider: 'alibaba_1688',
+      cacheFingerprint: 'a'.repeat(64),
+      pageSize: 20,
+      totalPages: 3,
+    } as SourcingSearchEntity)
+    pages.findOne
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        searchId,
+        ownerUserId,
+        pageNumber: 2,
+        pageSize: 20,
+        status: 'succeeded',
+      } as SourcingSearchPageEntity)
+    pages.save.mockRejectedValue(Object.assign(new Error('duplicate page'), { code: '23505' }))
+
+    await expect(service.requestPage(ownerUserId, workflowRunId, searchId, 2))
+      .resolves.toEqual({ searchId, status: 'succeeded', page: 2, pageSize: 20 })
   })
 
   it('reads only the requested persisted page with explicit tenant filters', async () => {
