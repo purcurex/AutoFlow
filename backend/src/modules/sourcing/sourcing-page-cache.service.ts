@@ -108,13 +108,31 @@ export class SourcingPageCacheService {
         const targetSuppliers = new Map(
           existingSuppliers.map((supplier) => [supplier.supplierKey, supplier]),
         )
+        const sourceSuppliersByKey = new Map(
+          sourceSuppliers.map((supplier) => [supplier.supplierKey, supplier]),
+        )
+        const refreshedSuppliers = existingSuppliers
+          .filter((supplier) => !this.supplierName(supplier))
+          .map((supplier) => {
+            const source = sourceSuppliersByKey.get(supplier.supplierKey)
+            if (!source) return supplier
+            supplier.openId ||= source.openId
+            supplier.companyName = source.companyName
+            supplier.shopName = source.shopName
+            supplier.shopUrl ||= source.shopUrl
+            supplier.supplierRating ||= source.supplierRating
+            supplier.yearsInBusiness ??= source.yearsInBusiness
+            supplier.capabilities = source.capabilities
+            return supplier
+          })
         const missingSuppliers = sourceSuppliers
           .filter((supplier) => !targetSuppliers.has(supplier.supplierKey))
           .map((supplier) => supplierRepository.create(
             this.cloneSupplier(supplier, currentSearch, ownerUserId),
           ))
-        if (missingSuppliers.length) {
-          const savedSuppliers = await supplierRepository.save(missingSuppliers)
+        const suppliersToSave = [...refreshedSuppliers, ...missingSuppliers]
+        if (suppliersToSave.length) {
+          const savedSuppliers = await supplierRepository.save(suppliersToSave)
           for (const supplier of savedSuppliers) {
             targetSuppliers.set(supplier.supplierKey, supplier)
           }
@@ -193,10 +211,14 @@ export class SourcingPageCacheService {
         return restoredPage
       })
     } catch (error) {
-      const concurrentPage = await this.pageRepository.findOne({
-        where: { ownerUserId, searchId: currentSearch.id, pageNumber },
-      })
-      if (concurrentPage) return concurrentPage
+      try {
+        const concurrentPage = await this.pageRepository.findOne({
+          where: { ownerUserId, searchId: currentSearch.id, pageNumber },
+        })
+        if (concurrentPage) return concurrentPage
+      } catch {
+        // 缓存查询本身不可用时必须继续走真实1688分页，不能让优化层阻断主流程。
+      }
       this.logger.warn(
         `1688 sourcing page cache fallback search=${currentSearch.id} page=${pageNumber}`
         + ` reason=${error instanceof Error ? error.message : 'unknown'}`,

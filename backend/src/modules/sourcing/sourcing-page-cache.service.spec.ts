@@ -251,4 +251,35 @@ describe('SourcingPageCacheService', () => {
     expect(savedOffers.map((offer) => offer.offerId)).toEqual(['offer-22'])
     expect(restored?.resultCount).toBe(1)
   })
+
+  it('fills an existing target supplier whose cached name is blank', async () => {
+    const value = setup()
+    value.suppliers.find.mockResolvedValue([{
+      ...value.sourceSupplier,
+      id: 'target-existing-supplier',
+      searchId: value.currentSearch.id,
+      workflowRunId,
+      companyName: null,
+      shopName: null,
+    } as SourcingSupplierEntity])
+
+    await value.service.restore(ownerUserId, value.currentSearch, 2)
+
+    const savedSuppliers = value.suppliers.save.mock.calls[0][0]
+    expect(savedSuppliers).toEqual([
+      expect.objectContaining({
+        id: 'target-existing-supplier',
+        companyName: 'Cached Supplier',
+        shopName: 'Cached Supplier',
+      }),
+    ])
+  })
+
+  it('falls back to a live page when both cache reads fail', async () => {
+    const value = setup()
+    value.pages.findOne.mockReset().mockRejectedValue(new Error('cache database unavailable'))
+
+    await expect(value.service.restore(ownerUserId, value.currentSearch, 2))
+      .resolves.toBeNull()
+  })
 })
