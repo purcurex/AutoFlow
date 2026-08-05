@@ -42,6 +42,7 @@ const summary = ref<SourcingSummary | null>(null)
 const loading = ref(true)
 const starting = ref(false)
 const pageChanging = ref(false)
+const extendingResults = ref(false)
 const loadError = ref('')
 const searchId = ref(typeof route.query?.searchId === 'string' ? route.query.searchId : '')
 const parsedPage = Number(route.query?.page || 1)
@@ -64,7 +65,14 @@ const search = computed(() => currentSourcingSearch(summary.value))
 const offers = computed(() => summary.value?.items ?? summary.value?.offers ?? [])
 const pagination = computed(() => summary.value?.pagination)
 const running = computed(() => isSourcingRunning(summary.value))
-const pageBusy = computed(() => pageChanging.value || running.value)
+const pageBusy = computed(() => pageChanging.value || extendingResults.value || running.value)
+const canExtendResults = computed(() => Boolean(
+  pagination.value?.canExpand
+  && pagination.value.totalPages !== null
+  && pagination.value.totalPages !== undefined
+  && pagination.value.totalPages > 0
+  && page.value >= pagination.value.totalPages,
+))
 const canStart = computed(() => Boolean(
   workflowId.value
   && summary.value?.providerConfigured
@@ -129,14 +137,7 @@ async function restartSourcing() {
   }
 }
 
-async function changePage(targetPage: number) {
-  const totalPages = pagination.value?.totalPages
-  if (
-    pageBusy.value
-    || !searchId.value
-    || targetPage < 1
-    || (totalPages !== null && totalPages !== undefined && targetPage > totalPages)
-  ) return
+async function navigateToPage(targetPage: number) {
   stopPolling()
   page.value = targetPage
   const cached = pageCache.get(targetPage)
@@ -154,6 +155,65 @@ async function changePage(targetPage: number) {
     loadError.value = error instanceof Error ? error.message : t('sourcing.loadFailed')
   } finally {
     pageChanging.value = false
+  }
+}
+
+async function changePage(targetPage: number) {
+  const totalPages = pagination.value?.totalPages
+  if (
+    pageBusy.value
+    || !searchId.value
+    || targetPage < 1
+    || (totalPages !== null && totalPages !== undefined && targetPage > totalPages)
+  ) return
+  await navigateToPage(targetPage)
+}
+
+/**
+ * 每次只开放额外 100 条可访问结果；扩容接口不请求 1688，进入新页时才按需获取并缓存该页。
+ * 同时刷新当前页与已有前端缓存中的分页元数据，避免返回旧页时总条数回退到旧窗口。
+ */
+async function extendResults() {
+  const currentPagination = pagination.value
+  if (!searchId.value || pageBusy.value || !canExtendResults.value || !currentPagination) return
+  const currentTotalPages = currentPagination.totalPages
+  if (currentTotalPages === null || currentTotalPages < 1) return
+
+  extendingResults.value = true
+  stopPolling()
+  loadError.value = ''
+  try {
+    const window = await sourcingApi.extendWorkflowSourcingWindow(
+      workflowId.value,
+      searchId.value,
+      (currentPagination.resultLimit ?? 100) + 100,
+    )
+    applyResultWindow(window)
+    await navigateToPage(currentTotalPages + 1)
+  } catch (error) {
+    loadError.value = error instanceof Error ? error.message : t('sourcing.extendFailed')
+  } finally {
+    extendingResults.value = false
+  }
+}
+
+function applyResultWindow(window: {
+  totalRecords: number | null
+  totalPages: number | null
+  providerTotalRecords: number | null
+  resultLimit: number
+  canExpand: boolean
+}) {
+  const paginationWindow = {
+    totalRecords: window.totalRecords,
+    totalPages: window.totalPages,
+    providerTotalRecords: window.providerTotalRecords,
+    resultLimit: window.resultLimit,
+    canExpand: window.canExpand,
+  }
+  if (summary.value?.pagination) Object.assign(summary.value.pagination, paginationWindow)
+  for (const cachedSummary of pageCache.values()) {
+    if (cachedSummary.pagination) Object.assign(cachedSummary.pagination, paginationWindow)
   }
 }
 
@@ -491,13 +551,23 @@ function offerLink(offer: SourcingOffer) {
           style="border-color: var(--color-border)"
           data-test="sourcing-pagination"
         >
-          <p class="text-sm text-slate-500">
-            {{ t('sourcing.resultRange', {
-              start: rangeStart,
-              end: rangeEnd,
-              total: pagination?.totalRecords ?? '?',
-            }) }}
-          </p>
+          <div class="text-sm text-slate-500">
+            <p>
+              {{ t('sourcing.resultRange', {
+                start: rangeStart,
+                end: rangeEnd,
+                total: pagination?.totalRecords ?? '?',
+              }) }}
+            </p>
+            <p
+              v-if="pagination?.providerTotalRecords !== null && pagination?.providerTotalRecords !== undefined"
+              class="mt-1 text-xs"
+              data-test="sourcing-result-window"
+            >
+              {{ t('sourcing.resultWindowLimit') }} {{ pagination?.resultLimit ?? 100 }} ·
+              {{ t('sourcing.providerResultEstimate') }} {{ pagination.providerTotalRecords }}
+            </p>
+          </div>
           <div class="flex items-center gap-2">
             <select
               :value="pageSize"
@@ -519,7 +589,9 @@ function offerLink(offer: SourcingOffer) {
             >
               {{ t('sourcing.previousPage') }}
             </button>
-            <span class="text-sm font-semibold">{{ page }} / {{ pagination?.totalPages ?? '?' }}</span>
+            <span class="text-sm font-semibold" data-test="sourcing-page-indicator">
+              {{ page }} / {{ pagination?.totalPages ?? '?' }}
+            </span>
             <button
               type="button"
               class="btn btn-secondary"
@@ -528,6 +600,17 @@ function offerLink(offer: SourcingOffer) {
               @click="changePage(page + 1)"
             >
               {{ t('sourcing.nextPage') }}
+            </button>
+            <button
+              v-if="canExtendResults"
+              type="button"
+              class="btn btn-primary"
+              data-test="extend-sourcing-results"
+              :disabled="pageBusy || starting"
+              @click="extendResults"
+            >
+              <LoaderCircle v-if="extendingResults" class="h-4 w-4 animate-spin" />
+              {{ t(extendingResults ? 'sourcing.continuingResults' : 'sourcing.continueResults') }}
             </button>
           </div>
         </div>

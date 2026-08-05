@@ -317,6 +317,12 @@ export interface SourcingPagination {
   pageSize: 10 | 20 | 50
   totalRecords: number | null
   totalPages: number | null
+  /** 1688 在本次搜索快照中报告的原始总数；旧数据可能没有该字段。 */
+  providerTotalRecords?: number | null
+  /** 当前允许访问的结果上限，默认从 100 条开始。 */
+  resultLimit?: number
+  /** 是否还能按 100 条继续开放后续结果。 */
+  canExpand?: boolean
   resultCount: number
   loaded: boolean
   status: 'pending' | 'running' | 'succeeded' | 'failed'
@@ -329,6 +335,15 @@ export interface SourcingStartResponse {
   status: 'pending' | 'running' | 'succeeded' | 'partial'
   page: number
   pageSize: 10 | 20 | 50
+}
+
+export interface SourcingWindowResponse {
+  searchId: string
+  totalRecords: number | null
+  totalPages: number | null
+  providerTotalRecords: number | null
+  resultLimit: number
+  canExpand: boolean
 }
 
 export interface SourcingQuery {
@@ -413,6 +428,15 @@ export const autoflowApi = {
     page: number,
   ): Promise<SourcingStartResponse> {
     return api.post(`/autoflow/workflows/${id}/sourcing/searches/${searchId}/pages/${page}`)
+  },
+  extendWorkflowSourcingWindow(
+    id: string,
+    searchId: string,
+    targetLimit: number,
+  ): Promise<SourcingWindowResponse> {
+    return api.post(`/autoflow/workflows/${id}/sourcing/searches/${searchId}/window`, {
+      targetLimit,
+    })
   },
   getLeads(status?: LeadStatus, page = 1, pageSize = 100): Promise<PaginatedResult<StoreLead>> {
     return api.get('/autoflow/leads', { params: { status, page, pageSize } })

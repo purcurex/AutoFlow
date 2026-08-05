@@ -7,6 +7,7 @@ const apiMock = vi.hoisted(() => ({
   getWorkflowSourcing: vi.fn(),
   startWorkflowSourcing: vi.fn(),
   requestWorkflowSourcingPage: vi.fn(),
+  extendWorkflowSourcingWindow: vi.fn(),
 }))
 const routerMock = vi.hoisted(() => ({ replace: vi.fn() }))
 const routeMock = vi.hoisted(() => ({
@@ -479,6 +480,104 @@ describe('1688 sourcing view', () => {
     expect(apiMock.getWorkflowSourcing).toHaveBeenLastCalledWith('workflow-1688', {
       searchId: 'search-50', page: 1, pageSize: 50,
     })
+    wrapper.unmount()
+  })
+
+  it('extends the 100-item result window once and opens the first newly available page', async () => {
+    routeMock.query = { searchId: 'search-1', page: '5', pageSize: '20' }
+    let resolveWindow!: (value: {
+      searchId: string
+      totalRecords: number
+      totalPages: number
+      providerTotalRecords: number
+      resultLimit: number
+      canExpand: boolean
+    }) => void
+    apiMock.getWorkflowSourcing
+      .mockResolvedValueOnce({
+        ...completedSummary,
+        pagination: {
+          ...completedSummary.pagination!,
+          page: 5,
+          totalRecords: 100,
+          totalPages: 5,
+          providerTotalRecords: 574,
+          resultLimit: 100,
+          canExpand: true,
+        },
+      } satisfies SourcingSummary)
+      .mockResolvedValueOnce({
+        ...completedSummary,
+        pagination: {
+          ...completedSummary.pagination!,
+          page: 6,
+          totalRecords: 200,
+          totalPages: 10,
+          providerTotalRecords: 574,
+          resultLimit: 200,
+          canExpand: true,
+        },
+      } satisfies SourcingSummary)
+    apiMock.extendWorkflowSourcingWindow.mockImplementation(() => new Promise((resolve) => {
+      resolveWindow = resolve
+    }))
+    apiMock.requestWorkflowSourcingPage.mockResolvedValue({
+      searchId: 'search-1', status: 'pending', page: 6, pageSize: 20,
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.get('[data-test="sourcing-result-window"]').text()).toContain('100')
+    expect(wrapper.get('[data-test="sourcing-result-window"]').text()).toContain('574')
+    await wrapper.get('[data-test="extend-sourcing-results"]').trigger('click')
+    expect(wrapper.get('[data-test="extend-sourcing-results"]').text())
+      .toContain('sourcing.continuingResults')
+    expect(wrapper.get<HTMLButtonElement>('[data-test="extend-sourcing-results"]').element.disabled)
+      .toBe(true)
+
+    resolveWindow({
+      searchId: 'search-1',
+      totalRecords: 200,
+      totalPages: 10,
+      providerTotalRecords: 574,
+      resultLimit: 200,
+      canExpand: true,
+    })
+    await flushPromises()
+
+    expect(apiMock.extendWorkflowSourcingWindow).toHaveBeenCalledWith(
+      'workflow-1688', 'search-1', 200,
+    )
+    expect(apiMock.requestWorkflowSourcingPage).toHaveBeenCalledWith(
+      'workflow-1688', 'search-1', 6,
+    )
+    expect(wrapper.get('[data-test="sourcing-page-indicator"]').text()).toContain('6 / 10')
+    expect(routerMock.replace).toHaveBeenLastCalledWith(expect.objectContaining({
+      query: expect.objectContaining({ searchId: 'search-1', page: '6', pageSize: '20' }),
+    }))
+    wrapper.unmount()
+  })
+
+  it('does not offer another result window after all provider matches are accessible', async () => {
+    routeMock.query = { searchId: 'search-1', page: '5', pageSize: '20' }
+    apiMock.getWorkflowSourcing.mockResolvedValue({
+      ...completedSummary,
+      pagination: {
+        ...completedSummary.pagination!,
+        page: 5,
+        totalRecords: 92,
+        totalPages: 5,
+        providerTotalRecords: 92,
+        resultLimit: 100,
+        canExpand: false,
+      },
+    } satisfies SourcingSummary)
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.find('[data-test="extend-sourcing-results"]').exists()).toBe(false)
     wrapper.unmount()
   })
 
