@@ -1,9 +1,21 @@
-import { Injectable, NotFoundException } from '@nestjs/common'
+import { businessScope } from './business-scope'
+import type { UpdateBusinessScopeDto } from './dto/business-scope.dto'
+import { ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common'
 import { InjectRepository } from '@nestjs/typeorm'
-import { Repository } from 'typeorm'
+import { ILike, Repository } from 'typeorm'
 import * as bcrypt from 'bcrypt'
 import { User, UserRole } from './user.entity'
 import type { UpdateProfileDto } from './dto/update-profile.dto'
+import type { ListWorkbenchAccountsDto } from './dto/workbench.dto'
+import type { WorkbenchRole } from './workbench-role'
+
+function workbenchAccount(user: User) {
+  return {
+    id: user.id, displayId: user.displayId, email: user.email, username: user.username, role: user.role, workbenchRoles: user.workbenchRoles,
+    businessScope: businessScope(user),
+    fopBinding: user.fopTenantId && user.fopUserId ? { tenantId: user.fopTenantId, userId: user.fopUserId } : null,
+  }
+}
 
 @Injectable()
 export class UsersService {
@@ -26,6 +38,7 @@ export class UsersService {
       password: hashedPassword,
       role,
       displayId,
+      workbenchRoles: ['sales'],
     })
     return this.usersRepository.save(user)
   }
@@ -34,8 +47,69 @@ export class UsersService {
     return this.usersRepository.find()
   }
 
+  async listWorkbenchAccounts(query: ListWorkbenchAccountsDto) {
+    const search = query.search?.trim()
+    const pattern = search ? ILike(`%${search.replace(/[\\%_]/g, '\\$&')}%`) : undefined
+    const [users, total] = await this.usersRepository.findAndCount({
+      select: { id: true, displayId: true, email: true, username: true, role: true, workbenchRoles: true, fopTenantId: true, fopUserId: true, businessRole: true, businessDepartmentId: true, businessEmployeeId: true },
+      where: pattern ? [{ username: pattern }, { email: pattern }, { displayId: pattern }] : {},
+      order: { displayId: 'ASC', id: 'ASC' },
+      skip: (query.page - 1) * query.pageSize,
+      take: query.pageSize,
+    })
+    return { items: users.map(workbenchAccount), total }
+  }
+
+  async updateWorkbenchRoles(id: string, workbenchRoles: WorkbenchRole[]) {
+    const user = await this.findById(id)
+    if (!user) throw new NotFoundException('用户不存在')
+    // A partial update cannot overwrite concurrently changed account identity fields.
+    await this.usersRepository.update(id, { workbenchRoles: [...workbenchRoles] })
+    const updated = await this.findById(id)
+    if (!updated) throw new NotFoundException('用户不存在')
+    return workbenchAccount(updated)
+  }
+
   async findById(id: string): Promise<User | null> {
     return this.usersRepository.findOne({ where: { id } })
+  }
+
+  async updateManagementRole(actorId: string, id: string, role: UserRole) {
+    return this.usersRepository.manager.transaction(async (manager) => {
+      // Serialize role mutations and recheck the acting administrator inside the
+      // lock, so concurrent demotions cannot remove every management account.
+      await manager.query("SELECT pg_advisory_xact_lock(hashtextextended('autoflow:management-roles', 0))")
+      const repository = manager.getRepository(User)
+      const actor = await repository.findOneBy({ id: actorId })
+      if (actor?.role !== UserRole.ADMIN) throw new ForbiddenException('Administrator access required')
+      if (actorId === id && role !== UserRole.ADMIN) throw new ConflictException('不能撤销自己的系统管理权限，请由另一位管理员操作')
+      if (!await repository.existsBy({ id })) throw new NotFoundException('用户不存在')
+      await repository.update(id, { role })
+      return workbenchAccount((await repository.findOneBy({ id }))!)
+    })
+  }
+
+  async updateBusinessScope(id: string, scope: UpdateBusinessScopeDto) {
+    if (!await this.findById(id)) throw new NotFoundException('用户不存在')
+    await this.usersRepository.update(id, { businessRole: scope.role, businessDepartmentId: scope.departmentId, businessEmployeeId: scope.employeeId })
+    const updated = await this.findById(id)
+    if (!updated) throw new NotFoundException('用户不存在')
+    return workbenchAccount(updated)
+  }
+
+  async updateFopBinding(id: string, tenantId: string | null, userId: string | null) {
+    if (!await this.findById(id)) throw new NotFoundException('用户不存在')
+    try {
+      await this.usersRepository.update(id, { fopTenantId: tenantId, fopUserId: userId })
+    } catch (error) {
+      if ((error as { driverError?: { code?: string } }).driverError?.code === '23505') {
+        throw new ConflictException('This FOP identity is already bound to another account')
+      }
+      throw error
+    }
+    const updated = await this.findById(id)
+    if (!updated) throw new NotFoundException('用户不存在')
+    return workbenchAccount(updated)
   }
 
   async findByEmail(email: string): Promise<User | null> {
@@ -56,9 +130,14 @@ export class UsersService {
       throw new NotFoundException('用户不存在')
     }
 
-    if (updateData.username !== undefined) user.username = updateData.username
-    if (updateData.avatarUrl !== undefined) user.avatarUrl = updateData.avatarUrl
-    return this.usersRepository.save(user)
+    // Never save a full profile snapshot: grants may have changed since the read.
+    const changes: Partial<Pick<User, 'username' | 'avatarUrl'>> = {}
+    if (updateData.username !== undefined) changes.username = updateData.username
+    if (updateData.avatarUrl !== undefined) changes.avatarUrl = updateData.avatarUrl
+    if (Object.keys(changes).length) await this.usersRepository.update(id, changes)
+    const updated = await this.findById(id)
+    if (!updated) throw new NotFoundException('用户不存在')
+    return updated
   }
 
   async updateAvatar(id: string, avatarUrl: string): Promise<User> {

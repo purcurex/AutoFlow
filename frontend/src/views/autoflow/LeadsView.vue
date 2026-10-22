@@ -81,7 +81,7 @@ function formatDate(value: string) {
       <div class="panel mb-4 flex flex-col gap-3 p-3 sm:flex-row sm:items-center">
         <label class="relative min-w-0 flex-1 sm:max-w-lg">
           <Search class="pointer-events-none absolute left-3 top-3 h-4 w-4 text-slate-400" />
-          <input v-model="query" class="input pl-10" :placeholder="t('leads.searchPlaceholder')" />
+          <input v-model="query" type="search" class="input pl-10" :placeholder="t('leads.searchPlaceholder')" />
         </label>
         <label class="relative sm:w-52">
           <SlidersHorizontal class="pointer-events-none absolute left-3 top-3 h-4 w-4 text-slate-400" />

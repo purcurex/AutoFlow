@@ -6,9 +6,12 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
   OneToMany,
+  Unique,
 } from 'typeorm'
+import type { BusinessRole } from './business-scope'
 import { Note } from '../notes/note.entity'
 import { Folder } from '../folders/folder.entity'
+import type { WorkbenchRole } from './workbench-role'
 
 export enum UserRole {
   ADMIN = 'admin',
@@ -16,6 +19,28 @@ export enum UserRole {
 }
 
 @Entity('users')
+@Check('chk_users_business_role', "business_role IN ('none','admin','department_manager','salesperson')")
+@Check('chk_users_business_ids', "(business_department_id IS NULL OR (char_length(business_department_id) > 0 AND business_department_id = btrim(business_department_id))) AND (business_employee_id IS NULL OR (char_length(business_employee_id) > 0 AND business_employee_id = btrim(business_employee_id)))")
+@Unique('uq_users_fop_identity', ['fopTenantId', 'fopUserId'])
+@Check('chk_users_fop_identity', `
+  (fop_tenant_id IS NULL AND fop_user_id IS NULL) OR (
+    fop_tenant_id IS NOT NULL AND fop_user_id IS NOT NULL
+    AND char_length(fop_tenant_id) BETWEEN 1 AND 128
+    AND char_length(fop_user_id) BETWEEN 1 AND 128
+    AND fop_tenant_id !~ '^[[:space:]]|[[:space:]]$'
+    AND fop_user_id !~ '^[[:space:]]|[[:space:]]$'
+  )
+`)
+@Check('chk_users_workbench_roles', `
+  workbench_roles <@ ARRAY['sales', 'procurement', 'allocation', 'dispatch', 'warehouse']::text[]
+  AND cardinality(workbench_roles) = (
+    CASE WHEN 'sales' = ANY(workbench_roles) THEN 1 ELSE 0 END +
+    CASE WHEN 'procurement' = ANY(workbench_roles) THEN 1 ELSE 0 END +
+    CASE WHEN 'allocation' = ANY(workbench_roles) THEN 1 ELSE 0 END +
+    CASE WHEN 'dispatch' = ANY(workbench_roles) THEN 1 ELSE 0 END +
+    CASE WHEN 'warehouse' = ANY(workbench_roles) THEN 1 ELSE 0 END
+  )
+`)
 @Check(
   'chk_users_next_workflow_number',
   'next_workflow_number >= 1 AND next_workflow_number <= 1000000',
@@ -59,6 +84,24 @@ export class User {
     default: UserRole.USER,
   })
   role: UserRole
+
+  @Column({ name: 'workbench_roles', type: 'text', array: true, default: () => "ARRAY['sales']::text[]" })
+  workbenchRoles: WorkbenchRole[]
+
+  @Column({ name: 'business_role', type: 'varchar', length: 24, default: 'salesperson' })
+  businessRole: BusinessRole
+
+  @Column({ name: 'business_department_id', type: 'varchar', length: 128, nullable: true })
+  businessDepartmentId: string | null
+
+  @Column({ name: 'business_employee_id', type: 'varchar', length: 128, nullable: true })
+  businessEmployeeId: string | null
+
+  @Column({ name: 'fop_tenant_id', type: 'varchar', length: 128, nullable: true })
+  fopTenantId: string | null
+
+  @Column({ name: 'fop_user_id', type: 'varchar', length: 128, nullable: true })
+  fopUserId: string | null
 
   @OneToMany(() => Note, (note) => note.user)
   notes: Note[]

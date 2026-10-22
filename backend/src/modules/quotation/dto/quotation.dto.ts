@@ -126,7 +126,7 @@ export class QuotePackageDto {
 export class QuoteDraftDto {
   @IsString()
   @Matches(/^[A-Z]{3}$/)
-  currency: string
+  currency: string = 'USD'
 
   @IsArray()
   @ArrayMinSize(1)

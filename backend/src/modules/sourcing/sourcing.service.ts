@@ -1,3 +1,4 @@
+import { readBusinessOwners } from '../users/business-data-access'
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common'
 import { InjectRepository } from '@nestjs/typeorm'
 import { randomUUID } from 'crypto'
@@ -63,8 +64,10 @@ export class SourcingService {
   ) {}
 
   async getSummary(ownerUserId: string, workflowRunId: string): Promise<SourcingSummaryResponse> {
-    await this.requireWorkflow(ownerUserId, workflowRunId)
-    return this.buildSummary(ownerUserId, workflowRunId)
+    const owners = await readBusinessOwners(this.dataSource, ownerUserId)
+    const workflow = await this.workflowRepository.findOne({ where: { id: workflowRunId, ownerUserId: owners.filter } })
+    if (!workflow) throw new NotFoundException('Workflow not found')
+    return this.buildSummary(workflow.ownerUserId, workflowRunId)
   }
 
   async startSearch(

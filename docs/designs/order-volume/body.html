@@ -1,0 +1,135 @@
+<style>
+.prototype{background:#f3f6fa;border:1px solid #dbe5ed;border-radius:12px;padding:18px;margin:20px -18px;color:#172b43}.prototype header{display:flex;align-items:start;justify-content:space-between;gap:15px}.prototype h3{margin:0 0 4px;color:#172b43;font-size:20px}.prototype p{margin:4px 0;font-size:12px;color:#5b6e80}.proto-tag{padding:3px 8px;background:#fff3d9;border-radius:4px;font-size:11px;white-space:nowrap;color:#815b14}.query-box{background:#fff;border:1px solid #dbe5ed;border-radius:9px;margin:16px 0;padding:14px;display:flex;justify-content:flex-end;gap:12px;flex-wrap:wrap;align-items:start}.query-box label,.object-picker,.time-field{font-size:11px;color:#5b6e80}.query-box label>span,.time-field>span{display:block;margin-bottom:5px}.prototype select,.prototype input[type=search],.prototype button,.prototype summary{font:inherit;color:#172b43;background:#fff;border:1px solid #dbe5ed;border-radius:5px;padding:7px 10px}.prototype button,.prototype summary{cursor:pointer}.prototype :focus{outline:none}.prototype :focus-visible{outline:2px solid #82909b;outline-offset:2px}.prototype select{height:35px;min-width:108px}.object-picker{position:relative;min-width:142px}.object-picker>span{display:block;margin-bottom:5px}.object-picker summary{height:35px;list-style:none}.object-picker summary::after{content:'⌄';float:right;margin-left:10px}.object-menu{position:absolute;right:0;top:58px;z-index:20;background:#fff;width:285px;padding:12px;box-shadow:0 8px 30px #172b4322;border:1px solid #dbe5ed;border-radius:8px}.object-menu input[type=search]{width:100%;font-size:12px;margin-bottom:8px}.object-menu button{width:100%;font-size:12px;text-align:left;margin-bottom:7px}.object-list{max-height:220px;overflow:auto}.object-list label{display:flex;gap:7px;padding:5px;font-size:12px;color:#172b43;align-items:center}.object-list small{margin-left:auto;color:#728494}.grain{display:flex;border:1px solid #dbe5ed;border-radius:5px;overflow:hidden;height:35px}.grain button{border:0;border-radius:0;padding:6px 11px}.grain button[aria-pressed=true]{background:#eaf1f7;color:#165a9b;font-weight:650}.prototype [hidden]{display:none!important}.query-context{font-size:12px;margin:8px 0 14px;line-height:1.8;color:#5b6e80}.kpi-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:14px 0}.kpi{background:#fff;border:1px solid #dbe5ed;padding:14px 16px;border-radius:8px}.kpi small{font-size:11px;color:#5b6e80;display:block}.kpi strong{font-size:25px;color:#6478b3;display:block;line-height:1.5;font-variant-numeric:tabular-nums}.kpi strong::before{content:'';display:inline-block;width:7px;height:7px;background:#94a5dd;border-radius:50%;margin-right:8px;vertical-align:middle}.proto-panel{background:white;border:1px solid #dbe5ed;border-radius:9px;padding:14px;margin:12px 0;min-width:0}.proto-panel h4{font-size:14px;margin:0;color:#234867}.proto-panel .note{font-size:11px;margin:2px 0 12px;color:#5b6e80}.trend-grid{display:grid;grid-template-columns:1fr;gap:12px}.trend-grid.split{grid-template-columns:1fr 1fr}.trend{height:340px;min-width:0}.split-label{font-size:12px;font-weight:600;margin:8px 0}.secondary-grid{display:grid;grid-template-columns:minmax(250px,.8fr) minmax(0,1.2fr);gap:12px}.rank-chart{height:350px}.proto-table-scroll{overflow:auto;max-height:350px}.prototype table{font-size:11px;white-space:nowrap}.prototype th,.prototype td{padding:9px;min-width:68px;text-align:right}.prototype th:first-child,.prototype td:first-child{text-align:left;min-width:150px}.prototype .aggregate-row td{background:#f1f4fc;color:#6478b3;font-weight:650}.prototype .aggregate-row td:first-child{box-shadow:inset 3px 0 #94a5dd}.prototype .table-wrap{border:0;margin:6px 0}.prototype .table-link{border:0;background:none;color:#165a9b;padding:0;font:inherit;text-decoration:underline;text-underline-offset:3px}.drill-example{border-left:3px solid #94a5dd;background:#f1f4fc;padding:12px;margin-top:12px;font-size:12px;color:#42577e}.drill-example strong{display:block}.layout-line{padding:13px 16px;border:1px solid #dbe5ed;border-radius:7px;margin:8px 0;background:#f8fafc;font-size:13px}.layout-line b{display:inline-block;min-width:145px;color:#165a9b}.pill{display:inline-block;border-radius:12px;background:#edf6f9;color:#087f8c;padding:2px 10px;font-size:12px}.prototype .table-wrap td{overflow-wrap:normal} .prototype .subtle{color:#5b6e80}.prototype .feedback{min-height:18px;font-size:11px;color:#8a5217}
+@media(max-width:1350px){.trend-grid.split,.secondary-grid{grid-template-columns:1fr}.rank-chart{height:300px}}@media(max-width:760px){.prototype{margin:15px -6px;padding:12px}.query-box{gap:10px}.query-box>label,.object-picker{flex:1 1 130px}.query-box select{width:100%}.object-menu{right:0;width:min(285px,80vw)}.kpi-grid{grid-template-columns:1fr}.trend{height:320px}.layout-line b{display:block}}@media print{.prototype{break-inside:auto}.query-box,.object-menu,.drill-example{display:none}.trend{height:300px}.proto-panel{break-inside:avoid}.secondary-grid{display:block}.proto-table-scroll{max-height:none;overflow:visible}.prototype{margin:10px 0}}
+.customer-search-form{align-items:end}.customer-search-form label{flex:1;max-width:440px}.customer-search-form input{width:100%;height:36px}.customer-search-form button{height:36px;font-size:12px}.customer-empty{text-align:center;padding:35px 15px;background:#fff;border:1px dashed #dbe5ed;border-radius:8px}.customer-empty strong{font-size:16px;color:#5b6e80}.customer-results{background:white;border:1px solid #dbe5ed;border-radius:8px;padding:6px}.customer-results button{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;text-align:left;border:0;border-bottom:1px solid #edf0f7;border-radius:0;padding:10px;font-size:12px}.customer-results button:last-child{border:0}.customer-results button:hover{background:#f1f4fc}.customer-results small{color:#5b6e80}.customer-paging{display:flex;justify-content:flex-end;align-items:center;gap:10px;margin:10px 0;font-size:12px}.customer-paging button:disabled{opacity:.45;cursor:default}.customer-identity{display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;background:#eaf1f7;border-radius:7px;padding:12px 15px;font-size:13px;margin-top:16px}.customer-identity span{color:#5b6e80}.customer-search-form :focus-visible{outline-color:#82909b}@media(max-width:760px){.customer-search-form label{flex-basis:100%;max-width:none}.customer-results button{align-items:start;flex-direction:column;gap:4px}}
+</style>
+
+<h2 id="decision">设计结论</h2>
+<p>新增一个<strong>「业务订单量分析」</strong>模块，使用一套查询条件联动 <strong>订单趋势 + 区间排名 + 汇总清单</strong>。默认查看「组织 → 营销中心 → 按月 → 全部仓库」，一屏回答：总共有多少单、何时产生、由哪些部门／对象贡献。</p>
+<p>综合分析保留<strong>物流服务商、组织、业务员</strong>三类。<strong>客户模块单独设置：默认保留前十客户排名，其余客户合计为“其他”；按名称或编码搜索、或点击排名客户后查看该客户的月／周／日趋势。</strong>仓库属于独立筛选，不与客户、部门组合成几十个固定报表；选择分仓对比时，把主图拆为杭州仓、深圳仓两张共用刻度的图。原始订单明细始终跳转工作台。</p>
+<blockquote><p>本交付为<strong>设计方案与可操作原型</strong>，对应正式前端和授权 API 已在本地实现；本文件仍是独立模拟原型，正式接口以 docs/FOP_ORDER_VOLUME_API.md 为准。下方全部为确定性模拟数据，统一截至 <strong>2026-10-21</strong>；客户为虚构名称，员工沿用现有演示名册，角色为“业务数据管理员”。未调用 FOP。</p></blockquote>
+
+<h2 id="prototype">交互原型</h2>
+<p>切换类别、部门、明细对象、月／周／天、仓库，即可联动图表及清单。订单趋势保留完整时间轴，默认定位最新已发生时间段。点击图表或清单中的订单数，可预览工作台应接收的筛选条件。</p>
+<section class="prototype" aria-label="订单量分析交互原型">
+  <header><div><h3>业务订单量分析</h3><p>从组织业绩到履约渠道，一处查看订单规模与结构</p></div><div><span class="proto-tag">MOCK · 设计演示</span> <button id="resetQuery" type="button">恢复默认</button></div></header>
+  <div class="query-box">
+    <label><span>① 查询类别</span><select id="category" aria-label="查询类别"><option value="organization">组织</option><option value="carrier">物流服务商</option><option value="salesperson">业务员</option></select></label>
+    <label id="departmentField"><span id="departmentCaption">② 组织范围</span><select id="department" aria-label="组织或业务部门"><option value="marketing">营销中心</option><option value="sales1">业务一部</option><option value="sales2">业务二部</option><option value="sales3">业务三部</option><option value="sales4">业务四部</option></select></label>
+    <div class="object-picker"><span id="objectCaption">明细对象</span><details id="objectPicker"><summary id="objectSummary">全部对象</summary><div class="object-menu"><input id="objectSearch" type="search" placeholder="搜索名称或编号" aria-label="搜索明细对象"><button id="allObjects" type="button">查看全部对象</button><div id="objectList" class="object-list"></div><div id="selectionFeedback" class="feedback" aria-live="polite"></div></div></details></div>
+    <div class="time-field"><span>③ 时间轴</span><div class="grain" role="group" aria-label="时间轴"><button type="button" data-grain="month" aria-pressed="true">按月</button><button type="button" data-grain="week" aria-pressed="false">按周</button><button type="button" data-grain="day" aria-pressed="false">按天</button></div></div>
+    <label id="monthField" hidden><span>月份</span><select id="month" aria-label="统计月份"><option value="2026-10">2026 年 10 月</option><option value="2026-09">2026 年 9 月</option><option value="2026-02">2026 年 2 月</option></select></label>
+    <label><span>仓库范围</span><select id="warehouse" aria-label="仓库范围"><option value="all">全部仓库</option><option value="HZ">杭州仓</option><option value="SZ">深圳仓</option></select></label>
+    <label><span>展示方式</span><select id="warehouseMode" aria-label="仓库展示方式"><option value="combined">合并展示</option><option value="split">分仓对比</option></select></label>
+  </div>
+  <div id="context" class="query-context" aria-live="polite"></div>
+  <div class="kpi-grid"><div class="kpi"><small>查询区间订单合计 · 单</small><strong id="total">—</strong><small>按订单 ID 去重，图表缩放不改变区间合计</small></div><div class="kpi"><small>杭州仓 · 单</small><strong id="hzTotal">—</strong><small>当前查询范围内的杭州仓订单</small></div><div class="kpi"><small>深圳仓 · 单</small><strong id="szTotal">—</strong><small>当前查询范围内的深圳仓订单</small></div></div>
+  <div class="proto-panel"><h4 id="trendTitle">订单趋势</h4><p class="note" id="trendNote"></p><div class="trend-grid" id="trendGrid"><div><div class="split-label" id="firstLabel" hidden>杭州仓</div><div class="trend" id="trendA" role="img" aria-label="订单量趋势图"></div></div><div id="secondPanel" hidden><div class="split-label">深圳仓</div><div class="trend" id="trendB" role="img" aria-label="深圳仓订单量趋势图"></div></div></div></div>
+  <div class="secondary-grid"><div class="proto-panel"><h4 id="rankTitle">区间贡献排名</h4><p class="note">按整个查询区间排序 · 不含汇总项 · 最多 10 项</p><div id="rankChart" class="rank-chart" role="img" aria-label="订单量对象排名"></div></div><div class="proto-panel"><h4>区间汇总清单</h4><p class="note">汇总置顶，明细与汇总平级；占比不重复计入合计</p><div class="proto-table-scroll"><table><thead><tr><th>统计对象</th><th>订单量</th><th>占比</th><th>杭州仓</th><th>深圳仓</th></tr></thead><tbody id="summaryRows"></tbody></table></div></div></div>
+  <details class="proto-panel"><summary>展开逐期数据清单</summary><div class="proto-table-scroll"><table><thead id="periodHead"></thead><tbody id="periodRows"></tbody></table></div></details>
+  <div id="drillPreview" class="drill-example" hidden aria-live="polite"></div>
+  <p>统计单位：订单／单 · 模拟业务时区：Asia/Shanghai · 截至 2026-10-21 · 当月／本周／当日尚未结束</p>
+</section>
+
+<h2 id="customer-prototype">独立客户订单查询</h2>
+<p><strong>先看排名，按需定位单客户。</strong>输入客户名称或编码，点击搜索；编码精确命中时直接显示，名称存在多个匹配时从候选结果中选择。默认显示前十客户＋其他的区间排名，不展开全量客户下拉框；排名随部门、时间与仓库筛选更新，搜索不会将排名缩小为一个客户。部门用于辅助辨认和可选的高级缩小范围，不作为搜索前置条件。</p>
+<section class="prototype" aria-label="独立客户订单查询原型">
+  <header><div><h3>客户订单查询</h3><p>按客户名称或编码定位，查看该客户的订单趋势</p></div><span class="proto-tag">MOCK · 单客户查询</span></header>
+    <div class="query-box">
+      <div class="time-field"><span>时间轴</span><div class="grain" role="group" aria-label="客户时间轴"><button type="button" data-customer-grain="month" aria-pressed="true">按月</button><button type="button" data-customer-grain="week" aria-pressed="false">按周</button><button type="button" data-customer-grain="day" aria-pressed="false">按天</button></div></div>
+      <label id="customerMonthField" hidden><span>月份</span><select id="customerMonth" aria-label="客户统计月份"><option value="2026-10">2026 年 10 月</option><option value="2026-09">2026 年 9 月</option><option value="2026-02">2026 年 2 月</option></select></label>
+      <label><span>仓库范围</span><select id="customerWarehouse" aria-label="客户仓库范围"><option value="all">全部仓库</option><option value="HZ">杭州仓</option><option value="SZ">深圳仓</option></select></label>
+    </div>
+  <div class="proto-panel"><h4>客户订单量排名 · 前十＋其他</h4><p id="customerRankingTotal"></p><div id="customerRankChart" style="height:440px" role="img" aria-label="前十客户订单排名"></div><div class="proto-table-scroll"><table><thead><tr><th>客户 / 编码</th><th>订单量</th><th>占比</th><th>杭州仓</th><th>深圳仓</th></tr></thead><tbody id="customerRankRows"></tbody></table></div></div>
+  <form id="customerSearchForm" class="query-box customer-search-form">
+    <label><span>客户名称或编码</span><input id="customerSearchInput" type="search" aria-label="客户名称或编码" placeholder="例如：Northstar 或 C001" autocomplete="off"></label>
+    <button type="submit">搜索客户</button><button type="button" id="clearCustomer">清空</button>
+  </form>
+  <div id="customerSearchStatus" class="query-context" role="status">请输入客户名称或编码，搜索并确定客户后显示订单数据。</div>
+  <div id="customerSearchResults" class="customer-results" hidden></div>
+  <div id="customerSearchPaging" class="customer-paging" hidden><button type="button" id="customerPrev">上一页</button><span id="customerPageLabel"></span><button type="button" id="customerNext">下一页</button></div>
+  <div id="customerEmpty" class="customer-empty"><strong>先搜索一位客户</strong><p>下方仅展示选定客户的趋势，上方保留前十客户与其他排名。</p></div>
+  <div id="customerData" hidden>
+    <div class="customer-identity"><strong id="customerName"></strong><span id="customerMeta"></span></div>
+    <p id="customerRange"></p>
+    <div class="kpi-grid"><div class="kpi"><small>该客户 · 区间订单合计</small><strong id="customerTotal">—</strong><small>单 · 按订单 ID 去重</small></div><div class="kpi"><small>杭州仓 · 单</small><strong id="customerHz">—</strong><small>当前客户及查询范围</small></div><div class="kpi"><small>深圳仓 · 单</small><strong id="customerSz">—</strong><small>当前客户及查询范围</small></div></div>
+    <div class="proto-panel"><h4 id="customerTrendTitle">客户订单趋势</h4><p class="note">浅蓝紫为该客户合计；全部仓库时并列展示杭州仓与深圳仓，合计不重复累加。</p><div id="customerChart" class="trend" role="img" aria-label="所选客户订单量趋势图"></div></div>
+    <div class="proto-panel"><h4>该客户逐期订单清单</h4><p class="note">仅当前客户 · 点击订单量预览工作台下钻条件</p><div class="proto-table-scroll"><table><thead><tr><th>时间范围</th><th>订单合计</th><th>杭州仓</th><th>深圳仓</th><th>周期状态</th></tr></thead><tbody id="customerPeriodRows"></tbody></table></div></div>
+    <div id="customerDrill" class="drill-example" hidden aria-live="polite"></div>
+  </div>
+</section>
+<p><strong>搜索规则：</strong>按名称模糊匹配，编码精确匹配优先，忽略首尾空格和编码大小写。结果每页 10 条，仅返回当前账号可访问的客户；同名按稳定客户 ID／编码区分，绝不按名字合并。输入为空不查询，搜索无结果显示空态；修改或清空关键词立即清除已选客户及旧图表，未选择新客户时不展示旧数据。已确定但零订单的客户展示 0，与“未选择客户”区分。</p>
+<p><strong>展示规则：</strong>按月用当年 1 月至当前月，默认最新 6 月；按周为本周及前三周；按天为所选月完整日期，默认最近 14 个已发生日期，未来日期留空。单客户趋势仅画该客户合计与两仓贡献；上方独立排名始终保留前十客户与其他。切换时间／仓库保留所选客户，修改客户搜索则清空结果。真实查询只传 customerId，不直接把输入名称作为订单过滤依据。</p>
+<p><strong>接口与性能：</strong>搜索与统计为两个独立请求；输入关键词后才允许搜索，分页加载搜索结果。排名请求不传 customerId；选定客户的趋势请求显式传稳定 customerId，无权或不存在的 ID 返回空统计，不能回退为全部客户；迟到响应按查询版本丢弃，撤权／切换账号清除客户身份与数据。单客户统计和订单下钻继续执行同一用户权限边界。</p>
+
+<h2 id="structure">一、三级查询结构</h2>
+<div class="layout-line"><b>第一级 · 看什么</b>综合分析类别：物流服务商 / 组织 / 业务员；客户查询使用独立入口</div>
+<div class="layout-line"><b>第二级 · 看谁</b>按类别联动组织范围及明细对象；提供授权范围内的明细对象单选，默认全部；客户使用独立分页搜索</div>
+<div class="layout-line"><b>第三级 · 怎么看时间</b>按月 / 按周 / 按天 → 对应年份、周区间或月份</div>
+<div class="layout-line"><b>独立条件 · 在哪处理</b>全部仓库 / 杭州仓 / 深圳仓；全部仓库时可切换分仓对比</div>
+<table><thead><tr><th>第一级</th><th>第二级及联动</th><th>默认图例</th><th>典型问题</th></tr></thead><tbody>
+<tr><td>物流服务商</td><td>云途 YT、4PX、万邦 WB、燕文 YW、极速 JS、其他；未分配单列。默认全部，可搜选具体服务商</td><td>服务商合计 + 各服务商。高级筛选可加部门，首屏不铺开</td><td>今年各渠道承接了多少订单？杭州仓与深圳仓渠道结构是否不同？</td></tr>
+<tr><td>组织</td><td>营销中心 / 业务一至四部；后续由组织目录动态提供，中心包含下属部门</td><td>营销中心合计 + 四部；选择业务一部后变成一部合计 + 部内业务员／伙伴</td><td>中心总体增长如何？哪一部、哪位员工贡献最多？</td></tr>
+<tr><td>客户（独立模块）</td><td>输入客户名称或编码 → 从授权搜索结果中确定一个客户；展示名称、编码、所属部门用于辨认，部门不是必选前置条件</td><td>前十客户＋其他排名、区间汇总清单；选定客户后增加独立趋势与逐期清单</td><td>指定客户本年、近四周、本月分别下了多少订单？</td></tr>
+<tr><td>业务员</td><td>业务部门 → 部内外贸业务员／营销伙伴；显示中文名（English），不列领导</td><td>部门合计 + 部内人员；超过 5 人时 Top 5 + 其余人员</td><td>业务一部近期每个人的订单贡献和趋势如何？</td></tr>
+</tbody></table>
+<p><strong>统一筛选行为：</strong>所有条件位于模块标题右上方的查询区，分两行右对齐。切类别保留有效时间和仓库条件，清除不兼容对象；切部门清除旧业务员。目录先加载，再允许选择；快速变更只接收最后一次查询响应。对象选择支持名称／中英文名／编号检索，最多手动比较 5 个对象；“全部”不受此限制，由 Top N 规则控图。筛选后显示一句完整范围摘要，可一键恢复默认。</p>
+<p><strong>默认值：</strong>业务数据管理员为营销中心；部门经理为本人部门；业务员为本人。客户搜索结果和业务员目录不展示未授权记录。综合分析多选部分对象后标题改为“所选对象合计”，不能再称部门合计；需要看部门完整总数时清除对象筛选。</p>
+
+<h2 id="time">二、时间轴与统计口径</h2>
+<table><thead><tr><th>时间粒度</th><th>完整数据范围</th><th>默认可见窗口</th><th>未结束周期处理</th></tr></thead><tbody>
+<tr><td>按月</td><td>当年 1 月至当前月。如 2026-10-21 为 10 组；历史整年为 12 组</td><td>最近 6 个月，滑块靠右；左拖查看前期</td><td>当前月标“截至 10-21”，不与完整上月直接计算涨跌</td></tr>
+<tr><td>按周</td><td>本周及前三周，共 4 组；以周一至周日、上海时区划分，可跨月跨年</td><td>4 周全部展示，不显示多余滚动轴</td><td>示例 09-28—10-04、10-05—10-11、10-12—10-18、10-19—10-25；末周只累计至 10-21</td></tr>
+<tr><td>按天</td><td>所选月完整日历天数，28 / 29 / 30 / 31 组；默认当月</td><td>最近 14 个已发生日期，当前日置于右侧；可向左查历史、向右看到月末日期</td><td>已过去但无订单记 0；未来日期为 null / “未到日期”，灰色标识，无柱无点；今天标“截至当前”</td></tr>
+</tbody></table>
+<p><strong>建议默认指标：</strong>按订单创建日期统计有效业务订单数，单位“单”；以 FOP 稳定履约订单 ID 去重，不按 SKU 行、商品件数、运单数或 Shopify 展示单号计数。默认包含待支付和已支付，排除已取消、全额退款及明确标识的测试订单；部分退款订单保留 1 单。页面显示口径说明；正式接入前核对 FOP 状态映射。若需要“已发货订单量”，应增加明确指标／日期口径，不能悄悄把创建日期换为发货日期。</p>
+<p><strong>时间比较：</strong>一期先展示绝对订单量与对象占比，不在未结束周期上误报环比。后续如增加环比，本月对上月同已过天数、本周对上周同星期及时间；分母为 0 显示“—”。独立客户查询沿用相同时间规则。历史月份按选定年份和月份计算，空月份同样占一个时间桶。</p>
+<p><strong>归属规则：</strong>组织和业务员采用订单创建时归属快照，权限判断仍使用当前授权，避免员工调岗改写历史业绩。服务商／仓库采用订单当前正式确认的主履约归属，并注明“截至更新时间”。一单拆到多个包裹、多个仓库或多个服务商时，须由 FOP 明确唯一主归属；不能确定的进入“多仓／多服务商待归属”，不在每个分类各计一次。未来“包裹量”应为独立指标。</p>
+<p><strong>分类完整性：</strong>“其他服务商”只收已知但非五大服务商；空值进入“未分配”，未知仓库／组织进入独立待归属分组，不静默丢弃。领导不显示为个人系列；部门内非业务员归属、离职或缺失人员映射的订单用“其他归属订单”汇总，不丢弃、不显示领导姓名。原型数据仅含杭州、深圳两仓；正式接口发现额外分组时，自动展示补充行／卡片，确保分类合计能与总数核对。</p>
+
+<h2 id="charts">三、图表结构与样式</h2>
+<table><thead><tr><th>区域</th><th>推荐呈现</th><th>作用</th></tr></thead><tbody>
+<tr><td>概况指标</td><td>查询区间合计、杭州仓、深圳仓；发现未归属仓则增加提示和数值</td><td>总量始终对应整段查询区间，拖动缩放、隐藏图例不会改变 KPI</td></tr>
+<tr><td>订单趋势 · ECharts 1</td><td>按月／周用分组柱状图；按天用折线图，禁用平滑以避免虚构日间起伏。汇总和明细为并列系列，不堆叠</td><td>月份看规模，日期看节奏；所有订单数为整数</td></tr>
+<tr><td>分仓对比 · ECharts 1A / 1B</td><td>杭州仓、深圳仓小倍图；同一时间轴、同一 Y 轴最大值、同一对象顺序与颜色、同步缩放</td><td>避免“对象 × 仓库”形成十几种颜色；窄屏上下排列</td></tr>
+<tr><td>区间贡献排名 · ECharts 2</td><td>横向条形图，按当前查询区间订单数降序，最多 Top 10；不放汇总行</td><td>快速找主要贡献者；不是“某个月”的排名</td></tr>
+<tr><td>汇总／逐期清单</td><td>合计行固定第一，其后全部授权对象；字段为对象、订单量、占比、杭州仓、深圳仓；逐期表可展开</td><td>精确核对数字；真实页面服务端分页／导出，不把 Top N 当全量</td></tr>
+</tbody></table>
+<p><strong>颜色语义：</strong>汇总系列沿用当前 Dashboard 浅蓝紫 <code>#94A5DD</code>，合计数字使用同色系较深文字 <code>#6478B3</code>，表格汇总底色 <code>#F1F4FC</code>。明细沿用柔和青绿、浅金、粉红、淡紫；其他／未分配使用不同中性灰并明确标签。对象颜色绑定稳定 ID，不因排名或仓库切换变色。选中控件不出现蓝色外框；键盘焦点保留中性灰指示。</p>
+<p><strong>Top N：</strong>对综合分析中的人员，以整段查询区间排序后固定 Top 5，不能每个月换一批人。“其余对象”补齐剩余贡献，与“其他服务商”完全不同。手选单一对象时直接显示该对象。分仓比较使用两仓共同范围的同一 Top 5，不分别排名。统计清单保留 Top N 与其余合计，原始订单清单支持查询全部授权订单；合计 = 明细之和 = 两仓之和（有未归属项时包含该项）。</p>
+<p><strong>提示与下钻：</strong>悬浮显示完整对象名、日期范围、订单量、区间状态；汇总永远排第一，数字不加货币符号。点击柱形／折线点／排名／汇总表数字时，在现有授权岗位工作台打开订单清单，携带对象 ID、时间区间、仓库和口径；点击汇总仅带范围，不叠加“全部分类”。排名及区间清单使用完整查询区间，趋势点使用该时间桶。</p>
+
+<h2 id="integration">四、页面归属、权限与预留 API</h2>
+<p><strong>页面位置：</strong>经营概览新增「业务订单量分析」卡片，可展开完整分析区；日常高频分析可在岗位工作台增加同组件入口，下钻筛选通过安全 URL 参数传递。Dashboard 放统计和汇总清单，原始订单编号、客户、SKU、图片、支付状态等订单明细仍由工作台承载。当前待办队列接口不能直接承担“所有订单”的分析下钻，需新增专门的授权清单查询，不用某一待办队列冒充全量。</p>
+<p><strong>权限：</strong>每次请求先取得会话身份，读取本地业务角色、当前部门／员工绑定和 FOP 数据权限，再计算授权交集。业务数据管理员可看所属公司授权全集；部门经理看本部门及子部门；业务员看本人。汇总、下拉目录、搜索建议、排名、导出、下钻都使用同一范围；无权数据不作为“其他”泄露。界面只能提交筛选对象 ID，不能提交授权用户或权限范围。有限权限的“营销中心合计”必须标“授权范围内”。</p>
+<p>下面为<strong>本项目建议新增的适配接口</strong>，不是金蝶现成 API，也尚未实现。Mock 与真实 FOP 适配器返回同一 DTO；真实接口故障不可静默降级为 Mock。</p>
+<table><thead><tr><th>已实现接口</th><th>职责</th></tr></thead><tbody>
+<tr><td><code>GET /api/autoflow/integrations/fop/order-volume</code></td><td>查询类别 carrier / organization / salesperson / customer；统一返回 periods、series、仓库分项、合计和已授权 options。customer 不传 customerId 时为前十＋其他排名，传 customerId 为单客户统计。</td></tr>
+<tr><td><code>GET /api/autoflow/integrations/fop/order-volume/customers</code></td><td>keyword 必填；名称／编码搜索，page / pageSize 分页，department 可选；不返回无权客户。</td></tr>
+<tr><td><code>GET /api/autoflow/integrations/fop/order-volume/orders</code></td><td>继承统计参数，加 workbenchRole / seriesId / periodId / detailWarehouse / page / pageSize，返回正式履约订单字段；后端复核岗位和数据权限。</td></tr></tbody></table>
+<pre><code>// 请求示例：业务一部日趋势，响应内含各仓库数据
+{ category: 'salesperson', department: 'sales1', grain: 'day', year: 2026, month: 10, warehouse: 'ALL' }
+// 响应结构（演示与 FOP 共用）
+{ source: 'mock', query: { ... }, asOf: 'ISO timestamp', timeZone: 'Asia/Shanghai', total: 123,
+  customerCount: 12,
+  periods: [{ id: '2026-10-01', label: '10-01', from: '2026-10-01', to: '2026-10-01', future: false }],
+  series: [{ id: 'total', label: '业务一部合计', kind: 'total', total: 123,
+    values: [12, null], warehouses: { HZ: [8, null], SZ: [4, null], UNASSIGNED: [0, null] } }],
+  options: { departments: [{ id: 'sales1', label: '业务一部' }], objects: [] }
+}</code></pre>
+<p><strong>接口接入：</strong>订单适配器增加 customerId、customerCode、carrierCode、warehouseCode；通过已认证会话、FOP 订单白名单与本地用户数据范围求交集后再聚合。管理员／经理／业务员沿用现有数据授权。前端不接收完整公司订单，不提供静态数据降级。当前使用显式启用的 demo provider；真实 FOP 适配器仍待后台接入。</p>
+<p><strong>一致性：</strong>分仓下钻用 detailWarehouse 在排名集合确定后过滤，避免重新计算 Top N；分页仍复核权限。当前为实时重新查询，无快照承诺，图表显示更新时间。请求失败与切换账号清空旧结果，迟到响应丢弃。</p>
+
+<h2 id="acceptance">五、验收清单与落地顺序</h2>
+<table><thead><tr><th>场景</th><th>验收结果</th></tr></thead><tbody>
+<tr><td>2026-10-21 按月／周／天</td><td>完整数据分别 10 / 4 / 31 组；月默认 05—10 月，日默认 08—21 日；未来 22—31 日不显示为 0</td></tr>
+<tr><td>选择营销中心、再切业务一部</td><td>先显示中心合计与四部，再显示一部合计与部内人员；清单与图表一致</td></tr>
+<tr><td>独立客户查询</td><td>默认前十客户＋其他排名；清空、未选中或无结果时清除单客户趋势，保留排名；名称或编码搜索可定位客户；同名必须按编码选定，不合并；月／周／天切换保持同一客户</td></tr><tr><td>业务部门 + 业务员</td><td>人员随部门变化，中英文名完整展示；选择部分对象后汇总名称准确</td></tr>
+<tr><td>合并展示、分仓对比</td><td>两仓使用相同 Top N、颜色、刻度和缩放区间；合计不重复累计</td></tr>
+<tr><td>拆单、跨仓、空服务商、额外仓库</td><td>每个有效订单仅 1 单；未归属单列且纳入总数，不挤进“其他服务商”</td></tr>
+<tr><td>跨年周、闰年、无数据、未来日期</td><td>周一边界、28／29／30／31 天正确；授权空数据为 0，未来为 null，权限不足／接口故障为独立错误态</td></tr>
+<tr><td>权限与下钻</td><td>汇总与目录均不泄露他人数据；点击柱形得到同一条件的工作台订单清单；URL 篡改不能越权</td></tr>
+<tr><td>图例隐藏与横向拖动</td><td>只改变可见图形，区间总额、排名与明细统计范围不变；有明确标签避免误解</td></tr>
+</tbody></table>
+<p><strong>落地顺序：</strong>先确定 FOP 有效订单／主归属映射并补稳定 ID，再实现服务端聚合及权限测试；随后接入统一查询组件、趋势和汇总表；再独立实现客户名称／编码搜索与单客户趋势；最后接入人员排名、分仓同步和工作台下钻。Mock 同步覆盖三类综合查询与独立客户查询、三种时间轴、两仓以及空值／跨年／撤权场景。</p>
+<p><strong>本次明确的设计默认项：</strong>上海业务时区、周一为周起始、按创建日期统计有效订单、最新 6 月／14 日视口、查询区间 Top 5、组织汇总并列展示。FOP 订单有效性映射、历史归属快照与跨仓主归属属于上线前需要核对的业务数据规则，不影响当前原型体验。</p>

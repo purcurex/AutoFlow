@@ -1,9 +1,11 @@
+import { readBusinessOwners } from '../users/business-data-access'
 import { Injectable, NotFoundException } from '@nestjs/common'
 import { InjectRepository } from '@nestjs/typeorm'
 import { DataSource, Repository } from 'typeorm'
 import { CrmActivityEntity, LeadEntity } from '../autoflow/entities'
 import { FopCrmHandoffPort } from './fop-integration.types'
 import { FopHandoffEntity } from './fop-handoff.entity'
+import { FopDataService } from '../fop-data/fop-data.service'
 
 @Injectable()
 export class FopHandoffService {
@@ -14,6 +16,7 @@ export class FopHandoffService {
     private readonly activityRepository: Repository<CrmActivityEntity>,
     private readonly handoffPort: FopCrmHandoffPort,
     private readonly dataSource: DataSource,
+    private readonly dataAccess: FopDataService,
   ) {}
 
   async handoff(ownerUserId: string, leadId: string, reason: string): Promise<FopHandoffEntity> {
@@ -32,6 +35,10 @@ export class FopHandoffService {
       if (existing?.status === 'succeeded' || existing?.status === 'requires_review' || pendingIsFresh) {
         return { record: existing, shouldCall: false }
       }
+
+      // Preserve local owner-scoped reads, but require a separate FOP action grant
+      // before creating/retrying any outbound handoff or pending claim.
+      await this.dataAccess.requireResourcePermission(ownerUserId)
 
       const record = repository.create({
         ...existing,
@@ -90,7 +97,8 @@ export class FopHandoffService {
   }
 
   async getForLead(ownerUserId: string, leadId: string): Promise<FopHandoffEntity | null> {
-    return this.handoffRepository.findOne({ where: { ownerUserId, leadId } })
+    const owners = await readBusinessOwners(this.dataSource, ownerUserId)
+    return this.handoffRepository.findOne({ where: { ownerUserId: owners.filter, leadId } })
   }
 
   private isUnavailable(error: unknown): boolean {

@@ -6,6 +6,7 @@ declare module 'express' {
       userId: string
       email: string
       role: UserRole
+      businessRole?: import('../modules/users/business-scope').BusinessRole
     }
   }
 }

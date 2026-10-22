@@ -1,4 +1,5 @@
-import { computed, ref } from 'vue'
+import { assertCurrentSession, captureSession, isCurrentSession, onSessionReset } from '@/utils/session'
+import { computed, onScopeDispose, ref } from 'vue'
 import { defineStore } from 'pinia'
 import { autoflowApi } from '@/api/autoflow'
 import type {
@@ -22,11 +23,24 @@ export const useAutoFlowStore = defineStore('autoflow', () => {
   const followUpStages = ref<FollowUpStage[]>([])
   const isLoading = ref(false)
 
+  onScopeDispose(onSessionReset(() => {
+    dashboard.value = null
+    workflows.value = []
+    leads.value = []
+    currentLead.value = null
+    outreachTasks.value = []
+    followUpStages.value = []
+    isLoading.value = false
+  }))
+
   const topLeads = computed(() => [...leads.value].sort((a, b) => b.totalScore - a.totalScore).slice(0, 10))
   const readyTasks = computed(() => outreachTasks.value.filter((task) => task.status === 'ready'))
 
   async function fetchDashboard() {
-    dashboard.value = await autoflowApi.getDashboard()
+    const session = captureSession()
+    const response = await autoflowApi.getDashboard()
+    assertCurrentSession(session)
+    dashboard.value = response
     workflows.value = dashboard.value.recentWorkflows
     leads.value = dashboard.value.topLeads
     outreachTasks.value = dashboard.value.nextTasks
@@ -34,40 +48,55 @@ export const useAutoFlowStore = defineStore('autoflow', () => {
   }
 
   async function fetchWorkflows() {
+    const session = captureSession()
     const result = await autoflowApi.getWorkflows()
+    assertCurrentSession(session)
     workflows.value = result.items
   }
 
   async function createWorkflow(data: CreateWorkflowRequest) {
+    const session = captureSession()
     const workflow = await autoflowApi.createWorkflow(data)
+    assertCurrentSession(session)
     workflows.value.unshift(workflow)
     return workflow
   }
 
   async function getWorkflow(id: string) {
-    return autoflowApi.getWorkflow(id)
+    const session = captureSession()
+    const result = await autoflowApi.getWorkflow(id)
+    assertCurrentSession(session)
+    return result
   }
 
   async function reviseWorkflow(id: string, data: CreateWorkflowRequest) {
+    const session = captureSession()
     const workflow = await autoflowApi.createWorkflowRevision(id, data)
+    assertCurrentSession(session)
     workflows.value.unshift(workflow)
     return workflow
   }
 
   async function deleteWorkflow(id: string) {
+    const session = captureSession()
     const result = await autoflowApi.deleteWorkflow(id)
+    assertCurrentSession(session)
     workflows.value = workflows.value.filter((item) => item.id !== id)
     return result
   }
 
   async function archiveWorkflow(id: string) {
+    const session = captureSession()
     const workflow = await autoflowApi.archiveWorkflow(id)
+    assertCurrentSession(session)
     workflows.value = workflows.value.filter((item) => item.id !== id)
     return workflow
   }
 
   async function startDiscovery(id: string) {
+    const session = captureSession()
     const result = await autoflowApi.startDiscovery(id)
+    assertCurrentSession(session)
     const workflow = workflows.value.find((item) => item.id === id)
     if (workflow) {
       workflow.status = 'running'
@@ -78,11 +107,14 @@ export const useAutoFlowStore = defineStore('autoflow', () => {
   }
 
   async function fetchLeads(status?: LeadStatus) {
+    const session = captureSession()
     const firstPage = await autoflowApi.getLeads(status, 1, 100)
+    assertCurrentSession(session)
     const items = [...firstPage.items]
     let page = 2
     while (items.length < firstPage.total) {
       const nextPage = await autoflowApi.getLeads(status, page, 100)
+      assertCurrentSession(session)
       if (!nextPage.items.length) break
       items.push(...nextPage.items)
       page += 1
@@ -91,28 +123,40 @@ export const useAutoFlowStore = defineStore('autoflow', () => {
   }
 
   async function fetchLead(id: string) {
-    currentLead.value = await autoflowApi.getLead(id)
+    const session = captureSession()
+    const response = await autoflowApi.getLead(id)
+    assertCurrentSession(session)
+    currentLead.value = response
     return currentLead.value
   }
 
   async function analyzeLeadContacts(id: string) {
-    currentLead.value = await autoflowApi.analyzeLeadContacts(id)
+    const session = captureSession()
+    const response = await autoflowApi.analyzeLeadContacts(id)
+    assertCurrentSession(session)
+    currentLead.value = response
     return currentLead.value
   }
 
   async function generateMessage(id: string, data: GenerateMessageRequest) {
+    const session = captureSession()
     const task = await autoflowApi.generateMessage(id, data)
+    assertCurrentSession(session)
     outreachTasks.value.unshift(task)
     return task
   }
 
   async function fetchOutreachTasks() {
+    const session = captureSession()
     const result = await autoflowApi.getOutreachTasks()
+    assertCurrentSession(session)
     outreachTasks.value = result.items
   }
 
   async function updateOutreachTask(id: string, data: UpdateOutreachTaskRequest) {
+    const session = captureSession()
     const task = await autoflowApi.updateOutreachTask(id, data)
+    assertCurrentSession(session)
     const index = outreachTasks.value.findIndex((item) => item.id === id)
     if (index !== -1) {
       outreachTasks.value[index] = task
@@ -121,15 +165,20 @@ export const useAutoFlowStore = defineStore('autoflow', () => {
   }
 
   async function fetchFollowUps() {
-    followUpStages.value = await autoflowApi.getFollowUps()
+    const session = captureSession()
+    const response = await autoflowApi.getFollowUps()
+    assertCurrentSession(session)
+    followUpStages.value = response
   }
 
   async function loadWorkspace() {
+    const session = captureSession()
     isLoading.value = true
     try {
       await Promise.all([fetchDashboard(), fetchWorkflows(), fetchLeads(), fetchOutreachTasks(), fetchFollowUps()])
+      assertCurrentSession(session)
     } finally {
-      isLoading.value = false
+      if (isCurrentSession(session)) isLoading.value = false
     }
   }
 

@@ -1,5 +1,10 @@
 ﻿import axios from 'axios'
 import { useUserStore } from '@/stores/user'
+import { assertCurrentSession, captureSession, isCurrentSession, StaleSessionError } from '@/utils/session'
+
+declare module 'axios' {
+  interface InternalAxiosRequestConfig { sessionEpoch?: number }
+}
 
 export { authApi } from './auth'
 export { notesApi } from './notes'
@@ -18,9 +23,20 @@ const api = axios.create({
   },
 })
 
+api.interceptors.request.use((config) => {
+  config.sessionEpoch = captureSession()
+  return config
+}, undefined, { synchronous: true })
+
 api.interceptors.response.use(
-  (response) => response.data,
+  (response) => {
+    assertCurrentSession(response.config.sessionEpoch!)
+    return response.data
+  },
   (error) => {
+    if (error.config?.sessionEpoch !== undefined && !isCurrentSession(error.config.sessionEpoch)) {
+      return Promise.reject(new StaleSessionError())
+    }
     if (error.response?.status === 401) {
       const userStore = useUserStore()
       userStore.clearSession()

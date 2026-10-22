@@ -1,3 +1,4 @@
+import { readBusinessOwners } from '../users/business-data-access'
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common'
 import { InjectRepository } from '@nestjs/typeorm'
 import { DataSource, EntityManager, In, IsNull, Repository } from 'typeorm'
@@ -70,15 +71,16 @@ export class AutoflowService {
   ) {}
 
   async getDashboard(ownerUserId: string): Promise<AutoFlowDashboard> {
+    const owners = await readBusinessOwners(this.dataSource, ownerUserId)
     const [activeWorkflows, newLeads, readyOutreach, replies, opportunities, workflows, leads, tasks, funnel] =
       await Promise.all([
-        this.workflowRepository.count({ where: { ownerUserId, status: 'running', archivedAt: IsNull() } }),
-        this.leadRepository.count({ where: { ownerUserId, status: 'new' } }),
-        this.outreachRepository.count({ where: { ownerUserId, status: 'ready' } }),
-        this.leadRepository.count({ where: { ownerUserId, status: 'replied' } }),
-        this.leadRepository.count({ where: { ownerUserId, status: 'opportunity' } }),
+        this.workflowRepository.count({ where: { ownerUserId: owners.filter, status: 'running', archivedAt: IsNull() } }),
+        this.leadRepository.count({ where: { ownerUserId: owners.filter, status: 'new' } }),
+        this.outreachRepository.count({ where: { ownerUserId: owners.filter, status: 'ready' } }),
+        this.leadRepository.count({ where: { ownerUserId: owners.filter, status: 'replied' } }),
+        this.leadRepository.count({ where: { ownerUserId: owners.filter, status: 'opportunity' } }),
         this.workflowRepository.find({
-          where: { ownerUserId, archivedAt: IsNull() },
+          where: { ownerUserId: owners.filter, archivedAt: IsNull() },
           order: { createdAt: 'DESC' },
           take: 5,
         }),
@@ -86,12 +88,12 @@ export class AutoflowService {
           .createQueryBuilder('lead')
           .leftJoinAndSelect('lead.contacts', 'contact')
           .loadRelationCountAndMap('lead.discoveryCount', 'lead.workflowLinks')
-          .where('lead.owner_user_id = :ownerUserId', { ownerUserId })
+          .where('lead.owner_user_id IN (:...visibleOwnerIds)', { visibleOwnerIds: owners.ids.length ? owners.ids : ['00000000-0000-0000-0000-000000000000'] })
           .orderBy('lead.totalScore', 'DESC')
           .take(5)
           .getMany(),
         this.outreachRepository.find({
-          where: { ownerUserId, status: 'ready' },
+          where: { ownerUserId: owners.filter, status: 'ready' },
           relations: { lead: { contacts: true }, owner: true },
           order: { nextFollowUpAt: 'ASC', createdAt: 'DESC' },
           take: 5,
@@ -112,17 +114,18 @@ export class AutoflowService {
     ownerUserId: string,
     query: ListWorkflowsQueryDto,
   ): Promise<PaginatedResult<WorkflowRun>> {
+    const owners = await readBusinessOwners(this.dataSource, ownerUserId)
     const page = query.page ?? 1
     const pageSize = query.pageSize ?? 20
     const [items, total] = await this.workflowRepository.findAndCount({
-      where: { ownerUserId, archivedAt: IsNull() },
+      where: { ownerUserId: owners.filter, archivedAt: IsNull() },
       order: { createdAt: 'DESC' },
       skip: (page - 1) * pageSize,
       take: pageSize,
     })
     const jobs = items.length > 0
       ? await this.workflowJobRepository.find({
-          where: { ownerUserId, workflowRunId: In(items.map((workflow) => workflow.id)) },
+          where: { ownerUserId: owners.filter, workflowRunId: In(items.map((workflow) => workflow.id)) },
         })
       : []
     const failureReasonByWorkflow = new Map(jobs.map((job) => [job.workflowRunId, job.lastError]))
@@ -145,9 +148,10 @@ export class AutoflowService {
   }
 
   async getWorkflow(ownerUserId: string, id: string): Promise<WorkflowRun> {
+    const owners = await readBusinessOwners(this.dataSource, ownerUserId)
     const [workflow, job] = await Promise.all([
-      this.workflowRepository.findOne({ where: { id, ownerUserId } }),
-      this.workflowJobRepository.findOne({ where: { workflowRunId: id, ownerUserId } }),
+      this.workflowRepository.findOne({ where: { id, ownerUserId: owners.filter } }),
+      this.workflowJobRepository.findOne({ where: { workflowRunId: id, ownerUserId: owners.filter } }),
     ])
     if (!workflow) throw new NotFoundException('Workflow not found')
     return this.mapWorkflow(workflow, job?.lastError || null)
@@ -256,6 +260,7 @@ export class AutoflowService {
   }
 
   async getLeads(ownerUserId: string, query: ListLeadsQueryDto): Promise<PaginatedResult<StoreLead>> {
+    const owners = await readBusinessOwners(this.dataSource, ownerUserId)
     const page = query.page ?? 1
     const pageSize = query.pageSize ?? 20
     const builder = this.leadRepository
@@ -265,7 +270,7 @@ export class AutoflowService {
       .leftJoinAndSelect('lead.workflowLinks', 'workflowLink')
       .leftJoinAndSelect('workflowLink.workflowRun', 'discoveryWorkflow')
       .loadRelationCountAndMap('lead.discoveryCount', 'lead.workflowLinks')
-      .where('lead.owner_user_id = :ownerUserId', { ownerUserId })
+      .where('lead.owner_user_id IN (:...visibleOwnerIds)', { visibleOwnerIds: owners.ids.length ? owners.ids : ['00000000-0000-0000-0000-000000000000'] })
       .orderBy('lead.totalScore', 'DESC')
       .addOrderBy('lead.createdAt', 'DESC')
       .skip((page - 1) * pageSize)
@@ -290,13 +295,14 @@ export class AutoflowService {
   }
 
   async getLead(ownerUserId: string, id: string): Promise<StoreLead> {
+    const owners = await readBusinessOwners(this.dataSource, ownerUserId)
     const lead = await this.leadRepository.findOne({
-      where: { id, ownerUserId },
+      where: { id, ownerUserId: owners.filter },
       relations: { contacts: true, workflowRun: true, workflowLinks: { workflowRun: true } },
     })
     if (!lead) throw new NotFoundException('Lead not found')
     const latestScore = await this.dataSource.getRepository(LeadScoreEntity).findOne({
-      where: { leadId: id, ownerUserId },
+      where: { leadId: id, ownerUserId: owners.filter },
       order: { calculatedAt: 'DESC' },
     })
     return this.mapLead(lead, latestScore?.reasons || null)
@@ -521,6 +527,7 @@ export class AutoflowService {
     ownerUserId: string,
     query: ListOutreachTasksQueryDto,
   ): Promise<PaginatedResult<OutreachTask>> {
+    const owners = await readBusinessOwners(this.dataSource, ownerUserId)
     const page = query.page ?? 1
     const pageSize = query.pageSize ?? 20
     const builder = this.outreachRepository
@@ -528,7 +535,7 @@ export class AutoflowService {
       .leftJoinAndSelect('task.lead', 'lead')
       .leftJoinAndSelect('lead.contacts', 'leadContact')
       .leftJoinAndSelect('task.owner', 'owner')
-      .where('task.owner_user_id = :ownerUserId', { ownerUserId })
+      .where('task.owner_user_id IN (:...visibleOwnerIds)', { visibleOwnerIds: owners.ids.length ? owners.ids : ['00000000-0000-0000-0000-000000000000'] })
       .orderBy('task.nextFollowUpAt', 'ASC', 'NULLS LAST')
       .addOrderBy('task.createdAt', 'DESC')
       .skip((page - 1) * pageSize)
@@ -595,11 +602,12 @@ export class AutoflowService {
   }
 
   async getFollowUps(ownerUserId: string): Promise<FollowUpStage[]> {
+    const owners = await readBusinessOwners(this.dataSource, ownerUserId)
     const counts = await this.leadRepository
       .createQueryBuilder('lead')
       .select('lead.status', 'status')
       .addSelect('COUNT(*)', 'count')
-      .where('lead.owner_user_id = :ownerUserId', { ownerUserId })
+      .where('lead.owner_user_id IN (:...visibleOwnerIds)', { visibleOwnerIds: owners.ids.length ? owners.ids : ['00000000-0000-0000-0000-000000000000'] })
       .groupBy('lead.status')
       .getRawMany<{ status: LeadStatus; count: string }>()
     const countByStatus = new Map(counts.map((item) => [item.status, Number(item.count)]))

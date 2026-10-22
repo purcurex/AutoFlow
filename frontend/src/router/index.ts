@@ -1,11 +1,45 @@
 ﻿import { createRouter, createWebHistory } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
+import { isFopOrderQueue } from '@/api/fop-orders'
+import { isWorkbenchRole, workbenchOrderLocation } from '@/utils/workbench'
+import { refreshWorkbenchAccess } from '@/composables/useWorkbenchAccess'
 
 const routes: RouteRecordRaw[] = [
   {
+    path: '/organization', name: 'Organization',
+    component: () => import('@/views/OrganizationView.vue'), meta: { requiresAuth: true },
+  },
+  {
+    path: '/admin/workbenches', name: 'WorkbenchRoleAdmin',
+    component: () => import('@/views/WorkbenchRoleAdminView.vue'), meta: { requiresAuth: true },
+  },
+  {
+    path: '/workbench-access-denied', name: 'WorkbenchAccessDenied',
+    component: () => import('@/views/WorkbenchAccessDenied.vue'), meta: { requiresAuth: true },
+  },
+  {
+    path: '/dashboard/orders',
+    name: 'FopOrders',
+    redirect: route => isFopOrderQueue(route.query.queue)
+      ? workbenchOrderLocation(route.query.queue, route.query)
+      : { name: 'RoleWorkbench', params: { role: 'sales' }, query: route.query },
+  },
+  {
+    path: '/workbench/:role',
+    name: 'RoleWorkbench',
+    component: () => import('@/views/autoflow/WorkbenchView.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/dashboard',
+    name: 'FopDashboard',
+    component: () => import('@/views/autoflow/FopDashboardView.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
     path: '/',
     name: 'Dashboard',
-    component: () => import('@/views/autoflow/DashboardView.vue'),
+    component: () => import('@/views/autoflow/WorkbenchView.vue'),
     meta: { requiresAuth: true }
   },
   {
@@ -117,35 +151,29 @@ const router = createRouter({
   routes
 })
 
-function getStoredRole(): string | null {
-  const user = localStorage.getItem('user')
-  if (!user) return null
-  try {
-    const parsed = JSON.parse(user) as { role?: unknown }
-    return typeof parsed.role === 'string' ? parsed.role : null
-  } catch {
-    localStorage.removeItem('user')
-    return null
-  }
-}
-
 router.beforeEach(async (to, _from, next) => {
   const hasSession = Boolean(localStorage.getItem('user'))
-
-  if (to.meta.requiresAuth && !hasSession) {
-    next({ name: 'Login', query: { redirect: to.fullPath } })
-  } else if (to.meta.guest && hasSession) {
-    next({ name: 'Dashboard' })
-  } else if (to.meta.requiresAdmin) {
-    if (getStoredRole() !== 'admin') {
-      next({ name: 'Dashboard' })
-      return
+  if (to.meta.requiresAuth && !hasSession) return next({ name: 'Login', query: { redirect: to.fullPath } })
+  if (to.meta.guest && hasSession) return next({ name: 'Dashboard' })
+  if (!to.meta.requiresAuth) return next()
+  if (to.name === 'WorkbenchAccessDenied') return next()
+  try {
+    const access = await refreshWorkbenchAccess()
+    if (['WorkbenchRoleAdmin', 'Organization'].includes(String(to.name))) { if (access.isAdmin) return next(); return next({ name: 'WorkbenchAccessDenied' }) }
+    const managementPage = ['Organization', 'Settings'].includes(String(to.name))
+    if (access.businessRole === 'none' && !managementPage) {
+      return next({ name: access.isAdmin ? 'WorkbenchRoleAdmin' : 'WorkbenchAccessDenied' })
+    }
+    if (to.meta.requiresAdmin && (!access.isAdmin || access.businessRole !== 'admin')) return next({ name: 'Dashboard' })
+    if (['Dashboard', 'RoleWorkbench'].includes(String(to.name))) {
+      const requested = to.name === 'Dashboard' ? (access.roles.includes('sales') ? 'sales' : access.roles[0]) : to.params.role
+      if (!isWorkbenchRole(requested) || !access.roles.includes(requested)) return next({ name: 'WorkbenchAccessDenied' })
+      if (to.name === 'Dashboard' && requested !== 'sales') return next({ name: 'RoleWorkbench', params: { role: requested } })
     }
     next()
-  } else {
-    next()
+  } catch {
+    next({ name: 'WorkbenchAccessDenied' })
   }
 })
 
 export default router
-

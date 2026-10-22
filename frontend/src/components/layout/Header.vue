@@ -5,6 +5,7 @@ import { Check, ChevronDown, Copy, PanelLeft } from 'lucide-vue-next'
 import { useI18n } from 'vue-i18n'
 import { onClickOutside } from '@vueuse/core'
 import { useUserStore } from '@/stores'
+import { isWorkbenchRole, workbenchNames } from '@/utils/workbench'
 import { LanguageSwitch, ThemeToggle } from '@/components/ui'
 
 defineProps<{ sidebarCollapsed: boolean }>()
@@ -16,13 +17,18 @@ const userMenu = ref<HTMLElement | null>(null)
 const showUserMenu = ref(false)
 const copied = ref(false)
 let copiedTimer: ReturnType<typeof setTimeout> | undefined
-const { t } = useI18n()
+const { t, locale } = useI18n()
 
 const pageTitle = computed(() => ({
+  FopDashboard: t('nav.overview'),
+  Organization: t('nav.organization'),
+  RoleWorkbench: isWorkbenchRole(route.params.role) ? workbenchNames[route.params.role][locale.value.startsWith('zh') ? 0 : 1] : t('nav.dashboard'),
+  WorkbenchRoleAdmin: t('nav.workbenchRoles'),
   Dashboard: t('nav.dashboard'), Workflows: t('nav.workflows'), NewWorkflow: t('nav.newWorkflow'), Leads: t('nav.leads'),
   LeadDetail: t('leads.detailEyebrow'), Outreach: t('nav.outreach'), Quotes: t('nav.quotes'), FollowUps: t('nav.followUps'),
   NoteDetail: t('legacy.record'), Settings: t('nav.settings'), Admin: t('nav.admin'),
-}[String(route.name)] || 'AutoFlow'))
+  ReviseWorkflow: t('workflows.reviseTitle'), WorkflowSourcing: t('sourcing.title'), PromptTemplates: t('prompts.title'),
+}[String(route.name)] || t('brand.fullName')))
 
 onMounted(() => userStore.fetchUser())
 onClickOutside(userMenu, () => { showUserMenu.value = false })
@@ -65,7 +71,7 @@ function handleLogout() {
       <button class="icon-btn" :title="sidebarCollapsed ? t('nav.expand') : t('nav.collapse')" @click="emit('toggle-sidebar')"><PanelLeft class="h-5 w-5" /></button>
       <div class="min-w-0">
         <p class="truncate text-sm font-bold text-slate-950 dark:text-white">{{ pageTitle }}</p>
-        <p class="hidden truncate text-xs text-slate-500 sm:block">{{ t('nav.operations') }}</p>
+        <p class="hidden truncate text-xs text-slate-500 sm:block">{{ t('brand.fullName') }}</p>
       </div>
 
       <div class="ml-auto flex items-center gap-2">

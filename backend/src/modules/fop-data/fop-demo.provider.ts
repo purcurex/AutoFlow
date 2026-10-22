@@ -1,0 +1,160 @@
+import { FOP_CARRIERS } from './fop-carriers'
+import { createHash } from 'crypto'
+import { FopAnalytics, FopDataProvider, FopIdentity, FopOrderCandidate, FopPermissionDeniedError, FopPermissionGrant, SALES_DEPARTMENTS, SalesDepartmentCode } from './fop-data.types'
+
+interface DemoWorkspace {
+  nodes: { id: string; parentId: string | null; name: string; kind: 'organization' | 'department'; sortOrder: number }[]
+  employees: { id: string; name: string; code: string; email: string; departmentId: string; workbenchRoles: readonly string[] }[]
+}
+interface WorkspaceReader { getWorkspace(ownerUserId: string): Promise<DemoWorkspace> }
+
+function salesDepartmentFor(workspace: DemoWorkspace, departmentId: string): SalesDepartmentCode | undefined {
+  const nodes = new Map(workspace.nodes.map(node => [node.id, node]))
+  let node = nodes.get(departmentId)
+  const seen = new Set<string>()
+  while (node && node.kind !== 'organization' && !seen.has(node.id)) {
+    const department = SALES_DEPARTMENTS.find(item => item.name === node!.name)
+    if (department) return department.id
+    seen.add(node.id)
+    node = node.parentId ? nodes.get(node.parentId) : undefined
+  }
+}
+
+function departmentPath(workspace: DemoWorkspace, id: string): string[] {
+  const path: string[] = []
+  let node = workspace.nodes.find(item => item.id === id)
+  while (node && !path.includes(node.id)) {
+    path.push(node.id)
+    node = workspace.nodes.find(item => item.id === node!.parentId)
+  }
+  return path
+}
+
+const DAY = 86_400_000
+const PRODUCTS = [
+  { sku: 'HZ-BAG-001', name: 'Everyday commuter backpack', variant: 'Slate blue / 20L', cents: 4890, color: '#627fa8', drawing: '<rect x="39" y="29" width="50" height="72" rx="14"/><path d="M51 31v-8h26v8M49 64h30v26H49z" fill="none" stroke="#fff" stroke-width="4"/>' },
+  { sku: 'HZ-LAMP-002', name: 'Nordic rechargeable desk lamp', variant: 'Warm ivory / USB-C', cents: 3250, color: '#d3b588', drawing: '<path d="M38 60l17-35h20l17 35z"/><path d="M64 61v35M45 100h38" fill="none" stroke="#66758c" stroke-width="7"/>' },
+  { sku: 'HZ-BOTTLE-003', name: 'Trail vacuum insulated bottle', variant: 'Sage green / 750ml', cents: 2490, color: '#85a89c', drawing: '<rect x="44" y="32" width="40" height="72" rx="12"/><rect x="51" y="20" width="26" height="17" rx="5"/><path d="M53 49v35" stroke="#fff" stroke-width="4" opacity=".6"/>' },
+  { sku: 'HZ-HEADSET-004', name: 'AirTune wireless headphones', variant: 'Midnight / Bluetooth 5.3', cents: 6900, color: '#57657e', drawing: '<path d="M35 73V54a29 29 0 0158 0v19" fill="none" stroke="#57657e" stroke-width="10"/><rect x="27" y="59" width="20" height="38" rx="9"/><rect x="81" y="59" width="20" height="38" rx="9"/>' },
+  { sku: 'HZ-SHOES-005', name: 'Cloudstep knit running shoes', variant: 'Sand / EU 39', cents: 5490, color: '#cfae93', drawing: '<path d="M29 47l25 9 12 22 32 7 5 15H25z"/><path d="M25 102h78M55 64l17-6M59 72l18-6" stroke="#fff" stroke-width="5"/>' },
+  { sku: 'HZ-MUG-006', name: 'Studio ceramic coffee mug', variant: 'Ocean glaze / 350ml', cents: 1890, color: '#72aab6', drawing: '<rect x="32" y="40" width="52" height="57" rx="10"/><path d="M84 49h11a16 16 0 010 32H84" fill="none" stroke="#72aab6" stroke-width="9"/><ellipse cx="58" cy="40" rx="25" ry="7" fill="#d5ecee"/>' },
+  { sku: 'HZ-WATCH-007', name: 'Active fitness smart watch', variant: 'Graphite / 42mm', cents: 7990, color: '#4b5d7e', drawing: '<rect x="49" y="13" width="30" height="102" rx="8"/><rect x="35" y="37" width="58" height="55" rx="13" fill="#8799b2"/><rect x="41" y="43" width="46" height="43" rx="8" fill="#243953"/><path d="M49 68h9l5-12 7 20 6-8h8" stroke="#5ce0c4" stroke-width="3" fill="none"/>' },
+  { sku: 'HZ-POUCH-008', name: 'Travel cable organizer', variant: 'Terracotta / medium', cents: 1590, color: '#ce917c', drawing: '<rect x="24" y="40" width="80" height="56" rx="13"/><path d="M29 53h70M86 51v12" stroke="#fff" stroke-width="4"/><rect x="50" y="67" width="29" height="13" rx="3" fill="#e8c2b0"/>' },
+] as const
+const CUSTOMERS = ['Olivia Martin', 'Noah Williams', 'Emma Thompson', 'Liam Anderson', 'Sofia Garcia', 'Lucas Meyer', 'Isabella Rossi', 'Ethan Wilson', 'Mia Johnson', 'Oliver Brown', 'Chloe Laurent', 'Daniel Lee']
+const STORES = ['Northstar Living', 'Urban Trail Supply', 'Studio Everyday', 'Evergreen Essentials', 'Coastal Home Market', 'Atlas Lifestyle']
+// Stable but varied service mix, independent of warehouse, owner and fulfillment stage.
+const CARRIER_THRESHOLDS = [32, 57, 75, 88, 96, 100]
+
+function imageUrl(product: typeof PRODUCTS[number]) {
+  return `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128"><rect width="128" height="128" rx="18" fill="#f1f5f9"/><ellipse cx="64" cy="108" rx="37" ry="5" fill="#dce4ed"/><g fill="${product.color}">${product.drawing}</g></svg>`)}`
+}
+
+/** Local demo only. This adapter never writes bindings or attempts an upstream fallback. */
+export class DemoFopDataProvider extends FopDataProvider {
+  readonly source = 'mock' as const
+  constructor(private readonly organizations: WorkspaceReader, private readonly environment: Record<string, string | undefined> = process.env) { super() }
+  isConfigured() { return this.environment.FOP_DATA_MODE === 'demo' && ['development', 'test', 'local'].includes(this.environment.NODE_ENV ?? '') }
+  demoIdentity(localUserId: string): FopIdentity | null { return this.isConfigured() ? { tenantId: `demo:${localUserId}`, userId: localUserId } : null }
+  private assertIdentity(identity: Readonly<FopIdentity>, permission?: Readonly<FopPermissionGrant>) {
+    if (!this.isConfigured() || !identity.userId || identity.tenantId !== `demo:${identity.userId}`
+      || (permission && (permission.subject.tenantId !== identity.tenantId || permission.subject.userId !== identity.userId))) throw new FopPermissionDeniedError('Invalid demo identity')
+  }
+  async resolvePermissions(identity: Readonly<FopIdentity>): Promise<FopPermissionGrant> {
+    this.assertIdentity(identity)
+    return { subject: { ...identity }, allowedOrderIds: (await this.orders(identity)).map(order => order.id), analyticsScopes: ['rates', 'registrations', 'receipts'] }
+  }
+  async listOrders(identity: Readonly<FopIdentity>, permission: Readonly<FopPermissionGrant>): Promise<FopOrderCandidate[]> {
+    this.assertIdentity(identity, permission)
+    const allowed = new Set(permission.allowedOrderIds)
+    return (await this.orders(identity)).filter(order => allowed.has(order.id))
+  }
+  async getAnalytics(identity: Readonly<FopIdentity>, permission: Readonly<FopPermissionGrant>, range: { from: string; to: string }): Promise<FopAnalytics> {
+    this.assertIdentity(identity, permission)
+    const registrations: FopAnalytics['registrations'] = []
+    const registrationEntries: NonNullable<FopAnalytics['registrationEntries']> = []
+    const start = Date.parse(`${range.from}T00:00:00Z`), end = Date.parse(`${range.to}T00:00:00Z`)
+    if (!Number.isFinite(start) || !Number.isFinite(end) || start > end || end - start > 365 * DAY) throw new Error('Invalid demo analytics range')
+    if (permission.analyticsScopes?.includes('registrations')) {
+      const workspace = await this.organizations.getWorkspace(identity.userId)
+      const employees = workspace.employees.filter(owner => owner.workbenchRoles.includes('sales')).map(owner => ({ owner, department: salesDepartmentFor(workspace, owner.departmentId) })).filter(item => item.department)
+      // One authorized ledger drives totals, departments and salesperson series.
+      for (let at = start; at <= end; at += DAY) {
+        const date = new Date(at).toISOString().slice(0, 10)
+        let total = 0
+        for (const { owner, department } of employees) {
+          const seed = createHash('sha256').update(`${identity.tenantId}:registration:${owner.id}:${date}`).digest().readUInt32BE(0)
+          const count = seed % 18
+          total += count
+          registrationEntries.push({ departmentPathIds: departmentPath(workspace, owner.departmentId), date, salesDepartmentCode: department!, owner: { id: owner.id, name: owner.name }, count })
+        }
+        registrations.push({ date, count: total })
+      }
+    }
+    return { subject: { ...identity }, registrations, registrationEntries, rates: permission.analyticsScopes?.includes('rates') ? [{ currency: 'USD', cnyPerUnit: 7.12 }, { currency: 'EUR', cnyPerUnit: 7.78 }, { currency: 'GBP', cnyPerUnit: 9.24 }] : [] }
+  }
+  private async orders(identity: Readonly<FopIdentity>): Promise<FopOrderCandidate[]> {
+    const workspace = await this.organizations.getWorkspace(identity.userId)
+    const employees = [...workspace.employees].sort((a, b) => a.code.localeCompare(b.code) || a.id.localeCompare(b.id))
+    if (!employees.length) return []
+    const nodes = new Map(workspace.nodes.map(node => [node.id, node]))
+    const accountKey = createHash('sha256').update(identity.tenantId).digest('hex').slice(0, 12)
+    const today = Date.parse(new Date().toISOString().slice(0, 10) + 'T00:00:00Z')
+    const year = new Date(today).getUTCFullYear()
+    const orders: FopOrderCandidate[] = []
+    const make = (index: number, createdAt: number, completed: boolean, stage = index % 6) => {
+      const owner = employees[index % employees.length]
+      const department = nodes.get(owner.departmentId)
+      if (!department) return
+      const salesDepartmentCode = owner.workbenchRoles.includes('sales') ? salesDepartmentFor(workspace, owner.departmentId) : undefined
+      let organization = department
+      const seen = new Set<string>()
+      while (organization.kind !== 'organization' && organization.parentId && !seen.has(organization.id)) {
+        seen.add(organization.id)
+        const parent = nodes.get(organization.parentId)
+        if (!parent) break
+        organization = parent
+      }
+      if (organization.kind !== 'organization') return
+      const product = PRODUCTS[index % PRODUCTS.length]
+      const quantity = index % 3 + 1
+      const paid = completed || stage !== 0 || index % 4 !== 0
+      const shipping = completed || stage === 4
+      const allocated = completed || stage === 3 || stage === 4
+      const suffix = String(index + 1).padStart(5, '0')
+      const items = [{ productId: `${accountKey}:product:${index % PRODUCTS.length + 1}`, sku: product.sku, name: product.name, imageUrl: imageUrl(product), variant: product.variant, quantity }]
+      if (index % 4 === 0) {
+        const extra = PRODUCTS[(index + 3) % PRODUCTS.length]
+        items.push({ productId: `${accountKey}:product:${(index + 3) % PRODUCTS.length + 1}`, sku: extra.sku, name: extra.name, imageUrl: imageUrl(extra), variant: extra.variant, quantity: 1 })
+      }
+      const cents = product.cents * quantity + (index % 4 === 0 ? PRODUCTS[(index + 3) % PRODUCTS.length].cents : 0)
+      const carrierSeed = createHash('sha256').update(`${accountKey}:carrier:${index}:${createdAt}`).digest().readUInt32BE(0) % 100
+      const carrier = FOP_CARRIERS[CARRIER_THRESHOLDS.findIndex(limit => carrierSeed < limit)]
+      orders.push({
+        tenantId: identity.tenantId, id: `${accountKey}:order:${suffix}`, orderNumber: `AF-${accountKey.slice(0, 4).toUpperCase()}-${suffix}`,
+        shopifyOrderNumber: `#${10400 + index}`, customerId: `${accountKey}:customer:${index % CUSTOMERS.length + 1}`, customerCode: `C${String(index % CUSTOMERS.length + 1).padStart(3, '0')}`, customerName: CUSTOMERS[index % CUSTOMERS.length], storeName: STORES[index % STORES.length], items,
+        ...(salesDepartmentCode ? { salesDepartmentCode } : {}),
+        departmentPathIds: departmentPath(workspace, owner.departmentId), organization: { id: organization.id, name: organization.name }, department: { id: department.id, name: department.name }, owner: { id: owner.id, name: owner.name },
+        amount: cents / 100, currency: 'USD', paymentStatus: paid ? 'paid' : 'unpaid', reviewStatus: completed || stage !== 0 ? 'approved' : 'pending',
+        procurementStatus: completed || stage >= 2 ? 'purchased' : 'pending', allocationStatus: allocated ? 'allocated' : stage === 2 ? 'pending' : 'not_ready',
+        dispatchStatus: shipping ? 'dispatched' : stage === 3 ? 'pending' : 'not_ready', shippingStatus: completed ? 'shipped' : stage === 4 ? 'pending' : 'not_ready',
+        warehouseCode: (index + Math.floor(index / 12)) % 3 === 0 ? 'SZ' : 'HZ', warehouse: (index + Math.floor(index / 12)) % 3 === 0 ? '深圳仓' : '杭州仓', carrierCode: carrier.id, carrier: carrier.label,
+        trackingNumber: shipping ? `HZ${accountKey.slice(0, 5).toUpperCase()}${String(800000000 + index)}` : null,
+        salesperson: owner.name, createdAt: new Date(createdAt).toISOString(), paidAt: paid ? new Date(createdAt + 15 * 60_000).toISOString() : null,
+        cancelled: false, exception: !completed && stage === 5 ? { reason: (['stock', 'address', 'tracking'] as const)[Math.floor(index / 6) % 3], hours: 3 + index % 47 } : null,
+      })
+    }
+    // Varied queue backlogs with independent customer, date and warehouse distributions.
+    let index = 0
+    for (const [stage, count] of [18, 27, 36, 24, 42, 13].entries()) {
+      for (let n = 0; n < count; n++, index++) make(index, today - (1 + (index * 7 + Math.floor(index / 12)) % 21) * DAY + (8 + index % 8) * 3_600_000, false, stage)
+    }
+    // Completed, paid orders populate monthly collections for this and the two prior years.
+    for (let y = year - 2; y <= year; y++) for (let month = 0; month < 12; month++) for (let n = 0; n < 18; n++) {
+      const at = Date.UTC(y, month, 2 + n, 9)
+      if (at > today) continue
+      make(216 + (y - (year - 2)) * 216 + month * 18 + n, at, true)
+    }
+    return orders
+  }
+}

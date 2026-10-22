@@ -40,7 +40,7 @@ export class FopProductCostLookupDto {
 
   @IsString()
   @Matches(/^[A-Z]{3}$/)
-  currency: string
+  currency: string = 'USD'
 
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)

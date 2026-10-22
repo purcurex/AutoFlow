@@ -38,10 +38,6 @@
     color: var(--color-text);
   }
   button, input, select, textarea { font: inherit; }
-  button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
-    outline: 2px solid var(--color-primary);
-    outline-offset: 2px;
-  }
 }
 
 @layer components {
@@ -63,7 +59,7 @@
   .btn-ghost { @apply border-transparent bg-transparent text-slate-600 hover:bg-slate-100 hover:text-slate-950 dark:text-slate-300 dark:hover:bg-white/5 dark:hover:text-white; }
   .icon-btn { @apply inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-950 dark:border-slate-700 dark:bg-[#15181d] dark:text-slate-300 dark:hover:bg-[#20242b] dark:hover:text-white; }
 
-  .input { @apply min-h-10 w-full rounded-md border px-3 py-2 text-sm transition placeholder:text-slate-400 focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500/15 dark:placeholder:text-slate-600; border-color: var(--color-border-strong); background: var(--color-surface); color: var(--color-text); }
+  .input { @apply min-h-10 w-full rounded-md border px-3 py-2 text-sm transition placeholder:text-slate-400 dark:placeholder:text-slate-600; border-color: var(--color-border-strong); background: var(--color-surface); color: var(--color-text); }
   .control-select { @apply inline-flex h-10 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-600 dark:border-slate-700 dark:bg-[#15181d] dark:text-slate-300; }
   .control-select select { @apply cursor-pointer appearance-none bg-transparent pr-1 text-xs font-semibold outline-none; }
   .field-label { @apply mb-1.5 block text-sm font-semibold text-slate-700 dark:text-slate-200; }
@@ -115,3 +111,16 @@
 .dark ::-webkit-scrollbar-thumb:hover { background: #596170; }
 * { scrollbar-width: thin; scrollbar-color: #cbd5e1 transparent; }
 .dark * { scrollbar-color: #3f4651 transparent; }
+
+/* Shared focus treatment: no colored outer ring or border-color change.
+   An inset neutral indicator keeps keyboard navigation visible in both themes. */
+:where(button, a, input, select, textarea, summary, [tabindex], [contenteditable="true"]):focus {
+  outline: none;
+}
+:where(button, a, input, select, textarea, summary, [tabindex], [contenteditable="true"]):focus-visible {
+  outline: 2px solid var(--color-text-secondary);
+  outline-offset: -3px;
+}
+input[type="search"]:focus-visible {
+  background-color: var(--color-surface-muted);
+}

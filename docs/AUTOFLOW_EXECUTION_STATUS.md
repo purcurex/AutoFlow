@@ -75,7 +75,7 @@ npm.cmd run build --workspace=frontend
 ## Notes
 
 - Root folder is now `E:\VSCode\AutoFlow`.
-- Main app folder is still `E:\VSCode\AutoFlow\note-app`.
+- Main app folder is still `E:\VSCode\AutoFlow\work-app`.
 - Existing code still contains significant Chinese encoding corruption from the legacy NoteFlow version.
 - Historical note: the first scaffold used in-memory data; P1 now uses owner-scoped TypeORM repositories.
 - Actual layout currently imports `Header.vue` and `Sidebar.vue`; `AutoFlowHeader.vue` and `AutoFlowSidebar.vue` were added during integration and can be reviewed/removed or reused in the next cleanup pass.
@@ -1024,3 +1024,26 @@ Verification:
 - PostgreSQL E2E: 18 tests passed, including multi-workflow lead attribution.
 - Frontend tests: 15 files, 41 tests passed.
 - Backend and frontend lint and production builds passed.
+
+## 46. 2026-07-31 New-Environment Deployment Package
+
+Completed:
+
+- Added the Simplified Chinese installation, build, PostgreSQL migration, backup, restore, startup, rollback, and acceptance guide.
+- Added PostgreSQL 16 Docker Compose and production environment templates without real credentials.
+- Added source installation, production runtime installation, compiled migration, database backup, guarded restore, startup, runtime verification, and deployment packaging scripts.
+- Added optional PostgreSQL TLS configuration through `DB_SSL` and `DB_SSL_REJECT_UNAUTHORIZED`.
+- Generated `AutoFlow-Deployment-20260731.zip` with compiled backend, packaged frontend, 23 compiled migrations, runtime manifests, deployment templates, scripts, and guide.
+- Excluded real `.env`, provider credentials, local uploads, `node_modules`, and database data from the package.
+
+Verification:
+
+- Backend and frontend production build passed.
+- Backend unit tests: 31 suites, 163 tests passed.
+- Backend and frontend lint passed.
+- PowerShell and Node deployment-script syntax checks passed.
+- Deployment ZIP required-entry validation passed with 656 archive entries and 23 compiled migrations.
+- Clean extracted package installed 520 production dependency packages successfully.
+- Extracted compiled migration runner connected to PostgreSQL: 23 registered, 23 applied, no pending migration.
+- Extracted production runtime served the frontend and returned API `ok`, database `up`, CSP, and security headers.
+- Docker backup script produced a valid custom-format PostgreSQL archive with 274 catalog entries.

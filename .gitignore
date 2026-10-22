@@ -6,6 +6,7 @@ node_modules/
 dist/
 build/
 **/dist/
+artifacts/
 backend/public/
 deploy/backend/
 deploy/frontend/
@@ -33,6 +34,13 @@ logs/
 # Test coverage
 coverage/
 
+# Documentation tooling
+__pycache__/
+*.pyc
+
 # Temp files
 *.tmp
 *.temp
+
+# Isolated local demo PostgreSQL data and generated password
+.runtime/local-demo/

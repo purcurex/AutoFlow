@@ -1,3 +1,4 @@
+jest.mock('../users/business-data-access', () => ({ readBusinessOwners: jest.fn(async (_dataSource, id) => ({ ids: [id], filter: id })) }))
 import { BadRequestException } from '@nestjs/common'
 import type { DataSource, Repository } from 'typeorm'
 import type { Alibaba1688Service } from '../alibaba1688'

@@ -60,7 +60,7 @@ const adEvidence = computed(() => lead.value?.adEvidence || [])
 async function handoffToFop() {
   if (!lead.value || handoffBusy.value) return
   handoffBusy.value = true
-  try { handoff.value = await fopApi.handoff(lead.value.id, 'Qualified prospect handed off from AutoFlow') } finally { handoffBusy.value = false }
+  try { handoff.value = await fopApi.handoff(lead.value.id, 'Qualified prospect handed off from HyperZone') } finally { handoffBusy.value = false }
 }
 
 async function analyzeContacts() {

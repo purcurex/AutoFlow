@@ -20,6 +20,7 @@ import { FileInterceptor } from '@nestjs/platform-express'
 import { Request as ExpressRequest } from 'express'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
 import { AutoflowService } from './autoflow.service'
+import { WorkbenchAccessService } from '../users/workbench-access.service'
 import {
   CreateWorkflowDto,
   CreateWorkflowRevisionDto,
@@ -43,10 +44,12 @@ export class AutoflowController {
     private readonly autoflowService: AutoflowService,
     private readonly workflowExecutionService: WorkflowExecutionService,
     private readonly workflowSeedAssetService: WorkflowSeedAssetService,
+    private readonly workbenchAccess: WorkbenchAccessService,
   ) {}
 
   @Get('dashboard')
-  getDashboard(@Request() req: ExpressRequest) {
+  async getDashboard(@Request() req: ExpressRequest) {
+    await this.workbenchAccess.requireRole(req.user!.userId, 'sales')
     return this.autoflowService.getDashboard(req.user!.userId)
   }
 

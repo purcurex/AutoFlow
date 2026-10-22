@@ -1,7 +1,7 @@
 import api from './index'
 import type { LoginRequest, RegisterRequest, AuthResponse, User } from '@/types'
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api'
+const API_URL = import.meta.env.VITE_API_URL || '/api'
 
 export const authApi = {
   login(data: LoginRequest): Promise<AuthResponse> {

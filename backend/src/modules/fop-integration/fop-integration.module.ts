@@ -17,9 +17,10 @@ import {
 import { FopHandoffEntity } from './fop-handoff.entity'
 import { FopHandoffController } from './fop-handoff.controller'
 import { FopHandoffService } from './fop-handoff.service'
+import { UsersModule } from '../users/users.module'
 
 @Module({
-  imports: [TypeOrmModule.forFeature([FopHandoffEntity, LeadEntity, CrmActivityEntity])],
+  imports: [UsersModule, TypeOrmModule.forFeature([FopHandoffEntity, LeadEntity, CrmActivityEntity])],
   controllers: [FopIntegrationController, FopHandoffController],
   providers: [
     FopIntegrationService,

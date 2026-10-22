@@ -4,8 +4,7 @@ import { ArrowRight, CheckCircle2, MessageSquareReply, PlayCircle, Target, Users
 import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
 import { useAutoFlowStore } from '@/stores'
-import { AppLayout } from '@/components/layout'
-import { EmptyState, PageHeader, StatusBadge } from '@/components/ui'
+import { EmptyState, StatusBadge } from '@/components/ui'
 import { withReturnTo } from '@/composables/useReturnNavigation'
 import { workflowCreatedDate } from '@/utils/workflowDisplay'
 
@@ -28,12 +27,11 @@ const metricCards = computed(() => [
 </script>
 
 <template>
-  <AppLayout>
-    <div class="app-page">
-      <PageHeader :eyebrow="t('dashboard.eyebrow')" :title="t('dashboard.title')" :description="t('dashboard.subtitle')" />
+  <div class="sales-overview">
+<h2 class="mb-4 text-lg font-bold">{{ t('dashboard.eyebrow') }}</h2>
 
       <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
-        <RouterLink v-for="item in metricCards" :key="item.label" :to="item.to" class="metric-card group focus:outline-none focus:ring-2 focus:ring-orange-500"><p class="metric-label">{{ item.label }}</p><p class="metric-value">{{ item.value }}</p><span class="metric-icon transition group-hover:bg-orange-100 group-hover:text-orange-700 dark:group-hover:bg-orange-950"><component :is="item.icon" class="h-4 w-4" /></span><ArrowRight class="absolute bottom-4 right-4 h-4 w-4 text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-orange-500" /></RouterLink>
+        <RouterLink v-for="item in metricCards" :key="item.label" :to="item.to" class="metric-card group"><p class="metric-label">{{ item.label }}</p><p class="metric-value">{{ item.value }}</p><span class="metric-icon transition group-hover:bg-orange-100 group-hover:text-orange-700 dark:group-hover:bg-orange-950"><component :is="item.icon" class="h-4 w-4" /></span><ArrowRight class="absolute bottom-4 right-4 h-4 w-4 text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-orange-500" /></RouterLink>
       </div>
 
       <div class="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1.25fr)_minmax(340px,0.75fr)]">
@@ -62,6 +60,5 @@ const metricCards = computed(() => [
         <div v-if="topLeads.length" class="overflow-x-auto"><table class="data-table"><thead><tr><th>{{ t('dashboard.brand') }}</th><th>{{ t('common.market') }}</th><th>{{ t('common.category') }}</th><th>{{ t('common.score') }}</th><th>{{ t('common.status') }}</th></tr></thead><tbody><tr v-for="lead in topLeads" :key="lead.id"><td><RouterLink :to="withReturnTo(`/leads/${lead.id}`, route.fullPath)" class="font-semibold text-orange-600 hover:underline dark:text-orange-400">{{ lead.brandName }}</RouterLink><p class="mt-0.5 text-xs text-slate-500">{{ lead.domain }}</p></td><td>{{ lead.country }}</td><td>{{ lead.category }}</td><td><span class="font-bold text-slate-950 dark:text-white">{{ lead.totalScore }}</span></td><td><StatusBadge :status="lead.status" /></td></tr></tbody></table></div>
         <EmptyState v-else :message="t('dashboard.noLeads')" />
       </section>
-    </div>
-  </AppLayout>
+  </div>
 </template>

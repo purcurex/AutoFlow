@@ -1,0 +1,99 @@
+export const SALES_DEPARTMENTS = [
+  { id: 'sales1', name: '业务一部' }, { id: 'sales2', name: '业务二部' },
+  { id: 'sales3', name: '业务三部' }, { id: 'sales4', name: '业务四部' },
+] as const
+export type SalesDepartmentCode = typeof SALES_DEPARTMENTS[number]['id']
+
+export interface FopIdentity { tenantId: string; userId: string }
+
+export interface FopPermissionGrant {
+  subject: FopIdentity
+  /** Explicit per-subject order allowlist; an empty array grants no order access. */
+  allowedOrderIds: readonly string[]
+  analyticsScopes?: readonly FopAnalyticsScope[]
+}
+
+export type FopAnalyticsScope = 'rates' | 'registrations' | 'receipts'
+export interface FopRegistrationEntry {
+  departmentPathIds?: string[]
+  date: string
+  salesDepartmentCode: SalesDepartmentCode
+  owner: { id: string; name: string }
+  count: number
+}
+export interface FopAnalytics {
+  subject: FopIdentity
+  rates: { currency: string; cnyPerUnit: number }[]
+  registrations: { date: string; count: number }[]
+  /** Subject-authorized daily employee counts; authoritative when supplied. */
+  registrationEntries?: FopRegistrationEntry[]
+}
+
+export interface FopOrderItem {
+  productId?: string
+  sku: string
+  name: string
+  imageUrl: string | null
+  variant: string
+  quantity: number
+}
+
+export interface FopOrder {
+  departmentPathIds?: string[]
+  /** Normalized reporting department supplied by the trusted FOP adapter. */
+  salesDepartmentCode?: SalesDepartmentCode
+  organization?: { id: string; name: string }
+  department?: { id: string; name: string }
+  owner?: { id: string; name: string }
+  id: string
+  orderNumber: string
+  shopifyOrderNumber: string
+  customerId?: string
+  customerCode?: string
+  warehouseCode?: string
+  carrierCode?: string
+  customerName: string
+  storeName: string
+  items: FopOrderItem[]
+  amount: number
+  currency: string
+  paymentStatus: 'paid' | 'unpaid' | 'refunded'
+  reviewStatus: 'pending' | 'approved'
+  procurementStatus: 'pending' | 'purchased' | 'not_required'
+  allocationStatus: 'pending' | 'allocated' | 'not_ready'
+  dispatchStatus: 'pending' | 'dispatched' | 'not_ready'
+  shippingStatus: 'pending' | 'shipped' | 'not_ready'
+  warehouse: string
+  carrier: string | null
+  trackingNumber: string | null
+  salesperson: string
+  createdAt: string
+  paidAt: string | null
+  cancelled: boolean
+  exception: { reason: 'stock' | 'address' | 'tracking'; hours: number } | null
+}
+
+/** Provider-only tenant provenance. It is validated and removed before client output. */
+export interface FopOrderCandidate extends FopOrder { tenantId: string }
+
+export const FOP_DATA_PROVIDER = 'FOP_DATA_PROVIDER'
+
+/** No employee identity, permission grant or scope is ever accepted from an HTTP client. */
+export abstract class FopDataProvider {
+  readonly source: 'mock' | 'fop' = 'fop'
+  demoIdentity(_localUserId: string): FopIdentity | null { return null }
+  async getAnalytics(identity: Readonly<FopIdentity>, _permission: Readonly<FopPermissionGrant>, _range: { from: string; to: string }): Promise<FopAnalytics> {
+    return { subject: { ...identity }, rates: [], registrations: [] }
+  }
+  abstract isConfigured(): boolean
+  abstract resolvePermissions(identity: Readonly<FopIdentity>): Promise<FopPermissionGrant>
+  abstract listOrders(identity: Readonly<FopIdentity>, permission: Readonly<FopPermissionGrant>): Promise<FopOrderCandidate[]>
+}
+
+export class FopPermissionDeniedError extends Error {}
+
+export class UnconfiguredFopDataProvider extends FopDataProvider {
+  isConfigured() { return false }
+  async resolvePermissions(_identity: FopIdentity): Promise<FopPermissionGrant> { throw new Error('FOP data provider is not configured') }
+  async listOrders(_identity: FopIdentity, _permission: FopPermissionGrant): Promise<FopOrderCandidate[]> { throw new Error('FOP data provider is not configured') }
+}

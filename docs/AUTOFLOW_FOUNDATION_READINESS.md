@@ -8,7 +8,7 @@ This document defines the ground preparation required before formal AutoFlow tra
 
 | Area | Status | Notes |
 |---|---|---|
-| Workspace | Ready | Main project path: `E:\VSCode\AutoFlow\note-app` |
+| Workspace | Ready | Main project path: `E:\VSCode\AutoFlow\work-app` |
 | Database | Ready | Docker instance `hyperzone` exposes PostgreSQL on `localhost:5432` |
 | Frontend Dev Server | Ready | Verified at `http://127.0.0.1:5173` |
 | Frontend Test Baseline | Ready | Vitest + Vue Test Utils + jsdom installed |

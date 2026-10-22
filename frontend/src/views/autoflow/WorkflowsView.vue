@@ -340,7 +340,7 @@ async function confirmLifecycleAction() {
               <span class="field-label">{{ t('workflows.productImage') }} <em class="font-normal not-italic text-red-500">*</em></span>
               <input ref="imageInput" type="file" accept="image/png,image/jpeg,image/webp" class="sr-only" @change="handleImageSelection" />
               <div
-                class="flex min-h-44 cursor-pointer items-center justify-center rounded-md border border-dashed p-4 text-center transition focus:outline-none focus:ring-2 focus:ring-orange-500/30"
+                class="flex min-h-44 cursor-pointer items-center justify-center rounded-md border border-dashed p-4 text-center transition"
                 :class="imagePreviewUrl ? 'border-slate-300 bg-slate-50 dark:border-slate-700 dark:bg-[#11151a]' : 'border-slate-300 bg-white hover:border-orange-400 hover:bg-orange-50/40 dark:border-slate-700 dark:bg-[#171b21] dark:hover:border-orange-500'"
                 role="button"
                 tabindex="0"
@@ -388,7 +388,7 @@ async function confirmLifecycleAction() {
                 <label
                   v-for="market in targetMarkets"
                   :key="market.code"
-                  class="relative flex min-h-24 cursor-pointer flex-col items-center justify-center gap-1 rounded-md border px-3 py-3 text-center transition focus-within:ring-2 focus-within:ring-orange-500/30"
+                  class="relative flex min-h-24 cursor-pointer flex-col items-center justify-center gap-1 rounded-md border px-3 py-3 text-center transition"
                   :class="form.targetMarket === market.value ? 'border-orange-500 bg-orange-50 text-orange-800 shadow-sm dark:bg-orange-500/10 dark:text-orange-200' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:bg-[#171b21] dark:text-slate-300 dark:hover:bg-[#20252d]'"
                 >
                   <input v-model="form.targetMarket" type="radio" name="target-market" :value="market.value" class="sr-only" required />
@@ -415,7 +415,7 @@ async function confirmLifecycleAction() {
         <div v-if="store.workflows.length" class="flex items-center gap-3 border-b px-4 py-3" style="border-color: var(--color-border)">
           <div v-if="actionMessage" class="notice flex-1 border-sky-500 bg-sky-50 text-sky-800 dark:bg-sky-950 dark:text-sky-200">{{ actionMessage }}</div>
           <span v-else class="flex-1" />
-          <RouterLink to="/workflows/new" class="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-orange-600 text-white shadow-sm transition hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-orange-500/30" :title="t('nav.newWorkflow')" :aria-label="t('nav.newWorkflow')"><Plus class="h-4 w-4" /></RouterLink>
+          <RouterLink to="/workflows/new" class="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-orange-600 text-white shadow-sm transition hover:bg-orange-700" :title="t('nav.newWorkflow')" :aria-label="t('nav.newWorkflow')"><Plus class="h-4 w-4" /></RouterLink>
         </div>
         <div v-if="store.workflows.length" class="overflow-x-auto">
           <table class="data-table min-w-[1380px]">

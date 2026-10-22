@@ -1,3 +1,7 @@
+<script setup lang="ts">
+import { sessionEpoch } from '@/utils/session'
+</script>
+
 <template>
-  <RouterView />
+  <RouterView :key="sessionEpoch" />
 </template>

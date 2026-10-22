@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16.13
+    container_name: hyperzone
+    restart: unless-stopped
+    env_file:
+      - postgres.env
+    ports:
+      - "${AUTOFLOW_DB_BIND_ADDRESS:-127.0.0.1}:5432:5432"
+    volumes:
+      - autoflow-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+volumes:
+  autoflow-postgres-data:
+    name: autoflow-postgres-data

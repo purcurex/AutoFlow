@@ -31,7 +31,7 @@ export class NotesController {
   // 管理员接口 - 获取所有用户的笔记
   @Get('admin/all')
   async findAllForAdmin(@Request() req: ExpressRequest) {
-    if (req.user!.role !== UserRole.ADMIN) {
+    if (req.user!.role !== UserRole.ADMIN || req.user!.businessRole !== 'admin') {
       throw new ForbiddenException('需要管理员权限')
     }
     return this.notesService.findAllForAdmin()
@@ -40,7 +40,7 @@ export class NotesController {
   // 管理员接口 - 删除任意笔记
   @Delete('admin/:id')
   async deleteByAdmin(@Request() req: ExpressRequest, @Param('id') id: string) {
-    if (req.user!.role !== UserRole.ADMIN) {
+    if (req.user!.role !== UserRole.ADMIN || req.user!.businessRole !== 'admin') {
       throw new ForbiddenException('需要管理员权限')
     }
     await this.notesService.deleteByAdmin(id)

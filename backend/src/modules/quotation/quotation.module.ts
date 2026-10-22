@@ -7,9 +7,11 @@ import { QuotationVersionEntity } from './entities/quotation-version.entity'
 import { QuotationController } from './quotation.controller'
 import { QuotationExcelExporter } from './quotation-excel.exporter'
 import { QuotationService } from './quotation.service'
+import { UsersModule } from '../users/users.module'
 
 @Module({
   imports: [
+    UsersModule,
     TypeOrmModule.forFeature([QuotationEntity, QuotationVersionEntity, LeadEntity]),
     FopIntegrationModule,
   ],

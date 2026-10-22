@@ -16,9 +16,11 @@ import {
 import { DiscoveryModule } from '../discovery/discovery.module'
 import { AiModule } from '../ai/ai.module'
 import { WorkflowSeedAssetService } from './workflow-seed-asset.service'
+import { UsersModule } from '../users/users.module'
 
 @Module({
   imports: [
+    UsersModule,
     DiscoveryModule,
     AiModule,
     TypeOrmModule.forFeature([

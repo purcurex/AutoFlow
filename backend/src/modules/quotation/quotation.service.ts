@@ -1,3 +1,4 @@
+import { readBusinessOwners } from '../users/business-data-access'
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common'
 import { InjectRepository } from '@nestjs/typeorm'
 import { DataSource, Repository } from 'typeorm'
@@ -13,6 +14,7 @@ import { QuotationEntity } from './entities/quotation.entity'
 import { QuotationVersionEntity } from './entities/quotation-version.entity'
 import type { QuoteCombinedMatrixRow, QuoteRequestSnapshot } from './quotation.types'
 import { QuotationExcelExporter } from './quotation-excel.exporter'
+import { FopDataService } from '../fop-data/fop-data.service'
 
 @Injectable()
 export class QuotationService {
@@ -27,6 +29,7 @@ export class QuotationService {
     private readonly productCostPort: FopProductCostPort,
     private readonly logisticsRatePort: FopLogisticsRatePort,
     private readonly excelExporter: QuotationExcelExporter,
+    private readonly dataAccess: FopDataService,
   ) {}
 
   async create(ownerUserId: string, dto: CreateQuotationDto) {
@@ -99,16 +102,18 @@ export class QuotationService {
   }
 
   async list(ownerUserId: string, leadId?: string) {
-    if (leadId) await this.requireLead(ownerUserId, leadId)
+    const owners = await readBusinessOwners(this.dataSource, ownerUserId)
+    if (leadId) await this.requireReadableLead(ownerUserId, leadId)
     return this.quotationRepository.find({
-      where: { ownerUserId, ...(leadId ? { leadId } : {}) },
+      where: { ownerUserId: owners.filter, ...(leadId ? { leadId } : {}) },
       order: { updatedAt: 'DESC' },
     })
   }
 
   async get(ownerUserId: string, quotationId: string) {
+    const owners = await readBusinessOwners(this.dataSource, ownerUserId)
     const quotation = await this.quotationRepository.findOne({
-      where: { id: quotationId, ownerUserId },
+      where: { id: quotationId, ownerUserId: owners.filter },
     })
     if (!quotation) throw new NotFoundException('Quotation not found')
     const versions = await this.versionRepository.find({
@@ -119,8 +124,9 @@ export class QuotationService {
   }
 
   async exportVersion(ownerUserId: string, quotationId: string, versionNumber: number): Promise<Buffer> {
+    const owners = await readBusinessOwners(this.dataSource, ownerUserId)
     const quotation = await this.quotationRepository.findOne({
-      where: { id: quotationId, ownerUserId },
+      where: { id: quotationId, ownerUserId: owners.filter },
     })
     if (!quotation) throw new NotFoundException('Quotation not found')
     const version = await this.versionRepository.findOne({
@@ -135,6 +141,10 @@ export class QuotationService {
       where: { id: quotationId, ownerUserId },
     })
     if (!quotation) throw new NotFoundException('Quotation not found')
+
+    // Local ownership permits editing/reading the quote, not external FOP pricing.
+    // Authorize before changing version statuses or invoking either provider port.
+    await this.dataAccess.requireResourcePermission(ownerUserId)
 
     const version = await this.versionRepository.findOne({
       where: { quotationId, version: quotation.currentVersion },
@@ -215,6 +225,11 @@ export class QuotationService {
     await this.versionRepository.save(version)
 
     return this.get(ownerUserId, quotationId)
+  }
+
+  private async requireReadableLead(ownerUserId: string, leadId: string): Promise<void> {
+    const owners = await readBusinessOwners(this.dataSource, ownerUserId)
+    if (!await this.leadRepository.exist({ where: { id: leadId, ownerUserId: owners.filter } })) throw new NotFoundException('Lead not found')
   }
 
   private async requireLead(ownerUserId: string, leadId: string): Promise<void> {

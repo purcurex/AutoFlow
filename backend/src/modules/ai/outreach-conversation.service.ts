@@ -1,3 +1,4 @@
+import { readBusinessOwners } from '../users/business-data-access'
 import {
   BadRequestException,
   ConflictException,
@@ -80,8 +81,9 @@ export class OutreachConversationService {
   }
 
   async list(ownerUserId: string, leadId: string) {
+    const owners = await readBusinessOwners(this.dataSource, ownerUserId)
     const conversations = await this.conversationRepository.find({
-      where: { ownerUserId, leadId },
+      where: { ownerUserId: owners.filter, leadId },
       relations: { messages: true, drafts: true },
       order: { updatedAt: 'DESC' },
       take: 20,
@@ -90,8 +92,9 @@ export class OutreachConversationService {
   }
 
   async get(ownerUserId: string, id: string) {
+    const owners = await readBusinessOwners(this.dataSource, ownerUserId)
     const conversation = await this.conversationRepository.findOne({
-      where: { id, ownerUserId },
+      where: { id, ownerUserId: owners.filter },
       relations: { messages: true, drafts: true },
     })
     if (!conversation) throw new NotFoundException('Outreach conversation not found')

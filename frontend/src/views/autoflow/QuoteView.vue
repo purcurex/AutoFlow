@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { DEFAULT_CURRENCY, formatCurrency } from '@/utils/currency'
+import { sumCompleteMoney } from '@/utils/tableTotals'
+import TableTotals from '@/components/ui/TableTotals.vue'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import {
@@ -39,12 +42,13 @@ import {
 } from '@/utils/quoteOptions'
 
 const route = useRoute()
-const { t } = useI18n()
+const { t, locale } = useI18n()
+const text = (cn: string, en: string) => String(locale.value).startsWith('zh') ? cn : en
 const capabilities = ref<FopCapabilities | null>(null)
 const capabilityError = ref('')
 const productReference = ref('')
 const unit = ref('piece')
-const currency = ref('USD')
+const currency = ref(DEFAULT_CURRENCY)
 const productProfitMarginRate = ref(20)
 const tiers = ref<ProductTierDraft[]>(createDefaultProductTiers())
 const nextTierId = ref(4)
@@ -359,7 +363,7 @@ async function exportQuote() {
   try {
     const blob = await quotationApi.exportExcel(quotationId.value, savedVersion.value)
     const safeReference = productReference.value.trim().replace(/[^\w.-]+/g, '_') || 'Quotation'
-    downloadBlob(blob, `AutoFlow_${safeReference}_V${savedVersion.value}.xlsx`)
+    downloadBlob(blob, `HyperZone_${safeReference}_V${savedVersion.value}.xlsx`)
     actionMessage.value = t('quotes.exportCompleted')
   } catch {
     saveError.value = t('quotes.exportFailed')
@@ -375,6 +379,15 @@ function resultFor(row: typeof matrixRows.value[number]) {
     && result.countryCode === row.country?.code
     && result.customChannelCode === row.channel.customChannelCode
     && result.actualChannelCode === row.channel.actualChannelCode)
+}
+
+const matrixTotals = computed(() => (['baseFreightAmount', 'customerFreightAmount', 'combinedAmount'] as const).map(field => {
+  const total = sumCompleteMoney(matrixRows.value.map(row => resultFor(row)?.[field]))
+  return total === null ? text('待完整报价', 'Awaiting complete quote') : formatCurrency(total, currency.value, String(locale.value))
+}))
+function quoteMoney(value: unknown) {
+  const amount = sumCompleteMoney([value])
+  return amount === null ? '—' : formatCurrency(amount, currency.value, String(locale.value))
 }
 
 onMounted(loadCapabilities)
@@ -485,6 +498,10 @@ onMounted(loadCapabilities)
                 </td>
               </tr>
             </tbody>
+            <TableTotals>
+              <th scope="row" colspan="2">{{ text('合计', 'Total') }} · {{ tiers.length }} {{ text('档报价', 'price tiers') }}</th>
+              <td>{{ text('单价不累加', 'Unit prices are not additive') }}</td><td>{{ text('单价不累加', 'Unit prices are not additive') }}</td><td>—</td>
+            </TableTotals>
           </table>
         </div>
       </section>
@@ -638,13 +655,18 @@ onMounted(loadCapabilities)
                 <td><span v-if="row.country" class="inline-flex items-center gap-2 font-semibold"><img :src="row.country.flagUrl" alt="" class="h-4 w-5 rounded-[2px] object-cover shadow-sm ring-1 ring-black/10" />{{ row.country.code }}</span></td>
                 <td><strong>{{ row.channel.customChannelName }}</strong><p class="text-xs text-slate-500">{{ row.channel.customChannelCode }}</p></td>
                 <td><strong>{{ row.channel.actualChannelName }}</strong><p class="text-xs text-slate-500">{{ row.channel.actualChannelCode }} · {{ row.channel.logisticsProfitMarginRate }}%</p></td>
-                <td>{{ resultFor(row)?.customerProductUnitPrice || row.tier.customerUnitPrice || '—' }} {{ currency }}</td>
-                <td>{{ resultFor(row)?.baseFreightAmount || '—' }}<template v-if="resultFor(row)?.baseFreightAmount"> {{ currency }}</template></td>
-                <td>{{ resultFor(row)?.customerFreightAmount || '—' }}<template v-if="resultFor(row)?.customerFreightAmount"> {{ currency }}</template></td>
-                <td class="font-bold text-slate-950 dark:text-white">{{ resultFor(row)?.combinedAmount || '—' }}<template v-if="resultFor(row)?.combinedAmount"> {{ currency }}</template></td>
+                <td>{{ quoteMoney(resultFor(row)?.customerProductUnitPrice ?? row.tier.customerUnitPrice) }}</td>
+                <td>{{ quoteMoney(resultFor(row)?.baseFreightAmount) }}</td>
+                <td>{{ quoteMoney(resultFor(row)?.customerFreightAmount) }}</td>
+                <td class="font-bold text-slate-950 dark:text-white">{{ quoteMoney(resultFor(row)?.combinedAmount) }}</td>
               </tr>
               <tr v-if="!matrixRows.length"><td colspan="8" class="text-center text-slate-500">{{ t('quotes.selectCountryAndChannel') }}</td></tr>
             </tbody>
+            <TableTotals>
+              <th scope="row" colspan="4">{{ text('方案金额合计', 'Quote options total') }} · {{ matrixRows.length }} {{ text('项', 'options') }}<br /><small>{{ text('仅列表统计，各方案独立报价', 'List statistics only; each option is a separate quote') }}</small></th>
+              <td>{{ text('单价不累加', 'Unit prices are not additive') }}</td>
+              <td v-for="(total, index) in matrixTotals" :key="index">{{ total }}</td>
+            </TableTotals>
           </table>
         </div>
       </section>

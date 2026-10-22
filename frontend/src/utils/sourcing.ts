@@ -1,3 +1,4 @@
+import { currencyCode } from './currency'
 import {
   autoflowApi,
   type SourcingOffer,
@@ -56,7 +57,7 @@ export function offerPriceParts(offer: SourcingOffer): {
   const minimum = displayNumber(offer.priceMin ?? offer.price)
   const maximum = displayNumber(offer.priceMax)
   return {
-    currency: offer.currency || 'CNY',
+    currency: currencyCode(offer.currency),
     minimum,
     maximum: maximum === minimum ? null : maximum,
   }

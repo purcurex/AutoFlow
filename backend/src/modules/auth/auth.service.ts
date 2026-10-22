@@ -56,6 +56,8 @@ export class AuthService {
         username: user.username,
         avatarUrl: user.avatarUrl,
         role: user.role,
+        businessRole: user.businessRole,
+        workbenchRoles: user.workbenchRoles,
         createdAt: user.createdAt,
         updatedAt: user.updatedAt,
       },
@@ -84,10 +86,19 @@ export class AuthService {
         username: user.username,
         avatarUrl: user.avatarUrl,
         role: user.role,
+        businessRole: user.businessRole,
+        workbenchRoles: user.workbenchRoles,
         createdAt: user.createdAt,
         updatedAt: user.updatedAt,
       },
     }
+  }
+
+  async getProfile(userId: string) {
+    const user = await this.usersService.findById(userId)
+    if (!user) throw new UnauthorizedException('Account no longer exists')
+    const { password: _, ...profile } = user
+    return { ...profile, userId: user.id }
   }
 
   private generateToken(userId: string, email: string, role: UserRole): string {

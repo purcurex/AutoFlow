@@ -25,6 +25,7 @@
     "@vueuse/core": "^14.3.0",
     "axios": "^1.18.1",
     "dompurify": "^3.4.12",
+    "echarts": "^6.1.0",
     "flag-icons": "^7.5.0",
     "html2canvas": "^1.4.1",
     "jspdf": "^4.2.1",

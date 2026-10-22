@@ -1,3 +1,4 @@
+jest.mock('../users/business-data-access', () => ({ readBusinessOwners: jest.fn(async (_dataSource, id) => ({ ids: [id], filter: id })) }))
 import type { DataSource, Repository } from 'typeorm'
 import type { LeadEntity } from '../autoflow/entities'
 import type {
@@ -8,6 +9,7 @@ import type { QuotationEntity } from './entities/quotation.entity'
 import type { QuotationVersionEntity } from './entities/quotation-version.entity'
 import { QuotationService } from './quotation.service'
 import { QuotationExcelExporter } from './quotation-excel.exporter'
+import type { FopDataService } from '../fop-data/fop-data.service'
 
 describe('QuotationService FOP pricing orchestration', () => {
   it('passes selected actual channels and persists product and logistics gross margins', async () => {
@@ -116,6 +118,7 @@ describe('QuotationService FOP pricing orchestration', () => {
       productCostPort,
       logisticsRatePort,
       new QuotationExcelExporter(),
+      { requireResourcePermission: jest.fn().mockResolvedValue(undefined) } as unknown as FopDataService,
     )
 
     const result = await service.requestFopQuote('owner-1', quotation.id)

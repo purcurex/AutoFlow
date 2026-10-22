@@ -14,6 +14,8 @@ vi.mock('@/api/notes', () => ({
   },
 }))
 
+vi.mock('@/api/workbench-access', () => ({ getWorkbenchAccess: vi.fn().mockResolvedValue({ roles: ['sales', 'procurement', 'allocation', 'dispatch', 'warehouse'], isAdmin: false }) }))
+
 describe('security and compatibility routing', () => {
   beforeEach(async () => {
     localStorage.clear()

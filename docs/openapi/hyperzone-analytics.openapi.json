@@ -1,0 +1,5323 @@
+{
+  "openapi": "3.1.1",
+  "jsonSchemaDialect": "https://spec.openapis.org/oas/3.1/dialect/base",
+  "info": {
+    "title": "HyperZone AutoFlow Analytics 当前实现契约",
+    "version": "2026-10-22",
+    "description": "字段级源码快照，仅记录已实现HTTP路由，不将计划FOP上游写为paths。响应裸JSON，无{code,data,message}包装。required=序列化必有；type:null=显式空值；可省略字段不在required中。参数跨字段依赖及已知口径差距见操作描述和配套审计。示例为脱敏契约样例，不是生产数据。"
+  },
+  "servers": [
+    {
+      "url": "/api",
+      "description": "同源全局前缀；导入客户端时补实际域名，避免重复/api。"
+    }
+  ],
+  "security": [
+    {
+      "BearerAuth": []
+    },
+    {
+      "SessionCookie": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "订单分析"
+    },
+    {
+      "name": "履约"
+    },
+    {
+      "name": "仪表盘"
+    },
+    {
+      "name": "访问上下文"
+    },
+    {
+      "name": "权限管理"
+    }
+  ],
+  "paths": {
+    "/autoflow/integrations/fop/data-access": {
+      "get": {
+        "operationId": "getFopDataAccess",
+        "summary": "读取FOP绑定及访问状态",
+        "tags": [
+          "访问上下文"
+        ],
+        "description": "无query；空DTO拒绝额外字段。允许businessRole=none并返回denied。FOP失败通常转为200状态对象，不抛503；ready允许空订单授权。",
+        "responses": {
+          "200": {
+            "description": "成功，裸JSON响应。",
+            "headers": {
+              "Cache-Control": {
+                "description": "JWT guard设置private, no-store；全局429可先于guard返回，不保证此头。",
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataAccess"
+                },
+                "example": {
+                  "binding": {
+                    "tenantId": "demo:example",
+                    "userId": "example"
+                  },
+                  "businessScope": {
+                    "role": "salesperson",
+                    "departmentId": null,
+                    "employeeId": "employee-example"
+                  },
+                  "status": "ready",
+                  "source": "mock",
+                  "mode": "demo"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "x-implementation-status": "implemented",
+        "x-source-files": [
+          "backend/src/modules/users/workbench.controller.ts",
+          "backend/src/modules/fop-data/fop-data.service.ts"
+        ]
+      }
+    },
+    "/autoflow/integrations/fop/order-volume": {
+      "get": {
+        "operationId": "getOrderVolume",
+        "summary": "读取订单量及客户USD金额图表",
+        "tags": [
+          "订单分析"
+        ],
+        "description": "至少一个工作台角色；当前账户绑定、租户、订单allowlist与businessScope求交。时间模式二选一：grain+year必填，day另需month，week默认weekOf=上海今天；或category=customer且from/to同时提供并禁止grain/year/month/weekOf。客户区间2020-01-01至上海今天含首尾。只统计paid、有效paidAt<=asOf、未取消未退款订单；非carrier还要求salesDepartmentCode。未来日null、已到日期无数据0。customer每个series含amounts。筛选参数不能扩大权限。",
+        "responses": {
+          "200": {
+            "description": "成功，裸JSON响应。",
+            "headers": {
+              "Cache-Control": {
+                "description": "JWT guard设置private, no-store；全局429可先于guard返回，不保证此头。",
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderVolume"
+                },
+                "example": {
+                  "source": "mock",
+                  "query": {
+                    "category": "customer",
+                    "from": "2026-10-21",
+                    "to": "2026-10-21",
+                    "warehouse": "ALL"
+                  },
+                  "timeZone": "Asia/Shanghai",
+                  "asOf": "2026-10-22T08:00:00.000Z",
+                  "total": 1,
+                  "customerCount": 1,
+                  "periods": [
+                    {
+                      "id": "2026-10-21",
+                      "label": "2026-10-21",
+                      "from": "2026-10-21",
+                      "to": "2026-10-21",
+                      "future": false
+                    }
+                  ],
+                  "series": [
+                    {
+                      "id": "total",
+                      "label": "订单合计",
+                      "kind": "total",
+                      "total": 1,
+                      "values": [
+                        1
+                      ],
+                      "warehouses": {
+                        "HZ": [
+                          1
+                        ],
+                        "SZ": [
+                          0
+                        ],
+                        "UNASSIGNED": [
+                          0
+                        ]
+                      },
+                      "amounts": {
+                        "currency": "USD",
+                        "total": 125.5,
+                        "values": [
+                          125.5
+                        ],
+                        "warehouses": {
+                          "HZ": [
+                            125.5
+                          ],
+                          "SZ": [
+                            0
+                          ],
+                          "UNASSIGNED": [
+                            0
+                          ]
+                        },
+                        "excludedOrderCount": 0
+                      }
+                    },
+                    {
+                      "id": "customer:customer-example",
+                      "label": "示例客户",
+                      "kind": "detail",
+                      "total": 1,
+                      "values": [
+                        1
+                      ],
+                      "warehouses": {
+                        "HZ": [
+                          1
+                        ],
+                        "SZ": [
+                          0
+                        ],
+                        "UNASSIGNED": [
+                          0
+                        ]
+                      },
+                      "amounts": {
+                        "currency": "USD",
+                        "total": 125.5,
+                        "values": [
+                          125.5
+                        ],
+                        "warehouses": {
+                          "HZ": [
+                            125.5
+                          ],
+                          "SZ": [
+                            0
+                          ],
+                          "UNASSIGNED": [
+                            0
+                          ]
+                        },
+                        "excludedOrderCount": 0
+                      },
+                      "entityId": "customer-example",
+                      "code": "C001"
+                    }
+                  ],
+                  "options": {
+                    "departments": [
+                      {
+                        "id": "sales1",
+                        "label": "业务一部"
+                      }
+                    ],
+                    "objects": [
+                      {
+                        "id": "employee-example",
+                        "label": "示例业务员"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "x-implementation-status": "implemented",
+        "x-source-files": [
+          "backend/src/modules/users/workbench.controller.ts",
+          "backend/src/modules/fop-data/fop-data.service.ts",
+          "backend/src/modules/fop-data/order-volume.dto.ts",
+          "backend/src/modules/fop-data/order-volume.ts"
+        ],
+        "parameters": [
+          {
+            "name": "category",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "carrier",
+                "organization",
+                "salesperson",
+                "customer"
+              ],
+              "description": "carrier物流、organization组织、salesperson业务员、customer客户。"
+            }
+          },
+          {
+            "name": "grain",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "month年内月份；week近4个完整周一至周日；day整月逐日。",
+              "enum": [
+                "month",
+                "week",
+                "day"
+              ]
+            }
+          },
+          {
+            "name": "year",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "description": "2020至上海当前年；week也要求year但由weekOf决定实际分桶。",
+              "minimum": 2020,
+              "maximum": 9999
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "仅客户区间；和to同时存在。",
+              "format": "date",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "仅客户区间，不晚于上海今天；当前无最大跨度限制。",
+              "format": "date",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            }
+          },
+          {
+            "name": "month",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "description": "grain=day必填；其他grain忽略。",
+              "minimum": 1,
+              "maximum": 12
+            }
+          },
+          {
+            "name": "weekOf",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "week锚点，默认上海今天；2020至今天，不强制与year同年。",
+              "format": "date",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            }
+          },
+          {
+            "name": "department",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/SalesDepartment",
+              "description": "报表部门过滤代码sales1..sales4，非权限departmentId。"
+            }
+          },
+          {
+            "name": "objectId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "仅carrier/salesperson，物流代码或owner.id；未知ID返回空。",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "customerId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "仅customer；未知/越权ID返回空。",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "warehouse",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "ALL",
+                "HZ",
+                "SZ",
+                "UNASSIGNED"
+              ],
+              "default": "ALL",
+              "description": "ALL全仓，HZ杭州，SZ深圳，UNASSIGNED未知或未归仓；默认ALL。"
+            }
+          }
+        ],
+        "x-cross-parameter-rules": [
+          "customerId仅customer",
+          "objectId仅carrier/salesperson",
+          "from/to与grain/year/month/weekOf互斥",
+          "timeline需要grain/year且day需要month",
+          "weekOf当前不要求与year同年",
+          "warehouse默认ALL"
+        ]
+      }
+    },
+    "/autoflow/integrations/fop/order-volume/orders": {
+      "get": {
+        "operationId": "getOrderVolumeDetails",
+        "summary": "图表series/period钻取订单",
+        "tags": [
+          "订单分析"
+        ],
+        "description": "至少一个工作台角色；当前账户绑定、租户、订单allowlist与businessScope求交。时间模式二选一：grain+year必填，day另需month，week默认weekOf=上海今天；或category=customer且from/to同时提供并禁止grain/year/month/weekOf。客户区间2020-01-01至上海今天含首尾。只统计paid、有效paidAt<=asOf、未取消未退款订单；非carrier还要求salesDepartmentCode。未来日null、已到日期无数据0。customer每个series含amounts。筛选参数不能扩大权限。 额外要求拥有workbenchRole，仅校验入口，不过滤履约队列。先完整范围重建TopN/other，再收窄period/detailWarehouse；warehouse与detailWarehouse求交。按paidAt倒序/id稳定排序，totals分页前计算。",
+        "responses": {
+          "200": {
+            "description": "成功，裸JSON响应。",
+            "headers": {
+              "Cache-Control": {
+                "description": "JWT guard设置private, no-store；全局429可先于guard返回，不保证此头。",
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderPage"
+                },
+                "example": {
+                  "source": "mock",
+                  "items": [],
+                  "total": 0,
+                  "totals": {
+                    "orderCount": 0,
+                    "itemQuantity": 0,
+                    "amountsByCurrency": []
+                  },
+                  "page": 1,
+                  "pageSize": 20
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "x-implementation-status": "implemented",
+        "x-source-files": [
+          "backend/src/modules/users/workbench.controller.ts",
+          "backend/src/modules/fop-data/fop-data.service.ts",
+          "backend/src/modules/fop-data/order-volume.dto.ts",
+          "backend/src/modules/fop-data/order-volume.ts",
+          "backend/src/modules/fop-data/fop-order-totals.ts"
+        ],
+        "parameters": [
+          {
+            "name": "category",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "carrier",
+                "organization",
+                "salesperson",
+                "customer"
+              ],
+              "description": "carrier物流、organization组织、salesperson业务员、customer客户。"
+            }
+          },
+          {
+            "name": "grain",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "month年内月份；week近4个完整周一至周日；day整月逐日。",
+              "enum": [
+                "month",
+                "week",
+                "day"
+              ]
+            }
+          },
+          {
+            "name": "year",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "description": "2020至上海当前年；week也要求year但由weekOf决定实际分桶。",
+              "minimum": 2020,
+              "maximum": 9999
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "仅客户区间；和to同时存在。",
+              "format": "date",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "仅客户区间，不晚于上海今天；当前无最大跨度限制。",
+              "format": "date",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            }
+          },
+          {
+            "name": "month",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "description": "grain=day必填；其他grain忽略。",
+              "minimum": 1,
+              "maximum": 12
+            }
+          },
+          {
+            "name": "weekOf",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "week锚点，默认上海今天；2020至今天，不强制与year同年。",
+              "format": "date",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            }
+          },
+          {
+            "name": "department",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/SalesDepartment",
+              "description": "报表部门过滤代码sales1..sales4，非权限departmentId。"
+            }
+          },
+          {
+            "name": "objectId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "仅carrier/salesperson，物流代码或owner.id；未知ID返回空。",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "customerId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "仅customer；未知/越权ID返回空。",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "warehouse",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "ALL",
+                "HZ",
+                "SZ",
+                "UNASSIGNED"
+              ],
+              "default": "ALL",
+              "description": "ALL全仓，HZ杭州，SZ深圳，UNASSIGNED未知或未归仓；默认ALL。"
+            }
+          },
+          {
+            "name": "workbenchRole",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/WorkbenchRole"
+            }
+          },
+          {
+            "name": "detailWarehouse",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/VolumeWarehouse"
+            }
+          },
+          {
+            "name": "seriesId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 220
+            },
+            "description": "回传series.id；省略total；未知ID返回200空集。"
+          },
+          {
+            "name": "periodId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}(?:-\\d{2})?$"
+            },
+            "description": "回传periods.id；不属于当前查询400；省略全部期间。"
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000000,
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          }
+        ]
+      }
+    },
+    "/autoflow/integrations/fop/order-volume/customers": {
+      "get": {
+        "operationId": "searchOrderCustomers",
+        "summary": "搜索授权客户",
+        "tags": [
+          "订单分析"
+        ],
+        "description": "至少一个工作台角色；已授权未取消未退款、有报表部门/customerId的订单构建客户集，包含未支付。编码精确命中优先，后按编码/ID排序。无日期/仓库参数，未知字段400。",
+        "responses": {
+          "200": {
+            "description": "成功，裸JSON响应。",
+            "headers": {
+              "Cache-Control": {
+                "description": "JWT guard设置private, no-store；全局429可先于guard返回，不保证此头。",
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderCustomerPage"
+                },
+                "example": {
+                  "source": "mock",
+                  "items": [
+                    {
+                      "id": "customer-example",
+                      "code": "C001",
+                      "name": "示例客户",
+                      "departments": [
+                        "业务一部"
+                      ]
+                    }
+                  ],
+                  "total": 1,
+                  "page": 1,
+                  "pageSize": 10
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "x-implementation-status": "implemented",
+        "x-source-files": [
+          "backend/src/modules/users/workbench.controller.ts",
+          "backend/src/modules/fop-data/fop-data.service.ts",
+          "backend/src/modules/fop-data/order-volume.dto.ts",
+          "backend/src/modules/fop-data/order-volume.ts"
+        ],
+        "parameters": [
+          {
+            "name": "keyword",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "description": "trim后非空，编码/名称忽略大小写包含匹配。"
+          },
+          {
+            "name": "department",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/SalesDepartment"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000000,
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50,
+              "default": 10
+            }
+          }
+        ]
+      }
+    },
+    "/autoflow/integrations/fop/fulfillment-orders": {
+      "get": {
+        "operationId": "getFulfillmentOrders",
+        "summary": "读取履约队列订单",
+        "tags": [
+          "履约"
+        ],
+        "description": "queue角色：review/exceptions=sales，procurement=procurement，allocation=allocation，dispatch=dispatch，shipping=warehouse。均排除取消/退款；review=reviewStatus pending；procurement=approved+paid+procurement pending；allocation=approved+paid+allocation pending；dispatch=paid+allocated+dispatch pending；shipping=paid+dispatched+shipping pending；exceptions=paid+未shipped+exception非null。按createdAt倒序/id排序，totals全筛选集。",
+        "responses": {
+          "200": {
+            "description": "成功，裸JSON响应。",
+            "headers": {
+              "Cache-Control": {
+                "description": "JWT guard设置private, no-store；全局429可先于guard返回，不保证此头。",
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderPage"
+                },
+                "example": {
+                  "source": "mock",
+                  "items": [],
+                  "total": 0,
+                  "totals": {
+                    "orderCount": 0,
+                    "itemQuantity": 0,
+                    "amountsByCurrency": []
+                  },
+                  "page": 1,
+                  "pageSize": 20
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "x-implementation-status": "implemented",
+        "x-source-files": [
+          "backend/src/modules/users/workbench.controller.ts",
+          "backend/src/modules/fop-data/fop-data.service.ts",
+          "backend/src/modules/users/dto/workbench.dto.ts",
+          "backend/src/modules/fop-data/fop-order-totals.ts"
+        ],
+        "parameters": [
+          {
+            "name": "queue",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "review",
+                "exceptions",
+                "procurement",
+                "allocation",
+                "dispatch",
+                "shipping"
+              ]
+            }
+          },
+          {
+            "name": "workbenchRole",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/WorkbenchRole"
+            },
+            "description": "可选，提供时必须匹配queue所需角色，否则400。"
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "description": "trim/忽略大小写，匹配orderNumber/shopifyOrderNumber/customerName/storeName/items.sku。"
+          },
+          {
+            "name": "orderNumber",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 100
+            },
+            "description": "FOP业务订单号精确匹配，不trim。"
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000000,
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          }
+        ]
+      }
+    },
+    "/autoflow/integrations/fop/dashboard": {
+      "get": {
+        "operationId": "getFopDashboard",
+        "summary": "读取FOP仪表盘",
+        "tags": [
+          "仪表盘"
+        ],
+        "description": "from<=to，end-start<=365天（含首尾最多366天），to<=UTC今天，year<=UTC当前年。from/to仅注册，year仅收款；队列/异常/任务不受日期筛选。rates/registrations/receipts分别需provider analyticsScopes；无scope返回空。registrationEntries优先并按业务范围过滤，缺失时仅业务admin可读旧registrations。收款为USD已支付订单amount、非独立收款流水，按paidAt.slice(0,7)归月，未统一上海时区。",
+        "responses": {
+          "200": {
+            "description": "成功，裸JSON响应。",
+            "headers": {
+              "Cache-Control": {
+                "description": "JWT guard设置private, no-store；全局429可先于guard返回，不保证此头。",
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FopDashboard"
+                },
+                "example": {
+                  "businessScope": {
+                    "role": "admin",
+                    "departmentId": null,
+                    "employeeId": null
+                  },
+                  "source": "mock",
+                  "updatedAt": "2026-10-22T08:00:00.000Z",
+                  "queues": {
+                    "review": 0,
+                    "allocation": 0,
+                    "dispatch": 0,
+                    "shipping": 0
+                  },
+                  "rates": [],
+                  "registrations": [],
+                  "registrationDepartments": [],
+                  "tasks": [],
+                  "exceptions": [],
+                  "receipts": {
+                    "currency": "USD",
+                    "months": [],
+                    "marketingCenter": null,
+                    "departments": []
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "x-implementation-status": "implemented",
+        "x-source-files": [
+          "backend/src/modules/users/workbench.controller.ts",
+          "backend/src/modules/fop-data/fop-data.service.ts",
+          "backend/src/modules/fop-data/fop-data.dto.ts",
+          "backend/src/modules/fop-data/fop-registration.ts"
+        ],
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "公历日期YYYY-MM-DD。",
+              "format": "date",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "公历日期YYYY-MM-DD。",
+              "format": "date",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            }
+          },
+          {
+            "name": "year",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 2020,
+              "maximum": 9999
+            }
+          }
+        ]
+      }
+    },
+    "/workbench/access": {
+      "get": {
+        "operationId": "getWorkbenchAccess",
+        "summary": "读取当前工作台入口权限",
+        "tags": [
+          "访问上下文"
+        ],
+        "description": "允许businessRole=none；当前数据库重新读取授权，不信任JWT角色。无Query DTO，额外query当前忽略。",
+        "responses": {
+          "200": {
+            "description": "成功，裸JSON响应。",
+            "headers": {
+              "Cache-Control": {
+                "description": "JWT guard设置private, no-store；全局429可先于guard返回，不保证此头。",
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkbenchAccess"
+                },
+                "example": {
+                  "roles": [
+                    "sales"
+                  ],
+                  "isAdmin": false,
+                  "businessRole": "salesperson"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "x-implementation-status": "implemented",
+        "x-source-files": [
+          "backend/src/modules/users/workbench.controller.ts",
+          "backend/src/modules/users/workbench-access.service.ts"
+        ]
+      }
+    },
+    "/workbench/{role}/access": {
+      "get": {
+        "operationId": "getWorkbenchRoleAccess",
+        "summary": "校验指定入口权限",
+        "tags": [
+          "访问上下文"
+        ],
+        "description": "未知role400，已知但未授权403。",
+        "responses": {
+          "200": {
+            "description": "成功，裸JSON响应。",
+            "headers": {
+              "Cache-Control": {
+                "description": "JWT guard设置private, no-store；全局429可先于guard返回，不保证此头。",
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkbenchAccess"
+                },
+                "example": {
+                  "roles": [
+                    "sales"
+                  ],
+                  "isAdmin": false,
+                  "businessRole": "salesperson"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "x-implementation-status": "implemented",
+        "x-source-files": [
+          "backend/src/modules/users/workbench.controller.ts",
+          "backend/src/modules/users/workbench-access.service.ts"
+        ],
+        "parameters": [
+          {
+            "name": "role",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/WorkbenchRole"
+            }
+          }
+        ]
+      }
+    },
+    "/users/workbench-accounts": {
+      "get": {
+        "operationId": "listWorkbenchAccounts",
+        "summary": "管理员分页列出账户权限",
+        "tags": [
+          "权限管理"
+        ],
+        "description": "仅系统role=admin；businessRole=none也可管理。按displayId/id排序；响应仅items/total。",
+        "responses": {
+          "200": {
+            "description": "成功，裸JSON响应。",
+            "headers": {
+              "Cache-Control": {
+                "description": "JWT guard设置private, no-store；全局429可先于guard返回，不保证此头。",
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkbenchAccountPage"
+                },
+                "example": {
+                  "items": [],
+                  "total": 0
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "x-implementation-status": "implemented",
+        "x-source-files": [
+          "backend/src/modules/users/users.controller.ts",
+          "backend/src/modules/users/users.service.ts",
+          "backend/src/modules/users/workbench-access.service.ts"
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000000,
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "description": "trim，username/email/displayId忽略大小写包含匹配；SQL通配符转义。"
+          }
+        ]
+      }
+    },
+    "/users/{id}/workbench-roles": {
+      "put": {
+        "operationId": "updateWorkbenchRoles",
+        "summary": "设置入口角色",
+        "tags": [
+          "权限管理"
+        ],
+        "description": "仅系统管理员。替换全数组，[]撤销入口；不修改FOP绑定/业务范围。",
+        "responses": {
+          "200": {
+            "description": "成功，裸JSON响应。",
+            "headers": {
+              "Cache-Control": {
+                "description": "JWT guard设置private, no-store；全局429可先于guard返回，不保证此头。",
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkbenchAccount"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "x-implementation-status": "implemented",
+        "x-source-files": [
+          "backend/src/modules/users/users.controller.ts",
+          "backend/src/modules/users/users.service.ts",
+          "backend/src/modules/users/workbench-access.service.ts"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "本地UUID。",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateWorkbenchRoles"
+              },
+              "example": {
+                "workbenchRoles": [
+                  "sales",
+                  "allocation"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/users/{id}/fop-binding": {
+      "put": {
+        "operationId": "updateFopBinding",
+        "summary": "绑定或解绑FOP身份",
+        "tags": [
+          "权限管理"
+        ],
+        "description": "仅系统管理员。两字段同时非空或同时null；同一FOP身份只能绑定一个账户，冲突409。",
+        "responses": {
+          "200": {
+            "description": "成功，裸JSON响应。",
+            "headers": {
+              "Cache-Control": {
+                "description": "JWT guard设置private, no-store；全局429可先于guard返回，不保证此头。",
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkbenchAccount"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "x-implementation-status": "implemented",
+        "x-source-files": [
+          "backend/src/modules/users/users.controller.ts",
+          "backend/src/modules/users/users.service.ts",
+          "backend/src/modules/users/workbench-access.service.ts"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "本地UUID。",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateFopBinding"
+              },
+              "example": {
+                "tenantId": "tenant-example",
+                "userId": "employee-example"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/users/{id}/business-scope": {
+      "put": {
+        "operationId": "updateBusinessScope",
+        "summary": "设置业务范围",
+        "tags": [
+          "权限管理"
+        ],
+        "description": "仅系统管理员。经理要求departmentId，销售要求employeeId；未分配字段显式null。当前不验证ID属于真实FOP目录。",
+        "responses": {
+          "200": {
+            "description": "成功，裸JSON响应。",
+            "headers": {
+              "Cache-Control": {
+                "description": "JWT guard设置private, no-store；全局429可先于guard返回，不保证此头。",
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkbenchAccount"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "x-implementation-status": "implemented",
+        "x-source-files": [
+          "backend/src/modules/users/users.controller.ts",
+          "backend/src/modules/users/users.service.ts",
+          "backend/src/modules/users/workbench-access.service.ts"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "本地UUID。",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateBusinessScope"
+              },
+              "example": {
+                "role": "department_manager",
+                "departmentId": "department-example",
+                "employeeId": null
+              }
+            }
+          }
+        }
+      }
+    },
+    "/users/{id}/management-role": {
+      "put": {
+        "operationId": "updateManagementRole",
+        "summary": "设置系统管理角色",
+        "tags": [
+          "权限管理"
+        ],
+        "description": "仅系统管理员。不改变业务范围；不能撤销自己管理权限，409；事务内重新校验操作者。",
+        "responses": {
+          "200": {
+            "description": "成功，裸JSON响应。",
+            "headers": {
+              "Cache-Control": {
+                "description": "JWT guard设置private, no-store；全局429可先于guard返回，不保证此头。",
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkbenchAccount"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "x-implementation-status": "implemented",
+        "x-source-files": [
+          "backend/src/modules/users/users.controller.ts",
+          "backend/src/modules/users/users.service.ts",
+          "backend/src/modules/users/workbench-access.service.ts"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "本地UUID。",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateManagementRole"
+              },
+              "example": {
+                "role": "admin"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/organization": {
+      "get": {
+        "operationId": "getOrganizationWorkspace",
+        "summary": "读取本地组织/员工上下文",
+        "tags": [
+          "访问上下文"
+        ],
+        "description": "仅系统管理员。每个本地账户独立mock组织，非FOP目录；首次GET可在事务内初始化种子，有本地写副作用。空Query DTO拒绝额外字段。组织写接口不在本规范。",
+        "responses": {
+          "200": {
+            "description": "成功，裸JSON响应。",
+            "headers": {
+              "Cache-Control": {
+                "description": "JWT guard设置private, no-store；全局429可先于guard返回，不保证此头。",
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrganizationWorkspace"
+                },
+                "example": {
+                  "source": "mock",
+                  "nodes": [],
+                  "employees": [],
+                  "canEdit": true
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "x-implementation-status": "implemented",
+        "x-source-files": [
+          "backend/src/modules/organization/organization.controller.ts",
+          "backend/src/modules/organization/organization.service.ts",
+          "backend/src/modules/organization/organization.types.ts"
+        ]
+      }
+    },
+    "/autoflow/dashboard": {
+      "get": {
+        "operationId": "getLocalAutoflowDashboard",
+        "summary": "读取本地AutoFlow业务概览",
+        "tags": [
+          "仪表盘"
+        ],
+        "description": "需要sales入口与当前业务范围，readBusinessOwners限定同租户/部门或本人。无查询DTO，额外query当前忽略。无FOP source/updatedAt；funnel.value固定0不表示真实金额。",
+        "responses": {
+          "200": {
+            "description": "成功，裸JSON响应。",
+            "headers": {
+              "Cache-Control": {
+                "description": "JWT guard设置private, no-store；全局429可先于guard返回，不保证此头。",
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocalDashboard"
+                },
+                "example": {
+                  "metrics": {
+                    "activeWorkflows": 0,
+                    "newLeads": 0,
+                    "readyOutreach": 0,
+                    "replies": 0,
+                    "opportunities": 0
+                  },
+                  "funnel": [
+                    {
+                      "key": "new",
+                      "label": "New",
+                      "count": 0,
+                      "value": 0
+                    },
+                    {
+                      "key": "qualified",
+                      "label": "Qualified",
+                      "count": 0,
+                      "value": 0
+                    },
+                    {
+                      "key": "contacted",
+                      "label": "Contacted",
+                      "count": 0,
+                      "value": 0
+                    },
+                    {
+                      "key": "replied",
+                      "label": "Replied",
+                      "count": 0,
+                      "value": 0
+                    },
+                    {
+                      "key": "opportunity",
+                      "label": "Opportunity",
+                      "count": 0,
+                      "value": 0
+                    },
+                    {
+                      "key": "won",
+                      "label": "Won",
+                      "count": 0,
+                      "value": 0
+                    },
+                    {
+                      "key": "lost",
+                      "label": "Lost",
+                      "count": 0,
+                      "value": 0
+                    },
+                    {
+                      "key": "invalid",
+                      "label": "Invalid",
+                      "count": 0,
+                      "value": 0
+                    }
+                  ],
+                  "recentWorkflows": [],
+                  "topLeads": [],
+                  "nextTasks": []
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "x-implementation-status": "implemented",
+        "x-source-files": [
+          "backend/src/modules/autoflow/autoflow.controller.ts",
+          "backend/src/modules/autoflow/autoflow.service.ts",
+          "backend/src/modules/autoflow/autoflow.types.ts",
+          "backend/src/modules/users/business-data-access.ts"
+        ]
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "Authorization: Bearer <JWT>；角色每次查当前数据库。"
+      },
+      "SessionCookie": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "autoflow_session",
+        "description": "浏览器使用HttpOnly会话cookie；和Bearer是OR，提取器优先cookie，过期cookie可能覆盖有效Bearer导致401。"
+      }
+    },
+    "schemas": {
+      "DataSource": {
+        "type": "string",
+        "description": "mock=本地演示；fop标签本身不证明真实上游已接通。",
+        "enum": [
+          "mock",
+          "fop"
+        ]
+      },
+      "WorkbenchRole": {
+        "type": "string",
+        "description": "工作台入口权限；与业务范围、系统管理权限独立。",
+        "enum": [
+          "sales",
+          "procurement",
+          "allocation",
+          "dispatch",
+          "warehouse"
+        ]
+      },
+      "BusinessRole": {
+        "type": "string",
+        "enum": [
+          "none",
+          "admin",
+          "department_manager",
+          "salesperson"
+        ]
+      },
+      "SalesDepartment": {
+        "type": "string",
+        "description": "固定报表部门：业务一部至四部；不是组织节点ID。",
+        "enum": [
+          "sales1",
+          "sales2",
+          "sales3",
+          "sales4"
+        ]
+      },
+      "VolumeWarehouse": {
+        "type": "string",
+        "description": "杭州、深圳、未分配。",
+        "enum": [
+          "HZ",
+          "SZ",
+          "UNASSIGNED"
+        ]
+      },
+      "CarrierCode": {
+        "type": "string",
+        "description": "固定顺序云途YT/4PX/万邦WB/燕文YW/极速JS/其他；未知代码归OTHER。",
+        "enum": [
+          "YT",
+          "4PX",
+          "WB",
+          "YW",
+          "JS",
+          "OTHER"
+        ]
+      },
+      "Money": {
+        "type": "number",
+        "description": "币种主单位（USD为美元），不是分。汇总按moneyToCents四舍五入至分求和后除100；当前部分路径没有非负/安全整数校验。",
+        "examples": [
+          125.5
+        ]
+      },
+      "NamedEntity": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "上游实体稳定标识，不依赖展示名称，不保证UUID。"
+          },
+          "name": {
+            "type": "string",
+            "description": "实体当前展示名称。"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "additionalProperties": false
+      },
+      "FopBinding": {
+        "type": "object",
+        "properties": {
+          "tenantId": {
+            "type": "string",
+            "description": "服务端维护FOP租户ID。",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "userId": {
+            "type": "string",
+            "description": "服务端维护FOP用户ID。",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "tenantId",
+          "userId"
+        ],
+        "additionalProperties": false
+      },
+      "BusinessScope": {
+        "type": "object",
+        "properties": {
+          "role": {
+            "$ref": "#/components/schemas/BusinessRole",
+            "description": "业务数据授权类型；none禁用，admin为授权租户内全业务，经理按部门，销售按员工。"
+          },
+          "departmentId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "授权部门ID；经理可匹配departmentPathIds下级。"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "授权部门ID；经理可匹配departmentPathIds下级。"
+          },
+          "employeeId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "授权员工ID；销售按owner.id匹配。"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "授权员工ID；销售按owner.id匹配。"
+          }
+        },
+        "required": [
+          "role",
+          "departmentId",
+          "employeeId"
+        ],
+        "additionalProperties": false
+      },
+      "WorkbenchAccess": {
+        "type": "object",
+        "properties": {
+          "roles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkbenchRole"
+            },
+            "description": "businessRole=none时[]，admin时全部角色。",
+            "uniqueItems": true
+          },
+          "isAdmin": {
+            "type": "boolean",
+            "description": "系统管理权限，与业务admin不同。"
+          },
+          "businessRole": {
+            "$ref": "#/components/schemas/BusinessRole",
+            "description": "当前数据库读取的业务角色，与isAdmin的系统管理权限相互独立。"
+          }
+        },
+        "required": [
+          "roles",
+          "isAdmin",
+          "businessRole"
+        ],
+        "additionalProperties": false
+      },
+      "DataAccess": {
+        "type": "object",
+        "properties": {
+          "binding": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FopBinding"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "账户当前FOP身份；没有绑定时为null；演示模式可返回临时demo身份。"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "unbound",
+              "not_configured",
+              "ready",
+              "unavailable",
+              "denied"
+            ],
+            "description": "unbound无身份；not_configured没有provider；ready已完成权限解析；unavailable上游失败；denied业务禁用/权限拒绝。"
+          },
+          "businessScope": {
+            "$ref": "#/components/schemas/BusinessScope",
+            "description": "当前业务范围；unbound返回分支省略此字段。"
+          },
+          "source": {
+            "$ref": "#/components/schemas/DataSource",
+            "description": "仅ready返回，mock为演示provider，fop为真实provider来源标记。"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "demo",
+              "live"
+            ],
+            "description": "仅ready返回；source=mock对应demo，否则live。"
+          }
+        },
+        "required": [
+          "binding",
+          "status"
+        ],
+        "additionalProperties": false,
+        "description": "binding/status必有；unbound省略businessScope；仅ready输出source/mode。"
+      },
+      "FopOrderItem": {
+        "type": "object",
+        "properties": {
+          "productId": {
+            "type": "string",
+            "description": "缺失/空值时省略。"
+          },
+          "sku": {
+            "type": "string",
+            "description": "SKU编码；参与履约search模糊检索。"
+          },
+          "name": {
+            "type": "string",
+            "description": "商品展示名称。"
+          },
+          "imageUrl": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "图片URL或data URI；无图null。"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "图片URL或data URI；无图null。"
+          },
+          "variant": {
+            "type": "string",
+            "description": "商品规格/变体描述。"
+          },
+          "quantity": {
+            "type": "number",
+            "description": "商品件数；当前未运行时验证整数/非负。"
+          }
+        },
+        "required": [
+          "sku",
+          "name",
+          "imageUrl",
+          "variant",
+          "quantity"
+        ],
+        "additionalProperties": false
+      },
+      "OrderException": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "enum": [
+              "stock",
+              "address",
+              "tracking"
+            ],
+            "description": "异常原因：stock库存、address地址、tracking物流跟踪号。"
+          },
+          "hours": {
+            "type": "number",
+            "description": "异常持续小时。"
+          }
+        },
+        "required": [
+          "reason",
+          "hours"
+        ],
+        "additionalProperties": false
+      },
+      "FopOrder": {
+        "type": "object",
+        "properties": {
+          "salesDepartmentCode": {
+            "$ref": "#/components/schemas/SalesDepartment",
+            "description": "可信适配器归一化后的报表部门；非物流维度统计及收款按此字段归属。"
+          },
+          "id": {
+            "type": "string",
+            "description": "FOP订单ID；授权白名单与去重键。"
+          },
+          "orderNumber": {
+            "type": "string",
+            "description": "FOP业务订单号。"
+          },
+          "shopifyOrderNumber": {
+            "type": "string",
+            "description": "来源Shopify订单展示号，例如#10401；参与模糊检索。"
+          },
+          "customerId": {
+            "type": "string",
+            "description": "稳定客户ID；客户去重、客户搜索、筛选与customer:<id> series使用。"
+          },
+          "customerCode": {
+            "type": "string",
+            "description": "业务侧客户编码，客户搜索可按此字段匹配；缺失时序列化省略。"
+          },
+          "warehouseCode": {
+            "type": "string",
+            "description": "HZ/SZ以外或缺失归UNASSIGNED。"
+          },
+          "carrierCode": {
+            "type": "string",
+            "description": "白名单以外或缺失归OTHER。"
+          },
+          "customerName": {
+            "type": "string",
+            "description": "客户展示名称，参与履约模糊检索。"
+          },
+          "storeName": {
+            "type": "string",
+            "description": "所属店铺展示名称，参与履约模糊检索。"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FopOrderItem"
+            },
+            "description": "订单商品行；商品数量汇总来自全部items.quantity。"
+          },
+          "organization": {
+            "$ref": "#/components/schemas/NamedEntity",
+            "description": "订单所属组织ID与名称；上游未提供时省略。"
+          },
+          "department": {
+            "$ref": "#/components/schemas/NamedEntity",
+            "description": "订单所属实际部门ID与名称；用于经理直接部门范围匹配。"
+          },
+          "owner": {
+            "$ref": "#/components/schemas/NamedEntity",
+            "description": "订单归属业务员工ID与名称；owner.id用于员工权限和业务员分组。"
+          },
+          "amount": {
+            "$ref": "#/components/schemas/Money",
+            "description": "订单总金额，单位为currency主单位；当前不是独立实收金额。"
+          },
+          "currency": {
+            "type": "string",
+            "description": "trim+uppercase，空值默认USD；不会换汇。"
+          },
+          "paymentStatus": {
+            "type": "string",
+            "enum": [
+              "paid",
+              "unpaid",
+              "refunded"
+            ],
+            "description": "paid已支付、unpaid未支付、refunded已退款；统计要求paid，review队列可含unpaid。"
+          },
+          "reviewStatus": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "approved"
+            ],
+            "description": "pending待审核，approved已审核。"
+          },
+          "procurementStatus": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "purchased",
+              "not_required"
+            ],
+            "description": "pending待采购，purchased已采购，not_required无需采购。"
+          },
+          "allocationStatus": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "allocated",
+              "not_ready"
+            ],
+            "description": "pending待配货，allocated已配货，not_ready尚未进入配货环节。"
+          },
+          "dispatchStatus": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "dispatched",
+              "not_ready"
+            ],
+            "description": "pending待调度，dispatched已调度，not_ready尚未进入调度环节。"
+          },
+          "shippingStatus": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "shipped",
+              "not_ready"
+            ],
+            "description": "pending待发货，shipped已发货，not_ready尚未进入发货环节。"
+          },
+          "warehouse": {
+            "type": "string",
+            "description": "展示名，不用于归仓。"
+          },
+          "carrier": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "物流服务商展示名；无服务商为null，不用于统计归类。"
+          },
+          "trackingNumber": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "物流跟踪号；尚未生成时null。"
+          },
+          "salesperson": {
+            "type": "string",
+            "description": "展示名，权限使用owner.id。"
+          },
+          "createdAt": {
+            "type": "string",
+            "description": "订单创建时间，履约列表按此时间降序，时刻相同按id排序。",
+            "format": "date-time"
+          },
+          "paidAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "订单量按Asia/Shanghai日期归桶；Dashboard按字符串月份归桶。",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "订单量按Asia/Shanghai日期归桶；Dashboard按字符串月份归桶。"
+          },
+          "cancelled": {
+            "type": "boolean",
+            "description": "true表示订单取消，从订单量/收款/履约队列排除。"
+          },
+          "exception": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OrderException"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "订单异常详情；无异常明确为null。"
+          }
+        },
+        "required": [
+          "id",
+          "orderNumber",
+          "shopifyOrderNumber",
+          "customerName",
+          "storeName",
+          "items",
+          "amount",
+          "currency",
+          "paymentStatus",
+          "reviewStatus",
+          "procurementStatus",
+          "allocationStatus",
+          "dispatchStatus",
+          "shippingStatus",
+          "warehouse",
+          "carrier",
+          "trackingNumber",
+          "salesperson",
+          "createdAt",
+          "paidAt",
+          "cancelled",
+          "exception"
+        ],
+        "additionalProperties": false,
+        "description": "publicOrder白名单输出，不含tenantId、departmentPathIds或任意provider元数据。上游金额/时间等尚无完整运行时schema验证。",
+        "examples": [
+          {
+            "id": "order-example",
+            "orderNumber": "AF-EXAMPLE-001",
+            "shopifyOrderNumber": "#10401",
+            "salesDepartmentCode": "sales1",
+            "customerId": "customer-example",
+            "customerCode": "C001",
+            "warehouseCode": "HZ",
+            "carrierCode": "YT",
+            "customerName": "示例客户",
+            "storeName": "示例店铺",
+            "organization": {
+              "id": "organization-example",
+              "name": "营销中心"
+            },
+            "department": {
+              "id": "department-example",
+              "name": "业务一部"
+            },
+            "owner": {
+              "id": "employee-example",
+              "name": "示例业务员"
+            },
+            "items": [
+              {
+                "productId": "product-example",
+                "sku": "SKU-001",
+                "name": "示例商品",
+                "imageUrl": null,
+                "variant": "蓝色",
+                "quantity": 2
+              }
+            ],
+            "amount": 125.5,
+            "currency": "USD",
+            "paymentStatus": "paid",
+            "reviewStatus": "approved",
+            "procurementStatus": "purchased",
+            "allocationStatus": "allocated",
+            "dispatchStatus": "dispatched",
+            "shippingStatus": "shipped",
+            "warehouse": "杭州仓",
+            "carrier": "云途YT",
+            "trackingNumber": "EXAMPLE-TRACKING",
+            "salesperson": "示例业务员",
+            "createdAt": "2026-10-21T01:00:00Z",
+            "paidAt": "2026-10-21T01:15:00Z",
+            "cancelled": false,
+            "exception": null
+          }
+        ]
+      },
+      "CurrencyAmount": {
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "description": "USD排首位，其他币种字典序。"
+          },
+          "amount": {
+            "$ref": "#/components/schemas/Money",
+            "description": "完整筛选集该币种订单amount的分币精度汇总，单位仍为币种主单位。"
+          }
+        },
+        "required": [
+          "currency",
+          "amount"
+        ],
+        "additionalProperties": false
+      },
+      "OrderTotals": {
+        "type": "object",
+        "properties": {
+          "orderCount": {
+            "type": "integer",
+            "description": "授权且匹配全部筛选条件的订单数量，与分页外total相等。",
+            "minimum": 0
+          },
+          "itemQuantity": {
+            "type": "number",
+            "description": "完整筛选订单items.quantity之和。"
+          },
+          "amountsByCurrency": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CurrencyAmount"
+            },
+            "description": "原币种分别汇总、不换汇；空集[]。"
+          }
+        },
+        "required": [
+          "orderCount",
+          "itemQuantity",
+          "amountsByCurrency"
+        ],
+        "additionalProperties": false,
+        "description": "分页前授权筛选全集汇总；total=totals.orderCount，不是当前页小计。"
+      },
+      "OrderPage": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "$ref": "#/components/schemas/DataSource",
+            "description": "本次返回数据的provider来源。"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FopOrder"
+            },
+            "description": "当前页订单；非授权订单在分页前已剔除，越界页为空。"
+          },
+          "total": {
+            "type": "integer",
+            "description": "授权筛选后的总订单数，与当前页items长度无关。",
+            "minimum": 0
+          },
+          "totals": {
+            "$ref": "#/components/schemas/OrderTotals",
+            "description": "分页前完整筛选集订单数、商品件数及分币种金额合计。"
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000000,
+            "description": "本次页码，从1开始。"
+          },
+          "pageSize": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "description": "本次每页大小，最多100。"
+          }
+        },
+        "required": [
+          "source",
+          "items",
+          "total",
+          "totals",
+          "page",
+          "pageSize"
+        ],
+        "additionalProperties": false,
+        "description": "越界页200且items=[]；total/totals保留完整筛选集。"
+      },
+      "OrderVolumeQuery": {
+        "type": "object",
+        "properties": {
+          "category": {
+            "type": "string",
+            "enum": [
+              "carrier",
+              "organization",
+              "salesperson",
+              "customer"
+            ],
+            "description": "carrier物流、organization组织、salesperson业务员、customer客户。"
+          },
+          "grain": {
+            "type": "string",
+            "description": "month年内月份；week近4个完整周一至周日；day整月逐日。",
+            "enum": [
+              "month",
+              "week",
+              "day"
+            ]
+          },
+          "year": {
+            "type": "integer",
+            "description": "2020至上海当前年；week也要求year但由weekOf决定实际分桶。",
+            "minimum": 2020,
+            "maximum": 9999
+          },
+          "from": {
+            "type": "string",
+            "description": "仅客户区间；和to同时存在。",
+            "format": "date",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          },
+          "to": {
+            "type": "string",
+            "description": "仅客户区间，不晚于上海今天；当前无最大跨度限制。",
+            "format": "date",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          },
+          "month": {
+            "type": "integer",
+            "description": "grain=day必填；其他grain忽略。",
+            "minimum": 1,
+            "maximum": 12
+          },
+          "weekOf": {
+            "type": "string",
+            "description": "week锚点，默认上海今天；2020至今天，不强制与year同年。",
+            "format": "date",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          },
+          "department": {
+            "$ref": "#/components/schemas/SalesDepartment",
+            "description": "报表部门过滤代码sales1..sales4，非权限departmentId。"
+          },
+          "objectId": {
+            "type": "string",
+            "description": "仅carrier/salesperson，物流代码或owner.id；未知ID返回空。",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "customerId": {
+            "type": "string",
+            "description": "仅customer；未知/越权ID返回空。",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "warehouse": {
+            "type": "string",
+            "enum": [
+              "ALL",
+              "HZ",
+              "SZ",
+              "UNASSIGNED"
+            ],
+            "default": "ALL",
+            "description": "ALL全仓，HZ杭州，SZ深圳，UNASSIGNED未知或未归仓；默认ALL。"
+          }
+        },
+        "required": [
+          "category",
+          "warehouse"
+        ],
+        "additionalProperties": false,
+        "description": "响应回显DTO转换后的查询。请求warehouse可省略，默认ALL。时间轴grain/year与客户from/to二选一，业务条件见操作描述。",
+        "oneOf": [
+          {
+            "required": [
+              "grain",
+              "year"
+            ],
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "from"
+                  ]
+                },
+                {
+                  "required": [
+                    "to"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "properties": {
+              "category": {
+                "const": "customer"
+              }
+            },
+            "required": [
+              "from",
+              "to"
+            ],
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "grain"
+                  ]
+                },
+                {
+                  "required": [
+                    "year"
+                  ]
+                },
+                {
+                  "required": [
+                    "month"
+                  ]
+                },
+                {
+                  "required": [
+                    "weekOf"
+                  ]
+                }
+              ]
+            }
+          }
+        ],
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "grain": {
+                  "const": "day"
+                }
+              },
+              "required": [
+                "grain"
+              ]
+            },
+            "then": {
+              "required": [
+                "month"
+              ]
+            }
+          },
+          {
+            "if": {
+              "required": [
+                "customerId"
+              ]
+            },
+            "then": {
+              "properties": {
+                "category": {
+                  "const": "customer"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "required": [
+                "objectId"
+              ]
+            },
+            "then": {
+              "properties": {
+                "category": {
+                  "enum": [
+                    "carrier",
+                    "salesperson"
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      },
+      "VolumePeriod": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "月YYYY-MM；周一或日期YYYY-MM-DD。",
+            "pattern": "^\\d{4}-\\d{2}(?:-\\d{2})?$"
+          },
+          "label": {
+            "type": "string",
+            "description": "图表横轴显示文本；月为n月，周为MM-DD—MM-DD，日为日期文本。"
+          },
+          "from": {
+            "type": "string",
+            "description": "含首日，上海日历。",
+            "format": "date",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          },
+          "to": {
+            "type": "string",
+            "description": "含末日，上海日历。",
+            "format": "date",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          },
+          "future": {
+            "type": "boolean",
+            "description": "首日晚于上海今天。"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "from",
+          "to",
+          "future"
+        ],
+        "additionalProperties": false
+      },
+      "CountValues": {
+        "type": "array",
+        "items": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "description": "与periods等长同序；null=未来日期，0=已到日期无单。"
+      },
+      "AmountValues": {
+        "type": "array",
+        "items": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "description": "与periods等长同序；USD主单位；null=未来。"
+      },
+      "CountWarehouses": {
+        "type": "object",
+        "properties": {
+          "HZ": {
+            "$ref": "#/components/schemas/CountValues",
+            "description": "当前series杭州仓每期订单量，数组下标与periods一致。"
+          },
+          "SZ": {
+            "$ref": "#/components/schemas/CountValues",
+            "description": "当前series深圳仓每期订单量，数组下标与periods一致。"
+          },
+          "UNASSIGNED": {
+            "$ref": "#/components/schemas/CountValues",
+            "description": "当前series未分配/未知仓每期订单量，数组下标与periods一致。"
+          }
+        },
+        "required": [
+          "HZ",
+          "SZ",
+          "UNASSIGNED"
+        ],
+        "additionalProperties": false,
+        "description": "三仓键始终存在，每期之和等于series.values。"
+      },
+      "AmountWarehouses": {
+        "type": "object",
+        "properties": {
+          "HZ": {
+            "$ref": "#/components/schemas/AmountValues",
+            "description": "杭州仓每期USD订单金额；数组下标与periods一致，未来值null。"
+          },
+          "SZ": {
+            "$ref": "#/components/schemas/AmountValues",
+            "description": "深圳仓每期USD订单金额；数组下标与periods一致，未来值null。"
+          },
+          "UNASSIGNED": {
+            "$ref": "#/components/schemas/AmountValues",
+            "description": "未分配/未知仓每期USD订单金额；数组下标与periods一致，未来值null。"
+          }
+        },
+        "required": [
+          "HZ",
+          "SZ",
+          "UNASSIGNED"
+        ],
+        "additionalProperties": false
+      },
+      "VolumeAmounts": {
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "const": "USD",
+            "description": "金额统计唯一币种USD；非USD订单不换汇且计入excludedOrderCount。"
+          },
+          "total": {
+            "$ref": "#/components/schemas/Money",
+            "description": "该series在整个查询范围内USD且金额finite的订单amount合计。"
+          },
+          "values": {
+            "$ref": "#/components/schemas/AmountValues",
+            "description": "按periods逐期汇总的USD金额，主单位美元，未来期null。"
+          },
+          "warehouses": {
+            "$ref": "#/components/schemas/AmountWarehouses",
+            "description": "同一series同一期的USD金额按HZ/SZ/UNASSIGNED拆分。"
+          },
+          "excludedOrderCount": {
+            "type": "integer",
+            "description": "非USD或amount非finite被排除的订单数，仍计入订单量。",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "currency",
+          "total",
+          "values",
+          "warehouses",
+          "excludedOrderCount"
+        ],
+        "additionalProperties": false,
+        "description": "仅customer维度每个series必有；不换汇。"
+      },
+      "VolumeSeries": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "total、other、carrier:<code>、department:<code>、employee:<id>、customer:<id>。"
+          },
+          "label": {
+            "type": "string",
+            "description": "图例和tooltip显示的系列名称，可为合计、部门、员工、客户或物流名称。"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "total",
+              "detail",
+              "other",
+              "unassigned"
+            ],
+            "description": "total合计，detail对象明细，other未进入TopN对象合并，unassigned缺失业务员归属。"
+          },
+          "entityId": {
+            "type": "string",
+            "description": "对象ID；合计/其他/缺失归属可省略。"
+          },
+          "code": {
+            "type": "string",
+            "description": "客户编码，其他维度通常省略。"
+          },
+          "total": {
+            "type": "integer",
+            "description": "当前系列整个时间范围订单总量；总计系列不可再与明细系列相加。",
+            "minimum": 0
+          },
+          "values": {
+            "$ref": "#/components/schemas/CountValues",
+            "description": "与periods数组一一对应的订单数量，未来日为null，其余空期0。"
+          },
+          "warehouses": {
+            "$ref": "#/components/schemas/CountWarehouses",
+            "description": "当前系列订单量按三仓拆分，三个数组均与periods对齐。"
+          },
+          "amounts": {
+            "$ref": "#/components/schemas/VolumeAmounts",
+            "description": "客户维度新增USD金额对象，含总额/逐期/逐仓金额及排除订单数；非客户维度省略。"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "kind",
+          "total",
+          "values",
+          "warehouses"
+        ],
+        "additionalProperties": false
+      },
+      "Option": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "可传回筛选参数的稳定值；部门为sales1..4，物流为固定代码，员工为owner.id。"
+          },
+          "label": {
+            "type": "string",
+            "description": "下拉筛选选项显示文本。"
+          }
+        },
+        "required": [
+          "id",
+          "label"
+        ],
+        "additionalProperties": false
+      },
+      "VolumeOptions": {
+        "type": "object",
+        "properties": {
+          "departments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Option"
+            },
+            "description": "授权有效订单涉及报表部门，不按日期/仓库限缩。"
+          },
+          "objects": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Option"
+            },
+            "description": "carrier固定6物流；其他维度为部门内授权业务员，按名称排序。"
+          }
+        },
+        "required": [
+          "departments",
+          "objects"
+        ],
+        "additionalProperties": false
+      },
+      "OrderVolume": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "$ref": "#/components/schemas/DataSource",
+            "description": "provider数据来源mock或fop。"
+          },
+          "query": {
+            "$ref": "#/components/schemas/OrderVolumeQuery",
+            "description": "实际经DTO转换并补默认warehouse后的查询回显；未传可选字段省略。"
+          },
+          "timeZone": {
+            "type": "string",
+            "const": "Asia/Shanghai",
+            "description": "订单量/客户金额统一日界线Asia/Shanghai（UTC+08:00）。"
+          },
+          "asOf": {
+            "type": "string",
+            "description": "聚合时刻，不是源数据刷新时刻或共享快照。",
+            "format": "date-time"
+          },
+          "total": {
+            "type": "integer",
+            "description": "完整授权筛选集已支付订单数，等于id=total系列total。",
+            "minimum": 0
+          },
+          "customerCount": {
+            "type": "integer",
+            "description": "非空customerId去重。",
+            "minimum": 0
+          },
+          "periods": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VolumePeriod"
+            },
+            "description": "图表时间桶；所有series.values和warehouse数组共享同一下标。"
+          },
+          "series": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VolumeSeries"
+            },
+            "description": "总计及各对象系列；排序/TopN以完整查询范围订单数确定。"
+          },
+          "options": {
+            "$ref": "#/components/schemas/VolumeOptions",
+            "description": "根据授权有效订单生成的可选部门和对象，不表示额外授权。"
+          }
+        },
+        "required": [
+          "source",
+          "query",
+          "timeZone",
+          "asOf",
+          "total",
+          "customerCount",
+          "periods",
+          "series",
+          "options"
+        ],
+        "additionalProperties": false,
+        "description": "业务员Top5、客户Top10按订单量排序，余项other；客户缺失ID不进Top10。物流固定顺序。",
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "query": {
+                  "properties": {
+                    "category": {
+                      "const": "customer"
+                    }
+                  }
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "series": {
+                  "items": {
+                    "required": [
+                      "amounts"
+                    ]
+                  }
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "series": {
+                  "items": {
+                    "not": {
+                      "required": [
+                        "amounts"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "OrderCustomer": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "稳定客户ID，用于customerId过滤。"
+          },
+          "code": {
+            "type": "string",
+            "description": "缺失为空串。"
+          },
+          "name": {
+            "type": "string",
+            "description": "客户展示名称，同一ID按首次出现订单填充。"
+          },
+          "departments": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "报表部门中文名称，非ID。"
+          }
+        },
+        "required": [
+          "id",
+          "code",
+          "name",
+          "departments"
+        ],
+        "additionalProperties": false
+      },
+      "OrderCustomerPage": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "$ref": "#/components/schemas/DataSource",
+            "description": "provider数据来源。"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OrderCustomer"
+            },
+            "description": "当前页授权客户搜索结果。"
+          },
+          "total": {
+            "type": "integer",
+            "description": "keyword和department筛选后的客户总数。",
+            "minimum": 0
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000000,
+            "description": "当前页码，从1开始。"
+          },
+          "pageSize": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50,
+            "description": "当前每页客户数，最多50。"
+          }
+        },
+        "required": [
+          "source",
+          "items",
+          "total",
+          "page",
+          "pageSize"
+        ],
+        "additionalProperties": false,
+        "description": "无totals；按授权未取消未退款订单构建客户集，包含未支付，不受图表日期/仓库筛选。"
+      },
+      "ExchangeRate": {
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "pattern": "^[A-Z]{3}$",
+            "description": "三位大写货币代码，例如USD/EUR/GBP。"
+          },
+          "cnyPerUnit": {
+            "type": "number",
+            "description": "1币种单位对应人民币；仅展示，未用于金额换汇。",
+            "exclusiveMinimum": 0
+          }
+        },
+        "required": [
+          "currency",
+          "cnyPerUnit"
+        ],
+        "additionalProperties": false
+      },
+      "DailyRegistration": {
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": "string",
+            "description": "注册统计归属日，按provider已经归属的YYYY-MM-DD读取。",
+            "format": "date",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          },
+          "count": {
+            "type": "integer",
+            "description": "当天当前业务范围已授权注册数量；非订单数量。",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "date",
+          "count"
+        ],
+        "additionalProperties": false
+      },
+      "RegistrationSalesperson": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "注册归属员工ID，与可信registrationEntries.owner.id一致。"
+          },
+          "name": {
+            "type": "string",
+            "description": "注册归属员工展示名。"
+          },
+          "counts": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "description": "数量。",
+              "minimum": 0
+            },
+            "description": "与registrations日期对齐。"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "counts"
+        ],
+        "additionalProperties": false
+      },
+      "RegistrationDepartment": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/SalesDepartment",
+            "description": "固定报表部门sales1..4。"
+          },
+          "name": {
+            "type": "string",
+            "description": "固定报表部门中文名称。"
+          },
+          "counts": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "description": "数量。",
+              "minimum": 0
+            },
+            "description": "部门每日注册量，与registrations数组日期同序；等于salespeople每日求和。"
+          },
+          "salespeople": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RegistrationSalesperson"
+            },
+            "description": "该部门有注册台账的员工系列，按员工ID排序。"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "counts",
+          "salespeople"
+        ],
+        "additionalProperties": false
+      },
+      "DashboardQueues": {
+        "type": "object",
+        "properties": {
+          "review": {
+            "type": "integer",
+            "description": "无对应角色为0；不受日期筛选。",
+            "minimum": 0
+          },
+          "allocation": {
+            "type": "integer",
+            "description": "无对应角色为0；不受日期筛选。",
+            "minimum": 0
+          },
+          "dispatch": {
+            "type": "integer",
+            "description": "无对应角色为0；不受日期筛选。",
+            "minimum": 0
+          },
+          "shipping": {
+            "type": "integer",
+            "description": "无对应角色为0；不受日期筛选。",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "review",
+          "allocation",
+          "dispatch",
+          "shipping"
+        ],
+        "additionalProperties": false
+      },
+      "DashboardException": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "orderNumber，非FopOrder.id。"
+          },
+          "customer": {
+            "type": "string",
+            "description": "异常订单客户名称。"
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "stock",
+              "address",
+              "tracking"
+            ],
+            "description": "异常原因代码：库存stock、地址address、物流单号tracking。"
+          },
+          "hours": {
+            "type": "number",
+            "description": "异常持续小时数，来自授权订单exception.hours。"
+          }
+        },
+        "required": [
+          "id",
+          "customer",
+          "reason",
+          "hours"
+        ],
+        "additionalProperties": false
+      },
+      "DashboardTask": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "enum": [
+              "review",
+              "allocation",
+              "shipping"
+            ],
+            "description": "任务卡稳定键，与kind相同。"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "review",
+              "allocation",
+              "shipping"
+            ],
+            "description": "review审核、allocation配货、shipping发货。"
+          },
+          "count": {
+            "type": "integer",
+            "description": "对应队列当前待处理数，只输出大于0且有入口权限的队列。",
+            "minimum": 0
+          },
+          "time": {
+            "type": "string",
+            "description": "最早createdAt.slice(11,16)，未转上海时间，可为空。"
+          },
+          "priority": {
+            "type": "string",
+            "description": "allocation为normal，其余high。",
+            "enum": [
+              "high",
+              "normal"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "count",
+          "time",
+          "priority"
+        ],
+        "additionalProperties": false
+      },
+      "ReceiptSeries": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "营销中心为marketing，部门为sales1..4，员工为owner.id；缺员工为__unassigned__。"
+          },
+          "name": {
+            "type": "string",
+            "description": "营销中心、报表部门或业务员工展示名。"
+          },
+          "previousAmount": {
+            "$ref": "#/components/schemas/Money",
+            "description": "所选year前一年12月金额，0不为null。"
+          },
+          "amounts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Money"
+            },
+            "description": "与months对齐。"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "previousAmount",
+          "amounts"
+        ],
+        "additionalProperties": false
+      },
+      "ReceiptDepartment": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "固定报表部门代码sales1..4。"
+          },
+          "name": {
+            "type": "string",
+            "description": "固定报表部门中文名称。"
+          },
+          "previousAmount": {
+            "$ref": "#/components/schemas/Money",
+            "description": "该部门所选year上一年12月USD已支付订单金额合计。"
+          },
+          "amounts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Money"
+            },
+            "description": "该部门各月份USD已支付订单金额，与receipts.months同序。"
+          },
+          "salespeople": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReceiptSeries"
+            },
+            "description": "按员工ID排序；缺owner用__unassigned__。"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "previousAmount",
+          "amounts",
+          "salespeople"
+        ],
+        "additionalProperties": false
+      },
+      "DashboardReceipts": {
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "const": "USD",
+            "description": "固定USD，非USD订单不进入此统计。"
+          },
+          "months": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}$"
+            },
+            "description": "UTC当前年截至当前月；历史年12个月；无scope为空。"
+          },
+          "previousMonth": {
+            "type": "string",
+            "pattern": "^\\d{4}-12$",
+            "description": "用于第一月环比的上年12月；仅months非空时存在。"
+          },
+          "marketingCenter": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReceiptSeries"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "四部门金额合计系列；没有receipts权限时明确null。"
+          },
+          "departments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReceiptDepartment"
+            },
+            "description": "有receipts scope固定4部门，否则空。"
+          }
+        },
+        "required": [
+          "currency",
+          "months",
+          "marketingCenter",
+          "departments"
+        ],
+        "additionalProperties": false,
+        "description": "仅USD paid未取消有paidAt/报表部门的订单amount，按paidAt.slice(0,7)归月，cents要求非负安全整数。这是订单金额，不是独立收款流水；无部分付款/退款/冲销模型。previousMonth仅months非空存在。"
+      },
+      "FopDashboard": {
+        "type": "object",
+        "properties": {
+          "businessScope": {
+            "$ref": "#/components/schemas/BusinessScope",
+            "description": "此次响应所使用的当前业务数据范围。"
+          },
+          "source": {
+            "$ref": "#/components/schemas/DataSource",
+            "description": "provider来源标识，不是独立金融系统来源。"
+          },
+          "updatedAt": {
+            "type": "string",
+            "description": "本次计算时刻，非上游刷新时间。",
+            "format": "date-time"
+          },
+          "queues": {
+            "$ref": "#/components/schemas/DashboardQueues",
+            "description": "审核、配货、调度、发货当前队列数量；无入口权限时对应0。"
+          },
+          "rates": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ExchangeRate"
+            },
+            "description": "无rates scope空。"
+          },
+          "registrations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DailyRegistration"
+            },
+            "description": "明细台账补齐0；仅旧汇总时只业务admin可读且不补齐日期。"
+          },
+          "registrationDepartments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RegistrationDepartment"
+            },
+            "description": "后端始终输出；无台账/权限空。"
+          },
+          "tasks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DashboardTask"
+            },
+            "description": "审核/配货/发货中有权限且非空的任务卡；不含调度或采购。"
+          },
+          "exceptions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DashboardException"
+            },
+            "description": "仅sales有权限。"
+          },
+          "receipts": {
+            "$ref": "#/components/schemas/DashboardReceipts",
+            "description": "按已支付订单amount计算的USD月度金额，含上年12月基线，不是收款流水。"
+          }
+        },
+        "required": [
+          "businessScope",
+          "source",
+          "updatedAt",
+          "queues",
+          "rates",
+          "registrations",
+          "registrationDepartments",
+          "tasks",
+          "exceptions",
+          "receipts"
+        ],
+        "additionalProperties": false,
+        "examples": [
+          {
+            "businessScope": {
+              "role": "admin",
+              "departmentId": null,
+              "employeeId": null
+            },
+            "source": "mock",
+            "updatedAt": "2026-10-22T08:00:00Z",
+            "queues": {
+              "review": 2,
+              "allocation": 1,
+              "dispatch": 0,
+              "shipping": 3
+            },
+            "rates": [
+              {
+                "currency": "USD",
+                "cnyPerUnit": 7.12
+              }
+            ],
+            "registrations": [
+              {
+                "date": "2026-10-21",
+                "count": 2
+              }
+            ],
+            "registrationDepartments": [
+              {
+                "id": "sales1",
+                "name": "业务一部",
+                "counts": [
+                  2
+                ],
+                "salespeople": [
+                  {
+                    "id": "employee-example",
+                    "name": "示例业务员",
+                    "counts": [
+                      2
+                    ]
+                  }
+                ]
+              },
+              {
+                "id": "sales2",
+                "name": "业务二部",
+                "counts": [
+                  0
+                ],
+                "salespeople": []
+              },
+              {
+                "id": "sales3",
+                "name": "业务三部",
+                "counts": [
+                  0
+                ],
+                "salespeople": []
+              },
+              {
+                "id": "sales4",
+                "name": "业务四部",
+                "counts": [
+                  0
+                ],
+                "salespeople": []
+              }
+            ],
+            "tasks": [
+              {
+                "id": "review",
+                "kind": "review",
+                "count": 2,
+                "time": "01:00",
+                "priority": "high"
+              },
+              {
+                "id": "allocation",
+                "kind": "allocation",
+                "count": 1,
+                "time": "02:00",
+                "priority": "normal"
+              },
+              {
+                "id": "shipping",
+                "kind": "shipping",
+                "count": 3,
+                "time": "03:00",
+                "priority": "high"
+              }
+            ],
+            "exceptions": [
+              {
+                "id": "AF-EXAMPLE-001",
+                "customer": "示例客户",
+                "reason": "stock",
+                "hours": 8
+              }
+            ],
+            "receipts": {
+              "currency": "USD",
+              "months": [
+                "2026-01",
+                "2026-02",
+                "2026-03",
+                "2026-04",
+                "2026-05",
+                "2026-06",
+                "2026-07",
+                "2026-08",
+                "2026-09",
+                "2026-10"
+              ],
+              "previousMonth": "2025-12",
+              "marketingCenter": {
+                "id": "marketing",
+                "name": "营销中心",
+                "previousAmount": 100,
+                "amounts": [
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  125.5
+                ]
+              },
+              "departments": [
+                {
+                  "id": "sales1",
+                  "name": "业务一部",
+                  "previousAmount": 100,
+                  "amounts": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    125.5
+                  ],
+                  "salespeople": [
+                    {
+                      "id": "employee-example",
+                      "name": "示例业务员",
+                      "previousAmount": 100,
+                      "amounts": [
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        125.5
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "id": "sales2",
+                  "name": "业务二部",
+                  "previousAmount": 0,
+                  "amounts": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "salespeople": []
+                },
+                {
+                  "id": "sales3",
+                  "name": "业务三部",
+                  "previousAmount": 0,
+                  "amounts": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "salespeople": []
+                },
+                {
+                  "id": "sales4",
+                  "name": "业务四部",
+                  "previousAmount": 0,
+                  "amounts": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "salespeople": []
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "WorkbenchAccount": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "本地账户UUID，权限写接口path参数使用。",
+            "format": "uuid"
+          },
+          "displayId": {
+            "type": "string",
+            "description": "六位展示号。"
+          },
+          "email": {
+            "type": "string",
+            "description": "账户登录邮箱。"
+          },
+          "username": {
+            "type": "string",
+            "description": "账户显示用户名。"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "admin",
+              "user"
+            ],
+            "description": "系统管理角色：admin可配置账户，user不可；不授予业务数据范围。"
+          },
+          "workbenchRoles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkbenchRole"
+            },
+            "uniqueItems": true,
+            "description": "存储的工作台入口角色数组；有效权限还受businessScope影响。"
+          },
+          "businessScope": {
+            "$ref": "#/components/schemas/BusinessScope",
+            "description": "独立业务角色、部门和员工范围。"
+          },
+          "fopBinding": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FopBinding"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "真实FOP租户/用户绑定，未绑定时null；不包含密码或JWT。"
+          }
+        },
+        "required": [
+          "id",
+          "displayId",
+          "email",
+          "username",
+          "role",
+          "workbenchRoles",
+          "businessScope",
+          "fopBinding"
+        ],
+        "additionalProperties": false
+      },
+      "WorkbenchAccountPage": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkbenchAccount"
+            },
+            "description": "本页账户及权限配置。"
+          },
+          "total": {
+            "type": "integer",
+            "description": "符合search的账户总数。",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "additionalProperties": false,
+        "description": "只有items/total，没有page/pageSize/source/totals。"
+      },
+      "UpdateWorkbenchRoles": {
+        "type": "object",
+        "properties": {
+          "workbenchRoles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkbenchRole"
+            },
+            "uniqueItems": true,
+            "maxItems": 5,
+            "description": "替换目标账户全部入口角色，最多5种不可重复；[]撤销所有存储入口角色。"
+          }
+        },
+        "required": [
+          "workbenchRoles"
+        ],
+        "additionalProperties": false
+      },
+      "UpdateManagementRole": {
+        "type": "object",
+        "properties": {
+          "role": {
+            "type": "string",
+            "enum": [
+              "admin",
+              "user"
+            ],
+            "description": "设置系统管理角色admin或user；不修改业务数据权限。"
+          }
+        },
+        "required": [
+          "role"
+        ],
+        "additionalProperties": false
+      },
+      "UpdateFopBinding": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "tenantId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "userId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              }
+            },
+            "required": [
+              "tenantId",
+              "userId"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "tenantId": {
+                "type": "null"
+              },
+              "userId": {
+                "type": "null"
+              }
+            },
+            "required": [
+              "tenantId",
+              "userId"
+            ],
+            "additionalProperties": false
+          }
+        ],
+        "description": "字符串trim；两字段同时非空或同时null解绑，不能缺失。"
+      },
+      "UpdateBusinessScope": {
+        "type": "object",
+        "properties": {
+          "role": {
+            "$ref": "#/components/schemas/BusinessRole",
+            "description": "设置独立业务权限：经理必须有departmentId，销售必须有employeeId。"
+          },
+          "departmentId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "字符串先trim；未分配显式null。"
+          },
+          "employeeId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "字符串先trim；未分配显式null。"
+          }
+        },
+        "required": [
+          "role",
+          "departmentId",
+          "employeeId"
+        ],
+        "additionalProperties": false,
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "role": {
+                  "const": "department_manager"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "departmentId": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "role": {
+                  "const": "salesperson"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "employeeId": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          }
+        ]
+      },
+      "OrganizationNode": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "本地组织树节点UUID。",
+            "format": "uuid"
+          },
+          "parentId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "本地UUID。",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "上级节点UUID；根组织节点为null。"
+          },
+          "name": {
+            "type": "string",
+            "description": "组织或部门显示名称。"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "organization",
+              "department"
+            ],
+            "description": "organization根组织或department部门节点。"
+          },
+          "sortOrder": {
+            "type": "integer",
+            "description": "同级显示排序数，越小越靠前。"
+          }
+        },
+        "required": [
+          "id",
+          "parentId",
+          "name",
+          "kind",
+          "sortOrder"
+        ],
+        "additionalProperties": false
+      },
+      "OrganizationEmployee": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "本地员工UUID，不自动等于FOP用户ID。",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string",
+            "description": "本地演示组织员工姓名。"
+          },
+          "code": {
+            "type": "string",
+            "description": "本地员工编码，排序依据。"
+          },
+          "email": {
+            "type": "string",
+            "description": "本地员工邮箱，种子使用hyperzone.example。"
+          },
+          "departmentId": {
+            "type": "string",
+            "description": "所属本地部门节点UUID。",
+            "format": "uuid"
+          },
+          "workbenchRoles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkbenchRole"
+            },
+            "description": "演示员工岗位角色，不等于当前登录账户实际入口授权。"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "code",
+          "email",
+          "departmentId",
+          "workbenchRoles"
+        ],
+        "additionalProperties": false
+      },
+      "OrganizationWorkspace": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": "string",
+            "description": "当前始终mock，非FOP目录。",
+            "const": "mock"
+          },
+          "nodes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OrganizationNode"
+            },
+            "description": "当前管理员账户独立组织树节点。"
+          },
+          "employees": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OrganizationEmployee"
+            },
+            "description": "当前管理员账户独立员工目录；尚未与FOP真实目录同步。"
+          },
+          "canEdit": {
+            "type": "boolean",
+            "description": "GET要求系统管理员，正常true。"
+          }
+        },
+        "required": [
+          "source",
+          "nodes",
+          "employees",
+          "canEdit"
+        ],
+        "additionalProperties": false
+      },
+      "LeadStatus": {
+        "type": "string",
+        "enum": [
+          "new",
+          "qualified",
+          "contacted",
+          "replied",
+          "opportunity",
+          "won",
+          "lost",
+          "invalid"
+        ]
+      },
+      "WorkflowRun": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "本地UUID。",
+            "format": "uuid"
+          },
+          "displayId": {
+            "type": "string",
+            "description": "工作流显示编号。"
+          },
+          "parentWorkflowRunId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "本地UUID。",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "父工作流UUID，无父版本时null。"
+          },
+          "rootWorkflowRunId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "本地UUID。",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "版本链根工作流UUID，无根引用时null。"
+          },
+          "revisionNo": {
+            "type": "integer",
+            "description": "工作流修订版本号。"
+          },
+          "name": {
+            "type": "string",
+            "description": "工作流名称。"
+          },
+          "seedType": {
+            "type": "string",
+            "enum": [
+              "keyword",
+              "image"
+            ],
+            "description": "搜索种子类型keyword关键词或image图片。"
+          },
+          "seedValue": {
+            "type": "string",
+            "description": "关键词文本或图片输入值。"
+          },
+          "targetMarket": {
+            "type": "string",
+            "description": "目标市场代码/名称。"
+          },
+          "searchOptions": {
+            "type": "object",
+            "properties": {
+              "exactPhrase": {
+                "type": "boolean"
+              },
+              "titleMatch": {
+                "type": "boolean"
+              },
+              "excludeMarketplaces": {
+                "type": "boolean"
+              },
+              "findOwnerFacebook": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "exactPhrase",
+              "titleMatch",
+              "excludeMarketplaces",
+              "findOwnerFacebook"
+            ],
+            "additionalProperties": false,
+            "description": "Google搜索选项：短语精确、标题、排除平台、查找店主Facebook。"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "draft",
+              "running",
+              "completed",
+              "failed",
+              "cancelled"
+            ],
+            "description": "工作流当前生命周期状态。"
+          },
+          "currentStage": {
+            "type": "string",
+            "enum": [
+              "seed",
+              "ad_discovery",
+              "store_detection",
+              "lead_cleaning",
+              "lead_scoring",
+              "message_generation",
+              "outreach",
+              "crm"
+            ],
+            "description": "工作流当前执行阶段。"
+          },
+          "progress": {
+            "type": "number",
+            "description": "当前执行进度数值。"
+          },
+          "leadCount": {
+            "type": "integer",
+            "description": "数量。",
+            "minimum": 0
+          },
+          "failureReason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "最近失败原因；本地Dashboard映射未传任务失败信息时null。"
+          },
+          "failureCode": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "provider_unavailable",
+                  "insufficient_credits",
+                  "image_unreachable",
+                  "no_results",
+                  "unknown"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "标准化失败分类；无失败null。"
+          },
+          "failureProvider": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "pipiads",
+                  "google_lens",
+                  "google_search"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "失败来源服务；未知或无失败null。"
+          },
+          "failureRetryable": {
+            "type": "boolean",
+            "description": "失败是否允许重试。"
+          },
+          "archivedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "带时区ISO8601时间戳。",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "归档时间，未归档null。"
+          },
+          "createdAt": {
+            "type": "string",
+            "description": "带时区ISO8601时间戳。",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "description": "带时区ISO8601时间戳。",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "displayId",
+          "parentWorkflowRunId",
+          "rootWorkflowRunId",
+          "revisionNo",
+          "name",
+          "seedType",
+          "seedValue",
+          "targetMarket",
+          "searchOptions",
+          "status",
+          "currentStage",
+          "progress",
+          "leadCount",
+          "failureReason",
+          "failureCode",
+          "failureProvider",
+          "failureRetryable",
+          "archivedAt",
+          "createdAt",
+          "updatedAt"
+        ],
+        "additionalProperties": false
+      },
+      "LeadContact": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "facebook",
+              "whatsapp",
+              "email",
+              "instagram",
+              "other",
+              "linkedin",
+              "website",
+              "phone"
+            ],
+            "description": "联系方式渠道类型。"
+          },
+          "value": {
+            "type": "string",
+            "description": "规范化联系方式值。"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "联系方式备注，无备注null。"
+          },
+          "verified": {
+            "type": "boolean",
+            "description": "是否验证该联系方式。"
+          },
+          "sourceUrl": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "来源页面URL，无来源null。"
+          },
+          "sourceType": {
+            "type": "string",
+            "description": "来源类型标记。"
+          },
+          "verificationStatus": {
+            "type": "string",
+            "enum": [
+              "verified",
+              "observed",
+              "unverified"
+            ],
+            "description": "证据验证状态：已验证、观察到、未验证。"
+          },
+          "confidence": {
+            "type": "number",
+            "description": "联系方式可信度分数。"
+          },
+          "evidence": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "提供者扩展证据字典。"
+          },
+          "sourcePageTitle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "来源页面标题，无值null。"
+          },
+          "sourcePageKind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "来源页面类别，无值null。"
+          },
+          "extractedFrom": {
+            "type": "string",
+            "description": "提取来源标记，优先evidence.extractedFrom，缺失回退sourceType。"
+          }
+        },
+        "required": [
+          "type",
+          "value",
+          "label",
+          "verified",
+          "sourceUrl",
+          "sourceType",
+          "verificationStatus",
+          "confidence",
+          "evidence",
+          "sourcePageTitle",
+          "sourcePageKind",
+          "extractedFrom"
+        ],
+        "additionalProperties": false
+      },
+      "LeadAdEvidence": {
+        "type": "object",
+        "properties": {
+          "provider": {
+            "type": "string",
+            "description": "广告证据提供方。"
+          },
+          "evidenceSource": {
+            "type": "string",
+            "description": "广告证据来源类型。"
+          },
+          "platform": {
+            "type": "string",
+            "enum": [
+              "facebook",
+              "instagram",
+              "tiktok",
+              "unknown"
+            ],
+            "description": "广告所属平台，未知unknown。"
+          },
+          "adId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "平台广告ID，缺失null。"
+          },
+          "sourceUrl": {
+            "type": "string",
+            "description": "证据URL。"
+          },
+          "isDirectAdLink": {
+            "type": "boolean",
+            "description": "是否为可直达广告的链接。"
+          },
+          "confidence": {
+            "type": "number",
+            "description": "广告关联可信度分数。"
+          },
+          "matchReasons": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "广告与线索匹配理由文本数组。"
+          }
+        },
+        "required": [
+          "provider",
+          "evidenceSource",
+          "platform",
+          "adId",
+          "sourceUrl",
+          "isDirectAdLink",
+          "confidence",
+          "matchReasons"
+        ],
+        "additionalProperties": false
+      },
+      "LeadWorkflowDiscovery": {
+        "type": "object",
+        "properties": {
+          "workflowRunId": {
+            "type": "string",
+            "description": "本地UUID。",
+            "format": "uuid"
+          },
+          "workflowDisplayId": {
+            "type": "string",
+            "description": "发现线索的工作流展示编号。"
+          },
+          "workflowName": {
+            "type": "string",
+            "description": "发现线索的工作流名称。"
+          },
+          "workflowCreatedAt": {
+            "type": "string",
+            "description": "带时区ISO8601时间戳。",
+            "format": "date-time"
+          },
+          "discoveredAt": {
+            "type": "string",
+            "description": "带时区ISO8601时间戳。",
+            "format": "date-time"
+          },
+          "score": {
+            "type": "number",
+            "description": "该次工作流发现线索时记录的评分。"
+          }
+        },
+        "required": [
+          "workflowRunId",
+          "workflowDisplayId",
+          "workflowName",
+          "workflowCreatedAt",
+          "discoveredAt",
+          "score"
+        ],
+        "additionalProperties": false
+      },
+      "StoreLead": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "本地UUID。",
+            "format": "uuid"
+          },
+          "workflowRunId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "本地UUID。",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "关联工作流UUID，未关联null。"
+          },
+          "brandName": {
+            "type": "string",
+            "description": "店铺/品牌名称。"
+          },
+          "domain": {
+            "type": "string",
+            "description": "规范化店铺域名。"
+          },
+          "storeUrl": {
+            "type": "string",
+            "description": "店铺主页URL。"
+          },
+          "productUrl": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "发现时商品页URL，缺失null。"
+          },
+          "ownerFacebookUrl": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "通过店主搜索得到的Facebook地址，缺失null。"
+          },
+          "discoverySources": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "pipiads",
+                "google_lens",
+                "google_search"
+              ]
+            },
+            "description": "发现来源服务枚举数组。"
+          },
+          "source": {
+            "type": "string",
+            "description": "来源展示标记。"
+          },
+          "country": {
+            "type": "string",
+            "description": "国家代码/名称。"
+          },
+          "language": {
+            "type": "string",
+            "description": "主要语言。"
+          },
+          "category": {
+            "type": "string",
+            "description": "商品/业务分类。"
+          },
+          "shopifyConfidence": {
+            "type": "number",
+            "description": "Shopify识别可信度。"
+          },
+          "adActivityScore": {
+            "type": "number",
+            "description": "广告活跃度评分。"
+          },
+          "trafficScore": {
+            "type": "number",
+            "description": "流量评分。"
+          },
+          "contactScore": {
+            "type": "number",
+            "description": "联系方式完整性评分。"
+          },
+          "totalScore": {
+            "type": "number",
+            "description": "线索总评分，用于topLeads排序。"
+          },
+          "status": {
+            "$ref": "#/components/schemas/LeadStatus",
+            "description": "线索当前销售阶段状态。"
+          },
+          "discoveryStatus": {
+            "type": "string",
+            "enum": [
+              "first_seen",
+              "seen_before"
+            ],
+            "description": "首次发现或重复发现。"
+          },
+          "discoveryCount": {
+            "type": "integer",
+            "description": "数量。",
+            "minimum": 0
+          },
+          "workflowDiscoveries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LeadWorkflowDiscovery"
+            },
+            "description": "同一线索相关工作流发现记录。"
+          },
+          "recommendedAngle": {
+            "type": "string",
+            "description": "推荐联系切入点文本。"
+          },
+          "contacts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LeadContact"
+            },
+            "description": "去重并按渠道/可信度排序的联系方式。"
+          },
+          "adEvidence": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LeadAdEvidence"
+            },
+            "description": "广告证据数组；Dashboard未传scoreReasons时通常为空。"
+          },
+          "createdAt": {
+            "type": "string",
+            "description": "带时区ISO8601时间戳。",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "workflowRunId",
+          "brandName",
+          "domain",
+          "storeUrl",
+          "productUrl",
+          "ownerFacebookUrl",
+          "discoverySources",
+          "source",
+          "country",
+          "language",
+          "category",
+          "shopifyConfidence",
+          "adActivityScore",
+          "trafficScore",
+          "contactScore",
+          "totalScore",
+          "status",
+          "discoveryStatus",
+          "discoveryCount",
+          "workflowDiscoveries",
+          "recommendedAngle",
+          "contacts",
+          "adEvidence",
+          "createdAt"
+        ],
+        "additionalProperties": false
+      },
+      "OutreachTemplateOptions": {
+        "type": "object",
+        "properties": {
+          "quoteMode": {
+            "type": "string",
+            "enum": [
+              "none",
+              "product",
+              "logistics",
+              "combined"
+            ],
+            "description": "报价模板模式：无报价、商品、物流或组合。"
+          },
+          "includeProductVisual": {
+            "type": "boolean",
+            "description": "是否包含商品视觉信息。"
+          },
+          "emphasizeSupplier": {
+            "type": "boolean",
+            "description": "是否强调供应商能力。"
+          },
+          "emphasizeLogistics": {
+            "type": "boolean",
+            "description": "是否强调物流能力。"
+          },
+          "productImageUrl": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "商品图片URL，无图null。"
+          },
+          "verifiedQuoteContext": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "经验证报价上下文，无上下文null。"
+          }
+        },
+        "required": [
+          "quoteMode",
+          "includeProductVisual",
+          "emphasizeSupplier",
+          "emphasizeLogistics",
+          "productImageUrl",
+          "verifiedQuoteContext"
+        ],
+        "additionalProperties": false
+      },
+      "OutreachTask": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "本地UUID。",
+            "format": "uuid"
+          },
+          "leadId": {
+            "type": "string",
+            "description": "本地UUID。",
+            "format": "uuid"
+          },
+          "leadName": {
+            "type": "string",
+            "description": "关联线索品牌名，无线索回退Unknown lead。"
+          },
+          "customer": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "本地UUID。",
+                "format": "uuid"
+              },
+              "name": {
+                "type": "string"
+              },
+              "domain": {
+                "type": "string"
+              },
+              "storeUrl": {
+                "type": "string"
+              },
+              "country": {
+                "type": "string"
+              },
+              "category": {
+                "type": "string"
+              },
+              "totalScore": {
+                "type": "number"
+              },
+              "status": {
+                "$ref": "#/components/schemas/LeadStatus"
+              }
+            },
+            "required": [
+              "id",
+              "name",
+              "domain",
+              "storeUrl",
+              "country",
+              "category",
+              "totalScore",
+              "status"
+            ],
+            "additionalProperties": false,
+            "description": "关联客户摘要。"
+          },
+          "contactChannels": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "facebook",
+                    "whatsapp",
+                    "email",
+                    "instagram",
+                    "other",
+                    "linkedin",
+                    "website",
+                    "phone"
+                  ]
+                },
+                "value": {
+                  "type": "string"
+                },
+                "label": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "verified": {
+                  "type": "boolean"
+                },
+                "confidence": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "type",
+                "value",
+                "label",
+                "verified",
+                "confidence"
+              ],
+              "additionalProperties": false
+            },
+            "description": "可联系渠道数组，排除website并按优先级排序。"
+          },
+          "channel": {
+            "type": "string",
+            "enum": [
+              "facebook",
+              "whatsapp",
+              "email",
+              "instagram",
+              "other"
+            ],
+            "description": "此次联系使用的渠道。"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "draft",
+              "ready",
+              "sent",
+              "replied",
+              "skipped",
+              "failed"
+            ],
+            "description": "任务生命周期状态。"
+          },
+          "message": {
+            "type": "string",
+            "description": "待发送或已生成消息正文。"
+          },
+          "targetContact": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "目标联系人地址，无值null。"
+          },
+          "subject": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "邮件/消息主题，无值null。"
+          },
+          "templateKey": {
+            "type": "string",
+            "description": "模板组合标识。"
+          },
+          "templateOptions": {
+            "$ref": "#/components/schemas/OutreachTemplateOptions",
+            "description": "本次模板选项；未设置时返回默认对象。"
+          },
+          "sendUrl": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "打开外部发送工具的URL，不能生成时null。"
+          },
+          "recommendedNextAction": {
+            "type": "string",
+            "description": "建议下一步操作文本。"
+          },
+          "nextFollowUpAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "带时区ISO8601时间戳。",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "计划下次跟进时间，未安排null。"
+          },
+          "owner": {
+            "type": "string",
+            "description": "任务归属账户用户名，未知回退Unassigned。"
+          },
+          "createdAt": {
+            "type": "string",
+            "description": "带时区ISO8601时间戳。",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "leadId",
+          "leadName",
+          "customer",
+          "contactChannels",
+          "channel",
+          "status",
+          "message",
+          "targetContact",
+          "subject",
+          "templateKey",
+          "templateOptions",
+          "sendUrl",
+          "recommendedNextAction",
+          "nextFollowUpAt",
+          "owner",
+          "createdAt"
+        ],
+        "additionalProperties": false
+      },
+      "FollowUpStage": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "$ref": "#/components/schemas/LeadStatus",
+            "description": "固定销售阶段键，与LeadStatus一致。"
+          },
+          "label": {
+            "type": "string",
+            "description": "销售阶段英文显示名。"
+          },
+          "count": {
+            "type": "integer",
+            "description": "数量。",
+            "minimum": 0
+          },
+          "value": {
+            "type": "number",
+            "description": "当前固定0，未接成交金额。",
+            "const": 0
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "count",
+          "value"
+        ],
+        "additionalProperties": false
+      },
+      "LocalDashboard": {
+        "type": "object",
+        "properties": {
+          "metrics": {
+            "type": "object",
+            "properties": {
+              "activeWorkflows": {
+                "type": "integer",
+                "description": "数量。",
+                "minimum": 0
+              },
+              "newLeads": {
+                "type": "integer",
+                "description": "数量。",
+                "minimum": 0
+              },
+              "readyOutreach": {
+                "type": "integer",
+                "description": "数量。",
+                "minimum": 0
+              },
+              "replies": {
+                "type": "integer",
+                "description": "数量。",
+                "minimum": 0
+              },
+              "opportunities": {
+                "type": "integer",
+                "description": "数量。",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "activeWorkflows",
+              "newLeads",
+              "readyOutreach",
+              "replies",
+              "opportunities"
+            ],
+            "additionalProperties": false,
+            "description": "当前授权本地业务范围的工作流、线索、待联系、回复和机会数量。"
+          },
+          "funnel": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FollowUpStage"
+            },
+            "description": "固定8种状态。"
+          },
+          "recentWorkflows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkflowRun"
+            },
+            "description": "最近未归档工作流。",
+            "maxItems": 5
+          },
+          "topLeads": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StoreLead"
+            },
+            "description": "最高分线索。",
+            "maxItems": 5
+          },
+          "nextTasks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OutreachTask"
+            },
+            "description": "ready待发送任务。",
+            "maxItems": 5
+          }
+        },
+        "required": [
+          "metrics",
+          "funnel",
+          "recentWorkflows",
+          "topLeads",
+          "nextTasks"
+        ],
+        "additionalProperties": false,
+        "description": "本地数据库业务概览，与FOP Dashboard不同；无source/updatedAt/包装层。"
+      },
+      "HttpError": {
+        "type": "object",
+        "properties": {
+          "statusCode": {
+            "type": "integer",
+            "description": "数值HTTP状态码，与响应HTTP状态一致。"
+          },
+          "message": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            ],
+            "description": "Nest错误字符串；DTO错误通常为字符串数组。"
+          },
+          "error": {
+            "type": "string",
+            "description": "部分异常带Bad Request/Forbidden等短语；默认401/429可省略。"
+          }
+        },
+        "required": [
+          "statusCode",
+          "message"
+        ],
+        "additionalProperties": false
+      },
+      "FopError": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "business_access_disabled",
+              "business_scope_required",
+              "fop_binding_required",
+              "fop_not_configured",
+              "fop_permission_denied",
+              "fop_binding_changed",
+              "fop_unavailable"
+            ],
+            "description": "可供前端i18n映射的业务错误码；具体HTTP状态由对应响应定义。"
+          },
+          "message": {
+            "type": "string",
+            "description": "固定公开消息，不回传上游秘密。"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "additionalProperties": false,
+        "description": "显式对象异常只有code/message，不含statusCode/error；HTTP为403或503。"
+      },
+      "ErrorResponse": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/HttpError"
+          },
+          {
+            "$ref": "#/components/schemas/FopError"
+          }
+        ]
+      }
+    },
+    "responses": {
+      "BadRequest": {
+        "description": "400：DTO失败、未知DTO字段、日期或跨参数条件错误。",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/HttpError"
+            },
+            "examples": {
+              "validation": {
+                "value": {
+                  "statusCode": 400,
+                  "error": "Bad Request",
+                  "message": [
+                    "property userId should not exist"
+                  ]
+                }
+              },
+              "semantic": {
+                "value": {
+                  "statusCode": 400,
+                  "error": "Bad Request",
+                  "message": "Period is outside this query"
+                }
+              }
+            }
+          }
+        }
+      },
+      "Unauthorized": {
+        "description": "401：缺失/过期/无效JWT或账户不存在。",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/HttpError"
+            },
+            "examples": {
+              "missingJwt": {
+                "value": {
+                  "statusCode": 401,
+                  "message": "Unauthorized"
+                }
+              },
+              "removedAccount": {
+                "value": {
+                  "statusCode": 401,
+                  "error": "Unauthorized",
+                  "message": "Account no longer exists"
+                }
+              }
+            }
+          }
+        }
+      },
+      "Forbidden": {
+        "description": "403：入口/系统管理权限不足、业务禁用、绑定/范围缺失、FOP拒绝或请求期间授权变更。",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            },
+            "examples": {
+              "roleDenied": {
+                "value": {
+                  "statusCode": 403,
+                  "error": "Forbidden",
+                  "message": "Workbench access denied"
+                }
+              },
+              "fopDenied": {
+                "value": {
+                  "code": "fop_permission_denied",
+                  "message": "FOP denied access to this employee account"
+                }
+              },
+              "disabled": {
+                "value": {
+                  "code": "business_access_disabled",
+                  "message": "Business data access is disabled for this account"
+                }
+              }
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "404：目标本地用户不存在。",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/HttpError"
+            },
+            "examples": {
+              "missingUser": {
+                "value": {
+                  "statusCode": 404,
+                  "error": "Not Found",
+                  "message": "用户不存在"
+                }
+              }
+            }
+          }
+        }
+      },
+      "Conflict": {
+        "description": "409：FOP身份重复绑定或尝试撤销自身系统管理权限。",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/HttpError"
+            },
+            "examples": {
+              "identityConflict": {
+                "value": {
+                  "statusCode": 409,
+                  "error": "Conflict",
+                  "message": "This FOP identity is already bound to another account"
+                }
+              }
+            }
+          }
+        }
+      },
+      "Unavailable": {
+        "description": "503：FOP provider未配置或调用异常；不会降级mock。",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/FopError"
+            },
+            "examples": {
+              "unconfigured": {
+                "value": {
+                  "code": "fop_not_configured",
+                  "message": "FOP data integration is not configured"
+                }
+              },
+              "upstream": {
+                "value": {
+                  "code": "fop_unavailable",
+                  "message": "FOP data access is unavailable"
+                }
+              }
+            }
+          }
+        }
+      },
+      "TooManyRequests": {
+        "description": "429：AppModule全局默认每60秒120次；实际计数受部署IP/代理策略影响。",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/HttpError"
+            },
+            "examples": {
+              "limit": {
+                "value": {
+                  "statusCode": 429,
+                  "message": "ThrottlerException: Too Many Requests"
+                }
+              }
+            }
+          }
+        }
+      },
+      "InternalError": {
+        "description": "500：未捕获服务/数据库异常。",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/HttpError"
+            },
+            "examples": {
+              "unexpected": {
+                "value": {
+                  "statusCode": 500,
+                  "message": "Internal server error"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "externalDocs": {
+    "description": "OpenAPI3.1.1官方规范",
+    "url": "https://spec.openapis.org/oas/v3.1.1.html"
+  },
+  "x-audit-date": "2026-10-22",
+  "x-implemented-operations": 15,
+  "x-not-included": [
+    "未实现FOP上游HTTP端点/签名/分页/游标/同步",
+    "产品成本/物流目录（requireResourcePermission当前总拒绝，不属于图表读契约）",
+    "组织写接口与完整CRM工作流CRUD"
+  ]
+}

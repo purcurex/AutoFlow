@@ -1,6 +1,8 @@
+import { AllowWithoutBusinessData } from '../auth/management-access.decorator'
 import {
   Controller,
   Get,
+  Header,
   Put,
   Post,
   Body,
@@ -9,6 +11,9 @@ import {
   UseInterceptors,
   UploadedFile,
   BadRequestException,
+  Param,
+  ParseUUIDPipe,
+  Query,
 } from '@nestjs/common'
 import { FileInterceptor } from '@nestjs/platform-express'
 import { diskStorage } from 'multer'
@@ -18,6 +23,11 @@ import { UsersService } from './users.service'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
 import { Request as ExpressRequest } from 'express'
 import { UpdateProfileDto } from './dto/update-profile.dto'
+import { WorkbenchAccessService } from './workbench-access.service'
+import { ListWorkbenchAccountsDto, UpdateWorkbenchRolesDto } from './dto/workbench.dto'
+import { UpdateBusinessScopeDto } from './dto/business-scope.dto'
+import { UpdateFopBindingDto } from './dto/fop-binding.dto'
+import { UpdateManagementRoleDto } from './dto/management-role.dto'
 
 // 确保上传目录存在
 const uploadDir = './uploads/avatars'
@@ -31,9 +41,59 @@ if (!existsSync(uploadDir)) {
   mkdirSync(uploadDir, { recursive: true })
 }
 
+@AllowWithoutBusinessData()
 @Controller('users')
 export class UsersController {
-  constructor(private readonly usersService: UsersService) {}
+  constructor(
+    private readonly usersService: UsersService,
+    private readonly workbenchAccess: WorkbenchAccessService,
+  ) {}
+
+  @UseGuards(JwtAuthGuard)
+  @Get('workbench-accounts')
+  @Header('Cache-Control', 'private, no-store')
+  listWorkbenchAccounts(@Request() req: ExpressRequest, @Query() query: ListWorkbenchAccountsDto) {
+    return this.workbenchAccess.listAccounts(req.user!.userId, query)
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Put(':id/workbench-roles')
+  @Header('Cache-Control', 'private, no-store')
+  updateWorkbenchRoles(
+    @Request() req: ExpressRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: UpdateWorkbenchRolesDto,
+  ) {
+    return this.workbenchAccess.updateRoles(req.user!.userId, id, body.workbenchRoles)
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Put(':id/management-role')
+  @Header('Cache-Control', 'private, no-store')
+  async updateManagementRole(@Request() req: ExpressRequest, @Param('id', ParseUUIDPipe) id: string, @Body() body: UpdateManagementRoleDto) {
+    await this.workbenchAccess.requireAdmin(req.user!.userId)
+    return this.usersService.updateManagementRole(req.user!.userId, id, body.role)
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Put(':id/business-scope')
+  @Header('Cache-Control', 'private, no-store')
+  async updateBusinessScope(@Request() req: ExpressRequest, @Param('id', ParseUUIDPipe) id: string, @Body() body: UpdateBusinessScopeDto) {
+    await this.workbenchAccess.requireAdmin(req.user!.userId)
+    return this.usersService.updateBusinessScope(id, body)
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Put(':id/fop-binding')
+  @Header('Cache-Control', 'private, no-store')
+  async updateFopBinding(
+    @Request() req: ExpressRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: UpdateFopBindingDto,
+  ) {
+    await this.workbenchAccess.requireAdmin(req.user!.userId)
+    return this.usersService.updateFopBinding(id, body.tenantId, body.userId)
+  }
 
   @UseGuards(JwtAuthGuard)
   @Get('profile')

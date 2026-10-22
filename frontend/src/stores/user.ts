@@ -1,12 +1,20 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, computed, onScopeDispose } from 'vue'
 import type { User } from '@/types'
 import { authApi } from '@/api/auth'
+import { assertCurrentSession, captureSession, invalidateSession, isCurrentSession, onSessionReset } from '@/utils/session'
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api'
+const API_URL = import.meta.env.VITE_API_URL || '/api'
 
 export const useUserStore = defineStore('user', () => {
   const user = ref<User | null>(null)
+  onScopeDispose(onSessionReset(() => { user.value = null }))
+  let authMutation: Promise<unknown> = Promise.resolve()
+  function serializeAuth<T>(operation: () => Promise<T>): Promise<T> {
+    const request = authMutation.then(operation)
+    authMutation = request.catch(() => undefined)
+    return request
+  }
   const isLoggedIn = computed(() => !!user.value)
   const username = computed(() => user.value?.username || '')
   const isAdmin = computed(() => user.value?.role === 'admin')
@@ -20,7 +28,13 @@ export const useUserStore = defineStore('user', () => {
   })
 
   async function login(email: string, password: string) {
-    const response = await authApi.login({ email, password })
+    clearSession()
+    const session = captureSession()
+    const response = await serializeAuth(() => {
+      assertCurrentSession(session)
+      return authApi.login({ email, password })
+    })
+    assertCurrentSession(session)
     user.value = response.user
     localStorage.setItem('user', JSON.stringify(response.user))
     return response
@@ -31,42 +45,62 @@ export const useUserStore = defineStore('user', () => {
   }
 
   async function register(email: string, username: string, password: string, verificationCode: string) {
-    const response = await authApi.register({ email, username, password, verificationCode })
+    clearSession()
+    const session = captureSession()
+    const response = await serializeAuth(() => {
+      assertCurrentSession(session)
+      return authApi.register({ email, username, password, verificationCode })
+    })
+    assertCurrentSession(session)
     user.value = response.user
     localStorage.setItem('user', JSON.stringify(response.user))
     return response
   }
 
   async function fetchUser() {
+    // A remount during logout must not restore the still-expiring cookie session.
+    if (!localStorage.getItem('user')) return
+    const session = captureSession()
     try {
       const response = await authApi.getProfile()
+      assertCurrentSession(session)
+      const previous = user.value?.id || JSON.parse(localStorage.getItem('user') || '{}').id
+      if (previous && previous !== response.id) invalidateSession()
       user.value = response
       localStorage.setItem('user', JSON.stringify(response))
     } catch {
-      clearSession()
+      if (isCurrentSession(session)) clearSession()
     }
   }
 
   async function updateProfile(data: { username?: string; avatarUrl?: string }) {
+    const session = captureSession()
     const response = await authApi.updateProfile(data)
+    assertCurrentSession(session)
     user.value = response
     return response
   }
 
   async function uploadAvatar(file: File) {
+    const session = captureSession()
     const response = await authApi.uploadAvatar(file)
+    assertCurrentSession(session)
     user.value = response
     return response
   }
 
   function clearSession() {
+    invalidateSession()
     user.value = null
     localStorage.removeItem('token')
     localStorage.removeItem('user')
   }
 
   function logout() {
-    void authApi.logout().finally(clearSession)
+    clearSession()
+    // Serialize Set-Cookie mutations: a slow earlier login must finish before
+    // logout/new login, otherwise its cookie could replace the current account.
+    return serializeAuth(() => authApi.logout()).catch(() => undefined)
   }
 
   return {

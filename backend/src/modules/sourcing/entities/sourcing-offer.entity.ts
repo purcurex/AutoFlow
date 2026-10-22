@@ -104,7 +104,7 @@ export class SourcingOfferEntity {
   @Column({ name: 'price_max', type: 'decimal', precision: 18, scale: 4, nullable: true })
   priceMax: string | null
 
-  @Column({ type: 'varchar', length: 8, default: 'CNY' })
+  @Column({ type: 'varchar', length: 8, default: 'USD' })
   currency: string
 
   @Column({ name: 'price_tiers', type: 'jsonb', default: () => "'[]'::jsonb" })

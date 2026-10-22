@@ -1,3 +1,4 @@
+import { AllowWithoutBusinessData } from './management-access.decorator'
 import { Controller, Post, Body, UseGuards, Request, Get, Res } from '@nestjs/common'
 import { AuthService } from './auth.service'
 import { JwtAuthGuard } from './jwt-auth.guard'
@@ -5,6 +6,7 @@ import { RegisterDto, LoginDto, SendCodeDto } from './dto/auth.dto'
 import { Request as ExpressRequest, Response } from 'express'
 import { Throttle } from '@nestjs/throttler'
 
+@AllowWithoutBusinessData()
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
@@ -50,7 +52,7 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @Get('profile')
   async getProfile(@Request() req: ExpressRequest) {
-    return req.user
+    return this.authService.getProfile(req.user!.userId)
   }
 
   private setSessionCookie(response: Response, token: string): void {

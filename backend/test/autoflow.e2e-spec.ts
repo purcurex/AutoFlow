@@ -1,3 +1,4 @@
+import { OrganizationService } from '../src/modules/organization/organization.service'
 import { INestApplication, ValidationPipe } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
 import { DataSource } from 'typeorm'
@@ -140,6 +141,52 @@ describe('AutoFlow persistence API', () => {
       username: 'owner',
     })
     expect(response.body).not.toHaveProperty('password')
+  })
+
+  it('enforces default, distinct and known workbench roles at the database boundary', async () => {
+    const [account] = await dataSource.query(`
+      INSERT INTO users (email, username, password)
+      VALUES ('role-constraint@autoflow.test', 'role-constraint', 'unused-test-hash')
+      RETURNING id, role, workbench_roles
+    `)
+    try {
+      expect(account).toMatchObject({ role: 'user', workbench_roles: ['sales'] })
+      for (const roles of [['admin'], ['sales', 'sales'], ['sales', null]]) {
+        await expect(dataSource.query('UPDATE users SET workbench_roles = $1 WHERE id = $2', [roles, account.id]))
+          .rejects.toMatchObject({ driverError: { code: '23514' } })
+      }
+      await expect(dataSource.query('UPDATE users SET workbench_roles = NULL WHERE id = $1', [account.id]))
+        .rejects.toMatchObject({ driverError: { code: '23502' } })
+      for (const roles of [[], ['procurement', 'warehouse']]) {
+        await dataSource.query('UPDATE users SET workbench_roles = $1 WHERE id = $2', [roles, account.id])
+        const [updated] = await dataSource.query('SELECT role, workbench_roles FROM users WHERE id = $1', [account.id])
+        expect(updated).toEqual({ role: 'user', workbench_roles: roles })
+      }
+    } finally {
+      await dataSource.query('DELETE FROM users WHERE id = $1', [account.id])
+    }
+  })
+
+  it('enforces unbound defaults, paired trimmed FOP IDs and unique employee bindings in PostgreSQL', async () => {
+    const accounts = await dataSource.query(`
+      INSERT INTO users (email, username, password)
+      VALUES ('fop-binding-a@autoflow.test', 'fop-binding-a', 'unused-test-hash'),
+             ('fop-binding-b@autoflow.test', 'fop-binding-b', 'unused-test-hash')
+      RETURNING id, fop_tenant_id, fop_user_id
+    `)
+    try {
+      for (const account of accounts) expect(account).toMatchObject({ fop_tenant_id: null, fop_user_id: null })
+      for (const [tenant, employee] of [[null, 'employee'], ['tenant', null], ['', 'employee'], [' tenant', 'employee'], ['tenant', 'employee\n']]) {
+        await expect(dataSource.query('UPDATE users SET fop_tenant_id = $1, fop_user_id = $2 WHERE id = $3', [tenant, employee, accounts[0].id]))
+          .rejects.toMatchObject({ driverError: { code: '23514' } })
+      }
+      await dataSource.query('UPDATE users SET fop_tenant_id = $1, fop_user_id = $2 WHERE id = $3', ['tenant', 'employee', accounts[0].id])
+      await expect(dataSource.query('UPDATE users SET fop_tenant_id = $1, fop_user_id = $2 WHERE id = $3', ['tenant', 'employee', accounts[1].id]))
+        .rejects.toMatchObject({ driverError: { code: '23505' } })
+      await dataSource.query('UPDATE users SET fop_tenant_id = $1, fop_user_id = $2 WHERE id = $3', ['other-tenant', 'employee', accounts[1].id])
+    } finally {
+      await dataSource.query('DELETE FROM users WHERE id = ANY($1::uuid[])', [accounts.map((account: { id: string }) => account.id)])
+    }
   })
 
   it('maintains owner-scoped GLM prompt templates with system fallback', async () => {
@@ -962,19 +1009,12 @@ describe('AutoFlow persistence API', () => {
     const unavailableFopResult = await request(app.getHttpServer())
       .post(`/api/autoflow/quotes/${created.body.id}/request-fop`)
       .set('Cookie', ownerCookie)
-      .expect(201)
-    expect(unavailableFopResult.body.versions[0]).toMatchObject({
-      version: 1,
-      productCostStatus: 'failed',
-      logisticsRateStatus: 'failed',
-    })
-    expect(unavailableFopResult.body.versions[0].resultSnapshot).toMatchObject({
-      providerErrors: {
-        productCost: expect.any(String),
-        logisticsRates: expect.any(String),
-      },
-      combinedMatrix: expect.any(Array),
-    })
+      .expect(403)
+    expect(unavailableFopResult.body.code).toBe('fop_binding_required')
+    const unchangedQuote = await request(app.getHttpServer())
+      .get(`/api/autoflow/quotes/${created.body.id}`)
+      .set('Cookie', ownerCookie).expect(200)
+    expect(unchangedQuote.body.versions[0]).toMatchObject({ productCostStatus: 'not_requested', logisticsRateStatus: 'not_requested', resultSnapshot: null })
 
     const revised = await request(app.getHttpServer())
       .post(`/api/autoflow/quotes/${created.body.id}/versions`)
@@ -985,7 +1025,7 @@ describe('AutoFlow persistence API', () => {
     expect(revised.body.versions.map((version: { version: number }) => version.version)).toEqual([2, 1])
   })
 
-  it('persists one fail-closed, retryable FOP handoff per lead', async () => {
+  it('rejects unbound external handoffs before persisting a pending claim while preserving local reads', async () => {
     await request(app.getHttpServer())
       .post(`/api/autoflow/leads/${leadId}/fop-handoff`)
       .set('Cookie', otherCookie)
@@ -996,24 +1036,18 @@ describe('AutoFlow persistence API', () => {
       .post(`/api/autoflow/leads/${leadId}/fop-handoff`)
       .set('Cookie', ownerCookie)
       .send({ reason: 'Qualified for FOP follow-up' })
-      .expect(201)
-    expect(first.body).toMatchObject({
-      leadId,
-      status: 'unavailable',
-      attempts: 1,
-      fopLeadId: null,
-      fopOpportunityId: null,
-    })
+      .expect(403)
+    expect(first.body.code).toBe('fop_binding_required')
 
     const second = await request(app.getHttpServer())
       .post(`/api/autoflow/leads/${leadId}/fop-handoff`)
       .set('Cookie', ownerCookie)
       .send({ reason: 'Retry after integration check' })
-      .expect(201)
-    expect(second.body.id).toBe(first.body.id)
-    expect(second.body.idempotencyKey).toBe(first.body.idempotencyKey)
-    expect(second.body.attempts).toBe(2)
-    expect(await dataSource.getRepository(FopHandoffEntity).countBy({ leadId })).toBe(1)
+      .expect(403)
+    expect(second.body.code).toBe('fop_binding_required')
+    expect(await dataSource.getRepository(FopHandoffEntity).countBy({ leadId })).toBe(0)
+    await request(app.getHttpServer()).get(`/api/autoflow/leads/${leadId}/fop-handoff`)
+      .set('Cookie', ownerCookie).expect(200)
   })
 
   it('reviews outreach before updating lead and local follow-up activity', async () => {
@@ -1129,4 +1163,55 @@ describe('AutoFlow persistence API', () => {
     expect(independentWorkflow.body.displayId).toBe('01')
     expect(sequenceWorkflows[0].body.createdAt).toMatch(/^\d{4}-\d{2}-\d{2}T/)
   })
+  it('enforces three live business scopes across every business read, detail and export', async () => {
+    const users = app.get(UsersService)
+    const actor = (await users.findByEmail('other@autoflow.test'))!
+    const getAsActor = (path: string) => request(app.getHttpServer()).get(`/api${path}`).set('Cookie', otherCookie)
+    await request(app.getHttpServer()).get('/api/organization').set('Cookie', ownerCookie).expect(403)
+    // Internal directory fixtures support scope checks without granting the employee management access.
+    const directory = await app.get(OrganizationService).getWorkspace(ownerUserId)
+    const parent = directory.nodes.find(node => node.name === '业务一部')
+    if (!parent) throw new Error('Missing sales department fixture')
+    const child = directory.nodes.find(node => node.parentId === parent.id)
+    if (!child) throw new Error('Missing child department fixture')
+    await dataSource.query('UPDATE users SET business_department_id = $1 WHERE id = $2', [child.id, ownerUserId])
+    const workflow = (await request(app.getHttpServer()).post('/api/autoflow/workflows').set('Cookie', ownerCookie).send({ name: 'Scope proof', seedType: 'keyword', seedValue: 'scope-proof', targetMarket: 'US' }).expect(201)).body
+    const quote = (await request(app.getHttpServer()).post('/api/autoflow/quotes').set('Cookie', ownerCookie).send({
+      leadId, title: 'Scope proof quote', products: [{ lineId: '76a6ab04-e015-4d6c-8697-0764a54280b2', productReference: 'SKU-SCOPE', unit: 'pcs', productProfitMarginRate: 20, quantityTiers: [{ minQuantity: 1, customerUnitPrice: '10.00' }] }],
+      destinationCountries: ['US'], packages: [{ quantity: 1, weight: 1, weightUnit: 'kg', length: 10, width: 10, height: 10, dimensionUnit: 'cm' }],
+      logisticsChannels: [{ customChannelCode: 'STANDARD', customChannelName: 'Standard', actualChannelCode: 'TEST', actualChannelName: 'Test channel', logisticsProfitMarginRate: 20 }],
+    }).expect(201)).body
+    expect(quote.currency).toBe('USD')
+    await dataSource.getRepository(FopHandoffEntity).save({ leadId, ownerUserId, idempotencyKey: `scope:${leadId}`, status: 'succeeded', fopLeadId: 'scoped-fop-lead' })
+    const conversations = (await request(app.getHttpServer()).get(`/api/ai/outreach-conversations?leadId=${leadId}`).set('Cookie', ownerCookie).expect(200)).body
+    const conversationId = conversations[0].id
+    const detailPaths = [`/autoflow/workflows/${workflow.id}`, `/autoflow/workflows/${workflow.id}/sourcing`, `/autoflow/leads/${leadId}`, `/autoflow/quotes/${quote.id}`, `/autoflow/quotes/${quote.id}/versions/1/export.xlsx`, `/ai/outreach-conversations/${conversationId}`]
+    for (const path of detailPaths) await getAsActor(path).expect(404)
+    for (const role of ['department_manager', 'admin']) {
+      await dataSource.query('UPDATE users SET business_role = $1, business_department_id = $2 WHERE id = $3', [role, parent.id, actor.id])
+      for (const path of detailPaths) {
+        const response = await getAsActor(path).expect(200)
+        expect(response.headers['cache-control']).toBe('private, no-store')
+      }
+      expect((await getAsActor('/autoflow/workflows').expect(200)).body.items.some((row: any) => row.id === workflow.id)).toBe(true)
+      expect((await getAsActor(`/autoflow/leads?search=${encodeURIComponent('PawSpark')}`).expect(200)).body.total).toBeGreaterThan(0)
+      expect((await getAsActor(`/autoflow/quotes?leadId=${leadId}`).expect(200)).body.some((row: any) => row.id === quote.id)).toBe(true)
+      expect((await getAsActor(`/autoflow/leads/${leadId}/fop-handoff`).expect(200)).body.fopLeadId).toBe('scoped-fop-lead')
+      expect((await getAsActor('/autoflow/outreach-tasks').expect(200)).body.total).toBeGreaterThan(0)
+      expect((await getAsActor('/autoflow/follow-ups').expect(200)).body.reduce((sum: number, row: any) => sum + row.count, 0)).toBeGreaterThan(0)
+      expect((await getAsActor('/autoflow/dashboard').expect(200)).body.topLeads.length).toBeGreaterThan(0)
+      await getAsActor('/users/workbench-accounts').expect(403)
+    }
+    // Switching department and revoking grants takes effect using the same login cookie.
+    await dataSource.query("UPDATE users SET business_role = 'department_manager', business_department_id = 'different-department' WHERE id = $1", [actor.id])
+    for (const path of detailPaths) await getAsActor(path).expect(404)
+    expect((await getAsActor('/autoflow/leads').expect(200)).body.total).toBe(0)
+    await dataSource.query("UPDATE users SET business_role = 'salesperson' WHERE id = $1", [actor.id])
+    for (const path of detailPaths) await getAsActor(path).expect(404)
+    expect((await getAsActor(`/autoflow/leads/${leadId}/fop-handoff`).expect(200)).body).not.toHaveProperty('fopLeadId')
+    // Tenant separation also applies to administrator-level local business reads.
+    await dataSource.query("UPDATE users SET business_role = 'admin', fop_tenant_id = 'isolated-tenant', fop_user_id = 'isolated-actor' WHERE id = $1", [actor.id])
+    for (const path of detailPaths) await getAsActor(path).expect(404)
+  })
+
 })

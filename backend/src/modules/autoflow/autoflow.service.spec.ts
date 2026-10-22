@@ -1,3 +1,4 @@
+jest.mock('../users/business-data-access', () => ({ readBusinessOwners: jest.fn(async (_dataSource, id) => ({ ids: [id], filter: id })) }))
 import { ConflictException, NotFoundException } from '@nestjs/common'
 import type { DataSource, ObjectLiteral, Repository } from 'typeorm'
 import { AutoflowService } from './autoflow.service'
