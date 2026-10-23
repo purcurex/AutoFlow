@@ -12,6 +12,7 @@ import { AuthService } from '../src/modules/auth/auth.service'
 import { JwtStrategy } from '../src/modules/auth/jwt.strategy'
 import { VerificationService } from '../src/modules/auth/verification.service'
 import { AutoflowController } from '../src/modules/autoflow/autoflow.controller'
+import { SourcingService } from '../src/modules/sourcing/sourcing.service'
 import { AutoflowService } from '../src/modules/autoflow/autoflow.service'
 import { WorkflowExecutionService } from '../src/modules/discovery/workflow-execution.service'
 import { WorkflowSeedAssetService } from '../src/modules/autoflow/workflow-seed-asset.service'
@@ -43,6 +44,7 @@ describe('Workbench authorization HTTP API (repository boundary stub)', () => {
       imports: [UsersModule, JwtModule.register({ secret })],
       controllers: [AuthController, AutoflowController],
       providers: [
+        { provide: SourcingService, useValue: { runForWorkflow: jest.fn() } },
         AuthService, JwtStrategy,
         { provide: ConfigService, useValue: new ConfigService({ JWT_SECRET: secret }) },
         { provide: VerificationService, useValue: { verifyCode: () => ({ valid: true }) } },

@@ -1,4 +1,5 @@
 import { NotFoundException } from '@nestjs/common'
+import { ConfigService } from '@nestjs/config'
 import type { ObjectLiteral, Repository } from 'typeorm'
 import { WorkflowRunEntity } from '../autoflow/entities'
 import { DiscoveryService } from './discovery.service'
@@ -15,7 +16,7 @@ describe('DiscoveryService', () => {
     } as unknown as jest.Mocked<Repository<T>>
   }
 
-  function createService() {
+  function createService(config: Record<string, string> = {}) {
     const workflows = repository<WorkflowRunEntity>()
     const ads = repository<AdCreativeEntity>()
     const stores = repository<ShopifyStoreEntity>()
@@ -24,7 +25,15 @@ describe('DiscoveryService', () => {
     const enrichment = {
       enrich: jest.fn().mockImplementation(async (values) => values),
     } as unknown as jest.Mocked<StorefrontEnrichmentService>
-    const service = new DiscoveryService(workflows, ads, stores, adAdapter, storeAdapter, enrichment)
+    const service = new DiscoveryService(
+      workflows,
+      ads,
+      stores,
+      adAdapter,
+      storeAdapter,
+      enrichment,
+      new ConfigService(config),
+    )
     return { service, workflows, ads, stores, adAdapter, storeAdapter }
   }
 
@@ -89,9 +98,11 @@ describe('DiscoveryService', () => {
       value: 'pet brush',
       targetMarket: 'United States',
     }))
-    expect(result.ads).toHaveLength(1)
-    expect(result.stores).toHaveLength(1)
-    expect(result.candidates).toEqual([expect.objectContaining({
+    expect(result.status).toBe('completed')
+    if (result.status !== 'completed') throw new Error('Expected completed customer discovery')
+    expect(result.evidence.ads).toHaveLength(1)
+    expect(result.evidence.stores).toHaveLength(1)
+    expect(result.evidence.candidates).toEqual([expect.objectContaining({
       normalizedDomain: 'pawspark.myshopify.com',
       shopifyConfidence: 100,
       trafficScore: 85,
@@ -105,5 +116,80 @@ describe('DiscoveryService', () => {
       [expect.objectContaining({ ownerUserId: 'owner-1', teamId: null, normalizedDomain: 'pawspark.myshopify.com' })],
       expect.objectContaining({ conflictPaths: ['workflowRunId', 'normalizedDomain'] }),
     )
+  })
+
+  it('converts an owned local image path to the configured public provider URL', async () => {
+    const { service, workflows, adAdapter, storeAdapter } = createService({
+      PUBLIC_ASSET_BASE_URL: 'https://assets.example.com/',
+    })
+    workflows.findOne.mockResolvedValue({
+      id: 'workflow-image',
+      ownerUserId: 'owner-1',
+      teamId: null,
+      seedType: 'image',
+      seedValue: 'http://localhost:3000/uploads/workflow-seeds/owner-1/product.jpg',
+      seedAssetPath: '/uploads/workflow-seeds/owner-1/product.jpg',
+      targetMarket: 'United States',
+    } as WorkflowRunEntity)
+    adAdapter.discover.mockResolvedValue([])
+    storeAdapter.discover.mockResolvedValue([])
+
+    const result = await service.discoverEvidence('owner-1', 'workflow-image')
+
+    expect(result.status).toBe('completed')
+    expect(adAdapter.discover).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'image',
+      value: 'https://assets.example.com/uploads/workflow-seeds/owner-1/product.jpg',
+    }))
+    expect(storeAdapter.discover).toHaveBeenCalledWith(expect.objectContaining({
+      value: 'https://assets.example.com/uploads/workflow-seeds/owner-1/product.jpg',
+    }))
+  })
+
+  it('skips customer discovery without calling paid adapters when a local image has no public base', async () => {
+    const { service, workflows, adAdapter, storeAdapter } = createService()
+    workflows.findOne.mockResolvedValue({
+      id: 'workflow-image',
+      ownerUserId: 'owner-1',
+      teamId: null,
+      seedType: 'image',
+      seedValue: 'http://localhost:3000/uploads/workflow-seeds/owner-1/product.jpg',
+      seedAssetPath: '/uploads/workflow-seeds/owner-1/product.jpg',
+      targetMarket: 'United States',
+    } as WorkflowRunEntity)
+
+    const result = await service.discoverEvidence('owner-1', 'workflow-image')
+
+    expect(result).toEqual({
+      status: 'skipped',
+      reasonCode: 'public_image_not_configured',
+      reason: 'Public image URL is not configured; customer discovery was skipped.',
+      evidence: {
+        workflowRunId: 'workflow-image',
+        ads: [],
+        stores: [],
+        candidates: [],
+      },
+    })
+    expect(adAdapter.discover).not.toHaveBeenCalled()
+    expect(storeAdapter.discover).not.toHaveBeenCalled()
+  })
+
+  it('rejects an invalid local asset path instead of treating it as an unconfigured public image', async () => {
+    const { service, workflows, adAdapter, storeAdapter } = createService()
+    workflows.findOne.mockResolvedValue({
+      id: 'workflow-image',
+      ownerUserId: 'owner-1',
+      teamId: null,
+      seedType: 'image',
+      seedValue: 'http://localhost:3000/uploads/workflow-seeds/owner-2/product.jpg',
+      seedAssetPath: '/uploads/workflow-seeds/owner-2/product.jpg',
+      targetMarket: 'United States',
+    } as WorkflowRunEntity)
+
+    await expect(service.discoverEvidence('owner-1', 'workflow-image'))
+      .rejects.toThrow('Workflow image asset path is invalid')
+    expect(adAdapter.discover).not.toHaveBeenCalled()
+    expect(storeAdapter.discover).not.toHaveBeenCalled()
   })
 })

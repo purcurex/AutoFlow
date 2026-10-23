@@ -4,11 +4,17 @@ import { Alibaba1688Module } from '../alibaba1688'
 import { WorkflowRunEntity } from '../autoflow/entities'
 import {
   SourcingOfferEntity,
+  SourcingSearchPageEntity,
   SourcingSearchEntity,
   SourcingSupplierEntity,
 } from './entities'
 import { SourcingController } from './sourcing.controller'
 import { SourcingService } from './sourcing.service'
+import { SourcingImageResolverService } from './sourcing-image-resolver.service'
+import { SourcingPageExecutorService } from './sourcing-page-executor.service'
+import { SourcingWorkerService } from './sourcing-worker.service'
+import { SourcingPageCacheService } from './sourcing-page-cache.service'
+import { SourcingSupplierNameCacheService } from './sourcing-supplier-name-cache.service'
 
 @Module({
   imports: [
@@ -16,12 +22,20 @@ import { SourcingService } from './sourcing.service'
     TypeOrmModule.forFeature([
       WorkflowRunEntity,
       SourcingSearchEntity,
+      SourcingSearchPageEntity,
       SourcingSupplierEntity,
       SourcingOfferEntity,
     ]),
   ],
   controllers: [SourcingController],
-  providers: [SourcingService],
+  providers: [
+    SourcingService,
+    SourcingImageResolverService,
+    SourcingPageExecutorService,
+    SourcingPageCacheService,
+    SourcingSupplierNameCacheService,
+    SourcingWorkerService,
+  ],
   exports: [SourcingService],
 })
 export class SourcingModule {}

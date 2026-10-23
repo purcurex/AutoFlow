@@ -1,7 +1,12 @@
 import { getMetadataArgsStorage, type QueryRunner } from 'typeorm'
 import { AddAlibaba1688Sourcing1784724000000 } from '../../../database/migrations/1784724000000-AddAlibaba1688Sourcing'
+import { AddAlibaba1688SourcingPagination1784728000000 } from '../../../database/migrations/1784728000000-AddAlibaba1688SourcingPagination'
+import { AddSourcingOfferProductFingerprint1784729000000 } from '../../../database/migrations/1784729000000-AddSourcingOfferProductFingerprint'
+import { AddSourcingResponseCacheMetadata1784730000000 } from '../../../database/migrations/1784730000000-AddSourcingResponseCacheMetadata'
+import { AddSourcingResultLimit1784731000000 } from '../../../database/migrations/1784731000000-AddSourcingResultLimit'
 import {
   SourcingOfferEntity,
+  SourcingSearchPageEntity,
   SourcingSearchEntity,
   SourcingSupplierEntity,
 } from './index'
@@ -9,6 +14,22 @@ import {
 describe('sourcing persistence entities', () => {
   const storage = getMetadataArgsStorage()
   const entities = [SourcingSearchEntity, SourcingSupplierEntity, SourcingOfferEntity]
+
+  it('maps leased sourcing page jobs with pagination and retry fields', () => {
+    const table = storage.tables.find((metadata) => metadata.target === SourcingSearchPageEntity)
+    const columns = storage.columns
+      .filter((metadata) => metadata.target === SourcingSearchPageEntity)
+      .map((metadata) => metadata.propertyName)
+
+    expect(table?.name).toBe('sourcing_search_pages')
+    expect(columns).toEqual(expect.arrayContaining([
+      'searchId', 'ownerUserId', 'pageNumber', 'pageSize', 'status',
+      'attempts', 'maxAttempts', 'availableAt', 'leaseOwner', 'leaseExpiresAt',
+      'heartbeatAt', 'providerRequestId', 'providerTraceId', 'resultCount',
+      'errorCode', 'errorMessage', 'startedAt', 'completedAt',
+      'cacheHit', 'cacheSourcePageId',
+    ]))
+  })
 
   it.each([
     [SourcingSearchEntity, 'sourcing_searches'],
@@ -45,6 +66,8 @@ describe('sourcing persistence entities', () => {
         'requestId',
         'providerRequestId',
         'providerMethod',
+        'cacheFingerprint',
+        'resultLimit',
         'requestPayload',
         'errorCode',
         'errorMessage',
@@ -68,6 +91,7 @@ describe('sourcing persistence entities', () => {
         'offerId',
         'offerUrl',
         'priceTiers',
+        'productFingerprint',
         'sourcingScore',
         'sourcingScoreReasons',
         'rawSnapshot',
@@ -111,6 +135,7 @@ describe('sourcing persistence entities', () => {
         'idx_sourcing_suppliers_owner_rating',
         'idx_sourcing_offers_owner_score',
         'idx_sourcing_offers_provider_offer',
+        'uq_sourcing_offers_search_provider_fingerprint',
       ]),
     )
     expect(checkNames).toEqual(
@@ -139,6 +164,88 @@ describe('sourcing persistence entities', () => {
     expect(relation(SourcingOfferEntity, 'search')?.options.onDelete).toBe('CASCADE')
     expect(relation(SourcingOfferEntity, 'supplier')?.options.onDelete).toBe('SET NULL')
     expect(relations.map((metadata) => metadata.propertyName)).not.toContain('lead')
+  })
+})
+
+describe('AddSourcingResponseCacheMetadata migration', () => {
+  it('adds reversible tenant-scoped cache metadata and lookup indexes', async () => {
+    const upRunner = { query: jest.fn().mockResolvedValue(undefined) } as unknown as QueryRunner
+    const downRunner = { query: jest.fn().mockResolvedValue(undefined) } as unknown as QueryRunner
+    const migration = new AddSourcingResponseCacheMetadata1784730000000()
+
+    await migration.up(upRunner)
+    await migration.down(downRunner)
+
+    const upSql = (upRunner.query as jest.Mock).mock.calls.map(([sql]) => sql).join('\n')
+    const downSql = (downRunner.query as jest.Mock).mock.calls.map(([sql]) => sql).join('\n')
+    expect(upSql).toContain('ADD COLUMN "cache_fingerprint" varchar(64)')
+    expect(upSql).toContain('ADD COLUMN "cache_hit" boolean NOT NULL DEFAULT false')
+    expect(upSql).toContain('ADD COLUMN "cache_source_page_id" uuid')
+    expect(upSql).toContain('idx_sourcing_searches_cache_lookup')
+    expect(upSql).toContain('idx_sourcing_pages_cache_lookup')
+    expect(upSql).toContain('idx_sourcing_offers_owner_provider_offer_recent')
+    expect(upSql).toContain('idx_sourcing_suppliers_owner_provider_open_recent')
+    expect(downSql).toContain('DROP COLUMN IF EXISTS "cache_fingerprint"')
+    expect(downSql).toContain('DROP COLUMN IF EXISTS "cache_hit"')
+    expect(downSql).toContain('DROP COLUMN IF EXISTS "cache_source_page_id"')
+  })
+})
+
+describe('AddSourcingResultLimit migration', () => {
+  it('adds a reversible 100-item result window constraint', async () => {
+    const upRunner = { query: jest.fn().mockResolvedValue(undefined) } as unknown as QueryRunner
+    const downRunner = { query: jest.fn().mockResolvedValue(undefined) } as unknown as QueryRunner
+    const migration = new AddSourcingResultLimit1784731000000()
+
+    await migration.up(upRunner)
+    await migration.down(downRunner)
+
+    const upSql = (upRunner.query as jest.Mock).mock.calls.map(([sql]) => sql).join('\n')
+    const downSql = (downRunner.query as jest.Mock).mock.calls.map(([sql]) => sql).join('\n')
+    expect(upSql).toContain('ADD COLUMN "result_limit" integer NOT NULL DEFAULT 100')
+    expect(upSql).toContain('CHECK ("result_limit" >= 100 AND "result_limit" % 100 = 0)')
+    expect(downSql).toContain('DROP CONSTRAINT IF EXISTS "chk_sourcing_searches_result_limit"')
+    expect(downSql).toContain('DROP COLUMN IF EXISTS "result_limit"')
+  })
+})
+
+describe('AddSourcingOfferProductFingerprint migration', () => {
+  it('adds a nullable fingerprint with a reversible search-scoped unique index', async () => {
+    const upRunner = { query: jest.fn().mockResolvedValue(undefined) } as unknown as QueryRunner
+    const downRunner = { query: jest.fn().mockResolvedValue(undefined) } as unknown as QueryRunner
+    const migration = new AddSourcingOfferProductFingerprint1784729000000()
+
+    await migration.up(upRunner)
+    await migration.down(downRunner)
+
+    const upSql = (upRunner.query as jest.Mock).mock.calls.map(([sql]) => sql).join('\n')
+    const downSql = (downRunner.query as jest.Mock).mock.calls.map(([sql]) => sql).join('\n')
+    expect(upSql).toContain('ADD COLUMN "product_fingerprint" varchar(64)')
+    expect(upSql).toContain('"search_id", "provider", "product_fingerprint"')
+    expect(upSql).toContain('WHERE "product_fingerprint" IS NOT NULL')
+    expect(downSql).toContain('DROP INDEX IF EXISTS "uq_sourcing_offers_search_provider_fingerprint"')
+    expect(downSql).toContain('DROP COLUMN IF EXISTS "product_fingerprint"')
+  })
+})
+
+describe('AddAlibaba1688SourcingPagination migration', () => {
+  it('adds the leased page table, precision fields, and a reversible partial state', async () => {
+    const upRunner = { query: jest.fn().mockResolvedValue(undefined) } as unknown as QueryRunner
+    const downRunner = { query: jest.fn().mockResolvedValue(undefined) } as unknown as QueryRunner
+    const migration = new AddAlibaba1688SourcingPagination1784728000000()
+
+    await migration.up(upRunner)
+    await migration.down(downRunner)
+
+    const upSql = (upRunner.query as jest.Mock).mock.calls.map(([sql]) => sql).join('\n')
+    const downSql = (downRunner.query as jest.Mock).mock.calls.map(([sql]) => sql).join('\n')
+    expect(upSql).toContain('CREATE TABLE "sourcing_search_pages"')
+    expect(upSql).toContain('UNIQUE ("search_id", "page_number")')
+    expect(upSql).toContain('"heartbeat_at" timestamptz')
+    expect(upSql).toContain("'partial'")
+    expect(upSql).toContain('numeric(9,4)')
+    expect(downSql).toContain("WHERE \"status\" = 'partial'")
+    expect(downSql).toContain('DROP TABLE IF EXISTS "sourcing_search_pages"')
   })
 })
 

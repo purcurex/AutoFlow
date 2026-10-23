@@ -1,157 +1,581 @@
 jest.mock('../users/business-data-access', () => ({ readBusinessOwners: jest.fn(async (_dataSource, id) => ({ ids: [id], filter: id })) }))
-import { BadRequestException } from '@nestjs/common'
-import type { DataSource, Repository } from 'typeorm'
+import { readBusinessOwners } from '../users/business-data-access'
+import { BadRequestException, NotFoundException } from '@nestjs/common'
+import type { DataSource, EntityManager, ObjectLiteral, Repository } from 'typeorm'
 import type { Alibaba1688Service } from '../alibaba1688'
-import type { WorkflowRunEntity } from '../autoflow/entities'
+import { WorkflowRunEntity } from '../autoflow/entities'
 import {
   SourcingOfferEntity,
   SourcingSearchEntity,
-  SourcingSupplierEntity,
+  SourcingSearchPageEntity,
 } from './entities'
 import { SourcingService } from './sourcing.service'
+import { ListSourcingDto } from './dto/list-sourcing.dto'
+import type { SourcingPageCacheService } from './sourcing-page-cache.service'
 
-describe('SourcingService', () => {
+interface ResultWindowService {
+  extendResultWindow(
+    ownerUserId: string,
+    workflowRunId: string,
+    searchId: string,
+    targetLimit: number,
+  ): Promise<{
+    searchId: string
+    totalRecords: number | null
+    totalPages: number | null
+    providerTotalRecords: number | null
+    resultLimit: number
+    canExpand: boolean
+  }>
+}
+
+describe('SourcingService asynchronous pagination', () => {
   const ownerUserId = 'd90f3d90-7f2b-45e7-9c8f-88fa0d915c8d'
+  const otherOwnerUserId = '11111111-1111-4111-8111-111111111111'
   const workflowRunId = 'e1e830d6-8efe-4f04-a031-1afdfc88a902'
+  const searchId = '22222222-2222-4222-8222-222222222222'
 
-  function createService() {
-    const workflowRepository = {
-      findOne: jest.fn().mockResolvedValue({ id: workflowRunId, ownerUserId }),
-    }
-    const searchRepository = {
-      findOne: jest.fn().mockResolvedValue(null),
-      save: jest.fn(),
-    }
-    const offerRepository = {
-      find: jest.fn().mockResolvedValue([]),
-    }
-    const alibaba1688Service = {
-      getReadiness: jest.fn().mockReturnValue({
-        ready: false,
-        enabled: false,
-        missing: ['ALIBABA_1688_ENABLED'],
-        provider: 'alibaba_1688',
-      }),
-    }
-    const dataSource = {
-      transaction: jest.fn(),
-    }
-    const service = new SourcingService(
-      workflowRepository as unknown as Repository<WorkflowRunEntity>,
-      searchRepository as unknown as Repository<SourcingSearchEntity>,
-      offerRepository as unknown as Repository<SourcingOfferEntity>,
-      alibaba1688Service as unknown as Alibaba1688Service,
-      dataSource as unknown as DataSource,
-    )
+  function repository<T extends ObjectLiteral>() {
     return {
-      service,
-      workflowRepository,
-      searchRepository,
-      offerRepository,
-      alibaba1688Service,
-      dataSource,
-    }
+      create: jest.fn((value) => value),
+      find: jest.fn().mockResolvedValue([]),
+      findOne: jest.fn().mockResolvedValue(null),
+      save: jest.fn(async (value) => value),
+    } as unknown as jest.Mocked<Repository<T>>
   }
 
-  it('returns an explicit unconfigured state without fabricating offers', async () => {
-    const { service, workflowRepository, offerRepository } = createService()
+  function createService() {
+    const workflows = repository<WorkflowRunEntity>()
+    const searches = repository<SourcingSearchEntity>()
+    const pages = repository<SourcingSearchPageEntity>()
+    const offers = repository<SourcingOfferEntity>()
+    const workflow = {
+      id: workflowRunId,
+      ownerUserId,
+      name: 'Pet brush prospecting',
+      seedType: 'keyword',
+      seedValue: 'pet brush',
+      targetMarket: 'United States',
+    } as WorkflowRunEntity
+    workflows.findOne.mockResolvedValue(workflow)
+    const provider = {
+      getReadiness: jest.fn().mockReturnValue({
+        ready: true,
+        enabled: true,
+        missing: [],
+        provider: 'alibaba_1688',
+      }),
+    } as unknown as jest.Mocked<Alibaba1688Service>
+    const manager = {
+      getRepository: jest.fn((entity: unknown) => {
+        if (entity === WorkflowRunEntity) return workflows
+        if (entity === SourcingSearchEntity) return searches
+        if (entity === SourcingSearchPageEntity) return pages
+        return offers
+      }),
+    } as unknown as EntityManager
+    const dataSource = {
+      transaction: jest.fn(async (callback) => callback(manager)),
+    } as unknown as jest.Mocked<DataSource>
+    const pageCache = {
+      restore: jest.fn().mockResolvedValue(null),
+    } as unknown as jest.Mocked<SourcingPageCacheService>
+    const service = new SourcingService(
+      workflows,
+      searches,
+      pages,
+      offers,
+      provider,
+      dataSource,
+      pageCache,
+    )
+    return { service, workflows, searches, pages, offers, provider, workflow, pageCache }
+  }
 
-    await expect(service.getSummary(ownerUserId, workflowRunId)).resolves.toEqual({
-      workflowId: workflowRunId,
-      provider: 'alibaba_1688',
-      providerConfigured: false,
-      status: 'not_configured',
-      latestSearch: null,
-      offers: [],
+  it('preserves visible owner scope when reading another account sourcing pages', async () => {
+    const { service, workflows, searches, workflow } = createService()
+    jest.mocked(readBusinessOwners).mockResolvedValueOnce({
+      ids: [otherOwnerUserId],
+      filter: otherOwnerUserId,
     })
-    expect(workflowRepository.findOne).toHaveBeenCalledWith({
-      where: { id: workflowRunId, ownerUserId },
+    workflow.ownerUserId = otherOwnerUserId
+
+    await service.getSummary(ownerUserId, workflowRunId)
+
+    expect(workflows.findOne).toHaveBeenCalledWith({
+      where: { id: workflowRunId, ownerUserId: otherOwnerUserId },
+      relations: { steps: true },
     })
-    expect(offerRepository.find).not.toHaveBeenCalled()
+    expect(searches.findOne).toHaveBeenCalledWith(expect.objectContaining({
+      where: { ownerUserId: otherOwnerUserId, workflowRunId },
+    }))
   })
 
-  it('maps persisted procurement evidence without customer score fields', async () => {
-    const {
-      service,
-      searchRepository,
-      offerRepository,
-      alibaba1688Service,
-    } = createService()
-    alibaba1688Service.getReadiness.mockReturnValue({
-      ready: true,
-      enabled: true,
-      missing: [],
-      provider: 'alibaba_1688',
+  it('rejects sourcing summaries for workflows outside the visible owner scope', async () => {
+    const { service, workflows, searches } = createService()
+    workflows.findOne.mockResolvedValue(null)
+
+    await expect(service.getSummary(ownerUserId, workflowRunId)).rejects.toBeInstanceOf(NotFoundException)
+    expect(searches.findOne).not.toHaveBeenCalled()
+  })
+
+  it('creates a search and only queues its first page', async () => {
+    const { service, searches, pages } = createService()
+    searches.save.mockImplementation(async (value) => ({ id: searchId, ...value }) as SourcingSearchEntity)
+
+    await expect(service.startSearch(ownerUserId, workflowRunId, { pageSize: 20 }))
+      .resolves.toEqual({ searchId, status: 'pending', page: 1, pageSize: 20 })
+    expect(pages.save).toHaveBeenCalledTimes(1)
+    expect(pages.save).toHaveBeenCalledWith(expect.objectContaining({
+      searchId,
+      ownerUserId,
+      pageNumber: 1,
+      pageSize: 20,
+      status: 'pending',
+    }))
+    expect(searches.save).toHaveBeenCalledWith(expect.objectContaining({
+      searchMode: 'keyword',
+      keyword: 'pet brush',
+      imageUrl: null,
+      resultLimit: 100,
+      queryFingerprint: expect.stringMatching(/^[a-f0-9]{64}$/),
+      cacheFingerprint: expect.stringMatching(/^[a-f0-9]{64}$/),
+      requestPayload: expect.objectContaining({
+        workflowName: 'Pet brush prospecting',
+        targetMarket: 'United States',
+        forceRefresh: false,
+      }),
+    }))
+  })
+
+  it('maps an image workflow URL to image sourcing and keeps its workflow context', async () => {
+    const { service, searches, workflow } = createService()
+    Object.assign(workflow, {
+      name: 'Pet brush image sourcing',
+      seedType: 'image',
+      seedValue: 'https://cdn.example.com/pet-brush.png',
+      targetMarket: 'Canada',
     })
-    searchRepository.findOne.mockResolvedValue({
-      id: 'search-1',
+    searches.save.mockImplementation(async (value) => ({ id: searchId, ...value }) as SourcingSearchEntity)
+
+    await service.startSearch(ownerUserId, workflowRunId, { pageSize: 20 })
+
+    expect(searches.save).toHaveBeenCalledWith(expect.objectContaining({
+      searchMode: 'image',
+      keyword: null,
+      imageUrl: 'https://cdn.example.com/pet-brush.png',
+      requestPayload: expect.objectContaining({
+        workflowName: 'Pet brush image sourcing',
+        targetMarket: 'Canada',
+      }),
+    }))
+  })
+
+  it('reuses a matching successful search unless force is true', async () => {
+    const { service, searches, pages } = createService()
+    searches.findOne.mockResolvedValue({
+      id: searchId,
+      status: 'succeeded',
+      pageSize: 20,
+    } as SourcingSearchEntity)
+
+    await expect(service.startSearch(ownerUserId, workflowRunId, { pageSize: 20 }))
+      .resolves.toEqual({ searchId, status: 'succeeded', page: 1, pageSize: 20 })
+    expect(searches.save).not.toHaveBeenCalled()
+    expect(pages.save).not.toHaveBeenCalled()
+
+    searches.save.mockImplementation(async (value) => ({ id: 'new-search', ...value }) as SourcingSearchEntity)
+    await expect(service.startSearch(ownerUserId, workflowRunId, { pageSize: 20, force: true }))
+      .resolves.toMatchObject({ searchId: 'new-search', status: 'pending' })
+    expect(searches.save).toHaveBeenLastCalledWith(expect.objectContaining({
+      requestPayload: expect.objectContaining({ forceRefresh: true }),
+    }))
+  })
+
+  it('shares the cache fingerprint across workflows without changing request idempotency', async () => {
+    const { service, searches, workflow } = createService()
+    searches.save.mockImplementation(async (value) => ({
+      id: `search-${searches.save.mock.calls.length}`,
+      ...value,
+    }) as SourcingSearchEntity)
+
+    await service.startSearch(ownerUserId, workflowRunId, { pageSize: 20, force: true })
+    const first = searches.save.mock.calls[0][0]
+    workflow.id = '77777777-7777-4777-8777-777777777777'
+    await service.startSearch(ownerUserId, workflow.id, { pageSize: 20, force: true })
+    const second = searches.save.mock.calls[1][0]
+
+    expect(first.queryFingerprint).not.toBe(second.queryFingerprint)
+    expect(first.cacheFingerprint).toBe(second.cacheFingerprint)
+  })
+
+  it('rejects page access outside owner and workflow scope', async () => {
+    const { service, searches } = createService()
+    searches.findOne.mockResolvedValue(null)
+
+    await expect(service.requestPage(otherOwnerUserId, workflowRunId, searchId, 2))
+      .rejects.toBeInstanceOf(NotFoundException)
+  })
+
+  it('requires known pagination bounds and keeps duplicate page requests idempotent', async () => {
+    const { service, searches, pages } = createService()
+    searches.findOne.mockResolvedValue({
+      id: searchId,
       ownerUserId,
       workflowRunId,
+      pageSize: 20,
+      totalPages: null,
+    } as SourcingSearchEntity)
+
+    await expect(service.requestPage(ownerUserId, workflowRunId, searchId, 2))
+      .rejects.toBeInstanceOf(BadRequestException)
+
+    searches.findOne.mockResolvedValue({
+      id: searchId,
+      ownerUserId,
+      workflowRunId,
+      pageSize: 20,
+      totalPages: 3,
+      totalRecords: '60',
+      resultLimit: 100,
+    } as SourcingSearchEntity)
+    pages.findOne.mockResolvedValue({
+      searchId,
+      pageNumber: 2,
+      pageSize: 20,
+      status: 'pending',
+    } as SourcingSearchPageEntity)
+    await expect(service.requestPage(ownerUserId, workflowRunId, searchId, 2))
+      .resolves.toMatchObject({ searchId, page: 2, status: 'pending' })
+    expect(pages.save).not.toHaveBeenCalled()
+  })
+
+  it('rejects provider pages that are outside the current 100-item result window', async () => {
+    const { service, searches, pages } = createService()
+    searches.findOne.mockResolvedValue({
+      id: searchId,
+      ownerUserId,
+      workflowRunId,
+      pageSize: 20,
+      totalRecords: '574',
+      totalPages: 29,
+      resultLimit: 100,
+    } as SourcingSearchEntity)
+
+    await expect(service.requestPage(ownerUserId, workflowRunId, searchId, 6))
+      .rejects.toBeInstanceOf(BadRequestException)
+    expect(pages.findOne).not.toHaveBeenCalled()
+  })
+
+  it('extends the accessible result window by exactly 100 records', async () => {
+    const { service, searches } = createService()
+    const search = {
+      id: searchId,
+      ownerUserId,
+      workflowRunId,
+      pageSize: 20,
+      totalRecords: '574',
+      totalPages: 29,
+      resultLimit: 100,
+    } as SourcingSearchEntity
+    searches.findOne.mockResolvedValue(search)
+
+    const result = await (service as unknown as ResultWindowService)
+      .extendResultWindow(ownerUserId, workflowRunId, searchId, 200)
+
+    expect(result).toEqual({
+      searchId,
+      totalRecords: 200,
+      totalPages: 10,
+      providerTotalRecords: 574,
+      resultLimit: 200,
+      canExpand: true,
+    })
+    expect(searches.findOne).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: searchId, ownerUserId, workflowRunId },
+      lock: { mode: 'pessimistic_write' },
+    }))
+    expect(searches.save).toHaveBeenCalledWith(expect.objectContaining({ resultLimit: 200 }))
+  })
+
+  it('derives accessible pages from provider records when the stored page count is stale', async () => {
+    const { service, searches } = createService()
+    searches.findOne.mockResolvedValue({
+      id: searchId,
+      ownerUserId,
+      workflowRunId,
+      pageSize: 20,
+      totalRecords: '574',
+      totalPages: 3,
+      resultLimit: 100,
+    } as SourcingSearchEntity)
+
+    await expect((service as unknown as ResultWindowService)
+      .extendResultWindow(ownerUserId, workflowRunId, searchId, 200))
+      .resolves.toMatchObject({ totalRecords: 200, totalPages: 10 })
+  })
+
+  it('treats a repeated target result limit as an idempotent retry', async () => {
+    const { service, searches } = createService()
+    searches.findOne.mockResolvedValue({
+      id: searchId,
+      ownerUserId,
+      workflowRunId,
+      pageSize: 20,
+      totalRecords: '574',
+      totalPages: 29,
+      resultLimit: 200,
+    } as SourcingSearchEntity)
+
+    await expect((service as unknown as ResultWindowService)
+      .extendResultWindow(ownerUserId, workflowRunId, searchId, 200))
+      .resolves.toMatchObject({ resultLimit: 200, totalRecords: 200 })
+    expect(searches.save).not.toHaveBeenCalled()
+  })
+
+  it('rejects skipping more than one 100-item result window', async () => {
+    const { service, searches } = createService()
+    searches.findOne.mockResolvedValue({
+      id: searchId,
+      ownerUserId,
+      workflowRunId,
+      pageSize: 20,
+      totalRecords: '574',
+      totalPages: 29,
+      resultLimit: 100,
+    } as SourcingSearchEntity)
+
+    await expect((service as unknown as ResultWindowService)
+      .extendResultWindow(ownerUserId, workflowRunId, searchId, 300))
+      .rejects.toBeInstanceOf(BadRequestException)
+    expect(searches.save).not.toHaveBeenCalled()
+  })
+
+  it('requires the first provider page before extending the result window', async () => {
+    const { service, searches } = createService()
+    searches.findOne.mockResolvedValue({
+      id: searchId,
+      ownerUserId,
+      workflowRunId,
+      pageSize: 20,
+      totalRecords: null,
+      totalPages: null,
+      resultLimit: 100,
+    } as SourcingSearchEntity)
+
+    await expect((service as unknown as ResultWindowService)
+      .extendResultWindow(ownerUserId, workflowRunId, searchId, 200))
+      .rejects.toBeInstanceOf(BadRequestException)
+  })
+
+  it('returns a restored cache page without queuing a worker page', async () => {
+    const { service, searches, pages, pageCache } = createService()
+    const search = {
+      id: searchId,
+      ownerUserId,
+      workflowRunId,
+      provider: 'alibaba_1688',
+      cacheFingerprint: 'a'.repeat(64),
+      pageSize: 20,
+      totalPages: 3,
+    } as SourcingSearchEntity
+    searches.findOne.mockResolvedValue(search)
+    pages.findOne.mockResolvedValue(null)
+    pageCache.restore.mockResolvedValue({
+      id: 'cached-page-2',
+      searchId,
+      ownerUserId,
+      pageNumber: 2,
+      pageSize: 20,
       status: 'succeeded',
+    } as SourcingSearchPageEntity)
+
+    await expect(service.requestPage(ownerUserId, workflowRunId, searchId, 2))
+      .resolves.toEqual({ searchId, status: 'succeeded', page: 2, pageSize: 20 })
+    expect(pages.save).not.toHaveBeenCalled()
+  })
+
+  it('queues an uncached page after the cache service misses', async () => {
+    const { service, searches, pages, pageCache } = createService()
+    searches.findOne.mockResolvedValue({
+      id: searchId,
+      ownerUserId,
+      workflowRunId,
+      provider: 'alibaba_1688',
+      cacheFingerprint: 'a'.repeat(64),
+      pageSize: 20,
+      totalPages: 3,
+    } as SourcingSearchEntity)
+    pages.findOne.mockResolvedValue(null)
+    pages.save.mockImplementation(async (value) => value as SourcingSearchPageEntity)
+
+    await expect(service.requestPage(ownerUserId, workflowRunId, searchId, 2))
+      .resolves.toEqual({ searchId, status: 'pending', page: 2, pageSize: 20 })
+    expect(pageCache.restore).toHaveBeenCalledTimes(1)
+    expect(pages.save).toHaveBeenCalledWith(expect.objectContaining({
+      searchId,
+      pageNumber: 2,
+      status: 'pending',
+    }))
+  })
+
+  it('returns a page created by a concurrent request instead of failing', async () => {
+    const { service, searches, pages } = createService()
+    searches.findOne.mockResolvedValue({
+      id: searchId,
+      ownerUserId,
+      workflowRunId,
+      provider: 'alibaba_1688',
+      cacheFingerprint: 'a'.repeat(64),
+      pageSize: 20,
+      totalPages: 3,
+    } as SourcingSearchEntity)
+    pages.findOne
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        searchId,
+        ownerUserId,
+        pageNumber: 2,
+        pageSize: 20,
+        status: 'succeeded',
+      } as SourcingSearchPageEntity)
+    pages.save.mockRejectedValue(Object.assign(new Error('duplicate page'), { code: '23505' }))
+
+    await expect(service.requestPage(ownerUserId, workflowRunId, searchId, 2))
+      .resolves.toEqual({ searchId, status: 'succeeded', page: 2, pageSize: 20 })
+  })
+
+  it('reads only the requested persisted page with explicit tenant filters', async () => {
+    const { service, searches, pages, offers } = createService()
+    const search = {
+      id: searchId,
+      ownerUserId,
+      workflowRunId,
       searchMode: 'keyword',
+      status: 'succeeded',
+      pageSize: 20,
+      totalRecords: '25',
+      totalPages: 2,
+      resultLimit: 100,
+      loadedPageCount: 1,
       keyword: 'pet brush',
       imageUrl: null,
       errorCode: null,
       errorMessage: null,
-      startedAt: new Date('2026-07-23T01:00:00.000Z'),
-      completedAt: new Date('2026-07-23T01:00:05.000Z'),
-    })
-    offerRepository.find.mockResolvedValue([
-      {
-        id: 'offer-row-1',
-        offerId: '16880001',
-        sourcingScore: 88,
-        imageUrl: 'https://example.test/offer.jpg',
-        title: 'Pet Brush',
-        titleZh: '宠物梳',
-        titleEn: 'Pet Brush',
-        offerUrl: 'https://detail.1688.com/offer/16880001.html',
-        currency: 'CNY',
-        priceMin: '3.20',
-        priceMax: '4.80',
-        minimumOrderQuantity: '2',
-        quantityUnit: null,
-        salesVolume: '500',
-        repurchaseRate: 32,
-        sourcingScoreReasons: [
-          { code: 'high_product_relevance', label: 'High product relevance', score: 35 },
-        ],
-        tags: ['verified'],
-        supplier: {
-          companyName: 'Example Supplier',
-          shopName: 'Example Shop',
-          shopUrl: 'https://example.1688.com',
-          supplierRating: 90,
-          capabilities: { identities: ['verified'] },
-        } as unknown as SourcingSupplierEntity,
-      },
-    ])
+      requestedAt: new Date('2026-08-04T00:00:00.000Z'),
+      startedAt: null,
+      completedAt: null,
+    } as SourcingSearchEntity
+    searches.findOne.mockResolvedValue(search)
+    pages.findOne.mockResolvedValue({
+      searchId,
+      ownerUserId,
+      pageNumber: 1,
+      pageSize: 20,
+      status: 'succeeded',
+      resultCount: 1,
+      errorCode: null,
+      errorMessage: null,
+    } as SourcingSearchPageEntity)
+    offers.find.mockResolvedValue([])
 
-    const summary = await service.getSummary(ownerUserId, workflowRunId)
-
-    expect(summary.status).toBe('completed')
-    expect(summary.offers[0]).toMatchObject({
-      providerOfferId: '16880001',
-      sourcingScore: 88,
-      recommendationReasons: ['High product relevance'],
+    const result = await service.getSummary(ownerUserId, workflowRunId, {
+      searchId,
+      page: 1,
+      pageSize: 20,
     })
-    expect(summary.offers[0]).not.toHaveProperty('contactScore')
-    expect(summary.offers[0]).not.toHaveProperty('totalScore')
+
+    expect(result.pagination).toMatchObject({
+      page: 1,
+      pageSize: 20,
+      totalRecords: 25,
+      totalPages: 2,
+      providerTotalRecords: 25,
+      resultLimit: 100,
+      canExpand: false,
+      loaded: true,
+      status: 'succeeded',
+    })
+    expect(result.workflowInput).toEqual({
+      name: 'Pet brush prospecting',
+      seedType: 'keyword',
+      seedValue: 'pet brush',
+      targetMarket: 'United States',
+    })
+    expect(offers.find).toHaveBeenCalledWith(expect.objectContaining({
+      where: { ownerUserId, workflowRunId, searchId, pageNumber: 1 },
+      order: { rankInPage: 'ASC' },
+    }))
   })
 
-  it('rejects an inverted price range before using provider traffic', async () => {
-    const { service, alibaba1688Service } = createService()
+  it('uses the persisted page size when the summary request does not specify one', async () => {
+    const { service, searches, pages, offers } = createService()
+    searches.findOne.mockResolvedValue({
+      id: searchId,
+      ownerUserId,
+      workflowRunId,
+      searchMode: 'keyword',
+      status: 'succeeded',
+      pageSize: 10,
+      totalRecords: '574',
+      totalPages: 58,
+      resultLimit: 100,
+      loadedPageCount: 1,
+      keyword: 'pet brush',
+      imageUrl: null,
+      errorCode: null,
+      errorMessage: null,
+      requestedAt: new Date('2026-08-04T00:00:00.000Z'),
+      startedAt: null,
+      completedAt: null,
+    } as SourcingSearchEntity)
+    pages.findOne.mockResolvedValue({
+      searchId,
+      ownerUserId,
+      pageNumber: 1,
+      pageSize: 10,
+      status: 'succeeded',
+      resultCount: 10,
+      errorCode: null,
+      errorMessage: null,
+    } as SourcingSearchPageEntity)
+    offers.find.mockResolvedValue([])
 
-    await expect(
-      service.startSearch(ownerUserId, workflowRunId, { priceMin: 20, priceMax: 10 }),
-    ).rejects.toBeInstanceOf(BadRequestException)
-    expect(alibaba1688Service.getReadiness).not.toHaveBeenCalled()
+    const result = await service.getSummary(ownerUserId, workflowRunId, {
+      searchId,
+      page: 1,
+    } as ListSourcingDto)
+
+    expect(result.pagination.pageSize).toBe(10)
+    expect(result.pagination).toMatchObject({
+      totalRecords: 100,
+      totalPages: 10,
+      providerTotalRecords: 574,
+      resultLimit: 100,
+      canExpand: true,
+    })
   })
 
-  it('keeps automatic workflow discovery alive when sourcing raises an error', async () => {
-    const { service } = createService()
-    jest.spyOn(service, 'startSearch').mockRejectedValue(new Error('provider timeout'))
+  it('returns workflow matching input before the first sourcing task exists', async () => {
+    const { service, workflow } = createService()
+    workflow.status = 'completed'
+    workflow.steps = [{
+      workflowRunId,
+      stage: 'ad_discovery',
+      status: 'skipped',
+      output: { reasonCode: 'public_image_not_configured' },
+    } as never]
 
-    await expect(service.runForWorkflow(ownerUserId, workflowRunId)).resolves.toBeUndefined()
+    const result = await service.getSummary(ownerUserId, workflowRunId)
+
+    expect(result.status).toBe('idle')
+    expect(result.search).toBeNull()
+    expect(result.customerDiscoveryStatus).toBe('pending_public_image')
+    expect(result.workflowInput).toEqual({
+      name: 'Pet brush prospecting',
+      seedType: 'keyword',
+      seedValue: 'pet brush',
+      targetMarket: 'United States',
+    })
   })
 })

@@ -22,10 +22,12 @@ export const useAutoFlowStore = defineStore('autoflow', () => {
   const outreachTasks = ref<OutreachTask[]>([])
   const followUpStages = ref<FollowUpStage[]>([])
   const isLoading = ref(false)
+  let workflowsLoaded = false
 
   onScopeDispose(onSessionReset(() => {
     dashboard.value = null
     workflows.value = []
+    workflowsLoaded = false
     leads.value = []
     currentLead.value = null
     outreachTasks.value = []
@@ -41,7 +43,7 @@ export const useAutoFlowStore = defineStore('autoflow', () => {
     const response = await autoflowApi.getDashboard()
     assertCurrentSession(session)
     dashboard.value = response
-    workflows.value = dashboard.value.recentWorkflows
+    synchronizeDashboardWorkflows()
     leads.value = dashboard.value.topLeads
     outreachTasks.value = dashboard.value.nextTasks
     followUpStages.value = dashboard.value.funnel
@@ -52,6 +54,16 @@ export const useAutoFlowStore = defineStore('autoflow', () => {
     const result = await autoflowApi.getWorkflows()
     assertCurrentSession(session)
     workflows.value = result.items
+    workflowsLoaded = true
+    synchronizeDashboardWorkflows()
+  }
+
+  /**
+   * 无论首页还是列表接口后返回，都以完整工作流列表作为最新状态，消除并发响应覆盖。
+   */
+  function synchronizeDashboardWorkflows() {
+    if (!dashboard.value || !workflowsLoaded) return
+    dashboard.value.recentWorkflows = workflows.value.slice(0, 5)
   }
 
   async function createWorkflow(data: CreateWorkflowRequest) {

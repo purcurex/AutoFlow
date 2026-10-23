@@ -44,3 +44,5 @@ __pycache__/
 
 # Isolated local demo PostgreSQL data and generated password
 .runtime/local-demo/
+# Local Git worktrees
+.worktrees/

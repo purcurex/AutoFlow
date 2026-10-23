@@ -102,6 +102,19 @@ export interface DiscoveryEvidenceResult {
   candidates: LeadCandidate[]
 }
 
+/**
+ * 客户发现的业务执行结果。
+ * 本机图片缺少公网地址属于可预期配置状态，必须与真正的第三方调用失败区分。
+ */
+export type CustomerDiscoveryResult =
+  | { status: 'completed'; evidence: DiscoveryEvidenceResult }
+  | {
+      status: 'skipped'
+      reasonCode: 'public_image_not_configured'
+      reason: string
+      evidence: DiscoveryEvidenceResult
+    }
+
 export interface AdDiscoveryAdapter {
   discover(seed: DiscoverySeed): Promise<NormalizedAdCreative[]>
 }

@@ -1,11 +1,12 @@
 import type {
   Alibaba1688ImageSearchDto,
+  Alibaba1688ImageUploadDto,
   Alibaba1688KeywordSearchDto,
   Alibaba1688ProductDetailDto,
 } from './dto/alibaba1688.dto'
 import type { ALIBABA_1688_PROVIDER, ALIBABA_1688_SOURCE_TAG } from './alibaba1688.constants'
 
-export type Alibaba1688Operation = 'keyword_search' | 'image_search' | 'product_detail'
+export type Alibaba1688Operation = 'keyword_search' | 'image_search' | 'product_detail' | 'image_upload'
 
 export interface Alibaba1688Readiness {
   ready: boolean
@@ -92,6 +93,8 @@ export interface Alibaba1688ProviderEnvelope<T> {
   error_message?: string
   requestId?: string
   request_id?: string
+  traceId?: string
+  trace_id?: string
   _aop_response_id?: string
   [key: string]: unknown
 }
@@ -148,6 +151,7 @@ export interface Alibaba1688ProviderProductDetail {
 export type Alibaba1688KeywordProviderResponse = Alibaba1688ProviderEnvelope<Alibaba1688ProviderPage>
 export type Alibaba1688ImageProviderResponse = Alibaba1688ProviderEnvelope<Alibaba1688ProviderPage>
 export type Alibaba1688DetailProviderResponse = Alibaba1688ProviderEnvelope<Alibaba1688ProviderProductDetail>
+export type Alibaba1688ImageUploadProviderResponse = Alibaba1688ProviderEnvelope<string>
 
 export interface Alibaba1688StablePrice {
   currency: 'CNY'
@@ -229,10 +233,16 @@ export interface Alibaba1688StableProductDetail {
   affectsContactConfidence: false
 }
 
+export interface Alibaba1688StableImageUploadResult {
+  provider: typeof ALIBABA_1688_PROVIDER
+  imageId: string
+}
+
 export interface Alibaba1688CallMetadata {
   operation: Alibaba1688Operation
   provider: typeof ALIBABA_1688_PROVIDER
   requestId: string | null
+  traceId: string | null
   fetchedAt: string
 }
 
@@ -264,4 +274,5 @@ export interface Alibaba1688NormalizedError {
 export type Alibaba1688RequestDto =
   | Alibaba1688KeywordSearchDto
   | Alibaba1688ImageSearchDto
+  | Alibaba1688ImageUploadDto
   | Alibaba1688ProductDetailDto

@@ -7,13 +7,16 @@ import { useAutoFlowStore } from '@/stores'
 import { EmptyState, StatusBadge } from '@/components/ui'
 import { withReturnTo } from '@/composables/useReturnNavigation'
 import { workflowCreatedDate } from '@/utils/workflowDisplay'
+import { workflowProgressDisplay } from '@/utils/workflowProgress'
 
 const store = useAutoFlowStore()
 const route = useRoute()
 const { t } = useI18n()
 onMounted(() => store.fetchDashboard())
 const metrics = computed(() => store.dashboard?.metrics)
-const workflows = computed(() => store.dashboard?.recentWorkflows || store.workflows)
+const workflows = computed(() => (
+  store.workflows.length ? store.workflows : store.dashboard?.recentWorkflows || []
+))
 const topLeads = computed(() => store.dashboard?.topLeads || store.leads.slice(0, 5))
 const tasks = computed(() => store.dashboard?.nextTasks || store.outreachTasks.slice(0, 4))
 const metricCards = computed(() => [
@@ -40,7 +43,7 @@ const metricCards = computed(() => [
           <div v-if="workflows.length" class="divide-y divide-slate-100 dark:divide-slate-800">
             <div v-for="workflow in workflows.slice(0, 5)" :key="workflow.id" class="px-5 py-4">
               <div class="flex items-start justify-between gap-4"><div class="min-w-0"><p class="truncate text-sm font-semibold text-slate-900 dark:text-white">{{ workflow.name }}</p><p class="mt-1 text-xs text-slate-500">ID {{ workflow.displayId }} · {{ workflowCreatedDate(workflow.createdAt) }} · {{ $te(`status.${workflow.currentStage}`) ? $t(`status.${workflow.currentStage}`) : workflow.currentStage }} · {{ workflow.targetMarket }}</p></div><StatusBadge :status="workflow.status" /></div>
-              <div class="mt-3 flex items-center gap-3"><div class="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800"><div class="h-full rounded-full bg-gradient-to-r from-orange-500 to-amber-400" :style="{ width: `${workflow.progress}%` }" /></div><span class="w-9 text-right text-xs font-semibold tabular-nums text-slate-500">{{ workflow.progress }}%</span></div>
+              <div class="mt-3 flex items-center gap-3"><div class="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800"><div class="h-full rounded-full bg-gradient-to-r from-orange-500 to-amber-400" :style="{ width: `${workflowProgressDisplay(workflow).percent}%` }" /></div><span class="min-w-9 text-right text-xs font-semibold tabular-nums text-slate-500">{{ t(workflowProgressDisplay(workflow).labelKey, workflowProgressDisplay(workflow).labelParams || {}) }}</span></div>
             </div>
           </div>
           <EmptyState v-else :message="t('dashboard.noWorkflow')"><RouterLink to="/workflows/new" class="btn btn-secondary">{{ t('nav.newWorkflow') }}</RouterLink></EmptyState>

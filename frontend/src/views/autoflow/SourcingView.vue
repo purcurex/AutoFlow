@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
-import { useRoute } from 'vue-router'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
   AlertTriangle,
@@ -36,44 +36,98 @@ import {
 } from '@/utils/sourcing'
 
 const route = useRoute()
+const router = useRouter()
 const { t } = useI18n()
 const summary = ref<SourcingSummary | null>(null)
 const loading = ref(true)
 const starting = ref(false)
+const pageChanging = ref(false)
+const extendingResults = ref(false)
 const loadError = ref('')
+const searchId = ref(typeof route.query?.searchId === 'string' ? route.query.searchId : '')
+const parsedPage = Number(route.query?.page || 1)
+const parsedPageSize = Number(route.query?.pageSize)
+const hasRoutePageSize = [10, 20, 50].includes(parsedPageSize)
+const page = ref(Number.isInteger(parsedPage) && parsedPage > 0 ? parsedPage : 1)
+const pageSize = ref<10 | 20 | 50>(hasRoutePageSize
+  ? parsedPageSize as 10 | 20 | 50
+  : 20)
+const pageSizeResolved = ref(hasRoutePageSize)
+const pageCache = new Map<number, SourcingSummary>()
+let pollTimer: ReturnType<typeof setTimeout> | null = null
 
 const workflowId = computed(() => {
   const value = route.params.id
   return Array.isArray(value) ? value[0] || '' : String(value || '')
 })
 const status = computed(() => sourcingStatus(summary.value))
+const customerDiscoveryPending = computed(() => (
+  summary.value?.customerDiscoveryStatus === 'pending_public_image'
+))
+/**
+ * 客户发现待配置时仍按 1688 的真实执行状态给出明确结果，不混淆两个独立业务链路。
+ */
+const customerDiscoveryPendingMessageKey = computed(() => {
+  switch (status.value) {
+    case 'completed': return 'sourcing.customerDiscoveryPending_completed'
+    case 'running': return 'sourcing.customerDiscoveryPending_running'
+    case 'failed': return 'sourcing.customerDiscoveryPending_failed'
+    case 'partial': return 'sourcing.customerDiscoveryPending_partial'
+    case 'not_configured': return 'sourcing.customerDiscoveryPending_notConfigured'
+    default: return 'sourcing.customerDiscoveryPending_idle'
+  }
+})
 const search = computed(() => currentSourcingSearch(summary.value))
-const offers = computed(() => summary.value?.offers ?? [])
+const offers = computed(() => summary.value?.items ?? summary.value?.offers ?? [])
+const pagination = computed(() => summary.value?.pagination)
 const running = computed(() => isSourcingRunning(summary.value))
+const pageBusy = computed(() => pageChanging.value || extendingResults.value || running.value)
+const canExtendResults = computed(() => Boolean(
+  pagination.value?.canExpand
+  && pagination.value.totalPages !== null
+  && pagination.value.totalPages !== undefined
+  && pagination.value.totalPages > 0
+  && page.value >= pagination.value.totalPages,
+))
 const canStart = computed(() => Boolean(
   workflowId.value
   && summary.value?.providerConfigured
-  && !running.value
+  && !pageBusy.value
   && !starting.value,
 ))
 
 onMounted(loadSourcing)
+onBeforeUnmount(stopPolling)
 
-async function loadSourcing() {
+async function loadSourcing(showLoading = true) {
   if (!workflowId.value) {
     loading.value = false
     loadError.value = t('sourcing.workflowMissing')
     return
   }
 
-  loading.value = true
+  if (showLoading) loading.value = true
   loadError.value = ''
   try {
-    summary.value = await sourcingApi.getWorkflowSourcing(workflowId.value)
+    const result = await sourcingApi.getWorkflowSourcing(workflowId.value, {
+      searchId: searchId.value || undefined,
+      page: page.value,
+      pageSize: pageSizeResolved.value ? pageSize.value : undefined,
+    })
+    summary.value = result
+    if (result.pagination?.pageSize) {
+      pageSize.value = result.pagination.pageSize
+      pageSizeResolved.value = true
+    }
+    const resolvedSearch = currentSourcingSearch(result)
+    if (resolvedSearch?.id) searchId.value = resolvedSearch.id
+    if (result.pagination?.loaded) pageCache.set(page.value, result)
+    syncRoute()
+    schedulePollingIfNeeded()
   } catch (error) {
     loadError.value = error instanceof Error ? error.message : t('sourcing.loadFailed')
   } finally {
-    loading.value = false
+    if (showLoading) loading.value = false
   }
 }
 
@@ -82,14 +136,159 @@ async function restartSourcing() {
   starting.value = true
   loadError.value = ''
   try {
-    await sourcingApi.startWorkflowSourcing(workflowId.value, { force: true })
-    await loadSourcing()
+    stopPolling()
+    const started = await sourcingApi.startWorkflowSourcing(workflowId.value, {
+      force: true,
+      pageSize: pageSize.value,
+    })
+    searchId.value = started.searchId
+    page.value = 1
+    pageSize.value = started.pageSize
+    pageCache.clear()
+    await loadSourcing(false)
   } catch (error) {
     loadError.value = error instanceof Error ? error.message : t('sourcing.startFailed')
   } finally {
     starting.value = false
   }
 }
+
+async function navigateToPage(targetPage: number) {
+  stopPolling()
+  page.value = targetPage
+  const cached = pageCache.get(targetPage)
+  if (cached) {
+    summary.value = cached
+    syncRoute()
+    return
+  }
+  pageChanging.value = true
+  loadError.value = ''
+  try {
+    await sourcingApi.requestWorkflowSourcingPage(workflowId.value, searchId.value, targetPage)
+    await loadSourcing(false)
+  } catch (error) {
+    loadError.value = error instanceof Error ? error.message : t('sourcing.loadFailed')
+  } finally {
+    pageChanging.value = false
+  }
+}
+
+async function changePage(targetPage: number) {
+  const totalPages = pagination.value?.totalPages
+  if (
+    pageBusy.value
+    || !searchId.value
+    || targetPage < 1
+    || (totalPages !== null && totalPages !== undefined && targetPage > totalPages)
+  ) return
+  await navigateToPage(targetPage)
+}
+
+/**
+ * 每次只开放额外 100 条可访问结果；扩容接口不请求 1688，进入新页时才按需获取并缓存该页。
+ * 同时刷新当前页与已有前端缓存中的分页元数据，避免返回旧页时总条数回退到旧窗口。
+ */
+async function extendResults() {
+  const currentPagination = pagination.value
+  if (!searchId.value || pageBusy.value || !canExtendResults.value || !currentPagination) return
+  const currentTotalPages = currentPagination.totalPages
+  if (currentTotalPages === null || currentTotalPages < 1) return
+
+  extendingResults.value = true
+  stopPolling()
+  loadError.value = ''
+  try {
+    const window = await sourcingApi.extendWorkflowSourcingWindow(
+      workflowId.value,
+      searchId.value,
+      (currentPagination.resultLimit ?? 100) + 100,
+    )
+    applyResultWindow(window)
+    await navigateToPage(currentTotalPages + 1)
+  } catch (error) {
+    loadError.value = error instanceof Error ? error.message : t('sourcing.extendFailed')
+  } finally {
+    extendingResults.value = false
+  }
+}
+
+function applyResultWindow(window: {
+  totalRecords: number | null
+  totalPages: number | null
+  providerTotalRecords: number | null
+  resultLimit: number
+  canExpand: boolean
+}) {
+  const paginationWindow = {
+    totalRecords: window.totalRecords,
+    totalPages: window.totalPages,
+    providerTotalRecords: window.providerTotalRecords,
+    resultLimit: window.resultLimit,
+    canExpand: window.canExpand,
+  }
+  if (summary.value?.pagination) Object.assign(summary.value.pagination, paginationWindow)
+  for (const cachedSummary of pageCache.values()) {
+    if (cachedSummary.pagination) Object.assign(cachedSummary.pagination, paginationWindow)
+  }
+}
+
+async function retryCurrentPage() {
+  if (!searchId.value || pageBusy.value) return
+  pageCache.delete(page.value)
+  pageChanging.value = true
+  loadError.value = ''
+  try {
+    await sourcingApi.requestWorkflowSourcingPage(workflowId.value, searchId.value, page.value)
+    await loadSourcing(false)
+  } catch (error) {
+    loadError.value = error instanceof Error ? error.message : t('sourcing.loadFailed')
+  } finally {
+    pageChanging.value = false
+  }
+}
+
+async function changePageSize(event: Event) {
+  const value = Number((event.target as HTMLSelectElement).value)
+  if (pageBusy.value || ![10, 20, 50].includes(value) || value === pageSize.value) return
+  pageSize.value = value as 10 | 20 | 50
+  await restartSourcing()
+}
+
+function schedulePollingIfNeeded() {
+  stopPolling()
+  if (status.value === 'not_configured') return
+  if (!pagination.value || !['pending', 'running'].includes(pagination.value.status)) return
+  pollTimer = setTimeout(async () => {
+    pollTimer = null
+    await loadSourcing(false)
+  }, 1_500)
+}
+
+function stopPolling() {
+  if (pollTimer) clearTimeout(pollTimer)
+  pollTimer = null
+}
+
+function syncRoute() {
+  void router.replace({
+    query: {
+      ...route.query,
+      ...(searchId.value ? { searchId: searchId.value } : {}),
+      page: String(page.value),
+      pageSize: String(pageSize.value),
+    },
+  })
+}
+
+const rangeStart = computed(() => {
+  if (pagination.value?.totalRecords === 0) return 0
+  return (page.value - 1) * pageSize.value + 1
+})
+const rangeEnd = computed(() => Math.min(
+  page.value * pageSize.value,
+  pagination.value?.totalRecords ?? page.value * pageSize.value,
+))
 
 function offerLink(offer: SourcingOffer) {
   return safeExternalUrl(offer.offerUrl)
@@ -115,7 +314,9 @@ function offerLink(offer: SourcingOffer) {
           >
             <LoaderCircle v-if="starting || running" class="h-4 w-4 animate-spin" />
             <RefreshCw v-else class="h-4 w-4" />
-            {{ starting || running ? t('sourcing.runningAction') : t('sourcing.restartAction') }}
+            {{ starting || running
+              ? t('sourcing.runningAction')
+              : search ? t('sourcing.restartAction') : t('sourcing.startAction') }}
           </button>
         </template>
       </PageHeader>
@@ -125,6 +326,14 @@ function offerLink(offer: SourcingOffer) {
         <div>
           <p class="font-bold">{{ t('sourcing.boundaryTitle') }}</p>
           <p>{{ t('sourcing.boundaryDescription') }}</p>
+        </div>
+      </section>
+
+      <section v-if="!loading && customerDiscoveryPending" data-test="customer-discovery-pending" class="notice mb-5 border-amber-400 bg-amber-50 text-amber-900 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-200">
+        <AlertTriangle class="mt-0.5 h-5 w-5 shrink-0" />
+        <div>
+          <p class="font-bold">{{ t('sourcing.customerDiscoveryPendingTitle') }}</p>
+          <p>{{ t(customerDiscoveryPendingMessageKey) }}</p>
         </div>
       </section>
 
@@ -146,10 +355,38 @@ function offerLink(offer: SourcingOffer) {
             :class="sourcingStatusClass(status)"
           >
             <LoaderCircle v-if="status === 'running'" class="h-3.5 w-3.5 animate-spin" />
-            <AlertTriangle v-else-if="status === 'failed' || status === 'not_configured'" class="h-3.5 w-3.5" />
+            <AlertTriangle v-else-if="status === 'failed' || status === 'partial' || status === 'not_configured'" class="h-3.5 w-3.5" />
             <BadgeCheck v-else-if="status === 'completed'" class="h-3.5 w-3.5" />
             {{ t(`sourcing.status_${status}`) }}
           </span>
+        </div>
+
+        <div
+          v-if="!loading && summary?.workflowInput"
+          class="grid gap-3 border-b bg-slate-50 px-5 py-4 text-sm dark:bg-[#171b21] sm:grid-cols-2 xl:grid-cols-4"
+          style="border-color: var(--color-border)"
+          data-test="sourcing-match-context"
+        >
+          <div>
+            <p class="text-xs font-semibold text-slate-500">{{ t('sourcing.workflowName') }}</p>
+            <p class="mt-1 font-semibold text-slate-950 dark:text-white">{{ summary.workflowInput.name }}</p>
+          </div>
+          <div>
+            <p class="text-xs font-semibold text-slate-500">{{ t('sourcing.matchType') }}</p>
+            <p class="mt-1 font-semibold text-slate-950 dark:text-white">
+              {{ t(`sourcing.matchType_${summary.workflowInput.seedType}`) }}
+            </p>
+          </div>
+          <div class="min-w-0">
+            <p class="text-xs font-semibold text-slate-500">{{ t('sourcing.query') }}</p>
+            <p class="mt-1 truncate font-semibold text-slate-950 dark:text-white" :title="summary.workflowInput.seedValue">
+              {{ summary.workflowInput.seedValue }}
+            </p>
+          </div>
+          <div>
+            <p class="text-xs font-semibold text-slate-500">{{ t('sourcing.targetMarket') }}</p>
+            <p class="mt-1 font-semibold text-slate-950 dark:text-white">{{ summary.workflowInput.targetMarket }}</p>
+          </div>
         </div>
 
         <div v-if="loading" class="empty-state" data-test="sourcing-loading">
@@ -161,7 +398,7 @@ function offerLink(offer: SourcingOffer) {
           <span class="empty-state-icon"><AlertTriangle class="h-5 w-5" /></span>
           <p class="font-semibold text-red-600 dark:text-red-300">{{ t('sourcing.loadFailed') }}</p>
           <p>{{ loadError }}</p>
-          <button type="button" class="btn btn-secondary" @click="loadSourcing">
+          <button type="button" class="btn btn-secondary" @click="loadSourcing()">
             <RefreshCw class="h-4 w-4" />
             {{ t('sourcing.retryLoad') }}
           </button>
@@ -177,13 +414,23 @@ function offerLink(offer: SourcingOffer) {
           <p>{{ t('sourcing.providerNotConfiguredHint') }}</p>
         </div>
 
+        <div v-else-if="pagination?.status === 'failed'" class="empty-state" data-test="sourcing-page-failed">
+          <span class="empty-state-icon"><AlertTriangle class="h-5 w-5" /></span>
+          <p class="font-bold text-slate-950 dark:text-white">{{ t('sourcing.pageFailed') }}</p>
+          <p>{{ pagination.errorMessage || t('sourcing.searchFailedHint') }}</p>
+          <button type="button" class="btn btn-secondary" data-test="retry-sourcing-page" @click="retryCurrentPage">
+            <RefreshCw class="h-4 w-4" />
+            {{ t('sourcing.retryPage') }}
+          </button>
+        </div>
+
         <div v-else-if="status === 'failed'" class="empty-state" data-test="sourcing-failed">
           <span class="empty-state-icon"><AlertTriangle class="h-5 w-5" /></span>
           <p class="font-bold text-slate-950 dark:text-white">{{ t('sourcing.searchFailed') }}</p>
           <p>{{ search?.failureMessage || t('sourcing.searchFailedHint') }}</p>
         </div>
 
-        <div v-else-if="status === 'running' && !offers.length" class="empty-state" data-test="sourcing-running">
+        <div v-else-if="pageBusy" class="empty-state" data-test="sourcing-running">
           <LoaderCircle class="h-7 w-7 animate-spin text-orange-500" />
           <p class="font-bold text-slate-950 dark:text-white">{{ t('sourcing.searchRunning') }}</p>
           <p>{{ t('sourcing.searchRunningHint') }}</p>
@@ -320,6 +567,76 @@ function offerLink(offer: SourcingOffer) {
           <span class="empty-state-icon"><PackageSearch class="h-5 w-5" /></span>
           <p class="font-bold text-slate-950 dark:text-white">{{ t('sourcing.noOffers') }}</p>
           <p>{{ t('sourcing.noOffersHint') }}</p>
+        </div>
+
+        <div
+          v-if="!loading && searchId && status !== 'not_configured'"
+          class="flex flex-wrap items-center justify-between gap-3 border-t px-5 py-4"
+          style="border-color: var(--color-border)"
+          data-test="sourcing-pagination"
+        >
+          <div class="text-sm text-slate-500">
+            <p>
+              {{ t('sourcing.resultRange', {
+                start: rangeStart,
+                end: rangeEnd,
+                total: pagination?.totalRecords ?? '?',
+              }) }}
+            </p>
+            <p
+              v-if="pagination?.providerTotalRecords !== null && pagination?.providerTotalRecords !== undefined"
+              class="mt-1 text-xs"
+              data-test="sourcing-result-window"
+            >
+              {{ t('sourcing.resultWindowLimit') }} {{ pagination?.resultLimit ?? 100 }} ·
+              {{ t('sourcing.providerResultEstimate') }} {{ pagination.providerTotalRecords }}
+            </p>
+          </div>
+          <div class="flex items-center gap-2">
+            <select
+              :value="pageSize"
+              :disabled="pageBusy || starting"
+              class="input h-9 w-20 py-1"
+              data-test="sourcing-page-size"
+              @change="changePageSize"
+            >
+              <option :value="10">10</option>
+              <option :value="20">20</option>
+              <option :value="50">50</option>
+            </select>
+            <button
+              type="button"
+              class="btn btn-secondary"
+              data-test="previous-sourcing-page"
+              :disabled="pageBusy || page <= 1"
+              @click="changePage(page - 1)"
+            >
+              {{ t('sourcing.previousPage') }}
+            </button>
+            <span class="text-sm font-semibold" data-test="sourcing-page-indicator">
+              {{ page }} / {{ pagination?.totalPages ?? '?' }}
+            </span>
+            <button
+              type="button"
+              class="btn btn-secondary"
+              data-test="next-sourcing-page"
+              :disabled="pageBusy || pagination?.totalPages === null || page >= (pagination?.totalPages ?? page)"
+              @click="changePage(page + 1)"
+            >
+              {{ t('sourcing.nextPage') }}
+            </button>
+            <button
+              v-if="canExtendResults"
+              type="button"
+              class="btn btn-primary"
+              data-test="extend-sourcing-results"
+              :disabled="pageBusy || starting"
+              @click="extendResults"
+            >
+              <LoaderCircle v-if="extendingResults" class="h-4 w-4 animate-spin" />
+              {{ t(extendingResults ? 'sourcing.continuingResults' : 'sourcing.continueResults') }}
+            </button>
+          </div>
         </div>
       </section>
     </div>

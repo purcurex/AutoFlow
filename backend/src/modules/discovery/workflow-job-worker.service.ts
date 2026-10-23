@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto'
 import { hostname } from 'os'
 import {
+  HttpException,
   Injectable,
   Logger,
   OnApplicationBootstrap,
@@ -158,7 +159,9 @@ export class WorkflowJobWorkerService implements OnApplicationBootstrap, OnAppli
 
   private async handleFailure(job: ClaimedWorkflowJob, error: unknown): Promise<void> {
     const lastError = this.errorMessage(error).slice(0, 4000)
-    const exhausted = job.attempts >= job.max_attempts
+    // 图片不可达、鉴权失败等确定性 4xx 错误不会因重试恢复，立即结束可避免重复
+    // 消耗第三方接口额度；超时、限流和 5xx 仍沿用原有退避重试策略。
+    const exhausted = !this.isRetryableError(error) || job.attempts >= job.max_attempts
     const retryDelayMs = Math.min(60_000, 1_000 * (2 ** Math.max(0, job.attempts - 1)))
 
     await this.jobRepository.update(
@@ -218,6 +221,12 @@ export class WorkflowJobWorkerService implements OnApplicationBootstrap, OnAppli
 
   private errorMessage(error: unknown): string {
     return error instanceof Error ? error.message : String(error || 'Unknown workflow execution error')
+  }
+
+  private isRetryableError(error: unknown): boolean {
+    if (!(error instanceof HttpException)) return true
+    const status = error.getStatus()
+    return status === 408 || status === 429 || status >= 500
   }
 
   private unwrapRows<T>(result: unknown): T[] {

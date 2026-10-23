@@ -1,3 +1,4 @@
+import { BadRequestException } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import type { DataSource, Repository } from 'typeorm'
 import type { WorkflowJobEntity } from '../autoflow/entities'
@@ -59,6 +60,35 @@ describe('WorkflowJobWorkerService', () => {
     expect(jobRepository.update).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'job-2', status: 'running' }),
       expect.objectContaining({ status: 'queued', lastError: 'provider timeout', availableAt: expect.any(Date) }),
+    )
+  })
+
+  it('fails a deterministic image input error without consuming the remaining retry budget', async () => {
+    const claimed = {
+      id: 'job-image',
+      workflow_run_id: 'workflow-image',
+      owner_user_id: 'owner-image',
+      attempts: 1,
+      max_attempts: 3,
+    }
+    const { service, jobRepository, executionService } = createSubject(claimed)
+    executionService.executeQueuedDiscovery.mockRejectedValueOnce(
+      new BadRequestException('PipiAds product image fetch failed.'),
+    )
+
+    await expect(service.runNextJob()).resolves.toBe(true)
+
+    expect(jobRepository.update).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'job-image', status: 'running' }),
+      expect.objectContaining({
+        status: 'failed',
+        lastError: 'PipiAds product image fetch failed.',
+        completedAt: expect.any(Date),
+      }),
+    )
+    expect(jobRepository.update).not.toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ status: 'queued' }),
     )
   })
 })

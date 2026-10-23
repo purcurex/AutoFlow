@@ -42,6 +42,8 @@ export interface OutreachTemplateOptions {
 }
 export type LeadContactType = OutreachChannel | 'linkedin' | 'website' | 'phone'
 export type DiscoverySource = 'pipiads' | 'google_lens' | 'google_search'
+export type CustomerDiscoveryStatus = 'not_started' | 'running' | 'completed' | 'pending_public_image' | 'failed'
+export type WorkflowFailureProvider = 'pipiads' | 'google_lens' | 'google_search' | 'customer_discovery'
 
 export interface GoogleSearchOptions {
   exactPhrase: boolean
@@ -59,15 +61,20 @@ export interface WorkflowRun {
   name: string
   seedType: SeedType
   seedValue: string
+  seedAssetPath: string | null
+  seedAssetMimeType: string | null
+  seedAssetSize: string | null
+  seedAssetSha256: string | null
   targetMarket: string
   searchOptions: GoogleSearchOptions
   status: WorkflowStatus
   currentStage: WorkflowStage
   progress: number
   leadCount: number
+  customerDiscoveryStatus: CustomerDiscoveryStatus
   failureReason: string | null
   failureCode: WorkflowFailureCode | null
-  failureProvider: 'pipiads' | 'google_lens' | 'google_search' | null
+  failureProvider: WorkflowFailureProvider | null
   failureRetryable: boolean
   archivedAt: string | null
   createdAt: string
@@ -213,6 +220,10 @@ export interface CreateWorkflowRequest {
   name?: string
   seedType: SeedType
   seedValue: string
+  seedAssetPath?: string
+  seedAssetMimeType?: 'image/jpeg' | 'image/png' | 'image/webp'
+  seedAssetSize?: number
+  seedAssetSha256?: string
   targetMarket?: string
   searchOptions?: GoogleSearchOptions
 }
@@ -222,7 +233,9 @@ export interface WorkflowImageUpload {
   publicUrl: string
   providerReady: boolean
   originalName: string
+  mimeType: 'image/jpeg' | 'image/png' | 'image/webp'
   size: number
+  sha256: string
 }
 
 export interface DiscoveryStartResult {
@@ -237,6 +250,7 @@ export type SourcingSearchStatus =
   | 'idle'
   | 'running'
   | 'failed'
+  | 'partial'
   | 'completed'
 
 export interface SourcingOffer {
@@ -285,18 +299,67 @@ export interface SourcingSearch {
 
 export interface SourcingSummary {
   workflowId?: string
+  customerDiscoveryStatus?: CustomerDiscoveryStatus
+  workflowInput?: {
+    name: string
+    seedType: SeedType
+    seedValue: string
+    targetMarket: string
+  }
   provider?: 'alibaba_1688'
   providerConfigured: boolean
   status?: SourcingSearchStatus
   latestSearch?: SourcingSearch | null
   search?: SourcingSearch | null
+  pagination?: SourcingPagination
+  items?: SourcingOffer[]
   offers: SourcingOffer[]
+}
+
+export interface SourcingPagination {
+  page: number
+  pageSize: 10 | 20 | 50
+  totalRecords: number | null
+  totalPages: number | null
+  /** 1688 在本次搜索快照中报告的原始总数；旧数据可能没有该字段。 */
+  providerTotalRecords?: number | null
+  /** 当前允许访问的结果上限，默认从 100 条开始。 */
+  resultLimit?: number
+  /** 是否还能按 100 条继续开放后续结果。 */
+  canExpand?: boolean
+  resultCount: number
+  loaded: boolean
+  status: 'pending' | 'running' | 'succeeded' | 'failed'
+  errorCode?: string | null
+  errorMessage?: string | null
+}
+
+export interface SourcingStartResponse {
+  searchId: string
+  status: 'pending' | 'running' | 'succeeded' | 'partial'
+  page: number
+  pageSize: 10 | 20 | 50
+}
+
+export interface SourcingWindowResponse {
+  searchId: string
+  totalRecords: number | null
+  totalPages: number | null
+  providerTotalRecords: number | null
+  resultLimit: number
+  canExpand: boolean
+}
+
+export interface SourcingQuery {
+  searchId?: string
+  page: number
+  pageSize?: 10 | 20 | 50
 }
 
 export interface StartSourcingRequest {
   force?: boolean
-  priceMin?: number
-  priceMax?: number
+  priceMin?: string
+  priceMax?: string
   pageSize?: number
 }
 
@@ -354,14 +417,30 @@ export const autoflowApi = {
   startDiscovery(id: string): Promise<DiscoveryStartResult> {
     return api.post(`/autoflow/workflows/${id}/start-discovery`)
   },
-  getWorkflowSourcing(id: string): Promise<SourcingSummary> {
-    return api.get(`/autoflow/workflows/${id}/sourcing`)
+  getWorkflowSourcing(id: string, query?: SourcingQuery): Promise<SourcingSummary> {
+    return api.get(`/autoflow/workflows/${id}/sourcing`, { params: query })
   },
   startWorkflowSourcing(
     id: string,
     data: StartSourcingRequest = {},
-  ): Promise<SourcingSummary> {
+  ): Promise<SourcingStartResponse> {
     return api.post(`/autoflow/workflows/${id}/sourcing/search`, data)
+  },
+  requestWorkflowSourcingPage(
+    id: string,
+    searchId: string,
+    page: number,
+  ): Promise<SourcingStartResponse> {
+    return api.post(`/autoflow/workflows/${id}/sourcing/searches/${searchId}/pages/${page}`)
+  },
+  extendWorkflowSourcingWindow(
+    id: string,
+    searchId: string,
+    targetLimit: number,
+  ): Promise<SourcingWindowResponse> {
+    return api.post(`/autoflow/workflows/${id}/sourcing/searches/${searchId}/window`, {
+      targetLimit,
+    })
   },
   getLeads(status?: LeadStatus, page = 1, pageSize = 100): Promise<PaginatedResult<StoreLead>> {
     return api.get('/autoflow/leads', { params: { status, page, pageSize } })

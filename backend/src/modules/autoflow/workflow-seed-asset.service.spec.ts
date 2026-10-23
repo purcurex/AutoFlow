@@ -40,8 +40,25 @@ describe('WorkflowSeedAssetService', () => {
       /^https:\/\/assets\.example\.com\/uploads\/workflow-seeds\/.*\.png$/,
     )
     expect(result.providerReady).toBe(true)
+    expect(result).toMatchObject({
+      assetPath: expect.stringContaining(`/uploads/workflow-seeds/${userId}/`),
+      mimeType: 'image/png',
+      size: png.length,
+      sha256: expect.stringMatching(/^[a-f0-9]{64}$/),
+    })
     await expect(access(join(process.cwd(), result.assetPath))).resolves.toBeUndefined()
     await expect(readFile(join(process.cwd(), result.assetPath))).resolves.toEqual(png)
+  })
+
+  it('rejects an asset path owned by another user', async () => {
+    const service = new WorkflowSeedAssetService(new ConfigService({ NODE_ENV: 'development' }))
+
+    await expect(
+      service.assertOwnedAsset(
+        userId,
+        '/uploads/workflow-seeds/22222222-2222-4222-8222-222222222222/image.png',
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException)
   })
 
   it('marks a development localhost upload as unavailable to external providers', async () => {

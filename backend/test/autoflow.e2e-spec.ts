@@ -1,6 +1,7 @@
 import { OrganizationService } from '../src/modules/organization/organization.service'
-import { INestApplication, ValidationPipe } from '@nestjs/common'
+import { ValidationPipe } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
+import { NestExpressApplication } from '@nestjs/platform-express'
 import { DataSource } from 'typeorm'
 import * as request from 'supertest'
 import { UsersService } from '../src/modules/users/users.service'
@@ -25,7 +26,7 @@ import { join } from 'path'
 jest.setTimeout(30000)
 
 describe('AutoFlow persistence API', () => {
-  let app: INestApplication
+  let app: NestExpressApplication
   let dataSource: DataSource
   let ownerCookie: string
   let otherCookie: string
@@ -83,8 +84,10 @@ describe('AutoFlow persistence API', () => {
         })),
       })
       .compile()
-    app = moduleRef.createNestApplication()
+    app = moduleRef.createNestApplication<NestExpressApplication>()
     app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }))
+    // E2E 测试容器复用真实启动入口的上传目录配置，覆盖“上传成功但静态读取 404”的回归场景。
+    app.useStaticAssets(join(process.cwd(), 'uploads'), { prefix: '/uploads/' })
     app.setGlobalPrefix('api')
     await app.init()
 
@@ -349,10 +352,33 @@ describe('AutoFlow persistence API', () => {
       .expect(200)
     expect(summary.body).toEqual({
       workflowId: created.body.id,
+      customerDiscoveryStatus: 'not_started',
+      workflowInput: {
+        name: 'pet grooming brush prospect workflow',
+        seedType: 'keyword',
+        seedValue: 'pet grooming brush',
+        targetMarket: 'United States',
+      },
       provider: 'alibaba_1688',
       providerConfigured: false,
       status: 'not_configured',
+      search: null,
       latestSearch: null,
+      pagination: {
+        page: 1,
+        pageSize: 20,
+        totalRecords: null,
+        totalPages: null,
+        providerTotalRecords: null,
+        resultLimit: 100,
+        canExpand: false,
+        resultCount: 0,
+        loaded: false,
+        status: 'pending',
+        errorCode: null,
+        errorMessage: null,
+      },
+      items: [],
       offers: [],
     })
 
@@ -360,11 +386,9 @@ describe('AutoFlow persistence API', () => {
       .post(`/api/autoflow/workflows/${created.body.id}/sourcing/search`)
       .set('Cookie', ownerCookie)
       .send({ force: true })
-      .expect(202)
+      .expect(503)
     expect(started.body).toMatchObject({
-      providerConfigured: false,
-      status: 'not_configured',
-      offers: [],
+      code: 'NOT_CONFIGURED',
     })
   })
 
@@ -549,6 +573,13 @@ describe('AutoFlow persistence API', () => {
     })
     expect(uploaded.body.assetPath).toContain(`/uploads/workflow-seeds/${ownerUserId}/`)
     expect(uploaded.body.publicUrl).toContain(uploaded.body.assetPath)
+
+    // 上传接口返回的资产路径必须能立即访问，避免开发环境从 dist/uploads 读取导致图片回显 404。
+    const downloaded = await request(app.getHttpServer())
+      .get(uploaded.body.assetPath)
+      .expect(200)
+    expect(downloaded.headers['content-type']).toMatch(/^image\/png/)
+    expect(downloaded.body).toEqual(png)
 
     await request(app.getHttpServer())
       .post('/api/autoflow/workflow-images')

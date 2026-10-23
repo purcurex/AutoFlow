@@ -72,6 +72,18 @@ export class WorkflowRunEntity {
   @Column({ name: 'seed_value', length: 500 })
   seedValue: string
 
+  @Column({ name: 'seed_asset_path', type: 'varchar', length: 1000, nullable: true })
+  seedAssetPath: string | null
+
+  @Column({ name: 'seed_asset_mime_type', type: 'varchar', length: 64, nullable: true })
+  seedAssetMimeType: string | null
+
+  @Column({ name: 'seed_asset_size', type: 'bigint', nullable: true })
+  seedAssetSize: string | null
+
+  @Column({ name: 'seed_asset_sha256', type: 'varchar', length: 64, nullable: true })
+  seedAssetSha256: string | null
+
   @Column({ name: 'target_market', length: 80, default: 'United States' })
   targetMarket: string
 
