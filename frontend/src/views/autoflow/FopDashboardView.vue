@@ -13,6 +13,7 @@ import type { FopOrderQueue } from '@/api/fop-orders'
 import { useI18n } from 'vue-i18n'
 import { AppLayout } from '@/components/layout'
 import OrderVolumeAnalysis from '@/components/order-volume/OrderVolumeAnalysis.vue'
+import FreightAnalysis from '@/components/freight/FreightAnalysis.vue'
 import EChart, { type ChartClick } from '@/components/charts/EChart.vue'
 import WorkCalendar from '@/components/WorkCalendar.vue'
 import FopDataAccessNotice from '@/components/FopDataAccessNotice.vue'
@@ -302,6 +303,7 @@ const salespersonOption = computed(() => collectionsOption(salespersonSeries.val
       </section>
       <OrderVolumeAnalysis :revision="orderVolumeRevision" />
       <OrderVolumeAnalysis customer :revision="orderVolumeRevision" />
+      <FreightAnalysis :revision="orderVolumeRevision" />
       <p v-if="data?.source === 'mock'" class="dashboard-footnote">{{ text('MOCK 演示数据 · 组织、员工与订单相互关联 · 日期筛选用于注册趋势，年份筛选用于回款分析。', 'MOCK demo data · Linked organization, employees and orders · Dates filter registrations; year filters collections.') }}</p>
       <p v-else class="dashboard-footnote">{{ text('履约数据按登录账号的 FOP 授权范围查询；未绑定或权限不可用时不展示数据。日期筛选用于注册趋势，年份筛选用于回款分析。', 'Fulfillment data follows your FOP user permissions. No data is shown without a valid binding and authorization. Dates filter registrations; year filters collections.') }}</p>
     </main>

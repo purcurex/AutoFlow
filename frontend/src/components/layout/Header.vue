@@ -24,6 +24,7 @@ const pageTitle = computed(() => ({
   Organization: t('nav.organization'),
   RoleWorkbench: isWorkbenchRole(route.params.role) ? workbenchNames[route.params.role][locale.value.startsWith('zh') ? 0 : 1] : t('nav.dashboard'),
   RoleWorkbenchReceipts: locale.value.startsWith('zh') ? '回款明细' : 'Receipt details',
+  RoleWorkbenchFreight: locale.value.startsWith('zh') ? '实际运费明细' : 'Actual freight details',
   WorkbenchRoleAdmin: t('nav.workbenchRoles'),
   Dashboard: t('nav.dashboard'), Workflows: t('nav.workflows'), NewWorkflow: t('nav.newWorkflow'), Leads: t('nav.leads'),
   LeadDetail: t('leads.detailEyebrow'), Outreach: t('nav.outreach'), Quotes: t('nav.quotes'), FollowUps: t('nav.followUps'),

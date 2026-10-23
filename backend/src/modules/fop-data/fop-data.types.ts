@@ -1,3 +1,4 @@
+import type { FopFreightCandidate } from './fop-freight.types'
 export const SALES_DEPARTMENTS = [
   { id: 'sales1', name: '业务一部' }, { id: 'sales2', name: '业务二部' },
   { id: 'sales3', name: '业务三部' }, { id: 'sales4', name: '业务四部' },
@@ -12,10 +13,12 @@ export interface FopPermissionGrant {
   allowedOrderIds: readonly string[]
   /** Independent receipt-line authorization; missing/empty grants no collections. */
   allowedReceiptIds?: readonly string[]
+  /** Independent actual freight-cost resource grant; never inferred from orders. */
+  allowedFreightIds?: readonly string[]
   analyticsScopes?: readonly FopAnalyticsScope[]
 }
 
-export type FopAnalyticsScope = 'rates' | 'registrations' | 'receipts'
+export type FopAnalyticsScope = 'rates' | 'registrations' | 'receipts' | 'freight'
 export interface FopRegistrationEntry {
   departmentPathIds?: string[]
   date: string
@@ -121,6 +124,9 @@ export abstract class FopDataProvider {
   abstract isConfigured(): boolean
   abstract resolvePermissions(identity: Readonly<FopIdentity>): Promise<FopPermissionGrant>
   abstract listOrders(identity: Readonly<FopIdentity>, permission: Readonly<FopPermissionGrant>): Promise<FopOrderCandidate[]>
+  async listFreight(_identity: Readonly<FopIdentity>, _permission: Readonly<FopPermissionGrant>): Promise<FopFreightCandidate[]> {
+    throw new Error('Freight data provider is not configured')
+  }
   async listReceipts(_identity: Readonly<FopIdentity>, _permission: Readonly<FopPermissionGrant>): Promise<FopReceiptCandidate[]> {
     // Existing adapters cannot silently synthesize collections from order amounts.
     throw new Error('Receipt data provider is not configured')

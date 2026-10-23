@@ -2,7 +2,7 @@
 
 审计日期：2026-10-22。依据当前工作区源码、DTO、序列化器、前端API类型与测试；方案 2 实现后同步契约；未连接或验证真实 FOP 生产服务。FOP 为金蝶云苍穹上的 HyperZone 自研应用，后台 `/Library/VSCode/dtr5b` 只读核查。
 
-机器可读交付：[hyperzone-analytics.openapi.json](../openapi/hyperzone-analytics.openapi.json)，OpenAPI **3.1.1**，**17条路径、17个操作、69个数据模型、8组通用错误响应**。仅列当前已实现的AutoFlow HTTP接口；未实现的 FOP 上游签名、同步和分页接口没有被写成已实现路径。格式依据[OpenAPI 3.1.1官方规范](https://spec.openapis.org/oas/v3.1.1.html)。
+机器可读交付：[hyperzone-analytics.openapi.json](../openapi/hyperzone-analytics.openapi.json)，OpenAPI **3.1.1**，**19条路径、19个操作、82个数据模型、8组通用错误响应**。物流运费新增2个操作及13个模型；仅列当前平台HTTP接口，未实现的 FOP 上游签名、同步和分页接口没有被写成已实现路径。格式依据[OpenAPI 3.1.1官方规范](https://spec.openapis.org/oas/v3.1.1.html)。
 
 ## 1. 当前交付判断
 
@@ -11,6 +11,8 @@
 客户 `series.amounts` 与 Dashboard `receipts` 已改为**独立授权的收款分录**：`amount=hzkj_real_receive_amt`；源单已支付、已审核且收款单已审核，来源履约＋全款备货，排除押金备货与样品，按支付时刻 UTC+8 归月。`orderAmount`、`handlingFee` 保留核对；使用已全款备货库存的履约不补回产品款。钱包授信可产生此类结算，因此不等同于银行新增现金流。历史期间按当前有效状态重算，未新增结账锁定、部分退款／冲销系统。
 
 数量仍只计已支付、已审核履约订单；备货不计数量。客户金额沿用数量 Top10／other 集合，只有全款备货回款的客户仍能搜索、进入总计／other。独立 `allowedReceiptIds` 缺失即无收款授权，且需 receipts scope；无 scope 时客户省略 amounts、Dashboard 回款为空、收款明细 403。客户金额和 Dashboard 均提供履约／全款备货来源拆分。
+
+物流运费新增独立发运单成本快照，使用 `allowedFreightIds` 与 `freight` scope，不从订单／收款授权推导。原币、原额、USD汇率及日期/来源强制保留，折算必须一致；已审核已确认的正成本按确认时间UTC+8归期。确认不等于最终结算，费用分录停用与首次候选规则使补收退款和后续调价仍有生产缺口，详见第8节。
 
 ## 2. 传输与错误边界
 
@@ -42,6 +44,8 @@
 | GET `/autoflow/integrations/fop/fulfillment-orders` | `getFulfillmentOrders` | queue、search、orderNumber、分页；`OrderPage` | queue对应角色强制校验；可选workbenchRole若不匹配则400 |
 | GET `/autoflow/integrations/fop/receipts` | `getReceipts` | from/to、部门/员工/客户/仓库/来源、workbenchRole、分页；`ReceiptPage` | 独立收款 scope 与分录 allowlist；UTC+8 有效 USD 分录，分页前合计 |
 | GET `/autoflow/integrations/fop/order-volume/receipts` | `getOrderVolumeReceipts` | customer 同图表查询及下钻参数；`ReceiptPage` | 先重建完整数量 Top10/other 集合，再收窄期间和仓库 |
+| GET `/autoflow/integrations/fop/freight` | `getFreight` | grain/year、可选weekOf/warehouse/carrierCode；`FreightData` | freight scope与独立成本allowlist；月/周/年、USD、完整上期环比、partial |
+| GET `/autoflow/integrations/fop/freight/details` | `getFreightDetails` | 同分析查询＋periodId/comparisonPeriod/workbenchRole/分页；`FreightPage` | 岗位权限再校验；current默认，previous完整上期；分页前USD/原币合计 |
 | GET `/autoflow/integrations/fop/dashboard` | `getFopDashboard` | from/to/year均必填；`FopDashboard` | 三类analyticsScopes独立控制；队列另按入口角色 |
 | GET `/workbench/access` | `getWorkbenchAccess` | 无参数；`WorkbenchAccess` | 当前账户入口/系统/业务权限摘要 |
 | GET `/workbench/{role}/access` | `getWorkbenchRoleAccess` | path角色；`WorkbenchAccess` | 未知角色400，无授权403 |
@@ -113,7 +117,7 @@
 
 ## 7. 历史诊断验证记录与本轮边界
 
-下表保留方案2实施前的 2026-10-22 诊断证据，不代表此次修改后的测试数量。当前代码全量验证、浏览器与生成文件检查以 VERIFICATION.md 为准；本次 OpenAPI 已扩展至17操作／69模型；已用现有 docs-venv 的 openapi-spec-validator 与 Draft202012Validator 校验结构和模型，生成器 validate_examples 递归校验186处模型／请求／响应示例通过（共享响应按使用位置重复计数）。此次仅验证，生成文件及真实 HTTP 响应检查由主流程完成。
+下表保留方案2实施前的 2026-10-22 诊断证据，不代表此次修改后的测试数量。方案2阶段OpenAPI为17操作／69模型，曾用docs-venv校验186处模型／请求／响应示例（共享响应按位置重复计数）；该历史数字不代表运费新增模型的验证结果。当前代码全量验证、浏览器、实际HTTP契约与生成文件检查以 VERIFICATION.md 为准。
 
 | 验证 | 本次真实结果 | 范围/限制 |
 |---|---|---|
@@ -125,3 +129,20 @@
 | 生产接入 | 未验证 | 没有真实provider、正式凭据、上游样本、生产数据量或跨系统财务对账 |
 
 机器规范的成功与错误样例均为脱敏契约样例，不是截取生产数据。上述定向测试与主流程全量测试存在重叠，不能将数量相加当作独立测试总数。本交付记录现状、风险和接入需求，没有把测试通过等同于生产FOP接入已完成。
+
+
+## 8. 物流运费新增契约与生产差距
+
+| 主题 | 当前实现合同 | 真实接入仍需验证 |
+| --- | --- | --- |
+| 事实粒度 | `FopFreight`每发运单一条当前实际成本；`FopFreightCandidate`含内部tenantId和departmentPathIds；公开字段白名单不输出这两项 | 发运单稳定ID、历史修订和多个发运单关联，不按订单号去重 |
+| 纳入规则 | 源发运单审核approved、成本confirmed、正金额、已发生确认时刻；源正成本缺时间、重复ID等错误拒收 | C审核码、确认状态归一和各供应商金额真正含义；确认不是银行支付或最终结账 |
+| 金额 | 原币/原额/明确汇率日期和来源必需；USD原币rate=1，amount为原额×汇率十进制精确乘法HALF_UP到分（1.50×0.15=0.23），有限安全分币累计 | YT/4PX/WB/YW保留原币，JS为CNY；真实币种、历史汇率和原币精度；禁止拿Rmb变量名猜币种 |
+| 权限 | 独立freight scope及allowedFreightIds；缺scope403、缺失/空IDs为空；与租户、本人/部门后代/业务管理员求交；请求后复查授权变化 | FOP运行期单据及字段成本可见权；不沿用单量报表无业务员档案时组织全员的规则 |
+| 周期 | month为YTD/历史12月；week周一4周，锚点与year一致；year近5年最早2020；完整跨年基期仍读取；partial标未结束期 | 真实跨年完整成本及汇率覆盖；前台不能把当前部分期与完整上期比较描述为同期同比 |
+| 环比 | 本期、完整上期、差额、百分点；0→正值percent=null，0→0为0；各期与总计均按基数重算 | 实际账单不同确认时延及调价引起的历史变化，不能视为已关账业绩 |
+| 下钻 | `/freight/details`强制workbenchRole；periodId来自同查询；current/previous；确认时间倒序稳定排序；total/totals分页前计算，原币分组 | 图表与明细为各次当前查询，asOf不是冻结快照；变动期间需明确一致性约定 |
+| 结算覆盖 | 仅表头快照，保留明确边界 | 源费用分录已停用，重派/退款采集注释；首次正成本后常规候选不再自动重查；补收退款及历史调价需单独机制 |
+| 网络与写接口 | 平台两个GET及Mock并不等于真实FOP已接通 | 尚无已确认分析HTTP接口；JsexpActualFreightController是POST回写维护，不能从分析端调用 |
+
+实现定位：`backend/src/modules/fop-data/fop-freight.types.ts`、`fop-freight.dto.ts`、`fop-freight.ts`、`fop-data.service.ts`、provider，以及 `backend/src/modules/users/workbench.controller.ts`。FOP源证据见源码映射第9节；联调资料和验收标准统一使用T17–T20、H18–H22、D11–D15。实际测试结论仅记录到VERIFICATION.md，本文不以契约或Mock存在推断生产验收通过。

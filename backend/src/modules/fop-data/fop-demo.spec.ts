@@ -112,6 +112,24 @@ describe('isolated mock FOP dataset', () => {
     const other = current.filter(order => order.carrierCode === 'OTHER').length
     expect(yt).toBeGreaterThan(other)
   })
+  it('provides independent actual freight with six carriers, explicit FX, prior-year baseline and scoped IDs', async () => {
+    const provider = new DemoFopDataProvider(organizations, env)
+    const identity = { tenantId: 'demo:alice', userId: 'alice' }
+    const grant = await provider.resolvePermissions(identity)
+    expect(grant.analyticsScopes).toContain('freight')
+    const rows = await provider.listFreight(identity, grant)
+    expect(new Set(rows.map(r => r.carrierCode))).toEqual(new Set(['YT', '4PX', 'WB', 'YW', 'JS', 'OTHER']))
+    expect(new Set(rows.map(r => r.originalCurrency)).size).toBeGreaterThan(1)
+    expect(rows.some(r => r.confirmedAt?.startsWith('2021-'))).toBe(true)
+    const data = new FopDataService(users, provider)
+    const summary = await data.getFreight('alice', { grain: 'month', year: 2026, warehouse: 'ALL' })
+    expect(summary.series.every(series => series.totals.amount > 0)).toBe(true)
+    const detail = await data.getFreightDetails('alice', { grain: 'month', year: 2026, warehouse: 'ALL', workbenchRole: 'dispatch', page: 1, pageSize: 1 })
+    expect(detail.totals.amount).toBe(summary.totals.amount)
+    expect(detail.total).toBe(summary.billCount)
+    expect(await provider.listFreight(identity, { ...grant, allowedFreightIds: [] })).toEqual([])
+    await expect(provider.listFreight({ tenantId: 'demo:bob', userId: 'bob' }, grant)).rejects.toThrow()
+  })
   it('reflects employee renaming and reassignment on the next refresh', async () => {
     const current = structuredClone(workspace)
     const provider = new DemoFopDataProvider({ getWorkspace: async () => current }, env)

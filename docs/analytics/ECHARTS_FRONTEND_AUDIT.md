@@ -28,6 +28,8 @@
 | G07 客户回款业绩对比 | 与 G06 同一组件，`metric=amount`；`series[].amounts.total/warehouses` | **沿用数量 Top 10 客户集合与顺序，不是金额 Top 10**；USD 两位小数。非 USD 收款分录数由兼容字段 `excludedOrderCount` 提示；数量来自履约账本（`:98`、`:106`） | 与数量图并列；分仓组与客户顺序一致；金额柱和金额单元格进入客户同一集合的 USD 收款明细；数量入口仍进入履约订单 |
 | G08 单客户每日订单量趋势 | `CustomerOrderResults.vue:63`，弹窗中 `rankingOnly=false, metric=orders`；只用 `kind=total` 的 values/warehouses | 新请求继承已应用的日期、部门、仓库，并新增 customerId。默认最近 14 天；无 MoM | 折线；分仓为同一图中的仓库系列；与金额图滑窗联动；点击非未来点以 `seriesId=total, periodId, detailWarehouse?` 下钻（`:83`、`:86`） |
 | G09 单客户每日回款业绩趋势 | 同 G08，`metric=amount`；`total.amounts.values/warehouses` | 同一客户集合、同一日期／仓库映射；金额来自独立授权 USD 收款分录，包含全款备货 | 金额轴与数量轴独立，只有时间窗口同步；表格显示每日数量与金额并按日期倒序；缺失 amounts 显示 `—`，不伪造 0（`:31`、`:35`、`:119`） |
+| G10 物流实际运费并列柱状 | `FreightAnalysis.vue` / `FreightResults.vue`，独立 `GET /freight`；periods、合计与YT/4PX/WB/YW/JS/OTHER的FreightValue系列 | month/week/year、year、weekOf、warehouse；已审核且已确认正成本，按UTC+8确认时间归期；USD目标币种 | 总计独立，不重复相加；未完期partial提示；完整上期环比；统计表倒序、固定列宽，开启环比展开、关闭保持；仅拖动滑块改横轴 |
+| G11 单物流服务商趋势弹窗 | `FreightTrendDialog.vue`，复用已返回响应，按选中carrierCode筛出单商；接口另支持carrierCode查询 | 继承已应用时间/仓库，0基期比例为null或0，前端不自造百分比 | 居中弹窗；原始成本从柱/表下钻当前可访问岗位工作台，展示原币、汇率与USD；分页前合计 |
 
 表内短文件名的完整路径分别为 `frontend/src/views/autoflow/FopDashboardView.vue`、`frontend/src/components/order-volume/OrderVolumeResults.vue`、`frontend/src/components/order-volume/CustomerOrderResults.vue`、`frontend/src/components/order-volume/order-volume.css`。
 
@@ -317,3 +319,21 @@ describe('ECharts audit: assertions of current incorrect behavior', () => {
   })
 })
 ```
+
+
+## 9. 物流运费前端审计补充
+
+物流运费与客户收费、订单金额、回款业绩分别使用独立事实与请求。界面显示“实际运费／确认时间”，不能将确认时间改为银行实付日或宣称最终结算；原币和汇率字段在工作台明细用于复核。当前生产FOP未接入，Mock标识必须保留。
+
+| 消费或交互 | 合同与检查点 |
+| --- | --- |
+| 请求 | GET `/api/autoflow/integrations/fop/freight`传grain/year，warehouse默认ALL；weekOf仅week且属于year；carrierCode是固定6类。返回query为已解析条件，不能用正在编辑的条件标注旧结果 |
+| 周期 | periods升序用于图轴、统计明细倒序。月YTD/历史12月、周一4周、年最近5年；未完期to截到UTC+8今天，partial醒目标未完周期（含末日当天）。上一期是完整自然周期，与当前未完期比较需要说明 |
+| 统计值 | 使用API amount/previousAmount/delta/percent；null表示上期为0且本期非0，显示“上期为0”，双0为0%；percent=25显示25%，不是0.25%；汇总直接取totals |
+| 图表与表格 | 合计/服务商并列，不堆叠；合计不再次累加。独立环比开关，开启自动展开统计表，关闭不收起；固定列宽避免跳动。复用EChart滑块拖动边界，滚轮滚动页面 |
+| 趋势 | 服务商居中弹窗从当前已返回数据筛出单商、继承已应用时间/仓库，不另外发请求，不把任意陈旧查询标题带入；关闭/ESC及焦点、暗色、窄屏需真实浏览器验收 |
+| 明细 | GET `/api/autoflow/integrations/fop/freight/details`必须有workbenchRole；保持基础查询、carrierCode、periodId、comparisonPeriod。current默认、previous完整上期；不得在Dashboard另造无权限成本列表 |
+| 分页 | 全筛选发运单数、USD金额与分原币合计使用返回totals，非当前页求和；换页仅改page。原始金额、币种、汇率方向/日期/来源及确认时间应可核对 |
+| 访问及错误 | freight scope缺失403与空allowlist合法空数据区分。切账号/会话、加载失败、筛选竞态必须清理或拒绝旧成本；前端岗位可见不取代服务端成本授权 |
+
+源码定位：`frontend/src/components/freight/FreightAnalysis.vue`、`FreightResults.vue`、`FreightTrendDialog.vue`、`frontend/src/utils/freight.ts`、`frontend/src/api/fop-freight.ts`、`frontend/src/views/autoflow/FopFreightView.vue`。工作台路由为`/workbench/:role/freight`（RoleWorkbenchFreight），由WorkbenchView和路由守卫校验岗位入口。以上已核对源码；测试、HTTP和浏览器实际验收状态以VERIFICATION.md为准。真实最终结算定义、汇率、后续补收退款/调价、成本可见权及服务商映射见H18–H22，不用本地Mock截图关闭生产待办。

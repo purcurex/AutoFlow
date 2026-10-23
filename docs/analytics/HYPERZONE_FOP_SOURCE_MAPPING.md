@@ -167,3 +167,44 @@ hzkj_total_amount = hzkj_fre_quo_amount + hzkj_fixed_tax_fee
 以上不阻碍前端使用明确标注的演示数据与归一接口边界；它们阻止的是把尚未验证的接口、状态或金额猜测包装成“真实 FOP 已接通”。
 
 后续工作、建议负责人、具体资料与完成标准统一维护在 [后续待办与人工核对清单](FOLLOW_UP_CHECKLIST.md)，并收录到完整需求第7章。
+
+## 9. 物流运费：已核实字段、结算边界与独立权限
+
+本节是本次物流运费分析的只读源码核查结果。平台已有 `/api/autoflow/integrations/fop/freight` 与 `/freight/details` 契约及独立 Mock；**没有证据表明真实 FOP 已发布对应只读分析 HTTP 接口**。下列 Java 服务、任务或表单存在，不代表可以把其名称拼成生产 URL。
+
+### 9.1 当前实际成本事实
+
+| 平台字段／规则 | FOP 源事实 | 适配说明 |
+| --- | --- | --- |
+| id / documentNumber | `hzkj_deliver_bill.id/billno` | 每发运单一条当前快照；同一订单多次发运不按订单号去重；重复发运单 ID 拒收 |
+| originalAmount | 表头 `hzkj_actual_freight` | 实际物流成本，不是客户收费、预估价格或订单金额 |
+| originalCurrency | 表头 `hzkj_textfield1` | 必须从真实币种字段取得，不从 Java 变量的 Rmb 后缀推断 |
+| confirmedAt | `hzkj_actual_freight_time` | 同步取得费用后写入苍穹的确认时刻；按 UTC+8 归日／月／周／年；不等于银行付款日或最终结账日 |
+| reviewStatus / costStatus | `billstatus='C'`；实际成本为正且有确认时刻 | C映射approved；confirmed是适配器依据已核实金额/时间建立的归一状态，未证明源有同名状态枚举。未确认或零金额不纳入，正数缺时间拒收 |
+| carrierCode/Name / channelName | `hzkj_logistics_providers` / `hzkj_logistics_channel1` | 采用发运单实际选择的服务商／渠道；真实编码显式映射YT/4PX/WB/YW/JS/OTHER，不能根据名字猜测，未知不能静默OTHER |
+| warehouseCode / warehouse | `hzkj_basedatafield` | 映射真实杭州/深圳仓ID；归一HZ/SZ，不从订单归仓替代发运归仓 |
+| customer / owner / organization | `hzkj_customer` / `hzkj_bizoperator` / `org` | 稳定ID及名称；部门/祖先路径需要可信目录或源字段补充，不能按文本推断权限 |
+| orderNumber / trackingNumber | `hzkj_order_no` / `hzkj_logistics_orderno` | 源订单号及物流订单号；运输跟踪号另有字段，实际展示语义待真实样本核对，不把物流号作为唯一事实ID |
+| fxRateToUsd/Date/Source / amount | 尚无已核实的统一历史USD折算字段 | 平台强制显式原币到USD汇率、取价日与来源，amount须等于精确十进制乘法HALF_UP折算后分币（1.50×0.15=0.23）；USD原币rate=1。Mock汇率仅样例，不能做生产历史汇率 |
+
+源码证据：[实际运费及确认时间元数据](</Library/VSCode/dtr5b/datamodel/hzkj_CRM/1.5/main/hzkj_logistics/metadata/hzkj_deliver_bill.dym:4001>)；[实际运费币种](</Library/VSCode/dtr5b/datamodel/hzkj_CRM/1.5/main/hzkj_logistics/metadata/hzkj_deliver_bill.dym:3841>)；[已审核表头成本查询及正数缺时间错误](</Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/logistics/service/OrderLogisticsCostQueryService.java:37>)；[发运维度字段](</Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/logistics/service/DeliveredOrderVolumeReportService.java:48>)；[订单号与物流号读取](</Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/logistics/exception/FreightExceptionService.java:81>)。
+
+### 9.2 原币与“最终结算”的限制
+
+云途、4PX、万邦、燕文任务将供应商返回金额与币种直接写入表头，未在这些写入语句里统一折成人民币或美元。急速同步明确写 CNY。因此 `OrderLogisticsCostQueryService` 的 `actualFreightRmb` 变量名不能证明所有服务商金额均为人民币，不能直接把不同币种相加后标记USD。
+
+证据：[云途金额及币种写入](</Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/logistics/task/SyncYunTuFreightTaskPlugin.java:68>)；[4PX](</Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/logistics/task/Sync4pxFreightTaskPlugin.java:76>)；[万邦](</Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/logistics/task/SyncWanbFreightTaskPlugin.java:68>)；[燕文](</Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/logistics/task/SyncYanWenFreightTaskPlugin.java:69>)；[急速CNY和确认时间](</Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/logistics/service/JsexpActualFreightSyncService.java:130>)。
+
+`OrderLogisticsCostQueryService` 明确注明费用单据体已移除，`collectSubsequentFees` 调用被注释；保留 redispatch/refund 代码不等于已计入重派或退费。常规候选无独立完成时间字段时，仅选择 `hzkj_actual_freight IS NULL OR =0`，首次正值之后不会由该候选规则自动重新采集。燕文取返回数组第一条；急速解析 `timeIn` 并选择记录，这些读取策略本身不能证明取得最终账单。因此当前能力是“已确认实际成本快照”，不承诺完整物流结算账本、最终实付成本或后续退款净额。
+
+证据：[停用后续费用采集](</Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/logistics/service/OrderLogisticsCostQueryService.java:83>)；[首次候选条件](</Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/logistics/service/FreightSyncCandidateService.java:183>)；[燕文第一条记录](</Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/logistics/task/SyncYanWenFreightTaskPlugin.java:69>)；[急速时间解析](</Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/logistics/service/JsexpActualFreightSyncService.java:190>)。
+
+### 9.3 成本授权和真实查询接口
+
+`DeliveredOrderVolumeReportService` 限当前组织；有 `hzkj_bizperson` 档案时限制本人，无档案时组织全员。这是该单量报表的规则，不能自动成为物流成本权限，更不能让没有业务员档案的本地账户因此查看组织所有成本。
+
+可信权限模式可参考 `FreightExceptionService.currentOrg/requireRight`：检查当前登录组织、`hasViewPermission` 和单据 `checkOperationRule`。它是可借鉴的服务端权限实现，仍需正式定义运费金额是否有额外字段权限。平台当前同时要求 `freight` analytics scope、独立 `allowedFreightIds`，并与 tenant、本人／部门／业务管理员范围求交；系统管理身份和订单 allowlist 均不授予成本可见性。公开序列化剥离 `tenantId/departmentPathIds`。
+
+证据：[单量报表当前组织和员工范围](</Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/logistics/service/DeliveredOrderVolumeReportService.java:137>)；[有无业务员档案的分支](</Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/logistics/service/DeliveredOrderVolumeReportService.java:180>)；[组织及单据权限校验](</Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/logistics/exception/FreightExceptionService.java:49>)。
+
+`JsexpActualFreightController` 的 `/actualFreight` 是 POST同步并回写发运单的维护接口，不是只读分析接口，不应由分析页面调用。[控制器写入行为](</Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/logistics/controller/JsexpActualFreightController.java:23>)。真实只读URL、鉴权、分页完整性、授权刷新和脱敏响应须由FOP研发提供；最终结算、币种汇率、调价补收退款、成本权限和服务商映射分别见 H18–H22。

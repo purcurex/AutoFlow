@@ -1,3 +1,4 @@
+import { FopFreightCandidate } from '../src/modules/fop-data/fop-freight.types'
 import { INestApplication, ServiceUnavailableException, ValidationPipe } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import { JwtModule, JwtService } from '@nestjs/jwt'
@@ -19,6 +20,7 @@ describe('FOP user isolation HTTP API (repository and provider boundaries stubbe
   let provider: any
   let records: any[]
   let receiptRecords: FopReceiptCandidate[]
+  let freightRecords: FopFreightCandidate[]
   const alice = '88f90288-6d52-4d0b-bd10-549e4ac937a1'
   const bob = '88f90288-6d52-4d0b-bd10-549e4ac937b2'
   const token = (id: string) => jwt.sign({ userId: id, role: 'admin' })
@@ -75,6 +77,7 @@ describe('FOP user isolation HTTP API (repository and provider boundaries stubbe
         resolvePermissions: (identity: any) => provider.resolvePermissions(identity),
         listOrders: (identity: any, grant: any) => provider.listOrders(identity, grant),
         listReceipts: (identity: any, grant: any) => provider.listReceipts(identity, grant),
+        listFreight: (identity: any, grant: any) => provider.listFreight(identity, grant),
       }).compile()
     app = module.createNestApplication()
     app.setGlobalPrefix('api')
@@ -90,14 +93,71 @@ describe('FOP user isolation HTTP API (repository and provider boundaries stubbe
     ])
     records = [order('a', { exception: { reason: 'stock', hours: 20 } }), order('b'), order('shared', { reviewStatus: 'approved' }), order('outside'), order('a', { tenantId: 'other-tenant', customerName: 'OTHER TENANT SECRET' })]
     receiptRecords = []
+    freightRecords = []
     provider = {
       isConfigured: () => true,
       resolvePermissions: async (identity: any) => ({ subject: { ...identity }, allowedOrderIds: identity.userId === 'alice-fop' ? ['a', 'shared'] : ['b', 'shared'] }),
       listOrders: async () => structuredClone(records),
       listReceipts: async () => structuredClone(receiptRecords),
+      listFreight: async () => structuredClone(freightRecords),
     }
   })
   afterAll(async () => { await app?.close() })
+
+  describe('freight analysis endpoints', () => {
+    const root = '/autoflow/integrations/fop/freight'
+    const filters = '?grain=month&year=2020&warehouse=ALL'
+    const freight = (id: string, extra: Partial<FopFreightCandidate> = {}): FopFreightCandidate => ({
+      tenantId: 'tenant-1', id, documentNumber: `DL-${id}`, orderNumber: 'SO-1', trackingNumber: 'YT001', carrierCode: 'YT', carrierName: '云途', channelName: '标准专线',
+      warehouseCode: 'HZ', warehouse: '杭州仓', customerId: 'c1', customerCode: 'C001', customerName: 'Customer', owner: { id: 'alice-owner', name: 'Alice' }, department: { id: 'd1', name: '业务一部' },
+      originalAmount: 70, originalCurrency: 'CNY', fxRateToUsd: 1 / 7, fxRateDate: '2020-01-01', fxRateSource: 'fixture', amount: 10, currency: 'USD',
+      confirmedAt: '2020-01-10T00:00:00Z', reviewStatus: 'approved', costStatus: 'confirmed', ...extra,
+    })
+    beforeEach(() => {
+      freightRecords = [freight('a'), freight('b', { owner: { id: 'bob-owner', name: 'Bob' } }), freight('foreign', { tenantId: 'other-tenant' }), freight('outside')]
+      provider.resolvePermissions = async (identity: any) => ({ subject: identity, allowedOrderIds: [], allowedFreightIds: ['a', 'b', 'foreign'], analyticsScopes: ['freight'] })
+    })
+    it('requires authentication and forbids client identity/cost scope injection for both endpoints', async () => {
+      for (const path of [root + filters, root + '/details' + filters + '&workbenchRole=sales']) {
+        await request(app.getHttpServer()).get('/api' + path).expect(401)
+        for (const injection of ['userId=bob-fop', 'allowedFreightIds=b', 'businessRole=admin']) await get(path + '&' + injection).expect(400)
+      }
+    })
+    it('isolates every total and detail amount and does not serialize private fields', async () => {
+      const summary = await get(root + filters).expect(200)
+      expect(summary.headers['cache-control']).toBe('private, no-store')
+      expect(summary.body.totals.amount).toBe(10)
+      expect(summary.body.billCount).toBe(1)
+      const detail = await get(root + '/details' + filters + '&periodId=2020-01&workbenchRole=sales&pageSize=1').expect(200)
+      expect(detail.body.total).toBe(1)
+      expect(detail.body.items[0].id).toBe('a')
+      expect(detail.body.items[0]).not.toHaveProperty('tenantId')
+      expect(detail.body.items[0]).not.toHaveProperty('departmentPathIds')
+      expect(detail.body.totals.amount).toBe(summary.body.totals.amount)
+      expect((await get(root + filters, bob).expect(200)).body.totals.amount).toBe(20)
+      expect((await get(root + filters + '&carrierCode=4PX').expect(200)).body.billCount).toBe(0)
+      await get(root + '/details' + filters + '&workbenchRole=dispatch').expect(403)
+    })
+    it('does not grant freight from order/receipt scope or system management privileges', async () => {
+      provider.resolvePermissions = async (identity: any) => ({ subject: identity, allowedOrderIds: ['a'], allowedReceiptIds: ['a'], analyticsScopes: ['receipts'] })
+      await get(root + filters, bob).expect(403)
+      await get(root + '/details' + filters + '&workbenchRole=sales', bob).expect(403)
+      accounts.get(bob).businessRole = 'none'
+      await get(root + filters, bob).expect(403)
+    })
+    it('rejects invalid period and paging filters without broadening the query', async () => {
+      for (const query of ['grain=day&year=2020', 'grain=month', 'grain=month&year=9999', 'grain=month&year=2020&weekOf=2020-01-01', 'grain=week&year=2020&weekOf=2020-02-30', 'grain=month&year=2020&carrierCode=UNASSIGNED']) await get(root + '?' + query).expect(400)
+      for (const suffix of ['&page=0', '&pageSize=101', '&periodId=2021-01', '&comparisonPeriod=all']) await get(root + '/details' + filters + '&workbenchRole=sales' + suffix).expect(400)
+    })
+    it('returns safe unavailable errors for corrupt FX and duplicate cost snapshots', async () => {
+      freightRecords[0].fxRateSource = 'private-upstream-secret'
+      freightRecords[0].fxRateToUsd = 0
+      const response = await get(root + filters).expect(503)
+      expect(JSON.stringify(response.body)).not.toContain('private-upstream-secret')
+      freightRecords = [freight('a'), freight('a')]
+      await get(root + filters).expect(503)
+    })
+  })
 
   describe('order volume endpoints', () => {
     const root = '/autoflow/integrations/fop/order-volume'

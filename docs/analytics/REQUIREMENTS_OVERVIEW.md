@@ -4,7 +4,7 @@
 
 ## 1. 交付结论与阅读方式
 
-本轮覆盖仓库中所有 ECharts 运行入口：共享 EChart 包装器、注册会员、部门回款、业务员回款、业务订单量趋势/排名、客户订单量/金额排名，以及客户趋势弹窗。履约卡片、任务、异常、工作日历虽不全部属于 ECharts，仍核对其图表相关数据依赖和边界。
+本轮覆盖仓库中所有 ECharts 运行入口：共享 EChart 包装器、注册会员、部门回款、业务员回款、业务订单量趋势/排名、客户订单量/金额排名、客户趋势弹窗，以及物流运费并列柱状图和单服务商趋势弹窗。履约卡片、任务、异常、工作日历虽不全部属于 ECharts，仍核对其图表相关数据依赖和边界。
 
 当前项目具备前后端分析契约、服务端演示数据、用户级权限过滤与工作台跳转。**真实 FOP 数据提供器、授权解析和组织同步尚未完成；本文件不是已接入金蝶生产环境的证明。** 本轮已按用户确认的方案 2 更新本工程聚合、Mock、前端和契约；历史诊断单独标注，验证结果以 VERIFICATION.md 为准。后台源码只读核查，未改生产应用。
 
@@ -31,6 +31,8 @@
 | CH-07 | 客户回款业绩对比 | 与 CH-06 完全相同客户集合和顺序 | `series.amounts.currency/total/values/warehouses/breakdown/excludedOrderCount` | `$`，两仓金额比较、合计及占比；不另取“金额Top 10” |
 | CH-08 | 客户订单量趋势弹窗 | 按客户名/编码搜索后选择，或从排名点趋势；继承日期/部门/仓库 | `order-volume/customers`；`order-volume?customerId=...` | 居中弹窗、关闭/ESC、每日明细、滑块拖动、分仓 |
 | CH-09 | 客户回款业绩趋势弹窗 | 与 CH-08 同筛选、同日期；与数量趋势同步拖动 | `series.amounts.values/warehouses` | 数量/金额双图，明细按日期倒排 |
+| CH-10 | 物流运费分析 | 月/周/年、年份、周锚点及仓库；合计、云途YT、4PX、万邦WB、燕文YW、极速JS、其他固定顺序并列柱状 | `freight.query/periods/series/totals`；实际成本按确认时间 UTC+8 归期、USD | 独立环比开关、倒序统计表、固定列宽；开启环比展开表格，关闭不收起；仅拖动滑块调整横轴 |
+| CH-11 | 单物流服务商运费趋势 | 继承已应用时间/仓库，按选中carrierCode显示该服务商 | 复用freight响应筛选单商；接口也支持carrierCode；各期 amount/previousAmount/delta/percent | 居中趋势弹窗；发运单原币/汇率/成本明细进入当前可访问岗位工作台 |
 | AUX-01 | 履约卡片/异常/任务 | 当前授权队列，不跟随注册日期范围 | `dashboard.queues/exceptions/tasks`、`fulfillment-orders` | Dashboard 仅统计和跳转；业务明细在岗位工作台 |
 | AUX-02 | 工作日历 | US纽约、EUR柏林、AUD悉尼；周一至周五09:00–17:00 | 浏览器时间＋`Intl` 时区，无独立HTTP接口 | 当地当前时间、工作状态、UTC+8转换、夏令时；不含公共假日 |
 
@@ -43,13 +45,13 @@
   → 平台 /api（会话、DTO验证、数据权限）
   → FopDataService（授权交集、租户隔离、去重、汇总、公开字段序列化）
   → FopDataProvider（当前 Demo 或 Unconfigured）
-  → 待实现：金蝶云苍穹用户授权、组织、客户、订单、收款分录、注册等网络适配
+  → 待实现：金蝶云苍穹用户授权、组织、客户、订单、收款分录、物流成本、注册等网络适配
 ```
 
 1. 浏览器仅提交业务筛选条件，不提交有效权限、FOP 用户身份或订单授权列表。
 2. 平台读取登录用户的 `fopTenantId/fopUserId`、业务角色、部门/员工标识与岗位角色。
-3. FOP 适配器解析该用户真实授权，返回同一 `subject` 的订单 allowlist、独立收款分录 allowlist 与分析资源授权；服务端再做本地业务范围交集，不能让本地业务管理员绕过 FOP 租户与用户授权。
-4. 订单／收款候选记录携带服务端专用 `tenantId`、必要部门祖先路径，验证后只向浏览器返回公开字段。组织路径不得依赖浏览器传入。
+3. FOP 适配器解析该用户真实授权，返回同一 `subject` 的订单 allowlist、独立收款分录 allowlist、独立 `allowedFreightIds` 与分析资源授权；服务端再做本地业务范围交集，不能让本地业务管理员绕过 FOP 租户与用户授权。物流成本必须有 `freight` analytics scope；订单／收款授权均不能推导成本授权。
+4. 订单／收款／运费候选记录携带服务端专用 `tenantId`、必要部门祖先路径，验证后只向浏览器返回公开字段。组织路径不得依赖浏览器传入。
 5. 新适配器不得在故障、超时、权限撤销时回退到全量数据或 Mock；应维持既有 403/503 语义。
 6. `asOf/updatedAt` 当前是响应生成时间，不代表 FOP 一致性快照、最后同步成功时间或账期关闭时间。真实接入如需一致性，应新增并正式版本化 `snapshotId/sourceUpdatedAt/permissionVersion` 等字段；它们目前不是已实现字段。
 
@@ -95,6 +97,27 @@
 - 下属团队由适配器映射至四个固定业务报表部门 `sales1...sales4`。组织树可自定义，但自定义组织树不会自动改变报表固定部门模型。
 - 名称保留中文和英文别名；统计人员为外贸业务员/伙伴。`owner.id` 是稳定业务员工标识，不能用名称或本地登录邮箱替代。
 
+### 4.4 物流运费的独立成本事实
+
+运费取已审核发运单 `hzkj_deliver_bill.hzkj_actual_freight`，按 `hzkj_actual_freight_time` 确认时间 UTC+8 归期。它是物流商实际成本快照，不使用客户支付运费、预估报价或订单金额推算。当前资格为 `reviewStatus=approved`、`costStatus=confirmed`、正数金额和已发生的非空确认时刻；未审核、未确认、零费用及未来确认不纳入。正数已确认成本缺确认时间属于契约错误，不能回退发运日／审核日。
+
+| 项目 | 当前实现／必须保持的边界 |
+| --- | --- |
+| 唯一粒度 | 每个发运单 ID 一条当前成本快照；重复 ID 拒收。一个履约订单多次发运可产生多条成本，不能按订单号去重 |
+| 币种 | `originalAmount/originalCurrency` 保留源金额和明确原币；`fxRateToUsd/fxRateDate/fxRateSource` 必须显式提供。USD 本币汇率也必须为1；其他币种不得默认当 CNY 或 USD |
+| 折算校验 | `amount=originalAmount×fxRateToUsd` 以十进制精确乘法按 HALF_UP 到分（1.50×0.15=0.23），不采用二进制浮点乘积后直接round，`currency=USD`；原额与USD结果最多两位小数；单条、乘积及累计须安全、有限，金额按分累加。缺汇率、折算不符、非法币种／金额不得静默混加 |
+| 月粒度 | 选定年1月至 UTC+8 当前月；历史年为12月；1月比较前一年完整12月 |
+| 周粒度 | 周一开始，锚点所在周及前三周。weekOf 默认当年今天、历史年12月31日；显式锚点必须属于 year 且不晚于今天；跨年周及其上一周完整读取 |
+| 年粒度 | 所选年及前四年，显示区间最早2020；即便首个显示年为2020，其完整2019年基期仍需读取 |
+| 未完周期 | `periods[].partial=true` 明示未结束周期（含周期末当天），本期to截到UTC+8今天。本期仅含当前已确认金额，与完整上一期比较；不能宣称为同期进度增长率或已关账数据 |
+| 环比 | amount、previousAmount、delta 和 percent 同时返回；delta=本期−上期，percent=delta/abs(上期)×100（25表示25%）。上期0且本期>0为null，显示“上期为0”；双0为0。合计比例用合计基数重算，不能加各期百分比 |
+| 服务商 | 无 carrierCode 时合计＋YT/4PX/WB/YW/JS/OTHER；过滤单商时合计＋该商。合计不与明细再次相加；OTHER仅为可信适配器明确映射的其他真实服务商 |
+| 独立成本权限 | `freight` scope 缺失403；`allowedFreightIds` 缺失或为空返回空范围。有效范围=FOP成本授权∩租户∩本人／部门及下属／业务管理员范围；系统管理身份、订单可见性和页面筛选均不扩大权限 |
+| 下钻与分页 | GET `/freight/details` 要求有效 `workbenchRole`，携带原查询、可选 periodId/carrierCode 与 comparisonPeriod。current 默认本期，previous选择同周期完整上期；periodId必须来自该查询。total/totals按完整筛选范围计算，分页不改变合计；原币按币种分别合计 |
+| 最终结算边界 | FOP费用分录已停用，重派／退费采集未启用；常规候选只查首次未得到正运费的单据，不能保证后续调价刷新。确认时间只证明写入苍穹，不证明最终账单、付款或全部补收退款已入账 |
+
+真实 FOP 只读成本查询、最终结算定义、币种和历史汇率、后续调价／补收退款、真实服务商映射及字段级成本可见权仍待联调。平台 Mock 已按独立事实实现，不能据此关闭这些生产核对项。
+
 ## 5. FOP 上游字段映射需求清单
 
 以下是平台逻辑字段。实体、状态与金额字段已经只读核对 `/Library/VSCode/dtr5b`，证据见源码映射；实际发布 URL、操作契约、鉴权、分页及脱敏响应仍待后台团队提供。平台 HTTP 路径不能直接当作云苍穹原生路径。
@@ -102,7 +125,7 @@
 | 资源 | 必需逻辑字段 | 类型/约束 | 用途与对接要求 |
 | --- | --- | --- | --- |
 | 绑定主体 | `tenantId`, `userId` | 非空稳定字符串；与本地绑定成对对应 | 响应主体必须与请求主体一致；停用/离职/转岗后即时撤销旧授权 |
-| 用户授权 | `subject`, `allowedOrderIds[]`, `allowedReceiptIds[]`, `analyticsScopes[]` | 订单与收款分录分别授权；收款字段缺失／空数组=无收款权限；分析范围枚举rates/registrations/receipts | 授权与数据读取不可跨用户复用；本地admin不等于FOP超级用户 |
+| 用户授权 | `subject`, `allowedOrderIds[]`, `allowedReceiptIds[]`, `allowedFreightIds[]`, `analyticsScopes[]` | 订单、收款分录、运费分别授权；独立白名单缺失／空数组=该资源无记录；分析范围rates/registrations/receipts/freight | 授权与数据读取不可跨用户复用；本地admin不等于FOP超级用户；freight scope缺失403 |
 | 组织 | `id`, `name`, `parentId`, `type`, `enabled`（后两项为目录同步需求） | 主键稳定，父级可空，无环 | FOP目录同步尚未实现；明确同步/手工修改优先级和删除语义 |
 | 部门 | `department.id/name`, `departmentPathIds[]`, `salesDepartmentCode` | 祖先路径来自可信源；报表部门sales1–sales4 | 支持经理管辖子部门；业务报表归口不能靠文本模糊匹配 |
 | 员工 | `owner.id/name`, 岗位/部门归属、中文名/英文名、在职状态 | employeeId独立于登录账号ID | 两类名字展示可合成name；领导不混入业务员业绩序列；伙伴可列入 |
@@ -117,6 +140,7 @@
 | 异常 | `exception.reason/hours` | stock/address/tracking；hours为持续时长 | 异常清单和任务，是否可同单多异常需定义 |
 | 注册会员 | `registrationEntries[].date/salesDepartmentCode/owner/count/departmentPathIds` | 每日+员工计数；非负安全整数，日期完整 | 非管理员须提供员工粒度可过滤记录；仅日汇总无法实现本人/部门隔离 |
 | 收款分录 | id、sourceType、documentId/Number、amount/orderAmount/handlingFee/currency、paidAt、reviewStatus、receiptReviewStatus、paymentStatus、客户/owner/部门/仓库/items | 独立分录 ID，tenantId／departmentPathIds 仅服务端；实际应收／手续费／实收分别保留；公开端点只返回有效 USD 分录 | 已实现 FopReceipt、GET /receipts 与 /order-volume/receipts；多笔分录不重复计订单数，不复制表头实收到各行 |
+| 物流成本快照 | id、documentNumber、orderNumber、trackingNumber、carrierCode/Name、channelName、warehouseCode/warehouse、客户/owner/部门、originalAmount/Currency、fxRateToUsd/Date/Source、amount/currency、confirmedAt、reviewStatus、costStatus | 发运单表头当前实际成本；tenantId／departmentPathIds只在可信服务端候选；USD折算有明确原币及汇率证据 | FopFreight、GET /freight及/freight/details；独立成本授权；确认不等于最终结算，补收退款与历史调价机制待核对 |
 | 增量同步 | 更新时间、删除/失效标记、分页游标、授权版本、一致性快照 | 新适配器设计要求，非现有响应字段 | 大数据量不能靠浏览器下载全部订单；约定全量、增量、重试与断点恢复 |
 
 ### 后台团队需回填
@@ -141,6 +165,9 @@
 | AT-12 | 实际渲染与导出 | 真浏览器检查SVG、Tooltip、图例、ResizeObserver、图片导出；stub单测不替代此项 |
 | AT-13 | 大规模真实数据 | 用实际业务量压测权限集合、全量聚合、客户搜索及大日期跨度；先协商响应时间和容量指标，再签收 |
 | AT-14 | 文案和数据一致性 | 当前条件与最后成功应用条件分离；在途改筛选不能改变已返回数据标题；失败不把旧图标成新条件 |
+| AT-15 | 运费事实及原币折算 | 已审核已确认正运费计入；重复发运单、缺确认时间、缺汇率、USD汇率非1、折算不符与未知维度明确拒收；同订单多发运单分别计成本 |
+| AT-16 | 运费周期与对账 | UTC+8跨月/年；月YTD、历史12月、周一4周、近5年；未完期标记；完整跨年上期、0基期、各商与合计、current/previous明细及分页前合计逐项对账 |
+| AT-17 | 成本独立授权及交互 | 订单有权但运费无scope为403；空运费授权为空；本人/部门/租户隔离和在途撤权；服务商弹窗、工作台明细、倒序/固定列宽、环比开关与拖动滑块真实浏览器验收 |
 
 ## 7. 交付与接入顺序、后续待办及人工核对
 
@@ -153,4 +180,4 @@
 
 本次交付包含当前项目的代码与文档基线；不包含本机数据库、用户密码、密钥和运行产物，也不表示已部署到生产服务器。
 
-本章后续收录 [后续待办与人工核对清单](FOLLOW_UP_CHECKLIST.md)：16项开发／交付待办、17项人工资料核对、10组最小验收场景及回填模板。清单以已实现方案2为基线；未确认的生产信息保持待核对，不改写当前业务口径，也不把Mock完成状态当成真实FOP接入完成。
+本章后续收录 [后续待办与人工核对清单](FOLLOW_UP_CHECKLIST.md)：保留T01–T16、H01–H17、D01–D10，并追加物流运费T17–T20、H18–H22、D11–D15及回填模板。清单以方案2及运费当前快照契约为基线；未确认的生产信息保持待核对，不改写当前业务口径，也不把Mock完成状态当成真实FOP接入完成。

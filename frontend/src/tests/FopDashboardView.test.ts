@@ -7,6 +7,7 @@ import { getFopDashboard, type FopDashboardData } from '@/api/fop-dashboard'
 
 vi.mock('@/composables/useWorkbenchAccess', () => ({ refreshWorkbenchAccess: vi.fn().mockResolvedValue({ roles: ['allocation'] }) }))
 vi.mock('@/components/order-volume/OrderVolumeAnalysis.vue', () => ({ default: { template: '<div />' } }))
+vi.mock('@/components/freight/FreightAnalysis.vue', () => ({ default: { template: '<div />' } }))
 vi.mock('@/components/layout', () => ({ AppLayout: { template: '<div><slot /></div>' } }))
 vi.mock('@/components/FopDataAccessNotice.vue', () => ({ default: { template: '<div />' } }))
 vi.mock('@/components/charts/EChart.vue', () => ({ default: { name: 'EChart', props: ['option', 'label'], template: '<div class="chart-stub" />' } }))

@@ -18,6 +18,8 @@ ROOT = Path(__file__).resolve().parents[2]
 SPEC = ROOT / 'docs/openapi/hyperzone-analytics.openapi.json'
 DOCS = ROOT / 'docs/analytics'
 REQUEST_QUERIES = {
+    '/autoflow/integrations/fop/freight': 'grain=year&year=2026&warehouse=ALL&carrierCode=YT',
+    '/autoflow/integrations/fop/freight/details': 'grain=month&year=2026&warehouse=ALL&carrierCode=YT&periodId=2026-10&comparisonPeriod=current&workbenchRole=sales&page=1&pageSize=20',
     '/autoflow/integrations/fop/receipts': 'from=2026-09-01&to=2026-10-22&warehouse=ALL&workbenchRole=sales&page=1&pageSize=20',
     '/autoflow/integrations/fop/order-volume/receipts': 'category=customer&from=2026-09-01&to=2026-10-22&warehouse=ALL&workbenchRole=sales&seriesId=total&page=1&pageSize=20',
     '/autoflow/integrations/fop/order-volume': 'category=organization&grain=month&year=2026&warehouse=ALL',

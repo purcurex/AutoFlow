@@ -4,7 +4,7 @@
   "info": {
     "title": "HyperZone AutoFlow Analytics 当前实现契约",
     "version": "2026-10-22",
-    "description": "字段级源码快照，仅记录已实现HTTP路由，不将计划FOP上游写为paths。响应裸JSON，无{code,data,message}包装。required=序列化必有；type:null=显式空值；可省略字段不在required中。参数跨字段依赖及已知口径差距见操作描述和配套审计。示例为脱敏契约样例，不是生产数据。 FOP为金蝶云苍穹上的HyperZone自研应用，源码只读核实；本工程方案2收款聚合和Mock已实现，真实生产网络适配器仍未配置。订单与收款各自授权，回款采用实际结算分录，统一UTC+8。"
+    "description": "字段级源码快照，仅记录已实现HTTP路由，不将计划FOP上游写为paths。响应裸JSON，无{code,data,message}包装。required=序列化必有；type:null=显式空值；可省略字段不在required中。参数跨字段依赖及已知口径差距见操作描述和配套审计。示例为脱敏契约样例，不是生产数据。 FOP为金蝶云苍穹上的HyperZone自研应用，源码只读核实；本工程方案2收款聚合和Mock已实现，真实生产网络适配器仍未配置。订单与收款各自授权，回款采用实际结算分录，统一UTC+8。 物流运费使用独立freight scope及allowedFreightIds，已实现Mock成本快照；必须保留原币与明确USD折算，按确认时间归期。最终结算、补收退款、调价及真实成本查询/授权仍待核对。"
   },
   "servers": [
     {
@@ -38,6 +38,10 @@
     },
     {
       "name": "收款分析"
+    },
+    {
+      "name": "物流运费分析",
+      "description": "独立授权的发运单实际成本快照与工作台明细。"
     }
   ],
   "paths": {
@@ -2211,6 +2215,539 @@
               "default": 20
             }
           }
+        ]
+      }
+    },
+    "/autoflow/integrations/fop/freight": {
+      "get": {
+        "operationId": "getFreight",
+        "summary": "物流实际运费聚合及完整上期环比",
+        "tags": [
+          "物流运费分析"
+        ],
+        "description": "独立成本权限：必须有freight analytics scope，否则403；allowedFreightIds缺失/空数组返回空范围，不能从订单或收款授权推导。服务端与租户、本地本人/部门及下属/业务管理员范围求交，系统管理员也不能绕过。每次请求复查绑定和授权变化；客户端不得传tenantId、userId、授权白名单或scope。只纳入已审核、已确认、正数且确认时刻已发生的发运单快照。原币、明确汇率日期/来源及折算一致性必需，目标USD；确认时间按UTC+8，不是银行付款或最终结算证明。真实FOP网络适配器未完成，Mock为独立成本样本。 返回合计与固定六类服务商并列系列；carrierCode过滤时仅合计与该商。单服务商趋势在居中弹窗展示；原始发运单在工作台下钻。",
+        "parameters": [
+          {
+            "name": "grain",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/FreightGrain"
+            },
+            "description": "见引用模型"
+          },
+          {
+            "name": "year",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "description": "2020至UTC+8当前年；未来年拒绝。周锚点必须属于所选年。",
+              "minimum": 2020,
+              "maximum": 9999
+            },
+            "description": "2020至UTC+8当前年；未来年拒绝。周锚点必须属于所选年。"
+          },
+          {
+            "name": "weekOf",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "仅week可传；不传时当年默认UTC+8今天、历史年默认12月31日。必须属于year且不晚于今天；响应回显解析后的锚点。非week传入则400。",
+              "format": "date",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            },
+            "description": "仅week可传；不传时当年默认UTC+8今天、历史年默认12月31日。必须属于year且不晚于今天；响应回显解析后的锚点。非week传入则400。"
+          },
+          {
+            "name": "warehouse",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "ALL=全仓，HZ=杭州仓，SZ=深圳仓；服务端授权范围内过滤，不扩大权限。",
+              "enum": [
+                "ALL",
+                "HZ",
+                "SZ"
+              ],
+              "default": "ALL"
+            },
+            "description": "ALL=全仓，HZ=杭州仓，SZ=深圳仓；服务端授权范围内过滤，不扩大权限。"
+          },
+          {
+            "name": "carrierCode",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/FreightCarrier",
+              "description": "省略返回合计及固定六类服务商；指定时返回合计及该服务商。"
+            },
+            "description": "省略返回合计及固定六类服务商；指定时返回合计及该服务商。"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功，裸JSON；空授权为零聚合/空明细，不是403。",
+            "headers": {
+              "Cache-Control": {
+                "description": "JWT guard设置private, no-store；全局429可先于guard返回，不保证此头。",
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FreightData"
+                },
+                "example": {
+                  "source": "mock",
+                  "query": {
+                    "grain": "year",
+                    "year": 2026,
+                    "warehouse": "ALL",
+                    "carrierCode": "YT"
+                  },
+                  "timeZone": "UTC+8",
+                  "currency": "USD",
+                  "dateBasis": "freight_confirmed_at",
+                  "asOf": "2026-10-22T04:00:00Z",
+                  "periods": [
+                    {
+                      "id": "2022",
+                      "label": "2022年",
+                      "from": "2022-01-01",
+                      "to": "2022-12-31",
+                      "partial": false,
+                      "previousFrom": "2021-01-01",
+                      "previousTo": "2021-12-31"
+                    },
+                    {
+                      "id": "2023",
+                      "label": "2023年",
+                      "from": "2023-01-01",
+                      "to": "2023-12-31",
+                      "partial": false,
+                      "previousFrom": "2022-01-01",
+                      "previousTo": "2022-12-31"
+                    },
+                    {
+                      "id": "2024",
+                      "label": "2024年",
+                      "from": "2024-01-01",
+                      "to": "2024-12-31",
+                      "partial": false,
+                      "previousFrom": "2023-01-01",
+                      "previousTo": "2023-12-31"
+                    },
+                    {
+                      "id": "2025",
+                      "label": "2025年",
+                      "from": "2025-01-01",
+                      "to": "2025-12-31",
+                      "partial": false,
+                      "previousFrom": "2024-01-01",
+                      "previousTo": "2024-12-31"
+                    },
+                    {
+                      "id": "2026",
+                      "label": "2026年",
+                      "from": "2026-01-01",
+                      "to": "2026-10-22",
+                      "partial": true,
+                      "previousFrom": "2025-01-01",
+                      "previousTo": "2025-12-31"
+                    }
+                  ],
+                  "series": [
+                    {
+                      "id": "total",
+                      "label": "合计",
+                      "kind": "total",
+                      "totals": {
+                        "amount": 24,
+                        "previousAmount": 10,
+                        "delta": 14,
+                        "percent": 140
+                      },
+                      "values": [
+                        {
+                          "amount": 0,
+                          "previousAmount": 0,
+                          "delta": 0,
+                          "percent": 0
+                        },
+                        {
+                          "amount": 0,
+                          "previousAmount": 0,
+                          "delta": 0,
+                          "percent": 0
+                        },
+                        {
+                          "amount": 0,
+                          "previousAmount": 0,
+                          "delta": 0,
+                          "percent": 0
+                        },
+                        {
+                          "amount": 10,
+                          "previousAmount": 0,
+                          "delta": 10,
+                          "percent": null
+                        },
+                        {
+                          "amount": 14,
+                          "previousAmount": 10,
+                          "delta": 4,
+                          "percent": 40
+                        }
+                      ],
+                      "billCount": 2
+                    },
+                    {
+                      "id": "carrier:YT",
+                      "label": "云途YT",
+                      "kind": "detail",
+                      "carrierCode": "YT",
+                      "totals": {
+                        "amount": 24,
+                        "previousAmount": 10,
+                        "delta": 14,
+                        "percent": 140
+                      },
+                      "values": [
+                        {
+                          "amount": 0,
+                          "previousAmount": 0,
+                          "delta": 0,
+                          "percent": 0
+                        },
+                        {
+                          "amount": 0,
+                          "previousAmount": 0,
+                          "delta": 0,
+                          "percent": 0
+                        },
+                        {
+                          "amount": 0,
+                          "previousAmount": 0,
+                          "delta": 0,
+                          "percent": 0
+                        },
+                        {
+                          "amount": 10,
+                          "previousAmount": 0,
+                          "delta": 10,
+                          "percent": null
+                        },
+                        {
+                          "amount": 14,
+                          "previousAmount": 10,
+                          "delta": 4,
+                          "percent": 40
+                        }
+                      ],
+                      "billCount": 2
+                    }
+                  ],
+                  "totals": {
+                    "amount": 24,
+                    "previousAmount": 10,
+                    "delta": 14,
+                    "percent": 140
+                  },
+                  "billCount": 2
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "x-implementation-status": "implemented; server-side mock available; real FOP network adapter pending",
+        "x-source-files": [
+          "backend/src/modules/users/workbench.controller.ts",
+          "backend/src/modules/fop-data/fop-data.service.ts",
+          "backend/src/modules/fop-data/fop-freight.dto.ts",
+          "backend/src/modules/fop-data/fop-freight.ts",
+          "backend/src/modules/fop-data/fop-freight.types.ts"
+        ],
+        "x-cross-parameter-rules": [
+          "grain/year必填；year∈[2020,UTC+8当前年]；warehouse默认ALL。",
+          "仅grain=week允许weekOf，必须有效、属于year且不晚于今天；省略时当年today、历史年12-31。",
+          "month返回年初至当前月/历史12月；week周一开始连续4周；year最近5年且显示最早2020。",
+          "上一期完整自然周期与本期采用相同权限及服务商/仓库过滤，包含跨年基期；partial标识未完成周期。",
+          "每个series.values与periods等长同下标；总计不与服务商再次相加；百分比为百分点，零基期规则见FreightValue。"
+        ]
+      }
+    },
+    "/autoflow/integrations/fop/freight/details": {
+      "get": {
+        "operationId": "getFreightDetails",
+        "summary": "岗位工作台物流运费发运单明细",
+        "tags": [
+          "物流运费分析"
+        ],
+        "description": "独立成本权限：必须有freight analytics scope，否则403；allowedFreightIds缺失/空数组返回空范围，不能从订单或收款授权推导。服务端与租户、本地本人/部门及下属/业务管理员范围求交，系统管理员也不能绕过。每次请求复查绑定和授权变化；客户端不得传tenantId、userId、授权白名单或scope。只纳入已审核、已确认、正数且确认时刻已发生的发运单快照。原币、明确汇率日期/来源及折算一致性必需，目标USD；确认时间按UTC+8，不是银行付款或最终结算证明。真实FOP网络适配器未完成，Mock为独立成本样本。 明细必须通过workbenchRole入口权限；periodId仅能是该查询返回的一期，comparisonPeriod默认current，previous选择完整上期。省略periodId时选择全部显示周期对应范围；确认时间倒序、ID稳定排序。total/totals在分页前计算，越界页仍保留完整合计；原币逐币种合计。",
+        "parameters": [
+          {
+            "name": "grain",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/FreightGrain"
+            },
+            "description": "见引用模型"
+          },
+          {
+            "name": "year",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "description": "2020至UTC+8当前年；未来年拒绝。周锚点必须属于所选年。",
+              "minimum": 2020,
+              "maximum": 9999
+            },
+            "description": "2020至UTC+8当前年；未来年拒绝。周锚点必须属于所选年。"
+          },
+          {
+            "name": "weekOf",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "仅week可传；不传时当年默认UTC+8今天、历史年默认12月31日。必须属于year且不晚于今天；响应回显解析后的锚点。非week传入则400。",
+              "format": "date",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            },
+            "description": "仅week可传；不传时当年默认UTC+8今天、历史年默认12月31日。必须属于year且不晚于今天；响应回显解析后的锚点。非week传入则400。"
+          },
+          {
+            "name": "warehouse",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "ALL=全仓，HZ=杭州仓，SZ=深圳仓；服务端授权范围内过滤，不扩大权限。",
+              "enum": [
+                "ALL",
+                "HZ",
+                "SZ"
+              ],
+              "default": "ALL"
+            },
+            "description": "ALL=全仓，HZ=杭州仓，SZ=深圳仓；服务端授权范围内过滤，不扩大权限。"
+          },
+          {
+            "name": "carrierCode",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/FreightCarrier",
+              "description": "省略返回合计及固定六类服务商；指定时返回合计及该服务商。"
+            },
+            "description": "省略返回合计及固定六类服务商；指定时返回合计及该服务商。"
+          },
+          {
+            "name": "periodId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "仅选择当前查询返回的一期；省略覆盖所有显示期；不能使用任意日期扩大范围。",
+              "pattern": "^\\d{4}(?:-\\d{2}(?:-\\d{2})?)?$"
+            },
+            "description": "仅选择当前查询返回的一期；省略覆盖所有显示期；不能使用任意日期扩大范围。"
+          },
+          {
+            "name": "comparisonPeriod",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "current为本期（默认）；previous为对应完整上一期；省略periodId时选择全部显示期对应的上期并集，重复日期不重复计费。",
+              "enum": [
+                "current",
+                "previous"
+              ],
+              "default": "current"
+            },
+            "description": "current为本期（默认）；previous为对应完整上一期；省略periodId时选择全部显示期对应的上期并集，重复日期不重复计费。"
+          },
+          {
+            "name": "workbenchRole",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/WorkbenchRole",
+              "description": "必须是当前账户可访问岗位，单据明细在工作台展示。"
+            },
+            "description": "必须是当前账户可访问岗位，单据明细在工作台展示。"
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "description": "页码。",
+              "minimum": 1,
+              "maximum": 1000000,
+              "default": 1
+            },
+            "description": "页码。"
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "description": "每页条数。",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            },
+            "description": "每页条数。"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功，裸JSON；空授权为零聚合/空明细，不是403。",
+            "headers": {
+              "Cache-Control": {
+                "description": "JWT guard设置private, no-store；全局429可先于guard返回，不保证此头。",
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FreightPage"
+                },
+                "example": {
+                  "source": "mock",
+                  "timeZone": "UTC+8",
+                  "currency": "USD",
+                  "dateBasis": "freight_confirmed_at",
+                  "total": 1,
+                  "page": 1,
+                  "pageSize": 20,
+                  "items": [
+                    {
+                      "id": "delivery-example",
+                      "documentNumber": "DEL-001",
+                      "orderNumber": "ORDER-001",
+                      "trackingNumber": "LOG-001",
+                      "carrierCode": "YT",
+                      "carrierName": "云途",
+                      "channelName": "示例实际渠道",
+                      "warehouseCode": "HZ",
+                      "warehouse": "杭州仓",
+                      "customerId": "customer-example",
+                      "customerCode": "C001",
+                      "customerName": "示例客户",
+                      "organization": {
+                        "id": "org-example",
+                        "name": "示例组织"
+                      },
+                      "department": {
+                        "id": "department-example",
+                        "name": "业务一部"
+                      },
+                      "owner": {
+                        "id": "employee-example",
+                        "name": "示例业务员"
+                      },
+                      "salesDepartmentCode": "sales1",
+                      "originalAmount": 100,
+                      "originalCurrency": "CNY",
+                      "fxRateToUsd": 0.14,
+                      "fxRateDate": "2026-10-22",
+                      "fxRateSource": "mock-contract-example",
+                      "amount": 14,
+                      "currency": "USD",
+                      "confirmedAt": "2026-10-21T16:30:00Z",
+                      "reviewStatus": "approved",
+                      "costStatus": "confirmed"
+                    }
+                  ],
+                  "totals": {
+                    "billCount": 1,
+                    "amount": 14,
+                    "originalAmounts": [
+                      {
+                        "currency": "CNY",
+                        "amount": 100
+                      }
+                    ]
+                  },
+                  "range": {
+                    "from": "2026-10-01",
+                    "to": "2026-10-22"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "x-implementation-status": "implemented; server-side mock available; real FOP network adapter pending",
+        "x-source-files": [
+          "backend/src/modules/users/workbench.controller.ts",
+          "backend/src/modules/fop-data/fop-data.service.ts",
+          "backend/src/modules/fop-data/fop-freight.dto.ts",
+          "backend/src/modules/fop-data/fop-freight.ts",
+          "backend/src/modules/fop-data/fop-freight.types.ts"
+        ],
+        "x-cross-parameter-rules": [
+          "grain/year必填；year∈[2020,UTC+8当前年]；warehouse默认ALL。",
+          "仅grain=week允许weekOf，必须有效、属于year且不晚于今天；省略时当年today、历史年12-31。",
+          "month返回年初至当前月/历史12月；week周一开始连续4周；year最近5年且显示最早2020。",
+          "上一期完整自然周期与本期采用相同权限及服务商/仓库过滤，包含跨年基期；partial标识未完成周期。",
+          "每个series.values与periods等长同下标；总计不与服务商再次相加；百分比为百分点，零基期规则见FreightValue。",
+          "periodId必须属于此query返回的periods；page默认1，pageSize默认20且最大100；workbenchRole必填且需持有。"
         ]
       }
     }
@@ -6282,6 +6819,1375 @@
             ]
           }
         ]
+      },
+      "FreightCarrier": {
+        "type": "string",
+        "description": "实际发运服务商的可信标准映射。OTHER仅为已知其他服务商；未知或缺失不得兜底。固定展示顺序YT/4PX/WB/YW/JS/OTHER。",
+        "enum": [
+          "YT",
+          "4PX",
+          "WB",
+          "YW",
+          "JS",
+          "OTHER"
+        ]
+      },
+      "FreightGrain": {
+        "type": "string",
+        "description": "month=所选年年初到当前月（历史年12月）；week=锚点所在周及前三周，周一开始；year=所选年及前四年，最早2020。",
+        "enum": [
+          "month",
+          "week",
+          "year"
+        ]
+      },
+      "FreightQuery": {
+        "type": "object",
+        "properties": {
+          "grain": {
+            "$ref": "#/components/schemas/FreightGrain"
+          },
+          "year": {
+            "type": "integer",
+            "description": "2020至UTC+8当前年；未来年拒绝。周锚点必须属于所选年。",
+            "minimum": 2020,
+            "maximum": 9999
+          },
+          "weekOf": {
+            "type": "string",
+            "description": "仅week可传；不传时当年默认UTC+8今天、历史年默认12月31日。必须属于year且不晚于今天；响应回显解析后的锚点。非week传入则400。",
+            "format": "date",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          },
+          "warehouse": {
+            "type": "string",
+            "description": "ALL=全仓，HZ=杭州仓，SZ=深圳仓；服务端授权范围内过滤，不扩大权限。",
+            "enum": [
+              "ALL",
+              "HZ",
+              "SZ"
+            ],
+            "default": "ALL"
+          },
+          "carrierCode": {
+            "$ref": "#/components/schemas/FreightCarrier",
+            "description": "省略返回合计及固定六类服务商；指定时返回合计及该服务商。"
+          }
+        },
+        "required": [
+          "grain",
+          "year",
+          "warehouse"
+        ],
+        "additionalProperties": false,
+        "description": "已解析的运费查询回显，week时含解析后weekOf；浏览器请求warehouse可省略默认ALL。时间按UTC+8确认时间归期。",
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "grain": {
+                  "const": "week"
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "weekOf"
+              ]
+            },
+            "else": {
+              "not": {
+                "required": [
+                  "weekOf"
+                ]
+              }
+            }
+          }
+        ],
+        "examples": [
+          {
+            "grain": "month",
+            "year": 2026,
+            "warehouse": "ALL"
+          },
+          {
+            "grain": "week",
+            "year": 2026,
+            "weekOf": "2026-10-22",
+            "warehouse": "HZ"
+          }
+        ]
+      },
+      "FopFreight": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "发运单稳定ID；当前成本快照唯一键，独立allowlist授权键；重复ID拒收。",
+            "minLength": 1
+          },
+          "documentNumber": {
+            "type": "string",
+            "description": "发运单billno，非订单号。",
+            "minLength": 1
+          },
+          "orderNumber": {
+            "type": "string",
+            "description": "hzkj_order_no对应源履约订单号；同一订单可有多条发运单成本。",
+            "minLength": 1
+          },
+          "trackingNumber": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "源hzkj_logistics_orderno物流订单号；可空；具体跟踪号语义待真实接口确认。",
+            "minLength": 1
+          },
+          "carrierCode": {
+            "$ref": "#/components/schemas/FreightCarrier"
+          },
+          "carrierName": {
+            "type": "string",
+            "description": "真实服务商展示名称。",
+            "minLength": 1
+          },
+          "channelName": {
+            "type": "string",
+            "description": "发运单实际物流渠道名称。",
+            "minLength": 1
+          },
+          "warehouseCode": {
+            "type": "string",
+            "description": "实际发运仓库，未知拒收。",
+            "enum": [
+              "HZ",
+              "SZ"
+            ]
+          },
+          "warehouse": {
+            "type": "string",
+            "description": "实际发运仓库展示名称。",
+            "minLength": 1
+          },
+          "customerId": {
+            "type": "string",
+            "description": "稳定客户ID。",
+            "minLength": 1
+          },
+          "customerCode": {
+            "type": "string",
+            "minLength": 1,
+            "description": "非空客户编码，可信适配器提供；不可用空值替代。"
+          },
+          "customerName": {
+            "type": "string",
+            "description": "客户名称。",
+            "minLength": 1
+          },
+          "organization": {
+            "$ref": "#/components/schemas/NamedEntity",
+            "description": "发运单组织；可信源提供。"
+          },
+          "department": {
+            "$ref": "#/components/schemas/NamedEntity",
+            "description": "成本归属部门；部门权限不得由浏览器提供。"
+          },
+          "owner": {
+            "$ref": "#/components/schemas/NamedEntity",
+            "description": "发运单业务员稳定ID及名称。"
+          },
+          "salesDepartmentCode": {
+            "$ref": "#/components/schemas/SalesDepartment"
+          },
+          "originalAmount": {
+            "type": "number",
+            "description": "hzkj_actual_freight原币实际成本，至多两位小数的安全分币；非客户收费或预估价。公开有效明细为正数。",
+            "minimum": 0,
+            "maximum": 90071992547409.9,
+            "x-decimal-scale": 2
+          },
+          "originalCurrency": {
+            "type": "string",
+            "description": "hzkj_textfield1明确原币种，标准大写三字母代码；不得统一假定CNY。",
+            "pattern": "^[A-Z]{3}$"
+          },
+          "fxRateToUsd": {
+            "type": "number",
+            "description": "每1单位原币折合USD；必须显式、有限且>0，USD原币必须1。",
+            "exclusiveMinimum": 0
+          },
+          "fxRateDate": {
+            "type": "string",
+            "description": "该条成本采用的汇率业务日期；不是响应生成日期的隐式替代。",
+            "format": "date",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          },
+          "fxRateSource": {
+            "type": "string",
+            "description": "可追溯的汇率来源；Mock来源不能用于生产。",
+            "minLength": 1
+          },
+          "amount": {
+            "type": "number",
+            "description": "USD成本=originalAmount×fxRateToUsd，按十进制精确乘法HALF_UP到分（1.50×0.15=0.23），不先做二进制浮点乘法再round。后端验证一致性、安全分币和累计安全性；缺汇率、不一致或超过两位小数的原额/结果拒收。",
+            "minimum": 0,
+            "maximum": 90071992547409.9,
+            "x-decimal-scale": 2
+          },
+          "currency": {
+            "type": "string",
+            "description": "统一分析与展示币种。",
+            "const": "USD"
+          },
+          "confirmedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "hzkj_actual_freight_time，带时区的实际运费确认时刻；UTC+8归期。公开有效明细必须非空且已发生；不是最终结账或银行付款证明。"
+          },
+          "reviewStatus": {
+            "type": "string",
+            "description": "发运单审核；billstatus=C映射approved。",
+            "enum": [
+              "approved",
+              "pending"
+            ]
+          },
+          "costStatus": {
+            "type": "string",
+            "description": "适配器归一成本确认状态；不能宣称源存在同名枚举。",
+            "enum": [
+              "confirmed",
+              "pending"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "documentNumber",
+          "orderNumber",
+          "trackingNumber",
+          "carrierCode",
+          "carrierName",
+          "channelName",
+          "warehouseCode",
+          "warehouse",
+          "customerId",
+          "customerCode",
+          "customerName",
+          "originalAmount",
+          "originalCurrency",
+          "fxRateToUsd",
+          "fxRateDate",
+          "fxRateSource",
+          "amount",
+          "currency",
+          "confirmedAt",
+          "reviewStatus",
+          "costStatus"
+        ],
+        "additionalProperties": false,
+        "description": "公开运费成本快照白名单；每发运单一条，不含tenantId/departmentPathIds。源费用分录已停用，未覆盖完整重派、补收、退款与历史调价账本。",
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "originalCurrency": {
+                  "const": "USD"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "fxRateToUsd": {
+                  "const": 1
+                }
+              }
+            }
+          }
+        ],
+        "examples": [
+          {
+            "id": "delivery-example",
+            "documentNumber": "DEL-001",
+            "orderNumber": "ORDER-001",
+            "trackingNumber": "LOG-001",
+            "carrierCode": "YT",
+            "carrierName": "云途",
+            "channelName": "示例实际渠道",
+            "warehouseCode": "HZ",
+            "warehouse": "杭州仓",
+            "customerId": "customer-example",
+            "customerCode": "C001",
+            "customerName": "示例客户",
+            "organization": {
+              "id": "org-example",
+              "name": "示例组织"
+            },
+            "department": {
+              "id": "department-example",
+              "name": "业务一部"
+            },
+            "owner": {
+              "id": "employee-example",
+              "name": "示例业务员"
+            },
+            "salesDepartmentCode": "sales1",
+            "originalAmount": 100,
+            "originalCurrency": "CNY",
+            "fxRateToUsd": 0.14,
+            "fxRateDate": "2026-10-22",
+            "fxRateSource": "mock-contract-example",
+            "amount": 14,
+            "currency": "USD",
+            "confirmedAt": "2026-10-21T16:30:00Z",
+            "reviewStatus": "approved",
+            "costStatus": "confirmed"
+          }
+        ]
+      },
+      "FopFreightCandidate": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "发运单稳定ID；当前成本快照唯一键，独立allowlist授权键；重复ID拒收。",
+            "minLength": 1
+          },
+          "documentNumber": {
+            "type": "string",
+            "description": "发运单billno，非订单号。",
+            "minLength": 1
+          },
+          "orderNumber": {
+            "type": "string",
+            "description": "hzkj_order_no对应源履约订单号；同一订单可有多条发运单成本。",
+            "minLength": 1
+          },
+          "trackingNumber": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "源hzkj_logistics_orderno物流订单号；可空；具体跟踪号语义待真实接口确认。",
+            "minLength": 1
+          },
+          "carrierCode": {
+            "$ref": "#/components/schemas/FreightCarrier"
+          },
+          "carrierName": {
+            "type": "string",
+            "description": "真实服务商展示名称。",
+            "minLength": 1
+          },
+          "channelName": {
+            "type": "string",
+            "description": "发运单实际物流渠道名称。",
+            "minLength": 1
+          },
+          "warehouseCode": {
+            "type": "string",
+            "description": "实际发运仓库，未知拒收。",
+            "enum": [
+              "HZ",
+              "SZ"
+            ]
+          },
+          "warehouse": {
+            "type": "string",
+            "description": "实际发运仓库展示名称。",
+            "minLength": 1
+          },
+          "customerId": {
+            "type": "string",
+            "description": "稳定客户ID。",
+            "minLength": 1
+          },
+          "customerCode": {
+            "type": "string",
+            "minLength": 1,
+            "description": "非空客户编码，可信适配器提供；不可用空值替代。"
+          },
+          "customerName": {
+            "type": "string",
+            "description": "客户名称。",
+            "minLength": 1
+          },
+          "organization": {
+            "$ref": "#/components/schemas/NamedEntity",
+            "description": "发运单组织；可信源提供。"
+          },
+          "department": {
+            "$ref": "#/components/schemas/NamedEntity",
+            "description": "成本归属部门；部门权限不得由浏览器提供。"
+          },
+          "owner": {
+            "$ref": "#/components/schemas/NamedEntity",
+            "description": "发运单业务员稳定ID及名称。"
+          },
+          "salesDepartmentCode": {
+            "$ref": "#/components/schemas/SalesDepartment"
+          },
+          "originalAmount": {
+            "type": "number",
+            "description": "hzkj_actual_freight原币实际成本，至多两位小数的安全分币；非客户收费或预估价。公开有效明细为正数。",
+            "minimum": 0,
+            "maximum": 90071992547409.9,
+            "x-decimal-scale": 2
+          },
+          "originalCurrency": {
+            "type": "string",
+            "description": "hzkj_textfield1明确原币种，标准大写三字母代码；不得统一假定CNY。",
+            "pattern": "^[A-Z]{3}$"
+          },
+          "fxRateToUsd": {
+            "type": "number",
+            "description": "每1单位原币折合USD；必须显式、有限且>0，USD原币必须1。",
+            "exclusiveMinimum": 0
+          },
+          "fxRateDate": {
+            "type": "string",
+            "description": "该条成本采用的汇率业务日期；不是响应生成日期的隐式替代。",
+            "format": "date",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          },
+          "fxRateSource": {
+            "type": "string",
+            "description": "可追溯的汇率来源；Mock来源不能用于生产。",
+            "minLength": 1
+          },
+          "amount": {
+            "type": "number",
+            "description": "USD成本=originalAmount×fxRateToUsd，按十进制精确乘法HALF_UP到分（1.50×0.15=0.23），不先做二进制浮点乘法再round。后端验证一致性、安全分币和累计安全性；缺汇率、不一致或超过两位小数的原额/结果拒收。",
+            "minimum": 0,
+            "maximum": 90071992547409.9,
+            "x-decimal-scale": 2
+          },
+          "currency": {
+            "type": "string",
+            "description": "统一分析与展示币种。",
+            "const": "USD"
+          },
+          "confirmedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "hzkj_actual_freight_time，带时区的实际运费确认时刻；UTC+8归期。公开有效明细必须非空且已发生；不是最终结账或银行付款证明。"
+          },
+          "reviewStatus": {
+            "type": "string",
+            "description": "发运单审核；billstatus=C映射approved。",
+            "enum": [
+              "approved",
+              "pending"
+            ]
+          },
+          "costStatus": {
+            "type": "string",
+            "description": "适配器归一成本确认状态；不能宣称源存在同名枚举。",
+            "enum": [
+              "confirmed",
+              "pending"
+            ]
+          },
+          "tenantId": {
+            "type": "string",
+            "description": "成本源所属租户，必须与绑定主体匹配。",
+            "minLength": 1
+          },
+          "departmentPathIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": "可信部门祖先ID。",
+              "minLength": 1
+            },
+            "description": "部门及子部门范围检查；不得由浏览器传入。",
+            "uniqueItems": true
+          }
+        },
+        "required": [
+          "id",
+          "documentNumber",
+          "orderNumber",
+          "trackingNumber",
+          "carrierCode",
+          "carrierName",
+          "channelName",
+          "warehouseCode",
+          "warehouse",
+          "customerId",
+          "customerCode",
+          "customerName",
+          "originalAmount",
+          "originalCurrency",
+          "fxRateToUsd",
+          "fxRateDate",
+          "fxRateSource",
+          "amount",
+          "currency",
+          "confirmedAt",
+          "reviewStatus",
+          "costStatus",
+          "tenantId"
+        ],
+        "additionalProperties": false,
+        "description": "仅可信FOP provider内部候选契约，不是HTTP输入或公开响应。先做主体、租户、独立成本授权和业务范围交集，再序列化公开字段。",
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "originalCurrency": {
+                  "const": "USD"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "fxRateToUsd": {
+                  "const": 1
+                }
+              }
+            }
+          }
+        ],
+        "examples": [
+          {
+            "id": "delivery-example",
+            "documentNumber": "DEL-001",
+            "orderNumber": "ORDER-001",
+            "trackingNumber": "LOG-001",
+            "carrierCode": "YT",
+            "carrierName": "云途",
+            "channelName": "示例实际渠道",
+            "warehouseCode": "HZ",
+            "warehouse": "杭州仓",
+            "customerId": "customer-example",
+            "customerCode": "C001",
+            "customerName": "示例客户",
+            "organization": {
+              "id": "org-example",
+              "name": "示例组织"
+            },
+            "department": {
+              "id": "department-example",
+              "name": "业务一部"
+            },
+            "owner": {
+              "id": "employee-example",
+              "name": "示例业务员"
+            },
+            "salesDepartmentCode": "sales1",
+            "originalAmount": 100,
+            "originalCurrency": "CNY",
+            "fxRateToUsd": 0.14,
+            "fxRateDate": "2026-10-22",
+            "fxRateSource": "mock-contract-example",
+            "amount": 14,
+            "currency": "USD",
+            "confirmedAt": "2026-10-21T16:30:00Z",
+            "reviewStatus": "approved",
+            "costStatus": "confirmed",
+            "tenantId": "tenant-example",
+            "departmentPathIds": [
+              "department-example"
+            ]
+          }
+        ]
+      },
+      "FreightPeriod": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "回传下钻的期间ID：月YYYY-MM、周周一YYYY-MM-DD、年YYYY；必须属于当前查询。",
+            "pattern": "^\\d{4}(?:-\\d{2}(?:-\\d{2})?)?$"
+          },
+          "label": {
+            "type": "string",
+            "description": "期间展示文本。"
+          },
+          "from": {
+            "type": "string",
+            "description": "本期起日，UTC+8，含当日。",
+            "format": "date",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          },
+          "to": {
+            "type": "string",
+            "description": "本期统计末日，UTC+8，含当日；未结束周期截到当前业务日期，不晚于今天。",
+            "format": "date",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          },
+          "partial": {
+            "type": "boolean",
+            "description": "本期自然周期尚未结束，含周期末当天；to截到今天。当前累计金额与完整上期比较，应醒目标识，不能当已关账或同期进度。"
+          },
+          "previousFrom": {
+            "type": "string",
+            "description": "完整上一自然周期起日，可能跨年或早于2020。",
+            "format": "date",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          },
+          "previousTo": {
+            "type": "string",
+            "description": "完整上一自然周期末日。",
+            "format": "date",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "from",
+          "to",
+          "partial",
+          "previousFrom",
+          "previousTo"
+        ],
+        "additionalProperties": false,
+        "description": "UTC+8自然周期。响应升序，统计表可倒序；previous范围不是截至同日的同比进度。"
+      },
+      "FreightValue": {
+        "type": "object",
+        "properties": {
+          "amount": {
+            "type": "number",
+            "description": "本期获授权有效USD实际成本。",
+            "minimum": 0,
+            "maximum": 90071992547409.9
+          },
+          "previousAmount": {
+            "type": "number",
+            "description": "完整上期同仓库/服务商和权限范围USD成本。",
+            "minimum": 0,
+            "maximum": 90071992547409.9
+          },
+          "delta": {
+            "type": "number",
+            "description": "本期减上期的USD差额，可为负。"
+          },
+          "percent": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "delta/abs(previousAmount)×100，25表示25%；上期0且本期>0为null，双0为0；不输出Infinity/NaN。"
+          }
+        },
+        "required": [
+          "amount",
+          "previousAmount",
+          "delta",
+          "percent"
+        ],
+        "additionalProperties": false,
+        "description": "环比指标；总计按合计金额与合计基数重新计算比例，不相加百分比。",
+        "examples": [
+          {
+            "amount": 14,
+            "previousAmount": 10,
+            "delta": 4,
+            "percent": 40
+          },
+          {
+            "amount": 14,
+            "previousAmount": 0,
+            "delta": 14,
+            "percent": null
+          },
+          {
+            "amount": 0,
+            "previousAmount": 0,
+            "delta": 0,
+            "percent": 0
+          }
+        ]
+      },
+      "FreightSeries": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "total 或 carrier:YT 等稳定系列ID；下钻使用carrierCode而非把系列ID当权限。",
+            "pattern": "^(total|carrier:(YT|4PX|WB|YW|JS|OTHER))$"
+          },
+          "label": {
+            "type": "string",
+            "description": "合计或服务商展示名称。"
+          },
+          "kind": {
+            "type": "string",
+            "description": "total汇总，detail单服务商；两者并列展示但不能重复累加。",
+            "enum": [
+              "total",
+              "detail"
+            ]
+          },
+          "carrierCode": {
+            "$ref": "#/components/schemas/FreightCarrier",
+            "description": "detail时存在；total省略。"
+          },
+          "totals": {
+            "$ref": "#/components/schemas/FreightValue",
+            "description": "显示期间金额之和及各期完整上期基数之和。"
+          },
+          "values": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FreightValue"
+            },
+            "description": "与periods严格等长同下标。"
+          },
+          "billCount": {
+            "type": "integer",
+            "description": "本系列显示期间的有效发运单数，不是履约订单数。",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "kind",
+          "totals",
+          "values",
+          "billCount"
+        ],
+        "additionalProperties": false,
+        "description": "固定合计在前；无服务商过滤时随后为YT/4PX/WB/YW/JS/OTHER。",
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "kind": {
+                  "const": "detail"
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "carrierCode"
+              ]
+            },
+            "else": {
+              "not": {
+                "required": [
+                  "carrierCode"
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "FreightData": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "$ref": "#/components/schemas/DataSource"
+          },
+          "query": {
+            "$ref": "#/components/schemas/FreightQuery"
+          },
+          "timeZone": {
+            "type": "string",
+            "description": "统计时区。",
+            "const": "UTC+8"
+          },
+          "currency": {
+            "type": "string",
+            "description": "分析目标币种。",
+            "const": "USD"
+          },
+          "dateBasis": {
+            "type": "string",
+            "description": "明确采用实际运费确认时间。",
+            "const": "freight_confirmed_at"
+          },
+          "asOf": {
+            "type": "string",
+            "description": "响应计算时刻，非源更新时间、最终账单或一致性快照。",
+            "format": "date-time"
+          },
+          "periods": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FreightPeriod"
+            },
+            "description": "升序周期数组。"
+          },
+          "series": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FreightSeries"
+            },
+            "description": "合计及服务商并列系列。",
+            "minItems": 2,
+            "maxItems": 7
+          },
+          "totals": {
+            "$ref": "#/components/schemas/FreightValue",
+            "description": "与series[kind=total].totals一致。"
+          },
+          "billCount": {
+            "type": "integer",
+            "description": "显示期间有效发运单总数，不重复加各系列。",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "source",
+          "query",
+          "timeZone",
+          "currency",
+          "dateBasis",
+          "asOf",
+          "periods",
+          "series",
+          "totals",
+          "billCount"
+        ],
+        "additionalProperties": false,
+        "description": "当前用户独立成本授权内的运费聚合。缺freight scope=403；空/缺失allowedFreightIds=各期0值空范围。source=mock明确演示；真实FOP网络适配未完成。",
+        "examples": [
+          {
+            "source": "mock",
+            "query": {
+              "grain": "year",
+              "year": 2026,
+              "warehouse": "ALL",
+              "carrierCode": "YT"
+            },
+            "timeZone": "UTC+8",
+            "currency": "USD",
+            "dateBasis": "freight_confirmed_at",
+            "asOf": "2026-10-22T04:00:00Z",
+            "periods": [
+              {
+                "id": "2022",
+                "label": "2022年",
+                "from": "2022-01-01",
+                "to": "2022-12-31",
+                "partial": false,
+                "previousFrom": "2021-01-01",
+                "previousTo": "2021-12-31"
+              },
+              {
+                "id": "2023",
+                "label": "2023年",
+                "from": "2023-01-01",
+                "to": "2023-12-31",
+                "partial": false,
+                "previousFrom": "2022-01-01",
+                "previousTo": "2022-12-31"
+              },
+              {
+                "id": "2024",
+                "label": "2024年",
+                "from": "2024-01-01",
+                "to": "2024-12-31",
+                "partial": false,
+                "previousFrom": "2023-01-01",
+                "previousTo": "2023-12-31"
+              },
+              {
+                "id": "2025",
+                "label": "2025年",
+                "from": "2025-01-01",
+                "to": "2025-12-31",
+                "partial": false,
+                "previousFrom": "2024-01-01",
+                "previousTo": "2024-12-31"
+              },
+              {
+                "id": "2026",
+                "label": "2026年",
+                "from": "2026-01-01",
+                "to": "2026-10-22",
+                "partial": true,
+                "previousFrom": "2025-01-01",
+                "previousTo": "2025-12-31"
+              }
+            ],
+            "series": [
+              {
+                "id": "total",
+                "label": "合计",
+                "kind": "total",
+                "totals": {
+                  "amount": 24,
+                  "previousAmount": 10,
+                  "delta": 14,
+                  "percent": 140
+                },
+                "values": [
+                  {
+                    "amount": 0,
+                    "previousAmount": 0,
+                    "delta": 0,
+                    "percent": 0
+                  },
+                  {
+                    "amount": 0,
+                    "previousAmount": 0,
+                    "delta": 0,
+                    "percent": 0
+                  },
+                  {
+                    "amount": 0,
+                    "previousAmount": 0,
+                    "delta": 0,
+                    "percent": 0
+                  },
+                  {
+                    "amount": 10,
+                    "previousAmount": 0,
+                    "delta": 10,
+                    "percent": null
+                  },
+                  {
+                    "amount": 14,
+                    "previousAmount": 10,
+                    "delta": 4,
+                    "percent": 40
+                  }
+                ],
+                "billCount": 2
+              },
+              {
+                "id": "carrier:YT",
+                "label": "云途YT",
+                "kind": "detail",
+                "carrierCode": "YT",
+                "totals": {
+                  "amount": 24,
+                  "previousAmount": 10,
+                  "delta": 14,
+                  "percent": 140
+                },
+                "values": [
+                  {
+                    "amount": 0,
+                    "previousAmount": 0,
+                    "delta": 0,
+                    "percent": 0
+                  },
+                  {
+                    "amount": 0,
+                    "previousAmount": 0,
+                    "delta": 0,
+                    "percent": 0
+                  },
+                  {
+                    "amount": 0,
+                    "previousAmount": 0,
+                    "delta": 0,
+                    "percent": 0
+                  },
+                  {
+                    "amount": 10,
+                    "previousAmount": 0,
+                    "delta": 10,
+                    "percent": null
+                  },
+                  {
+                    "amount": 14,
+                    "previousAmount": 10,
+                    "delta": 4,
+                    "percent": 40
+                  }
+                ],
+                "billCount": 2
+              }
+            ],
+            "totals": {
+              "amount": 24,
+              "previousAmount": 10,
+              "delta": 14,
+              "percent": 140
+            },
+            "billCount": 2
+          }
+        ]
+      },
+      "FreightDetailsQuery": {
+        "type": "object",
+        "properties": {
+          "grain": {
+            "$ref": "#/components/schemas/FreightGrain"
+          },
+          "year": {
+            "type": "integer",
+            "description": "2020至UTC+8当前年；未来年拒绝。周锚点必须属于所选年。",
+            "minimum": 2020,
+            "maximum": 9999
+          },
+          "weekOf": {
+            "type": "string",
+            "description": "仅week可传；不传时当年默认UTC+8今天、历史年默认12月31日。必须属于year且不晚于今天；响应回显解析后的锚点。非week传入则400。",
+            "format": "date",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          },
+          "warehouse": {
+            "type": "string",
+            "description": "ALL=全仓，HZ=杭州仓，SZ=深圳仓；服务端授权范围内过滤，不扩大权限。",
+            "enum": [
+              "ALL",
+              "HZ",
+              "SZ"
+            ],
+            "default": "ALL"
+          },
+          "carrierCode": {
+            "$ref": "#/components/schemas/FreightCarrier",
+            "description": "省略返回合计及固定六类服务商；指定时返回合计及该服务商。"
+          },
+          "periodId": {
+            "type": "string",
+            "description": "仅选择当前查询返回的一期；省略覆盖所有显示期；不能使用任意日期扩大范围。",
+            "pattern": "^\\d{4}(?:-\\d{2}(?:-\\d{2})?)?$"
+          },
+          "comparisonPeriod": {
+            "type": "string",
+            "description": "current为本期（默认）；previous为对应完整上一期；省略periodId时选择全部显示期对应的上期并集，重复日期不重复计费。",
+            "enum": [
+              "current",
+              "previous"
+            ],
+            "default": "current"
+          },
+          "workbenchRole": {
+            "$ref": "#/components/schemas/WorkbenchRole",
+            "description": "必须是当前账户可访问岗位，单据明细在工作台展示。"
+          },
+          "page": {
+            "type": "integer",
+            "description": "页码。",
+            "minimum": 1,
+            "maximum": 1000000,
+            "default": 1
+          },
+          "pageSize": {
+            "type": "integer",
+            "description": "每页条数。",
+            "minimum": 1,
+            "maximum": 100,
+            "default": 20
+          }
+        },
+        "required": [
+          "grain",
+          "year",
+          "warehouse",
+          "workbenchRole",
+          "page",
+          "pageSize"
+        ],
+        "additionalProperties": false,
+        "description": "已解析运费明细查询。HTTP请求warehouse/page/pageSize可省略并取默认；periodId需与基础查询匹配。query非公开响应字段，此模型用于字段字典。"
+      },
+      "FreightTotals": {
+        "type": "object",
+        "properties": {
+          "billCount": {
+            "type": "integer",
+            "description": "完整筛选范围发运单数，等于FreightPage.total。",
+            "minimum": 0
+          },
+          "amount": {
+            "type": "number",
+            "description": "完整筛选范围USD折算成本，非当前页小计。",
+            "minimum": 0,
+            "maximum": 90071992547409.9
+          },
+          "originalAmounts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "currency": {
+                  "type": "string",
+                  "description": "原币种。",
+                  "pattern": "^[A-Z]{3}$"
+                },
+                "amount": {
+                  "type": "number",
+                  "description": "该币种原币金额合计。",
+                  "minimum": 0,
+                  "maximum": 90071992547409.9
+                }
+              },
+              "required": [
+                "currency",
+                "amount"
+              ],
+              "additionalProperties": false,
+              "description": "原币合计分币种列示，不跨币种相加。"
+            },
+            "description": "完整筛选范围原币分组；空范围为空数组。"
+          }
+        },
+        "required": [
+          "billCount",
+          "amount",
+          "originalAmounts"
+        ],
+        "additionalProperties": false,
+        "description": "分页前成本合计；不改变分页条件时切页不改变totals。"
+      },
+      "FreightPage": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "$ref": "#/components/schemas/DataSource"
+          },
+          "timeZone": {
+            "type": "string",
+            "description": "统计时区。",
+            "const": "UTC+8"
+          },
+          "currency": {
+            "type": "string",
+            "description": "目标币种。",
+            "const": "USD"
+          },
+          "dateBasis": {
+            "type": "string",
+            "description": "日期口径。",
+            "const": "freight_confirmed_at"
+          },
+          "total": {
+            "type": "integer",
+            "description": "完整筛选范围的发运单数。",
+            "minimum": 0
+          },
+          "page": {
+            "type": "integer",
+            "description": "页码。",
+            "minimum": 1,
+            "maximum": 1000000
+          },
+          "pageSize": {
+            "type": "integer",
+            "description": "页容量。",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/FopFreight"
+                },
+                {
+                  "properties": {
+                    "reviewStatus": {
+                      "const": "approved"
+                    },
+                    "costStatus": {
+                      "const": "confirmed"
+                    },
+                    "confirmedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "amount": {
+                      "exclusiveMinimum": 0
+                    },
+                    "originalAmount": {
+                      "exclusiveMinimum": 0
+                    }
+                  }
+                }
+              ]
+            },
+            "description": "当前页公开已审核、已确认、正运费且确认时刻已发生的发运单，确认时间倒序、ID稳定排序。"
+          },
+          "totals": {
+            "$ref": "#/components/schemas/FreightTotals"
+          },
+          "range": {
+            "type": "object",
+            "properties": {
+              "from": {
+                "type": "string",
+                "description": "选定本期或上期并集的起始日，UTC+8，含首日。",
+                "format": "date",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+              },
+              "to": {
+                "type": "string",
+                "description": "选定周期并集末日，含末日；current未完期截到UTC+8今天，previous使用完整上期末日。",
+                "format": "date",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+              }
+            },
+            "required": [
+              "from",
+              "to"
+            ],
+            "additionalProperties": false,
+            "description": "请求实际选择的周期范围；并集由有效查询周期推导。"
+          }
+        },
+        "required": [
+          "source",
+          "timeZone",
+          "currency",
+          "dateBasis",
+          "total",
+          "page",
+          "pageSize",
+          "items",
+          "totals",
+          "range"
+        ],
+        "additionalProperties": false,
+        "description": "独立成本授权加岗位权限；total/totals分页前计算，越界页items=[]且合计保留；不公开tenantId/departmentPathIds。",
+        "examples": [
+          {
+            "source": "mock",
+            "timeZone": "UTC+8",
+            "currency": "USD",
+            "dateBasis": "freight_confirmed_at",
+            "total": 1,
+            "page": 1,
+            "pageSize": 20,
+            "items": [
+              {
+                "id": "delivery-example",
+                "documentNumber": "DEL-001",
+                "orderNumber": "ORDER-001",
+                "trackingNumber": "LOG-001",
+                "carrierCode": "YT",
+                "carrierName": "云途",
+                "channelName": "示例实际渠道",
+                "warehouseCode": "HZ",
+                "warehouse": "杭州仓",
+                "customerId": "customer-example",
+                "customerCode": "C001",
+                "customerName": "示例客户",
+                "organization": {
+                  "id": "org-example",
+                  "name": "示例组织"
+                },
+                "department": {
+                  "id": "department-example",
+                  "name": "业务一部"
+                },
+                "owner": {
+                  "id": "employee-example",
+                  "name": "示例业务员"
+                },
+                "salesDepartmentCode": "sales1",
+                "originalAmount": 100,
+                "originalCurrency": "CNY",
+                "fxRateToUsd": 0.14,
+                "fxRateDate": "2026-10-22",
+                "fxRateSource": "mock-contract-example",
+                "amount": 14,
+                "currency": "USD",
+                "confirmedAt": "2026-10-21T16:30:00Z",
+                "reviewStatus": "approved",
+                "costStatus": "confirmed"
+              }
+            ],
+            "totals": {
+              "billCount": 1,
+              "amount": 14,
+              "originalAmounts": [
+                {
+                  "currency": "CNY",
+                  "amount": 100
+                }
+              ]
+            },
+            "range": {
+              "from": "2026-10-01",
+              "to": "2026-10-22"
+            }
+          },
+          {
+            "source": "mock",
+            "timeZone": "UTC+8",
+            "currency": "USD",
+            "dateBasis": "freight_confirmed_at",
+            "total": 0,
+            "page": 1,
+            "pageSize": 20,
+            "items": [],
+            "totals": {
+              "billCount": 0,
+              "amount": 0,
+              "originalAmounts": []
+            },
+            "range": {
+              "from": "2026-10-01",
+              "to": "2026-10-22"
+            }
+          }
+        ]
+      },
+      "FopFreightAuthorization": {
+        "type": "object",
+        "properties": {
+          "subject": {
+            "type": "object",
+            "properties": {
+              "tenantId": {
+                "type": "string",
+                "description": "绑定租户。",
+                "minLength": 1
+              },
+              "userId": {
+                "type": "string",
+                "description": "绑定FOP用户。",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "tenantId",
+              "userId"
+            ],
+            "additionalProperties": false,
+            "description": "可信provider解析主体，必须与服务端绑定完全匹配。"
+          },
+          "allowedFreightIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": "获授权发运单ID。",
+              "minLength": 1
+            },
+            "description": "独立成本白名单，缺失或空为无运费记录；不能从allowedOrderIds/allowedReceiptIds推导。",
+            "uniqueItems": true
+          },
+          "analyticsScopes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": "独立分析资源。",
+              "enum": [
+                "rates",
+                "registrations",
+                "receipts",
+                "freight"
+              ]
+            },
+            "description": "运费两个端点均要求包含freight；缺失/不包含返回403。",
+            "uniqueItems": true
+          }
+        },
+        "required": [
+          "subject"
+        ],
+        "additionalProperties": false,
+        "description": "仅内部FopPermissionGrant中与成本有关的投影，不是新的HTTP端点或客户端可写权限。仍须与租户、本地业务范围及当前岗位授权求交，并复查请求中途授权变更。"
       }
     },
     "responses": {

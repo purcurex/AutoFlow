@@ -1,3 +1,5 @@
+import { aggregateFreight, freightDetails, freightPeriods, publicFreight } from './fop-freight'
+import type { FopFreight, FreightQuery, FreightDetailsQuery } from './fop-freight.types'
 import { BadRequestException, ForbiddenException, Inject, Injectable, ServiceUnavailableException, UnauthorizedException } from '@nestjs/common'
 import { UsersService } from '../users/users.service'
 import { isWorkbenchRole, WORKBENCH_ROLES, WorkbenchRole } from '../users/workbench-role'
@@ -98,10 +100,13 @@ export class FopDataService {
     if (grant.allowedReceiptIds !== undefined && (!Array.isArray(grant.allowedReceiptIds) || grant.allowedReceiptIds.some(id => typeof id !== 'string' || !id.trim()))) {
       throw new ForbiddenException({ code: 'fop_permission_denied', message: 'Invalid FOP receipt permissions' })
     }
-    if (grant.analyticsScopes !== undefined && (!Array.isArray(grant.analyticsScopes) || grant.analyticsScopes.some(scope => !['rates', 'registrations', 'receipts'].includes(scope)))) {
+    if (grant.allowedFreightIds !== undefined && (!Array.isArray(grant.allowedFreightIds) || grant.allowedFreightIds.some(id => typeof id !== 'string' || !id.trim()))) {
+      throw new ForbiddenException({ code: 'fop_permission_denied', message: 'Invalid FOP freight permissions' })
+    }
+    if (grant.analyticsScopes !== undefined && (!Array.isArray(grant.analyticsScopes) || grant.analyticsScopes.some(scope => !['rates', 'registrations', 'receipts', 'freight'].includes(scope)))) {
       throw new ForbiddenException({ code: 'fop_permission_denied', message: 'Invalid FOP analytics permissions' })
     }
-    return { subject: { ...identity }, allowedOrderIds: [...new Set(grant.allowedOrderIds)], allowedReceiptIds: [...new Set(grant.allowedReceiptIds ?? [])], analyticsScopes: [...new Set(grant.analyticsScopes ?? [])] }
+    return { subject: { ...identity }, allowedOrderIds: [...new Set(grant.allowedOrderIds)], allowedReceiptIds: [...new Set(grant.allowedReceiptIds ?? [])], allowedFreightIds: [...new Set(grant.allowedFreightIds ?? [])], analyticsScopes: [...new Set(grant.analyticsScopes ?? [])] }
   }
 
   private async providerCall<T>(operation: () => Promise<T>): Promise<T> {
@@ -183,6 +188,51 @@ export class FopDataService {
         return true
       }).map(publicReceipt)
     })
+  }
+
+  private async scopedFreight(userId: string, requiredRole?: WorkbenchRole): Promise<{ records: FopFreight[]; initial: Scope }> {
+    const initial = await this.scope(userId)
+    if (requiredRole ? !initial.roles.includes(requiredRole) : !initial.roles.length) throw new ForbiddenException('Workbench access denied')
+    const permission = await this.permissions(userId, initial)
+    if (!permission.analyticsScopes?.includes('freight')) throw new ForbiddenException({ code: 'fop_permission_denied', message: 'Freight cost access denied' })
+    const allowed = new Set(permission.allowedFreightIds ?? [])
+    if (!allowed.size) return { records: [], initial }
+    const identity = Object.freeze({ ...permission.subject })
+    const grant = Object.freeze({ subject: identity, allowedOrderIds: Object.freeze([...permission.allowedOrderIds]), allowedFreightIds: Object.freeze([...allowed]), analyticsScopes: Object.freeze([...(permission.analyticsScopes ?? [])]) })
+    const candidates = await this.providerCall(() => this.provider.listFreight(identity, grant))
+    await this.assertUnchanged(userId, initial)
+    const records = await this.providerCall(async () => {
+      if (!Array.isArray(candidates)) throw new Error('Invalid FOP freight response')
+      const seen = new Set<string>()
+      return candidates.filter(candidate => {
+        if (!candidate || candidate.tenantId !== identity.tenantId || !allowed.has(candidate.id)) return false
+        if (candidate.departmentPathIds !== undefined && (!Array.isArray(candidate.departmentPathIds) || candidate.departmentPathIds.some(id => typeof id !== 'string' || !id.trim()))) throw new Error('Invalid freight department ancestry')
+        if (!matchesBusinessScope(initial.business, candidate)) return false
+        if (seen.has(candidate.id)) throw new Error('Duplicate authorized freight ID')
+        seen.add(candidate.id)
+        return true
+      }).map(publicFreight)
+    })
+    return { records, initial }
+  }
+
+  async getFreight(userId: string, query: FreightQuery) {
+    const now = new Date()
+    freightPeriods(query, now)
+    const { records, initial } = await this.scopedFreight(userId)
+    const result = await this.providerCall(async () => aggregateFreight(records, query, now))
+    await this.assertUnchanged(userId, initial)
+    return { source: this.provider.source ?? 'fop', ...result }
+  }
+
+  async getFreightDetails(userId: string, query: FreightDetailsQuery) {
+    const now = new Date()
+    // Validate period IDs before data fetch; malformed user filters are HTTP 400.
+    freightDetails([], query, now)
+    const { records, initial } = await this.scopedFreight(userId, query.workbenchRole)
+    const result = await this.providerCall(async () => freightDetails(records, query, now))
+    await this.assertUnchanged(userId, initial)
+    return { source: this.provider.source ?? 'fop', ...result }
   }
 
   private receiptPage(rows: FopReceipt[], query: { page: number; pageSize: number }) {

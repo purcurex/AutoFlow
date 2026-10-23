@@ -53,6 +53,16 @@ describe('role workbench navigation', () => {
     await router.push('/')
     expect(router.currentRoute.value.params.role).toBe('allocation')
   })
+  it('requires an assigned role and login for freight details', async () => {
+    vi.mocked(getWorkbenchAccess).mockResolvedValue({ roles: ['dispatch'], isAdmin: false })
+    await router.push('/workbench/dispatch/freight?grain=month&year=2026&warehouse=HZ')
+    expect(router.currentRoute.value.name).toBe('RoleWorkbenchFreight')
+    await router.push('/workbench/sales/freight')
+    expect(router.currentRoute.value.name).toBe('WorkbenchAccessDenied')
+    localStorage.clear()
+    await router.push('/workbench/dispatch/freight')
+    expect(router.currentRoute.value.name).toBe('Login')
+  })
   it('routes a management-only administrator to account settings and denies business deep links', async () => {
     vi.mocked(getWorkbenchAccess).mockResolvedValue({ roles: [], isAdmin: true, businessRole: 'none' })
     for (const path of ['/', '/dashboard', '/leads', '/quotes', '/workbench/sales']) {

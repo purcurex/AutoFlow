@@ -4,7 +4,7 @@
 
 ## 1. 交付结论与阅读方式
 
-本轮覆盖仓库中所有 ECharts 运行入口：共享 EChart 包装器、注册会员、部门回款、业务员回款、业务订单量趋势/排名、客户订单量/金额排名，以及客户趋势弹窗。履约卡片、任务、异常、工作日历虽不全部属于 ECharts，仍核对其图表相关数据依赖和边界。
+本轮覆盖仓库中所有 ECharts 运行入口：共享 EChart 包装器、注册会员、部门回款、业务员回款、业务订单量趋势/排名、客户订单量/金额排名、客户趋势弹窗，以及物流运费并列柱状图和单服务商趋势弹窗。履约卡片、任务、异常、工作日历虽不全部属于 ECharts，仍核对其图表相关数据依赖和边界。
 
 当前项目具备前后端分析契约、服务端演示数据、用户级权限过滤与工作台跳转。**真实 FOP 数据提供器、授权解析和组织同步尚未完成；本文件不是已接入金蝶生产环境的证明。** 本轮已按用户确认的方案 2 更新本工程聚合、Mock、前端和契约；历史诊断单独标注，验证结果以 VERIFICATION.md 为准。后台源码只读核查，未改生产应用。
 
@@ -31,6 +31,8 @@
 | CH-07 | 客户回款业绩对比 | 与 CH-06 完全相同客户集合和顺序 | `series.amounts.currency/total/values/warehouses/breakdown/excludedOrderCount` | `$`，两仓金额比较、合计及占比；不另取“金额Top 10” |
 | CH-08 | 客户订单量趋势弹窗 | 按客户名/编码搜索后选择，或从排名点趋势；继承日期/部门/仓库 | `order-volume/customers`；`order-volume?customerId=...` | 居中弹窗、关闭/ESC、每日明细、滑块拖动、分仓 |
 | CH-09 | 客户回款业绩趋势弹窗 | 与 CH-08 同筛选、同日期；与数量趋势同步拖动 | `series.amounts.values/warehouses` | 数量/金额双图，明细按日期倒排 |
+| CH-10 | 物流运费分析 | 月/周/年、年份、周锚点及仓库；合计、云途YT、4PX、万邦WB、燕文YW、极速JS、其他固定顺序并列柱状 | `freight.query/periods/series/totals`；实际成本按确认时间 UTC+8 归期、USD | 独立环比开关、倒序统计表、固定列宽；开启环比展开表格，关闭不收起；仅拖动滑块调整横轴 |
+| CH-11 | 单物流服务商运费趋势 | 继承已应用时间/仓库，按选中carrierCode显示该服务商 | 复用freight响应筛选单商；接口也支持carrierCode；各期 amount/previousAmount/delta/percent | 居中趋势弹窗；发运单原币/汇率/成本明细进入当前可访问岗位工作台 |
 | AUX-01 | 履约卡片/异常/任务 | 当前授权队列，不跟随注册日期范围 | `dashboard.queues/exceptions/tasks`、`fulfillment-orders` | Dashboard 仅统计和跳转；业务明细在岗位工作台 |
 | AUX-02 | 工作日历 | US纽约、EUR柏林、AUD悉尼；周一至周五09:00–17:00 | 浏览器时间＋`Intl` 时区，无独立HTTP接口 | 当地当前时间、工作状态、UTC+8转换、夏令时；不含公共假日 |
 
@@ -43,13 +45,13 @@
   → 平台 /api（会话、DTO验证、数据权限）
   → FopDataService（授权交集、租户隔离、去重、汇总、公开字段序列化）
   → FopDataProvider（当前 Demo 或 Unconfigured）
-  → 待实现：金蝶云苍穹用户授权、组织、客户、订单、收款分录、注册等网络适配
+  → 待实现：金蝶云苍穹用户授权、组织、客户、订单、收款分录、物流成本、注册等网络适配
 ```
 
 1. 浏览器仅提交业务筛选条件，不提交有效权限、FOP 用户身份或订单授权列表。
 2. 平台读取登录用户的 `fopTenantId/fopUserId`、业务角色、部门/员工标识与岗位角色。
-3. FOP 适配器解析该用户真实授权，返回同一 `subject` 的订单 allowlist、独立收款分录 allowlist 与分析资源授权；服务端再做本地业务范围交集，不能让本地业务管理员绕过 FOP 租户与用户授权。
-4. 订单／收款候选记录携带服务端专用 `tenantId`、必要部门祖先路径，验证后只向浏览器返回公开字段。组织路径不得依赖浏览器传入。
+3. FOP 适配器解析该用户真实授权，返回同一 `subject` 的订单 allowlist、独立收款分录 allowlist、独立 `allowedFreightIds` 与分析资源授权；服务端再做本地业务范围交集，不能让本地业务管理员绕过 FOP 租户与用户授权。物流成本必须有 `freight` analytics scope；订单／收款授权均不能推导成本授权。
+4. 订单／收款／运费候选记录携带服务端专用 `tenantId`、必要部门祖先路径，验证后只向浏览器返回公开字段。组织路径不得依赖浏览器传入。
 5. 新适配器不得在故障、超时、权限撤销时回退到全量数据或 Mock；应维持既有 403/503 语义。
 6. `asOf/updatedAt` 当前是响应生成时间，不代表 FOP 一致性快照、最后同步成功时间或账期关闭时间。真实接入如需一致性，应新增并正式版本化 `snapshotId/sourceUpdatedAt/permissionVersion` 等字段；它们目前不是已实现字段。
 
@@ -95,6 +97,27 @@
 - 下属团队由适配器映射至四个固定业务报表部门 `sales1...sales4`。组织树可自定义，但自定义组织树不会自动改变报表固定部门模型。
 - 名称保留中文和英文别名；统计人员为外贸业务员/伙伴。`owner.id` 是稳定业务员工标识，不能用名称或本地登录邮箱替代。
 
+### 4.4 物流运费的独立成本事实
+
+运费取已审核发运单 `hzkj_deliver_bill.hzkj_actual_freight`，按 `hzkj_actual_freight_time` 确认时间 UTC+8 归期。它是物流商实际成本快照，不使用客户支付运费、预估报价或订单金额推算。当前资格为 `reviewStatus=approved`、`costStatus=confirmed`、正数金额和已发生的非空确认时刻；未审核、未确认、零费用及未来确认不纳入。正数已确认成本缺确认时间属于契约错误，不能回退发运日／审核日。
+
+| 项目 | 当前实现／必须保持的边界 |
+| --- | --- |
+| 唯一粒度 | 每个发运单 ID 一条当前成本快照；重复 ID 拒收。一个履约订单多次发运可产生多条成本，不能按订单号去重 |
+| 币种 | `originalAmount/originalCurrency` 保留源金额和明确原币；`fxRateToUsd/fxRateDate/fxRateSource` 必须显式提供。USD 本币汇率也必须为1；其他币种不得默认当 CNY 或 USD |
+| 折算校验 | `amount=originalAmount×fxRateToUsd` 以十进制精确乘法按 HALF_UP 到分（1.50×0.15=0.23），不采用二进制浮点乘积后直接round，`currency=USD`；原额与USD结果最多两位小数；单条、乘积及累计须安全、有限，金额按分累加。缺汇率、折算不符、非法币种／金额不得静默混加 |
+| 月粒度 | 选定年1月至 UTC+8 当前月；历史年为12月；1月比较前一年完整12月 |
+| 周粒度 | 周一开始，锚点所在周及前三周。weekOf 默认当年今天、历史年12月31日；显式锚点必须属于 year 且不晚于今天；跨年周及其上一周完整读取 |
+| 年粒度 | 所选年及前四年，显示区间最早2020；即便首个显示年为2020，其完整2019年基期仍需读取 |
+| 未完周期 | `periods[].partial=true` 明示未结束周期（含周期末当天），本期to截到UTC+8今天。本期仅含当前已确认金额，与完整上一期比较；不能宣称为同期进度增长率或已关账数据 |
+| 环比 | amount、previousAmount、delta 和 percent 同时返回；delta=本期−上期，percent=delta/abs(上期)×100（25表示25%）。上期0且本期>0为null，显示“上期为0”；双0为0。合计比例用合计基数重算，不能加各期百分比 |
+| 服务商 | 无 carrierCode 时合计＋YT/4PX/WB/YW/JS/OTHER；过滤单商时合计＋该商。合计不与明细再次相加；OTHER仅为可信适配器明确映射的其他真实服务商 |
+| 独立成本权限 | `freight` scope 缺失403；`allowedFreightIds` 缺失或为空返回空范围。有效范围=FOP成本授权∩租户∩本人／部门及下属／业务管理员范围；系统管理身份、订单可见性和页面筛选均不扩大权限 |
+| 下钻与分页 | GET `/freight/details` 要求有效 `workbenchRole`，携带原查询、可选 periodId/carrierCode 与 comparisonPeriod。current 默认本期，previous选择同周期完整上期；periodId必须来自该查询。total/totals按完整筛选范围计算，分页不改变合计；原币按币种分别合计 |
+| 最终结算边界 | FOP费用分录已停用，重派／退费采集未启用；常规候选只查首次未得到正运费的单据，不能保证后续调价刷新。确认时间只证明写入苍穹，不证明最终账单、付款或全部补收退款已入账 |
+
+真实 FOP 只读成本查询、最终结算定义、币种和历史汇率、后续调价／补收退款、真实服务商映射及字段级成本可见权仍待联调。平台 Mock 已按独立事实实现，不能据此关闭这些生产核对项。
+
 ## 5. FOP 上游字段映射需求清单
 
 以下是平台逻辑字段。实体、状态与金额字段已经只读核对 `/Library/VSCode/dtr5b`，证据见源码映射；实际发布 URL、操作契约、鉴权、分页及脱敏响应仍待后台团队提供。平台 HTTP 路径不能直接当作云苍穹原生路径。
@@ -102,7 +125,7 @@
 | 资源 | 必需逻辑字段 | 类型/约束 | 用途与对接要求 |
 | --- | --- | --- | --- |
 | 绑定主体 | `tenantId`, `userId` | 非空稳定字符串；与本地绑定成对对应 | 响应主体必须与请求主体一致；停用/离职/转岗后即时撤销旧授权 |
-| 用户授权 | `subject`, `allowedOrderIds[]`, `allowedReceiptIds[]`, `analyticsScopes[]` | 订单与收款分录分别授权；收款字段缺失／空数组=无收款权限；分析范围枚举rates/registrations/receipts | 授权与数据读取不可跨用户复用；本地admin不等于FOP超级用户 |
+| 用户授权 | `subject`, `allowedOrderIds[]`, `allowedReceiptIds[]`, `allowedFreightIds[]`, `analyticsScopes[]` | 订单、收款分录、运费分别授权；独立白名单缺失／空数组=该资源无记录；分析范围rates/registrations/receipts/freight | 授权与数据读取不可跨用户复用；本地admin不等于FOP超级用户；freight scope缺失403 |
 | 组织 | `id`, `name`, `parentId`, `type`, `enabled`（后两项为目录同步需求） | 主键稳定，父级可空，无环 | FOP目录同步尚未实现；明确同步/手工修改优先级和删除语义 |
 | 部门 | `department.id/name`, `departmentPathIds[]`, `salesDepartmentCode` | 祖先路径来自可信源；报表部门sales1–sales4 | 支持经理管辖子部门；业务报表归口不能靠文本模糊匹配 |
 | 员工 | `owner.id/name`, 岗位/部门归属、中文名/英文名、在职状态 | employeeId独立于登录账号ID | 两类名字展示可合成name；领导不混入业务员业绩序列；伙伴可列入 |
@@ -117,6 +140,7 @@
 | 异常 | `exception.reason/hours` | stock/address/tracking；hours为持续时长 | 异常清单和任务，是否可同单多异常需定义 |
 | 注册会员 | `registrationEntries[].date/salesDepartmentCode/owner/count/departmentPathIds` | 每日+员工计数；非负安全整数，日期完整 | 非管理员须提供员工粒度可过滤记录；仅日汇总无法实现本人/部门隔离 |
 | 收款分录 | id、sourceType、documentId/Number、amount/orderAmount/handlingFee/currency、paidAt、reviewStatus、receiptReviewStatus、paymentStatus、客户/owner/部门/仓库/items | 独立分录 ID，tenantId／departmentPathIds 仅服务端；实际应收／手续费／实收分别保留；公开端点只返回有效 USD 分录 | 已实现 FopReceipt、GET /receipts 与 /order-volume/receipts；多笔分录不重复计订单数，不复制表头实收到各行 |
+| 物流成本快照 | id、documentNumber、orderNumber、trackingNumber、carrierCode/Name、channelName、warehouseCode/warehouse、客户/owner/部门、originalAmount/Currency、fxRateToUsd/Date/Source、amount/currency、confirmedAt、reviewStatus、costStatus | 发运单表头当前实际成本；tenantId／departmentPathIds只在可信服务端候选；USD折算有明确原币及汇率证据 | FopFreight、GET /freight及/freight/details；独立成本授权；确认不等于最终结算，补收退款与历史调价机制待核对 |
 | 增量同步 | 更新时间、删除/失效标记、分页游标、授权版本、一致性快照 | 新适配器设计要求，非现有响应字段 | 大数据量不能靠浏览器下载全部订单；约定全量、增量、重试与断点恢复 |
 
 ### 后台团队需回填
@@ -141,6 +165,9 @@
 | AT-12 | 实际渲染与导出 | 真浏览器检查SVG、Tooltip、图例、ResizeObserver、图片导出；stub单测不替代此项 |
 | AT-13 | 大规模真实数据 | 用实际业务量压测权限集合、全量聚合、客户搜索及大日期跨度；先协商响应时间和容量指标，再签收 |
 | AT-14 | 文案和数据一致性 | 当前条件与最后成功应用条件分离；在途改筛选不能改变已返回数据标题；失败不把旧图标成新条件 |
+| AT-15 | 运费事实及原币折算 | 已审核已确认正运费计入；重复发运单、缺确认时间、缺汇率、USD汇率非1、折算不符与未知维度明确拒收；同订单多发运单分别计成本 |
+| AT-16 | 运费周期与对账 | UTC+8跨月/年；月YTD、历史12月、周一4周、近5年；未完期标记；完整跨年上期、0基期、各商与合计、current/previous明细及分页前合计逐项对账 |
+| AT-17 | 成本独立授权及交互 | 订单有权但运费无scope为403；空运费授权为空；本人/部门/租户隔离和在途撤权；服务商弹窗、工作台明细、倒序/固定列宽、环比开关与拖动滑块真实浏览器验收 |
 
 ## 7. 交付与接入顺序、后续待办及人工核对
 
@@ -153,11 +180,11 @@
 
 本次交付包含当前项目的代码与文档基线；不包含本机数据库、用户密码、密钥和运行产物，也不表示已部署到生产服务器。
 
-本章后续收录 [后续待办与人工核对清单](FOLLOW_UP_CHECKLIST.md)：16项开发／交付待办、17项人工资料核对、10组最小验收场景及回填模板。清单以已实现方案2为基线；未确认的生产信息保持待核对，不改写当前业务口径，也不把Mock完成状态当成真实FOP接入完成。
+本章后续收录 [后续待办与人工核对清单](FOLLOW_UP_CHECKLIST.md)：保留T01–T16、H01–H17、D01–D10，并追加物流运费T17–T20、H18–H22、D11–D15及回填模板。清单以方案2及运费当前快照契约为基线；未确认的生产信息保持待核对，不改写当前业务口径，也不把Mock完成状态当成真实FOP接入完成。
 
 
 
-适用基线：方案2代码提交 `d60fd5d`、当前 OpenAPI 17个操作／69个模型、HyperZone FOP 源码映射。本文作为完整需求第7章的补充，区分“已经实现”“待开发”“待提供资料”，便于业务、财务、FOP研发与实施人员逐项回填。
+适用基线：方案2代码提交 `d60fd5d`、本次物流运费成本快照扩展、当前 OpenAPI 19个操作／82个模型、HyperZone FOP 源码映射。本文作为完整需求第7章的补充，区分“已经实现”“待开发”“待提供资料”，便于业务、财务、FOP研发与实施人员逐项回填。方案2历史测试数量保留作证据，运费测试结果以 VERIFICATION.md 新增记录为准。
 
 建议负责人仅表示职责，不代表已指定人员或承诺工期。P0表示开始真实接入前必须具备的输入或能力，P1表示正式上线前必须完成，P2表示确认存在需求后安排；它们不是漏洞等级。未完成项不因 Mock 验收通过而关闭。
 
@@ -174,6 +201,8 @@
 | 权限 | 系统管理权限与业务范围独立；管理员／部门经理／业务员范围已实现；订单与收款独立授权 | 真实FOP授权、员工绑定和全部业务模块的生产归属尚待接入；业务管理员不能绕过FOP许可 |
 | 前端与演示 | Dashboard跳转工作台；回款明细、来源拆分、分仓、环比、客户Top10＋其他及纯备货客户展示已实现 | 真实接口、正式员工及数据对账仍待联调；不重复安排已完成页面开发 |
 | 币种与其他来源 | 当前业绩仅统计USD，显示 `$`，不自动换汇；样品、押金备货、钱包充值不加入本次收款业绩 | 非USD、退款／调整、钱包授信含义按下方清单核对；新增指标需单独变更契约 |
+| 物流实际成本 | 发运单已审核且已确认的实际运费，按确认时间UTC+8归期；独立成本Mock、分析/明细契约、月周年度与完整上期环比 | 源确认不是最终结算或银行付款；后续补收、退款、重派和调价不能靠首次快照覆盖 |
+| 运费币种与授权 | 保留原币/原额、明确USD汇率及日期/来源；折算金额必须一致；独立allowedFreightIds与freight scope | 不推断所有运费为CNY；订单可见不等于成本可见；真实历史汇率、FOP成本和字段权限待H18–H22确认 |
 
 ### 后续开发与交付待办
 
@@ -197,6 +226,10 @@
 | T14 | P1 · 待专项验证 | 真浏览器全图表交互、中文长名称、SKU图片、暗色／窄屏、键盘、导出验证 | H16、H17 | 本期指定浏览器与设备验收；测试SVG下载、图例、Tooltip、缩放、弹窗焦点和滚轮；图片鉴权／失效降级可用；不把stub图表单测当视觉验收 | 前端＋测试 |
 | T15 | P1 · 待实施安排 | 测试到生产切换、备份恢复、配置和运维观测；已有本地构建及隔离启动验证 | H01、H03、H15、H17 | 确认发布版本、环境配置、首批账号与回滚步骤；检查迁移／附件备份、错误告警与同步延迟；生产故障不得退回Mock；上线后抽样复核真实数据 | IT／运维＋实施＋平台后端 |
 | T16 | P2 · 待需求确认 | 可选扩展：多部门经理、报表部门扩展、财务关账、跨币种业绩、逐条会员名单、分析表导出、公共假日日历 | H04、H08、H13、H14、H17 | 仅对明确需要的项目另立需求、权限和接口版本；没有需求的标注暂不实施；不将这些可选项计入本期已交付功能 | 产品＋相关业务负责人 |
+| T17 | P0 · 待真实接入 | 实现发运单实际成本只读接口与独立成本授权；已有本工程聚合/明细、Mock及权限边界 | H01、H18、H21、H22 | 以真实绑定用户和组织查询成本；freight scope及allowedFreightIds独立，不用订单量报表权限替代；明确字段可见性；无权403、空授权空、故障503，统计与明细同范围 | FOP研发＋平台后端＋IT |
+| T18 | P0 · 待确认／适配 | 建立真实运费币种及USD汇率映射；已有原币、汇率日期/来源、折算一致性合同 | H19、H22 | 每种真实币种提供原额、取价规则和历史汇率；USD原币rate=1；缺币种/汇率、不一致和溢出拒收；原币分组和USD合计逐条对账 | 财务＋FOP研发＋平台后端 |
+| T19 | P0 · 待业务定界 | 核实“已确认”与最终结算、首次同步后调价／补收／退款／重派的关系；当前仅表头快照 | H18、H20 | 若保留快照，业务明确接受范围及历史修订规则；若要求完整净结算，先建立独立费用/调整事实、稳定ID、关联、方向、时间、版本及授权后扩展契约；不可把未采集调整当0 | 财务＋物流负责人＋产品＋FOP研发 |
+| T20 | P1 · 待真实验收 | 物流运费真实样本、跨期基线、权限、页面及性能验收；已有本工程图表/弹窗/工作台链路 | H16、H18–H22 | D11–D15对账；月YTD/历史12月、4周、5年与完整跨年上期；未完期提示；图表、原币、current/previous明细及分页合计一致；真实多账号、浏览器与业务量签收 | 测试＋财务＋物流＋平台前后端 |
 
 ### 需要人工核对、说明与提供资料的清单
 
@@ -204,7 +237,7 @@
 
 | 编号 | 建议答复方 | 需要核对、阐述或提供的信息 | 当前基线与影响 | 关联待办 |
 | --- | --- | --- | --- | --- |
-| H01 | FOP研发／IT | 测试与生产域名、网关前缀、租户／数据中心标识、应用及发布版本；只读订单、收款、注册、目录、权限接口的URL、方法、操作码、请求／响应脱敏样本；认证／续期、分页上限、限流、超时、错误码及可访问网络条件；认证配置交接位置 | `/Library/VSCode/dtr5b`当前源码不是线上部署证明；平台17个API也不是金蝶原生地址；收款手续费维护写接口不能作为分析查询接口 | T01、T02、T11、T15 |
+| H01 | FOP研发／IT | 测试与生产域名、网关前缀、租户／数据中心标识、应用及发布版本；只读订单、收款、注册、目录、权限接口的URL、方法、操作码、请求／响应脱敏样本；认证／续期、分页上限、限流、超时、错误码及可访问网络条件；认证配置交接位置 | `/Library/VSCode/dtr5b`当前源码不是线上部署证明；平台19个API也不是金蝶原生地址；收款手续费维护写接口不能作为分析查询接口 | T01、T02、T11、T15 |
 | H02 | FOP权限开发／IT | 实际如何以绑定用户执行或校验数据权限；业务对象权限／组织范围／字段权限；收款能否按分录授权；无权、无数据、禁用用户、错误返回如何区分；授权更新与缓存失效机制；提供至少两名权限不同用户的预期结果 | 当前服务端分别使用subject、订单ID集合、收款分录ID集合和analyticsScopes；本地再次做租户及业务范围交集；若生产只支持表头授权，需说明其如何安全转换为分录授权 | T02–T04、T10 |
 | H03 | IT／人事／部门负责人 | 正式账号清单：前端登录邮箱、姓名、FOP tenantId/userId、员工稳定ID、部门稳定ID、在职状态、系统管理角色、五类工作台岗位、businessRole及其departmentId/employeeId；哪些人员首批验收；入职、停用、离职、转岗由谁维护 | 模拟员工不是前端登录账号；不使用姓名／邮箱充当FOP主键；系统管理员不自动具有业务管理员范围，Demo账号授权不能复制为全员模板 | T03–T05、T13、T15 |
 | H04 | 业务／组织管理员／IT | 正式组织树及稳定ID、四业务部归口表、二三级子部门；部门经理含哪些下属团队；是否有人同时负责多个非上下级部门、兼岗或跨部门协作；前端组织自定义是独立业务组织还是要回写FOP；全部业务模块本地记录如何对应FOP员工／部门 | 当前一名经理仅配置一个departmentId及其后代；系统管理不等于查看所有数据；组织设计为账号内Mock空间；固定sales1–sales4报表不会随任意新增节点自动扩展 | T03–T05、T09、T16 |
@@ -221,6 +254,16 @@
 | H15 | IT／运维／业务／FOP研发 | 历史年限、订单／收款／注册总量与日增量、SKU行数、账号和并发量、最大查询范围；同步或实时方式、容许延迟、目标响应时间；上游游标／更新时间／删除标记、限流；图表到下钻期间允许的变化及权限撤销时效 | 当前全量候选内存统计，asOf/updatedAt不是源更新时间；没有快照／授权版本合同，前端30秒超时也不是承诺SLA。用实际业务量决定优化，不能用Demo数据量作上线容量结论 | T02、T10–T12、T15 |
 | H16 | FOP研发／财务／测试／各岗位代表 | 按下方“最小验收数据包”提供脱敏原始报文、完整筛选条件、预期纳入／排除原因、按客户／业务员／部门／仓库的数量与金额；覆盖不同权限账号和一条完整跨月备货链路 | 当前468项测试、19组HTTP契约检查均是本地实现／Mock证据，不能替代真实FOP对账；敏感信息可脱敏，但主键关联与金额等式要保留一致性 | T06–T09、T13、T14 |
 | H17 | 产品／IT／业务负责人 | 本期模块范围、试点账号与验收人、浏览器／分辨率／设备、正式域名与部署责任、备份／恢复和切换安排；是否确需分析表导出、逐条会员名单、多部门经理、公共假日等可选能力；SKU图片的授权访问方式 | 目前只有部分图表SVG导出，不能称已提供所有分析表Excel/PDF导出；工作日历为三个代表城市的标准工作周、无节假日。本项决定上线验收范围，不自动授权新功能或生产发布 | T13–T16 |
+
+#### 物流运费人工核对项（追加，保留原编号）
+
+| 编号 | 建议答复方 | 需要核对、阐述或提供的信息 | 当前基线与影响 | 关联待办 |
+| --- | --- | --- | --- | --- |
+| H18 | 财务／物流／FOP研发 | 各服务商“实际运费”取数是首笔扣款、已计费、账单确认、最终结算还是银行实付；确认时间、源收费时间、财务账期的区别；燕文第一条记录与急速最新timeIn是否最终；提供源账单—发运单—付款的脱敏关联样本及最终状态定义 | 当前hzkj_actual_freight_time为写入确认时刻；本工程按该时刻UTC+8归期，不改称实付时间。源码不能证明最终结算；若新指标需最终结算，须明确新状态/时间字段 | T17、T19、T20 |
+| H19 | 财务／汇率维护方／FOP研发 | YT/4PX/WB/YW/JS/其他的原币字段与真实币种；USD折算采用哪一日、哪个来源、汇率方向和精度；历史汇率覆盖及修正流程；缺币种、缺汇率、原额调价时如何处理；提供原额×汇率=USD的样例 | YT/4PX/WB/YW写原币金额，JS写CNY；Rmb变量名不证明币种。当前每条必须originalAmount/Currency及fxRateToUsd/Date/Source，USD本币rate=1；不隐式混加或用Mock汇率 | T18、T20 |
+| H20 | 财务／物流／售后／FOP研发 | 首次正运费后是否补收、退款、燃油/偏远附加费、重派、人工调价；事件ID、原单关联、正负方向、原币、发生/确认日期、状态、版本；自动重查或人工维护流程；已结期是否回写或调整期冲销 | 费用单据体停用，重派/退费采集注释；常规候选仅空/0金额，首次正数后不自动修订。当前每发运单只保留一条快照，不能表达完整调整流水 | T19、T20 |
+| H21 | 财务／FOP权限开发／IT | 哪些岗位/用户可见物流成本、原币、汇率与利润相关字段；正式单据/组织/字段权限如何以绑定用户校验；成本可见与订单可见不同的正反例；撤权/离职/调岗时效；独立allowlist的真实获取方式 | 当前需freight scope＋allowedFreightIds＋租户/本地业务范围交集；缺scope403，空IDs为空；单量报表“无业务员档案则组织全员”的规则不能继承为成本授权 | T17、T20 |
+| H22 | 物流／仓库／FOP研发 | 六类服务商真实ID/编码映射、实际渠道与物流订单/跟踪号语义、杭州/深圳仓归属、客户/业务员/部门来源；一个订单多发运单、多包裹、重发、跨仓、改渠道的样本；已知其他与未知代码区分；真实只读查询URL、分页和更新字段 | 固定YT/4PX/WB/YW/JS/OTHER仅归一代码，不能直接当生产ID；成本按发运单，不按订单号去重。JS同步POST是写接口，不能充当分析查询 | T17、T18、T20 |
 
 ### 最小验收数据包
 
@@ -240,6 +283,16 @@
 | D10 排名与注册 | 超过10个有履约客户、纯备货客户；按日／员工注册样本 | Top10＋其他全量不重不漏；下钻沿同一集合；部门合计等于成员，营销中心等于四部 |
 
 真实环境无某类场景时，由对应负责人注明“不存在／暂不在本期”，说明依据；保留合成边界测试，不声称该类生产流程已验收。
+
+#### 物流运费验收数据（追加）
+
+| 样本 | 必须覆盖的事实 | 预期核对点 |
+| --- | --- | --- |
+| D11 成本资格与多次发运 | 同订单两张发运单、未审核、未确认、0成本、已确认缺时间、未来时间和重复ID；源账单状态说明 | 只统计有效正快照；两个发运单分别计费；异常拒收或资格排除与契约一致；不拿客户运费对账 |
+| D12 原币与汇率 | 至少USD与一种真实非USD；不同汇率日期/来源；缺汇率、USD非1、折算不符、精度/溢出边界 | USD折算按分一致；原币分别合计；禁止把所有服务商当人民币；不能用Dashboard当前汇率替代历史汇率 |
+| D13 周期与完整基期 | UTC+8月末/年末，跨年周，历史12月、当年未完月/周/年，2020首年及2019基期，0→0和0→正数 | 四周周一开始、近五年；partial可见；完整上一期、跨年基期、null/0比例正确；current/previous明细与图表合计一致 |
+| D14 独立成本授权 | 订单可见但成本不可见、freight scope缺失、空运费IDs、两租户同类单据、部门后代/本人、管理员、在途撤权 | 缺scope403、空IDs合法空；不通过订单或本地管理员扩大范围；公开响应不含tenantId/departmentPathIds |
+| D15 后续修订及页面 | 首次同步后真实补收/退款/重派/调价链路；六类服务商映射；趋势弹窗、工作台分页与原币字段，筛选在途变化 | 确认源账单能否完整覆盖；未覆盖流程记录边界，不能显示为已完成结算；表格倒序/列宽、环比展开、拖动滑块、错误/会话清理和分页前合计验收 |
 
 ### 回填格式与完成规则
 
@@ -267,7 +320,7 @@
 
 ## 8. OpenAPI 接口清单与请求/响应定义
 
-本规范覆盖 **17 个操作、69 个数据模型**。以下清单由同目录 OpenAPI JSON 生成。Base URL 为 `/api`，表中路径不重复此前缀。响应为实际裸 JSON，不额外包装成 `{code,data}`。时间序列数值数组必须与对应时间轴等长：counts 对应 registrations、amounts 对应 months、values 及 warehouses 内数组对应 periods；items/series/options 等集合不适用。该跨字段规则需联调测试，单纯 schema 校验不能证明。
+本规范覆盖 **19 个操作、82 个数据模型**。以下清单由同目录 OpenAPI JSON 生成。Base URL 为 `/api`，表中路径不重复此前缀。响应为实际裸 JSON，不额外包装成 `{code,data}`。时间序列数值数组必须与对应时间轴等长：counts 对应 registrations、amounts 对应 months、values 及 warehouses 内数组对应 periods；items/series/options 等集合不适用。该跨字段规则需联调测试，单纯 schema 校验不能证明。
 
 | 方法 | 路径 | operationId | 用途 |
 | --- | --- | --- | --- |
@@ -288,12 +341,14 @@
 | GET | `/autoflow/dashboard` | `getLocalAutoflowDashboard` | 读取本地AutoFlow业务概览 |
 | GET | `/autoflow/integrations/fop/order-volume/receipts` | `getOrderVolumeReceipts` | 客户同一数量排名集合下钻收款分录 |
 | GET | `/autoflow/integrations/fop/receipts` | `getReceipts` | 读取获授权实收分录及完整筛选合计 |
+| GET | `/autoflow/integrations/fop/freight` | `getFreight` | 物流实际运费聚合及完整上期环比 |
+| GET | `/autoflow/integrations/fop/freight/details` | `getFreightDetails` | 岗位工作台物流运费发运单明细 |
 
 
 ### 8.1 公共鉴权与响应说明
 
 
-字段级源码快照，仅记录已实现HTTP路由，不将计划FOP上游写为paths。响应裸JSON，无{code,data,message}包装。required=序列化必有；type:null=显式空值；可省略字段不在required中。参数跨字段依赖及已知口径差距见操作描述和配套审计。示例为脱敏契约样例，不是生产数据。 FOP为金蝶云苍穹上的HyperZone自研应用，源码只读核实；本工程方案2收款聚合和Mock已实现，真实生产网络适配器仍未配置。订单与收款各自授权，回款采用实际结算分录，统一UTC+8。
+字段级源码快照，仅记录已实现HTTP路由，不将计划FOP上游写为paths。响应裸JSON，无{code,data,message}包装。required=序列化必有；type:null=显式空值；可省略字段不在required中。参数跨字段依赖及已知口径差距见操作描述和配套审计。示例为脱敏契约样例，不是生产数据。 FOP为金蝶云苍穹上的HyperZone自研应用，源码只读核实；本工程方案2收款聚合和Mock已实现，真实生产网络适配器仍未配置。订单与收款各自授权，回款采用实际结算分录，统一UTC+8。 物流运费使用独立freight scope及allowedFreightIds，已实现Mock成本快照；必须保留原币与明确USD折算，按确认时间归期。最终结算、补收退款、调价及真实成本查询/授权仍待核对。
 
 - `BearerAuth`：Authorization: Bearer <JWT>；角色每次查当前数据库。；type=http，in=Authorization，name=bearer。
 
@@ -1525,6 +1580,362 @@ Accept: application/json
 
 
 实现证据：`backend/src/modules/users/workbench.controller.ts`, `backend/src/modules/fop-data/fop-data.service.ts`, `backend/src/modules/fop-data/fop-receipts.dto.ts`, `backend/src/modules/fop-data/fop-receipts.ts`, `backend/src/modules/fop-data/fop-business-time.ts`。
+
+
+### 8.19 物流实际运费聚合及完整上期环比
+
+`GET /api/autoflow/integrations/fop/freight` · operationId: `getFreight`
+
+
+独立成本权限：必须有freight analytics scope，否则403；allowedFreightIds缺失/空数组返回空范围，不能从订单或收款授权推导。服务端与租户、本地本人/部门及下属/业务管理员范围求交，系统管理员也不能绕过。每次请求复查绑定和授权变化；客户端不得传tenantId、userId、授权白名单或scope。只纳入已审核、已确认、正数且确认时刻已发生的发运单快照。原币、明确汇率日期/来源及折算一致性必需，目标USD；确认时间按UTC+8，不是银行付款或最终结算证明。真实FOP网络适配器未完成，Mock为独立成本样本。 返回合计与固定六类服务商并列系列；carrierCode过滤时仅合计与该商。单服务商趋势在居中弹窗展示；原始发运单在工作台下钻。
+
+
+实现状态：implemented; server-side mock available; real FOP network adapter pending
+
+
+鉴权：`[{"BearerAuth": []}, {"SessionCookie": []}]`。
+
+
+请求示例（日期和主体为脱敏样例，联调时替换）：
+
+```http
+GET /api/autoflow/integrations/fop/freight?grain=year&year=2026&warehouse=ALL&carrierCode=YT
+Authorization: Bearer <有效会话JWT>
+Accept: application/json
+```
+
+
+交叉参数规则：
+
+```json
+[
+  "grain/year必填；year∈[2020,UTC+8当前年]；warehouse默认ALL。",
+  "仅grain=week允许weekOf，必须有效、属于year且不晚于今天；省略时当年today、历史年12-31。",
+  "month返回年初至当前月/历史12月；week周一开始连续4周；year最近5年且显示最早2020。",
+  "上一期完整自然周期与本期采用相同权限及服务商/仓库过滤，包含跨年基期；partial标识未完成周期。",
+  "每个series.values与periods等长同下标；总计不与服务商再次相加；百分比为百分点，零基期规则见FreightValue。"
+]
+```
+
+
+| 参数 | 位置 | 类型 | 必填 | 说明 | 约束/默认值 |
+| --- | --- | --- | --- | --- | --- |
+| `grain` | query | FreightGrain | 是 | 见引用模型 | enum=["month", "week", "year"] |
+| `year` | query | integer | 是 | 2020至UTC+8当前年；未来年拒绝。周锚点必须属于所选年。 | minimum=2020; maximum=9999 |
+| `weekOf` | query | string (date) | 否 | 仅week可传；不传时当年默认UTC+8今天、历史年默认12月31日。必须属于year且不晚于今天；响应回显解析后的锚点。非week传入则400。 | pattern="^\\d{4}-\\d{2}-\\d{2}$" |
+| `warehouse` | query | string | 否 | ALL=全仓，HZ=杭州仓，SZ=深圳仓；服务端授权范围内过滤，不扩大权限。 | enum=["ALL", "HZ", "SZ"]; default="ALL" |
+| `carrierCode` | query | FreightCarrier | 否 | 省略返回合计及固定六类服务商；指定时返回合计及该服务商。 | enum=["YT", "4PX", "WB", "YW", "JS", "OTHER"] |
+
+
+| 状态码 | 说明 | Content-Type / 响应模型 |
+| --- | --- | --- |
+| 200 | 成功，裸JSON；空授权为零聚合/空明细，不是403。 | application/json: FreightData |
+| 400 | 400：DTO失败、未知DTO字段、日期或跨参数条件错误。 | application/json: HttpError |
+| 401 | 401：缺失/过期/无效JWT或账户不存在。 | application/json: HttpError |
+| 403 | 403：入口/系统管理权限不足、业务禁用、绑定/范围缺失、FOP拒绝或请求期间授权变更。 | application/json: ErrorResponse |
+| 429 | 429：AppModule全局默认每60秒120次；实际计数受部署IP/代理策略影响。 | application/json: HttpError |
+| 500 | 500：未捕获服务/数据库异常。 | application/json: HttpError |
+| 503 | 503：FOP provider未配置或调用异常；不会降级mock。 | application/json: FopError |
+
+
+200 响应示例（application/json）：
+
+```json
+{
+  "source": "mock",
+  "query": {
+    "grain": "year",
+    "year": 2026,
+    "warehouse": "ALL",
+    "carrierCode": "YT"
+  },
+  "timeZone": "UTC+8",
+  "currency": "USD",
+  "dateBasis": "freight_confirmed_at",
+  "asOf": "2026-10-22T04:00:00Z",
+  "periods": [
+    {
+      "id": "2022",
+      "label": "2022年",
+      "from": "2022-01-01",
+      "to": "2022-12-31",
+      "partial": false,
+      "previousFrom": "2021-01-01",
+      "previousTo": "2021-12-31"
+    },
+    {
+      "id": "2023",
+      "label": "2023年",
+      "from": "2023-01-01",
+      "to": "2023-12-31",
+      "partial": false,
+      "previousFrom": "2022-01-01",
+      "previousTo": "2022-12-31"
+    },
+    {
+      "id": "2024",
+      "label": "2024年",
+      "from": "2024-01-01",
+      "to": "2024-12-31",
+      "partial": false,
+      "previousFrom": "2023-01-01",
+      "previousTo": "2023-12-31"
+    },
+    {
+      "id": "2025",
+      "label": "2025年",
+      "from": "2025-01-01",
+      "to": "2025-12-31",
+      "partial": false,
+      "previousFrom": "2024-01-01",
+      "previousTo": "2024-12-31"
+    },
+    {
+      "id": "2026",
+      "label": "2026年",
+      "from": "2026-01-01",
+      "to": "2026-10-22",
+      "partial": true,
+      "previousFrom": "2025-01-01",
+      "previousTo": "2025-12-31"
+    }
+  ],
+  "series": [
+    {
+      "id": "total",
+      "label": "合计",
+      "kind": "total",
+      "totals": {
+        "amount": 24,
+        "previousAmount": 10,
+        "delta": 14,
+        "percent": 140
+      },
+      "values": [
+        {
+          "amount": 0,
+          "previousAmount": 0,
+          "delta": 0,
+          "percent": 0
+        },
+        {
+          "amount": 0,
+          "previousAmount": 0,
+          "delta": 0,
+          "percent": 0
+        },
+        {
+          "amount": 0,
+          "previousAmount": 0,
+          "delta": 0,
+          "percent": 0
+        },
+        {
+          "amount": 10,
+          "previousAmount": 0,
+          "delta": 10,
+          "percent": null
+        },
+        {
+          "amount": 14,
+          "previousAmount": 10,
+          "delta": 4,
+          "percent": 40
+        }
+      ],
+      "billCount": 2
+    },
+    {
+      "id": "carrier:YT",
+      "label": "云途YT",
+      "kind": "detail",
+      "carrierCode": "YT",
+      "totals": {
+        "amount": 24,
+        "previousAmount": 10,
+        "delta": 14,
+        "percent": 140
+      },
+      "values": [
+        {
+          "amount": 0,
+          "previousAmount": 0,
+          "delta": 0,
+          "percent": 0
+        },
+        {
+          "amount": 0,
+          "previousAmount": 0,
+          "delta": 0,
+          "percent": 0
+        },
+        {
+          "amount": 0,
+          "previousAmount": 0,
+          "delta": 0,
+          "percent": 0
+        },
+        {
+          "amount": 10,
+          "previousAmount": 0,
+          "delta": 10,
+          "percent": null
+        },
+        {
+          "amount": 14,
+          "previousAmount": 10,
+          "delta": 4,
+          "percent": 40
+        }
+      ],
+      "billCount": 2
+    }
+  ],
+  "totals": {
+    "amount": 24,
+    "previousAmount": 10,
+    "delta": 14,
+    "percent": 140
+  },
+  "billCount": 2
+}
+```
+
+
+实现证据：`backend/src/modules/users/workbench.controller.ts`, `backend/src/modules/fop-data/fop-data.service.ts`, `backend/src/modules/fop-data/fop-freight.dto.ts`, `backend/src/modules/fop-data/fop-freight.ts`, `backend/src/modules/fop-data/fop-freight.types.ts`。
+
+
+### 8.20 岗位工作台物流运费发运单明细
+
+`GET /api/autoflow/integrations/fop/freight/details` · operationId: `getFreightDetails`
+
+
+独立成本权限：必须有freight analytics scope，否则403；allowedFreightIds缺失/空数组返回空范围，不能从订单或收款授权推导。服务端与租户、本地本人/部门及下属/业务管理员范围求交，系统管理员也不能绕过。每次请求复查绑定和授权变化；客户端不得传tenantId、userId、授权白名单或scope。只纳入已审核、已确认、正数且确认时刻已发生的发运单快照。原币、明确汇率日期/来源及折算一致性必需，目标USD；确认时间按UTC+8，不是银行付款或最终结算证明。真实FOP网络适配器未完成，Mock为独立成本样本。 明细必须通过workbenchRole入口权限；periodId仅能是该查询返回的一期，comparisonPeriod默认current，previous选择完整上期。省略periodId时选择全部显示周期对应范围；确认时间倒序、ID稳定排序。total/totals在分页前计算，越界页仍保留完整合计；原币逐币种合计。
+
+
+实现状态：implemented; server-side mock available; real FOP network adapter pending
+
+
+鉴权：`[{"BearerAuth": []}, {"SessionCookie": []}]`。
+
+
+请求示例（日期和主体为脱敏样例，联调时替换）：
+
+```http
+GET /api/autoflow/integrations/fop/freight/details?grain=month&year=2026&warehouse=ALL&carrierCode=YT&periodId=2026-10&comparisonPeriod=current&workbenchRole=sales&page=1&pageSize=20
+Authorization: Bearer <有效会话JWT>
+Accept: application/json
+```
+
+
+交叉参数规则：
+
+```json
+[
+  "grain/year必填；year∈[2020,UTC+8当前年]；warehouse默认ALL。",
+  "仅grain=week允许weekOf，必须有效、属于year且不晚于今天；省略时当年today、历史年12-31。",
+  "month返回年初至当前月/历史12月；week周一开始连续4周；year最近5年且显示最早2020。",
+  "上一期完整自然周期与本期采用相同权限及服务商/仓库过滤，包含跨年基期；partial标识未完成周期。",
+  "每个series.values与periods等长同下标；总计不与服务商再次相加；百分比为百分点，零基期规则见FreightValue。",
+  "periodId必须属于此query返回的periods；page默认1，pageSize默认20且最大100；workbenchRole必填且需持有。"
+]
+```
+
+
+| 参数 | 位置 | 类型 | 必填 | 说明 | 约束/默认值 |
+| --- | --- | --- | --- | --- | --- |
+| `grain` | query | FreightGrain | 是 | 见引用模型 | enum=["month", "week", "year"] |
+| `year` | query | integer | 是 | 2020至UTC+8当前年；未来年拒绝。周锚点必须属于所选年。 | minimum=2020; maximum=9999 |
+| `weekOf` | query | string (date) | 否 | 仅week可传；不传时当年默认UTC+8今天、历史年默认12月31日。必须属于year且不晚于今天；响应回显解析后的锚点。非week传入则400。 | pattern="^\\d{4}-\\d{2}-\\d{2}$" |
+| `warehouse` | query | string | 否 | ALL=全仓，HZ=杭州仓，SZ=深圳仓；服务端授权范围内过滤，不扩大权限。 | enum=["ALL", "HZ", "SZ"]; default="ALL" |
+| `carrierCode` | query | FreightCarrier | 否 | 省略返回合计及固定六类服务商；指定时返回合计及该服务商。 | enum=["YT", "4PX", "WB", "YW", "JS", "OTHER"] |
+| `periodId` | query | string | 否 | 仅选择当前查询返回的一期；省略覆盖所有显示期；不能使用任意日期扩大范围。 | pattern="^\\d{4}(?:-\\d{2}(?:-\\d{2})?)?$" |
+| `comparisonPeriod` | query | string | 否 | current为本期（默认）；previous为对应完整上一期；省略periodId时选择全部显示期对应的上期并集，重复日期不重复计费。 | enum=["current", "previous"]; default="current" |
+| `workbenchRole` | query | WorkbenchRole | 是 | 必须是当前账户可访问岗位，单据明细在工作台展示。 | enum=["sales", "procurement", "allocation", "dispatch", "warehouse"] |
+| `page` | query | integer | 否 | 页码。 | default=1; minimum=1; maximum=1000000 |
+| `pageSize` | query | integer | 否 | 每页条数。 | default=20; minimum=1; maximum=100 |
+
+
+| 状态码 | 说明 | Content-Type / 响应模型 |
+| --- | --- | --- |
+| 200 | 成功，裸JSON；空授权为零聚合/空明细，不是403。 | application/json: FreightPage |
+| 400 | 400：DTO失败、未知DTO字段、日期或跨参数条件错误。 | application/json: HttpError |
+| 401 | 401：缺失/过期/无效JWT或账户不存在。 | application/json: HttpError |
+| 403 | 403：入口/系统管理权限不足、业务禁用、绑定/范围缺失、FOP拒绝或请求期间授权变更。 | application/json: ErrorResponse |
+| 429 | 429：AppModule全局默认每60秒120次；实际计数受部署IP/代理策略影响。 | application/json: HttpError |
+| 500 | 500：未捕获服务/数据库异常。 | application/json: HttpError |
+| 503 | 503：FOP provider未配置或调用异常；不会降级mock。 | application/json: FopError |
+
+
+200 响应示例（application/json）：
+
+```json
+{
+  "source": "mock",
+  "timeZone": "UTC+8",
+  "currency": "USD",
+  "dateBasis": "freight_confirmed_at",
+  "total": 1,
+  "page": 1,
+  "pageSize": 20,
+  "items": [
+    {
+      "id": "delivery-example",
+      "documentNumber": "DEL-001",
+      "orderNumber": "ORDER-001",
+      "trackingNumber": "LOG-001",
+      "carrierCode": "YT",
+      "carrierName": "云途",
+      "channelName": "示例实际渠道",
+      "warehouseCode": "HZ",
+      "warehouse": "杭州仓",
+      "customerId": "customer-example",
+      "customerCode": "C001",
+      "customerName": "示例客户",
+      "organization": {
+        "id": "org-example",
+        "name": "示例组织"
+      },
+      "department": {
+        "id": "department-example",
+        "name": "业务一部"
+      },
+      "owner": {
+        "id": "employee-example",
+        "name": "示例业务员"
+      },
+      "salesDepartmentCode": "sales1",
+      "originalAmount": 100,
+      "originalCurrency": "CNY",
+      "fxRateToUsd": 0.14,
+      "fxRateDate": "2026-10-22",
+      "fxRateSource": "mock-contract-example",
+      "amount": 14,
+      "currency": "USD",
+      "confirmedAt": "2026-10-21T16:30:00Z",
+      "reviewStatus": "approved",
+      "costStatus": "confirmed"
+    }
+  ],
+  "totals": {
+    "billCount": 1,
+    "amount": 14,
+    "originalAmounts": [
+      {
+        "currency": "CNY",
+        "amount": 100
+      }
+    ]
+  },
+  "range": {
+    "from": "2026-10-01",
+    "to": "2026-10-22"
+  }
+}
+```
+
+
+实现证据：`backend/src/modules/users/workbench.controller.ts`, `backend/src/modules/fop-data/fop-data.service.ts`, `backend/src/modules/fop-data/fop-freight.dto.ts`, `backend/src/modules/fop-data/fop-freight.ts`, `backend/src/modules/fop-data/fop-freight.types.ts`。
 
 
 ## 9. 字段级数据字典
@@ -3128,6 +3539,592 @@ publicOrder白名单输出，不含tenantId、departmentPathIds或任意provider
 ```
 
 
+### FreightCarrier
+
+
+实际发运服务商的可信标准映射。OTHER仅为已知其他服务商；未知或缺失不得兜底。固定展示顺序YT/4PX/WB/YW/JS/OTHER。
+
+类型：`string`；约束：enum=["YT", "4PX", "WB", "YW", "JS", "OTHER"]。
+
+
+### FreightGrain
+
+
+month=所选年年初到当前月（历史年12月）；week=锚点所在周及前三周，周一开始；year=所选年及前四年，最早2020。
+
+类型：`string`；约束：enum=["month", "week", "year"]。
+
+
+### FreightQuery
+
+
+已解析的运费查询回显，week时含解析后weekOf；浏览器请求warehouse可省略默认ALL。时间按UTC+8确认时间归期。
+
+
+| 字段路径 | 类型/引用 | 必填 | 说明 | 约束/示例 |
+| --- | --- | --- | --- | --- |
+| `grain` | FreightGrain | 是 | 见引用模型/接口说明 | — |
+| `year` | integer | 是 | 2020至UTC+8当前年；未来年拒绝。周锚点必须属于所选年。 | minimum=2020; maximum=9999 |
+| `weekOf` | string (date) | 否 | 仅week可传；不传时当年默认UTC+8今天、历史年默认12月31日。必须属于year且不晚于今天；响应回显解析后的锚点。非week传入则400。 | pattern="^\\d{4}-\\d{2}-\\d{2}$" |
+| `warehouse` | string | 是 | ALL=全仓，HZ=杭州仓，SZ=深圳仓；服务端授权范围内过滤，不扩大权限。 | enum=["ALL", "HZ", "SZ"]; default="ALL" |
+| `carrierCode` | FreightCarrier | 否 | 省略返回合计及固定六类服务商；指定时返回合计及该服务商。 | — |
+
+组合规则 `allOf`：`见 schema`。完整约束见 OpenAPI JSON。
+
+
+```json
+{
+  "grain": "month",
+  "year": 2026,
+  "warehouse": "ALL"
+}
+```
+
+
+### FopFreight
+
+
+公开运费成本快照白名单；每发运单一条，不含tenantId/departmentPathIds。源费用分录已停用，未覆盖完整重派、补收、退款与历史调价账本。
+
+
+| 字段路径 | 类型/引用 | 必填 | 说明 | 约束/示例 |
+| --- | --- | --- | --- | --- |
+| `id` | string | 是 | 发运单稳定ID；当前成本快照唯一键，独立allowlist授权键；重复ID拒收。 | minLength=1 |
+| `documentNumber` | string | 是 | 发运单billno，非订单号。 | minLength=1 |
+| `orderNumber` | string | 是 | hzkj_order_no对应源履约订单号；同一订单可有多条发运单成本。 | minLength=1 |
+| `trackingNumber` | string / null | 是 | 源hzkj_logistics_orderno物流订单号；可空；具体跟踪号语义待真实接口确认。 | minLength=1 |
+| `carrierCode` | FreightCarrier | 是 | 见引用模型/接口说明 | — |
+| `carrierName` | string | 是 | 真实服务商展示名称。 | minLength=1 |
+| `channelName` | string | 是 | 发运单实际物流渠道名称。 | minLength=1 |
+| `warehouseCode` | string | 是 | 实际发运仓库，未知拒收。 | enum=["HZ", "SZ"] |
+| `warehouse` | string | 是 | 实际发运仓库展示名称。 | minLength=1 |
+| `customerId` | string | 是 | 稳定客户ID。 | minLength=1 |
+| `customerCode` | string | 是 | 非空客户编码，可信适配器提供；不可用空值替代。 | minLength=1 |
+| `customerName` | string | 是 | 客户名称。 | minLength=1 |
+| `organization` | NamedEntity | 否 | 发运单组织；可信源提供。 | — |
+| `department` | NamedEntity | 否 | 成本归属部门；部门权限不得由浏览器提供。 | — |
+| `owner` | NamedEntity | 否 | 发运单业务员稳定ID及名称。 | — |
+| `salesDepartmentCode` | SalesDepartment | 否 | 见引用模型/接口说明 | — |
+| `originalAmount` | number | 是 | hzkj_actual_freight原币实际成本，至多两位小数的安全分币；非客户收费或预估价。公开有效明细为正数。 | minimum=0; maximum=90071992547409.9 |
+| `originalCurrency` | string | 是 | hzkj_textfield1明确原币种，标准大写三字母代码；不得统一假定CNY。 | pattern="^[A-Z]{3}$" |
+| `fxRateToUsd` | number | 是 | 每1单位原币折合USD；必须显式、有限且>0，USD原币必须1。 | exclusiveMinimum=0 |
+| `fxRateDate` | string (date) | 是 | 该条成本采用的汇率业务日期；不是响应生成日期的隐式替代。 | pattern="^\\d{4}-\\d{2}-\\d{2}$" |
+| `fxRateSource` | string | 是 | 可追溯的汇率来源；Mock来源不能用于生产。 | minLength=1 |
+| `amount` | number | 是 | USD成本=originalAmount×fxRateToUsd，按十进制精确乘法HALF_UP到分（1.50×0.15=0.23），不先做二进制浮点乘法再round。后端验证一致性、安全分币和累计安全性；缺汇率、不一致或超过两位小数的原额/结果拒收。 | minimum=0; maximum=90071992547409.9 |
+| `currency` | "USD" | 是 | 统一分析与展示币种。 | — |
+| `confirmedAt` | string / null | 是 | hzkj_actual_freight_time，带时区的实际运费确认时刻；UTC+8归期。公开有效明细必须非空且已发生；不是最终结账或银行付款证明。 | — |
+| `reviewStatus` | string | 是 | 发运单审核；billstatus=C映射approved。 | enum=["approved", "pending"] |
+| `costStatus` | string | 是 | 适配器归一成本确认状态；不能宣称源存在同名枚举。 | enum=["confirmed", "pending"] |
+
+组合规则 `allOf`：`见 schema`。完整约束见 OpenAPI JSON。
+
+
+```json
+{
+  "id": "delivery-example",
+  "documentNumber": "DEL-001",
+  "orderNumber": "ORDER-001",
+  "trackingNumber": "LOG-001",
+  "carrierCode": "YT",
+  "carrierName": "云途",
+  "channelName": "示例实际渠道",
+  "warehouseCode": "HZ",
+  "warehouse": "杭州仓",
+  "customerId": "customer-example",
+  "customerCode": "C001",
+  "customerName": "示例客户",
+  "organization": {
+    "id": "org-example",
+    "name": "示例组织"
+  },
+  "department": {
+    "id": "department-example",
+    "name": "业务一部"
+  },
+  "owner": {
+    "id": "employee-example",
+    "name": "示例业务员"
+  },
+  "salesDepartmentCode": "sales1",
+  "originalAmount": 100,
+  "originalCurrency": "CNY",
+  "fxRateToUsd": 0.14,
+  "fxRateDate": "2026-10-22",
+  "fxRateSource": "mock-contract-example",
+  "amount": 14,
+  "currency": "USD",
+  "confirmedAt": "2026-10-21T16:30:00Z",
+  "reviewStatus": "approved",
+  "costStatus": "confirmed"
+}
+```
+
+
+### FopFreightCandidate
+
+
+仅可信FOP provider内部候选契约，不是HTTP输入或公开响应。先做主体、租户、独立成本授权和业务范围交集，再序列化公开字段。
+
+
+| 字段路径 | 类型/引用 | 必填 | 说明 | 约束/示例 |
+| --- | --- | --- | --- | --- |
+| `id` | string | 是 | 发运单稳定ID；当前成本快照唯一键，独立allowlist授权键；重复ID拒收。 | minLength=1 |
+| `documentNumber` | string | 是 | 发运单billno，非订单号。 | minLength=1 |
+| `orderNumber` | string | 是 | hzkj_order_no对应源履约订单号；同一订单可有多条发运单成本。 | minLength=1 |
+| `trackingNumber` | string / null | 是 | 源hzkj_logistics_orderno物流订单号；可空；具体跟踪号语义待真实接口确认。 | minLength=1 |
+| `carrierCode` | FreightCarrier | 是 | 见引用模型/接口说明 | — |
+| `carrierName` | string | 是 | 真实服务商展示名称。 | minLength=1 |
+| `channelName` | string | 是 | 发运单实际物流渠道名称。 | minLength=1 |
+| `warehouseCode` | string | 是 | 实际发运仓库，未知拒收。 | enum=["HZ", "SZ"] |
+| `warehouse` | string | 是 | 实际发运仓库展示名称。 | minLength=1 |
+| `customerId` | string | 是 | 稳定客户ID。 | minLength=1 |
+| `customerCode` | string | 是 | 非空客户编码，可信适配器提供；不可用空值替代。 | minLength=1 |
+| `customerName` | string | 是 | 客户名称。 | minLength=1 |
+| `organization` | NamedEntity | 否 | 发运单组织；可信源提供。 | — |
+| `department` | NamedEntity | 否 | 成本归属部门；部门权限不得由浏览器提供。 | — |
+| `owner` | NamedEntity | 否 | 发运单业务员稳定ID及名称。 | — |
+| `salesDepartmentCode` | SalesDepartment | 否 | 见引用模型/接口说明 | — |
+| `originalAmount` | number | 是 | hzkj_actual_freight原币实际成本，至多两位小数的安全分币；非客户收费或预估价。公开有效明细为正数。 | minimum=0; maximum=90071992547409.9 |
+| `originalCurrency` | string | 是 | hzkj_textfield1明确原币种，标准大写三字母代码；不得统一假定CNY。 | pattern="^[A-Z]{3}$" |
+| `fxRateToUsd` | number | 是 | 每1单位原币折合USD；必须显式、有限且>0，USD原币必须1。 | exclusiveMinimum=0 |
+| `fxRateDate` | string (date) | 是 | 该条成本采用的汇率业务日期；不是响应生成日期的隐式替代。 | pattern="^\\d{4}-\\d{2}-\\d{2}$" |
+| `fxRateSource` | string | 是 | 可追溯的汇率来源；Mock来源不能用于生产。 | minLength=1 |
+| `amount` | number | 是 | USD成本=originalAmount×fxRateToUsd，按十进制精确乘法HALF_UP到分（1.50×0.15=0.23），不先做二进制浮点乘法再round。后端验证一致性、安全分币和累计安全性；缺汇率、不一致或超过两位小数的原额/结果拒收。 | minimum=0; maximum=90071992547409.9 |
+| `currency` | "USD" | 是 | 统一分析与展示币种。 | — |
+| `confirmedAt` | string / null | 是 | hzkj_actual_freight_time，带时区的实际运费确认时刻；UTC+8归期。公开有效明细必须非空且已发生；不是最终结账或银行付款证明。 | — |
+| `reviewStatus` | string | 是 | 发运单审核；billstatus=C映射approved。 | enum=["approved", "pending"] |
+| `costStatus` | string | 是 | 适配器归一成本确认状态；不能宣称源存在同名枚举。 | enum=["confirmed", "pending"] |
+| `tenantId` | string | 是 | 成本源所属租户，必须与绑定主体匹配。 | minLength=1 |
+| `departmentPathIds` | string[] | 否 | 部门及子部门范围检查；不得由浏览器传入。 | uniqueItems=true |
+
+组合规则 `allOf`：`见 schema`。完整约束见 OpenAPI JSON。
+
+
+```json
+{
+  "id": "delivery-example",
+  "documentNumber": "DEL-001",
+  "orderNumber": "ORDER-001",
+  "trackingNumber": "LOG-001",
+  "carrierCode": "YT",
+  "carrierName": "云途",
+  "channelName": "示例实际渠道",
+  "warehouseCode": "HZ",
+  "warehouse": "杭州仓",
+  "customerId": "customer-example",
+  "customerCode": "C001",
+  "customerName": "示例客户",
+  "organization": {
+    "id": "org-example",
+    "name": "示例组织"
+  },
+  "department": {
+    "id": "department-example",
+    "name": "业务一部"
+  },
+  "owner": {
+    "id": "employee-example",
+    "name": "示例业务员"
+  },
+  "salesDepartmentCode": "sales1",
+  "originalAmount": 100,
+  "originalCurrency": "CNY",
+  "fxRateToUsd": 0.14,
+  "fxRateDate": "2026-10-22",
+  "fxRateSource": "mock-contract-example",
+  "amount": 14,
+  "currency": "USD",
+  "confirmedAt": "2026-10-21T16:30:00Z",
+  "reviewStatus": "approved",
+  "costStatus": "confirmed",
+  "tenantId": "tenant-example",
+  "departmentPathIds": [
+    "department-example"
+  ]
+}
+```
+
+
+### FreightPeriod
+
+
+UTC+8自然周期。响应升序，统计表可倒序；previous范围不是截至同日的同比进度。
+
+
+| 字段路径 | 类型/引用 | 必填 | 说明 | 约束/示例 |
+| --- | --- | --- | --- | --- |
+| `id` | string | 是 | 回传下钻的期间ID：月YYYY-MM、周周一YYYY-MM-DD、年YYYY；必须属于当前查询。 | pattern="^\\d{4}(?:-\\d{2}(?:-\\d{2})?)?$" |
+| `label` | string | 是 | 期间展示文本。 | — |
+| `from` | string (date) | 是 | 本期起日，UTC+8，含当日。 | pattern="^\\d{4}-\\d{2}-\\d{2}$" |
+| `to` | string (date) | 是 | 本期统计末日，UTC+8，含当日；未结束周期截到当前业务日期，不晚于今天。 | pattern="^\\d{4}-\\d{2}-\\d{2}$" |
+| `partial` | boolean | 是 | 本期自然周期尚未结束，含周期末当天；to截到今天。当前累计金额与完整上期比较，应醒目标识，不能当已关账或同期进度。 | — |
+| `previousFrom` | string (date) | 是 | 完整上一自然周期起日，可能跨年或早于2020。 | pattern="^\\d{4}-\\d{2}-\\d{2}$" |
+| `previousTo` | string (date) | 是 | 完整上一自然周期末日。 | pattern="^\\d{4}-\\d{2}-\\d{2}$" |
+
+
+### FreightValue
+
+
+环比指标；总计按合计金额与合计基数重新计算比例，不相加百分比。
+
+
+| 字段路径 | 类型/引用 | 必填 | 说明 | 约束/示例 |
+| --- | --- | --- | --- | --- |
+| `amount` | number | 是 | 本期获授权有效USD实际成本。 | minimum=0; maximum=90071992547409.9 |
+| `previousAmount` | number | 是 | 完整上期同仓库/服务商和权限范围USD成本。 | minimum=0; maximum=90071992547409.9 |
+| `delta` | number | 是 | 本期减上期的USD差额，可为负。 | — |
+| `percent` | number / null | 是 | delta/abs(previousAmount)×100，25表示25%；上期0且本期>0为null，双0为0；不输出Infinity/NaN。 | — |
+
+
+```json
+{
+  "amount": 14,
+  "previousAmount": 10,
+  "delta": 4,
+  "percent": 40
+}
+```
+
+
+### FreightSeries
+
+
+固定合计在前；无服务商过滤时随后为YT/4PX/WB/YW/JS/OTHER。
+
+
+| 字段路径 | 类型/引用 | 必填 | 说明 | 约束/示例 |
+| --- | --- | --- | --- | --- |
+| `id` | string | 是 | total 或 carrier:YT 等稳定系列ID；下钻使用carrierCode而非把系列ID当权限。 | pattern="^(total&#124;carrier:(YT&#124;4PX&#124;WB&#124;YW&#124;JS&#124;OTHER))$" |
+| `label` | string | 是 | 合计或服务商展示名称。 | — |
+| `kind` | string | 是 | total汇总，detail单服务商；两者并列展示但不能重复累加。 | enum=["total", "detail"] |
+| `carrierCode` | FreightCarrier | 否 | detail时存在；total省略。 | — |
+| `totals` | FreightValue | 是 | 显示期间金额之和及各期完整上期基数之和。 | — |
+| `values` | FreightValue[] | 是 | 与periods严格等长同下标。 | — |
+| `billCount` | integer | 是 | 本系列显示期间的有效发运单数，不是履约订单数。 | minimum=0 |
+
+组合规则 `allOf`：`见 schema`。完整约束见 OpenAPI JSON。
+
+
+### FreightData
+
+
+当前用户独立成本授权内的运费聚合。缺freight scope=403；空/缺失allowedFreightIds=各期0值空范围。source=mock明确演示；真实FOP网络适配未完成。
+
+
+| 字段路径 | 类型/引用 | 必填 | 说明 | 约束/示例 |
+| --- | --- | --- | --- | --- |
+| `source` | DataSource | 是 | 见引用模型/接口说明 | — |
+| `query` | FreightQuery | 是 | 见引用模型/接口说明 | — |
+| `timeZone` | "UTC+8" | 是 | 统计时区。 | — |
+| `currency` | "USD" | 是 | 分析目标币种。 | — |
+| `dateBasis` | "freight_confirmed_at" | 是 | 明确采用实际运费确认时间。 | — |
+| `asOf` | string (date-time) | 是 | 响应计算时刻，非源更新时间、最终账单或一致性快照。 | — |
+| `periods` | FreightPeriod[] | 是 | 升序周期数组。 | — |
+| `series` | FreightSeries[] | 是 | 合计及服务商并列系列。 | minItems=2; maxItems=7 |
+| `totals` | FreightValue | 是 | 与series[kind=total].totals一致。 | — |
+| `billCount` | integer | 是 | 显示期间有效发运单总数，不重复加各系列。 | minimum=0 |
+
+
+```json
+{
+  "source": "mock",
+  "query": {
+    "grain": "year",
+    "year": 2026,
+    "warehouse": "ALL",
+    "carrierCode": "YT"
+  },
+  "timeZone": "UTC+8",
+  "currency": "USD",
+  "dateBasis": "freight_confirmed_at",
+  "asOf": "2026-10-22T04:00:00Z",
+  "periods": [
+    {
+      "id": "2022",
+      "label": "2022年",
+      "from": "2022-01-01",
+      "to": "2022-12-31",
+      "partial": false,
+      "previousFrom": "2021-01-01",
+      "previousTo": "2021-12-31"
+    },
+    {
+      "id": "2023",
+      "label": "2023年",
+      "from": "2023-01-01",
+      "to": "2023-12-31",
+      "partial": false,
+      "previousFrom": "2022-01-01",
+      "previousTo": "2022-12-31"
+    },
+    {
+      "id": "2024",
+      "label": "2024年",
+      "from": "2024-01-01",
+      "to": "2024-12-31",
+      "partial": false,
+      "previousFrom": "2023-01-01",
+      "previousTo": "2023-12-31"
+    },
+    {
+      "id": "2025",
+      "label": "2025年",
+      "from": "2025-01-01",
+      "to": "2025-12-31",
+      "partial": false,
+      "previousFrom": "2024-01-01",
+      "previousTo": "2024-12-31"
+    },
+    {
+      "id": "2026",
+      "label": "2026年",
+      "from": "2026-01-01",
+      "to": "2026-10-22",
+      "partial": true,
+      "previousFrom": "2025-01-01",
+      "previousTo": "2025-12-31"
+    }
+  ],
+  "series": [
+    {
+      "id": "total",
+      "label": "合计",
+      "kind": "total",
+      "totals": {
+        "amount": 24,
+        "previousAmount": 10,
+        "delta": 14,
+        "percent": 140
+      },
+      "values": [
+        {
+          "amount": 0,
+          "previousAmount": 0,
+          "delta": 0,
+          "percent": 0
+        },
+        {
+          "amount": 0,
+          "previousAmount": 0,
+          "delta": 0,
+          "percent": 0
+        },
+        {
+          "amount": 0,
+          "previousAmount": 0,
+          "delta": 0,
+          "percent": 0
+        },
+        {
+          "amount": 10,
+          "previousAmount": 0,
+          "delta": 10,
+          "percent": null
+        },
+        {
+          "amount": 14,
+          "previousAmount": 10,
+          "delta": 4,
+          "percent": 40
+        }
+      ],
+      "billCount": 2
+    },
+    {
+      "id": "carrier:YT",
+      "label": "云途YT",
+      "kind": "detail",
+      "carrierCode": "YT",
+      "totals": {
+        "amount": 24,
+        "previousAmount": 10,
+        "delta": 14,
+        "percent": 140
+      },
+      "values": [
+        {
+          "amount": 0,
+          "previousAmount": 0,
+          "delta": 0,
+          "percent": 0
+        },
+        {
+          "amount": 0,
+          "previousAmount": 0,
+          "delta": 0,
+          "percent": 0
+        },
+        {
+          "amount": 0,
+          "previousAmount": 0,
+          "delta": 0,
+          "percent": 0
+        },
+        {
+          "amount": 10,
+          "previousAmount": 0,
+          "delta": 10,
+          "percent": null
+        },
+        {
+          "amount": 14,
+          "previousAmount": 10,
+          "delta": 4,
+          "percent": 40
+        }
+      ],
+      "billCount": 2
+    }
+  ],
+  "totals": {
+    "amount": 24,
+    "previousAmount": 10,
+    "delta": 14,
+    "percent": 140
+  },
+  "billCount": 2
+}
+```
+
+
+### FreightDetailsQuery
+
+
+已解析运费明细查询。HTTP请求warehouse/page/pageSize可省略并取默认；periodId需与基础查询匹配。query非公开响应字段，此模型用于字段字典。
+
+
+| 字段路径 | 类型/引用 | 必填 | 说明 | 约束/示例 |
+| --- | --- | --- | --- | --- |
+| `grain` | FreightGrain | 是 | 见引用模型/接口说明 | — |
+| `year` | integer | 是 | 2020至UTC+8当前年；未来年拒绝。周锚点必须属于所选年。 | minimum=2020; maximum=9999 |
+| `weekOf` | string (date) | 否 | 仅week可传；不传时当年默认UTC+8今天、历史年默认12月31日。必须属于year且不晚于今天；响应回显解析后的锚点。非week传入则400。 | pattern="^\\d{4}-\\d{2}-\\d{2}$" |
+| `warehouse` | string | 是 | ALL=全仓，HZ=杭州仓，SZ=深圳仓；服务端授权范围内过滤，不扩大权限。 | enum=["ALL", "HZ", "SZ"]; default="ALL" |
+| `carrierCode` | FreightCarrier | 否 | 省略返回合计及固定六类服务商；指定时返回合计及该服务商。 | — |
+| `periodId` | string | 否 | 仅选择当前查询返回的一期；省略覆盖所有显示期；不能使用任意日期扩大范围。 | pattern="^\\d{4}(?:-\\d{2}(?:-\\d{2})?)?$" |
+| `comparisonPeriod` | string | 否 | current为本期（默认）；previous为对应完整上一期；省略periodId时选择全部显示期对应的上期并集，重复日期不重复计费。 | enum=["current", "previous"]; default="current" |
+| `workbenchRole` | WorkbenchRole | 是 | 必须是当前账户可访问岗位，单据明细在工作台展示。 | — |
+| `page` | integer | 是 | 页码。 | default=1; minimum=1; maximum=1000000 |
+| `pageSize` | integer | 是 | 每页条数。 | default=20; minimum=1; maximum=100 |
+
+
+### FreightTotals
+
+
+分页前成本合计；不改变分页条件时切页不改变totals。
+
+
+| 字段路径 | 类型/引用 | 必填 | 说明 | 约束/示例 |
+| --- | --- | --- | --- | --- |
+| `billCount` | integer | 是 | 完整筛选范围发运单数，等于FreightPage.total。 | minimum=0 |
+| `amount` | number | 是 | 完整筛选范围USD折算成本，非当前页小计。 | minimum=0; maximum=90071992547409.9 |
+| `originalAmounts` | object[] | 是 | 完整筛选范围原币分组；空范围为空数组。 | — |
+| `originalAmounts[].currency` | string | 是 | 原币种。 | pattern="^[A-Z]{3}$" |
+| `originalAmounts[].amount` | number | 是 | 该币种原币金额合计。 | minimum=0; maximum=90071992547409.9 |
+
+
+### FreightPage
+
+
+独立成本授权加岗位权限；total/totals分页前计算，越界页items=[]且合计保留；不公开tenantId/departmentPathIds。
+
+
+| 字段路径 | 类型/引用 | 必填 | 说明 | 约束/示例 |
+| --- | --- | --- | --- | --- |
+| `source` | DataSource | 是 | 见引用模型/接口说明 | — |
+| `timeZone` | "UTC+8" | 是 | 统计时区。 | — |
+| `currency` | "USD" | 是 | 目标币种。 | — |
+| `dateBasis` | "freight_confirmed_at" | 是 | 日期口径。 | — |
+| `total` | integer | 是 | 完整筛选范围的发运单数。 | minimum=0 |
+| `page` | integer | 是 | 页码。 | minimum=1; maximum=1000000 |
+| `pageSize` | integer | 是 | 页容量。 | minimum=1; maximum=100 |
+| `items` | FopFreight allOf 见 schema[] | 是 | 当前页公开已审核、已确认、正运费且确认时刻已发生的发运单，确认时间倒序、ID稳定排序。 | — |
+| `totals` | FreightTotals | 是 | 见引用模型/接口说明 | — |
+| `range` | object | 是 | 请求实际选择的周期范围；并集由有效查询周期推导。 | additionalProperties=false |
+| `range.from` | string (date) | 是 | 选定本期或上期并集的起始日，UTC+8，含首日。 | pattern="^\\d{4}-\\d{2}-\\d{2}$" |
+| `range.to` | string (date) | 是 | 选定周期并集末日，含末日；current未完期截到UTC+8今天，previous使用完整上期末日。 | pattern="^\\d{4}-\\d{2}-\\d{2}$" |
+
+
+```json
+{
+  "source": "mock",
+  "timeZone": "UTC+8",
+  "currency": "USD",
+  "dateBasis": "freight_confirmed_at",
+  "total": 1,
+  "page": 1,
+  "pageSize": 20,
+  "items": [
+    {
+      "id": "delivery-example",
+      "documentNumber": "DEL-001",
+      "orderNumber": "ORDER-001",
+      "trackingNumber": "LOG-001",
+      "carrierCode": "YT",
+      "carrierName": "云途",
+      "channelName": "示例实际渠道",
+      "warehouseCode": "HZ",
+      "warehouse": "杭州仓",
+      "customerId": "customer-example",
+      "customerCode": "C001",
+      "customerName": "示例客户",
+      "organization": {
+        "id": "org-example",
+        "name": "示例组织"
+      },
+      "department": {
+        "id": "department-example",
+        "name": "业务一部"
+      },
+      "owner": {
+        "id": "employee-example",
+        "name": "示例业务员"
+      },
+      "salesDepartmentCode": "sales1",
+      "originalAmount": 100,
+      "originalCurrency": "CNY",
+      "fxRateToUsd": 0.14,
+      "fxRateDate": "2026-10-22",
+      "fxRateSource": "mock-contract-example",
+      "amount": 14,
+      "currency": "USD",
+      "confirmedAt": "2026-10-21T16:30:00Z",
+      "reviewStatus": "approved",
+      "costStatus": "confirmed"
+    }
+  ],
+  "totals": {
+    "billCount": 1,
+    "amount": 14,
+    "originalAmounts": [
+      {
+        "currency": "CNY",
+        "amount": 100
+      }
+    ]
+  },
+  "range": {
+    "from": "2026-10-01",
+    "to": "2026-10-22"
+  }
+}
+```
+
+
+### FopFreightAuthorization
+
+
+仅内部FopPermissionGrant中与成本有关的投影，不是新的HTTP端点或客户端可写权限。仍须与租户、本地业务范围及当前岗位授权求交，并复查请求中途授权变更。
+
+
+| 字段路径 | 类型/引用 | 必填 | 说明 | 约束/示例 |
+| --- | --- | --- | --- | --- |
+| `subject` | object | 是 | 可信provider解析主体，必须与服务端绑定完全匹配。 | additionalProperties=false |
+| `subject.tenantId` | string | 是 | 绑定租户。 | minLength=1 |
+| `subject.userId` | string | 是 | 绑定FOP用户。 | minLength=1 |
+| `allowedFreightIds` | string[] | 否 | 独立成本白名单，缺失或空为无运费记录；不能从allowedOrderIds/allowedReceiptIds推导。 | uniqueItems=true |
+| `analyticsScopes` | string[] | 否 | 运费两个端点均要求包含freight；缺失/不包含返回403。 | uniqueItems=true |
+
+
 ## 10. 前端功能诊断与复现证据
 
 
@@ -3159,6 +4156,8 @@ publicOrder白名单输出，不含tenantId、departmentPathIds或任意provider
 | G07 客户回款业绩对比 | 与 G06 同一组件，`metric=amount`；`series[].amounts.total/warehouses` | **沿用数量 Top 10 客户集合与顺序，不是金额 Top 10**；USD 两位小数。非 USD 收款分录数由兼容字段 `excludedOrderCount` 提示；数量来自履约账本（`:98`、`:106`） | 与数量图并列；分仓组与客户顺序一致；金额柱和金额单元格进入客户同一集合的 USD 收款明细；数量入口仍进入履约订单 |
 | G08 单客户每日订单量趋势 | `CustomerOrderResults.vue:63`，弹窗中 `rankingOnly=false, metric=orders`；只用 `kind=total` 的 values/warehouses | 新请求继承已应用的日期、部门、仓库，并新增 customerId。默认最近 14 天；无 MoM | 折线；分仓为同一图中的仓库系列；与金额图滑窗联动；点击非未来点以 `seriesId=total, periodId, detailWarehouse?` 下钻（`:83`、`:86`） |
 | G09 单客户每日回款业绩趋势 | 同 G08，`metric=amount`；`total.amounts.values/warehouses` | 同一客户集合、同一日期／仓库映射；金额来自独立授权 USD 收款分录，包含全款备货 | 金额轴与数量轴独立，只有时间窗口同步；表格显示每日数量与金额并按日期倒序；缺失 amounts 显示 `—`，不伪造 0（`:31`、`:35`、`:119`） |
+| G10 物流实际运费并列柱状 | `FreightAnalysis.vue` / `FreightResults.vue`，独立 `GET /freight`；periods、合计与YT/4PX/WB/YW/JS/OTHER的FreightValue系列 | month/week/year、year、weekOf、warehouse；已审核且已确认正成本，按UTC+8确认时间归期；USD目标币种 | 总计独立，不重复相加；未完期partial提示；完整上期环比；统计表倒序、固定列宽，开启环比展开、关闭保持；仅拖动滑块改横轴 |
+| G11 单物流服务商趋势弹窗 | `FreightTrendDialog.vue`，复用已返回响应，按选中carrierCode筛出单商；接口另支持carrierCode查询 | 继承已应用时间/仓库，0基期比例为null或0，前端不自造百分比 | 居中弹窗；原始成本从柱/表下钻当前可访问岗位工作台，展示原币、汇率与USD；分页前合计 |
 
 表内短文件名的完整路径分别为 `frontend/src/views/autoflow/FopDashboardView.vue`、`frontend/src/components/order-volume/OrderVolumeResults.vue`、`frontend/src/components/order-volume/CustomerOrderResults.vue`、`frontend/src/components/order-volume/order-volume.css`。
 
@@ -3448,12 +4447,30 @@ describe('ECharts audit: assertions of current incorrect behavior', () => {
 ```
 
 
+### 9. 物流运费前端审计补充
+
+物流运费与客户收费、订单金额、回款业绩分别使用独立事实与请求。界面显示“实际运费／确认时间”，不能将确认时间改为银行实付日或宣称最终结算；原币和汇率字段在工作台明细用于复核。当前生产FOP未接入，Mock标识必须保留。
+
+| 消费或交互 | 合同与检查点 |
+| --- | --- |
+| 请求 | GET `/api/autoflow/integrations/fop/freight`传grain/year，warehouse默认ALL；weekOf仅week且属于year；carrierCode是固定6类。返回query为已解析条件，不能用正在编辑的条件标注旧结果 |
+| 周期 | periods升序用于图轴、统计明细倒序。月YTD/历史12月、周一4周、年最近5年；未完期to截到UTC+8今天，partial醒目标未完周期（含末日当天）。上一期是完整自然周期，与当前未完期比较需要说明 |
+| 统计值 | 使用API amount/previousAmount/delta/percent；null表示上期为0且本期非0，显示“上期为0”，双0为0%；percent=25显示25%，不是0.25%；汇总直接取totals |
+| 图表与表格 | 合计/服务商并列，不堆叠；合计不再次累加。独立环比开关，开启自动展开统计表，关闭不收起；固定列宽避免跳动。复用EChart滑块拖动边界，滚轮滚动页面 |
+| 趋势 | 服务商居中弹窗从当前已返回数据筛出单商、继承已应用时间/仓库，不另外发请求，不把任意陈旧查询标题带入；关闭/ESC及焦点、暗色、窄屏需真实浏览器验收 |
+| 明细 | GET `/api/autoflow/integrations/fop/freight/details`必须有workbenchRole；保持基础查询、carrierCode、periodId、comparisonPeriod。current默认、previous完整上期；不得在Dashboard另造无权限成本列表 |
+| 分页 | 全筛选发运单数、USD金额与分原币合计使用返回totals，非当前页求和；换页仅改page。原始金额、币种、汇率方向/日期/来源及确认时间应可核对 |
+| 访问及错误 | freight scope缺失403与空allowlist合法空数据区分。切账号/会话、加载失败、筛选竞态必须清理或拒绝旧成本；前端岗位可见不取代服务端成本授权 |
+
+源码定位：`frontend/src/components/freight/FreightAnalysis.vue`、`FreightResults.vue`、`FreightTrendDialog.vue`、`frontend/src/utils/freight.ts`、`frontend/src/api/fop-freight.ts`、`frontend/src/views/autoflow/FopFreightView.vue`。工作台路由为`/workbench/:role/freight`（RoleWorkbenchFreight），由WorkbenchView和路由守卫校验岗位入口。以上已核对源码；测试、HTTP和浏览器实际验收状态以VERIFICATION.md为准。真实最终结算定义、汇率、后续补收退款/调价、成本可见权及服务商映射见H18–H22，不用本地Mock截图关闭生产待办。
+
+
 ## 11. 后端契约诊断与生产接入差距
 
 
 审计日期：2026-10-22。依据当前工作区源码、DTO、序列化器、前端API类型与测试；方案 2 实现后同步契约；未连接或验证真实 FOP 生产服务。FOP 为金蝶云苍穹上的 HyperZone 自研应用，后台 `/Library/VSCode/dtr5b` 只读核查。
 
-机器可读交付：[hyperzone-analytics.openapi.json](../openapi/hyperzone-analytics.openapi.json)，OpenAPI **3.1.1**，**17条路径、17个操作、69个数据模型、8组通用错误响应**。仅列当前已实现的AutoFlow HTTP接口；未实现的 FOP 上游签名、同步和分页接口没有被写成已实现路径。格式依据[OpenAPI 3.1.1官方规范](https://spec.openapis.org/oas/v3.1.1.html)。
+机器可读交付：[hyperzone-analytics.openapi.json](../openapi/hyperzone-analytics.openapi.json)，OpenAPI **3.1.1**，**19条路径、19个操作、82个数据模型、8组通用错误响应**。物流运费新增2个操作及13个模型；仅列当前平台HTTP接口，未实现的 FOP 上游签名、同步和分页接口没有被写成已实现路径。格式依据[OpenAPI 3.1.1官方规范](https://spec.openapis.org/oas/v3.1.1.html)。
 
 ### 1. 当前交付判断
 
@@ -3462,6 +4479,8 @@ describe('ECharts audit: assertions of current incorrect behavior', () => {
 客户 `series.amounts` 与 Dashboard `receipts` 已改为**独立授权的收款分录**：`amount=hzkj_real_receive_amt`；源单已支付、已审核且收款单已审核，来源履约＋全款备货，排除押金备货与样品，按支付时刻 UTC+8 归月。`orderAmount`、`handlingFee` 保留核对；使用已全款备货库存的履约不补回产品款。钱包授信可产生此类结算，因此不等同于银行新增现金流。历史期间按当前有效状态重算，未新增结账锁定、部分退款／冲销系统。
 
 数量仍只计已支付、已审核履约订单；备货不计数量。客户金额沿用数量 Top10／other 集合，只有全款备货回款的客户仍能搜索、进入总计／other。独立 `allowedReceiptIds` 缺失即无收款授权，且需 receipts scope；无 scope 时客户省略 amounts、Dashboard 回款为空、收款明细 403。客户金额和 Dashboard 均提供履约／全款备货来源拆分。
+
+物流运费新增独立发运单成本快照，使用 `allowedFreightIds` 与 `freight` scope，不从订单／收款授权推导。原币、原额、USD汇率及日期/来源强制保留，折算必须一致；已审核已确认的正成本按确认时间UTC+8归期。确认不等于最终结算，费用分录停用与首次候选规则使补收退款和后续调价仍有生产缺口，详见第8节。
 
 ### 2. 传输与错误边界
 
@@ -3493,6 +4512,8 @@ describe('ECharts audit: assertions of current incorrect behavior', () => {
 | GET `/autoflow/integrations/fop/fulfillment-orders` | `getFulfillmentOrders` | queue、search、orderNumber、分页；`OrderPage` | queue对应角色强制校验；可选workbenchRole若不匹配则400 |
 | GET `/autoflow/integrations/fop/receipts` | `getReceipts` | from/to、部门/员工/客户/仓库/来源、workbenchRole、分页；`ReceiptPage` | 独立收款 scope 与分录 allowlist；UTC+8 有效 USD 分录，分页前合计 |
 | GET `/autoflow/integrations/fop/order-volume/receipts` | `getOrderVolumeReceipts` | customer 同图表查询及下钻参数；`ReceiptPage` | 先重建完整数量 Top10/other 集合，再收窄期间和仓库 |
+| GET `/autoflow/integrations/fop/freight` | `getFreight` | grain/year、可选weekOf/warehouse/carrierCode；`FreightData` | freight scope与独立成本allowlist；月/周/年、USD、完整上期环比、partial |
+| GET `/autoflow/integrations/fop/freight/details` | `getFreightDetails` | 同分析查询＋periodId/comparisonPeriod/workbenchRole/分页；`FreightPage` | 岗位权限再校验；current默认，previous完整上期；分页前USD/原币合计 |
 | GET `/autoflow/integrations/fop/dashboard` | `getFopDashboard` | from/to/year均必填；`FopDashboard` | 三类analyticsScopes独立控制；队列另按入口角色 |
 | GET `/workbench/access` | `getWorkbenchAccess` | 无参数；`WorkbenchAccess` | 当前账户入口/系统/业务权限摘要 |
 | GET `/workbench/{role}/access` | `getWorkbenchRoleAccess` | path角色；`WorkbenchAccess` | 未知角色400，无授权403 |
@@ -3564,7 +4585,7 @@ describe('ECharts audit: assertions of current incorrect behavior', () => {
 
 ### 7. 历史诊断验证记录与本轮边界
 
-下表保留方案2实施前的 2026-10-22 诊断证据，不代表此次修改后的测试数量。当前代码全量验证、浏览器与生成文件检查以 VERIFICATION.md 为准；本次 OpenAPI 已扩展至17操作／69模型；已用现有 docs-venv 的 openapi-spec-validator 与 Draft202012Validator 校验结构和模型，生成器 validate_examples 递归校验186处模型／请求／响应示例通过（共享响应按使用位置重复计数）。此次仅验证，生成文件及真实 HTTP 响应检查由主流程完成。
+下表保留方案2实施前的 2026-10-22 诊断证据，不代表此次修改后的测试数量。方案2阶段OpenAPI为17操作／69模型，曾用docs-venv校验186处模型／请求／响应示例（共享响应按位置重复计数）；该历史数字不代表运费新增模型的验证结果。当前代码全量验证、浏览器、实际HTTP契约与生成文件检查以 VERIFICATION.md 为准。
 
 | 验证 | 本次真实结果 | 范围/限制 |
 |---|---|---|
@@ -3578,12 +4599,54 @@ describe('ECharts audit: assertions of current incorrect behavior', () => {
 机器规范的成功与错误样例均为脱敏契约样例，不是截取生产数据。上述定向测试与主流程全量测试存在重叠，不能将数量相加当作独立测试总数。本交付记录现状、风险和接入需求，没有把测试通过等同于生产FOP接入已完成。
 
 
+### 8. 物流运费新增契约与生产差距
+
+| 主题 | 当前实现合同 | 真实接入仍需验证 |
+| --- | --- | --- |
+| 事实粒度 | `FopFreight`每发运单一条当前实际成本；`FopFreightCandidate`含内部tenantId和departmentPathIds；公开字段白名单不输出这两项 | 发运单稳定ID、历史修订和多个发运单关联，不按订单号去重 |
+| 纳入规则 | 源发运单审核approved、成本confirmed、正金额、已发生确认时刻；源正成本缺时间、重复ID等错误拒收 | C审核码、确认状态归一和各供应商金额真正含义；确认不是银行支付或最终结账 |
+| 金额 | 原币/原额/明确汇率日期和来源必需；USD原币rate=1，amount为原额×汇率十进制精确乘法HALF_UP到分（1.50×0.15=0.23），有限安全分币累计 | YT/4PX/WB/YW保留原币，JS为CNY；真实币种、历史汇率和原币精度；禁止拿Rmb变量名猜币种 |
+| 权限 | 独立freight scope及allowedFreightIds；缺scope403、缺失/空IDs为空；与租户、本人/部门后代/业务管理员求交；请求后复查授权变化 | FOP运行期单据及字段成本可见权；不沿用单量报表无业务员档案时组织全员的规则 |
+| 周期 | month为YTD/历史12月；week周一4周，锚点与year一致；year近5年最早2020；完整跨年基期仍读取；partial标未结束期 | 真实跨年完整成本及汇率覆盖；前台不能把当前部分期与完整上期比较描述为同期同比 |
+| 环比 | 本期、完整上期、差额、百分点；0→正值percent=null，0→0为0；各期与总计均按基数重算 | 实际账单不同确认时延及调价引起的历史变化，不能视为已关账业绩 |
+| 下钻 | `/freight/details`强制workbenchRole；periodId来自同查询；current/previous；确认时间倒序稳定排序；total/totals分页前计算，原币分组 | 图表与明细为各次当前查询，asOf不是冻结快照；变动期间需明确一致性约定 |
+| 结算覆盖 | 仅表头快照，保留明确边界 | 源费用分录已停用，重派/退款采集注释；首次正成本后常规候选不再自动重查；补收退款及历史调价需单独机制 |
+| 网络与写接口 | 平台两个GET及Mock并不等于真实FOP已接通 | 尚无已确认分析HTTP接口；JsexpActualFreightController是POST回写维护，不能从分析端调用 |
+
+实现定位：`backend/src/modules/fop-data/fop-freight.types.ts`、`fop-freight.dto.ts`、`fop-freight.ts`、`fop-data.service.ts`、provider，以及 `backend/src/modules/users/workbench.controller.ts`。FOP源证据见源码映射第9节；联调资料和验收标准统一使用T17–T20、H18–H22、D11–D15。实际测试结论仅记录到VERIFICATION.md，本文不以契约或Mock存在推断生产验收通过。
+
+
 ## 12. 本次验证记录与限制
 
 
 业务方案版本：2026-10-22；最终执行时刻所在业务日期为 2026-10-23（UTC+8）。环境：macOS、Node.js 22.23.3、npm 10.9.9、本地隔离 PostgreSQL 16。执行结果不等同于生产 FOP 验收。
 
-### 本次方案 2 验证
+### 本轮物流运费分析验证（2026-10-23 UTC+8）
+
+新增独立实际运费成本资源、月/周/年汇总及环比、工作台明细、单物流商趋势弹窗，使用与公开接口同结构的 Mock。下列结果为本轮执行，不将此前基线重复计数。
+
+| 检查 | 实际结果 | 范围与限制 |
+| --- | --- | --- |
+| 全量前端测试 | 41 文件、169 用例通过 | 包含成本图表、固定表格、环比本期/上期跳转、请求乱序、会话清空、Other真实服务商名称和路由权限 |
+| 全量后端测试 | 38 套、257 用例通过 | UTC+8、月/周/年跨年基期、零基期、精确十进制汇率舍入、重复ID、异常字段、部门路径与独立成本权限 |
+| 全量 E2E | 4 套、95 用例通过 | `autoflow_test` 隔离数据库；FOP边界使用stub；新增成本接口鉴权、ID注入拒绝、业务管理员/本人、分页、过滤与脱敏503 |
+| Lint、类型与构建 | 通过 | 前后端ESLint；后端临时输出编译；前端vue-tsc/Vite构建及资源打包。仍有既有Browserslist过期及大chunk提示 |
+| 隔离生产冒烟 | 通过 | 临时目录+端口3198，健康检查、数据库、Dashboard与`/workbench/dispatch/freight` SPA路由及CSP/nosniff；完成后停止临时进程并清理 |
+| OpenAPI与文档 | 19操作、82模型、220处示例通过 | OpenAPI3.1.1、完整MD/HTML同源生成；HTML共享CSS/透明Logo及离线结构校验 |
+| 实际本地HTTP | 42组响应Schema通过 | 月/周/年各汇总与明细，加六物流商当前/上期明细；36组服务商周期金额逐项对账一致；并非生产FOP调用 |
+| 独立审查 | 已修复发现并复核 | 十进制半分舍入、异常部门路径子串误命中、Other真实服务商名称遗漏；无未解决的实质阻断问题 |
+
+本轮共 **521 个测试用例通过**（169＋257＋95）。未重复累计定向测试、审查复跑与诊断失败试跑。
+
+实际浏览器验收：月度展示最新六个月、周展示四组、年展示近五年；合计与六物流商同级柱状；云途趋势弹窗正常居中、普通金额用折线、环比用柱状；按上期链接跳转发运工作台，UTC+8的9月云途明细合计为 `$91.29`，与对比基期一致。主统计表环比前后八列横坐标/宽度逐项一致，首行均为84px；取消环比后仍展开。金额滚轮测试中页面滚动、图表时间窗口保持不变。数值仅对应当前验收账号与时刻，不代表生产实际金额。
+
+截图：[物流运费面板](freight-analysis-browser-smoke.png)、[服务商趋势弹窗](freight-trend-browser-smoke.png)。未声称覆盖全部设备、图例组合、下载、键盘/屏幕阅读器及所有真实岗位。
+
+新增文档保留旧ID，后续清单共20项T任务、22项H人工核对、15项D验收场景。正式切换FOP前仍需核对“最终结算”定义、首笔费用是否最终金额、原币和历史汇率、调价/补收/退款、服务商映射及成本查看授权。没有把已确认成本快照包装成已付款流水，也没有把真实FOP网络适配器标为已完成。
+
+本轮修复记录：`1.50 × 0.15`应按十进制HALF_UP得到`0.23`，先复现二进制中间乘积的错误拒收后改用BigInt；部门路径为字符串`d10`时不得让部门`d1`命中，先复现后增加数组及元素校验；OTHER分类也必须保留具体物流商名。三个回归均先观察失败再验证修复。
+
+### 上一轮方案 2 验证基线
 
 | 检查 | 实际结果 | 范围/限制 |
 | --- | --- | --- |
@@ -3624,7 +4687,7 @@ describe('ECharts audit: assertions of current incorrect behavior', () => {
 
 ### 文档与 Git
 
-MD/HTML从同一需求源及OpenAPI生成，包含FOP源码字段映射和后续待办清单。补充清单后的HTML使用共享HyperZone CSS与透明SVG Logo；离线检查通过：113张表格，其中57张字段表、17张响应表，15个有效页内链接、2处内嵌Logo，并包含移动及打印规则。浏览器工具之前拒绝本地文件URL，本轮未绕过该限制，因此未宣称完成文档的浏览器视觉/打印预览。
+MD/HTML从同一需求源及OpenAPI生成，包含FOP源码字段映射和后续待办清单。物流运费补充后的HTML使用共享HyperZone CSS与透明SVG Logo；离线检查通过：新增字段表及两组接口响应表、15个有效页内链接、2处内嵌Logo，并包含移动及打印规则。具体表格数量以本轮生成器输出为准。浏览器工具之前拒绝本地文件URL，本轮未绕过该限制，因此未宣称完成文档的浏览器视觉/打印预览。
 
 提交只包含本工程代码、测试、项目事实和交付文档；运行库、密码、会话和测试日志保留于忽略目录，不进入Git。提交与远端同步结果以Git记录和最终交付消息为准。
 
@@ -3805,6 +4868,47 @@ hzkj_total_amount = hzkj_fre_quo_amount + hzkj_fixed_tax_fee
 以上不阻碍前端使用明确标注的演示数据与归一接口边界；它们阻止的是把尚未验证的接口、状态或金额猜测包装成“真实 FOP 已接通”。
 
 后续工作、建议负责人、具体资料与完成标准统一维护在 [后续待办与人工核对清单](FOLLOW_UP_CHECKLIST.md)，并收录到完整需求第7章。
+
+### 9. 物流运费：已核实字段、结算边界与独立权限
+
+本节是本次物流运费分析的只读源码核查结果。平台已有 `/api/autoflow/integrations/fop/freight` 与 `/freight/details` 契约及独立 Mock；**没有证据表明真实 FOP 已发布对应只读分析 HTTP 接口**。下列 Java 服务、任务或表单存在，不代表可以把其名称拼成生产 URL。
+
+#### 9.1 当前实际成本事实
+
+| 平台字段／规则 | FOP 源事实 | 适配说明 |
+| --- | --- | --- |
+| id / documentNumber | `hzkj_deliver_bill.id/billno` | 每发运单一条当前快照；同一订单多次发运不按订单号去重；重复发运单 ID 拒收 |
+| originalAmount | 表头 `hzkj_actual_freight` | 实际物流成本，不是客户收费、预估价格或订单金额 |
+| originalCurrency | 表头 `hzkj_textfield1` | 必须从真实币种字段取得，不从 Java 变量的 Rmb 后缀推断 |
+| confirmedAt | `hzkj_actual_freight_time` | 同步取得费用后写入苍穹的确认时刻；按 UTC+8 归日／月／周／年；不等于银行付款日或最终结账日 |
+| reviewStatus / costStatus | `billstatus='C'`；实际成本为正且有确认时刻 | C映射approved；confirmed是适配器依据已核实金额/时间建立的归一状态，未证明源有同名状态枚举。未确认或零金额不纳入，正数缺时间拒收 |
+| carrierCode/Name / channelName | `hzkj_logistics_providers` / `hzkj_logistics_channel1` | 采用发运单实际选择的服务商／渠道；真实编码显式映射YT/4PX/WB/YW/JS/OTHER，不能根据名字猜测，未知不能静默OTHER |
+| warehouseCode / warehouse | `hzkj_basedatafield` | 映射真实杭州/深圳仓ID；归一HZ/SZ，不从订单归仓替代发运归仓 |
+| customer / owner / organization | `hzkj_customer` / `hzkj_bizoperator` / `org` | 稳定ID及名称；部门/祖先路径需要可信目录或源字段补充，不能按文本推断权限 |
+| orderNumber / trackingNumber | `hzkj_order_no` / `hzkj_logistics_orderno` | 源订单号及物流订单号；运输跟踪号另有字段，实际展示语义待真实样本核对，不把物流号作为唯一事实ID |
+| fxRateToUsd/Date/Source / amount | 尚无已核实的统一历史USD折算字段 | 平台强制显式原币到USD汇率、取价日与来源，amount须等于精确十进制乘法HALF_UP折算后分币（1.50×0.15=0.23）；USD原币rate=1。Mock汇率仅样例，不能做生产历史汇率 |
+
+源码证据：[实际运费及确认时间元数据](</Library/VSCode/dtr5b/datamodel/hzkj_CRM/1.5/main/hzkj_logistics/metadata/hzkj_deliver_bill.dym:4001>)；[实际运费币种](</Library/VSCode/dtr5b/datamodel/hzkj_CRM/1.5/main/hzkj_logistics/metadata/hzkj_deliver_bill.dym:3841>)；[已审核表头成本查询及正数缺时间错误](</Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/logistics/service/OrderLogisticsCostQueryService.java:37>)；[发运维度字段](</Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/logistics/service/DeliveredOrderVolumeReportService.java:48>)；[订单号与物流号读取](</Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/logistics/exception/FreightExceptionService.java:81>)。
+
+#### 9.2 原币与“最终结算”的限制
+
+云途、4PX、万邦、燕文任务将供应商返回金额与币种直接写入表头，未在这些写入语句里统一折成人民币或美元。急速同步明确写 CNY。因此 `OrderLogisticsCostQueryService` 的 `actualFreightRmb` 变量名不能证明所有服务商金额均为人民币，不能直接把不同币种相加后标记USD。
+
+证据：[云途金额及币种写入](</Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/logistics/task/SyncYunTuFreightTaskPlugin.java:68>)；[4PX](</Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/logistics/task/Sync4pxFreightTaskPlugin.java:76>)；[万邦](</Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/logistics/task/SyncWanbFreightTaskPlugin.java:68>)；[燕文](</Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/logistics/task/SyncYanWenFreightTaskPlugin.java:69>)；[急速CNY和确认时间](</Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/logistics/service/JsexpActualFreightSyncService.java:130>)。
+
+`OrderLogisticsCostQueryService` 明确注明费用单据体已移除，`collectSubsequentFees` 调用被注释；保留 redispatch/refund 代码不等于已计入重派或退费。常规候选无独立完成时间字段时，仅选择 `hzkj_actual_freight IS NULL OR =0`，首次正值之后不会由该候选规则自动重新采集。燕文取返回数组第一条；急速解析 `timeIn` 并选择记录，这些读取策略本身不能证明取得最终账单。因此当前能力是“已确认实际成本快照”，不承诺完整物流结算账本、最终实付成本或后续退款净额。
+
+证据：[停用后续费用采集](</Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/logistics/service/OrderLogisticsCostQueryService.java:83>)；[首次候选条件](</Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/logistics/service/FreightSyncCandidateService.java:183>)；[燕文第一条记录](</Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/logistics/task/SyncYanWenFreightTaskPlugin.java:69>)；[急速时间解析](</Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/logistics/service/JsexpActualFreightSyncService.java:190>)。
+
+#### 9.3 成本授权和真实查询接口
+
+`DeliveredOrderVolumeReportService` 限当前组织；有 `hzkj_bizperson` 档案时限制本人，无档案时组织全员。这是该单量报表的规则，不能自动成为物流成本权限，更不能让没有业务员档案的本地账户因此查看组织所有成本。
+
+可信权限模式可参考 `FreightExceptionService.currentOrg/requireRight`：检查当前登录组织、`hasViewPermission` 和单据 `checkOperationRule`。它是可借鉴的服务端权限实现，仍需正式定义运费金额是否有额外字段权限。平台当前同时要求 `freight` analytics scope、独立 `allowedFreightIds`，并与 tenant、本人／部门／业务管理员范围求交；系统管理身份和订单 allowlist 均不授予成本可见性。公开序列化剥离 `tenantId/departmentPathIds`。
+
+证据：[单量报表当前组织和员工范围](</Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/logistics/service/DeliveredOrderVolumeReportService.java:137>)；[有无业务员档案的分支](</Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/logistics/service/DeliveredOrderVolumeReportService.java:180>)；[组织及单据权限校验](</Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/logistics/exception/FreightExceptionService.java:49>)。
+
+`JsexpActualFreightController` 的 `/actualFreight` 是 POST同步并回写发运单的维护接口，不是只读分析接口，不应由分析页面调用。[控制器写入行为](</Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/logistics/controller/JsexpActualFreightController.java:23>)。真实只读URL、鉴权、分页完整性、授权刷新和脱敏响应须由FOP研发提供；最终结算、币种汇率、调价补收退款、成本权限和服务商映射分别见 H18–H22。
 
 
 ## 14. 规范来源与文档再生成

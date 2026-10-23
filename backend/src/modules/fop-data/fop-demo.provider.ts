@@ -1,3 +1,5 @@
+import { demoFreight } from './fop-freight-demo'
+import type { FopFreightCandidate } from './fop-freight.types'
 import { businessDate } from './fop-business-time'
 import { FOP_CARRIERS } from './fop-carriers'
 import { createHash } from 'crypto'
@@ -63,7 +65,7 @@ export class DemoFopDataProvider extends FopDataProvider {
   }
   async resolvePermissions(identity: Readonly<FopIdentity>): Promise<FopPermissionGrant> {
     this.assertIdentity(identity)
-    return { subject: { ...identity }, allowedOrderIds: (await this.orders(identity)).map(order => order.id), allowedReceiptIds: (await this.receipts(identity)).map(receipt => receipt.id), analyticsScopes: ['rates', 'registrations', 'receipts'] }
+    return { subject: { ...identity }, allowedOrderIds: (await this.orders(identity)).map(order => order.id), allowedReceiptIds: (await this.receipts(identity)).map(receipt => receipt.id), allowedFreightIds: demoFreight(identity, await this.orders(identity)).map(row => row.id), analyticsScopes: ['rates', 'registrations', 'receipts', 'freight'] }
   }
   async listOrders(identity: Readonly<FopIdentity>, permission: Readonly<FopPermissionGrant>): Promise<FopOrderCandidate[]> {
     this.assertIdentity(identity, permission)
@@ -74,6 +76,12 @@ export class DemoFopDataProvider extends FopDataProvider {
     this.assertIdentity(identity, permission)
     const allowed = new Set(permission.allowedReceiptIds ?? [])
     return (await this.receipts(identity)).filter(receipt => allowed.has(receipt.id))
+  }
+  async listFreight(identity: Readonly<FopIdentity>, permission: Readonly<FopPermissionGrant>): Promise<FopFreightCandidate[]> {
+    this.assertIdentity(identity, permission)
+    if (!permission.analyticsScopes?.includes('freight')) throw new FopPermissionDeniedError('Freight cost access denied')
+    const allowed = new Set(permission.allowedFreightIds ?? [])
+    return demoFreight(identity, await this.orders(identity)).filter(row => allowed.has(row.id))
   }
   private async receipts(identity: Readonly<FopIdentity>): Promise<FopReceiptCandidate[]> {
     const orders = await this.orders(identity)
