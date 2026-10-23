@@ -4,7 +4,7 @@
   "info": {
     "title": "HyperZone AutoFlow Analytics 当前实现契约",
     "version": "2026-10-22",
-    "description": "字段级源码快照，仅记录已实现HTTP路由，不将计划FOP上游写为paths。响应裸JSON，无{code,data,message}包装。required=序列化必有；type:null=显式空值；可省略字段不在required中。参数跨字段依赖及已知口径差距见操作描述和配套审计。示例为脱敏契约样例，不是生产数据。"
+    "description": "字段级源码快照，仅记录已实现HTTP路由，不将计划FOP上游写为paths。响应裸JSON，无{code,data,message}包装。required=序列化必有；type:null=显式空值；可省略字段不在required中。参数跨字段依赖及已知口径差距见操作描述和配套审计。示例为脱敏契约样例，不是生产数据。 FOP为金蝶云苍穹上的HyperZone自研应用，源码只读核实；本工程方案2收款聚合和Mock已实现，真实生产网络适配器仍未配置。订单与收款各自授权，回款采用实际结算分录，统一UTC+8。"
   },
   "servers": [
     {
@@ -35,6 +35,9 @@
     },
     {
       "name": "权限管理"
+    },
+    {
+      "name": "收款分析"
     }
   ],
   "paths": {
@@ -107,7 +110,7 @@
         "tags": [
           "订单分析"
         ],
-        "description": "至少一个工作台角色；当前账户绑定、租户、订单allowlist与businessScope求交。时间模式二选一：grain+year必填，day另需month，week默认weekOf=上海今天；或category=customer且from/to同时提供并禁止grain/year/month/weekOf。客户区间2020-01-01至上海今天含首尾。只统计paid、有效paidAt<=asOf、未取消未退款订单；非carrier还要求salesDepartmentCode。未来日null、已到日期无数据0。customer每个series含amounts。筛选参数不能扩大权限。",
+        "description": "至少一个工作台角色；绑定、租户、独立订单／收款 allowlist 与 businessScope 求交。时间模式二选一：grain+year，day 另需 month；或 category=customer 且 from/to 同时提供，禁止 grain/year/month/weekOf。日期为 2020-01-01 至 UTC+8 今天含首尾。订单数仅 paid、reviewStatus=approved、有效 paidAt<=asOf、未取消的履约订单；非 carrier 要求报表部门。备货不计订单数。未来日 null，已发生空期 0。客户有 receipts scope 时 amounts 来自独立授权的有效收款分录，无 scope 省略 amounts。Top10 按履约数量，只有备货回款的客户仍进入总计／other 和搜索。筛选参数不能扩大权限。",
         "responses": {
           "200": {
             "description": "成功，裸JSON响应。",
@@ -133,7 +136,7 @@
                     "to": "2026-10-21",
                     "warehouse": "ALL"
                   },
-                  "timeZone": "Asia/Shanghai",
+                  "timeZone": "UTC+8",
                   "asOf": "2026-10-22T08:00:00.000Z",
                   "total": 1,
                   "customerCount": 1,
@@ -183,7 +186,11 @@
                             0
                           ]
                         },
-                        "excludedOrderCount": 0
+                        "excludedOrderCount": 0,
+                        "breakdown": {
+                          "fulfillment": 125.5,
+                          "fullPaymentStock": 0
+                        }
                       }
                     },
                     {
@@ -222,7 +229,11 @@
                             0
                           ]
                         },
-                        "excludedOrderCount": 0
+                        "excludedOrderCount": 0,
+                        "breakdown": {
+                          "fulfillment": 125.5,
+                          "fullPaymentStock": 0
+                        }
                       },
                       "entityId": "customer-example",
                       "code": "C001"
@@ -308,7 +319,7 @@
             "required": false,
             "schema": {
               "type": "integer",
-              "description": "2020至上海当前年；week也要求year但由weekOf决定实际分桶。",
+              "description": "2020至UTC+8 当前年；week也要求year但由weekOf决定实际分桶。",
               "minimum": 2020,
               "maximum": 9999
             }
@@ -330,7 +341,7 @@
             "required": false,
             "schema": {
               "type": "string",
-              "description": "仅客户区间，不晚于上海今天；当前无最大跨度限制。",
+              "description": "仅客户区间，不晚于UTC+8 今天；当前无最大跨度限制。",
               "format": "date",
               "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
             }
@@ -352,7 +363,7 @@
             "required": false,
             "schema": {
               "type": "string",
-              "description": "week锚点，默认上海今天；2020至今天，不强制与year同年。",
+              "description": "week锚点，默认UTC+8 今天；2020至今天，不强制与year同年。",
               "format": "date",
               "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
             }
@@ -401,7 +412,7 @@
                 "UNASSIGNED"
               ],
               "default": "ALL",
-              "description": "ALL全仓，HZ杭州，SZ深圳，UNASSIGNED未知或未归仓；默认ALL。"
+              "description": "ALL全仓，HZ杭州，SZ深圳；UNASSIGNED仅兼容查询，已审核履约／有效收款不得未知仓；默认ALL。"
             }
           }
         ],
@@ -422,7 +433,7 @@
         "tags": [
           "订单分析"
         ],
-        "description": "至少一个工作台角色；当前账户绑定、租户、订单allowlist与businessScope求交。时间模式二选一：grain+year必填，day另需month，week默认weekOf=上海今天；或category=customer且from/to同时提供并禁止grain/year/month/weekOf。客户区间2020-01-01至上海今天含首尾。只统计paid、有效paidAt<=asOf、未取消未退款订单；非carrier还要求salesDepartmentCode。未来日null、已到日期无数据0。customer每个series含amounts。筛选参数不能扩大权限。 额外要求拥有workbenchRole，仅校验入口，不过滤履约队列。先完整范围重建TopN/other，再收窄period/detailWarehouse；warehouse与detailWarehouse求交。按paidAt倒序/id稳定排序，totals分页前计算。",
+        "description": "至少一个工作台角色；绑定、租户、独立订单／收款 allowlist 与 businessScope 求交。时间模式二选一：grain+year，day 另需 month；或 category=customer 且 from/to 同时提供，禁止 grain/year/month/weekOf。日期为 2020-01-01 至 UTC+8 今天含首尾。订单数仅 paid、reviewStatus=approved、有效 paidAt<=asOf、未取消的履约订单；非 carrier 要求报表部门。备货不计订单数。未来日 null，已发生空期 0。客户有 receipts scope 时 amounts 来自独立授权的有效收款分录，无 scope 省略 amounts。Top10 按履约数量，只有备货回款的客户仍进入总计／other 和搜索。筛选参数不能扩大权限。 额外要求 workbenchRole；先完整范围重建 TopN/other，再收窄 period/detailWarehouse，查询仓和明细仓取交集。按 paidAt 倒序/id 排序，totals 在分页前计算；此端点返回履约订单金额，不是实收明细。",
         "responses": {
           "200": {
             "description": "成功，裸JSON响应。",
@@ -518,7 +529,7 @@
             "required": false,
             "schema": {
               "type": "integer",
-              "description": "2020至上海当前年；week也要求year但由weekOf决定实际分桶。",
+              "description": "2020至UTC+8 当前年；week也要求year但由weekOf决定实际分桶。",
               "minimum": 2020,
               "maximum": 9999
             }
@@ -540,7 +551,7 @@
             "required": false,
             "schema": {
               "type": "string",
-              "description": "仅客户区间，不晚于上海今天；当前无最大跨度限制。",
+              "description": "仅客户区间，不晚于UTC+8 今天；当前无最大跨度限制。",
               "format": "date",
               "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
             }
@@ -562,7 +573,7 @@
             "required": false,
             "schema": {
               "type": "string",
-              "description": "week锚点，默认上海今天；2020至今天，不强制与year同年。",
+              "description": "week锚点，默认UTC+8 今天；2020至今天，不强制与year同年。",
               "format": "date",
               "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
             }
@@ -611,7 +622,7 @@
                 "UNASSIGNED"
               ],
               "default": "ALL",
-              "description": "ALL全仓，HZ杭州，SZ深圳，UNASSIGNED未知或未归仓；默认ALL。"
+              "description": "ALL全仓，HZ杭州，SZ深圳；UNASSIGNED仅兼容查询，已审核履约／有效收款不得未知仓；默认ALL。"
             }
           },
           {
@@ -683,7 +694,7 @@
         "tags": [
           "订单分析"
         ],
-        "description": "至少一个工作台角色；已授权未取消未退款、有报表部门/customerId的订单构建客户集，包含未支付。编码精确命中优先，后按编码/ID排序。无日期/仓库参数，未知字段400。",
+        "description": "至少一个工作台角色。授权已审核、未取消未退款、有报表部门及 customerId 的订单（可含未支付），与独立授权的有效收款客户共同构建目录；没有收款 scope 时只用订单。只有全款备货收款的客户可搜索。编码精确命中优先，随后编码/ID 排序。无日期／仓库参数，未知字段 400。",
         "responses": {
           "200": {
             "description": "成功，裸JSON响应。",
@@ -935,7 +946,7 @@
         "tags": [
           "仪表盘"
         ],
-        "description": "from<=to，end-start<=365天（含首尾最多366天），to<=UTC今天，year<=UTC当前年。from/to仅注册，year仅收款；队列/异常/任务不受日期筛选。rates/registrations/receipts分别需provider analyticsScopes；无scope返回空。registrationEntries优先并按业务范围过滤，缺失时仅业务admin可读旧registrations。收款为USD已支付订单amount、非独立收款流水，按paidAt.slice(0,7)归月，未统一上海时区。",
+        "description": "from<=to，end-start<=365 天（含首尾最多 366 天），to<=UTC+8 今天，year<=UTC+8 当前年。from/to 仅注册，year 仅回款；队列／异常／任务不受日期筛选。rates/registrations/receipts 分别需 analyticsScopes；无 scope 返回空。注册明细按业务范围过滤，缺失时仅业务 admin 可读旧日汇总。回款以独立授权的 hzkj_real_receive_amt 分录为准：USD、paid、源单与收款单均 approved、未取消且支付已发生，来源履约＋全款备货，不含押金／样品，按 UTC+8 支付月归属。包含来源拆分和上年12月基线；非银行现金流保证。",
         "responses": {
           "200": {
             "description": "成功，裸JSON响应。",
@@ -976,7 +987,9 @@
                     "currency": "USD",
                     "months": [],
                     "marketingCenter": null,
-                    "departments": []
+                    "departments": [],
+                    "basis": "actual_received",
+                    "timeZone": "UTC+8"
                   }
                 }
               }
@@ -1006,7 +1019,9 @@
           "backend/src/modules/users/workbench.controller.ts",
           "backend/src/modules/fop-data/fop-data.service.ts",
           "backend/src/modules/fop-data/fop-data.dto.ts",
-          "backend/src/modules/fop-data/fop-registration.ts"
+          "backend/src/modules/fop-data/fop-registration.ts",
+          "backend/src/modules/fop-data/fop-receipts.ts",
+          "backend/src/modules/fop-data/fop-business-time.ts"
         ],
         "parameters": [
           {
@@ -1755,6 +1770,449 @@
           "backend/src/modules/users/business-data-access.ts"
         ]
       }
+    },
+    "/autoflow/integrations/fop/order-volume/receipts": {
+      "get": {
+        "operationId": "getOrderVolumeReceipts",
+        "summary": "客户同一数量排名集合下钻收款分录",
+        "tags": [
+          "收款分析"
+        ],
+        "description": "仅 category=customer；沿用客户统计时间、部门、仓库及完整查询范围数量 Top10/other 客户集合，再应用 periodId/detailWarehouse。需要 workbenchRole、receipts scope 与独立 allowedReceiptIds；没有 scope 返回403，缺失/空白名单为空。订单 allowlist 不能替代收款授权。只返回有效 USD 履约／全款备货分录；不含押金、样品。状态、UTC+8 日期及来源口径同 Dashboard。total/totals 分页前计算，按 paidAt 倒序/id 稳定排序；客户端不能传身份/权限字段。",
+        "responses": {
+          "200": {
+            "description": "成功，裸JSON响应。",
+            "headers": {
+              "Cache-Control": {
+                "description": "JWT guard设置private, no-store；全局429可先于guard返回，不保证此头。",
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReceiptPage"
+                },
+                "example": {
+                  "source": "mock",
+                  "timeZone": "UTC+8",
+                  "total": 0,
+                  "page": 1,
+                  "pageSize": 20,
+                  "totals": {
+                    "receiptCount": 0,
+                    "currency": "USD",
+                    "amount": 0,
+                    "fulfillmentAmount": 0,
+                    "fullPaymentStockAmount": 0,
+                    "orderAmount": 0,
+                    "handlingFee": 0
+                  },
+                  "items": []
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "x-implementation-status": "implemented",
+        "x-source-files": [
+          "backend/src/modules/users/workbench.controller.ts",
+          "backend/src/modules/fop-data/fop-data.service.ts",
+          "backend/src/modules/fop-data/order-volume.dto.ts",
+          "backend/src/modules/fop-data/order-volume.ts",
+          "backend/src/modules/fop-data/fop-receipts.ts"
+        ],
+        "parameters": [
+          {
+            "name": "category",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "const": "customer"
+            }
+          },
+          {
+            "name": "grain",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "month年内月份；week近4个完整周一至周日；day整月逐日。",
+              "enum": [
+                "month",
+                "week",
+                "day"
+              ]
+            }
+          },
+          {
+            "name": "year",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "description": "2020至UTC+8 当前年；week也要求year但由weekOf决定实际分桶。",
+              "minimum": 2020,
+              "maximum": 9999
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "仅客户区间；和to同时存在。",
+              "format": "date",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "仅客户区间，不晚于UTC+8 今天；当前无最大跨度限制。",
+              "format": "date",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            }
+          },
+          {
+            "name": "month",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "description": "grain=day必填；其他grain忽略。",
+              "minimum": 1,
+              "maximum": 12
+            }
+          },
+          {
+            "name": "weekOf",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "week锚点，默认UTC+8 今天；2020至今天，不强制与year同年。",
+              "format": "date",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            }
+          },
+          {
+            "name": "department",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/SalesDepartment",
+              "description": "报表部门过滤代码sales1..sales4，非权限departmentId。"
+            }
+          },
+          {
+            "name": "objectId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "仅carrier/salesperson，物流代码或owner.id；未知ID返回空。",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "customerId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "仅customer；未知/越权ID返回空。",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "warehouse",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "ALL",
+                "HZ",
+                "SZ",
+                "UNASSIGNED"
+              ],
+              "default": "ALL",
+              "description": "ALL全仓，HZ杭州，SZ深圳；UNASSIGNED仅兼容查询，已审核履约／有效收款不得未知仓；默认ALL。"
+            }
+          },
+          {
+            "name": "workbenchRole",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/WorkbenchRole"
+            }
+          },
+          {
+            "name": "detailWarehouse",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/VolumeWarehouse"
+            }
+          },
+          {
+            "name": "seriesId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 220
+            },
+            "description": "回传series.id；省略total；未知ID返回200空集。"
+          },
+          {
+            "name": "periodId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}(?:-\\d{2})?$"
+            },
+            "description": "回传periods.id；不属于当前查询400；省略全部期间。"
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000000,
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          }
+        ]
+      }
+    },
+    "/autoflow/integrations/fop/receipts": {
+      "get": {
+        "operationId": "getReceipts",
+        "summary": "读取获授权实收分录及完整筛选合计",
+        "tags": [
+          "收款分析"
+        ],
+        "description": "Dashboard回款下钻。from/to 必填且严格有效，2020-01-01<=from<=to<=UTC+8 今天，含首尾；当前无最大跨度。department/ownerId/customerId/warehouse/sourceType 仅收窄范围。需拥有 workbenchRole、receipts scope 及独立 allowedReceiptIds；无 scope 403，缺失/空 allowlist 合法空结果。按绑定租户与部门/员工业务范围过滤，读取前后复核本地授权变化。有效分录要求 USD、paid、源单及收款单均 approved、未取消、已发生 paidAt，来源仅履约或全款备货。实收不是银行现金保证，源单金额与手续费单独返回。畸形授权分录/重复ID为503，禁止由订单金额合成。total/totals 分页前计算，paidAt倒序/id稳定排序；未知身份/权限参数400。",
+        "responses": {
+          "200": {
+            "description": "成功，裸JSON响应。",
+            "headers": {
+              "Cache-Control": {
+                "description": "JWT guard设置private, no-store；全局429可先于guard返回，不保证此头。",
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReceiptPage"
+                },
+                "example": {
+                  "source": "mock",
+                  "timeZone": "UTC+8",
+                  "total": 0,
+                  "page": 1,
+                  "pageSize": 20,
+                  "totals": {
+                    "receiptCount": 0,
+                    "currency": "USD",
+                    "amount": 0,
+                    "fulfillmentAmount": 0,
+                    "fullPaymentStockAmount": 0,
+                    "orderAmount": 0,
+                    "handlingFee": 0
+                  },
+                  "items": []
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "x-implementation-status": "implemented",
+        "x-source-files": [
+          "backend/src/modules/users/workbench.controller.ts",
+          "backend/src/modules/fop-data/fop-data.service.ts",
+          "backend/src/modules/fop-data/fop-receipts.dto.ts",
+          "backend/src/modules/fop-data/fop-receipts.ts",
+          "backend/src/modules/fop-data/fop-business-time.ts"
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "from",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            },
+            "example": "2026-10-01"
+          },
+          {
+            "in": "query",
+            "name": "to",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            },
+            "example": "2026-10-22"
+          },
+          {
+            "in": "query",
+            "name": "department",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/SalesDepartment"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ownerId",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          {
+            "in": "query",
+            "name": "customerId",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          {
+            "in": "query",
+            "name": "warehouse",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "ALL",
+                "HZ",
+                "SZ"
+              ],
+              "default": "ALL"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sourceType",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "fulfillment",
+                "full_payment_stock"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "workbenchRole",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/WorkbenchRole"
+            },
+            "example": "sales"
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000000,
+              "default": 1
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          }
+        ]
+      }
     }
   },
   "components": {
@@ -1813,7 +2271,7 @@
       },
       "VolumeWarehouse": {
         "type": "string",
-        "description": "杭州、深圳、未分配。",
+        "description": "HZ 杭州、SZ 深圳；UNASSIGNED 仅兼容查询/数组键，已审核履约不得缺失或未知仓库。",
         "enum": [
           "HZ",
           "SZ",
@@ -1822,7 +2280,7 @@
       },
       "CarrierCode": {
         "type": "string",
-        "description": "固定顺序云途YT/4PX/万邦WB/燕文YW/极速JS/其他；未知代码归OTHER。",
+        "description": "固定顺序 YT/4PX/WB/YW/JS/OTHER；OTHER 仅用于可信适配器明确映射的其他服务商，未知或缺失代码拒收。",
         "enum": [
           "YT",
           "4PX",
@@ -2091,11 +2549,11 @@
           },
           "warehouseCode": {
             "type": "string",
-            "description": "HZ/SZ以外或缺失归UNASSIGNED。"
+            "description": "已审核履约必须 HZ/SZ；缺失或未知代码拒收。"
           },
           "carrierCode": {
             "type": "string",
-            "description": "白名单以外或缺失归OTHER。"
+            "description": "已审核履约必须已映射 YT/4PX/WB/YW/JS/OTHER；缺失或未知代码拒收。"
           },
           "customerName": {
             "type": "string",
@@ -2224,14 +2682,14 @@
             "anyOf": [
               {
                 "type": "string",
-                "description": "订单量按Asia/Shanghai日期归桶；Dashboard按字符串月份归桶。",
+                "description": "带时区的支付时间，订单量按 UTC+8 业务日期归桶。",
                 "format": "date-time"
               },
               {
                 "type": "null"
               }
             ],
-            "description": "订单量按Asia/Shanghai日期归桶；Dashboard按字符串月份归桶。"
+            "description": "带明确时区的订单支付时刻，转换 UTC+8 归桶；缺失不回退 createdAt。"
           },
           "cancelled": {
             "type": "boolean",
@@ -2325,6 +2783,35 @@
             "paidAt": "2026-10-21T01:15:00Z",
             "cancelled": false,
             "exception": null
+          }
+        ],
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "reviewStatus": {
+                  "const": "approved"
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "warehouseCode",
+                "carrierCode"
+              ],
+              "properties": {
+                "warehouseCode": {
+                  "type": "string",
+                  "enum": [
+                    "HZ",
+                    "SZ"
+                  ]
+                },
+                "carrierCode": {
+                  "$ref": "#/components/schemas/CarrierCode"
+                }
+              }
+            }
           }
         ]
       },
@@ -2445,7 +2932,7 @@
           },
           "year": {
             "type": "integer",
-            "description": "2020至上海当前年；week也要求year但由weekOf决定实际分桶。",
+            "description": "2020至UTC+8 当前年；week也要求year但由weekOf决定实际分桶。",
             "minimum": 2020,
             "maximum": 9999
           },
@@ -2457,7 +2944,7 @@
           },
           "to": {
             "type": "string",
-            "description": "仅客户区间，不晚于上海今天；当前无最大跨度限制。",
+            "description": "仅客户区间，不晚于UTC+8 今天；当前无最大跨度限制。",
             "format": "date",
             "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
           },
@@ -2469,7 +2956,7 @@
           },
           "weekOf": {
             "type": "string",
-            "description": "week锚点，默认上海今天；2020至今天，不强制与year同年。",
+            "description": "week锚点，默认UTC+8 今天；2020至今天，不强制与year同年。",
             "format": "date",
             "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
           },
@@ -2498,7 +2985,7 @@
               "UNASSIGNED"
             ],
             "default": "ALL",
-            "description": "ALL全仓，HZ杭州，SZ深圳，UNASSIGNED未知或未归仓；默认ALL。"
+            "description": "ALL全仓，HZ杭州，SZ深圳；UNASSIGNED仅兼容查询，已审核履约／有效收款不得未知仓；默认ALL。"
           }
         },
         "required": [
@@ -2629,19 +3116,19 @@
           },
           "from": {
             "type": "string",
-            "description": "含首日，上海日历。",
+            "description": "含首日，UTC+8 日历。",
             "format": "date",
             "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
           },
           "to": {
             "type": "string",
-            "description": "含末日，上海日历。",
+            "description": "含末日，UTC+8 日历。",
             "format": "date",
             "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
           },
           "future": {
             "type": "boolean",
-            "description": "首日晚于上海今天。"
+            "description": "首日晚于UTC+8 今天。"
           }
         },
         "required": [
@@ -2687,7 +3174,7 @@
           },
           "UNASSIGNED": {
             "$ref": "#/components/schemas/CountValues",
-            "description": "当前series未分配/未知仓每期订单量，数组下标与periods一致。"
+            "description": "兼容数组键；已审核履约仓库必须 HZ/SZ，正常为0，未来为null。"
           }
         },
         "required": [
@@ -2703,15 +3190,15 @@
         "properties": {
           "HZ": {
             "$ref": "#/components/schemas/AmountValues",
-            "description": "杭州仓每期USD订单金额；数组下标与periods一致，未来值null。"
+            "description": "HZ 仓每期有效 USD 实收，periods 下标对齐，未来为 null。"
           },
           "SZ": {
             "$ref": "#/components/schemas/AmountValues",
-            "description": "深圳仓每期USD订单金额；数组下标与periods一致，未来值null。"
+            "description": "SZ 仓每期有效 USD 实收，periods 下标对齐，未来为 null。"
           },
           "UNASSIGNED": {
             "$ref": "#/components/schemas/AmountValues",
-            "description": "未分配/未知仓每期USD订单金额；数组下标与periods一致，未来值null。"
+            "description": "兼容数组键；有效收款仓库必须 HZ/SZ，正常为0，未来为null。"
           }
         },
         "required": [
@@ -2727,11 +3214,11 @@
           "currency": {
             "type": "string",
             "const": "USD",
-            "description": "金额统计唯一币种USD；非USD订单不换汇且计入excludedOrderCount。"
+            "description": "固定 USD；非 USD 收款分录计入兼容字段 excludedOrderCount。"
           },
           "total": {
             "$ref": "#/components/schemas/Money",
-            "description": "该series在整个查询范围内USD且金额finite的订单amount合计。"
+            "description": "本系列完整查询范围内有效 USD 收款实收合计。"
           },
           "values": {
             "$ref": "#/components/schemas/AmountValues",
@@ -2743,8 +3230,11 @@
           },
           "excludedOrderCount": {
             "type": "integer",
-            "description": "非USD或amount非finite被排除的订单数，仍计入订单量。",
+            "description": "保留旧字段名；现表示因非 USD 排除的收款分录数，不是订单数。",
             "minimum": 0
+          },
+          "breakdown": {
+            "$ref": "#/components/schemas/ReceiptBreakdown"
           }
         },
         "required": [
@@ -2752,10 +3242,11 @@
           "total",
           "values",
           "warehouses",
-          "excludedOrderCount"
+          "excludedOrderCount",
+          "breakdown"
         ],
         "additionalProperties": false,
-        "description": "仅customer维度每个series必有；不换汇。"
+        "description": "仅 customer 且有 receipts scope 时返回；独立收款分录按与数量相同客户集合、日期及仓库过滤，不由订单金额合成，不隐式换汇。"
       },
       "VolumeSeries": {
         "type": "object",
@@ -2801,7 +3292,7 @@
           },
           "amounts": {
             "$ref": "#/components/schemas/VolumeAmounts",
-            "description": "客户维度新增USD金额对象，含总额/逐期/逐仓金额及排除订单数；非客户维度省略。"
+            "description": "客户有效 USD 实收及履约／全款备货来源拆分；无 receipts scope 或非客户维度省略。"
           }
         },
         "required": [
@@ -2869,8 +3360,8 @@
           },
           "timeZone": {
             "type": "string",
-            "const": "Asia/Shanghai",
-            "description": "订单量/客户金额统一日界线Asia/Shanghai（UTC+08:00）。"
+            "const": "UTC+8",
+            "description": "统一业务日/月界线 UTC+8（固定 +08:00）。"
           },
           "asOf": {
             "type": "string",
@@ -2879,12 +3370,12 @@
           },
           "total": {
             "type": "integer",
-            "description": "完整授权筛选集已支付订单数，等于id=total系列total。",
+            "description": "完整授权筛选集已支付且已审核履约订单数；备货不计数。",
             "minimum": 0
           },
           "customerCount": {
             "type": "integer",
-            "description": "非空customerId去重。",
+            "description": "筛选范围内非空客户 ID 去重；customer 类别包含有效收款客户，可含订单数为0的全款备货客户。",
             "minimum": 0
           },
           "periods": {
@@ -2918,7 +3409,7 @@
           "options"
         ],
         "additionalProperties": false,
-        "description": "业务员Top5、客户Top10按订单量排序，余项other；客户缺失ID不进Top10。物流固定顺序。",
+        "description": "业务员 Top5、客户 Top10 按已支付已审核履约数量排序；客户 Top10 仅 count>0，只有备货收款的客户归 other（显式 customerId 时正常显示该客户）。金额来自同客户集合的独立收款。物流固定顺序。",
         "allOf": [
           {
             "if": {
@@ -2926,24 +3417,15 @@
                 "query": {
                   "properties": {
                     "category": {
-                      "const": "customer"
+                      "not": {
+                        "const": "customer"
+                      }
                     }
                   }
                 }
               }
             },
             "then": {
-              "properties": {
-                "series": {
-                  "items": {
-                    "required": [
-                      "amounts"
-                    ]
-                  }
-                }
-              }
-            },
-            "else": {
               "properties": {
                 "series": {
                   "items": {
@@ -3230,7 +3712,7 @@
           },
           "time": {
             "type": "string",
-            "description": "最早createdAt.slice(11,16)，未转上海时间，可为空。"
+            "description": "最早待办创建时刻转换 UTC+8 后的 HH:mm；无可用时刻为空字符串。"
           },
           "priority": {
             "type": "string",
@@ -3255,7 +3737,7 @@
         "properties": {
           "id": {
             "type": "string",
-            "description": "营销中心为marketing，部门为sales1..4，员工为owner.id；缺员工为__unassigned__。"
+            "description": "营销中心 marketing、报表部门 sales1..4、业务员 owner.id。"
           },
           "name": {
             "type": "string",
@@ -3263,21 +3745,29 @@
           },
           "previousAmount": {
             "$ref": "#/components/schemas/Money",
-            "description": "所选year前一年12月金额，0不为null。"
+            "description": "所选 year 上一年12月、同一权限及来源口径的 USD 实收合计。"
           },
           "amounts": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/Money"
             },
-            "description": "与months对齐。"
+            "description": "各 UTC+8 支付月份 USD 实收，与 receipts.months 对齐。"
+          },
+          "breakdown": {
+            "$ref": "#/components/schemas/ReceiptBreakdownValues"
+          },
+          "previousBreakdown": {
+            "$ref": "#/components/schemas/ReceiptBreakdown"
           }
         },
         "required": [
           "id",
           "name",
           "previousAmount",
-          "amounts"
+          "amounts",
+          "breakdown",
+          "previousBreakdown"
         ],
         "additionalProperties": false
       },
@@ -3294,21 +3784,27 @@
           },
           "previousAmount": {
             "$ref": "#/components/schemas/Money",
-            "description": "该部门所选year上一年12月USD已支付订单金额合计。"
+            "description": "所选 year 上一年12月、同一权限及来源口径的 USD 实收合计。"
           },
           "amounts": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/Money"
             },
-            "description": "该部门各月份USD已支付订单金额，与receipts.months同序。"
+            "description": "各 UTC+8 支付月份 USD 实收，与 receipts.months 对齐。"
           },
           "salespeople": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/ReceiptSeries"
             },
-            "description": "按员工ID排序；缺owner用__unassigned__。"
+            "description": "按稳定业务员 ID 排序；授权分录必须有 owner，不能制造未分配业绩。"
+          },
+          "breakdown": {
+            "$ref": "#/components/schemas/ReceiptBreakdownValues"
+          },
+          "previousBreakdown": {
+            "$ref": "#/components/schemas/ReceiptBreakdown"
           }
         },
         "required": [
@@ -3316,7 +3812,9 @@
           "name",
           "previousAmount",
           "amounts",
-          "salespeople"
+          "salespeople",
+          "breakdown",
+          "previousBreakdown"
         ],
         "additionalProperties": false
       },
@@ -3326,7 +3824,7 @@
           "currency": {
             "type": "string",
             "const": "USD",
-            "description": "固定USD，非USD订单不进入此统计。"
+            "description": "固定 USD；非 USD 分录不进入业绩。"
           },
           "months": {
             "type": "array",
@@ -3334,7 +3832,7 @@
               "type": "string",
               "pattern": "^\\d{4}-\\d{2}$"
             },
-            "description": "UTC当前年截至当前月；历史年12个月；无scope为空。"
+            "description": "UTC+8 当前年截至当前月；历史年12个月；无 scope 为空。"
           },
           "previousMonth": {
             "type": "string",
@@ -3358,16 +3856,26 @@
               "$ref": "#/components/schemas/ReceiptDepartment"
             },
             "description": "有receipts scope固定4部门，否则空。"
+          },
+          "basis": {
+            "type": "string",
+            "const": "actual_received"
+          },
+          "timeZone": {
+            "type": "string",
+            "const": "UTC+8"
           }
         },
         "required": [
           "currency",
           "months",
           "marketingCenter",
-          "departments"
+          "departments",
+          "basis",
+          "timeZone"
         ],
         "additionalProperties": false,
-        "description": "仅USD paid未取消有paidAt/报表部门的订单amount，按paidAt.slice(0,7)归月，cents要求非负安全整数。这是订单金额，不是独立收款流水；无部分付款/退款/冲销模型。previousMonth仅months非空存在。"
+        "description": "方案2独立授权的USD实收分录：已支付、源单及收款单均已审核，履约＋全款备货，排除押金／样品／取消／退款／未来支付。按 UTC+8 支付月归属，使用预付库存不补回产品款。无 scope 时 months/departments=[]、marketingCenter=null，仍返回 basis/timeZone。"
       },
       "FopDashboard": {
         "type": "object",
@@ -3426,7 +3934,7 @@
           },
           "receipts": {
             "$ref": "#/components/schemas/DashboardReceipts",
-            "description": "按已支付订单amount计算的USD月度金额，含上年12月基线，不是收款流水。"
+            "description": "独立授权的 USD 实收分录按 UTC+8 月度汇总，含履约／全款备货来源拆分及上年12月基线。"
           }
         },
         "required": [
@@ -3572,7 +4080,37 @@
                   0,
                   0,
                   125.5
-                ]
+                ],
+                "breakdown": {
+                  "fulfillment": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    125.5
+                  ],
+                  "fullPaymentStock": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                  ]
+                },
+                "previousBreakdown": {
+                  "fulfillment": 100,
+                  "fullPaymentStock": 0
+                }
               },
               "departments": [
                 {
@@ -3607,9 +4145,69 @@
                         0,
                         0,
                         125.5
-                      ]
+                      ],
+                      "breakdown": {
+                        "fulfillment": [
+                          0,
+                          0,
+                          0,
+                          0,
+                          0,
+                          0,
+                          0,
+                          0,
+                          0,
+                          125.5
+                        ],
+                        "fullPaymentStock": [
+                          0,
+                          0,
+                          0,
+                          0,
+                          0,
+                          0,
+                          0,
+                          0,
+                          0,
+                          0
+                        ]
+                      },
+                      "previousBreakdown": {
+                        "fulfillment": 100,
+                        "fullPaymentStock": 0
+                      }
                     }
-                  ]
+                  ],
+                  "breakdown": {
+                    "fulfillment": [
+                      0,
+                      0,
+                      0,
+                      0,
+                      0,
+                      0,
+                      0,
+                      0,
+                      0,
+                      125.5
+                    ],
+                    "fullPaymentStock": [
+                      0,
+                      0,
+                      0,
+                      0,
+                      0,
+                      0,
+                      0,
+                      0,
+                      0,
+                      0
+                    ]
+                  },
+                  "previousBreakdown": {
+                    "fulfillment": 100,
+                    "fullPaymentStock": 0
+                  }
                 },
                 {
                   "id": "sales2",
@@ -3627,7 +4225,37 @@
                     0,
                     0
                   ],
-                  "salespeople": []
+                  "salespeople": [],
+                  "breakdown": {
+                    "fulfillment": [
+                      0,
+                      0,
+                      0,
+                      0,
+                      0,
+                      0,
+                      0,
+                      0,
+                      0,
+                      0
+                    ],
+                    "fullPaymentStock": [
+                      0,
+                      0,
+                      0,
+                      0,
+                      0,
+                      0,
+                      0,
+                      0,
+                      0,
+                      0
+                    ]
+                  },
+                  "previousBreakdown": {
+                    "fulfillment": 0,
+                    "fullPaymentStock": 0
+                  }
                 },
                 {
                   "id": "sales3",
@@ -3645,7 +4273,37 @@
                     0,
                     0
                   ],
-                  "salespeople": []
+                  "salespeople": [],
+                  "breakdown": {
+                    "fulfillment": [
+                      0,
+                      0,
+                      0,
+                      0,
+                      0,
+                      0,
+                      0,
+                      0,
+                      0,
+                      0
+                    ],
+                    "fullPaymentStock": [
+                      0,
+                      0,
+                      0,
+                      0,
+                      0,
+                      0,
+                      0,
+                      0,
+                      0,
+                      0
+                    ]
+                  },
+                  "previousBreakdown": {
+                    "fulfillment": 0,
+                    "fullPaymentStock": 0
+                  }
                 },
                 {
                   "id": "sales4",
@@ -3663,9 +4321,41 @@
                     0,
                     0
                   ],
-                  "salespeople": []
+                  "salespeople": [],
+                  "breakdown": {
+                    "fulfillment": [
+                      0,
+                      0,
+                      0,
+                      0,
+                      0,
+                      0,
+                      0,
+                      0,
+                      0,
+                      0
+                    ],
+                    "fullPaymentStock": [
+                      0,
+                      0,
+                      0,
+                      0,
+                      0,
+                      0,
+                      0,
+                      0,
+                      0,
+                      0
+                    ]
+                  },
+                  "previousBreakdown": {
+                    "fulfillment": 0,
+                    "fullPaymentStock": 0
+                  }
                 }
-              ]
+              ],
+              "basis": "actual_received",
+              "timeZone": "UTC+8"
             }
           }
         ]
@@ -5120,6 +5810,476 @@
           },
           {
             "$ref": "#/components/schemas/FopError"
+          }
+        ]
+      },
+      "ReceiptBreakdown": {
+        "type": "object",
+        "properties": {
+          "fulfillment": {
+            "$ref": "#/components/schemas/Money",
+            "minimum": 0
+          },
+          "fullPaymentStock": {
+            "$ref": "#/components/schemas/Money",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "fulfillment",
+          "fullPaymentStock"
+        ],
+        "additionalProperties": false,
+        "description": "履约与全款备货实收拆分，二者之和等于总实收；押金备货不计入。"
+      },
+      "ReceiptBreakdownValues": {
+        "type": "object",
+        "properties": {
+          "fulfillment": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Money",
+              "minimum": 0
+            }
+          },
+          "fullPaymentStock": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Money",
+              "minimum": 0
+            }
+          }
+        },
+        "required": [
+          "fulfillment",
+          "fullPaymentStock"
+        ],
+        "additionalProperties": false,
+        "description": "与 Dashboard receipts.months 同下标；每期两来源之和等于 amounts。"
+      },
+      "FopReceipt": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "唯一收款分录 ID，独立授权及去重键，不是重复的收款表头 ID。"
+          },
+          "documentId": {
+            "type": "string",
+            "description": "源履约或备货单稳定 ID；可信适配器解析，不以显示单号替代。"
+          },
+          "documentNumber": {
+            "type": "string",
+            "description": "源单业务单号，原收款 entryentity.hzkj_src_order 为单号而非 ID。"
+          },
+          "customerId": {
+            "type": "string",
+            "description": "业务归属客户稳定 ID。"
+          },
+          "customerCode": {
+            "type": "string",
+            "description": "客户编码，未提供时空字符串。"
+          },
+          "customerName": {
+            "type": "string",
+            "description": "客户展示名。"
+          },
+          "warehouse": {
+            "type": "string",
+            "description": "国内仓库展示名。"
+          },
+          "sourceType": {
+            "type": "string",
+            "enum": [
+              "fulfillment",
+              "full_payment_stock",
+              "deposit_stock"
+            ],
+            "description": "归一来源。公开有效分录端点只返回履约及全款备货，押金备货不进入业绩，样品不在本资源范围。"
+          },
+          "organization": {
+            "$ref": "#/components/schemas/NamedEntity"
+          },
+          "department": {
+            "$ref": "#/components/schemas/NamedEntity"
+          },
+          "owner": {
+            "$ref": "#/components/schemas/NamedEntity"
+          },
+          "salesDepartmentCode": {
+            "$ref": "#/components/schemas/SalesDepartment"
+          },
+          "warehouseCode": {
+            "type": "string",
+            "enum": [
+              "HZ",
+              "SZ"
+            ]
+          },
+          "carrierCode": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CarrierCode"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "履约必须已映射服务商；全款／押金备货必须 null，表示不适用。未知物流不能兜底为 OTHER。"
+          },
+          "amount": {
+            "$ref": "#/components/schemas/Money",
+            "minimum": 0,
+            "description": "收款分录 hzkj_real_receive_amt 实收，业务结算含钱包授信，并非银行现金流保证。"
+          },
+          "orderAmount": {
+            "$ref": "#/components/schemas/Money",
+            "minimum": 0,
+            "description": "收款分录 hzkj_samount 订单金额，不用于实收业绩。"
+          },
+          "handlingFee": {
+            "$ref": "#/components/schemas/Money",
+            "minimum": 0,
+            "description": "收款分录 hzkj_handle_fee 手续费，单独保留用于对账。"
+          },
+          "currency": {
+            "type": "string",
+            "pattern": "^[A-Z]{3}$",
+            "description": "明确原币种，不隐式换汇；公开业绩分录页仅 USD。"
+          },
+          "paidAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "带明确时区的支付时刻，转换 UTC+8 归日／月；有效分录页必为已发生的非空时刻。"
+          },
+          "reviewStatus": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "approved"
+            ],
+            "description": "源履约或备货单审核，不等于收款单审核。"
+          },
+          "receiptReviewStatus": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "approved"
+            ],
+            "description": "收款单审核，业绩要求源单及收款单均 approved。"
+          },
+          "paymentStatus": {
+            "type": "string",
+            "enum": [
+              "paid",
+              "unpaid",
+              "refunded"
+            ],
+            "description": "归一支付状态。paid 必须同时满足源履约／备货订单的支付条件及收款单已收条件（hzkj_receive_status=B）；不能只根据收款单 B 推定源单已支付。源单两类枚举不同，按已核实映射处理。"
+          },
+          "cancelled": {
+            "type": "boolean"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FopOrderItem"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "documentId",
+          "documentNumber",
+          "customerId",
+          "customerCode",
+          "customerName",
+          "warehouse",
+          "sourceType",
+          "department",
+          "owner",
+          "salesDepartmentCode",
+          "warehouseCode",
+          "carrierCode",
+          "amount",
+          "orderAmount",
+          "handlingFee",
+          "currency",
+          "paidAt",
+          "reviewStatus",
+          "receiptReviewStatus",
+          "paymentStatus",
+          "cancelled",
+          "items"
+        ],
+        "additionalProperties": false,
+        "description": "公开收款分录白名单，不含 tenantId、departmentPathIds、权限或未确认的 approvedAt。使用预付全款库存的履约产品款已在源单免除，禁止补回或再扣减；不重复复制表头实收。",
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "sourceType": {
+                  "const": "fulfillment"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "carrierCode": {
+                  "$ref": "#/components/schemas/CarrierCode"
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "carrierCode": {
+                  "type": "null"
+                }
+              }
+            }
+          }
+        ],
+        "examples": [
+          {
+            "id": "receipt-line-example",
+            "sourceType": "full_payment_stock",
+            "documentId": "stock-example",
+            "documentNumber": "STOCK-001",
+            "customerId": "customer-example",
+            "customerCode": "C001",
+            "customerName": "示例客户",
+            "department": {
+              "id": "department-example",
+              "name": "业务一部"
+            },
+            "owner": {
+              "id": "employee-example",
+              "name": "示例业务员"
+            },
+            "salesDepartmentCode": "sales1",
+            "warehouseCode": "HZ",
+            "warehouse": "杭州仓",
+            "carrierCode": null,
+            "amount": 98,
+            "orderAmount": 100,
+            "handlingFee": 2,
+            "currency": "USD",
+            "paidAt": "2026-10-21T16:30:00Z",
+            "reviewStatus": "approved",
+            "receiptReviewStatus": "approved",
+            "paymentStatus": "paid",
+            "cancelled": false,
+            "items": [
+              {
+                "sku": "SKU-001",
+                "name": "示例备货商品",
+                "imageUrl": null,
+                "variant": "蓝色",
+                "quantity": 2
+              }
+            ]
+          }
+        ]
+      },
+      "ReceiptTotals": {
+        "type": "object",
+        "properties": {
+          "receiptCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "currency": {
+            "type": "string",
+            "const": "USD"
+          },
+          "amount": {
+            "$ref": "#/components/schemas/Money",
+            "minimum": 0
+          },
+          "fulfillmentAmount": {
+            "$ref": "#/components/schemas/Money",
+            "minimum": 0
+          },
+          "fullPaymentStockAmount": {
+            "$ref": "#/components/schemas/Money",
+            "minimum": 0
+          },
+          "orderAmount": {
+            "$ref": "#/components/schemas/Money",
+            "minimum": 0
+          },
+          "handlingFee": {
+            "$ref": "#/components/schemas/Money",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "receiptCount",
+          "currency",
+          "amount",
+          "fulfillmentAmount",
+          "fullPaymentStockAmount",
+          "orderAmount",
+          "handlingFee"
+        ],
+        "additionalProperties": false,
+        "description": "完整筛选范围分页前合计；receiptCount 为分录数，fulfillmentAmount+fullPaymentStockAmount=amount；订单金额和手续费不替代实收。"
+      },
+      "ReceiptPage": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "$ref": "#/components/schemas/DataSource"
+          },
+          "timeZone": {
+            "type": "string",
+            "const": "UTC+8"
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "totals": {
+            "$ref": "#/components/schemas/ReceiptTotals"
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000000
+          },
+          "pageSize": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/FopReceipt"
+                },
+                {
+                  "properties": {
+                    "sourceType": {
+                      "enum": [
+                        "fulfillment",
+                        "full_payment_stock"
+                      ]
+                    },
+                    "currency": {
+                      "const": "USD"
+                    },
+                    "paymentStatus": {
+                      "const": "paid"
+                    },
+                    "reviewStatus": {
+                      "const": "approved"
+                    },
+                    "receiptReviewStatus": {
+                      "const": "approved"
+                    },
+                    "cancelled": {
+                      "const": false
+                    },
+                    "paidAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        },
+        "required": [
+          "source",
+          "timeZone",
+          "total",
+          "totals",
+          "page",
+          "pageSize",
+          "items"
+        ],
+        "additionalProperties": false,
+        "description": "仅独立授权、USD、paid、源单 approved、收款 approved、未取消、已发生的履约／全款备货分录。按 paidAt 倒序、id 稳定排序；total=totals.receiptCount；越界页 items=[] 但保留完整合计。",
+        "examples": [
+          {
+            "source": "mock",
+            "timeZone": "UTC+8",
+            "total": 0,
+            "page": 1,
+            "pageSize": 20,
+            "totals": {
+              "receiptCount": 0,
+              "currency": "USD",
+              "amount": 0,
+              "fulfillmentAmount": 0,
+              "fullPaymentStockAmount": 0,
+              "orderAmount": 0,
+              "handlingFee": 0
+            },
+            "items": []
+          },
+          {
+            "source": "mock",
+            "timeZone": "UTC+8",
+            "total": 1,
+            "page": 1,
+            "pageSize": 20,
+            "totals": {
+              "receiptCount": 1,
+              "currency": "USD",
+              "amount": 98,
+              "fulfillmentAmount": 0,
+              "fullPaymentStockAmount": 98,
+              "orderAmount": 100,
+              "handlingFee": 2
+            },
+            "items": [
+              {
+                "id": "receipt-line-example",
+                "sourceType": "full_payment_stock",
+                "documentId": "stock-example",
+                "documentNumber": "STOCK-001",
+                "customerId": "customer-example",
+                "customerCode": "C001",
+                "customerName": "示例客户",
+                "department": {
+                  "id": "department-example",
+                  "name": "业务一部"
+                },
+                "owner": {
+                  "id": "employee-example",
+                  "name": "示例业务员"
+                },
+                "salesDepartmentCode": "sales1",
+                "warehouseCode": "HZ",
+                "warehouse": "杭州仓",
+                "carrierCode": null,
+                "amount": 98,
+                "orderAmount": 100,
+                "handlingFee": 2,
+                "currency": "USD",
+                "paidAt": "2026-10-21T16:30:00Z",
+                "reviewStatus": "approved",
+                "receiptReviewStatus": "approved",
+                "paymentStatus": "paid",
+                "cancelled": false,
+                "items": [
+                  {
+                    "sku": "SKU-001",
+                    "name": "示例备货商品",
+                    "imageUrl": null,
+                    "variant": "蓝色",
+                    "quantity": 2
+                  }
+                ]
+              }
+            ]
           }
         ]
       }

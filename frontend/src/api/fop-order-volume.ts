@@ -1,4 +1,5 @@
 import api from './index'
+import type { FopReceiptPage } from './fop-receipts'
 import type { FopOrderPage } from './fop-orders'
 import type { WorkbenchRole } from '@/utils/workbench'
 export type VolumeCategory = 'carrier' | 'organization' | 'salesperson' | 'customer'
@@ -13,8 +14,8 @@ export interface VolumePeriod { id: string; label: string; from: string; to: str
 export interface VolumeSeries {
   id: string; label: string; kind: 'total' | 'detail' | 'other' | 'unassigned'; entityId?: string; code?: string
   total: number; values: (number | null)[]; warehouses: Record<VolumeWarehouse, (number | null)[]>
-  /** Customer analytics: same authorized orders, periods and warehouse mapping as counts. */
-  amounts?: { currency: 'USD'; total: number; values: (number | null)[]; warehouses: Record<VolumeWarehouse, (number | null)[]>; excludedOrderCount: number }
+  /** Customer receipts have their own authorized ledger scope; count rows remain fulfillment orders. */
+  amounts?: { currency: 'USD'; total: number; values: (number | null)[]; warehouses: Record<VolumeWarehouse, (number | null)[]>; excludedOrderCount: number; breakdown?: { fulfillment: number; fullPaymentStock: number } }
 }
 export interface OrderVolumeData {
   source: 'mock' | 'fop'; query: OrderVolumeQuery; timeZone: string; asOf: string; total: number; customerCount: number
@@ -28,3 +29,5 @@ const root = '/autoflow/integrations/fop/order-volume'
 export const getOrderVolume = (query: OrderVolumeQuery): Promise<OrderVolumeData> => api.get(root, { params: query })
 export const searchOrderCustomers = (query: { keyword: string; department?: string; page: number; pageSize: number }): Promise<OrderCustomerPage> => api.get(`${root}/customers`, { params: query })
 export const getOrderVolumeDetails = (query: OrderVolumeDetailsQuery): Promise<FopOrderPage> => api.get(`${root}/orders`, { params: query })
+
+export const getOrderVolumeReceipts = (query: OrderVolumeDetailsQuery): Promise<FopReceiptPage> => api.get(`${root}/receipts`, { params: query })

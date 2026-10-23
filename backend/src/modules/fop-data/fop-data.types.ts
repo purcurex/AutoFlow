@@ -10,6 +10,8 @@ export interface FopPermissionGrant {
   subject: FopIdentity
   /** Explicit per-subject order allowlist; an empty array grants no order access. */
   allowedOrderIds: readonly string[]
+  /** Independent receipt-line authorization; missing/empty grants no collections. */
+  allowedReceiptIds?: readonly string[]
   analyticsScopes?: readonly FopAnalyticsScope[]
 }
 
@@ -76,6 +78,37 @@ export interface FopOrder {
 /** Provider-only tenant provenance. It is validated and removed before client output. */
 export interface FopOrderCandidate extends FopOrder { tenantId: string }
 
+/** One actual settled receipt line, never a header repeated for each source order. */
+export interface FopReceipt {
+  id: string
+  sourceType: 'fulfillment' | 'full_payment_stock' | 'deposit_stock'
+  documentId: string
+  documentNumber: string
+  customerId: string
+  customerCode: string
+  customerName: string
+  organization?: { id: string; name: string }
+  department?: { id: string; name: string }
+  owner?: { id: string; name: string }
+  salesDepartmentCode?: SalesDepartmentCode
+  warehouseCode: string
+  warehouse: string
+  carrierCode: string | null
+  amount: number
+  orderAmount: number
+  handlingFee: number
+  currency: string
+  paidAt: string | null
+  /** Source document approval, separate from receipt approval. */
+  reviewStatus: 'pending' | 'approved'
+  receiptReviewStatus: 'pending' | 'approved'
+  /** paid requires BOTH source-document payment and receipt received-status gates. */
+  paymentStatus: 'paid' | 'unpaid' | 'refunded'
+  cancelled: boolean
+  items: FopOrderItem[]
+}
+export interface FopReceiptCandidate extends FopReceipt { tenantId: string; departmentPathIds?: string[] }
+
 export const FOP_DATA_PROVIDER = 'FOP_DATA_PROVIDER'
 
 /** No employee identity, permission grant or scope is ever accepted from an HTTP client. */
@@ -88,6 +121,10 @@ export abstract class FopDataProvider {
   abstract isConfigured(): boolean
   abstract resolvePermissions(identity: Readonly<FopIdentity>): Promise<FopPermissionGrant>
   abstract listOrders(identity: Readonly<FopIdentity>, permission: Readonly<FopPermissionGrant>): Promise<FopOrderCandidate[]>
+  async listReceipts(_identity: Readonly<FopIdentity>, _permission: Readonly<FopPermissionGrant>): Promise<FopReceiptCandidate[]> {
+    // Existing adapters cannot silently synthesize collections from order amounts.
+    throw new Error('Receipt data provider is not configured')
+  }
 }
 
 export class FopPermissionDeniedError extends Error {}

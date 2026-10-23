@@ -18,6 +18,8 @@ ROOT = Path(__file__).resolve().parents[2]
 SPEC = ROOT / 'docs/openapi/hyperzone-analytics.openapi.json'
 DOCS = ROOT / 'docs/analytics'
 REQUEST_QUERIES = {
+    '/autoflow/integrations/fop/receipts': 'from=2026-09-01&to=2026-10-22&warehouse=ALL&workbenchRole=sales&page=1&pageSize=20',
+    '/autoflow/integrations/fop/order-volume/receipts': 'category=customer&from=2026-09-01&to=2026-10-22&warehouse=ALL&workbenchRole=sales&seriesId=total&page=1&pageSize=20',
     '/autoflow/integrations/fop/order-volume': 'category=organization&grain=month&year=2026&warehouse=ALL',
     '/autoflow/integrations/fop/order-volume/orders': 'category=customer&from=2026-01-01&to=2026-10-22&warehouse=ALL&workbenchRole=sales&seriesId=total&page=1&pageSize=20',
     '/autoflow/integrations/fop/order-volume/customers': 'keyword=C001&page=1&pageSize=10',
@@ -165,9 +167,9 @@ def build(spec):
                 parts.append(f"组合规则 `{key}`：" + ', '.join(f'`{type_name(s)}`' for s in schema[key]) + '。完整约束见 OpenAPI JSON。')
         if schema.get('examples'):
             parts.append('\n```json\n' + json.dumps(schema['examples'][0], ensure_ascii=False, indent=2) + '\n```')
-    for title, filename in [('10. 前端功能诊断与复现证据', 'ECHARTS_FRONTEND_AUDIT.md'), ('11. 后端契约诊断与生产接入差距', 'ECHARTS_BACKEND_CONTRACT_AUDIT.md'), ('12. 本次验证记录与限制', 'VERIFICATION.md')]:
+    for title, filename in [('10. 前端功能诊断与复现证据', 'ECHARTS_FRONTEND_AUDIT.md'), ('11. 后端契约诊断与生产接入差距', 'ECHARTS_BACKEND_CONTRACT_AUDIT.md'), ('12. 本次验证记录与限制', 'VERIFICATION.md'), ('13. HyperZone FOP 源码字段映射', 'HYPERZONE_FOP_SOURCE_MAPPING.md')]:
         parts.append(f'\n## {title}\n\n' + appendix((DOCS / filename).read_text()))
-    parts.append('\n## 13. 规范来源与文档再生成\n\nOpenAPI 结构参考 [OpenAPI Specification 3.1.1](https://spec.openapis.org/oas/v3.1.1.html)。产品事实来自本仓库源码和本次诊断，不来自通用规范。HTML 使用项目共享 HyperZone 样式、内嵌 CSS 和透明 SVG Logo，可离线打开及打印。\n\n```sh\npython3 -m venv .runtime/local-demo/docs-venv\n.runtime/local-demo/docs-venv/bin/pip install -r scripts/docs/requirements.txt\n.runtime/local-demo/docs-venv/bin/python scripts/docs/build-analytics-docs.py \\\n  --style-root /Library/VSCode/.hyperzone/html-style\n```\n\n`REQUIREMENTS_OVERVIEW.md` 是业务需求源，接口及字段表从 OpenAPI JSON 生成；修改后执行上述脚本同步两种交付格式。不同机器需提供同版本 HyperZone 共享样式目录；生成后的 HTML 本身无此路径依赖。\n')
+    parts.append('\n## 14. 规范来源与文档再生成\n\nOpenAPI 结构参考 [OpenAPI Specification 3.1.1](https://spec.openapis.org/oas/v3.1.1.html)。产品事实来自本仓库源码和本次诊断，不来自通用规范。HTML 使用项目共享 HyperZone 样式、内嵌 CSS 和透明 SVG Logo，可离线打开及打印。\n\n```sh\npython3 -m venv .runtime/local-demo/docs-venv\n.runtime/local-demo/docs-venv/bin/pip install -r scripts/docs/requirements.txt\n.runtime/local-demo/docs-venv/bin/python scripts/docs/build-analytics-docs.py \\\n  --style-root /Library/VSCode/.hyperzone/html-style\n```\n\n`REQUIREMENTS_OVERVIEW.md` 是业务需求源，接口及字段表从 OpenAPI JSON 生成；修改后执行上述脚本同步两种交付格式。不同机器需提供同版本 HyperZone 共享样式目录；生成后的 HTML 本身无此路径依赖。\n')
     text = '\n\n'.join(parts).rstrip() + '\n'
     # Table rows must remain adjacent for Markdown to render field dictionaries.
     return re.sub(r'(?m)(^\|[^\n]*\|)\n\n(?=\|)', r'\1\n', text)

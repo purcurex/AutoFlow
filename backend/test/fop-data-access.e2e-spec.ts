@@ -10,6 +10,7 @@ import { JwtStrategy } from '../src/modules/auth/jwt.strategy'
 import { FopIntegrationController } from '../src/modules/fop-integration/fop-integration.controller'
 import { FopIntegrationService } from '../src/modules/fop-integration/fop-integration.service'
 import { FopLogisticsCatalogPort, FopProductCostPort } from '../src/modules/fop-integration/fop-integration.types'
+import { FopReceiptCandidate } from '../src/modules/fop-data/fop-data.types'
 
 describe('FOP user isolation HTTP API (repository and provider boundaries stubbed)', () => {
   let app: INestApplication
@@ -17,6 +18,7 @@ describe('FOP user isolation HTTP API (repository and provider boundaries stubbe
   let accounts: Map<string, any>
   let provider: any
   let records: any[]
+  let receiptRecords: FopReceiptCandidate[]
   const alice = '88f90288-6d52-4d0b-bd10-549e4ac937a1'
   const bob = '88f90288-6d52-4d0b-bd10-549e4ac937b2'
   const token = (id: string) => jwt.sign({ userId: id, role: 'admin' })
@@ -30,9 +32,18 @@ describe('FOP user isolation HTTP API (repository and provider boundaries stubbe
     owner: { id: 'alice-owner', name: 'Alice' }, tenantId: 'tenant-1', id, orderNumber: id.toUpperCase(), shopifyOrderNumber: `#${id}`, customerName: `Customer ${id}`,
     storeName: `Store ${id}`, items: [{ sku: id, name: id, imageUrl: null, variant: '', quantity: 1 }],
     amount: 10, currency: 'USD', paymentStatus: 'paid', reviewStatus: 'pending', procurementStatus: 'pending',
-    allocationStatus: 'pending', dispatchStatus: 'not_ready', shippingStatus: 'not_ready', warehouse: 'A',
-    carrier: null, trackingNumber: null, salesperson: id, createdAt: '2020-01-10T00:00:00Z', paidAt: '2020-01-10T00:00:00Z', cancelled: false,
+    allocationStatus: 'pending', dispatchStatus: 'not_ready', shippingStatus: 'not_ready', warehouse: '杭州仓', warehouseCode: 'HZ',
+    carrier: '云途YT', carrierCode: 'YT', trackingNumber: null, salesperson: id, createdAt: '2020-01-10T00:00:00Z', paidAt: '2020-01-10T00:00:00Z', cancelled: false,
     exception: null, ...extra,
+  })
+  const receipt = (id: string, extra: Partial<FopReceiptCandidate> = {}): FopReceiptCandidate => ({
+    tenantId: 'tenant-1', id, sourceType: 'fulfillment', documentId: `order-${id}`, documentNumber: `ORDER-${id}`,
+    customerId: id, customerCode: `C-${id}`, customerName: `Customer ${id}`,
+    owner: { id: 'alice-owner', name: 'Alice' }, department: { id: 'd1', name: '业务一部' }, salesDepartmentCode: 'sales1', departmentPathIds: ['d1'],
+    organization: { id: 'org-1', name: 'HyperZone' }, warehouseCode: 'HZ', warehouse: '杭州仓', carrierCode: 'YT',
+    amount: 8, orderAmount: 10, handlingFee: 2, currency: 'USD', paidAt: '2020-01-10T00:00:00Z',
+    paymentStatus: 'paid', reviewStatus: 'approved', receiptReviewStatus: 'approved', cancelled: false,
+    items: [{ sku: 'sku-1', name: 'Product', imageUrl: null, variant: '', quantity: 1 }], ...extra,
   })
 
   beforeAll(async () => {
@@ -63,6 +74,7 @@ describe('FOP user isolation HTTP API (repository and provider boundaries stubbe
         isConfigured: () => provider.isConfigured(),
         resolvePermissions: (identity: any) => provider.resolvePermissions(identity),
         listOrders: (identity: any, grant: any) => provider.listOrders(identity, grant),
+        listReceipts: (identity: any, grant: any) => provider.listReceipts(identity, grant),
       }).compile()
     app = module.createNestApplication()
     app.setGlobalPrefix('api')
@@ -77,10 +89,12 @@ describe('FOP user isolation HTTP API (repository and provider boundaries stubbe
       [bob, { id: bob, displayId: '000002', email: 'bob@example.test', username: 'Bob', password: 'secret', role: UserRole.ADMIN, businessRole: 'admin', workbenchRoles: [], fopTenantId: 'tenant-1', fopUserId: 'bob-fop' }],
     ])
     records = [order('a', { exception: { reason: 'stock', hours: 20 } }), order('b'), order('shared', { reviewStatus: 'approved' }), order('outside'), order('a', { tenantId: 'other-tenant', customerName: 'OTHER TENANT SECRET' })]
+    receiptRecords = []
     provider = {
       isConfigured: () => true,
       resolvePermissions: async (identity: any) => ({ subject: { ...identity }, allowedOrderIds: identity.userId === 'alice-fop' ? ['a', 'shared'] : ['b', 'shared'] }),
       listOrders: async () => structuredClone(records),
+      listReceipts: async () => structuredClone(receiptRecords),
     }
   })
   afterAll(async () => { await app?.close() })
@@ -88,7 +102,11 @@ describe('FOP user isolation HTTP API (repository and provider boundaries stubbe
   describe('order volume endpoints', () => {
     const root = '/autoflow/integrations/fop/order-volume'
     const filters = '?category=customer&grain=month&year=2020&warehouse=ALL'
-    beforeEach(() => { records = records.map(o => ({ ...o, customerId: o.id, customerCode: `C-${o.id}`, salesDepartmentCode: 'sales1', warehouseCode: 'HZ', carrierCode: 'YT' })) })
+    beforeEach(() => {
+      records = records.map(o => ({ ...o, reviewStatus: 'approved', customerId: o.id, customerCode: `C-${o.id}`, salesDepartmentCode: 'sales1', warehouseCode: 'HZ', carrierCode: 'YT' }))
+      receiptRecords = [receipt('ra', { customerId: 'a', customerCode: 'C-a', amount: 4 }), receipt('rb', { customerId: 'b', customerCode: 'C-b', amount: 999 }), receipt('shared', { customerId: 'shared', customerCode: 'C-shared', amount: 6 })]
+      provider.resolvePermissions = async (identity: any) => ({ subject: identity, allowedOrderIds: identity.userId === 'alice-fop' ? ['a', 'shared'] : ['b', 'shared'], allowedReceiptIds: identity.userId === 'alice-fop' ? ['ra', 'shared'] : ['rb', 'shared'], analyticsScopes: ['receipts'] })
+    })
     it('authenticates all endpoints and rejects identity injection', async () => {
       for (const path of [root + filters, root + '/customers?keyword=C', root + '/orders' + filters + '&workbenchRole=sales']) {
         await request(app.getHttpServer()).get('/api' + path).expect(401)
@@ -114,9 +132,9 @@ describe('FOP user isolation HTTP API (repository and provider boundaries stubbe
       const a = await get(root + filters).expect(200)
       expect(a.headers['cache-control']).toBe('private, no-store')
       expect(a.body.total).toBe(2)
-      expect(a.body.series[0].amounts).toMatchObject({ currency: 'USD', total: 20, excludedOrderCount: 0 })
-      expect(a.body.series[0].amounts.values[0]).toBe(20)
-      expect(a.body.series[0].amounts.warehouses.HZ[0]).toBe(20)
+      expect(a.body.series[0].amounts).toMatchObject({ currency: 'USD', total: 10, excludedOrderCount: 0 })
+      expect(a.body.series[0].amounts.values[0]).toBe(10)
+      expect(a.body.series[0].amounts.warehouses.HZ[0]).toBe(10)
       expect(a.body.series[0].amounts.warehouses.SZ[0]).toBe(0)
       expect(a.body.series.filter((s: any) => s.kind === 'detail').map((s: any) => s.entityId).sort()).toEqual(['a', 'shared'])
       const customers = await get(root + '/customers?keyword=C-&pageSize=1').expect(200)
@@ -141,6 +159,148 @@ describe('FOP user isolation HTTP API (repository and provider boundaries stubbe
       expect((await get(root + filters).expect(200)).body.total).toBe(1)
       provider.listOrders = async () => { accounts.get(alice).fopUserId = 'revoked'; return records }
       await get(root + filters).expect(403)
+    })
+  })
+
+  describe('receipt analytics endpoints', () => {
+    const root = '/autoflow/integrations/fop'
+    const receiptFilters = '?from=2020-01-01&to=2020-01-31&warehouse=ALL&workbenchRole=sales'
+    const cohortFilters = '?category=customer&grain=month&year=2020&warehouse=ALL&workbenchRole=sales'
+    const receipts = (extra = '', actor = alice) => get(root + '/receipts' + receiptFilters + extra, actor)
+    const cohort = (extra = '', actor = alice) => get(root + '/order-volume/receipts' + cohortFilters + extra, actor)
+    beforeEach(() => {
+      receiptRecords = [receipt('r-a'), receipt('r-stock', { sourceType: 'full_payment_stock', documentId: 'stock-1', documentNumber: 'STOCK-1', carrierCode: null, amount: 80, orderAmount: 80, handlingFee: 0, warehouseCode: 'SZ', warehouse: '深圳仓' })]
+      provider.resolvePermissions = async (identity: any) => ({ subject: identity, allowedOrderIds: [], allowedReceiptIds: ['r-a', 'r-stock'], analyticsScopes: ['receipts'] })
+    })
+    it('authenticates both routes, rejects injected identity and scope, and requires the selected workbench role', async () => {
+      for (const path of [root + '/receipts' + receiptFilters, root + '/order-volume/receipts' + cohortFilters]) {
+        await request(app.getHttpServer()).get('/api' + path).expect(401)
+        for (const forged of ['userId=bob-fop', 'tenantId=other', 'allowedReceiptIds=outside', 'allowedOrderIds=outside', 'analyticsScopes=receipts']) await get(path + '&' + forged).expect(400)
+        await get(path.replace('workbenchRole=sales', 'workbenchRole=warehouse')).expect(403)
+      }
+      await get(root + '/receipts?from=2020-01-01&to=2020-01-31').expect(400)
+      await get(root + '/order-volume/receipts' + cohortFilters.replace('category=customer', 'category=carrier')).expect(400)
+    })
+    it('requires independent receipt IDs and the receipts analytics scope even when orders are visible', async () => {
+      const load = jest.spyOn(provider, 'listReceipts')
+      provider.resolvePermissions = async (identity: any) => ({ subject: identity, allowedOrderIds: ['a', 'shared'], allowedReceiptIds: ['r-a'] })
+      await receipts().expect(403)
+      await cohort().expect(403)
+      expect(load).not.toHaveBeenCalled()
+      const noAmount = await get(root + '/order-volume?category=customer&grain=month&year=2020').expect(200)
+      expect(noAmount.body.series[0]).not.toHaveProperty('amounts')
+      provider.resolvePermissions = async (identity: any) => ({ subject: identity, allowedOrderIds: ['a', 'shared'], analyticsScopes: ['receipts'] })
+      expect((await receipts().expect(200)).body).toMatchObject({ total: 0, totals: { receiptCount: 0, amount: 0 }, items: [] })
+      expect((await cohort().expect(200)).body.total).toBe(0)
+      expect(load).not.toHaveBeenCalled()
+      provider.resolvePermissions = async (identity: any) => ({ subject: identity, allowedOrderIds: [], allowedReceiptIds: ['r-stock'], analyticsScopes: ['receipts'] })
+      expect((await receipts().expect(200)).body.items.map((row: any) => row.id)).toEqual(['r-stock'])
+      expect((await cohort().expect(200)).body.items.map((row: any) => row.id)).toEqual(['r-stock'])
+    })
+    it('includes only paid, source-approved, receipt-approved fulfillment and full-payment stocking lines', async () => {
+      receiptRecords.push(
+        receipt('deposit', { sourceType: 'deposit_stock', carrierCode: null, amount: 999 }),
+        receipt('unpaid', { paymentStatus: 'unpaid', paidAt: null }), receipt('refunded', { paymentStatus: 'refunded' }),
+        receipt('source-pending', { reviewStatus: 'pending' }), receipt('receipt-pending', { receiptReviewStatus: 'pending' }),
+        receipt('cancelled', { cancelled: true }), receipt('future', { paidAt: '9999-01-01T00:00:00Z' }),
+        receipt('eur', { currency: 'EUR', amount: 999 }),
+      )
+      provider.resolvePermissions = async (identity: any) => ({ subject: identity, allowedOrderIds: [], allowedReceiptIds: receiptRecords.map(row => row.id), analyticsScopes: ['receipts'] })
+      for (const response of [await receipts().expect(200), await cohort().expect(200)]) {
+        expect(response.headers['cache-control']).toBe('private, no-store')
+        expect(response.body.items.map((row: any) => row.id)).toEqual(['r-a', 'r-stock'])
+        expect(response.body.totals).toEqual({ receiptCount: 2, currency: 'USD', amount: 88, fulfillmentAmount: 8, fullPaymentStockAmount: 80, orderAmount: 90, handlingFee: 2 })
+        expect(response.body.items[0]).toMatchObject({ documentId: 'order-r-a', amount: 8, orderAmount: 10, handlingFee: 2, reviewStatus: 'approved', receiptReviewStatus: 'approved' })
+        expect(response.body.items[1].carrierCode).toBeNull()
+        for (const item of response.body.items) {
+          expect(item).not.toHaveProperty('tenantId')
+          expect(item).not.toHaveProperty('departmentPathIds')
+        }
+      }
+    })
+    it('rejects duplicate authorized receipt IDs on both receipt endpoints', async () => {
+      receiptRecords.push({ ...receiptRecords[0] })
+      await receipts().expect(503)
+      await cohort().expect(503)
+    })
+    it('isolates tenants and employees before totals, customer discovery and pagination', async () => {
+      receiptRecords = [
+        receipt('own'), receipt('bob', { owner: { id: 'bob-owner', name: 'Bob' }, amount: 1000 }),
+        receipt('outside', { amount: 9999 }), receipt('own', { tenantId: 'tenant-2', customerName: 'OTHER TENANT SECRET', amount: 99999 }),
+      ]
+      provider.resolvePermissions = async (identity: any) => ({ subject: identity, allowedOrderIds: [], allowedReceiptIds: identity.userId === 'alice-fop' ? ['own', 'bob'] : ['bob'], analyticsScopes: ['receipts'] })
+      for (const response of [await receipts('&pageSize=1').expect(200), await cohort('&pageSize=1').expect(200)]) {
+        expect(response.body).toMatchObject({ total: 1, totals: { amount: 8 } })
+        expect(response.body.items.map((row: any) => row.id)).toEqual(['own'])
+        expect(JSON.stringify(response.body)).not.toContain('OTHER TENANT SECRET')
+      }
+      expect((await receipts('', bob).expect(200)).body.items.map((row: any) => row.id)).toEqual(['bob'])
+      expect((await get(root + '/order-volume/customers?keyword=C-bob').expect(200)).body.total).toBe(0)
+      expect((await get(root + '/order-volume/customers?keyword=C-own').expect(200)).body.items[0].id).toBe('own')
+      accounts.get(alice).businessRole = 'department_manager'
+      accounts.get(alice).businessDepartmentId = 'd2'
+      expect((await receipts().expect(200)).body.total).toBe(0)
+    })
+    it.each(['binding', 'workbench', 'employee'] as const)('rejects %s revocation while receipt rows are loading', async change => {
+      provider.listReceipts = async () => {
+        if (change === 'binding') accounts.get(alice).fopUserId = 'revoked'
+        if (change === 'workbench') accounts.get(alice).workbenchRoles = []
+        if (change === 'employee') accounts.get(alice).businessEmployeeId = 'other-owner'
+        return receiptRecords
+      }
+      await receipts().expect(403)
+    })
+    it('rereads receipt grants on the next request and discards a revoked cohort read', async () => {
+      expect((await receipts().expect(200)).body.total).toBe(2)
+      provider.resolvePermissions = async (identity: any) => ({ subject: identity, allowedOrderIds: [], allowedReceiptIds: [], analyticsScopes: ['receipts'] })
+      expect((await receipts().expect(200)).body.total).toBe(0)
+      provider.resolvePermissions = async (identity: any) => ({ subject: identity, allowedOrderIds: [], allowedReceiptIds: ['r-a'], analyticsScopes: ['receipts'] })
+      provider.listReceipts = async () => { accounts.get(alice).fopTenantId = 'revoked'; return receiptRecords }
+      await cohort().expect(403)
+    })
+    it('keeps totals independent of pagination and applies receipt dimensions and Shanghai payment dates', async () => {
+      receiptRecords[0].paidAt = '2019-12-31T16:00:00Z'
+      const first = await receipts('&pageSize=1').expect(200)
+      const second = await receipts('&pageSize=1&page=2').expect(200)
+      expect(first.body.total).toBe(2)
+      expect(first.body.items[0].id).toBe('r-stock')
+      expect(second.body.items[0].id).toBe('r-a')
+      expect(second.body.totals).toEqual(first.body.totals)
+      expect(first.body.totals.amount).toBe(88)
+      expect((await cohort('&detailWarehouse=SZ').expect(200)).body.totals.amount).toBe(80)
+      expect((await cohort('&periodId=2020-02').expect(200)).body.total).toBe(0)
+      expect((await get(root + '/receipts' + receiptFilters.replace('warehouse=ALL', 'warehouse=SZ') + '&sourceType=full_payment_stock&department=sales1&ownerId=alice-owner').expect(200)).body.totals.amount).toBe(80)
+      expect((await receipts('&customerId=unknown').expect(200)).body.total).toBe(0)
+      expect((await receipts('&ownerId=other-owner').expect(200)).body.total).toBe(0)
+      await receipts('&sourceType=deposit_stock').expect(400)
+      for (const range of ['from=2020-02-30&to=2020-03-01', 'from=2020-02-01&to=2020-01-01', 'from=2020-01-01&to=9999-01-01']) await get(root + '/receipts?' + range + '&workbenchRole=sales').expect(400)
+    })
+    it('drills into the same Top 10 and Other customer receipt cohort without adding stock receipts to order counts', async () => {
+      records = Array.from({ length: 12 }, (_, index) => order(`c${index}`, { reviewStatus: 'approved', customerId: `c${index}`, customerCode: `C-c${index}`, salesDepartmentCode: 'sales1' }))
+      receiptRecords = records.map((row, index) => receipt(`r${index}`, { customerId: row.customerId, amount: index + 1 }))
+      receiptRecords.push(receipt('stock-only', { sourceType: 'full_payment_stock', carrierCode: null, customerId: 'stock-only', amount: 80 }))
+      provider.resolvePermissions = async (identity: any) => ({ subject: identity, allowedOrderIds: records.map(row => row.id), allowedReceiptIds: receiptRecords.map(row => row.id), analyticsScopes: ['receipts'] })
+      const chart = await get(root + '/order-volume?category=customer&grain=month&year=2020&warehouse=ALL').expect(200)
+      expect(chart.body.total).toBe(12)
+      expect(chart.body.customerCount).toBe(13)
+      expect(chart.body.series[0].amounts.total).toBe(158)
+      const other = chart.body.series.find((row: any) => row.id === 'other')
+      const details = await cohort('&seriesId=other&periodId=2020-01&pageSize=1').expect(200)
+      expect(details.body.total).toBe(3)
+      expect(details.body.items).toHaveLength(1)
+      expect(details.body.totals.amount).toBe(other.amounts.total)
+      const second = await cohort('&seriesId=other&periodId=2020-01&pageSize=1&page=2').expect(200)
+      expect(second.body.totals).toEqual(details.body.totals)
+      expect((await cohort('&customerId=stock-only').expect(200)).body.totals.amount).toBe(80)
+      expect((await get(root + '/order-volume/orders' + cohortFilters + '&customerId=stock-only').expect(200)).body.total).toBe(0)
+      expect((await cohort('&seriesId=customer:unknown').expect(200)).body.total).toBe(0)
+      await cohort('&periodId=2021-01').expect(400)
+    })
+    it('fails closed on malformed authorized receipts without disclosing provider diagnostics', async () => {
+      receiptRecords[0].amount = NaN
+      for (const response of [await receipts().expect(503), await cohort().expect(503)]) expect(JSON.stringify(response.body)).not.toContain('Invalid receipt amount')
+      provider.listReceipts = async () => { throw new Error('secret receipt provider diagnostic') }
+      expect(JSON.stringify((await receipts().expect(503)).body)).not.toContain('secret receipt provider diagnostic')
     })
   })
 

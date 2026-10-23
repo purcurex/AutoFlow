@@ -79,7 +79,7 @@ function navigate(values: Record<string, string | number | undefined>) {
   return router.push(workbenchOrderLocation(queue.value, { ...route.query, ...values }))
 }
 function submitSearch() { return navigate({ search: search.value.trim() || undefined, page: 1 }) }
-const formatDate = (value: string | null) => value ? new Date(value).toLocaleString(zh.value ? 'zh-CN' : 'en-US', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'
+const formatDate = (value: string | null) => value ? new Date(value).toLocaleString(zh.value ? 'zh-CN' : 'en-US', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'
 const formatMoney = (amount: number, currency: string) => formatCurrency(amount, currency, zh.value ? 'zh-CN' : 'en-US')
 </script>
 

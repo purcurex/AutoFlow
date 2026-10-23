@@ -33,7 +33,7 @@ onBeforeUnmount(() => {
       <header class="ov-trend-dialog-header">
         <div class="ov-trend-dialog-heading">
           <span class="ov-trend-dialog-icon"><ChartNoAxesCombined :size="21" /></span>
-          <div><p>{{ t('客户订单趋势', 'Customer order trend') }}</p><h2 :id="titleId">{{ name }}<span>{{ code }}</span></h2></div>
+          <div><p>{{ t('客户订单与回款趋势', 'Customer fulfillment and collections') }}</p><h2 :id="titleId">{{ name }}<span>{{ code }}</span></h2></div>
         </div>
         <button ref="closeButton" type="button" class="ov-trend-dialog-close" :aria-label="t('关闭客户趋势', 'Close customer trend')" @click="emit('close')"><X :size="20" /></button>
         <p :id="scopeId" class="ov-trend-dialog-scope">{{ scope }}</p>

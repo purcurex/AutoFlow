@@ -1,8 +1,16 @@
-import { aggregateOrderVolume, orderVolumeDetails, orderVolumePeriods, searchOrderCustomers } from './order-volume'
-import { FopOrder } from './fop-data.types'
+import { aggregateOrderVolume, orderVolumeDetails, orderVolumeReceiptDetails, orderVolumePeriods, searchOrderCustomers } from './order-volume'
+import { FopOrder, FopReceipt } from './fop-data.types'
 const now = new Date('2026-10-22T10:00:00Z')
 const query = { category: 'customer', grain: 'month', year: 2026, warehouse: 'ALL' } as const
-const order = (id: number, extra = {}) => ({ id: String(id), customerId: `c${id % 12}`, customerCode: `C${id % 12}`, customerName: `Customer ${id % 12}`, owner: { id: 'u1', name: '曹可滢 (Ruth)' }, salesDepartmentCode: 'sales1', warehouseCode: id % 2 ? 'SZ' : 'HZ', carrierCode: 'YT', paymentStatus: 'paid', cancelled: false, createdAt: '2026-10-10T00:00:00Z', paidAt: '2026-10-10T00:15:00Z', ...extra }) as FopOrder
+const order = (id: number, extra = {}) => ({ id: String(id), customerId: `c${id % 12}`, customerCode: `C${id % 12}`, customerName: `Customer ${id % 12}`, owner: { id: 'u1', name: '曹可滢 (Ruth)' }, salesDepartmentCode: 'sales1', warehouseCode: id % 2 ? 'SZ' : 'HZ', carrierCode: 'YT', paymentStatus: 'paid', reviewStatus: 'approved', cancelled: false, createdAt: '2026-10-10T00:00:00Z', paidAt: '2026-10-10T00:15:00Z', ...extra }) as FopOrder
+const receipt = (id: number, extra: Partial<FopReceipt> = {}): FopReceipt => ({
+  id: `receipt-${id}`, sourceType: 'fulfillment', documentId: String(id), documentNumber: `ORDER-${id}`,
+  customerId: `c${id % 12}`, customerCode: `C${id % 12}`, customerName: `Customer ${id % 12}`,
+  owner: { id: 'u1', name: '曹可滢 (Ruth)' }, department: { id: 'd1', name: '业务一部' }, salesDepartmentCode: 'sales1',
+  warehouseCode: id % 2 ? 'SZ' : 'HZ', warehouse: id % 2 ? '深圳仓' : '杭州仓', carrierCode: 'YT',
+  amount: 0.2, orderAmount: 1, handlingFee: 0, currency: 'USD', paidAt: '2026-10-10T00:15:00Z',
+  reviewStatus: 'approved', receiptReviewStatus: 'approved', paymentStatus: 'paid', cancelled: false, items: [], ...extra,
+})
 
 describe('authorized order volume aggregation', () => {
   it('reconciles customer amounts across periods, warehouses and Top 10 plus Other without duplicating orders or mixing currencies', () => {
@@ -10,7 +18,10 @@ describe('authorized order volume aggregation', () => {
     orders.push(order(20, { customerId: 'c0', warehouseCode: 'SZ', paidAt: '2026-09-30T16:00:00Z', amount: 0.2, currency: '' }))
     orders.push(order(21, { customerId: 'c0', warehouseCode: 'HZ', amount: 999, currency: 'EUR' }))
     const rows = [...orders, orders[0], order(30, { amount: 999, currency: 'USD', cancelled: true })]
-    const result = aggregateOrderVolume(rows, query, now)
+    const receipts = Array.from({ length: 12 }, (_, i) => receipt(i, { amount: i === 0 ? 0.1 : 0.2 }))
+    receipts.push(receipt(20, { customerId: 'c0', warehouseCode: 'SZ', paidAt: '2026-09-30T16:00:00Z' }), receipt(21, { customerId: 'c0', warehouseCode: 'HZ', amount: 999, currency: 'EUR' }), receipt(30, { amount: 999, cancelled: true }))
+    receipts.push(receipts[0])
+    const result = aggregateOrderVolume(rows, query, now, receipts)
     expect(result.total).toBe(14)
     expect(result.series[0].amounts).toMatchObject({ currency: 'USD', total: 2.5, excludedOrderCount: 1 })
     expect(result.series[0].amounts!.values[9]).toBe(2.5)
@@ -26,8 +37,26 @@ describe('authorized order volume aggregation', () => {
     }
     const other = result.series.find(s => s.id === 'other')!
     expect(other.amounts!.total).toBe(0.4)
-    expect(orderVolumeDetails(rows, { ...query, seriesId: 'other' }, now).reduce((sum, o) => sum + o.amount, 0)).toBe(0.4)
-    expect(aggregateOrderVolume(rows, { ...query, customerId: 'c0', warehouse: 'SZ' }, now).series[0].amounts!.total).toBe(0.2)
+    expect(orderVolumeReceiptDetails(rows, receipts, { ...query, seriesId: 'other' }, now).reduce((sum, r) => sum + r.amount, 0)).toBe(0.4)
+    expect(aggregateOrderVolume(rows, { ...query, customerId: 'c0', warehouse: 'SZ' }, now, receipts).series[0].amounts!.total).toBe(0.2)
+  })
+  it('counts approved fulfillment orders but sources collections independently from receipt lines, including stock-only customers', () => {
+    const orders = [order(1, { amount: 10000 }), order(2, { reviewStatus: 'pending', amount: 20000 })]
+    expect(aggregateOrderVolume(orders, query, now).series[0]).not.toHaveProperty('amounts')
+    expect(aggregateOrderVolume(orders, query, now, []).series[0].amounts!.total).toBe(0)
+    const receipts = [
+      receipt(1, { amount: 8, orderAmount: 9, handlingFee: 1 }),
+      receipt(50, { sourceType: 'full_payment_stock', customerId: 'stock-only', carrierCode: null, amount: 80 }),
+      receipt(51, { sourceType: 'deposit_stock', carrierCode: null, amount: 999 }),
+      receipt(52, { reviewStatus: 'pending', amount: 999 }), receipt(53, { receiptReviewStatus: 'pending', amount: 999 }),
+    ]
+    const result = aggregateOrderVolume(orders, query, now, receipts)
+    expect(result.total).toBe(1)
+    expect(result.customerCount).toBe(2)
+    expect(result.series[0].amounts).toMatchObject({ total: 88, breakdown: { fulfillment: 8, fullPaymentStock: 80 } })
+    expect(result.series.find(row => row.id === 'other')).toMatchObject({ total: 0, amounts: { total: 80 } })
+    expect(orderVolumeReceiptDetails(orders, receipts, { ...query, seriesId: 'other' }, now).map(row => row.id)).toEqual(['receipt-50'])
+    expect(orderVolumeDetails(orders, { ...query, seriesId: 'other' }, now, receipts)).toEqual([])
   })
   it('uses payment time consistently for totals, date buckets and detail ordering without falling back to creation time', () => {
     const rows = [

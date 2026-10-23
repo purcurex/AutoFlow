@@ -5,7 +5,7 @@ export function currencyCode(value?: string | null): string {
   return code && /^[A-Z]{3}$/.test(code) ? code : DEFAULT_CURRENCY
 }
 export function formatCurrency(amount: number, currency?: string | null, locale = 'zh-CN'): string {
-  return new Intl.NumberFormat(locale, { style: 'currency', currency: currencyCode(currency), minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount)
+  return new Intl.NumberFormat(locale, { style: 'currency', currency: currencyCode(currency), currencyDisplay: currencyCode(currency) === 'USD' ? 'narrowSymbol' : 'symbol', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount)
 }
 
 /** Dashboard charts use USD with the compact dollar symbol in every locale. */

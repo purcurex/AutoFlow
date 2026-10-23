@@ -6,6 +6,7 @@ import { WorkbenchAccessService } from './workbench-access.service'
 import { ListFulfillmentOrdersDto } from './dto/workbench.dto'
 import { FopDataService } from '../fop-data/fop-data.service'
 import { OrderVolumeQueryDto, OrderVolumeDetailsDto, OrderCustomerSearchDto } from '../fop-data/order-volume.dto'
+import { ReceiptQueryDto } from '../fop-data/fop-receipts.dto'
 import { FopDashboardQueryDto, FopDataAccessQueryDto } from '../fop-data/fop-data.dto'
 
 @AllowWithoutBusinessData()
@@ -62,6 +63,18 @@ export class FulfillmentOrdersController {
   @Header('Cache-Control', 'private, no-store')
   getVolumeOrders(@Request() req: ExpressRequest, @Query() query: OrderVolumeDetailsDto) {
     return this.data.getOrderVolumeDetails(req.user!.userId, query)
+  }
+
+  @Get('receipts')
+  @Header('Cache-Control', 'private, no-store')
+  getReceipts(@Request() req: ExpressRequest, @Query() query: ReceiptQueryDto) {
+    return this.data.getReceipts(req.user!.userId, query)
+  }
+
+  @Get('order-volume/receipts')
+  @Header('Cache-Control', 'private, no-store')
+  getVolumeReceipts(@Request() req: ExpressRequest, @Query() query: OrderVolumeDetailsDto) {
+    return this.data.getOrderVolumeReceipts(req.user!.userId, query)
   }
 
   @Get('dashboard')

@@ -1,14 +1,16 @@
 # HyperZone ECharts / Dashboard 后台契约审计
 
-审计日期：2026-10-22。依据当前工作区源码、DTO、序列化器、前端API类型与测试；本次不修改业务代码，也未连接或验证真实FOP生产服务。
+审计日期：2026-10-22。依据当前工作区源码、DTO、序列化器、前端API类型与测试；方案 2 实现后同步契约；未连接或验证真实 FOP 生产服务。FOP 为金蝶云苍穹上的 HyperZone 自研应用，后台 `/Library/VSCode/dtr5b` 只读核查。
 
-机器可读交付：[hyperzone-analytics.openapi.json](../openapi/hyperzone-analytics.openapi.json)，OpenAPI **3.1.1**，**15条路径、15个操作、64个数据模型、8组通用错误响应**。仅列当前已实现的AutoFlow HTTP接口；未实现的FOP上游签名、同步、分页和收款流水接口没有被写成已实现路径。格式依据[OpenAPI 3.1.1官方规范](https://spec.openapis.org/oas/v3.1.1.html)。
+机器可读交付：[hyperzone-analytics.openapi.json](../openapi/hyperzone-analytics.openapi.json)，OpenAPI **3.1.1**，**17条路径、17个操作、69个数据模型、8组通用错误响应**。仅列当前已实现的AutoFlow HTTP接口；未实现的 FOP 上游签名、同步和分页接口没有被写成已实现路径。格式依据[OpenAPI 3.1.1官方规范](https://spec.openapis.org/oas/v3.1.1.html)。
 
 ## 1. 当前交付判断
 
 图表所需的前后端聚合、查询、权限交集、明细钻取与分页汇总已经存在；**生产FOP数据接入尚未完成**。`UsersModule`只选择`DemoFopDataProvider`或`UnconfiguredFopDataProvider`，没有真实FOP数据适配器。演示仅在`FOP_DATA_MODE=demo`且`NODE_ENV`为`development/test/local`生效。没有演示开关时保持未配置状态，不会把fixture当真实业务数据展示。
 
-客户统计的新增`series.amounts`已经贯穿后端聚合、前端类型和本规范，包含USD总金额、逐期金额、三仓金额及排除订单数。界面称作“收款/回款”的Dashboard数据，实际来自已支付订单的`amount`，**不是独立金融收款台账**；分次付款、部分退款、退款冲销和订单金额与实付金额差异尚未建模。
+客户 `series.amounts` 与 Dashboard `receipts` 已改为**独立授权的收款分录**：`amount=hzkj_real_receive_amt`；源单已支付、已审核且收款单已审核，来源履约＋全款备货，排除押金备货与样品，按支付时刻 UTC+8 归月。`orderAmount`、`handlingFee` 保留核对；使用已全款备货库存的履约不补回产品款。钱包授信可产生此类结算，因此不等同于银行新增现金流。历史期间按当前有效状态重算，未新增结账锁定、部分退款／冲销系统。
+
+数量仍只计已支付、已审核履约订单；备货不计数量。客户金额沿用数量 Top10／other 集合，只有全款备货回款的客户仍能搜索、进入总计／other。独立 `allowedReceiptIds` 缺失即无收款授权，且需 receipts scope；无 scope 时客户省略 amounts、Dashboard 回款为空、收款明细 403。客户金额和 Dashboard 均提供履约／全款备货来源拆分。
 
 ## 2. 传输与错误边界
 
@@ -18,7 +20,7 @@
 | 响应包裹 | Controller直接返回对象；无`{code,data,message}`成功包裹。前端拦截器返回`response.data` | `workbench.controller.ts`、`RequestAuditInterceptor`原样返回`value`、`frontend/src/api/index.ts` |
 | 鉴权 | JWT Bearer或`autoflow_session` cookie二选一；提取顺序cookie优先 | `backend/src/modules/auth/jwt.strategy.ts` |
 | 即时授权 | JWT只提供身份；每次查当前账户role/businessRole，FOP读前后复查绑定、业务范围和入口授权 | `jwt-auth.guard.ts`、`fop-data.service.ts:59`及`assertUnchanged` |
-| 参数验证 | 全局`whitelist + forbidNonWhitelisted + transform`；有DTO的图表接口禁止客户端传tenantId/userId/scope等额外字段 | `main.ts`、`fop-data.dto.ts`、`order-volume.dto.ts` |
+| 参数验证 | 全局`whitelist + forbidNonWhitelisted + transform`；有DTO的图表接口禁止客户端传tenantId/userId/scope等额外字段 | `main.ts`、`fop-data.dto.ts`、`order-volume.dto.ts`、`fop-receipts.dto.ts` |
 | 无DTO接口 | `/workbench/access`、`/workbench/{role}/access`及本地`/autoflow/dashboard`没有Query DTO，额外query当前忽略；不能笼统声称所有接口拒绝未知参数 | 对应controller签名 |
 | 缓存 | JWT guard以及相关controller设置`Cache-Control: private, no-store`；全局限流可能先于JWT guard运行 | `jwt-auth.guard.ts`、`app.module.ts` |
 | 标准错误 | Nest通用错误为`{statusCode,message,error?}`；DTO的message通常为字符串数组。默认401可只有statusCode/message | DTO校验、`UnauthorizedException`/`ForbiddenException` |
@@ -38,6 +40,8 @@
 | GET `/autoflow/integrations/fop/order-volume/customers` | `searchOrderCustomers` | keyword、department、分页；`OrderCustomerPage` | keyword trim后1..100字符；pageSize默认10、最大50 |
 | GET `/autoflow/integrations/fop/order-volume/orders` | `getOrderVolumeDetails` | 图表同查询+workbenchRole+series/period/明细仓；`OrderPage` | 必须拥有所传入口角色；不是履约队列筛选 |
 | GET `/autoflow/integrations/fop/fulfillment-orders` | `getFulfillmentOrders` | queue、search、orderNumber、分页；`OrderPage` | queue对应角色强制校验；可选workbenchRole若不匹配则400 |
+| GET `/autoflow/integrations/fop/receipts` | `getReceipts` | from/to、部门/员工/客户/仓库/来源、workbenchRole、分页；`ReceiptPage` | 独立收款 scope 与分录 allowlist；UTC+8 有效 USD 分录，分页前合计 |
+| GET `/autoflow/integrations/fop/order-volume/receipts` | `getOrderVolumeReceipts` | customer 同图表查询及下钻参数；`ReceiptPage` | 先重建完整数量 Top10/other 集合，再收窄期间和仓库 |
 | GET `/autoflow/integrations/fop/dashboard` | `getFopDashboard` | from/to/year均必填；`FopDashboard` | 三类analyticsScopes独立控制；队列另按入口角色 |
 | GET `/workbench/access` | `getWorkbenchAccess` | 无参数；`WorkbenchAccess` | 当前账户入口/系统/业务权限摘要 |
 | GET `/workbench/{role}/access` | `getWorkbenchRoleAccess` | path角色；`WorkbenchAccess` | 未知角色400，无授权403 |
@@ -59,17 +63,17 @@
 | 上游私有字段 | `tenantId`用于租户校验；`departmentPathIds`用于部门后代权限匹配；两者均不输出给客户端 | `fop-data.types.ts`、`business-scope.ts`、`publicOrder` |
 | `currency` | trim+uppercase；空值默认USD，未换汇 | `fop-data.service.ts:44` |
 | `periods`、时间轴 | 支付时刻转UTC+08:00日期；月、近4周、日；客户区间逐日展开 | `order-volume.ts:7`、`:24` |
-| `total/customerCount` | 当前筛选paid、未取消未退款、有有效paidAt且不在未来的订单；非carrier还要求报表部门；客户ID去重 | `order-volume.ts:63`、`:140` |
+| `total/customerCount` | 订单数来自 paid＋approved、未取消且有效已发生 paidAt 的履约；客户集合含有效独立收款客户，备货只增金额 | `order-volume.ts` |
 | `series` | 首项total；物流固定6项，业务员Top5，客户Top10，剩余other；名称相同不合并ID | `order-volume.ts:83`至`:113` |
-| `values/warehouses` | 与periods同下标；未来日null，其余空期0；HZ/SZ以外归UNASSIGNED | `order-volume.ts:20`、`:123`至`:138` |
-| 客户新增`amounts` | 仅customer每条series均含currency=USD/total/values/warehouses/excludedOrderCount；筛掉非USD或非finite金额后以分累计 | `order-volume.ts:131`至`:138`；`frontend/src/api/fop-order-volume.ts` |
+| `values/warehouses` | periods 同下标；未来 null，其余空期0；已审核履约必须已映射 HZ/SZ，UNASSIGNED 仅兼容数组键 | `order-volume.ts`、`fop-data.service.ts` |
+| 客户 `amounts` | 有 receipts scope 才输出；同客户集合、日期、仓库的独立收款实收，USD 分币汇总及来源 breakdown；excludedOrderCount 兼容名表示非 USD 分录数 | `order-volume.ts`、`fop-receipts.ts` |
 | `detailWarehouse` | 与查询warehouse取交集；先构建完整排名/other，再缩窄明细期间与仓库 | `order-volume.ts:143`至`:150` |
 | `totals` | 分页前完整筛选范围；订单数、所有商品件数、原币种金额各自求和；USD排序优先 | `fop-order-totals.ts`、`fop-data.service.ts:167`及`:190` |
-| 客户搜索 | 授权有效订单中按customerId建目录，包含未支付；编码精确命中优先，之后编码/ID排序；departments为中文名 | `order-volume.ts:153`至`:165` |
+| 客户搜索 | 授权已审核有效订单客户（可含未支付）并入有效获授权收款客户；编码精确优先，编码/ID排序 | `order-volume.ts` |
 | Dashboard队列 | 当前全部授权订单，日期控件不影响队列；review/异常为sales，采购/配货/调度/仓库分别对应角色 | `dto/workbench.dto.ts`、`fop-data.service.ts:15`及`:203` |
 | Dashboard注册 | 注册明细优先，按owner/部门业务范围过滤后合并、补0、校验重复键；缺台账时只有业务admin读取旧日汇总 | `fop-registration.ts`、`fop-data.service.ts:224` |
-| Dashboard金额 | paid订单amount，仅USD/有效报表部门/非负安全分币；`paidAt.slice(0,7)`归月，上年12月做previousAmount | `fop-data.service.ts:227`至`:260` |
-| Dashboard任务/异常 | task.time截取最早createdAt的HH:mm；异常id实际orderNumber，不是order.id | `fop-data.service.ts:210`及`:255` |
+| Dashboard金额 | 独立收款分录，UTC+8 支付月；履约＋全款备货；上年12月 previousAmount/previousBreakdown，basis=actual_received | `fop-receipts.ts`、`fop-business-time.ts` |
+| Dashboard任务/异常 | task.time 按 UTC+8 显示；异常 id 实际 orderNumber，不是 order.id | `fop-data.service.ts` |
 | 本地Dashboard | 本地工作流/线索/outreach表，readBusinessOwners限定范围；funnel.value当前固定0 | `autoflow.service.ts:73`、`:604`及对应map函数 |
 | 实时性元数据 | asOf/updatedAt是本次计算时间，没有upstreamUpdatedAt/snapshotId | `order-volume.ts:140`、`fop-data.service.ts:196`及`:254` |
 
@@ -77,37 +81,39 @@
 
 ### 仓库、物流、部门与金额对账
 
-仓库只按`warehouseCode`映射HZ/SZ/UNASSIGNED；物流只按`carrierCode`映射YT/4PX/WB/YW/JS/OTHER，顺序固定；展示名称不作为稳定键。报表部门必须由可信适配器把实际组织树归一化为sales1..sales4，不能用前端传参代替权限。
+已审核履约的 warehouseCode 必须 HZ/SZ、carrierCode 必须 YT/4PX/WB/YW/JS/OTHER；缺失或未映射属于适配错误，不能正常归入未分配／其他。OTHER 仅接受可信适配器明确映射的已知其他服务商。全款备货必须有国内仓库，carrierCode=null 表示不适用，不能计入物流量。报表部门归一化为 sales1..sales4，不能用前端筛选代替授权。
 
-每个数量series应满足`total=sum(非null values)`；每期三仓和等于values。客户金额与同一授权订单、时间桶、仓库映射对应，但非USD订单仍计入订单数，金额会排除并增加excludedOrderCount。明细`amountsByCurrency`保留所有币种，因此不能将其混币总和直接与客户USD金额比较。整数分币解决常见0.1+0.2误差，不等于已完成所有金额异常/溢出校验。
+数量 series 满足 total=sum(非 null values)，每期 HZ＋SZ=values。客户金额来自各自授权收款账本，来源拆分和仓库拆分各自合计为总实收；不得用订单明细 amountsByCurrency 与实收直接对等。收款 totals 在分页前汇总；收款行数、履约订单数、商品件数是不同单位。分录单条及累计均验证非负安全分币；订单旧总计的完整异常校验不因此自动完成。
 
 ## 5. FOP/provider现状与接入缺口
 
 | 优先级 | 当前事实与影响 | 证据 | 生产接入要求 |
 |---|---|---|---|
 | P0 | 没有真实FOP数据provider。API路由/前端图表已实现，不能据此宣称生产对接完成 | `users.module.ts:21`工厂只返回Demo或Unconfigured；`fop-data.types.ts`抽象provider | 明确真实上游鉴权、地址、权限解析、订单/注册/汇率契约，再实现适配器；不凭空约定FOP路由名 |
-| P1 | Dashboard金额不是独立回款账；部分支付/部分退款/冲销没有模型 | `fop-data.types.ts`只有amount/paymentStatus/paidAt；Dashboard直接累加amount | 先确认“已支付订单金额”还是“实际收款净额”；若为后者需要独立交易ID、金额、币种、类型、到账/撤销时间及订单关联 |
-| P1 | 统计时区不统一；同一临界支付可出现在不同月份 | `order-volume.ts:7`加8小时；`fop-data.service.ts:235`直接slice月份；当前年/月采用UTC | 统一业务时区与日/月界线；验证`2026-01-31T16:30:00Z`应归上海2月，当前Dashboard归1月 |
-| P1 | 金额有效性规则不一致；客户amounts允许负数/超安全分币值，Dashboard单单检查非负安全整数，明细总计未检查 | `order-volume.ts:132`仅USD+finite；`fop-data.service.ts:238`；`fop-order-totals.ts` | 统一单单与累计校验；明确负数是否为退款，不能默默混入订单额；非USD/坏币种不得无审计默认USD |
-| P1 | provider订单仅部分结构校验；无完整状态枚举、时间戳、金额、商品数量、报表部门运行时验证 | `scopedOrders`过滤后调用publicOrder；订单枚举主要是TypeScript类型 | 加入可信适配器运行时schema校验和可观测拒收计数；未知部门应明确隔离/映射，避免漏数或聚合异常 |
+| 已修订（原 P1） | 原诊断：Dashboard 直接累加订单金额。方案2现使用独立实收分录、来源拆分、源单＋收款双审核与独立授权 | fop-receipts.ts、fop-data.service.ts | 正式源字段样本与跨系统对账仍待完成；钱包授信不代表银行现金流 |
+| 已修订（原 P1） | 原诊断：Dashboard 直接 slice 月份，临界支付与订单统计错月。现共用 UTC+8 业务日期，统一当前年/月与日期校验 | fop-business-time.ts、monthlyReceipts | 核验 2026-01-31T16:30:00Z 属于 UTC+8 的2月及跨年基线 |
+| 部分修订（原 P1） | 收款单条及累计使用非负安全分币校验；客户业绩与 Dashboard 同源。订单明细金额仍为独立旧合同 | fop-receipts.ts、fop-order-totals.ts | 正式币种策略及订单资源完整运行时验证仍需对齐 |
+| P1 | provider 订单尚无完整状态／商品数量运行时 schema；已审核仓库和物流完整性已新增校验。收款必需字段、金额、来源、双审核和归属独立校验，重复授权分录拒收 | publicOrder、publicReceipt、scopedReceipts | 正式适配器须完成源数据映射、错误监控与完整运行时验证 |
 | P1 | 当前接口全量拉授权订单后内存过滤、排序、聚合；客户区间没有最大跨度 | `listOrders`返回数组；`order-volume.ts:36`逐日展开；service分页最后slice | 确定数据量、分页/游标完整性、权限快照、增量同步、数据库索引/预聚合和允许日期跨度，再按目标量压测 |
 | P1 | 图表与明细各次独立拉数据、重建排名；期间订单变化会使TopN/other和钻取总数漂移 | `getOrderVolume`与`getOrderVolumeDetails`分别调用scopedOrders；asOf非快照ID | 同一图表钻取需共享snapshotId或清晰声明实时一致性边界；不能把当前asOf当稳定版本 |
 | P1 | 本地组织模块始终mock且按管理员账户独立播种；权限ID配置未验证真实FOP归属 | `organization.service.ts:88`的`withWorkspace`；`users.service.ts:92` | 建立本地用户—FOP租户/用户—真实员工/部门映射；目录权限与同步流程独立设计，禁止把种子ID当FOP正式ID |
 | P2 | weekOf与year可以不同年，周桶实际忽略year；无效objectId返回空，其他grain的month/weekOf可被忽略 | `order-volume.ts:41`至`:59`及`:80` | 在兼容性评估后统一跨参数校验；当前契约如实描述，不把未实现限制写成事实 |
 | P2 | `source`是provider标签；asOf/updatedAt只是计算时刻，无法识别真实源数据陈旧程度 | `source`属性与响应构造 | 增加可验证来源、上游刷新时间、同步延迟、snapshot/version指标；目前这些字段为建议，不在已实现paths内 |
-| P2 | 前端FopOrder类型含可选departmentPathIds，HTTP白名单实际剥离；Dashboard类型遗漏businessScope或将必有字段标可选 | `frontend/src/api/fop-orders.ts`、`fop-dashboard.ts`与publicOrder | 后续可由本规范生成类型或做契约漂移检查；本次不改前端业务源码 |
+| P2 | 前端兼容类型允许部分 Dashboard 字段缺失，实际后端必有 basis/timeZone/breakdown；HTTP 白名单仍剥离服务端元数据 | frontend API types、publicOrder、publicReceipt | 使用 OpenAPI 作真实响应校验，兼容类型不等于后端可省略必需字段 |
 
-当前已有的重要保护：服务端身份绑定、每次权限查库、租户与allowlist交集、业务范围筛选、空allowlist不授予任何订单、跨请求授权变更复查、publicOrder字段白名单、provider错误公开信息归一化。待接入适配器应保持这些边界，不以“管理员”“测试环境”或页面筛选器替代服务端权限。
+当前已有的重要保护：服务端身份绑定、每次权限查库、租户与allowlist交集、业务范围筛选、空订单／收款 allowlist 分别不授予对应资源、跨请求授权变更复查、publicOrder/publicReceipt 字段白名单、provider错误公开信息归一化。待接入适配器应保持这些边界，不以“管理员”“测试环境”或页面筛选器替代服务端权限。
 
 ## 6. 接入验收要求（尚待真实FOP环境执行）
 
-1. 获得实际FOP文档与脱敏响应样本，逐字段确认订单ID/客户ID/员工ID/部门祖先/报表部门/仓库/物流/支付状态/原币种/金额/时间戳语义；本规范描述AutoFlow外部契约，不替代尚未获证的FOP上游协议。
-2. 对每个本地账户验证绑定唯一性、租户边界、订单白名单、部门后代范围、员工归属及撤权即时生效；无权限时不能退回演示数据。
-3. 对图表、同筛选明细、分页总计三方对账，包含空授权、重复ID、未知仓库/物流、非USD、缺客户ID、未来日、跨月UTC+8、TopN/other、无注册台账等边界。
-4. 明确收款口径后再对财务系统对账；付款状态不能替代收款交易流水。金额计算统一分币规则、币种策略与异常订单隔离规则。
+1. 以 HYPERZONE_FOP_SOURCE_MAPPING.md 已确认的实体、字段与状态为起点，取得实际发布 FOP HTTP 文档及脱敏样本，核验收款行 ID、源单关联、两类审核与支付、客户/员工/部门/仓库/物流、币种和支付时间；源码证据不能替代线上协议验证。
+2. 对每个本地账户验证绑定唯一性、租户边界、独立订单／收款白名单、部门后代范围、员工归属及撤权即时生效；无权限时不能退回演示数据。
+3. 对图表、同筛选明细、分页总计三方对账，包含空授权、重复分录拒收、未知已审核仓库/物流拒收、非USD、缺客户ID、未来日、跨月UTC+8、TopN/other、无注册台账等边界。
+4. 按已确认方案2与财务业务结算对账：分录实收、订单金额和手续费分开，排除样品／押金备货，预付库存履约不补回产品款；包含钱包授信、迟审核、零追加收款和跨月用库存场景。
 5. 定义上游超时、限流、失败重试、缓存权限键、数据新鲜度和一致性要求；进行真实规模吞吐/内存测试。当前前端axios超时30秒，不代表上游SLA已完成。
 
-## 7. 实际验证记录与边界
+## 7. 历史诊断验证记录与本轮边界
+
+下表保留方案2实施前的 2026-10-22 诊断证据，不代表此次修改后的测试数量。当前代码全量验证、浏览器与生成文件检查以 VERIFICATION.md 为准；本次 OpenAPI 已扩展至17操作／69模型；已用现有 docs-venv 的 openapi-spec-validator 与 Draft202012Validator 校验结构和模型，生成器 validate_examples 递归校验186处模型／请求／响应示例通过（共享响应按使用位置重复计数）。此次仅验证，生成文件及真实 HTTP 响应检查由主流程完成。
 
 | 验证 | 本次真实结果 | 范围/限制 |
 |---|---|---|
@@ -115,7 +121,7 @@
 | 定向API E2E | `npm run test:e2e -- --testPathPatterns='(fop-data-access\|workbench-access).e2e-spec.ts'`：2 suites、46 tests通过 | 覆盖JWT/权限/状态/DTO/明细/汇总；使用测试替身，不是上游联调 |
 | JSON Schema模型/样例 | 64个schema用项目已装Ajv2020编译；31个顶层schema/操作/错误实例通过 | JSON Schema2020-12及formats；含客户amounts与null。主流程另用openapi-spec-validator及递归实例验证 |
 | 完整OpenAPI结构 | 最终文件已用`openapi-spec-validator`验证通过，并校验159处模型/请求/响应示例 | 支持3.1.1/JSON Schema2020-12；另有12组本地HTTP响应通过schema校验，不等于真实FOP联调或某个API平台导入已测试 |
-| 源码路由审计 | 15个操作均有controller/service证据，源码文件记录在各operation的x-source-files | 不生成未实现FOP操作或伪造上游响应 |
+| 源码路由审计 | 历史15个操作均有controller/service证据，源码文件记录在各operation的x-source-files | 不生成未实现FOP操作或伪造上游响应 |
 | 生产接入 | 未验证 | 没有真实provider、正式凭据、上游样本、生产数据量或跨系统财务对账 |
 
 机器规范的成功与错误样例均为脱敏契约样例，不是截取生产数据。上述定向测试与主流程全量测试存在重叠，不能将数量相加当作独立测试总数。本交付记录现状、风险和接入需求，没有把测试通过等同于生产FOP接入已完成。

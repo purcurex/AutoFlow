@@ -12,7 +12,7 @@ const calendar = computed(() => getWorkCalendar(now.value))
 const weekdays = computed(() => zh.value ? ['周日', '周一', '周二', '周三', '周四', '周五', '周六'] : ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'])
 const cursor = computed(() => (calendar.value.beijing.hour * 60 + calendar.value.beijing.minute + calendar.value.beijing.second / 60) / 1440 * 100)
 const stateLabel = (status: string) => status === 'working' ? text('工作中', 'Working') : status === 'weekend' ? text('周末休息', 'Weekend') : text('休息中', 'Off hours')
-const difference = (hours: number) => zh.value ? `比北京${hours > 0 ? '快' : '慢'} ${Math.abs(hours)} 小时` : `${Math.abs(hours)}h ${hours > 0 ? 'ahead of' : 'behind'} Beijing`
+const difference = (hours: number) => zh.value ? `比 UTC+8${hours > 0 ? '快' : '慢'} ${Math.abs(hours)} 小时` : `${Math.abs(hours)}h ${hours > 0 ? 'ahead of' : 'behind'} UTC+8`
 const syncClock = () => { now.value = new Date() }
 let timer: ReturnType<typeof setInterval> | undefined
 onMounted(() => {
@@ -32,7 +32,7 @@ onBeforeUnmount(() => {
     <header class="calendar-heading">
       <h2><CalendarClock :size="16" aria-hidden="true" />{{ text('工作日历', 'Work calendar') }}</h2>
       <div class="beijing-clock" :title="text('使用电脑时间，每秒更新', 'Computer clock, updated every second')">
-        <span>{{ text('北京', 'Beijing') }} <small>UTC+8</small></span>
+        <span>{{ text('参考时间', 'Reference time') }} <small>UTC+8</small></span>
         <time :datetime="now.toISOString()">{{ calendar.beijing.time }}</time>
         <span class="beijing-date">{{ calendar.beijing.shortDate }} {{ weekdays[calendar.beijing.weekday] }}</span>
       </div>
@@ -48,16 +48,16 @@ onBeforeUnmount(() => {
         <div class="work-hours">
           <div><span>{{ text('当地上班', 'Local hours') }}</span><strong>09:00–17:00</strong></div>
           <MoveRight class="conversion-arrow" :size="13" aria-hidden="true" />
-          <div class="beijing-hours"><span>{{ text('对应北京', 'Beijing hours') }}</span><strong>{{ region.beijingStart }}–<small v-if="region.endDayOffset">{{ text('次日 ', 'next day ') }}</small>{{ region.beijingEnd }}</strong></div>
+          <div class="beijing-hours"><span>{{ text('对应 UTC+8', 'UTC+8 hours') }}</span><strong>{{ region.beijingStart }}–<small v-if="region.endDayOffset">{{ text('次日 ', 'next day ') }}</small>{{ region.beijingEnd }}</strong></div>
         </div>
-        <div class="hours-track" role="img" :aria-label="`${text('北京时间工作窗口', 'Work window in Beijing time')} ${region.beijingStart}–${region.endDayOffset ? text('次日 ', 'next day ') : ''}${region.beijingEnd}`">
+        <div class="hours-track" role="img" :aria-label="`${text('UTC+8 工作窗口', 'Work window in UTC+8')} ${region.beijingStart}–${region.endDayOffset ? text('次日 ', 'next day ') : ''}${region.beijingEnd}`">
           <span v-for="segment in region.segments" :key="segment.start" class="work-segment" :style="{ left: `${segment.start / 24 * 100}%`, width: `${(segment.end - segment.start) / 24 * 100}%` }" />
-          <span class="now-cursor" :style="{ left: `${cursor}%` }" :title="`${text('北京现在', 'Beijing now')} ${calendar.beijing.time}`" />
+          <span class="now-cursor" :style="{ left: `${cursor}%` }" :title="`${text('UTC+8 当前时间', 'UTC+8 now')} ${calendar.beijing.time}`" />
         </div>
         <div class="track-labels" aria-hidden="true"><span>00</span><span>12</span><span>24</span></div>
       </section>
     </div>
-    <footer class="calendar-note"><span>{{ text('参考作息：当地周一至周五 09:00–17:00 · 不含公共假期', 'Reference: Mon–Fri 09:00–17:00 local · public holidays excluded') }}</span><span class="clock-note"><i aria-hidden="true" />{{ text('竖线为北京当前时间 · 自动换算夏令时', 'Line: Beijing now · daylight saving adjusts automatically') }}</span></footer>
+    <footer class="calendar-note"><span>{{ text('参考作息：当地周一至周五 09:00–17:00 · 不含公共假期', 'Reference: Mon–Fri 09:00–17:00 local · public holidays excluded') }}</span><span class="clock-note"><i aria-hidden="true" />{{ text('竖线为 UTC+8 当前时间 · 自动换算夏令时', 'Line: UTC+8 now · daylight saving adjusts automatically') }}</span></footer>
   </article>
 </template>
 

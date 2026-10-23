@@ -22,14 +22,35 @@ beforeAll(() => {
   Object.defineProperty(HTMLDialogElement.prototype, 'close', { configurable: true, value() { this.removeAttribute('open') } })
 })
 afterAll(() => { Reflect.deleteProperty(HTMLDialogElement.prototype, 'showModal'); Reflect.deleteProperty(HTMLDialogElement.prototype, 'close') })
-async function setup(teleportStub = true) {
-  const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: { template: '<div />' } }, { path: '/workbench/:role', name: 'RoleWorkbench', component: { template: '<div />' } }] })
+async function setup(teleportStub = true, customer = true) {
+  const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: { template: '<div />' } }, { path: '/workbench/:role', name: 'RoleWorkbench', component: { template: '<div />' } }, { path: '/workbench/:role/receipts', name: 'RoleWorkbenchReceipts', component: { template: '<div />' } }] })
   await router.push('/')
-  const wrapper = mount(OrderVolumeAnalysis, { attachTo: document.body, props: { customer: true }, global: { stubs: { teleport: teleportStub }, plugins: [router, createI18n({ legacy: false, locale: 'zh-CN', messages: {} })] } })
+  const wrapper = mount(OrderVolumeAnalysis, { attachTo: document.body, props: { customer }, global: { stubs: { teleport: teleportStub }, plugins: [router, createI18n({ legacy: false, locale: 'zh-CN', messages: {} })] } })
   await flushPromises(); return { wrapper, router }
 }
 describe('customer order analysis', () => {
   beforeEach(() => { vi.mocked(refreshWorkbenchAccess).mockReset().mockResolvedValue({ roles: ['allocation'], isAdmin: false }); vi.mocked(getOrderVolume).mockReset().mockImplementation(async q => result(q)); vi.mocked(searchOrderCustomers).mockReset() })
+  it.each([true, false])('offers only supported warehouse choices for customer mode %s', async customer => {
+    const { wrapper } = await setup(true, customer)
+    expect(wrapper.find('select[aria-label="订单量仓库"]').findAll('option').map(option => option.attributes('value'))).toEqual(['ALL', 'HZ', 'SZ'])
+    wrapper.unmount()
+  })
+  it('shows warehouse-specific receipt hints without attributing customer-wide sources to warehouse cells', async () => {
+    vi.mocked(getOrderVolume).mockImplementation(async query => {
+      const payload = result(query)
+      payload.series.forEach(row => { if (row.amounts) row.amounts.breakdown = { fulfillment: 0, fullPaymentStock: row.amounts.total } })
+      return payload
+    })
+    const { wrapper } = await setup()
+    for (const [code, name] of [['HZ', '杭州仓'], ['SZ', '深圳仓']]) {
+      const hint = wrapper.find(`[data-row-id="customer:c1"][data-metric="amount"] button[data-warehouse="${code}"]`).attributes('title')
+      expect(hint).toContain(name)
+      expect(hint).toContain('回款')
+      expect(hint).not.toContain('$')
+    }
+    expect(wrapper.find('[data-row-id="customer:c1"][data-metric="amount"] button:not([data-warehouse])').attributes('title')).toContain('全款备货 $50.05')
+    wrapper.unmount()
+  })
   it('queries customers using start/end dates without timeline or year controls and preserves dates in drill links', async () => {
     const { wrapper, router } = await setup()
     expect(wrapper.find('select[aria-label="客户订单时间轴"]').exists()).toBe(false)
@@ -139,7 +160,7 @@ describe('customer order analysis', () => {
     const rows = wrapper.findAll('[data-row-id="customer:c1"]')
     expect(rows).toHaveLength(2)
     expect(rows[0]!.text()).toContain('订单量')
-    expect(rows[1]!.text()).toContain('订单金额')
+    expect(rows[1]!.text()).toContain('回款业绩金额')
     expect(rows[1]!.text()).toContain('$50.05')
     const charts = () => wrapper.findAllComponents({ name: 'EChart' })
     const labels = charts()[0]!.props('option').yAxis.data
@@ -152,7 +173,35 @@ describe('customer order analysis', () => {
     expect(charts()[1]!.props('option').tooltip.valueFormatter(30.03)).toBe('$30.03')
     await wrapper.find('[data-row-id="customer:c1"][data-metric="amount"] button[data-warehouse="SZ"]').trigger('click')
     await flushPromises()
-    expect(router.currentRoute.value.query).toMatchObject({ seriesId: 'customer:c1', detailWarehouse: 'SZ' })
+    expect(router.currentRoute.value.name).toBe('RoleWorkbenchReceipts')
+    expect(router.currentRoute.value.query).toMatchObject({ mode: 'customer', seriesId: 'customer:c1', detailWarehouse: 'SZ' })
+    wrapper.unmount()
+  })
+  it('renders a stock-only customer and opens receipt details from the amount chart', async () => {
+    vi.mocked(getOrderVolume).mockImplementation(async query => {
+      const payload = result(query)
+      payload.total = 0
+      payload.series.forEach(row => { row.total = 0; row.values = [0]; row.warehouses = { HZ: [0], SZ: [0], UNASSIGNED: [0] } })
+      return payload
+    })
+    const { wrapper, router } = await setup()
+    const charts = wrapper.findAllComponents({ name: 'EChart' })
+    expect(charts).toHaveLength(2)
+    charts[1]!.vm.$emit('select', { dataIndex: 0, seriesId: 'total' })
+    await flushPromises()
+    expect(router.currentRoute.value.name).toBe('RoleWorkbenchReceipts')
+    expect(router.currentRoute.value.query).toMatchObject({ mode: 'customer', seriesId: 'customer:c1' })
+    wrapper.unmount()
+  })
+  it('keeps order counts visible when receipt amounts are omitted for permission reasons', async () => {
+    vi.mocked(getOrderVolume).mockImplementation(async query => {
+      const payload = result(query); payload.series.forEach(row => { delete row.amounts }); return payload
+    })
+    const { wrapper } = await setup()
+    expect(wrapper.findAllComponents({ name: 'EChart' })).toHaveLength(1)
+    expect(wrapper.text()).toContain('Northstar')
+    expect(wrapper.find('.customer-amount-kpi').text()).toBe('—')
+    expect(wrapper.find('[data-row-id="customer:c1"][data-metric="amount"] button').attributes('disabled')).toBeDefined()
     wrapper.unmount()
   })
   it('opens customer trends in a modal immediately, preserves filters and ignores responses after closing', async () => {

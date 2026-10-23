@@ -1,6 +1,6 @@
 /** Authenticated backend contract. No client-side mock fallback or scope selection. */
 export interface FopDashboardQuery { from: string; to: string; year: number }
-export interface ReceiptSeries { id: string; name?: string; amounts: number[]; previousAmount?: number | null }
+export interface ReceiptSeries { id: string; name?: string; amounts: number[]; previousAmount?: number | null; breakdown?: { fulfillment: number[]; fullPaymentStock: number[] }; previousBreakdown?: { fulfillment: number; fullPaymentStock: number } }
 export interface FopDashboardData {
   source: 'mock' | 'fop'
   updatedAt: string
@@ -10,11 +10,11 @@ export interface FopDashboardData {
   registrationDepartments?: { id: string; name: string; counts: number[]; salespeople: { id: string; name: string; counts: number[] }[] }[]
   exceptions: { id: string; customer: string; reason: 'stock' | 'address' | 'tracking'; hours: number }[]
   tasks: { id: string; kind: 'review' | 'allocation' | 'shipping'; count: number; time: string; priority: 'high' | 'normal' }[]
-  receipts: { currency: 'USD'; months: string[]; previousMonth?: string; marketingCenter?: ReceiptSeries | null; departments: (ReceiptSeries & { salespeople: (ReceiptSeries & { name: string })[] })[] }
+  receipts: { timeZone?: 'UTC+8'; basis?: 'actual_received'; currency: 'USD'; months: string[]; previousMonth?: string; marketingCenter?: ReceiptSeries | null; departments: (ReceiptSeries & { salespeople: (ReceiptSeries & { name: string })[] })[] }
 }
 
 export function localDate(date: Date): string {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+  return new Date(date.getTime() + 8 * 3_600_000).toISOString().slice(0, 10)
 }
 
 function parseDay(value: string): number {
@@ -30,7 +30,7 @@ export async function getFopDashboard(query: FopDashboardQuery, now = new Date()
   const end = parseDay(query.to)
   const day = 86_400_000
   if (start > end || (end - start) / day > 365 || query.to > localDate(now)) throw new Error('Invalid date range')
-  if (!Number.isInteger(query.year) || query.year < 2020 || query.year > now.getFullYear()) throw new Error('Invalid year')
+  if (!Number.isInteger(query.year) || query.year < 2020 || query.year > Number(localDate(now).slice(0, 4))) throw new Error('Invalid year')
   const { default: api } = await import('./index')
   const { from, to, year } = query
   return api.get('/autoflow/integrations/fop/dashboard', { params: { from, to, year } })

@@ -1,6 +1,7 @@
+import { businessDate } from './fop-business-time'
 import { FOP_CARRIERS } from './fop-carriers'
 import { createHash } from 'crypto'
-import { FopAnalytics, FopDataProvider, FopIdentity, FopOrderCandidate, FopPermissionDeniedError, FopPermissionGrant, SALES_DEPARTMENTS, SalesDepartmentCode } from './fop-data.types'
+import { FopAnalytics, FopDataProvider, FopIdentity, FopOrderCandidate, FopReceiptCandidate, FopPermissionDeniedError, FopPermissionGrant, SALES_DEPARTMENTS, SalesDepartmentCode } from './fop-data.types'
 
 interface DemoWorkspace {
   nodes: { id: string; parentId: string | null; name: string; kind: 'organization' | 'department'; sortOrder: number }[]
@@ -62,12 +63,47 @@ export class DemoFopDataProvider extends FopDataProvider {
   }
   async resolvePermissions(identity: Readonly<FopIdentity>): Promise<FopPermissionGrant> {
     this.assertIdentity(identity)
-    return { subject: { ...identity }, allowedOrderIds: (await this.orders(identity)).map(order => order.id), analyticsScopes: ['rates', 'registrations', 'receipts'] }
+    return { subject: { ...identity }, allowedOrderIds: (await this.orders(identity)).map(order => order.id), allowedReceiptIds: (await this.receipts(identity)).map(receipt => receipt.id), analyticsScopes: ['rates', 'registrations', 'receipts'] }
   }
   async listOrders(identity: Readonly<FopIdentity>, permission: Readonly<FopPermissionGrant>): Promise<FopOrderCandidate[]> {
     this.assertIdentity(identity, permission)
     const allowed = new Set(permission.allowedOrderIds)
     return (await this.orders(identity)).filter(order => allowed.has(order.id))
+  }
+  async listReceipts(identity: Readonly<FopIdentity>, permission: Readonly<FopPermissionGrant>): Promise<FopReceiptCandidate[]> {
+    this.assertIdentity(identity, permission)
+    const allowed = new Set(permission.allowedReceiptIds ?? [])
+    return (await this.receipts(identity)).filter(receipt => allowed.has(receipt.id))
+  }
+  private async receipts(identity: Readonly<FopIdentity>): Promise<FopReceiptCandidate[]> {
+    const orders = await this.orders(identity)
+    const rows: FopReceiptCandidate[] = orders.filter(o => o.salesDepartmentCode && o.paymentStatus === 'paid').map(o => {
+      const fee = Math.round(o.amount * 100 * .02) / 100
+      return { tenantId: o.tenantId, departmentPathIds: o.departmentPathIds, id: `${o.id}:receipt:1`, sourceType: 'fulfillment', documentId: o.id, documentNumber: o.orderNumber,
+        customerId: o.customerId!, customerCode: o.customerCode!, customerName: o.customerName, organization: o.organization, department: o.department, owner: o.owner, salesDepartmentCode: o.salesDepartmentCode,
+        warehouseCode: o.warehouseCode!, warehouse: o.warehouse, carrierCode: o.carrierCode!, amount: Math.round((o.amount - fee) * 100) / 100, orderAmount: o.amount, handlingFee: fee, currency: 'USD', paidAt: o.paidAt,
+        reviewStatus: o.reviewStatus, receiptReviewStatus: 'approved', paymentStatus: o.paymentStatus, cancelled: o.cancelled, items: o.items }
+    })
+    const seen = new Set<string>()
+    for (const order of orders.filter(o => o.salesDepartmentCode && o.reviewStatus === 'approved' && o.paidAt)) {
+      const month = businessDate(order.paidAt!).slice(0, 7), key = `${order.owner!.id}:${month}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      const base = rows.find(r => r.documentId === order.id)!
+      const index = seen.size, amount = 350 + (index % 9) * 85
+      rows.push({ ...base, id: `stock:${key}:receipt:1`, sourceType: 'full_payment_stock', documentId: `stock:${key}`, documentNumber: `ST-${month.replace('-', '')}-${String(index).padStart(4, '0')}`,
+        amount, orderAmount: amount, handlingFee: 0, carrierCode: null, paidAt: `${month}-05T09:00:00+08:00`,
+        ...(index % 5 === 0 ? { customerId: `${identity.tenantId}:stock-customer:${index % 3}`, customerCode: `STC00${index % 3 + 1}`, customerName: ['Prepaid Supply Co', 'Reserve Living', 'Future Stock Studio'][index % 3] } : {}) })
+      if (index % 7 === 0) rows.push({ ...base, id: `deposit:${key}:receipt:1`, documentId: `deposit:${key}`, documentNumber: `DP-${index}`, sourceType: 'deposit_stock', amount: 250, orderAmount: 250, handlingFee: 0, carrierCode: null })
+    }
+    const prepaid = orders.find(o => o.id.endsWith(':prepaid-fulfillment'))
+    if (prepaid) {
+      const current = businessDate(prepaid.paidAt!), previous = new Date(Date.UTC(Number(current.slice(0, 4)), Number(current.slice(5, 7)) - 2, 15, 1)).toISOString()
+      const base = rows.find(r => r.documentId === prepaid.id)!
+      base.amount = 60; base.orderAmount = 60; base.handlingFee = 0
+      rows.push({ ...base, id: `${prepaid.id}:stock-receipt`, sourceType: 'full_payment_stock', documentId: `${prepaid.id}:stock`, documentNumber: 'ST-PREPAID-1000', paidAt: previous, amount: 1000, orderAmount: 1000, handlingFee: 0, carrierCode: null })
+    }
+    return rows
   }
   async getAnalytics(identity: Readonly<FopIdentity>, permission: Readonly<FopPermissionGrant>, range: { from: string; to: string }): Promise<FopAnalytics> {
     this.assertIdentity(identity, permission)
@@ -99,7 +135,7 @@ export class DemoFopDataProvider extends FopDataProvider {
     if (!employees.length) return []
     const nodes = new Map(workspace.nodes.map(node => [node.id, node]))
     const accountKey = createHash('sha256').update(identity.tenantId).digest('hex').slice(0, 12)
-    const today = Date.parse(new Date().toISOString().slice(0, 10) + 'T00:00:00Z')
+    const today = Date.parse(businessDate(new Date()) + 'T00:00:00Z')
     const year = new Date(today).getUTCFullYear()
     const orders: FopOrderCandidate[] = []
     const make = (index: number, createdAt: number, completed: boolean, stage = index % 6) => {
@@ -155,6 +191,10 @@ export class DemoFopDataProvider extends FopDataProvider {
       if (at > today) continue
       make(216 + (y - (year - 2)) * 216 + month * 18 + n, at, true)
     }
+    const source = orders.find(o => o.salesDepartmentCode && o.reviewStatus === 'approved' && o.paymentStatus === 'paid')
+    if (source) orders.push({ ...source, id: `${source.id}:prepaid-fulfillment`, orderNumber: 'AF-PREPAID-0060', amount: 60,
+      createdAt: new Date(today - DAY).toISOString(), paidAt: new Date(today - DAY + 3_600_000).toISOString(),
+      customerId: `${accountKey}:prepaid-customer`, customerCode: 'PRE001', customerName: 'Prepaid Demo Customer', exception: null })
     return orders
   }
 }

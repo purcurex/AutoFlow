@@ -1,5 +1,7 @@
 # HyperZone Demo 验收与接口约定
 
+更新：2026-10-22，方案2实收分录合同。FOP 为金蝶云苍穹上的 HyperZone 自研后台，源码只读核查见 [字段映射](analytics/HYPERZONE_FOP_SOURCE_MAPPING.md)；本 Demo 不证明生产网络已接通。
+
 ## 启动和模式
 
 本地恢复脚本 `scripts/deployment/start-local-demo-backend-macos.sh` 显式设置 `FOP_DATA_MODE=demo`。仅在 `NODE_ENV=development`、`test` 或 `local` 时生效。生产环境或未配置 Demo 模式，仍使用默认未接入的 FOP 适配器，不会因上游失败切换到模拟数据。
@@ -17,11 +19,11 @@
 - `/workbench/sales?queue=exceptions`：异常13单。
 - `/organization`：HyperZone组织树和员工目录，可自定义结构。
 
-上述数量为初始演示集、账号持有全部岗位时的结果。各岗位仍受真实登录账号的岗位授权约束。Dashboard 异常区预览5条并链接全部清单；接口与数量徽标保留完整异常集合。
+上述数量是原始160笔待办演示集的参考基线；新增预付库存验收单及账号／组织范围可能改变实时清单计数，应以同请求筛选合计为准。各岗位仍受真实登录账号的岗位授权约束。Dashboard 异常区预览5条并链接全部清单；接口与数量徽标保留完整异常集合。
 
-模拟数据包含160笔待办订单、三个年份的历史已付款订单、8种配有SVG示意图的SKU产品、海外客户与Shopify店铺、支付状态、仓库、物流商、跟踪号和创建／支付时间。历史付款订单用于部门回款统计，不混入待办队列。注册日期范围可查询，使用营销中心／业务一至四部单一统计范围筛选，回款年份可切换；履约待办计数不受注册日期影响。
+模拟数据包含160笔待办订单、三个年份的历史已付款订单、8种配有SVG示意图的SKU产品、海外客户与Shopify店铺、支付状态、仓库、物流商、跟踪号和创建／支付时间。历史已支付已审核订单用于履约数量统计，并生成独立模拟收款分录；新增全款备货与押金备货分录供纳入／排除验证。注册日期范围可查询，使用营销中心／业务一至四部单一统计范围筛选，回款年份可切换；履约待办计数不受注册日期影响。
 
-回款金额由当前账号授权订单中已支付、未取消、币种USD且有对应支付日期的订单汇总而来。演示汇率只是展示参考值，不用于伪造跨币种结算。数据随日历推进生成；同一天刷新、搜索与分页保持稳定。
+回款由当前账号独立授权的有效 USD 收款分录实收汇总：源单已支付、已审核且收款单已审核，来源履约＋全款备货；押金备货和样品不计。普通模拟履约分录保留订单金额、2%手续费及扣手续费后的实收；全款备货有独立行 ID 且不计履约订单数。支付日／月统一 UTC+8。API 可返回演示汇率参考值，当前 Dashboard 未展示汇率，也不用于跨币种结算。数据随日历推进生成；同一天刷新、搜索与分页保持稳定。
 
 ## 组织与员工
 
@@ -44,6 +46,8 @@
 - `GET /api/autoflow/integrations/fop/fulfillment-orders?queue=allocation&page=1&pageSize=10`
 - `GET /api/autoflow/integrations/fop/dashboard?from=YYYY-MM-DD&to=YYYY-MM-DD&year=YYYY`
 - `GET /api/autoflow/integrations/fop/data-access`
+- `GET /api/autoflow/integrations/fop/receipts?from=YYYY-MM-DD&to=YYYY-MM-DD&warehouse=ALL&workbenchRole=sales&page=1&pageSize=20`
+- `GET /api/autoflow/integrations/fop/order-volume/receipts?category=customer&from=YYYY-MM-DD&to=YYYY-MM-DD&warehouse=ALL&seriesId=other&workbenchRole=sales&page=1&pageSize=20`
 
 订单保持现有 `FopOrderPage`，额外提供可选归属字段供Mock和将来的FOP共用：
 
@@ -55,15 +59,17 @@ salesDepartmentCode?: 'sales1' | 'sales2' | 'sales3' | 'sales4'
 // items[]新增可选 productId，原sku/name/imageUrl/variant/quantity保持不变。
 ```
 
-面板维持 `queues/rates/registrations/exceptions/tasks/receipts` 结构。`receipts.departments[]` 固定按业务一至四部排序，`id` 为 `sales1` 至 `sales4` 的报表编码，`name` 为对应业务部名称。每个部门返回 `amounts: number[]` 及 `salespeople: {id,name,amounts:number[]}[]`，两种金额数组均与 `receipts.months` 对齐，以 USD 元表示、保留两位小数。无回款的部门为零数组；未授予 receipts 权限时，月份、部门和业务员数据均为空。员工以稳定 ID 分组，不按姓名合并；有部门编码却缺失负责人时归入 `__unassigned__`（未分配业务员）以确保两图合计一致。
+面板维持 queues/rates/registrations/exceptions/tasks/receipts 结构；receipts 必有 basis=actual_received、timeZone=UTC+8。部门固定 sales1 至 sales4。营销中心／部门／业务员系列均有 amounts、previousAmount、breakdown（fulfillment 与 fullPaymentStock 逐月数组）、previousBreakdown（上年12月两来源金额）。金额与 months 对齐，以 USD 主单位表示；无回款部门为零数组。无 receipts scope 时 months/departments 为空、marketingCenter=null；字段缺失不当作合法零额。
 
-Mock 适配器沿员工所属部门向上查找业务一至四部（包括其二三级子部门），写入订单 `salesDepartmentCode`；运营、采购、仓库等其他部门订单不计入这四部回款。正式 FOP 适配器应按后台组织 ID 映射该标准编码，不应依赖前端推断。演示组织中若改名或移出这些业务部，下一次刷新按新树归属计算；正式历史归属需由 FOP 提供订单上的业务部和负责人快照。
+每条收款必须有稳定 owner、department 与报表部门，缺失归属是契约错误，不再生成 __unassigned__ 业绩。已审核履约仓库及物流必须明确映射；全款备货物流为 null，页面显示“不适用”。
 
-业务员图一次仅显示表头选中的部门，切换部门不重新请求权限或扩展数据范围；年份与上方部门图共用。两张图都由服务器对同一授权订单集以整数分累计，逐部门逐月可核对。明细按订单分页，多商品显示在同一行。统计、列表均在用户权限过滤后计算，生产和Mock不会使用不同计数逻辑。
+Mock 适配器沿员工所属部门向上查找业务一至四部（包括其二三级子部门），写入订单及收款的 salesDepartmentCode；其他部门不纳入四部业绩资源。正式 FOP 适配器应按后台组织 ID 映射该标准编码，不应依赖前端推断。演示组织中若改名或移出这些业务部，下一次刷新按新树归属计算；正式归属需由可信 FOP 适配器明确收款／源单业务部及负责人映射。
+
+业务员图一次仅显示表头选中的部门，切换部门不重新请求权限或扩展数据范围；年份与上方部门图共用。两张回款图都由服务器对同一独立授权收款分录集以安全整数分累计，逐部门逐月可核对。数量明细按履约订单分页；金额明细按收款分录分页，多商品显示在同一行，totals 是分页前完整合计。统计、列表均在用户权限过滤后计算，生产和Mock不会使用不同计数逻辑。
 
 `data-access` 在Demo模式返回 `source:'mock', mode:'demo'` 和模拟身份；真实绑定不变。正式接口可返回 `source:'fop', mode:'live'`。UI明确区分两种来源。
 
-服务端 `FopPermissionGrant` 现在可提供 `analyticsScopes: ['rates','registrations','receipts']`。上游适配器必须分别授予需要的统计资源权限；缺少的范围返回空数据。注册／汇率提供方的返回主体需与当前绑定一致；回款仍由授权订单计算。成本、物流和CRM移交端口不因启用此Demo而获得真实FOP权限。
+服务端 `FopPermissionGrant` 现在可提供 `analyticsScopes: ['rates','registrations','receipts']`。上游适配器必须分别授予需要的统计资源权限；缺少的范围返回空数据。注册／汇率提供方的返回主体需与当前绑定一致；回款额外要求独立 allowedReceiptIds，缺失或空清单不授予收款权限；订单授权不能推导收款授权。客户统计无 receipts scope 时省略 amounts，收款端点返回403。成本、物流和CRM移交端口不因启用此Demo而获得真实FOP权限。
 
 ### 组织管理
 
@@ -83,6 +89,14 @@ Mock 适配器沿员工所属部门向上查找业务一至四部（包括其二
 
 ## 验证要点
 
+方案2验收场景（日期随 Demo 日历生成，以下以 2026-10-22 验收为例）：
+
+1. 在客户分析搜索编码 `PRE001`（Prepaid Demo Customer），查询9月至10月；该客户9月全款备货实收 `$1,000`，10月使用该库存履约只追加 `$60`。两月回款合计 `$1,060`，履约订单数只有1；10月不能补回产品款成为 `$1,060`，也不能再次扣除预付款。
+2. 点击9月金额进入收款明细，核对 `ST-PREPAID-1000`、来源全款备货、实收1000、手续费0、物流“不适用”；点击10月金额核对 `AF-PREPAID-0060` 履约实收60；点击数量仍是订单明细。月初运行时按实际 paidAt 的 UTC+8 月份验收，不硬编码自然当前月。
+3. 搜索 `STC001`／`STC002`／`STC003` 中有当前授权记录的仅备货客户，选择覆盖其收款的日期；订单量0但回款大于0时仍显示趋势、来源和明细。它们不占数量 Top10 名额，默认归入 other；other 金额下钻不能重新排名。
+4. Dashboard 部门与业务员回款来源拆分、客户金额、同条件收款明细及分页前 totals 应分别对账。押金备货不出现在有效收款页、不增加业绩或订单量；原始生成数据中的待审核／未来支付分录也不进入统计。
+5. 在测试替身中分别撤销 receipts scope、清空／省略 allowedReceiptIds、撤销岗位／改绑；验证无权金额不显示为0、明细403或合法空白名单结果、在途请求不返回旧授权数据。重复收款行ID、坏金额、未知已审核仓库／物流均应拒收为503。
+
 后端测试覆盖默认关闭／生产关闭、跨账号数据隔离、同一接口形状、队列与统计一致、真实组织ID关联、日期年份筛选、权限撤销、异常解析关闭、组织保存／循环／非空删除及并发移动。前端覆盖树层级与父级选项、创建保存、失败不伪造成功、成员调动、删除确认、四部门汇总、业务员筛选及金额核对、列表状态和搜索分页。
 
 ## 注册维度与营销中心汇总（2026-10-21）
@@ -91,7 +105,7 @@ Mock 适配器沿员工所属部门向上查找业务一至四部（包括其二
 
 - `registrations: {date,count}[]`：筛选范围内的逐日总数。
 - `registrationDepartments: {id,name,counts:number[],salespeople:{id,name,counts:number[]}[]}[]`：固定业务一至四部，所有 counts 数组与 registrations 的日期顺序对齐；业务员按稳定 ID 区分。同一天的业务员合计等于部门合计，四部合计等于总数。
-- `receipts.marketingCenter: {id:'marketing',name:'营销中心',amounts:number[]} | null`：与 months 对齐，逐月等于四部 amounts 的和。前端图例、柱状系列和数据表将营销中心排在四部之前；页面总额仅计算一次，业务员回款下拉仍仅包含四个部门。
+- `receipts.marketingCenter`（含 id/name/amounts/previousAmount/breakdown/previousBreakdown）或 null：与 months 对齐，逐月等于四部 amounts 的和。前端图例、柱状系列和数据表将营销中心排在四部之前；页面总额仅计算一次，业务员回款下拉仍仅包含四个部门。
 
 服务端 FOP 适配器可返回 `registrationEntries: {date,salesDepartmentCode,owner:{id,name},count}[]`。该明细必须先按请求主体的 FOP 用户权限过滤，且同一天、部门、业务员组合只能出现一次；后端校验日期、部门编码、员工标识、非负整数和重复项，再在所选范围内补齐零值并汇总三种视图。提供该字段时，以该明细为注册统计的唯一数据源；旧适配器未提供时仅保留原每日总数，部门／业务员维度显示无授权数据，不编造归属。
 

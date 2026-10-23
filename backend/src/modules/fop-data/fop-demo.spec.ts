@@ -70,16 +70,30 @@ describe('isolated mock FOP dataset', () => {
     expect(dashboard.receipts.departments.map(dept => dept.name)).toEqual(['业务一部', '业务二部', '业务三部', '业务四部'])
     expect((dashboard.receipts.departments as {amounts:number[]}[])[0].amounts.some((amount: number) => amount > 0)).toBe(true)
   })
+  it('displays the oldest task creation time in UTC+8 across timestamp offsets', async () => {
+    const provider = new DemoFopDataProvider(organizations, env)
+    const listOrders = provider.listOrders.bind(provider)
+    provider.listOrders = async (identity, grant) => (await listOrders(identity, grant)).map((row, index) => ({
+      ...row, createdAt: index === 0 ? '2026-10-01T23:30:00-04:00' : '2026-10-02T02:00:00Z',
+    }))
+    const dashboard = await new FopDataService(users, provider).getDashboard('alice', query)
+    expect(dashboard.tasks.find(task => task.kind === 'review')?.time).toBe('10:00')
+  })
   it('isolates tenants and rejects forged identity or another tenant grant', async () => {
     const provider = new DemoFopDataProvider(organizations, env)
     const a = { tenantId: 'demo:alice', userId: 'alice' }, b = { tenantId: 'demo:bob', userId: 'bob' }
     const grantA = await provider.resolvePermissions(a), grantB = await provider.resolvePermissions(b)
     expect(grantA.allowedOrderIds.some(id => grantB.allowedOrderIds.includes(id))).toBe(false)
     await expect(provider.listOrders(b, grantA)).rejects.toThrow()
+    await expect(provider.listReceipts(b, grantA)).rejects.toThrow()
     await expect(provider.resolvePermissions({ tenantId: 'demo:alice', userId: 'bob' })).rejects.toThrow()
     const rows = await provider.listOrders(a, { subject: a, allowedOrderIds: [grantA.allowedOrderIds[0]] })
     expect(rows).toHaveLength(1)
     expect(rows[0].tenantId).toBe('demo:alice')
+    const receipts = await provider.listReceipts(a, { ...grantA, allowedOrderIds: [], allowedReceiptIds: [grantA.allowedReceiptIds![0]] })
+    expect(receipts).toHaveLength(1)
+    expect(receipts[0].tenantId).toBe('demo:alice')
+    expect(await provider.listReceipts(a, { ...grantA, allowedReceiptIds: [] })).toEqual([])
   })
   it('provides six named demo carriers with independent warehouse and monthly distributions', async () => {
     const provider = new DemoFopDataProvider(organizations, env)
@@ -108,6 +122,8 @@ describe('isolated mock FOP dataset', () => {
     current.employees[0].departmentId = 'dept-2'
     const updated = (await provider.listOrders(identity, grant)).find(order => order.id === old.id)!
     expect(updated).toMatchObject({ owner: { name: 'Alice Renamed' }, department: { id: 'dept-2', name: 'Europe' }, salesDepartmentCode: 'sales2' })
+    const receipt = (await provider.listReceipts(identity, grant)).find(row => row.owner?.id === 'employee-1')!
+    expect(receipt).toMatchObject({ owner: { name: 'Alice Renamed' }, department: { id: 'dept-2', name: 'Europe' }, salesDepartmentCode: 'sales2' })
   })
   it('uses range and year filters for charts while keeping queues stable and receipts scoped', async () => {
     const provider = new DemoFopDataProvider(organizations, env)
@@ -119,9 +135,9 @@ describe('isolated mock FOP dataset', () => {
     expect(second.queues).toEqual(first.queues)
     expect(second.receipts.months).toHaveLength(12)
     const identity = { tenantId: 'demo:alice', userId: 'alice' }
-    const orders = await provider.listOrders(identity, await provider.resolvePermissions(identity))
-    const paid = orders.filter(order => order.paymentStatus === 'paid' && !order.cancelled && order.paidAt?.startsWith('2026'))
-    const expectedCents = paid.reduce((sum, order) => sum + Math.round(order.amount * 100), 0)
+    const receipts = await provider.listReceipts(identity, await provider.resolvePermissions(identity))
+    const paid = receipts.filter(receipt => receipt.paymentStatus === 'paid' && receipt.reviewStatus === 'approved' && receipt.receiptReviewStatus === 'approved' && receipt.sourceType !== 'deposit_stock' && !receipt.cancelled && receipt.currency === 'USD' && receipt.paidAt?.startsWith('2026'))
+    const expectedCents = paid.reduce((sum, receipt) => sum + Math.round(receipt.amount * 100), 0)
     expect(Math.round((first.receipts.departments as {amounts:number[]}[]).reduce((sum, dept) => sum + dept.amounts.reduce((a, b) => a + b, 0), 0) * 100)).toBe(expectedCents)
   })
   it('reconciles each department with its salespeople and excludes non-sales departments', async () => {
@@ -203,26 +219,26 @@ describe('analytics boundary validation', () => {
     const provider = new DemoFopDataProvider(organizations, env)
     const identity = { tenantId: 'demo:alice', userId: 'alice' }
     const grant = await provider.resolvePermissions(identity)
-    const one = (await provider.listOrders(identity, grant)).find(order => order.paymentStatus === 'paid' && order.paidAt?.startsWith('2026'))!
-    jest.spyOn(provider, 'resolvePermissions').mockResolvedValue({ ...grant, allowedOrderIds: [one.id] })
+    const one = (await provider.listReceipts(identity, grant)).find(receipt => receipt.paymentStatus === 'paid' && receipt.reviewStatus === 'approved' && receipt.receiptReviewStatus === 'approved' && receipt.sourceType === 'full_payment_stock' && receipt.paidAt?.startsWith('2026'))!
+    jest.spyOn(provider, 'resolvePermissions').mockResolvedValue({ ...grant, allowedOrderIds: [], allowedReceiptIds: [one.id] })
     const dashboard = await new FopDataService(users, provider).getDashboard('alice', query)
     expect(dashboard.receipts.departments).toHaveLength(4)
     const department = dashboard.receipts.departments.find(dept => dept.id === one.salesDepartmentCode)!
-    expect(dashboard.receipts.departments.flatMap(dept => dept.salespeople)).toEqual([{ id: one.owner!.id, name: one.owner!.name, previousAmount: 0, amounts: department.amounts }])
+    expect(dashboard.receipts.departments.flatMap(dept => dept.salespeople)).toMatchObject([{ id: one.owner!.id, name: one.owner!.name, previousAmount: 0, amounts: department.amounts }])
     expect(dashboard.receipts.departments.flatMap(dept => dept.amounts).reduce((a, b) => a + b, 0)).toBe(one.amount)
   })
   it('includes authorized December receipt baselines without counting them as current-year receipts', async () => {
     const provider = new DemoFopDataProvider(organizations, env)
     const identity = { tenantId: 'demo:alice', userId: 'alice' }
     const grant = await provider.resolvePermissions(identity)
-    const template = (await provider.listOrders(identity, grant)).find(order => order.paymentStatus === 'paid' && order.owner?.id === 'employee-1')!
-    const orders = [
-      { ...template, id: 'dec', orderNumber: 'DEC', paidAt: '2025-12-15T12:00:00Z', amount: 80 },
-      { ...template, id: 'jan', orderNumber: 'JAN', paidAt: '2026-01-15T12:00:00Z', amount: 100 },
-      { ...template, id: 'excluded', orderNumber: 'EXCLUDED', paidAt: '2025-12-15T12:00:00Z', amount: 9999 },
+    const template = (await provider.listReceipts(identity, grant)).find(receipt => receipt.paymentStatus === 'paid' && receipt.reviewStatus === 'approved' && receipt.receiptReviewStatus === 'approved' && receipt.sourceType !== 'deposit_stock' && receipt.owner?.id === 'employee-1')!
+    const receipts = [
+      { ...template, id: 'dec', documentNumber: 'DEC', paidAt: '2025-12-15T12:00:00Z', amount: 80 },
+      { ...template, id: 'jan', documentNumber: 'JAN', paidAt: '2026-01-15T12:00:00Z', amount: 100 },
+      { ...template, id: 'excluded', documentNumber: 'EXCLUDED', paidAt: '2025-12-15T12:00:00Z', amount: 9999 },
     ]
-    jest.spyOn(provider, 'resolvePermissions').mockResolvedValue({ ...grant, allowedOrderIds: ['dec', 'jan'] })
-    jest.spyOn(provider, 'listOrders').mockResolvedValue(orders)
+    jest.spyOn(provider, 'resolvePermissions').mockResolvedValue({ ...grant, allowedOrderIds: [], allowedReceiptIds: ['dec', 'jan'] })
+    jest.spyOn(provider, 'listReceipts').mockResolvedValue(receipts)
     const dashboard = await new FopDataService(users, provider).getDashboard('alice', query)
     expect(dashboard.receipts).toMatchObject({ previousMonth: '2025-12', marketingCenter: { previousAmount: 80 } })
     const department = dashboard.receipts.departments.find(dept => dept.id === template.salesDepartmentCode)!

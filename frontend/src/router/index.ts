@@ -25,6 +25,12 @@ const routes: RouteRecordRaw[] = [
       : { name: 'RoleWorkbench', params: { role: 'sales' }, query: route.query },
   },
   {
+    path: '/workbench/:role/receipts',
+    name: 'RoleWorkbenchReceipts',
+    component: () => import('@/views/autoflow/WorkbenchView.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
     path: '/workbench/:role',
     name: 'RoleWorkbench',
     component: () => import('@/views/autoflow/WorkbenchView.vue'),
@@ -165,7 +171,7 @@ router.beforeEach(async (to, _from, next) => {
       return next({ name: access.isAdmin ? 'WorkbenchRoleAdmin' : 'WorkbenchAccessDenied' })
     }
     if (to.meta.requiresAdmin && (!access.isAdmin || access.businessRole !== 'admin')) return next({ name: 'Dashboard' })
-    if (['Dashboard', 'RoleWorkbench'].includes(String(to.name))) {
+    if (['Dashboard', 'RoleWorkbench', 'RoleWorkbenchReceipts'].includes(String(to.name))) {
       const requested = to.name === 'Dashboard' ? (access.roles.includes('sales') ? 'sales' : access.roles[0]) : to.params.role
       if (!isWorkbenchRole(requested) || !access.roles.includes(requested)) return next({ name: 'WorkbenchAccessDenied' })
       if (to.name === 'Dashboard' && requested !== 'sales') return next({ name: 'RoleWorkbench', params: { role: requested } })

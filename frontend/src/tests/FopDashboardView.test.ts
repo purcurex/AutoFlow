@@ -1,9 +1,11 @@
 import { flushPromises, mount, RouterLinkStub } from '@vue/test-utils'
+import { createMemoryHistory, createRouter } from 'vue-router'
 import { createI18n } from 'vue-i18n'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import FopDashboardView from '@/views/autoflow/FopDashboardView.vue'
 import { getFopDashboard, type FopDashboardData } from '@/api/fop-dashboard'
 
+vi.mock('@/composables/useWorkbenchAccess', () => ({ refreshWorkbenchAccess: vi.fn().mockResolvedValue({ roles: ['allocation'] }) }))
 vi.mock('@/components/order-volume/OrderVolumeAnalysis.vue', () => ({ default: { template: '<div />' } }))
 vi.mock('@/components/layout', () => ({ AppLayout: { template: '<div><slot /></div>' } }))
 vi.mock('@/components/FopDataAccessNotice.vue', () => ({ default: { template: '<div />' } }))
@@ -17,7 +19,8 @@ const sample: FopDashboardData = {
   receipts: { currency: 'USD', months: [], departments: [] },
 }
 function mountView() {
-  return mount(FopDashboardView, { global: { plugins: [createI18n({ legacy: false, locale: 'zh-CN', messages: {} })], stubs: { RouterLink: RouterLinkStub } } })
+  const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: { template: '<div />' } }, { path: '/workbench/:role/receipts', name: 'RoleWorkbenchReceipts', component: { template: '<div />' } }] })
+  return mount(FopDashboardView, { global: { plugins: [router, createI18n({ legacy: false, locale: 'zh-CN', messages: {} })], stubs: { RouterLink: RouterLinkStub } } })
 }
 describe('FOP Dashboard interactions', () => {
   beforeEach(() => { vi.mocked(getFopDashboard).mockReset().mockResolvedValue(structuredClone(sample)) })
@@ -87,6 +90,49 @@ describe('FOP Dashboard interactions', () => {
     }
     expect(links.some(link => { const to = link.props('to'); return typeof to !== 'string' && to.query?.orderNumber === 'AUTHORIZED-ORDER' })).toBe(true)
     expect(wrapper.text()).toContain('暂无可查看的回款统计')
+    wrapper.unmount()
+  })
+  it('opens a monthly salesperson amount as authorized receipt details and shows its source breakdown', async () => {
+    vi.mocked(getFopDashboard).mockResolvedValue({ ...sample, receipts: { currency: 'USD', months: ['2026-02'], departments: [{ id: 'sales1', name: '业务一部', amounts: [125], breakdown: { fulfillment: [25], fullPaymentStock: [100] }, salespeople: [{ id: 'alice', name: 'Alice', amounts: [125], breakdown: { fulfillment: [25], fullPaymentStock: [100] } }] }] } })
+    const wrapper = mountView(); await flushPromises()
+    const cell = wrapper.findAll('.salesperson-panel tbody td')[2]!
+    expect(cell.find('button').exists()).toBe(true)
+    expect(cell.find('button').attributes('title')).toContain('全款备货 $100.00')
+    await cell.find('button').trigger('click'); await flushPromises()
+    expect(wrapper.vm.$router.currentRoute.value.name).toBe('RoleWorkbenchReceipts')
+    expect(wrapper.vm.$router.currentRoute.value.params.role).toBe('allocation')
+    expect(wrapper.vm.$router.currentRoute.value.query).toMatchObject({ from: '2026-02-01', to: '2026-02-28', department: 'sales1', ownerId: 'alice', warehouse: 'ALL' })
+    wrapper.unmount()
+  })
+  it('routes department chart amounts to the corresponding monthly receipt scope', async () => {
+    vi.mocked(getFopDashboard).mockResolvedValue({ ...sample, receipts: { currency: 'USD', months: ['2026-02'], departments: [{ id: 'sales1', name: '业务一部', amounts: [125], salespeople: [] }] } })
+    const wrapper = mountView(); await flushPromises()
+    wrapper.findAllComponents({ name: 'EChart' })[0]!.vm.$emit('select', { seriesId: 'sales1', dataIndex: 0 })
+    await flushPromises()
+    expect(wrapper.vm.$router.currentRoute.value.query).toMatchObject({ from: '2026-02-01', to: '2026-02-28', department: 'sales1' })
+    expect(wrapper.vm.$router.currentRoute.value.query).not.toHaveProperty('ownerId')
+    wrapper.unmount()
+  })
+  it('clamps current-month receipt links to today in UTC+8', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-10-21T16:05:00Z'))
+    vi.mocked(getFopDashboard).mockResolvedValue({ ...sample, receipts: { currency: 'USD', months: ['2026-10'], departments: [{ id: 'sales1', name: '业务一部', amounts: [125], salespeople: [] }] } })
+    const wrapper = mountView()
+    try {
+      await flushPromises()
+      await wrapper.find('.receipts-panel tbody button').trigger('click'); await flushPromises()
+      expect(wrapper.vm.$router.currentRoute.value.query).toMatchObject({ from: '2026-10-01', to: '2026-10-22' })
+    } finally { wrapper.unmount(); vi.useRealTimers() }
+  })
+  it('labels in-flight results with the submitted query rather than edited controls', async () => {
+    let resolve!: (value: FopDashboardData) => void
+    vi.mocked(getFopDashboard).mockReturnValueOnce(new Promise(r => { resolve = r }))
+    const wrapper = mountView()
+    const submitted = vi.mocked(getFopDashboard).mock.calls[0]![0]
+    await wrapper.findAll('input[type=date]')[0]!.setValue('2025-01-01')
+    await wrapper.find('select[aria-label="回款年份"]').setValue(String(submitted.year - 1))
+    resolve({ ...sample, registrations: [{ date: submitted.from, count: 1 }] }); await flushPromises()
+    expect(wrapper.find('.registration-panel .chart-summary').text()).toContain(`${submitted.from} — ${submitted.to}`)
+    expect(wrapper.find('.receipts-panel .panel-top p').text()).toContain(String(submitted.year))
     wrapper.unmount()
   })
   it('forwards date and year filters to the authorized aggregate provider', async () => {

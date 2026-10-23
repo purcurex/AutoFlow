@@ -38,11 +38,11 @@ describe('fulfillment order list', () => {
     expect(wrapper.findAll('tbody tr')).toHaveLength(1)
     expect(wrapper.find('tfoot th').text()).toContain('123 笔订单')
     expect(wrapper.find('tfoot .quantity-total').text()).toBe('456')
-    expect(wrapper.findAll('.order-currency-total').map(cell => cell.text())).toEqual(['US$100.20', '€9.80'])
+    expect(wrapper.findAll('.order-currency-total').map(cell => cell.text())).toEqual(['$100.20', '€9.80'])
     spy.mockResolvedValueOnce({ source: 'mock', total: 0, page: 1, pageSize: 10, items: [], totals: { orderCount: 0, itemQuantity: 0, amountsByCurrency: [] } })
     await router.push('/workbench/allocation?queue=allocation&search=empty'); await flushPromises()
     expect(wrapper.find('tfoot').text()).toContain('0 笔订单')
-    expect(wrapper.find('tfoot').text()).toContain('US$0.00')
+    expect(wrapper.find('tfoot').text()).toContain('$0.00')
     wrapper.unmount(); spy.mockRestore()
   })
   it('shows the required fields and only the selected business status, retaining its queue while searching', async () => {

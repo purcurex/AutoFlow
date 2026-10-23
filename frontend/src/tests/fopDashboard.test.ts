@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { getFopDashboard } from '@/api/fop-dashboard'
+import { getFopDashboard, localDate } from '@/api/fop-dashboard'
 
 const get = vi.hoisted(() => vi.fn())
 vi.mock('@/api/index', () => ({ default: { get } }))
@@ -11,6 +11,12 @@ describe('user-scoped dashboard provider', () => {
     get.mockResolvedValue(response)
     expect(await getFopDashboard({ from: '2026-10-15', to: '2026-10-21', year: 2026, userId: 'forged' } as Parameters<typeof getFopDashboard>[0], now)).toEqual(response)
     expect(get).toHaveBeenCalledWith('/autoflow/integrations/fop/dashboard', { params: { from: '2026-10-15', to: '2026-10-21', year: 2026 } })
+  })
+  it('uses UTC+8 for the day and year boundary even when the browser is in another timezone', async () => {
+    const boundary = new Date('2026-12-31T16:01:00Z')
+    expect(localDate(boundary)).toBe('2027-01-01')
+    get.mockResolvedValue({ source: 'fop' })
+    await expect(getFopDashboard({ from: '2027-01-01', to: '2027-01-01', year: 2027 }, boundary)).resolves.toEqual({ source: 'fop' })
   })
   it('returns a permission failure instead of synthetic counts', async () => {
     get.mockRejectedValue({ code: 'fop_binding_required' })

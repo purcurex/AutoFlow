@@ -37,6 +37,17 @@ describe('role workbench navigation', () => {
     expect(router.currentRoute.value.name).toBe('WorkbenchAccessDenied')
   })
 
+  it('guards receipt detail routes with the same role and login access as workbenches', async () => {
+    vi.mocked(getWorkbenchAccess).mockResolvedValue({ roles: ['allocation'], isAdmin: false })
+    await router.push('/workbench/allocation/receipts?from=2026-10-01&to=2026-10-31')
+    expect(router.currentRoute.value.name).toBe('RoleWorkbenchReceipts')
+    await router.push('/workbench/sales/receipts')
+    expect(router.currentRoute.value.name).toBe('WorkbenchAccessDenied')
+    localStorage.clear()
+    await router.push('/workbench/allocation/receipts')
+    expect(router.currentRoute.value.name).toBe('Login')
+  })
+
   it('lands non-sales users in their own assigned workbench', async () => {
     vi.mocked(getWorkbenchAccess).mockResolvedValue({ roles: ['allocation'], isAdmin: false })
     await router.push('/')
