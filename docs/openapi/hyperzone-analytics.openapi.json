@@ -862,7 +862,7 @@
         "tags": [
           "履约"
         ],
-        "description": "queue角色：review/exceptions=sales，dispatch=dispatch，procurement=procurement，allocation=allocation，shipping=warehouse。待审核：paid且reviewStatus=pending。待履约：paid、approved，shopifySync=pending/partial。待采购：paid、approved，supplierShipment=pending/partial。待配货：paid、approved，stockReadiness=incomplete，或ready且allocationReview=pending。待出库：paid、approved，stockReadiness=ready且allocationReview=approved，outbound=pending/partial。 五类均排除取消、未支付、退款。队列可重叠，每队列按订单ID去重；partial表示尚有未完成事项。unknown不推断；进度缺失或非法返回503。exceptions继续使用paid+未shipped+exception非null。按createdAt倒序/id排序，totals覆盖完整筛选集。保留dispatch/shipping键兼容旧URL，已不再使用旧发运/发货筛选逻辑。",
+        "description": "queue角色：review/exceptions=sales，dispatch=dispatch，procurement=procurement，allocation=allocation，shipping=warehouse。待审核：paid且reviewStatus=pending。待履约：paid、approved，shopifySync=pending/partial。待采购：paid、approved，supplierShipment=pending/partial。待配货：paid、approved，stockReadiness=incomplete，或ready且allocationReview=pending。待出库：paid、approved，stockReadiness=ready且allocationReview=approved，outbound=pending/partial。 五类均排除取消、未支付、退款。队列可重叠，每队列按订单ID去重；partial表示尚有未完成事项。unknown不推断；进度缺失或非法返回503。exceptions继续使用paid+未shipped+exception非null。按createdAt倒序/id排序，totals覆盖完整筛选集。保留dispatch/shipping键兼容旧URL，已不再使用旧发运/发货筛选逻辑。 五类待办强制按服务端登录账号取FOP租户/订单白名单与业务数据范围交集后统计和分页：salesperson仅owner.id等于绑定员工，department_manager仅管理部门及下级，business admin仅FOP明确授权的全部记录，none拒绝。系统管理员或全部岗位不扩大数据范围；搜索、精确订单查询、卡片/tasks数量、total和金额/数量合计均同范围。",
         "responses": {
           "200": {
             "description": "成功，裸JSON响应。",
@@ -1000,7 +1000,7 @@
         "tags": [
           "仪表盘"
         ],
-        "description": "from<=to，end-start<=365 天（含首尾最多 366 天），to<=UTC+8 今天，year<=UTC+8 当前年。from/to 仅注册，year 仅回款；队列／异常／任务不受日期筛选。rates/registrations/receipts 分别需 analyticsScopes；无 scope 返回空。注册明细按业务范围过滤，缺失时仅业务 admin 可读旧日汇总。回款以独立授权的 hzkj_real_receive_amt 分录为准：USD、paid、源单与收款单均 approved、未取消且支付已发生，来源履约＋全款备货，不含押金／样品，按 UTC+8 支付月归属。包含来源拆分和上年12月基线；非银行现金流保证。 逐图策略分别控制注册、部门回款、业务员回款；departmentReceipts为独立组织聚合，receipts为获授权业务员事实。禁止图表不能仅由浏览器隐藏，响应也不得包含其数据。",
+        "description": "from<=to，end-start<=365 天（含首尾最多 366 天），to<=UTC+8 今天，year<=UTC+8 当前年。from/to 仅注册，year 仅回款；队列／异常／任务不受日期筛选。rates/registrations/receipts 分别需 analyticsScopes；无 scope 返回空。注册明细按业务范围过滤，缺失时仅业务 admin 可读旧日汇总。回款以独立授权的 hzkj_real_receive_amt 分录为准：USD、paid、源单与收款单均 approved、未取消且支付已发生，来源履约＋全款备货，不含押金／样品，按 UTC+8 支付月归属。包含来源拆分和上年12月基线；非银行现金流保证。 逐图策略分别控制注册、部门回款、业务员回款；departmentReceipts为独立组织聚合，receipts为获授权业务员事实。禁止图表不能仅由浏览器隐藏，响应也不得包含其数据。 五类待办强制按服务端登录账号取FOP租户/订单白名单与业务数据范围交集后统计和分页：salesperson仅owner.id等于绑定员工，department_manager仅管理部门及下级，business admin仅FOP明确授权的全部记录，none拒绝。系统管理员或全部岗位不扩大数据范围；搜索、精确订单查询、卡片/tasks数量、total和金额/数量合计均同范围。",
         "responses": {
           "200": {
             "description": "成功，裸JSON响应。",

@@ -1,13 +1,13 @@
 # HyperZone 分析与销售工作台 IT 交付入口
 
-更新日期：2026-10-23（UTC+8）。最新修订五类履约待办：待审核、待履约、待采购、待配货、待出库；完整需求第9节、源码映射第12节及T31/H33/D30为新增对接入口。最新追加P0全局图表授权及员工数据隔离，完整需求第1.1–1.3节优先约束全部图表。本次在原有全量需求上追加销售个人收款／净毛利月、周、天统计；注册、部门／业务员回款、订单量、客户分析、物流运费、权限和全部历史待办保留。
+更新日期：2026-10-23（UTC+8）。最新修订五类履约待办：待审核、待履约、待采购、待配货、待出库；完整需求第9节（含9.1登录用户数据范围）、源码映射第12节及T31/H33/D30–D31为新增对接入口。最新追加P0全局图表授权及员工数据隔离，完整需求第1.1–1.3节优先约束全部图表。本次在原有全量需求上追加销售个人收款／净毛利月、周、天统计；注册、部门／业务员回款、订单量、客户分析、物流运费、权限和全部历史待办保留。
 
 ## 阅读顺序
 
 1. [完整需求HTML](HYPERZONE_ECHARTS_API_REQUIREMENTS.html) 或 [完整需求Markdown](HYPERZONE_ECHARTS_API_REQUIREMENTS.md)：业务、页面、字段、审计与验收的全量交付。源正文为 [REQUIREMENTS_OVERVIEW.md](REQUIREMENTS_OVERVIEW.md)，个人收款／净毛利在第8节。
 2. [OpenAPI](../openapi/hyperzone-analytics.openapi.json)：23项平台HTTP操作、112个模型，servers为`/api`；不是FOP原生接口目录。最新增加 `/autoflow/integrations/fop/chart-access` 与 `/users/{id}/chart-permissions`，包含内部FOP授权、客户当前归属和独立组织汇总字段契约。
 3. [FOP源码映射](HYPERZONE_FOP_SOURCE_MAPPING.md)：实体／字段／Java行号证据。第9节是物流成本，第10节是月结毛利、预计贡献和当前数据缺口。
-4. [后续待办与人工核对](FOLLOW_UP_CHECKLIST.md)：完整T01–T31、H01–H33、D01–D30；最新权限任务为T27–T30/H29–H32/D23–D29，按模板分配、回填和关闭。
+4. [后续待办与人工核对](FOLLOW_UP_CHECKLIST.md)：完整T01–T31、H01–H33、D01–D31；最新权限任务为T27–T30/H29–H32/D23–D29，按模板分配、回填和关闭。
 5. [验证记录](VERIFICATION.md)：仅此处记录实际执行的测试、HTTP、浏览器、生成物检查与限制；文档或Mock存在不能替代验证。详细消费检查见 [前端审计](ECHARTS_FRONTEND_AUDIT.md) 和 [后台契约审计](ECHARTS_BACKEND_CONTRACT_AUDIT.md)。
 
 ## 当前交付边界

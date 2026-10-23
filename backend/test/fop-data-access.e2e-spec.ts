@@ -600,12 +600,70 @@ describe('FOP user isolation HTTP API (repository and provider boundaries stubbe
     expect(restricted.body.tasks.map((task: any) => task.kind)).toEqual(['allocation'])
   })
 
+  it.each(['review', 'dispatch', 'procurement', 'allocation', 'shipping'])('isolates %s counts, tasks, search and totals by the logged-in employee and FOP grant', async queue => {
+    const progress = {
+      shopifySync: 'pending', supplierShipment: 'partial',
+      stockReadiness: queue === 'shipping' ? 'ready' : 'incomplete',
+      allocationReview: queue === 'shipping' ? 'approved' : 'pending', outbound: 'pending',
+    }
+    const candidate = (id: string, employeeId: string, departmentId: string, ancestors: string[], amount: number, quantity: number) => order(id, {
+      owner: { id: employeeId, name: employeeId }, department: { id: departmentId, name: departmentId }, departmentPathIds: ancestors,
+      amount, items: [{ sku: id, name: id, imageUrl: null, variant: '', quantity }],
+      reviewStatus: queue === 'review' ? 'pending' : 'approved', fulfillmentProgress: progress,
+    })
+    records = [
+      candidate('self', 'alice-owner', 'd1', ['d1'], 10, 2),
+      candidate('peer', 'peer-owner', 'd1-child', ['d1', 'd1-child'], 20, 3),
+      candidate('outside-department', 'other-owner', 'd2', ['d2'], 30, 4),
+      candidate('not-granted', 'alice-owner', 'd1', ['d1'], 1000, 100),
+    ]
+    records.push({ ...records[0], id: 'foreign-tenant', tenantId: 'tenant-2' }, { ...records[0] })
+    provider.resolvePermissions = async (subject: any) => ({ subject, allowedOrderIds: ['self', 'peer', 'outside-department', 'foreign-tenant'] })
+    // Even system administration and all five job roles cannot enlarge employee data scope.
+    accounts.get(alice).role = UserRole.ADMIN
+    accounts.get(alice).workbenchRoles = ['sales', 'dispatch', 'procurement', 'allocation', 'warehouse']
+    accounts.get(alice).businessDepartmentId = 'd1'
+    const cases = [
+      { role: 'salesperson', ids: ['self'], count: 1, amount: 10, quantity: 2, outside: 0 },
+      { role: 'department_manager', ids: ['peer', 'self'], count: 2, amount: 30, quantity: 5, outside: 0 },
+      { role: 'admin', ids: ['outside-department', 'peer', 'self'], count: 3, amount: 60, quantity: 9, outside: 1 },
+    ]
+    for (const example of cases) {
+      accounts.get(alice).businessRole = example.role
+      const page = (await list(`queue=${queue}&pageSize=100`).expect(200)).body
+      const summary = (await dashboard().expect(200)).body
+      expect(page.items.map((row: any) => row.id).sort()).toEqual(example.ids)
+      expect(page.total).toBe(example.count)
+      expect(page.totals).toEqual({ orderCount: example.count, itemQuantity: example.quantity, amountsByCurrency: [{ currency: 'USD', amount: example.amount }] })
+      expect(summary.queues[queue]).toBe(example.count)
+      expect(summary.tasks.find((task: any) => task.kind === queue)?.count).toBe(example.count)
+      const paged = (await list(`queue=${queue}&pageSize=1`).expect(200)).body
+      expect(paged.items).toHaveLength(1)
+      expect(paged.totals).toEqual(page.totals)
+      const searched = (await list(`queue=${queue}&search=outside-department`).expect(200)).body
+      const exact = (await list(`queue=${queue}&orderNumber=OUTSIDE-DEPARTMENT`).expect(200)).body
+      expect(searched.total).toBe(example.outside)
+      expect(exact.total).toBe(example.outside)
+      expect((await list(`queue=${queue}&search=not-granted`).expect(200)).body.total).toBe(0)
+      await list(`queue=${queue}&userId=bob-fop`).expect(400)
+    }
+    accounts.get(alice).businessRole = 'none'
+    await list(`queue=${queue}`).expect(403)
+    await dashboard().expect(403)
+  })
+
   it('returns empty data for an empty allowlist, including for administrators', async () => {
     provider.resolvePermissions = async (identity: any) => ({ subject: identity, allowedOrderIds: [] })
     provider.listOrders = () => { throw new Error('Must not enumerate without allowed IDs') }
     expect((await access(bob).expect(200)).body.status).toBe('ready')
-    expect((await list('queue=review', bob).expect(200)).body.total).toBe(0)
-    expect((await dashboard(bob).expect(200)).body.queues.review).toBe(0)
+    for (const queue of ['review', 'dispatch', 'procurement', 'allocation', 'shipping']) {
+      const page = (await list(`queue=${queue}`, bob).expect(200)).body
+      expect(page.total).toBe(0)
+      expect(page.totals).toEqual({ orderCount: 0, itemQuantity: 0, amountsByCurrency: [] })
+    }
+    const summary = (await dashboard(bob).expect(200)).body
+    expect(summary.queues).toEqual({ review: 0, dispatch: 0, procurement: 0, allocation: 0, shipping: 0 })
+    expect(summary.tasks).toEqual([])
   })
 
   it('sorts authorized orders deterministically before paging regardless of provider order', async () => {

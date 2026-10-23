@@ -439,6 +439,11 @@
 | D30 | 验收数据 | 一单同时待履约+待采购+待配货；一单齐套待审核；一单配货已审待出库；一单部分出库；一单完成；未付款、已取消、退款、未知状态反例 | 同队列订单ID只计一次，队列可交叠；角色不可越权，未知不推断；金额统计规则不变 |
 
 
+| 编号 | 类型 | 待办／需提供信息 | 验收结果 |
+| --- | --- | --- | --- |
+| D31 | 五待办权限验收 | 使用业务员A、同部门业务员B、下级部门成员、外部门成员、业务管理员及仅系统管理员账号，回放同一批订单；FOP授权包含与不包含样本均保留 | 待审核／待履约／待采购／待配货／待出库逐项核对卡片、tasks、清单、搜索和全量合计。全部岗位或系统管理员不能扩大业务范围；空白名单不泄露任何待办数据 |
+
+
 ## 8. 销售个人收款与净毛利（月／周／天）
 
 本节追加2026-10-23需求，保留前述所有模块和编号。交付目标是本工程销售工作台、BFF聚合／明细、独立授权、Mock和机器契约同步；其完成及测试结论以 `VERIFICATION.md` 为准。**这些产物不等于真实FOP已发布查询、具备历史利润账本或通过生产财务验收。** 后台源码本轮只读，真实适配保持未配置边界。
@@ -519,6 +524,22 @@ Dashboard 依次显示 **待审核 → 待履约 → 待采购 → 待配货 →
 - 保留 `dispatch/shipping` URL 与 API 键及岗位授权，以兼容旧收藏；**这两个键的业务筛选口径已经更新**。既有 `procurementStatus/allocationStatus/dispatchStatus/shippingStatus` 保留兼容，前五队列不再使用这些旧粗粒度字段；异常队列旧口径保持。
 - `dashboard.queues` 新增必填 `procurement`；`tasks.kind/id` 扩展到五个队列，有权限且非空才输出，顺序与卡片相同。日期控件仍不影响待办队列。
 - 全局数据隔离继续生效：先取登录账号对应的 FOP 订单白名单与本人／部门／管理员交集，再按岗位过滤和统计；没有采购岗位权限不能查看采购清单。卡片、清单、分页合计必须来自同一口径。
+
+### 9.1 登录用户数据范围（五类待办强制规则）
+
+五类待办均使用服务端会话中的登录账号，取 **FOP租户及订单授权白名单 ∩ 账号业务数据范围 ∩ 岗位入口权限 ∩ 队列业务条件**。顺序为先授权过滤，再统计、搜索和分页；不得先汇总全部订单后仅隐藏明细。
+
+| 账号业务数据权限 | 五类待办可见数据 |
+| --- | --- |
+| 业务员 | 订单归属业务员工ID等于当前账号绑定员工ID的数据 |
+| 部门经理 | 当前管理部门及其下级部门成员的数据，包含本人符合部门归属的数据 |
+| 业务数据管理员 | FOP明确授权的全部业务订单，不能突破FOP白名单或跨租户 |
+| 无业务数据权限 | 拒绝业务待办访问，不因系统管理员身份获得业务数据 |
+
+系统管理权限与业务数据权限独立；即使拥有全部五类岗位或系统管理员身份，也不能扩大本人／部门数据范围。没有对应岗位权限时卡片数量为0，清单接口拒绝访问；FOP返回空订单白名单时卡片、待办及列表合计均为空或0；未绑定、未配置或授权查询失败时明确报错，不回退全量数据。卡片数量、履约待办数量、订单列表、搜索、精确订单号查询、分页总数、金额及商品数量合计保持同一授权范围。客户端传入其他用户或租户身份一律拒绝，不能切换查看他人数据。
+
+验收账号 `test@autoflow.local` 已按既有授权配置为业务数据管理员，看到全部演示订单符合其权限；验收员工隔离须使用绑定不同员工／部门的数据权限配置。本规则不改变五卡结构或已约定队列条件。
+
 
 **当前落地**：前端、BFF、Mock、OpenAPI 已同步；真实 FOP 网络适配器仍未接通。本次不修改财务统计规则或 FOP 源代码。字段证据见源码映射第12节，后续联调见 T31/H33/D30。
 
@@ -991,7 +1012,7 @@ Accept: application/json
 `GET /api/autoflow/integrations/fop/fulfillment-orders` · operationId: `getFulfillmentOrders`
 
 
-queue角色：review/exceptions=sales，dispatch=dispatch，procurement=procurement，allocation=allocation，shipping=warehouse。待审核：paid且reviewStatus=pending。待履约：paid、approved，shopifySync=pending/partial。待采购：paid、approved，supplierShipment=pending/partial。待配货：paid、approved，stockReadiness=incomplete，或ready且allocationReview=pending。待出库：paid、approved，stockReadiness=ready且allocationReview=approved，outbound=pending/partial。 五类均排除取消、未支付、退款。队列可重叠，每队列按订单ID去重；partial表示尚有未完成事项。unknown不推断；进度缺失或非法返回503。exceptions继续使用paid+未shipped+exception非null。按createdAt倒序/id排序，totals覆盖完整筛选集。保留dispatch/shipping键兼容旧URL，已不再使用旧发运/发货筛选逻辑。
+queue角色：review/exceptions=sales，dispatch=dispatch，procurement=procurement，allocation=allocation，shipping=warehouse。待审核：paid且reviewStatus=pending。待履约：paid、approved，shopifySync=pending/partial。待采购：paid、approved，supplierShipment=pending/partial。待配货：paid、approved，stockReadiness=incomplete，或ready且allocationReview=pending。待出库：paid、approved，stockReadiness=ready且allocationReview=approved，outbound=pending/partial。 五类均排除取消、未支付、退款。队列可重叠，每队列按订单ID去重；partial表示尚有未完成事项。unknown不推断；进度缺失或非法返回503。exceptions继续使用paid+未shipped+exception非null。按createdAt倒序/id排序，totals覆盖完整筛选集。保留dispatch/shipping键兼容旧URL，已不再使用旧发运/发货筛选逻辑。 五类待办强制按服务端登录账号取FOP租户/订单白名单与业务数据范围交集后统计和分页：salesperson仅owner.id等于绑定员工，department_manager仅管理部门及下级，business admin仅FOP明确授权的全部记录，none拒绝。系统管理员或全部岗位不扩大数据范围；搜索、精确订单查询、卡片/tasks数量、total和金额/数量合计均同范围。
 
 
 实现状态：implemented
@@ -1056,7 +1077,7 @@ Accept: application/json
 `GET /api/autoflow/integrations/fop/dashboard` · operationId: `getFopDashboard`
 
 
-from<=to，end-start<=365 天（含首尾最多 366 天），to<=UTC+8 今天，year<=UTC+8 当前年。from/to 仅注册，year 仅回款；队列／异常／任务不受日期筛选。rates/registrations/receipts 分别需 analyticsScopes；无 scope 返回空。注册明细按业务范围过滤，缺失时仅业务 admin 可读旧日汇总。回款以独立授权的 hzkj_real_receive_amt 分录为准：USD、paid、源单与收款单均 approved、未取消且支付已发生，来源履约＋全款备货，不含押金／样品，按 UTC+8 支付月归属。包含来源拆分和上年12月基线；非银行现金流保证。 逐图策略分别控制注册、部门回款、业务员回款；departmentReceipts为独立组织聚合，receipts为获授权业务员事实。禁止图表不能仅由浏览器隐藏，响应也不得包含其数据。
+from<=to，end-start<=365 天（含首尾最多 366 天），to<=UTC+8 今天，year<=UTC+8 当前年。from/to 仅注册，year 仅回款；队列／异常／任务不受日期筛选。rates/registrations/receipts 分别需 analyticsScopes；无 scope 返回空。注册明细按业务范围过滤，缺失时仅业务 admin 可读旧日汇总。回款以独立授权的 hzkj_real_receive_amt 分录为准：USD、paid、源单与收款单均 approved、未取消且支付已发生，来源履约＋全款备货，不含押金／样品，按 UTC+8 支付月归属。包含来源拆分和上年12月基线；非银行现金流保证。 逐图策略分别控制注册、部门回款、业务员回款；departmentReceipts为独立组织聚合，receipts为获授权业务员事实。禁止图表不能仅由浏览器隐藏，响应也不得包含其数据。 五类待办强制按服务端登录账号取FOP租户/订单白名单与业务数据范围交集后统计和分页：salesperson仅owner.id等于绑定员工，department_manager仅管理部门及下级，business admin仅FOP明确授权的全部记录，none拒绝。系统管理员或全部岗位不扩大数据范围；搜索、精确订单查询、卡片/tasks数量、total和金额/数量合计均同范围。
 
 
 实现状态：implemented
@@ -6601,6 +6622,17 @@ MD/HTML从同一需求源及OpenAPI生成，包含FOP源码字段映射和后续
 独立最终代码审查（6e9a3c9..43df7d7）：无Critical/Important/Minor问题。真实FOP多包裹、部分取消／退款、撤审的归一化暂不作生产正确性结论，仍须T31/H33样本联调。
 
 
+### 五类待办登录用户范围专项回归（2026-10-23）
+
+本次核查确认五队列原有实现已经在BFF授权过滤后统计，无需改动页面结构或业务筛选算法；补充5组HTTP权限回归测试和明确需求。
+
+- `npm run test:e2e --prefix backend -- --testPathPatterns=fop-data-access`：64项通过（原59项，加五类队列各1组场景矩阵）。使用真实HTTP鉴权/控制器/BFF，账号仓储与FOP provider边界使用测试替身；不代表已接通生产FOP。
+- 每队列矩阵：业务员只见self（$10/2件），经理见self+下级部门peer（$30/5件），业务数据管理员见FOP授权三单（$60/9件）；同属本人但未获FOP授权、外租户、重复订单均不得增加结果。
+- 同时验证卡片及tasks数量、订单ID、金额/数量合计、分页后全量合计、模糊搜索、精确订单号查询；伪造userId返回400，无业务数据权限返回403。
+- 将账号系统角色设为admin并授予全部五岗位，仍须遵守本人／部门范围。FOP空订单白名单下，包括业务管理员的五卡及清单合计全部为0。
+- 未修改实际员工或验收账号权限。`test@autoflow.local`此前已授予全部演示业务数据，看到全部数据属于预期行为。
+
+
 ## 15. HyperZone FOP 源码字段映射
 
 
@@ -6912,14 +6944,14 @@ FOP收入使用收款 `hzkj_exrate`；没有收款汇率时回退当前 `bd_exra
 ## 16. IT 交付导航与实施顺序
 
 
-更新日期：2026-10-23（UTC+8）。最新修订五类履约待办：待审核、待履约、待采购、待配货、待出库；完整需求第9节、源码映射第12节及T31/H33/D30为新增对接入口。最新追加P0全局图表授权及员工数据隔离，完整需求第1.1–1.3节优先约束全部图表。本次在原有全量需求上追加销售个人收款／净毛利月、周、天统计；注册、部门／业务员回款、订单量、客户分析、物流运费、权限和全部历史待办保留。
+更新日期：2026-10-23（UTC+8）。最新修订五类履约待办：待审核、待履约、待采购、待配货、待出库；完整需求第9节（含9.1登录用户数据范围）、源码映射第12节及T31/H33/D30–D31为新增对接入口。最新追加P0全局图表授权及员工数据隔离，完整需求第1.1–1.3节优先约束全部图表。本次在原有全量需求上追加销售个人收款／净毛利月、周、天统计；注册、部门／业务员回款、订单量、客户分析、物流运费、权限和全部历史待办保留。
 
 ### 阅读顺序
 
 1. [完整需求HTML](HYPERZONE_ECHARTS_API_REQUIREMENTS.html) 或 [完整需求Markdown](HYPERZONE_ECHARTS_API_REQUIREMENTS.md)：业务、页面、字段、审计与验收的全量交付。源正文为 [REQUIREMENTS_OVERVIEW.md](REQUIREMENTS_OVERVIEW.md)，个人收款／净毛利在第8节。
 2. [OpenAPI](../openapi/hyperzone-analytics.openapi.json)：23项平台HTTP操作、112个模型，servers为`/api`；不是FOP原生接口目录。最新增加 `/autoflow/integrations/fop/chart-access` 与 `/users/{id}/chart-permissions`，包含内部FOP授权、客户当前归属和独立组织汇总字段契约。
 3. [FOP源码映射](HYPERZONE_FOP_SOURCE_MAPPING.md)：实体／字段／Java行号证据。第9节是物流成本，第10节是月结毛利、预计贡献和当前数据缺口。
-4. [后续待办与人工核对](FOLLOW_UP_CHECKLIST.md)：完整T01–T31、H01–H33、D01–D30；最新权限任务为T27–T30/H29–H32/D23–D29，按模板分配、回填和关闭。
+4. [后续待办与人工核对](FOLLOW_UP_CHECKLIST.md)：完整T01–T31、H01–H33、D01–D31；最新权限任务为T27–T30/H29–H32/D23–D29，按模板分配、回填和关闭。
 5. [验证记录](VERIFICATION.md)：仅此处记录实际执行的测试、HTTP、浏览器、生成物检查与限制；文档或Mock存在不能替代验证。详细消费检查见 [前端审计](ECHARTS_FRONTEND_AUDIT.md) 和 [后台契约审计](ECHARTS_BACKEND_CONTRACT_AUDIT.md)。
 
 ### 当前交付边界
