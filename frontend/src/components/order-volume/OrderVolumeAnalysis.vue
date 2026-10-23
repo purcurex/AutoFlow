@@ -134,7 +134,6 @@ onBeforeUnmount(() => { off(); reset() })
 
 <template>
   <section v-if="chartVisible" class="ov-panel" :data-module="customer ? 'customer-volume' : 'order-volume'">
-    <p class="ov-scope" data-chart-scope>{{ chartAccess?.scopeLabel }}</p>
     <header class="ov-header"><div class="ov-heading"><h2><component :is="customer ? UsersRound : BarChart3" :size="18" />{{ customer ? t('客户订单分析', 'Customer fulfillment and collections') : t('业务订单量分析', 'Business order analysis') }}<span v-if="data?.source === 'mock'" class="ov-badge">MOCK</span></h2><p>{{ customer ? t('履约订单量 + 回款业绩金额 · 前十客户＋其他 · 支持分仓对比', 'Fulfillment orders + collections performance · Top 10 + Other · Compare warehouses') : t('从服务商、组织与业务员查看订单结构及变化', 'Explore order volume by carrier, organization and salesperson') }}</p></div>
       <form class="ov-filters" @submit.prevent="applyFilters">
         <label v-if="!customer && grain !== 'week'">{{ t('年份', 'Year') }}<select v-model.number="year" aria-label="订单量年份"><option v-for="y in years" :key="y">{{ y }}</option></select></label>

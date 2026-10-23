@@ -13,7 +13,7 @@ import { onSessionReset } from '@/utils/session'
 import { volumeColor } from '@/utils/order-volume'
 import '@/components/order-volume/order-volume.css'
 
-const { access: chartAccess, refresh: refreshChartAccess, applyResponse: applyChartResponse, clear: clearChartAccess, visible: chartVisible, canViewDetails } = useChartAccess(() => 'sales_performance')
+const { refresh: refreshChartAccess, applyResponse: applyChartResponse, clear: clearChartAccess, visible: chartVisible, canViewDetails } = useChartAccess(() => 'sales_performance')
 const { locale } = useI18n()
 const t = (cn: string, en: string) => String(locale.value).startsWith('zh') ? cn : en
 const today = new Date(Date.now() + 8 * 3600_000).toISOString().slice(0, 10)
@@ -107,7 +107,6 @@ onBeforeUnmount(() => { off(); clear() })
 
 <template>
   <section v-if="chartVisible" class="ov-panel performance-panel">
-    <p class="ov-scope" data-chart-scope>{{ chartAccess?.scopeLabel }}</p>
     <header class="ov-header">
       <div class="ov-heading"><h2><ChartNoAxesCombined :size="19" />{{ t('个人收款与毛利', 'Personal receipts and profit') }}<span v-if="data?.source === 'mock'" class="ov-badge">MOCK</span></h2><p>{{ t('独立查看收款与净毛利贡献', 'Track receipts and net profit contributions') }}</p></div>
       <form class="ov-filters" @submit.prevent="applyFilters">

@@ -47,7 +47,7 @@ const orderData = { chartAccess: allowedChart, source: 'mock', query: { category
 it('renders counts while disabling every underlying order detail action', async () => {
   get.mockImplementation(async (url, config) => url.endsWith('/chart-access') ? { charts: [allowedChart] } : { ...orderData, query: config.params })
   const wrapper = await setup(OrderVolumeAnalysis)
-  expect(wrapper.text()).toContain('仅本人')
+  expect(wrapper.text()).not.toContain('仅本人')
   const details = wrapper.findAll('button').filter(button => button.text().includes('订单') || button.element.closest('.ov-period-table'))
   expect(details.length).toBeGreaterThan(0)
   expect(details.every(button => button.attributes('disabled') !== undefined)).toBe(true)
@@ -75,7 +75,7 @@ it('removes previously visible data and dialogs after a capability is revoked', 
 it('applies the statistics response capabilities when grants change between authorization and query', async () => {
   get.mockImplementation(async (url, config) => url.endsWith('/chart-access') ? { charts: [{ ...allowedChart, canViewDetails: true, canExport: true, scopeLabel: '原部门范围' }] } : { ...orderData, query: config.params, chartAccess: { ...allowedChart, scopeLabel: '已缩小到本人' } })
   const wrapper = await setup(OrderVolumeAnalysis)
-  expect(wrapper.text()).toContain('已缩小到本人')
+  expect(wrapper.text()).not.toContain('已缩小到本人')
   expect(wrapper.text()).not.toContain('原部门范围')
   const button = wrapper.findAll('button').find(button => button.text().includes('查看订单明细'))!
   expect(button.attributes('disabled')).toBeDefined()

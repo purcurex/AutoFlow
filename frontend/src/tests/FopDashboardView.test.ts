@@ -297,7 +297,7 @@ it('shows independent department summaries without record drilldown or employee 
   vi.mocked(getFopDashboard).mockResolvedValue({ ...sample, chartAccess: [{ chartId: 'department_receipts', visible: true, scopeLabel: '业务二部组织汇总', dataScope: 'none', summaryOnly: true, summaryDepartments: ['sales2'], canViewDetails: false, canExport: false }], departmentReceipts: { currency: 'USD', months: ['2026-10'], departments: [{ id: 'sales2', name: '业务二部', amounts: [765], salespeople: [] }] } } as FopDashboardData)
   const wrapper = mountView(); await flushPromises()
   expect(wrapper.text()).toContain('$765.00')
-  expect(wrapper.text()).toContain('业务二部组织汇总')
+  expect(wrapper.find('.receipts-panel h2').text()).toBe('部门月度回款分析')
   expect(wrapper.find('.salesperson-panel').exists()).toBe(false)
   expect(wrapper.find('.receipts-panel .receipt-link').exists()).toBe(false)
   wrapper.unmount()
