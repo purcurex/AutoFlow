@@ -12272,8 +12272,53 @@ describe('ECharts audit: assertions of current incorrect behavior', () =&gt; {
 <p>逐项文件与行号证据见 <code>HYPERZONE_FOP_SOURCE_MAPPING.md</code> 第10节；这五项是已读源码限制，不是对线上部署行为的猜测。执行T21–T26、回填H23–H28并完成D16–D22／AT-18–AT-24后才能判定真实接入完成。本文不记录未经运行的测试通过数量。</p>
 <h2 id="hz-section-13">13. 本次验证记录与限制</h2>
 <p>业务方案版本：2026-10-23（UTC+8）；本轮追加销售个人收款与净毛利，以下保留各轮独立验证记录。环境：macOS、Node.js 22.23.3、npm 10.9.9、本地隔离 PostgreSQL 16。执行结果不等同于生产 FOP 验收。</p>
+<h3>最终集成验证（2026-10-23 UTC+8）</h3>
+<p>完成销售统计后，远程master更新至<code>8172a96</code>，包含1688寻源功能及其74条历史提交。本地销售功能提交<code>536ffe3</code>与其无文件冲突，采用普通merge保留双方实现和历史，没有强推覆盖。以下是合并后的最终结果，前述605项为合并前销售功能基线：</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>检查</th>
+<th>最终实际结果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>全量前端</td>
+<td>45文件、221用例通过</td>
+</tr>
+<tr>
+<td>全量后端</td>
+<td>53套、435用例通过</td>
+</tr>
+<tr>
+<td>全量E2E</td>
+<td>4套、100用例通过；隔离autoflow_test数据库</td>
+</tr>
+<tr>
+<td>合计</td>
+<td><strong>756用例通过</strong>；不叠加重复运行及历史记录</td>
+</tr>
+<tr>
+<td>构建与规则</td>
+<td>前后端lint、独立目录backend tsc、frontend生产build及资产打包通过</td>
+</tr>
+<tr>
+<td>HTTP对账</td>
+<td>重新执行28份响应schema/格式校验、12组分期明细对账和4组非法请求验证，均通过</td>
+</tr>
+<tr>
+<td>生产冒烟</td>
+<td>新编译工程在隔离进程完成health+数据库up、首页/Dashboard/销售工作台/客户工作流4条SPA路径及CSP/nosniff检查</td>
+</tr>
+<tr>
+<td>本地运行数据库</td>
+<td>先备份autoflow_local_demo，再执行远程工程新增4条寻源迁移，均成功；没有修改生产FOP数据库</td>
+</tr>
+</tbody>
+</table></div>
+<p>依赖按合并后的锁文件安装（<code>npm ci --ignore-scripts</code>）；<code>sharp</code>实际导入及相关测试通过。未执行真实1688外部调用、生产FOP调用或生产压测。销售分析源码和公开契约在merge中未发生冲突改写；本节是最终集成状态。</p>
 <h3>本轮销售个人收款与净毛利验证（2026-10-23 UTC+8）</h3>
-<p>本轮前端／BFF／Mock实现并保留真实FOP接入边界；未改写 <code>/Library/VSCode/dtr5b</code>。以下 <strong>605项</strong> 为最终完整回归：前端187＋后端318＋E2E100，不叠加历史基线或独立复核重复用例。</p>
+<p>本轮前端／BFF／Mock实现并保留真实FOP接入边界；未改写 <code>/Library/VSCode/dtr5b</code>。以下 <strong>605项</strong> 为合并前销售功能完整回归：前端187＋后端318＋E2E100，不叠加历史基线或独立复核重复用例。</p>
 <div class="table-wrap"><table>
 <thead>
 <tr>
@@ -13087,6 +13132,8 @@ hzkj_total_amount = hzkj_fre_quo_amount + hzkj_fixed_tax_fee
 </tbody>
 </table></div>
 <p>每项资料标注答复人、环境、版本、日期及差异处置。资料已提供、接口可调用、Mock已演示和真实财务验收是不同阶段；仅在对应证据齐全后关闭清单。</p>
+<h3>同仓库最新客户开发功能</h3>
+<p>交付代码已普通合并远程<code>8172a96</code>的1688寻源功能，保留远程实现与历史。客户开发／寻源专项设计与执行记录位于 <code>docs/superpowers/specs/</code> 和 <code>docs/superpowers/plans/</code> 的2026-08-03至2026-08-05文档；其外部供应商接口不是本21项FOP分析HTTP契约。最终集成验证756项及本地数据库迁移记录见VERIFICATION.md。IT应同时按合并后的package-lock安装依赖，并应用随工程附带的数据库迁移。</p>
 <h2 id="hz-section-16">16. 规范来源与文档再生成</h2>
 <p>OpenAPI 结构参考 <a href="https://spec.openapis.org/oas/v3.1.1.html" rel="noopener noreferrer">OpenAPI Specification 3.1.1</a>。产品事实来自本仓库源码和本次诊断，不来自通用规范。HTML 使用项目共享 HyperZone 样式、内嵌 CSS 和透明 SVG Logo，可离线打开及打印。</p>
 <pre><code class="language-sh">python3 -m venv .runtime/local-demo/docs-venv
