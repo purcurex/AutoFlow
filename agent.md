@@ -8,6 +8,10 @@
 - 时间文案及统计口径统一 `UTC+8`；传输时间戳保留明确时区，日/月归属按 `+08:00` 换算。
 - 已审核履约订单的仓库和物流渠道由 FOP 保证完整。全款备货在国内仓库备货，物流渠道不适用，不能归为“其他物流服务商”。
 - 物流运费分析当前按已审核发运单的 `hzkj_actual_freight` / `hzkj_actual_freight_time` 统计已确认成本；确认时间不是银行付款日，不能据此承诺最终账单完整性。物流商原币在 `hzkj_textfield1`，必须显式换算 USD；首次正数快照后续调价/退款仍需对接确认。成本采用独立 `allowedFreightIds` 和 `freight` 授权，不能从订单权限推导。
+- 销售个人毛利采用净毛利的期间贡献：C审核月结取 `hzkj_gp_net_delta_total`／分录delta及冻结业务员，不能重复累计整单快照。收款独立按paidAt，利润按recognitionMonth/date；同订单同月已结算替换预计，跨月调整保留原归属。预计与已结算分别汇总，不合成总利润。
+- 未结算必须使用预估运费和截至本次查询asOf已知收入／成本。现有FOP实时毛利无运费按0、采购无cutoff、备货cutoff未使用、仓储不按通知日期截止，不能直接当历史预计日报。预计日周需事件台账／快照差分；新平台查询不提供历史asOf审批回放。
+- 完整月可取无日归属的审核月结；周／天／部分月不能均摊，返回null／待拆分并保留月参考。全款备货回款不再次成为利润收入，利润按有效使用转入；收入已含调整时不可重复加算。冻结CNY通过明确历史FX换USD，保留原额／取价日／来源及尾差审计。
+- 利润采用独立 `sales_profit` 和 `allowedProfitIds`，不从订单／收款／运费授权推导；冻结业绩归属与当前查看权限分开。本工程前端、BFF、Mock和契约不代表FOP生产ready；IT入口见 `docs/analytics/IT_HANDOFF.md`，生产剩余工作见T21–T26及H23–H28。
 - 已确认后台字段与证据见 `docs/analytics/HYPERZONE_FOP_SOURCE_MAPPING.md`；需求及 OpenAPI 见 `docs/analytics/`、`docs/openapi/`。
 
 未经单独安排，不修改 `/Library/VSCode/dtr5b` 的生产应用实现；本工程内对接层、Mock 与契约同步维护。

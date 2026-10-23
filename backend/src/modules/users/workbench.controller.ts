@@ -1,3 +1,4 @@
+import { SalesPerformanceQueryDto, SalesPerformanceDetailsDto } from '../fop-data/sales-performance.dto'
 import { FreightQueryDto, FreightDetailsDto } from '../fop-data/fop-freight.dto'
 import { AllowWithoutBusinessData } from '../auth/management-access.decorator'
 import { Controller, Get, Header, Param, Query, Request, UseGuards } from '@nestjs/common'
@@ -88,6 +89,18 @@ export class FulfillmentOrdersController {
   @Header('Cache-Control', 'private, no-store')
   getFreightDetails(@Request() req: ExpressRequest, @Query() query: FreightDetailsDto) {
     return this.data.getFreightDetails(req.user!.userId, query)
+  }
+
+  @Get('sales-performance')
+  @Header('Cache-Control', 'private, no-store')
+  getSalesPerformance(@Request() req: ExpressRequest, @Query() query: SalesPerformanceQueryDto) {
+    return this.data.getSalesPerformance(req.user!.userId, query)
+  }
+
+  @Get('sales-performance/details')
+  @Header('Cache-Control', 'private, no-store')
+  getSalesPerformanceDetails(@Request() req: ExpressRequest, @Query() query: SalesPerformanceDetailsDto) {
+    return this.data.getSalesPerformanceDetails(req.user!.userId, query)
   }
 
   @Get('dashboard')

@@ -1,3 +1,5 @@
+import { demoProfits } from './sales-performance-demo'
+import type { FopProfitCandidate } from './sales-performance.types'
 import { demoFreight } from './fop-freight-demo'
 import type { FopFreightCandidate } from './fop-freight.types'
 import { businessDate } from './fop-business-time'
@@ -65,7 +67,7 @@ export class DemoFopDataProvider extends FopDataProvider {
   }
   async resolvePermissions(identity: Readonly<FopIdentity>): Promise<FopPermissionGrant> {
     this.assertIdentity(identity)
-    return { subject: { ...identity }, allowedOrderIds: (await this.orders(identity)).map(order => order.id), allowedReceiptIds: (await this.receipts(identity)).map(receipt => receipt.id), allowedFreightIds: demoFreight(identity, await this.orders(identity)).map(row => row.id), analyticsScopes: ['rates', 'registrations', 'receipts', 'freight'] }
+    return { subject: { ...identity }, allowedOrderIds: (await this.orders(identity)).map(order => order.id), allowedReceiptIds: (await this.receipts(identity)).map(receipt => receipt.id), allowedFreightIds: demoFreight(identity, await this.orders(identity)).map(row => row.id), allowedProfitIds: demoProfits(identity, await this.orders(identity)).map(row => row.id), analyticsScopes: ['rates', 'registrations', 'receipts', 'freight', 'sales_profit'] }
   }
   async listOrders(identity: Readonly<FopIdentity>, permission: Readonly<FopPermissionGrant>): Promise<FopOrderCandidate[]> {
     this.assertIdentity(identity, permission)
@@ -76,6 +78,12 @@ export class DemoFopDataProvider extends FopDataProvider {
     this.assertIdentity(identity, permission)
     const allowed = new Set(permission.allowedReceiptIds ?? [])
     return (await this.receipts(identity)).filter(receipt => allowed.has(receipt.id))
+  }
+  async listProfits(identity: Readonly<FopIdentity>, permission: Readonly<FopPermissionGrant>): Promise<FopProfitCandidate[]> {
+    this.assertIdentity(identity, permission)
+    if (!permission.analyticsScopes?.includes('sales_profit')) throw new FopPermissionDeniedError('Sales profit access denied')
+    const allowed = new Set(permission.allowedProfitIds ?? [])
+    return demoProfits(identity, await this.orders(identity)).filter(row => allowed.has(row.id))
   }
   async listFreight(identity: Readonly<FopIdentity>, permission: Readonly<FopPermissionGrant>): Promise<FopFreightCandidate[]> {
     this.assertIdentity(identity, permission)

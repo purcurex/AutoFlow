@@ -1,6 +1,6 @@
 # HyperZone ECharts 全面诊断与 API 对接需求
 
-核对日期：2026-10-22。适用对象：前端、平台后端、FOP（金蝶云苍穹上的 HyperZone 自研应用）开发、测试与实施人员。
+更新日期：2026-10-23（UTC+8）；保留2026-10-22既有诊断和需求。适用对象：前端、平台后端、FOP（金蝶云苍穹上的 HyperZone 自研应用）开发、测试与实施人员。
 
 ## 1. 交付结论与阅读方式
 
@@ -14,6 +14,7 @@
 - `docs/openapi/hyperzone-analytics.openapi.json`：可供 Swagger Editor、Apifox、Postman 等支持 OpenAPI 的工具导入的契约；描述当前平台 HTTP API，而非虚构的金蝶原生接口。
 - `ECHARTS_FRONTEND_AUDIT.md`、`ECHARTS_BACKEND_CONTRACT_AUDIT.md`：独立诊断证据，内容也收录在本文附录。
 - `VERIFICATION.md`：本次实际检查与限制。
+- `IT_HANDOFF.md`：最新全量交付的阅读顺序、实施边界、后台剩余工作和资料输入入口。
 - `FOLLOW_UP_CHECKLIST.md`：第7章补充的后续待办与人工核对清单；按T/H编号记录优先级、建议负责人、输入、产物和完成标准，并提供脱敏验收样本及回填模板。
 
 采用 [OpenAPI Specification 3.1.1](https://spec.openapis.org/oas/v3.1.1.html) 的 `paths`、`operationId`、`parameters`、`requestBody`、`responses`、`components/schemas`、`securitySchemes` 结构。可空使用 JSON Schema 的 `null` 类型；必填与可空分别表达。该版本选择用于稳定契约，不宣称它是最新规范版本。
@@ -33,6 +34,8 @@
 | CH-09 | 客户回款业绩趋势弹窗 | 与 CH-08 同筛选、同日期；与数量趋势同步拖动 | `series.amounts.values/warehouses` | 数量/金额双图，明细按日期倒排 |
 | CH-10 | 物流运费分析 | 月/周/年、年份、周锚点及仓库；合计、云途YT、4PX、万邦WB、燕文YW、极速JS、其他固定顺序并列柱状 | `freight.query/periods/series/totals`；实际成本按确认时间 UTC+8 归期、USD | 独立环比开关、倒序统计表、固定列宽；开启环比展开表格，关闭不收起；仅拖动滑块调整横轴 |
 | CH-11 | 单物流服务商运费趋势 | 继承已应用时间/仓库，按选中carrierCode显示该服务商 | 复用freight响应筛选单商；接口也支持carrierCode；各期 amount/previousAmount/delta/percent | 居中趋势弹窗；发运单原币/汇率/成本明细进入当前可访问岗位工作台 |
+| CH-12 | 销售个人收款业绩 | 销售工作台；月/周/天、日期范围；个人强制本人，经理/业务管理员可选授权人员 | `sales-performance.periods` 的 `orderAmount/stockAmount/collectionsAmount`，按收款paidAt归期 | 统计表及收款分录明细；同一筛选下分页前合计；全款备货不重复计款 |
+| CH-13 | 销售个人净毛利 | 与CH-12共用筛选；已结算与预计分开，USD；利润使用独立归属日期/月 | `settledGrossProfit/estimatedGrossProfit/unallocatedCount`、`unallocatedSettlements`，不能按paidAt代替利润归属 | 月结来源/版本与收入成本明细；无日分配的月结在周/天显示待拆分，不均摊、不显示为0 |
 | AUX-01 | 履约卡片/异常/任务 | 当前授权队列，不跟随注册日期范围 | `dashboard.queues/exceptions/tasks`、`fulfillment-orders` | Dashboard 仅统计和跳转；业务明细在岗位工作台 |
 | AUX-02 | 工作日历 | US纽约、EUR柏林、AUD悉尼；周一至周五09:00–17:00 | 浏览器时间＋`Intl` 时区，无独立HTTP接口 | 当地当前时间、工作状态、UTC+8转换、夏令时；不含公共假日 |
 
@@ -59,7 +62,7 @@
 
 ### 4.1 日期与时间
 
-统一口径：订单与收款统计按 `paidAt` 先转换 UTC+8，再取业务日期/月；范围包含开始和结束当天。传输时间戳必须携带时区（推荐 ISO 8601 UTC `Z`），纯业务日期使用 `YYYY-MM-DD`。
+统一口径：订单与收款统计按 `paidAt` 先转换 UTC+8，再取业务日期/月；范围包含开始和结束当天。新增毛利独立使用 `recognitionMonth/recognitionDate`，详见第8节，不沿用付款日。传输时间戳必须携带时区（推荐 ISO 8601 UTC `Z`），纯业务日期使用 `YYYY-MM-DD`。
 
 当前订单、收款、Dashboard 日期默认值和校验均使用 UTC+8。历史诊断中的直接截取支付字符串月份、UTC／浏览器本地上限差异已由共享业务时间转换替换；跨月和跨年仍须在真实源数据联调时核验。
 
@@ -181,3 +184,63 @@
 本次交付包含当前项目的代码与文档基线；不包含本机数据库、用户密码、密钥和运行产物，也不表示已部署到生产服务器。
 
 本章后续收录 [后续待办与人工核对清单](FOLLOW_UP_CHECKLIST.md)：保留T01–T16、H01–H17、D01–D10，并追加物流运费T17–T20、H18–H22、D11–D15及回填模板。清单以方案2及运费当前快照契约为基线；未确认的生产信息保持待核对，不改写当前业务口径，也不把Mock完成状态当成真实FOP接入完成。
+
+## 8. 销售个人收款与净毛利（月／周／天）
+
+本节追加2026-10-23需求，保留前述所有模块和编号。交付目标是本工程销售工作台、BFF聚合／明细、独立授权、Mock和机器契约同步；其完成及测试结论以 `VERIFICATION.md` 为准。**这些产物不等于真实FOP已发布查询、具备历史利润账本或通过生产财务验收。** 后台源码本轮只读，真实适配保持未配置边界。
+
+### 8.1 页面、查询和权限
+
+入口为销售工作台，显示所选人员、应用日期、粒度、USD、UTC+8、数据来源和计算时刻。收款图分履约收款／全款备货收款；净毛利图和统计表分已结算／预计，不提供将两者相加的“总利润”。`mixed` 只表示范围内存在两种来源，不意味着可以无条件相加。负毛利和负调整允许展示。
+
+平台接口（相对于 `/api`）为 `GET /autoflow/integrations/fop/sales-performance` 和 `GET /autoflow/integrations/fop/sales-performance/details`。共同查询 `from/to/grain=month|week|day/ownerId?`；明细另有 `kind=receipts|profit`、`periodId?`、`page/pageSize`。响应是裸对象，准确字段以 `backend/src/modules/fop-data/sales-performance.types.ts` 及OpenAPI为准，接口地址不是FOP原生发布地址。
+
+个人账号必须由服务端锁定本人；经理／业务管理员只能选择当前授权交集中的人员。系统管理员身份不自动授予业务权限。利润要求独立 `sales_profit` scope 与 `allowedProfitIds`，收款仍使用 `receipts` 与 `allowedReceiptIds`；不得从订单、收款或运费授权推导利润可见性。人物候选、聚合、明细、分页合计均先做同一租户／身份／业务范围校验。退出、换号、撤权、筛选失败和在途请求不得保留越权旧数据。
+
+### 8.2 收款与利润是两个独立事实
+
+| 概念 | 固定口径／契约 |
+| --- | --- |
+| 收款日期与金额 | 复用方案2，按有效收款分录 `paidAt` 归UTC+8日/月；`orderAmount` 是本响应的履约收款合计，`stockAmount` 是全款备货收款合计，二者之和为 `collectionsAmount`。此处汇总字段不等于单条 `FopReceipt.orderAmount` 应收订单金额 |
+| 利润归属 | `recognitionMonth=YYYY-MM`、`recognitionDate=YYYY-MM-DD|null`；不从paidAt、订单创建日、月结审核日猜测。月结版本关联月与跨期调整月分别保存 |
+| 已结算 | 只认已审核月结和对应不可覆盖的订单结算版本。`amount` 是该期净毛利差额；不能累计各版本整单毛利。`approvedAt` 是审核已知门槛，不是经济归属日 |
+| 未结算 | `status=estimated`、`freightBasis=estimated`，使用截至asOf已知的收入、采购、库存转入、退款／退货／调价等事实和预估运费；即使已有实际运费，也不能在审核结算前擅自切为实际成本 |
+| 结算替换 | 同一订单、同一利润归属月存在合格已审核结算时，以该期权威贡献替换该期预计贡献；不能双计。跨月后续调整独立落入其结算／确认月，不覆盖历史月、不重复确认完整订单利润 |
+| 汇总 | `settledGrossProfit:number|null`、`estimatedGrossProfit:number`分别返回；名称沿用接口，业务展示明确为净毛利。`receiptCount/profitCount`是各自事实行数，不是履约订单数 |
+| 版本和截止 | `id/orderId/settlementId/version/knownAt/approvedAt/cutoffAt`保留追溯；截至asOf未知、未来发生或未来审核的事实不准进入。响应asOf只是计算边界，历史完备性必须由上游账本证明 |
+
+全款备货回款只进入收款指标。利润仅在有效库存使用时，按用量转入对应销售收入和成本；履约实际追加收款中的产品额已在FOP减免，不补回第二次。`incomeAmount`的认定与收款实收不是同一数值模型，不能拿 `collectionsAmount` 减成本替代利润。
+
+`asOf`由服务端在本次查询生成，查询参数不接受历史asOf回放。查询历史日期范围时，可以展示截至当前查询时刻已完成审核的该月权威结算值；这不表示平台已经能够还原当月末当时的审批状态。发生／known／approved时间和cutoff是上游事实归属及当前截断证据，历史审批回放仍是未交付能力。
+
+### 8.3 月结无法直接拆为周／天
+
+完整自然月可使用 `recognitionDate=null` 的已审核月结贡献，按 `recognitionMonth` 入月。周／天或只覆盖部分月份的查询，无法可靠分配这类月结金额时，`settledGrossProfit=null`，`unallocatedCount>0`，并保留 `unallocatedSettlements[{month,amount,count}]` 作月结参考。页面显示“月结金额待日分配”；参考金额不进入当前日／周小计，也不能按天数均摊。空事实为0、未分配为null、无权／上游错误是不同状态。
+
+预计日／周金额也必须是该期贡献差额。上游应建立带发生时间、获知时间、审核时间和版本的事件账本，或可复现的历史快照差分；**不能把每天的整单累计预计毛利相加**。现有实时FOP报告按订单创建时间筛候选、读取查询时全部当前数据，不能直接作为本接口的历史日报。没有可靠历史事实的部分必须标注不具备能力，不能伪造日归属。
+
+### 8.4 金额构成、币种和审计换汇
+
+契约恒等式：`amount = incomeAmount + adjustmentIncome − productCost − freightCost − refundCost − returnCost − otherCost − previousRecognizedProfit + roundingAdjustment`。所有公开分量和结果均为USD；`otherCost`需明确包含国内采购物流、仓储、财务手续费等未单列成本，每项只归一处。退款收入冲减与退款成本须按真实事实分别映射，不能对同一退款在两个位置重复扣减。`roundingAdjustment`只用于可审计的换汇分币尾差，绝对值不超过0.10 USD，不能隐藏缺项成本或业务调价。
+
+FOP快照的 `hzkj_gp_income_usd/rmb` 已经包含收款调整。适配器若另填 `adjustmentIncome`，必须先从 `incomeAmount` 中扣除该调整；或者收入保留含调整值、独立调整分量为0并在审计明细追溯，不得再次增加调整。备货转入收入／成本只各计一次。已确认的前版本累计利润通过 `previousRecognizedProfit` 抵减，得出本期delta；不能将当前累计利润直接放入 `amount`。
+
+已审核CNY冻结金额应作为权威原额保存，不用最新成本或最新汇率重算历史月结。归一字段保留 `originalAmount/originalCurrency/fxRateToUsd/fxRateDate/fxRateSource`，按有证据的审计换汇规则生成USD差额并验证分量恒等式；USD原币rate=1。若差额原币换汇与逐分量换汇存在舍入差异，必须定义可追溯处理规则，不任意修改成本凑数。缺预估运费、币种、历史汇率或截止证据属于未具备可靠核算能力，不能默认为零。
+
+### 8.5 新增验收场景与实施待办
+
+| 编号 | 场景 | 验收要求 |
+| --- | --- | --- |
+| AT-18 | 个人与人员选择权限 | 本人强制限定，经理只见授权团队，系统管理不扩大业务；独立利润授权、空集合、跨租户和在途撤权均正确 |
+| AT-19 | 支付与利润日期分离 | 跨月支付／首次结算／后续调整分别归期；已结算订单不按付款日重复计完整利润 |
+| AT-20 | 预计与月结版本 | 未结算强制预估运费；同订单同月结算替换预计；草稿不可当结算，跨月负调整独立贡献，汇总不合并预计与结算 |
+| AT-21 | 无日归属月结 | 完整月按结算月，周／天及部分月返回null／待拆分及月结参考；无均摊、无伪零、无参考额重复合计 |
+| AT-22 | asOf与未来事实 | 晚于本次查询asOf的付款、采购、库存使用、退款、退货、调价、汇率、审核或knownAt均排除；历史range可展示当前已审核月结，但不得宣称支持历史审批状态回放 |
+| AT-23 | 成本分量与备货防重 | 恒等式到分一致；调整已含收入不重复加，全款备货回款与库存使用不重复确认利润；CNY冻结差额及USD换汇可追溯 |
+| AT-24 | 页面、明细及错误 | 月周天／人员切换、倒序固定列表、负数与null、同筛选明细及分页前合计；会话切换、错误和过期响应清空；真实ECharts渲染与窄屏验收另记结果 |
+
+后台缺口及逐项源码证据见源码映射第10节；新增任务T21–T26、人工资料H23–H28、样本D16–D22见后续清单。所有验收结果统一由 `VERIFICATION.md` 记录，需求存在和Mock样例不表示已通过验收。
+
+### 8.6 冻结归属变更与预估撤销
+
+同订单同确认月发生业务员调整时，BFF在已授权业务范围内先做结算替代，再选择业务员，避免管理员选择旧业务员时仍看到已替代的预估。若最终冻结月结属于另一主体且当前用户没有该事实权限，平台不得越权读取其金额用于去重；FOP适配器必须在授权返回前撤销／过滤已替代预估，或提供不含他人金额的可信失效标识。该能力属于T22/T24上线前条件，纳入H25人工核对及D18/D22验收。

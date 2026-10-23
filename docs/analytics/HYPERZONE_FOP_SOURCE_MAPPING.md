@@ -1,6 +1,6 @@
 # HyperZone FOP 源码字段与分析适配依据
 
-核查日期：2026-10-22。源码目录：`/Library/VSCode/dtr5b`，HEAD：`bd4c115c`（核查当前工作树，不代表生产部署版本）。仅阅读业务 Java、苍穹元数据与转换规则；未连接生产、未读取配置密钥、未修改后端。
+更新日期：2026-10-23（UTC+8），保留2026-10-22原核查。源码目录：`/Library/VSCode/dtr5b`，原核查HEAD：`bd4c115c`（核查当前工作树，不代表生产部署版本）。仅阅读业务 Java、苍穹元数据与转换规则；未连接生产、未读取配置密钥、未修改FOP后端。
 
 本文件区分源码事实、此次业务口径和仍待接口样本确认的映射。FOP 在本项目指金蝶苍穹上的 HyperZone 自定义应用。
 
@@ -208,3 +208,70 @@ hzkj_total_amount = hzkj_fre_quo_amount + hzkj_fixed_tax_fee
 证据：[单量报表当前组织和员工范围](</Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/logistics/service/DeliveredOrderVolumeReportService.java:137>)；[有无业务员档案的分支](</Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/logistics/service/DeliveredOrderVolumeReportService.java:180>)；[组织及单据权限校验](</Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/logistics/exception/FreightExceptionService.java:49>)。
 
 `JsexpActualFreightController` 的 `/actualFreight` 是 POST同步并回写发运单的维护接口，不是只读分析接口，不应由分析页面调用。[控制器写入行为](</Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/logistics/controller/JsexpActualFreightController.java:23>)。真实只读URL、鉴权、分页完整性、授权刷新和脱敏响应须由FOP研发提供；最终结算、币种汇率、调价补收退款、成本权限和服务商映射分别见 H18–H22。
+
+## 10. 销售个人净毛利：月结版本、预计贡献和真实缺口
+
+核查日期：2026-10-23（UTC+8），后台只读。本节确认当前工作树实现，不确认生产发布状态。本工程契约见 `backend/src/modules/fop-data/sales-performance.types.ts`；新增两条平台GET及Mock不能证明FOP拥有可查询的历史利润账本。预计与已结算净毛利分别输出，收款仍独立按paidAt归期。
+
+### 10.1 月结候选、草稿与已审核版本
+
+| 环节／字段 | 已确认实现 | 对本次适配的约束 |
+| --- | --- | --- |
+| 候选 `OrderGrossProfitMonthlyCandidateService` | 已审核发运单正数 `hzkj_actual_freight`，按 `hzkj_actual_freight_time`；已审核 `hzkj_adjust_bill` 按 `createtime`；正常收款不触发 | 月结触发日不是付款日，也不是自动可拆分的日利润；直接复用候选会漏掉仍需预估运费的订单 |
+| 草稿 `hzkj_gp_monthly_settle` | A暂存、B提交、C审核；仅A可重算；按组织／月／业务员生成 | 草稿金额不得标为已结算；存在草稿不等于已生成订单结算历史 |
+| 月报维度 | `billstatus=C`、`hzkj_gp_dimension=salesperson`、`hzkj_gp_month`、`hzkj_gp_owner` | 完整月按结算月和冻结业务员取权威值，不按订单当前业务员或paidAt重分配历史业绩 |
+| 月报金额 | 表头 `hzkj_gp_net_delta_total`；分录 `hzkj_gp_net_delta_rmb` | 这是本期净毛利差额，不是 `hzkj_gp_net_total/net_rmb` 整单累计值；跨期累计delta，不能累计各期累计快照 |
+| 版本关联 | 月结分录 `hzkj_gp_order_no/prev_ver/version/settle_type`；订单 `hzkj_gp_settle_entry` | 保留稳定订单、月结单、版本及上版关联；同期间结算替换预计，跨期调整独立确认 |
+
+证据：[候选与停用费用扫描，42–97行](</Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/ordercenter/service/OrderGrossProfitMonthlyCandidateService.java:42>)；[草稿字段与状态，36–94行](</Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/ordercenter/service/OrderGrossProfitMonthlyBillService.java:36>)；[仅暂存可重算](</Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/ordercenter/service/OrderGrossProfitMonthlyBillService.java:244>)；[月报C筛选及delta汇总，58–108行](</Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/ordercenter/service/SalespersonMonthlyGrossProfitReportService.java:58>)。
+
+审核插件禁止反审核，审核时重新计算、比较草稿版本与金额，在当前审核事务内批量保存订单版本。`hzkj_gp_time`取审核处理时 `new Date()`；`hzkj_gp_cutoff_e`取下月首日；`hzkj_gp_month`独立保存结算月。版本冻结业务员 `hzkj_gp_owner_e` 和客户 `hzkj_gp_customer_e`，后续版本沿用前版本归属，不应以当前客户／业务员重新分组。订单头 `hzkj_gp_status=settled` 仅证明曾结算，不证明随后调整已全部结清。
+
+证据：[审核事务与日期，49–143行](</Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/ordercenter/plugin/operate/OrderGrossProfitMonthlyAuditOperationPlugin.java:49>)；[草稿金额／版本校验](</Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/ordercenter/plugin/operate/OrderGrossProfitMonthlyAuditOperationPlugin.java:181>)；[订单版本与冻结归属，166–242行](</Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/ordercenter/service/OrderGrossProfitSettlementRecordService.java:166>)。元数据也存在[结算月份／时间／cutoff](</Library/VSCode/dtr5b/datamodel/hzkj_CRM/1.5/main/hzkj_ordercenter/metadata/hzkj_orders.dym:4103>)及[净毛利差额](</Library/VSCode/dtr5b/datamodel/hzkj_CRM/1.5/main/hzkj_ordercenter/metadata/hzkj_orders.dym:4384>)。
+
+### 10.2 累计金额与本期贡献的映射
+
+订单结算分录保存收入 `hzkj_gp_income_usd/rmb`、调整 `hzkj_gp_adjust_usd`、收入汇率 `hzkj_gp_rate`，商品成本 `hzkj_gp_pur_rmb`、国内物流 `hzkj_gp_dom_ship_rmb`、国际物流 `hzkj_gp_ship_rmb`、仓储 `hzkj_gp_wh_cost_rmb`、财务手续费 `hzkj_gp_fin_fee_rmb`，以及毛利 `hzkj_gp_total_rmb`、净毛利 `hzkj_gp_net_rmb`、前净毛利 `hzkj_gp_prev_net_rmb` 和净差额 `hzkj_gp_net_delta_rmb`。
+
+FOP公式是：累计收入（含收款调整与全款备货使用转入）减商品／国内物流／国际物流／仓储成本得毛利，再减财务手续费得净毛利。本版净毛利减上版累计净毛利得本期delta。旧版本缺净毛利时，代码会以旧毛利值兜底，真实历史数据需专项核对，不能把兼容分支解释为历史已逐项补齐手续费。
+
+证据：[快照公式，124–161行](</Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/ordercenter/service/OrderGrossProfitSnapshotService.java:124>)；[草稿delta和旧版兼容](</Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/ordercenter/service/OrderGrossProfitMonthlyCalculationService.java:114>)；[历史净毛利回退](</Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/ordercenter/service/OrderGrossProfitSettlementRecordService.java:318>)。
+
+平台 `FopProfit.amount` 是USD期间贡献；成本分量通过 `previousRecognizedProfit` 抵减此前已确认部分，不能将累计值重复写为各期amount。`incomeAmount`与`adjustmentIncome`必须互不重复：FOP收入字段已经含调整，拆出调整时先从基础收入扣除。`otherCost`须明确覆盖未单列的国内物流、仓储、手续费，并与product/freight/refund/return各类别互斥。不能用未经确认的退款金额填两个成本项，也不能为了满足等式任意增加成本。`roundingAdjustment`另列可审计换汇尾差，绝对值最多0.10 USD；业务金额差异不能塞入尾差。
+
+### 10.3 全款备货和调整的防重复规则
+
+利润收款读取源类型A履约／B样品、收款C审核且B已收，按分录 `hzkj_samount` 与 `hzkj_handle_fee` 读取，不直接读取C类备货收款。它与本次收款业绩使用 `hzkj_real_receive_amt`、排除样品的方案2不是同一金额／候选口径，不能直接互换。[收款读取及校验，191–275行](</Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/ordercenter/service/OrderGrossProfitSnapshotService.java:191>)。
+
+全款备货利润转入来自 `hzkj_stock_order_new.hzkj_stock_type=1`、使用表 `hzkj_sale_order_use.hzkj_sale_order_billno/hzkj_use_qty`；销售、商品成本、国内运费单价分别为 `hzkj_settled_price/hzkj_settled_cost_price/hzkj_settled_shipping_pri`。收入／成本按使用数量分摊给履约订单。备货回款已在付款月进入收款指标，不能在收款时再作为利润收入，更不能在库存使用时重复增加收款。[备货使用与单价，37–47、114–138行](</Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/einkauf/service/ReservedStockProfitAllocationService.java:37>)。
+
+调整严格通过 `hzkj_adjust_bill.hzkj_entryentity.hzkj_sales_order_number` 关联履约订单，取有符号 `hzkj_adjust_amount1`；原单号可能是RMA，不能回退混用。正负调整已纳入累计收入，展示调整分量不等于再次计入利润。[调整关联及金额，279–321行](</Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/ordercenter/service/OrderGrossProfitSnapshotService.java:279>)。
+
+### 10.4 现有实时／cutoff服务不能直接满足预计日周
+
+| 缺口 | 具体源码证据 | 必须补齐的能力 |
+| --- | --- | --- |
+| 无运费按0、无历史截止 | `calculateRealtime(order)`调用 `calculate(order,null,false)`，注释明确取查询时全部当前数据、未确认国际运费按0 | 新口径未结算始终用有版本的预估运费，缺失不可默认为0；不能直接调用此入口 |
+| 候选日期不是利润日 | `findByCreatedTime`按订单 `createtime` 筛选，并要求当前订单已收 | 付款仅作收款归属／预计准入；利润归属独立；月结触发也不能补全未结算候选 |
+| 采购未按cutoff | `OrderPurchaseCostQueryService.calculate(order)`仅按当前 `hzkj_pay_status=1` 取 `hzkj_settlement_amount` 与运费分摊 | 采购支付／成本修改发生时间、knownAt及历史版本；防止未来采购进入较早期间贡献 |
+| 备货cutoff参数未使用 | `ReservedStockProfitAllocationService.calculate(order,cutoff)`未向下传入；所有正数使用量计入，注释明确不以状态／使用时间作条件 | 使用发生／获知／有效状态及撤销退回事件；单价和成本版本可追溯 |
+| 仓储不按通知日期截断 | `WarehouseHandlingCostQueryService`明确后补通知不按日期截止，cutoff只确定杭州收费生效月份 | 可用于预计贡献的仓储事件日期及knownAt，避免后补数据伪装成先前已知 |
+| 审核不是历史快照 | 收款按receive_time、调整按createtime截止，但均查询当前C状态 | 当前asOf资格须有可信审批时间；不能声称可复原过去任意时刻的审批状态 |
+
+证据：[实时入口，68–79行](</Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/ordercenter/service/OrderGrossProfitSnapshotService.java:68>)；[创建时间候选，108–143行](</Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/ordercenter/service/OrderGrossProfitReportCandidateService.java:108>)；[采购无cutoff，26–90行](</Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/einkauf/service/OrderPurchaseCostQueryService.java:26>)；[备货cutoff与使用条件，25–31、56–70、157–183行](</Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/einkauf/service/ReservedStockProfitAllocationService.java:25>)；[仓储明确限制，48–51行](</Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/logistics/service/WarehouseHandlingCostQueryService.java:48>)。
+
+已确认发运预估字段为 `hzkj_deliver_bill.hzkj_estimate_freight`，按渠道／国家／重量计算写入；但该代码未建立历史预估版本或knownAt保证，不能将当前值推定为历史值。客户运费报价 `hzkj_fre_quo_amount` 也不能未经财务核对当作物流成本。[预估运费计算](</Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/logistics/util/LogisticUtils.java:28>)；[预估字段元数据](</Library/VSCode/dtr5b/datamodel/hzkj_CRM/1.5/main/hzkj_logistics/metadata/hzkj_deliver_bill.dym:3775>)。
+
+需要建立稳定事件ID／版本、发生／known／approved时间和cutoff的事实账本或历史快照差分，提供预计期间delta；仅把现有 `calculate(order,cutoff)` 传入日期仍不能解决上述缺口。平台当前查询的asOf是查询时刻，不接受过去asOf回放；读取历史range可显示目前已审核月结，不能据此宣称历史预计贡献和审批状态可完整复现。
+
+### 10.5 无日分配、币种与HTTP权限边界
+
+月结只提供结算月、审核写入时间、cutoff；没有权威日利润分配。完整自然月可用 `recognitionDate=null` 月结值；周／天／部分月返回 `settledGrossProfit=null`、`unallocatedCount`及 `unallocatedSettlements` 月参考。审核日不是利润发生日，不能均摊月delta。预计也须按期间差额计，不累加每日存量快照。
+
+FOP收入使用收款 `hzkj_exrate`；没有收款汇率时回退当前 `bd_exrate_tree.indirectexrate`，不是带日期的历史FX查询。[收款汇率](</Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/ordercenter/service/OrderGrossProfitSnapshotService.java:120>)；[当前汇率树](</Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/ordercenter/service/OrderGrossProfitExchangeRateService.java:24>)。物流成本查询未读原币而直接加到Rmb变量，后续重派／退款采集停用，详见第9节。已审CNY净毛利delta保留权威原额，再按明确日期／来源换USD并审计分量与舍入；不能用最新FX或最新原始成本改写冻结月结。
+
+检索毛利服务调用发现的是原生表单插件，未发现对应毛利分析HTTP controller；真实地址、认证及分页仍待H23。实时权限按当前 `hzkj_operator`，业务员限本人，但非业务员默认可查当前组织全部；月报service允许空业务员，组织ID≤0时不加组织过滤。新个人工作台不能直接将这些宽松参数暴露为HTTP。
+
+证据：[实时身份及范围，49–78、139–146行](</Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/ordercenter/service/OrderGrossProfitReportPermissionService.java:49>)；[月报筛选，52–68行](</Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/ordercenter/service/SalespersonMonthlyGrossProfitReportService.java:52>)；[月报表单调用](</Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/ordercenter/plugin/form/SalespersonMonthlyGrossProfitReportFormPlugin.java:103>)；[实时表单调用](</Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/ordercenter/plugin/form/OrderGrossProfitRealtimeReportFormPlugin.java:192>)。
+
+真实适配必须以当前可信用户／组织建立独立 `sales_profit` scope 与 `allowedProfitIds`，与本地本人／部门权限求交；冻结业绩归属与当前访问权分开。资料与完成标准见T21–T26、H23–H28、D16–D22；未经真实联调不得标为FOP ready。

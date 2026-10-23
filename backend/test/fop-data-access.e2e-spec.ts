@@ -1,3 +1,4 @@
+import { FopProfitCandidate } from '../src/modules/fop-data/sales-performance.types'
 import { FopFreightCandidate } from '../src/modules/fop-data/fop-freight.types'
 import { INestApplication, ServiceUnavailableException, ValidationPipe } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
@@ -21,6 +22,7 @@ describe('FOP user isolation HTTP API (repository and provider boundaries stubbe
   let records: any[]
   let receiptRecords: FopReceiptCandidate[]
   let freightRecords: FopFreightCandidate[]
+  let profitRecords: FopProfitCandidate[]
   const alice = '88f90288-6d52-4d0b-bd10-549e4ac937a1'
   const bob = '88f90288-6d52-4d0b-bd10-549e4ac937b2'
   const token = (id: string) => jwt.sign({ userId: id, role: 'admin' })
@@ -78,6 +80,7 @@ describe('FOP user isolation HTTP API (repository and provider boundaries stubbe
         listOrders: (identity: any, grant: any) => provider.listOrders(identity, grant),
         listReceipts: (identity: any, grant: any) => provider.listReceipts(identity, grant),
         listFreight: (identity: any, grant: any) => provider.listFreight(identity, grant),
+        listProfits: (identity: any, grant: any) => provider.listProfits(identity, grant),
       }).compile()
     app = module.createNestApplication()
     app.setGlobalPrefix('api')
@@ -94,15 +97,70 @@ describe('FOP user isolation HTTP API (repository and provider boundaries stubbe
     records = [order('a', { exception: { reason: 'stock', hours: 20 } }), order('b'), order('shared', { reviewStatus: 'approved' }), order('outside'), order('a', { tenantId: 'other-tenant', customerName: 'OTHER TENANT SECRET' })]
     receiptRecords = []
     freightRecords = []
+    profitRecords = []
     provider = {
       isConfigured: () => true,
       resolvePermissions: async (identity: any) => ({ subject: { ...identity }, allowedOrderIds: identity.userId === 'alice-fop' ? ['a', 'shared'] : ['b', 'shared'] }),
       listOrders: async () => structuredClone(records),
       listReceipts: async () => structuredClone(receiptRecords),
       listFreight: async () => structuredClone(freightRecords),
+      listProfits: async () => structuredClone(profitRecords),
     }
   })
   afterAll(async () => { await app?.close() })
+
+  describe('sales performance endpoints', () => {
+    const root = '/autoflow/integrations/fop/sales-performance'
+    const filters = '?from=2020-01-01&to=2020-01-31&grain=month'
+    const paths = () => [root + filters, root + '/details' + filters + '&kind=profit']
+    beforeEach(() => {
+      const base: FopProfitCandidate = {
+        tenantId: 'tenant-1', id: 'p1', orderId: 'o1', orderNumber: 'SO1', customerCode: 'C1', customerName: 'Customer', owner: { id: 'alice-owner', name: 'Alice' }, department: { id: 'd1', name: 'Sales' }, departmentPathIds: ['d1'], salesDepartmentCode: 'sales1',
+        recognitionMonth: '2020-01', recognitionDate: null, knownAt: '2020-02-02T08:00:00+08:00', status: 'settled', settlementId: 'settlement1', version: 's1', approvedAt: '2020-02-02T08:00:00+08:00', cutoffAt: '2020-02-01T00:00:00+08:00', freightBasis: 'frozen',
+        incomeAmount: 100, adjustmentIncome: 0, productCost: 30, freightCost: 10, refundCost: 0, returnCost: 0, otherCost: 0, previousRecognizedProfit: 0, roundingAdjustment: 0, amount: 60, currency: 'USD', originalAmount: 60, originalCurrency: 'USD', fxRateToUsd: 1, fxRateDate: '2020-01-31', fxRateSource: 'fixture',
+      }
+      profitRecords = [{ ...base, secret: 'private' } as FopProfitCandidate, { ...base, id: 'bob-profit', orderId: 'ob', owner: { id: 'bob-owner', name: 'Bob' } }, { ...base, id: 'foreign', tenantId: 'private' }]
+      receiptRecords = [receipt('receipt1')]
+      provider.resolvePermissions = async (subject: any) => ({ subject, allowedOrderIds: [], allowedReceiptIds: ['receipt1'], allowedProfitIds: ['p1', 'bob-profit', 'foreign'], analyticsScopes: ['receipts', 'sales_profit'] })
+      provider.listOrders = async () => { throw new Error('Must not enumerate orders') }
+    })
+    it('requires authentication, strict query fields and private cache controls on both routes', async () => {
+      for (const path of paths()) {
+        await request(app.getHttpServer()).get('/api' + path).expect(401)
+        for (const injected of ['userId=bob-fop', 'tenantId=tenant-2', 'allowedProfitIds=bob-profit', 'businessRole=admin', 'asOf=2099-01-01']) await get(path + '&' + injected).expect(400)
+        expect((await get(path).expect(200)).headers['cache-control']).toBe('private, no-store')
+      }
+    })
+    it('selects the bound employee, enforces owner scope, and reconciles paged details without private provider data', async () => {
+      const summary = (await get(root + filters).expect(200)).body
+      expect(summary).toMatchObject({ selectedOwner: { id: 'alice-owner' }, canSelectOwner: false, totals: { collectionsAmount: 8, settledGrossProfit: 60 } })
+      const detail = (await get(root + '/details' + filters + '&kind=profit&pageSize=1').expect(200)).body
+      expect(detail.total).toBe(1); expect(detail.totals).toEqual(summary.totals)
+      for (const field of ['tenantId', 'departmentPathIds', 'secret']) expect(detail.profits[0]).not.toHaveProperty(field)
+      for (const path of paths()) await get(path + '&ownerId=bob-owner').expect(403)
+      const manager = (await get(root + filters + '&ownerId=bob-owner', bob).expect(200)).body
+      expect(manager).toMatchObject({ canSelectOwner: true, selectedOwner: { id: 'bob-owner' }, totals: { collectionsAmount: 0, settledGrossProfit: 60 } })
+    })
+    it('preserves undated month references in day details and rejects invalid filters', async () => {
+      const result = (await get(root + '/details' + filters.replace('grain=month', 'grain=day') + '&kind=profit&periodId=2020-01-10').expect(200)).body
+      expect(result).toMatchObject({ total: 1, totals: { settledGrossProfit: null, unallocatedCount: 1 }, unallocatedSettlements: [{ month: '2020-01', amount: 60, count: 1 }] })
+      for (const suffix of ['&page=0', '&pageSize=101', '&periodId=2021-01', '&ownerId=', '&kind=unknown']) await get(root + '/details' + filters + '&kind=profit' + suffix).expect(400)
+      for (const dates of ['from=2020-02-30&to=2020-03-01', 'from=2019-01-01&to=2019-01-02', 'from=2020-01-01&to=2021-01-02']) await get(root + '?' + dates + '&grain=day').expect(400)
+    })
+    it('requires separate cost and receipt grants and sales access even for system administrators', async () => {
+      provider.resolvePermissions = async (subject: any) => ({ subject, allowedOrderIds: ['o1'], allowedReceiptIds: ['receipt1'], allowedProfitIds: ['p1'], analyticsScopes: ['receipts'] })
+      for (const path of paths()) await get(path, bob).expect(403)
+      accounts.get(bob).businessRole = 'none'
+      for (const path of paths()) await get(path, bob).expect(403)
+    })
+    it('rejects duplicate upstream versions and identity changes without disclosing diagnostics', async () => {
+      profitRecords.push({ ...profitRecords[0], id: 'p2', version: 's2' })
+      provider.resolvePermissions = async (subject: any) => ({ subject, allowedOrderIds: [], allowedReceiptIds: ['receipt1'], allowedProfitIds: ['p1', 'p2'], analyticsScopes: ['receipts', 'sales_profit'] })
+      expect((await get(root + filters).expect(503)).body.code).toBe('fop_unavailable')
+      provider.listProfits = async () => { accounts.get(alice).businessEmployeeId = 'bob-owner'; return [] }
+      expect((await get(root + filters).expect(403)).body.code).toBe('fop_binding_changed')
+    })
+  })
 
   describe('freight analysis endpoints', () => {
     const root = '/autoflow/integrations/fop/freight'

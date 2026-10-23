@@ -3,8 +3,8 @@
   "jsonSchemaDialect": "https://spec.openapis.org/oas/3.1/dialect/base",
   "info": {
     "title": "HyperZone AutoFlow Analytics 当前实现契约",
-    "version": "2026-10-22",
-    "description": "字段级源码快照，仅记录已实现HTTP路由，不将计划FOP上游写为paths。响应裸JSON，无{code,data,message}包装。required=序列化必有；type:null=显式空值；可省略字段不在required中。参数跨字段依赖及已知口径差距见操作描述和配套审计。示例为脱敏契约样例，不是生产数据。 FOP为金蝶云苍穹上的HyperZone自研应用，源码只读核实；本工程方案2收款聚合和Mock已实现，真实生产网络适配器仍未配置。订单与收款各自授权，回款采用实际结算分录，统一UTC+8。 物流运费使用独立freight scope及allowedFreightIds，已实现Mock成本快照；必须保留原币与明确USD折算，按确认时间归期。最终结算、补收退款、调价及真实成本查询/授权仍待核对。"
+    "version": "2026-10-23",
+    "description": "字段级源码快照，仅记录已实现HTTP路由，不将计划FOP上游写为paths。响应裸JSON，无{code,data,message}包装。required=序列化必有；type:null=显式空值；可省略字段不在required中。参数跨字段依赖及已知口径差距见操作描述和配套审计。示例为脱敏契约样例，不是生产数据。 FOP为金蝶云苍穹上的HyperZone自研应用，源码只读核实；本工程方案2收款聚合和Mock已实现，真实生产网络适配器仍未配置。订单与收款各自授权，回款采用实际结算分录，统一UTC+8。 物流运费使用独立freight scope及allowedFreightIds，已实现Mock成本快照；必须保留原币与明确USD折算，按确认时间归期。最终结算、补收退款、调价及真实成本查询/授权仍待核对。 销售工作台增加个人收款与毛利：独立sales_profit授权、已审核净毛利差额优先、无日分配返回null；预估期间事件账本和严格asOf成本链仍是FOP对接前置条件。"
   },
   "servers": [
     {
@@ -42,6 +42,10 @@
     {
       "name": "物流运费分析",
       "description": "独立授权的发运单实际成本快照与工作台明细。"
+    },
+    {
+      "name": "个人收款与毛利",
+      "description": "独立授权的个人收款、预计/结算净毛利和分期明细。"
     }
   ],
   "paths": {
@@ -2749,6 +2753,388 @@
           "每个series.values与periods等长同下标；总计不与服务商再次相加；百分比为百分点，零基期规则见FreightValue。",
           "periodId必须属于此query返回的periods；page默认1，pageSize默认20且最大100；workbenchRole必填且需持有。"
         ]
+      }
+    },
+    "/autoflow/integrations/fop/sales-performance": {
+      "get": {
+        "operationId": "getSalesPerformance",
+        "summary": "销售工作台个人收款与毛利统计",
+        "tags": [
+          "个人收款与毛利"
+        ],
+        "description": "必须具备sales工作台、receipts及sales_profit analytics scope。服务端重新读取用户FOP绑定、业务角色范围，分别以allowedReceiptIds/allowedProfitIds授权并与租户/业务员/部门范围求交，不从订单权限推导。普通业务员仅自身；业务管理员/部门经理可选择已授权业务员，显式越权ownerId为403。身份/权限查询参数禁止。from/to为UTC+8含首尾日期，2020起、不晚于今天，最大366天；grain month/week/day，周一开始，首尾裁剪。收款复用方案2（履约实际收款+全款备货收款，排除押金），按支付日期；毛利按独立确认日期/月，已结算取冻结净毛利差额、预估以预估运费及已知成本收入计算期间贡献。不会把全款备货回款直接再加利润。同订单同确认月已结算替代预估，跨期差额保留。无可信日明细的结算只能进入完整自然月month桶；week/day/部分月返回null和整月参考，不均摊。未来knownAt/approvedAt/paidAt排除；不支持客户端asOf历史回放。现有FOP原生实时服务未满足严格cutoff/预估成本，新事件账本与只读适配器待实现。",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "起始日期，UTC+8，含当日；不早于2020-01-01。",
+              "format": "date",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            },
+            "description": "起始日期，UTC+8，含当日；不早于2020-01-01。"
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "结束日期，UTC+8，含当日，不晚于今天；最多366天。",
+              "format": "date",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            },
+            "description": "结束日期，UTC+8，含当日，不晚于今天；最多366天。"
+          },
+          {
+            "name": "grain",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/PerformanceGrain"
+            },
+            "description": "见引用模型"
+          },
+          {
+            "name": "ownerId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "授权业务员稳定ID。不是FOP登录用户ID；仅缩小服务端范围。",
+              "minLength": 1
+            },
+            "description": "授权业务员稳定ID。不是FOP登录用户ID；仅缩小服务端范围。"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功，裸JSON；在独立scope已授予但allowlist为空时返回空范围。",
+            "headers": {
+              "Cache-Control": {
+                "description": "JWT guard设置private, no-store；全局429可先于guard返回，不保证此头。",
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PerformanceData"
+                },
+                "example": {
+                  "source": "mock",
+                  "query": {
+                    "from": "2026-09-01",
+                    "to": "2026-09-30",
+                    "grain": "month",
+                    "ownerId": "employee-example"
+                  },
+                  "timeZone": "UTC+8",
+                  "currency": "USD",
+                  "asOf": "2026-10-23T12:00:00+08:00",
+                  "owners": [
+                    {
+                      "id": "employee-example",
+                      "name": "曹可滢（Ruth）",
+                      "department": {
+                        "id": "sales1-example",
+                        "name": "业务一部"
+                      }
+                    }
+                  ],
+                  "selectedOwner": {
+                    "id": "employee-example",
+                    "name": "曹可滢（Ruth）",
+                    "department": {
+                      "id": "sales1-example",
+                      "name": "业务一部"
+                    }
+                  },
+                  "canSelectOwner": false,
+                  "periods": [
+                    {
+                      "orderAmount": 0,
+                      "stockAmount": 0,
+                      "collectionsAmount": 0,
+                      "settledGrossProfit": 8,
+                      "estimatedGrossProfit": 0,
+                      "unallocatedCount": 0,
+                      "receiptCount": 0,
+                      "profitCount": 1,
+                      "id": "2026-09",
+                      "label": "2026-09",
+                      "from": "2026-09-01",
+                      "to": "2026-09-30",
+                      "profitStatus": "settled"
+                    }
+                  ],
+                  "totals": {
+                    "orderAmount": 0,
+                    "stockAmount": 0,
+                    "collectionsAmount": 0,
+                    "settledGrossProfit": 8,
+                    "estimatedGrossProfit": 0,
+                    "unallocatedCount": 0,
+                    "receiptCount": 0,
+                    "profitCount": 1
+                  },
+                  "unallocatedSettlements": []
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "x-source-files": [
+          "backend/src/modules/fop-data/sales-performance.ts",
+          "backend/src/modules/fop-data/sales-performance.dto.ts",
+          "backend/src/modules/fop-data/fop-data.service.ts",
+          "backend/src/modules/users/workbench.controller.ts"
+        ],
+        "x-implementation-status": "本工程BFF/Mock及前端实现；对应FOP生产只读适配器、严格截止历史成本与日级贡献账本待IT实现。"
+      }
+    },
+    "/autoflow/integrations/fop/sales-performance/details": {
+      "get": {
+        "operationId": "getSalesPerformanceDetails",
+        "summary": "销售工作台个人收款与毛利明细",
+        "tags": [
+          "个人收款与毛利"
+        ],
+        "description": "必须具备sales工作台、receipts及sales_profit analytics scope。服务端重新读取用户FOP绑定、业务角色范围，分别以allowedReceiptIds/allowedProfitIds授权并与租户/业务员/部门范围求交，不从订单权限推导。普通业务员仅自身；业务管理员/部门经理可选择已授权业务员，显式越权ownerId为403。身份/权限查询参数禁止。from/to为UTC+8含首尾日期，2020起、不晚于今天，最大366天；grain month/week/day，周一开始，首尾裁剪。收款复用方案2（履约实际收款+全款备货收款，排除押金），按支付日期；毛利按独立确认日期/月，已结算取冻结净毛利差额、预估以预估运费及已知成本收入计算期间贡献。不会把全款备货回款直接再加利润。同订单同确认月已结算替代预估，跨期差额保留。无可信日明细的结算只能进入完整自然月month桶；week/day/部分月返回null和整月参考，不均摊。未来knownAt/approvedAt/paidAt排除；不支持客户端asOf历史回放。现有FOP原生实时服务未满足严格cutoff/预估成本，新事件账本与只读适配器待实现。 分页前计算合计；明细kind仅切换事实清单，periodId不得扩大日期范围。",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "起始日期，UTC+8，含当日；不早于2020-01-01。",
+              "format": "date",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            },
+            "description": "起始日期，UTC+8，含当日；不早于2020-01-01。"
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "结束日期，UTC+8，含当日，不晚于今天；最多366天。",
+              "format": "date",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            },
+            "description": "结束日期，UTC+8，含当日，不晚于今天；最多366天。"
+          },
+          {
+            "name": "grain",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/PerformanceGrain"
+            },
+            "description": "见引用模型"
+          },
+          {
+            "name": "ownerId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "授权业务员稳定ID。不是FOP登录用户ID；仅缩小服务端范围。",
+              "minLength": 1
+            },
+            "description": "授权业务员稳定ID。不是FOP登录用户ID；仅缩小服务端范围。"
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "明细类别。",
+              "enum": [
+                "receipts",
+                "profit"
+              ]
+            },
+            "description": "明细类别。"
+          },
+          {
+            "name": "periodId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "省略时全查询范围；提供时必须是summary返回的期ID。",
+              "minLength": 1,
+              "pattern": "^\\d{4}-\\d{2}(?:-\\d{2})?$"
+            },
+            "description": "省略时全查询范围；提供时必须是summary返回的期ID。"
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000000,
+              "default": 1
+            },
+            "description": "分页参数。"
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            },
+            "description": "分页参数。"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功，裸JSON；在独立scope已授予但allowlist为空时返回空范围。",
+            "headers": {
+              "Cache-Control": {
+                "description": "JWT guard设置private, no-store；全局429可先于guard返回，不保证此头。",
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PerformancePage"
+                },
+                "example": {
+                  "source": "mock",
+                  "timeZone": "UTC+8",
+                  "currency": "USD",
+                  "asOf": "2026-10-23T12:00:00+08:00",
+                  "kind": "profit",
+                  "total": 1,
+                  "page": 1,
+                  "pageSize": 20,
+                  "receipts": [],
+                  "profits": [
+                    {
+                      "id": "gp-example",
+                      "orderId": "order-example",
+                      "orderNumber": "TO-202609-001",
+                      "customerCode": "C001",
+                      "customerName": "示例客户",
+                      "owner": {
+                        "id": "employee-example",
+                        "name": "曹可滢（Ruth）"
+                      },
+                      "department": {
+                        "id": "sales1-example",
+                        "name": "业务一部"
+                      },
+                      "salesDepartmentCode": "sales1",
+                      "recognitionMonth": "2026-09",
+                      "recognitionDate": null,
+                      "knownAt": "2026-10-08T10:00:00+08:00",
+                      "status": "settled",
+                      "settlementId": "GP-202609-RUTH",
+                      "version": "2",
+                      "approvedAt": "2026-10-08T10:00:00+08:00",
+                      "cutoffAt": "2026-10-01T00:00:00+08:00",
+                      "freightBasis": "frozen",
+                      "incomeAmount": 100,
+                      "adjustmentIncome": 5,
+                      "productCost": 60,
+                      "freightCost": 10,
+                      "refundCost": 4,
+                      "returnCost": 1,
+                      "otherCost": 2,
+                      "previousRecognizedProfit": 20,
+                      "roundingAdjustment": 0,
+                      "amount": 8,
+                      "currency": "USD",
+                      "originalAmount": 8,
+                      "originalCurrency": "USD",
+                      "fxRateToUsd": 1,
+                      "fxRateDate": "2026-09-30",
+                      "fxRateSource": "mock-contract-example"
+                    }
+                  ],
+                  "totals": {
+                    "orderAmount": 0,
+                    "stockAmount": 0,
+                    "collectionsAmount": 0,
+                    "settledGrossProfit": 8,
+                    "estimatedGrossProfit": 0,
+                    "unallocatedCount": 0,
+                    "receiptCount": 0,
+                    "profitCount": 1
+                  },
+                  "range": {
+                    "from": "2026-09-01",
+                    "to": "2026-09-30"
+                  },
+                  "unallocatedSettlements": []
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "x-source-files": [
+          "backend/src/modules/fop-data/sales-performance.ts",
+          "backend/src/modules/fop-data/sales-performance.dto.ts",
+          "backend/src/modules/fop-data/fop-data.service.ts",
+          "backend/src/modules/users/workbench.controller.ts"
+        ],
+        "x-implementation-status": "本工程BFF/Mock及前端实现；对应FOP生产只读适配器、严格截止历史成本与日级贡献账本待IT实现。"
       }
     }
   },
@@ -8176,7 +8562,8 @@
                 "rates",
                 "registrations",
                 "receipts",
-                "freight"
+                "freight",
+                "sales_profit"
               ]
             },
             "description": "运费两个端点均要求包含freight；缺失/不包含返回403。",
@@ -8188,6 +8575,1068 @@
         ],
         "additionalProperties": false,
         "description": "仅内部FopPermissionGrant中与成本有关的投影，不是新的HTTP端点或客户端可写权限。仍须与租户、本地业务范围及当前岗位授权求交，并复查请求中途授权变更。"
+      },
+      "PerformanceGrain": {
+        "type": "string",
+        "description": "分期粒度；周一为周起点，首尾按查询日期裁剪。",
+        "enum": [
+          "month",
+          "week",
+          "day"
+        ]
+      },
+      "PerformanceQuery": {
+        "type": "object",
+        "description": "查询使用支付日期统计收款，使用利润确认期间统计毛利；两种归属不可混同。",
+        "properties": {
+          "from": {
+            "type": "string",
+            "description": "起始日期，UTC+8，含当日；不早于2020-01-01。",
+            "format": "date",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          },
+          "to": {
+            "type": "string",
+            "description": "结束日期，UTC+8，含当日，不晚于今天；最多366天。",
+            "format": "date",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          },
+          "grain": {
+            "$ref": "#/components/schemas/PerformanceGrain"
+          },
+          "ownerId": {
+            "type": "string",
+            "description": "授权业务员稳定ID。不是FOP登录用户ID；仅缩小服务端范围。",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "from",
+          "to",
+          "grain"
+        ],
+        "additionalProperties": false
+      },
+      "PerformanceOwner": {
+        "type": "object",
+        "description": "来自已授权收款及毛利事实的可选业务员，不是全公司目录。",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "授权业务员稳定ID。",
+            "minLength": 1
+          },
+          "name": {
+            "type": "string",
+            "description": "中英文展示名称。",
+            "minLength": 1
+          },
+          "department": {
+            "$ref": "#/components/schemas/NamedEntity",
+            "description": "授权范围内归属部门。"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "department"
+        ],
+        "additionalProperties": false,
+        "examples": [
+          {
+            "id": "employee-example",
+            "name": "曹可滢（Ruth）",
+            "department": {
+              "id": "sales1-example",
+              "name": "业务一部"
+            }
+          }
+        ]
+      },
+      "FopProfit": {
+        "type": "object",
+        "description": "白名单公开利润贡献事实：同订单同确认月已结算优先替代预估，不跨月抹掉后续差额；禁止重复累计快照。tenantId/departmentPathIds仅provider内部使用。 当前归一规则：同订单同确认月只接收一个已审核结算版本；若上游返回多个版本，应先在可信适配器选取/合并为唯一期间贡献，不得把累计版本直接透传相加。预估同订单同月每日最多一个去重贡献，多个当日事件先在适配器合并。 适配器须撤销已被审核结算替代的预估，即使冻结owner已变且当前查看人无新owner利润权限；BFF不可越权读取他人金额去重。在授权businessScope交集内先替代再选择owner。",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "利润贡献事实唯一ID，独立allowedProfitIds授权；不能复用订单授权。",
+            "minLength": 1
+          },
+          "orderId": {
+            "type": "string",
+            "description": "履约订单稳定ID。",
+            "minLength": 1
+          },
+          "orderNumber": {
+            "type": "string",
+            "description": "履约订单编号。",
+            "minLength": 1
+          },
+          "customerCode": {
+            "type": "string",
+            "description": "客户编码。",
+            "minLength": 1
+          },
+          "customerName": {
+            "type": "string",
+            "description": "客户名称。",
+            "minLength": 1
+          },
+          "owner": {
+            "$ref": "#/components/schemas/NamedEntity",
+            "description": "结算利润为首次月结冻结业务员；后续版本沿用。"
+          },
+          "department": {
+            "$ref": "#/components/schemas/NamedEntity",
+            "description": "用于权限交集的可信归属部门。"
+          },
+          "salesDepartmentCode": {
+            "$ref": "#/components/schemas/SalesDepartment"
+          },
+          "recognitionMonth": {
+            "type": "string",
+            "description": "毛利贡献结算/确认月，不等于订单支付月。",
+            "pattern": "^\\d{4}-\\d{2}$"
+          },
+          "recognitionDate": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date",
+            "description": "可信利润事件归属日，必须属于recognitionMonth。现有FOP月结仅有月份时为null；禁止审核日代替、禁止均摊。预估分期事件必须有日期。"
+          },
+          "knownAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "该贡献及全部组成事实已知时刻；晚于服务端asOf的事实不参与。不是HTTP客户端可指定值。"
+          },
+          "status": {
+            "type": "string",
+            "description": "settled仅已审核冻结结算；estimated为新适配器按预估运费和已知事实计算的期间贡献差额。",
+            "enum": [
+              "estimated",
+              "settled"
+            ]
+          },
+          "settlementId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "审核月结单ID，settled必填；estimated为null。",
+            "minLength": 1
+          },
+          "version": {
+            "type": "string",
+            "description": "冻结结算版本或预估事实版本，可追溯且不可静默覆盖。",
+            "minLength": 1
+          },
+          "approvedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "月结审核时刻，settled必填且不得晚于asOf；不是利润业务日期。estimated为null。"
+          },
+          "cutoffAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "构成快照业务排他截止时刻，通常下月1日；可以是未来窗口边界。recognitionDate的UTC+8日始必须严格早于cutoffAt；实际组成事实还须符合knownAt/asOf，不能把未来窗口当事实已知。"
+          },
+          "freightBasis": {
+            "type": "string",
+            "description": "未结算强制estimated，已结算使用frozen快照；缺失预估成本不能填0冒充完整。",
+            "enum": [
+              "estimated",
+              "frozen"
+            ]
+          },
+          "incomeAmount": {
+            "type": "number",
+            "description": "快照累计收入USD；不含另列adjustmentIncome。全款备货只按有效使用关系转收入，不直接加备货收款。",
+            "x-decimal-scale": 2
+          },
+          "adjustmentIncome": {
+            "type": "number",
+            "description": "快照差价调整等收入USD，可为负；如上游收入已含调整须拆出，不能重复加。",
+            "x-decimal-scale": 2
+          },
+          "productCost": {
+            "type": "number",
+            "description": "快照商品/采购成本USD，含有效备货使用分摊。",
+            "x-decimal-scale": 2
+          },
+          "freightCost": {
+            "type": "number",
+            "description": "快照国际物流成本USD；estimated使用hzkj_estimate_freight的可信历史版本，settled用冻结快照。",
+            "x-decimal-scale": 2
+          },
+          "refundCost": {
+            "type": "number",
+            "description": "截至截止时刻已知、已生效退款成本USD；与负收入拆分互斥。",
+            "x-decimal-scale": 2
+          },
+          "returnCost": {
+            "type": "number",
+            "description": "已知退货相关成本USD；与退款及其他成本去重。",
+            "x-decimal-scale": 2
+          },
+          "otherCost": {
+            "type": "number",
+            "description": "国内物流、仓储、财务手续费等其余净毛利成本USD；不能遗漏或与product/freight重复。",
+            "x-decimal-scale": 2
+          },
+          "previousRecognizedProfit": {
+            "type": "number",
+            "description": "此前已确认累计净毛利USD，从本版本累计值扣除得到期间差额；不是本期额。",
+            "x-decimal-scale": 2
+          },
+          "roundingAdjustment": {
+            "type": "number",
+            "description": "逐项换汇与原币差额整体换汇的USD尾差；明确展示，不能伪装为费用。",
+            "x-decimal-scale": 2,
+            "minimum": -0.1,
+            "maximum": 0.1
+          },
+          "amount": {
+            "type": "number",
+            "description": "期间净毛利USD贡献 = incomeAmount + adjustmentIncome - productCost - freightCost - refundCost - returnCost - otherCost - previousRecognizedProfit + roundingAdjustment；可负。",
+            "x-decimal-scale": 2
+          },
+          "currency": {
+            "type": "string",
+            "description": "统一展示币种。",
+            "const": "USD"
+          },
+          "originalAmount": {
+            "type": "number",
+            "description": "原币期间净毛利差额。已审核FOP月结通常CNY net_delta_rmb，不能冒充USD。",
+            "x-decimal-scale": 2
+          },
+          "originalCurrency": {
+            "type": "string",
+            "description": "明确原币代码。",
+            "pattern": "^[A-Z]{3}$"
+          },
+          "fxRateToUsd": {
+            "type": "number",
+            "description": "每单位原币折USD，有限且正；USD必须1。",
+            "exclusiveMinimum": 0
+          },
+          "fxRateDate": {
+            "type": "string",
+            "description": "冻结/指定的审计汇率日期。 晚于当前UTC+8日期的汇率事实不参与统计或业务员选项。",
+            "format": "date",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          },
+          "fxRateSource": {
+            "type": "string",
+            "description": "可信汇率来源，禁止用今天汇率隐式改写历史。",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "id",
+          "orderId",
+          "orderNumber",
+          "customerCode",
+          "customerName",
+          "owner",
+          "department",
+          "salesDepartmentCode",
+          "recognitionMonth",
+          "recognitionDate",
+          "knownAt",
+          "status",
+          "settlementId",
+          "version",
+          "approvedAt",
+          "cutoffAt",
+          "freightBasis",
+          "incomeAmount",
+          "adjustmentIncome",
+          "productCost",
+          "freightCost",
+          "refundCost",
+          "returnCost",
+          "otherCost",
+          "previousRecognizedProfit",
+          "roundingAdjustment",
+          "amount",
+          "currency",
+          "originalAmount",
+          "originalCurrency",
+          "fxRateToUsd",
+          "fxRateDate",
+          "fxRateSource"
+        ],
+        "additionalProperties": false,
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "status": {
+                  "const": "settled"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "settlementId": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "approvedAt": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "freightBasis": {
+                  "const": "frozen"
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "settlementId": {
+                  "type": "null"
+                },
+                "approvedAt": {
+                  "type": "null"
+                },
+                "freightBasis": {
+                  "const": "estimated"
+                },
+                "recognitionDate": {
+                  "type": "string",
+                  "format": "date"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "originalCurrency": {
+                  "const": "USD"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "fxRateToUsd": {
+                  "const": 1
+                }
+              }
+            }
+          }
+        ],
+        "examples": [
+          {
+            "id": "gp-example",
+            "orderId": "order-example",
+            "orderNumber": "TO-202609-001",
+            "customerCode": "C001",
+            "customerName": "示例客户",
+            "owner": {
+              "id": "employee-example",
+              "name": "曹可滢（Ruth）"
+            },
+            "department": {
+              "id": "sales1-example",
+              "name": "业务一部"
+            },
+            "salesDepartmentCode": "sales1",
+            "recognitionMonth": "2026-09",
+            "recognitionDate": null,
+            "knownAt": "2026-10-08T10:00:00+08:00",
+            "status": "settled",
+            "settlementId": "GP-202609-RUTH",
+            "version": "2",
+            "approvedAt": "2026-10-08T10:00:00+08:00",
+            "cutoffAt": "2026-10-01T00:00:00+08:00",
+            "freightBasis": "frozen",
+            "incomeAmount": 100,
+            "adjustmentIncome": 5,
+            "productCost": 60,
+            "freightCost": 10,
+            "refundCost": 4,
+            "returnCost": 1,
+            "otherCost": 2,
+            "previousRecognizedProfit": 20,
+            "roundingAdjustment": 0,
+            "amount": 8,
+            "currency": "USD",
+            "originalAmount": 8,
+            "originalCurrency": "USD",
+            "fxRateToUsd": 1,
+            "fxRateDate": "2026-09-30",
+            "fxRateSource": "mock-contract-example"
+          },
+          {
+            "id": "gp-estimated-example",
+            "orderId": "order-example",
+            "orderNumber": "TO-202609-001",
+            "customerCode": "C001",
+            "customerName": "示例客户",
+            "owner": {
+              "id": "employee-example",
+              "name": "曹可滢（Ruth）"
+            },
+            "department": {
+              "id": "sales1-example",
+              "name": "业务一部"
+            },
+            "salesDepartmentCode": "sales1",
+            "recognitionMonth": "2026-10",
+            "recognitionDate": "2026-10-20",
+            "knownAt": "2026-10-20T12:00:00+08:00",
+            "status": "estimated",
+            "settlementId": null,
+            "version": "estimate-event-1",
+            "approvedAt": null,
+            "cutoffAt": "2026-10-23T12:00:00+08:00",
+            "freightBasis": "estimated",
+            "incomeAmount": 50,
+            "adjustmentIncome": 0,
+            "productCost": 30,
+            "freightCost": 8,
+            "refundCost": 5,
+            "returnCost": 0,
+            "otherCost": 2,
+            "previousRecognizedProfit": 8,
+            "roundingAdjustment": 0,
+            "amount": -3,
+            "currency": "USD",
+            "originalAmount": -3,
+            "originalCurrency": "USD",
+            "fxRateToUsd": 1,
+            "fxRateDate": "2026-10-20",
+            "fxRateSource": "mock-contract-example"
+          }
+        ]
+      },
+      "PerformanceMetrics": {
+        "type": "object",
+        "description": "同权限、同业务员、同日期范围的全量合计。金额安全分币累加，负调整允许，不求和百分比。",
+        "properties": {
+          "orderAmount": {
+            "type": "number",
+            "description": "已审核已支付履约订单实际收款，不是订单名义总价。",
+            "x-decimal-scale": 2
+          },
+          "stockAmount": {
+            "type": "number",
+            "description": "已审核已支付全款备货实际收款，不含押金备货。",
+            "x-decimal-scale": 2
+          },
+          "collectionsAmount": {
+            "type": "number",
+            "description": "orderAmount + stockAmount；使用库存时不补回SKU产品款。",
+            "x-decimal-scale": 2
+          },
+          "settledGrossProfit": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "本期审核结算净毛利差额；存在不能可靠分期的月结时为null，而不是零或局部合计。",
+            "x-decimal-scale": 2
+          },
+          "estimatedGrossProfit": {
+            "type": "number",
+            "description": "本期未结算预计净毛利贡献差额，使用预估运费和已知收入成本。不能把每日存量快照相加；与结算毛利分开展示。",
+            "x-decimal-scale": 2
+          },
+          "unallocatedCount": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "当前期间涉及但缺可靠日分配的结算事实数量。"
+          },
+          "receiptCount": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "有效收款行数；不是订单数。"
+          },
+          "profitCount": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "利润贡献事实数量；含缺分期的结算事实，不是订单数。"
+          }
+        },
+        "required": [
+          "orderAmount",
+          "stockAmount",
+          "collectionsAmount",
+          "settledGrossProfit",
+          "estimatedGrossProfit",
+          "unallocatedCount",
+          "receiptCount",
+          "profitCount"
+        ],
+        "additionalProperties": false,
+        "examples": [
+          {
+            "orderAmount": 0,
+            "stockAmount": 0,
+            "collectionsAmount": 0,
+            "settledGrossProfit": 8,
+            "estimatedGrossProfit": 0,
+            "unallocatedCount": 0,
+            "receiptCount": 0,
+            "profitCount": 1
+          },
+          {
+            "orderAmount": 0,
+            "stockAmount": 0,
+            "collectionsAmount": 0,
+            "settledGrossProfit": null,
+            "estimatedGrossProfit": 0,
+            "unallocatedCount": 1,
+            "receiptCount": 0,
+            "profitCount": 1
+          }
+        ]
+      },
+      "PerformancePeriod": {
+        "type": "object",
+        "description": "收款和毛利独立时间归属的分期指标。数据按时间升序提供，明细表前端倒序。",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "接口生成期ID，明细仅接受本次query存在的ID。"
+          },
+          "label": {
+            "type": "string",
+            "description": "分期展示文本。"
+          },
+          "from": {
+            "type": "string",
+            "description": "裁剪后起始日期。",
+            "format": "date",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          },
+          "to": {
+            "type": "string",
+            "description": "裁剪后结束日期。",
+            "format": "date",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          },
+          "orderAmount": {
+            "type": "number",
+            "description": "已审核已支付履约订单实际收款，不是订单名义总价。",
+            "x-decimal-scale": 2
+          },
+          "stockAmount": {
+            "type": "number",
+            "description": "已审核已支付全款备货实际收款，不含押金备货。",
+            "x-decimal-scale": 2
+          },
+          "collectionsAmount": {
+            "type": "number",
+            "description": "orderAmount + stockAmount；使用库存时不补回SKU产品款。",
+            "x-decimal-scale": 2
+          },
+          "settledGrossProfit": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "本期审核结算净毛利差额；存在不能可靠分期的月结时为null，而不是零或局部合计。",
+            "x-decimal-scale": 2
+          },
+          "estimatedGrossProfit": {
+            "type": "number",
+            "description": "本期未结算预计净毛利贡献差额，使用预估运费和已知收入成本。不能把每日存量快照相加；与结算毛利分开展示。",
+            "x-decimal-scale": 2
+          },
+          "unallocatedCount": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "当前期间涉及但缺可靠日分配的结算事实数量。"
+          },
+          "receiptCount": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "有效收款行数；不是订单数。"
+          },
+          "profitCount": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "利润贡献事实数量；含缺分期的结算事实，不是订单数。"
+          },
+          "profitStatus": {
+            "type": "string",
+            "description": "none无利润；estimated仅预估；settled仅结算；mixed混合；unallocated存在月结待分期。",
+            "enum": [
+              "none",
+              "estimated",
+              "settled",
+              "mixed",
+              "unallocated"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "from",
+          "to",
+          "orderAmount",
+          "stockAmount",
+          "collectionsAmount",
+          "settledGrossProfit",
+          "estimatedGrossProfit",
+          "unallocatedCount",
+          "receiptCount",
+          "profitCount",
+          "profitStatus"
+        ],
+        "additionalProperties": false,
+        "examples": [
+          {
+            "orderAmount": 0,
+            "stockAmount": 0,
+            "collectionsAmount": 0,
+            "settledGrossProfit": 8,
+            "estimatedGrossProfit": 0,
+            "unallocatedCount": 0,
+            "receiptCount": 0,
+            "profitCount": 1,
+            "id": "2026-09",
+            "label": "2026-09",
+            "from": "2026-09-01",
+            "to": "2026-09-30",
+            "profitStatus": "settled"
+          }
+        ]
+      },
+      "PerformanceUnallocated": {
+        "type": "object",
+        "description": "整月参考值，用于解释null；涉及多周时不可按周相加。",
+        "properties": {
+          "month": {
+            "type": "string",
+            "description": "尚无日分期的结算月。",
+            "pattern": "^\\d{4}-\\d{2}$"
+          },
+          "amount": {
+            "type": "number",
+            "description": "该月获授权结算参考金额，不冒充当前所选周/日金额，不重复加入合计。",
+            "x-decimal-scale": 2
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "待分期结算事实数。"
+          }
+        },
+        "required": [
+          "month",
+          "amount",
+          "count"
+        ],
+        "additionalProperties": false
+      },
+      "PerformanceData": {
+        "type": "object",
+        "description": "销售工作台个人收款与毛利响应。当前Mock/BFF已实现，FOP历史事件和只读网络适配待IT对接。",
+        "properties": {
+          "source": {
+            "type": "string",
+            "description": "数据来源。",
+            "enum": [
+              "mock",
+              "fop"
+            ]
+          },
+          "query": {
+            "$ref": "#/components/schemas/PerformanceQuery"
+          },
+          "timeZone": {
+            "type": "string",
+            "description": "业务日期归属。",
+            "const": "UTC+8"
+          },
+          "currency": {
+            "type": "string",
+            "description": "展示币种。",
+            "const": "USD"
+          },
+          "asOf": {
+            "type": "string",
+            "format": "date-time",
+            "description": "服务端当前查询快照时刻，不是支持历史回放的承诺。"
+          },
+          "owners": {
+            "type": "array",
+            "description": "当前用户权限范围内业务员。",
+            "items": {
+              "$ref": "#/components/schemas/PerformanceOwner"
+            }
+          },
+          "selectedOwner": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PerformanceOwner"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "本次实际选择；空范围null。普通员工仅自己。管理员/经理无绑定时默认首个并明确显示姓名。"
+          },
+          "canSelectOwner": {
+            "type": "boolean",
+            "description": "普通业务员false，业务管理员/部门经理true；仍不得越权。"
+          },
+          "periods": {
+            "type": "array",
+            "description": "查询期分桶，含零值期。",
+            "items": {
+              "$ref": "#/components/schemas/PerformancePeriod"
+            }
+          },
+          "totals": {
+            "$ref": "#/components/schemas/PerformanceMetrics"
+          },
+          "unallocatedSettlements": {
+            "type": "array",
+            "description": "未分期月结参考。",
+            "items": {
+              "$ref": "#/components/schemas/PerformanceUnallocated"
+            }
+          }
+        },
+        "required": [
+          "source",
+          "query",
+          "timeZone",
+          "currency",
+          "asOf",
+          "owners",
+          "selectedOwner",
+          "canSelectOwner",
+          "periods",
+          "totals",
+          "unallocatedSettlements"
+        ],
+        "additionalProperties": false,
+        "examples": [
+          {
+            "source": "mock",
+            "query": {
+              "from": "2026-09-01",
+              "to": "2026-09-30",
+              "grain": "month",
+              "ownerId": "employee-example"
+            },
+            "timeZone": "UTC+8",
+            "currency": "USD",
+            "asOf": "2026-10-23T12:00:00+08:00",
+            "owners": [
+              {
+                "id": "employee-example",
+                "name": "曹可滢（Ruth）",
+                "department": {
+                  "id": "sales1-example",
+                  "name": "业务一部"
+                }
+              }
+            ],
+            "selectedOwner": {
+              "id": "employee-example",
+              "name": "曹可滢（Ruth）",
+              "department": {
+                "id": "sales1-example",
+                "name": "业务一部"
+              }
+            },
+            "canSelectOwner": false,
+            "periods": [
+              {
+                "orderAmount": 0,
+                "stockAmount": 0,
+                "collectionsAmount": 0,
+                "settledGrossProfit": 8,
+                "estimatedGrossProfit": 0,
+                "unallocatedCount": 0,
+                "receiptCount": 0,
+                "profitCount": 1,
+                "id": "2026-09",
+                "label": "2026-09",
+                "from": "2026-09-01",
+                "to": "2026-09-30",
+                "profitStatus": "settled"
+              }
+            ],
+            "totals": {
+              "orderAmount": 0,
+              "stockAmount": 0,
+              "collectionsAmount": 0,
+              "settledGrossProfit": 8,
+              "estimatedGrossProfit": 0,
+              "unallocatedCount": 0,
+              "receiptCount": 0,
+              "profitCount": 1
+            },
+            "unallocatedSettlements": []
+          }
+        ]
+      },
+      "PerformancePage": {
+        "type": "object",
+        "description": "工作台明细响应，金额和计数总计在分页前计算。",
+        "properties": {
+          "source": {
+            "type": "string",
+            "description": "来源。",
+            "enum": [
+              "mock",
+              "fop"
+            ]
+          },
+          "timeZone": {
+            "type": "string",
+            "description": "UTC+8归属。",
+            "const": "UTC+8"
+          },
+          "currency": {
+            "type": "string",
+            "description": "金额币种。",
+            "const": "USD"
+          },
+          "asOf": {
+            "type": "string",
+            "format": "date-time",
+            "description": "查询快照时刻。"
+          },
+          "kind": {
+            "type": "string",
+            "description": "明细类别。",
+            "enum": [
+              "receipts",
+              "profit"
+            ]
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "当前kind全量行数。"
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "pageSize": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "receipts": {
+            "type": "array",
+            "description": "kind=receipts时返回收款行，否则空。",
+            "items": {
+              "$ref": "#/components/schemas/FopReceipt"
+            }
+          },
+          "profits": {
+            "type": "array",
+            "description": "kind=profit时返回利润事实，否则空；无日分配的月结为参考，不能冒充当前周日。",
+            "items": {
+              "$ref": "#/components/schemas/FopProfit"
+            }
+          },
+          "totals": {
+            "$ref": "#/components/schemas/PerformanceMetrics",
+            "description": "全范围合计，分页不影响。"
+          },
+          "range": {
+            "type": "object",
+            "description": "详情范围。",
+            "properties": {
+              "from": {
+                "type": "string",
+                "description": "本次详情开始。",
+                "format": "date",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+              },
+              "to": {
+                "type": "string",
+                "description": "本次详情结束。",
+                "format": "date",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+              }
+            },
+            "required": [
+              "from",
+              "to"
+            ],
+            "additionalProperties": false
+          },
+          "unallocatedSettlements": {
+            "type": "array",
+            "description": "月结整月参考。",
+            "items": {
+              "$ref": "#/components/schemas/PerformanceUnallocated"
+            }
+          }
+        },
+        "required": [
+          "source",
+          "timeZone",
+          "currency",
+          "asOf",
+          "kind",
+          "total",
+          "page",
+          "pageSize",
+          "receipts",
+          "profits",
+          "totals",
+          "range",
+          "unallocatedSettlements"
+        ],
+        "additionalProperties": false,
+        "examples": [
+          {
+            "source": "mock",
+            "timeZone": "UTC+8",
+            "currency": "USD",
+            "asOf": "2026-10-23T12:00:00+08:00",
+            "kind": "profit",
+            "total": 1,
+            "page": 1,
+            "pageSize": 20,
+            "receipts": [],
+            "profits": [
+              {
+                "id": "gp-example",
+                "orderId": "order-example",
+                "orderNumber": "TO-202609-001",
+                "customerCode": "C001",
+                "customerName": "示例客户",
+                "owner": {
+                  "id": "employee-example",
+                  "name": "曹可滢（Ruth）"
+                },
+                "department": {
+                  "id": "sales1-example",
+                  "name": "业务一部"
+                },
+                "salesDepartmentCode": "sales1",
+                "recognitionMonth": "2026-09",
+                "recognitionDate": null,
+                "knownAt": "2026-10-08T10:00:00+08:00",
+                "status": "settled",
+                "settlementId": "GP-202609-RUTH",
+                "version": "2",
+                "approvedAt": "2026-10-08T10:00:00+08:00",
+                "cutoffAt": "2026-10-01T00:00:00+08:00",
+                "freightBasis": "frozen",
+                "incomeAmount": 100,
+                "adjustmentIncome": 5,
+                "productCost": 60,
+                "freightCost": 10,
+                "refundCost": 4,
+                "returnCost": 1,
+                "otherCost": 2,
+                "previousRecognizedProfit": 20,
+                "roundingAdjustment": 0,
+                "amount": 8,
+                "currency": "USD",
+                "originalAmount": 8,
+                "originalCurrency": "USD",
+                "fxRateToUsd": 1,
+                "fxRateDate": "2026-09-30",
+                "fxRateSource": "mock-contract-example"
+              }
+            ],
+            "totals": {
+              "orderAmount": 0,
+              "stockAmount": 0,
+              "collectionsAmount": 0,
+              "settledGrossProfit": 8,
+              "estimatedGrossProfit": 0,
+              "unallocatedCount": 0,
+              "receiptCount": 0,
+              "profitCount": 1
+            },
+            "range": {
+              "from": "2026-09-01",
+              "to": "2026-09-30"
+            },
+            "unallocatedSettlements": []
+          }
+        ]
+      },
+      "FopSalesProfitAuthorization": {
+        "type": "object",
+        "properties": {
+          "subject": {
+            "type": "object",
+            "properties": {
+              "tenantId": {
+                "type": "string",
+                "description": "绑定租户。",
+                "minLength": 1
+              },
+              "userId": {
+                "type": "string",
+                "description": "绑定FOP用户。",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "tenantId",
+              "userId"
+            ],
+            "additionalProperties": false,
+            "description": "可信provider解析主体，必须与服务端绑定完全匹配。"
+          },
+          "analyticsScopes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": "独立分析资源。",
+              "enum": [
+                "rates",
+                "registrations",
+                "receipts",
+                "freight",
+                "sales_profit"
+              ]
+            },
+            "description": "销售个人统计要求sales_profit及receipts，缺scope为403。",
+            "uniqueItems": true
+          },
+          "allowedProfitIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": "获授权发运单ID。",
+              "minLength": 1
+            },
+            "description": "独立利润贡献事实ID白名单，缺失/空不授予毛利事实；不能从订单/收款/运费推导。",
+            "uniqueItems": true
+          },
+          "allowedReceiptIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "uniqueItems": true,
+            "description": "独立收款行白名单；缺失/空不授予收款事实。"
+          }
+        },
+        "required": [
+          "subject"
+        ],
+        "additionalProperties": false,
+        "description": "内部权限投影，浏览器不可写。sales_profit + receipts scopes + sales岗位同时必需；毛利、收款独立白名单并与本地业务范围求交。FOP冻结业务员身份应映射到当前可信员工绑定。"
       }
     },
     "responses": {

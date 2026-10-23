@@ -1,12 +1,12 @@
 # ECharts 前端全量诊断
 
-诊断日期：2026-10-22。范围：`work-app/frontend` 全部 ECharts 实例、调用组件、直接相关 API 客户端、统计工具、路由、权限与测试。本文源码路径均相对于 `work-app/`。原诊断行号保留作历史定位；方案2修改后应以当前函数／组件名定位，最终验证见 VERIFICATION.md。
+更新日期：2026-10-23（UTC+8），保留2026-10-22诊断。范围：`work-app/frontend` 全部 ECharts 实例、调用组件、直接相关 API 客户端、统计工具、路由、权限与测试。本文源码路径均相对于 `work-app/`。原诊断行号保留作历史定位；方案2及后续扩展应以当前函数／组件名定位，最终验证见 VERIFICATION.md。
 
 原始诊断为只读；本轮按方案2更新了收款口径、来源拆分和工作台下钻，并修复 FE-01/FE-02。本文历史测试只证明当时结果，不能代替本轮验证。没有访问生产 FOP。结论区分“源码已实现”“本地测试已验证”“未实现”“生产待验证”，不能将 mock/stub 测试等同于真实浏览器或生产验收。
 
 ## 1. 覆盖范围与结论
 
-全量搜索 `echarts`、`EChart`、`dataZoom`、`toolbox` 确认：只有 **1 个 ECharts 初始化包装器、3 个业务调用文件、6 处 `<EChart>` 模板调用点、9 类面向用户的逻辑图表**。没有发现另外的原生 `echarts.init` 实例、饼图、地图或独立第三方图表包装器。
+2026-10-22初始全量搜索 `echarts`、`EChart`、`dataZoom`、`toolbox` 的历史基线为 **1 个 ECharts 初始化包装器、3 个业务调用文件、6 处 `<EChart>` 模板调用点、9 类面向用户的逻辑图表**，当时未发现另外的原生 `echarts.init` 实例、饼图、地图或独立第三方图表包装器。后续物流G10–G11和本次个人收款／净毛利G12–G13追加如下，不能将历史调用数当成当前全量数量。
 
 - 包装器：`frontend/src/components/charts/EChart.vue:3`、`:60`。
 - 业务调用：`frontend/src/views/autoflow/FopDashboardView.vue:222`、`:247`、`:257`；`frontend/src/components/order-volume/OrderVolumeResults.vue:67`、`:68`；`frontend/src/components/order-volume/CustomerOrderResults.vue:103`。
@@ -30,6 +30,8 @@
 | G09 单客户每日回款业绩趋势 | 同 G08，`metric=amount`；`total.amounts.values/warehouses` | 同一客户集合、同一日期／仓库映射；金额来自独立授权 USD 收款分录，包含全款备货 | 金额轴与数量轴独立，只有时间窗口同步；表格显示每日数量与金额并按日期倒序；缺失 amounts 显示 `—`，不伪造 0（`:31`、`:35`、`:119`） |
 | G10 物流实际运费并列柱状 | `FreightAnalysis.vue` / `FreightResults.vue`，独立 `GET /freight`；periods、合计与YT/4PX/WB/YW/JS/OTHER的FreightValue系列 | month/week/year、year、weekOf、warehouse；已审核且已确认正成本，按UTC+8确认时间归期；USD目标币种 | 总计独立，不重复相加；未完期partial提示；完整上期环比；统计表倒序、固定列宽，开启环比展开、关闭保持；仅拖动滑块改横轴 |
 | G11 单物流服务商趋势弹窗 | `FreightTrendDialog.vue`，复用已返回响应，按选中carrierCode筛出单商；接口另支持carrierCode查询 | 继承已应用时间/仓库，0基期比例为null或0，前端不自造百分比 | 居中弹窗；原始成本从柱/表下钻当前可访问岗位工作台，展示原币、汇率与USD；分页前合计 |
+| G12 个人收款趋势 | `SalesPerformanceView.vue`，`periods[].orderAmount/stockAmount`收款来源柱与collectionsAmount合计线 | 销售工作台；from/to、month/week/day、授权ownerId；金额是独立分录实收，按paidAt归期 | 同筛选收款明细；统计表倒序和分页；数据来源、UTC+8、USD及asOf可见 |
+| G13 个人净毛利趋势 | 同页面，settledGrossProfit与estimatedGrossProfit两条独立曲线 | 已审核月结期间delta／预计贡献；归属月/日不沿用收款日，结算与预计不加成总利润 | null断线及待补充分期提示；月结参考独立展示；利润明细有收入／成本、上期已确认、版本、原币和FX |
 
 表内短文件名的完整路径分别为 `frontend/src/views/autoflow/FopDashboardView.vue`、`frontend/src/components/order-volume/OrderVolumeResults.vue`、`frontend/src/components/order-volume/CustomerOrderResults.vue`、`frontend/src/components/order-volume/order-volume.css`。
 
@@ -337,3 +339,25 @@ describe('ECharts audit: assertions of current incorrect behavior', () => {
 | 访问及错误 | freight scope缺失403与空allowlist合法空数据区分。切账号/会话、加载失败、筛选竞态必须清理或拒绝旧成本；前端岗位可见不取代服务端成本授权 |
 
 源码定位：`frontend/src/components/freight/FreightAnalysis.vue`、`FreightResults.vue`、`FreightTrendDialog.vue`、`frontend/src/utils/freight.ts`、`frontend/src/api/fop-freight.ts`、`frontend/src/views/autoflow/FopFreightView.vue`。工作台路由为`/workbench/:role/freight`（RoleWorkbenchFreight），由WorkbenchView和路由守卫校验岗位入口。以上已核对源码；测试、HTTP和浏览器实际验收状态以VERIFICATION.md为准。真实最终结算定义、汇率、后续补收退款/调价、成本可见权及服务商映射见H18–H22，不用本地Mock截图关闭生产待办。
+
+## 10. 销售个人收款与净毛利前端审计补充
+
+本次前端源码入口为 `frontend/src/views/autoflow/SalesPerformanceView.vue`，API为 `frontend/src/api/fop-sales-performance.ts`，明细为 `frontend/src/components/sales-performance/SalesPerformanceDetails.vue`。新增页面与已有EChart包装器共用展示基础；本节描述合同与检查点，**不宣称测试或真实浏览器验收完成**。本地功能验证与生产FOP验收分开记录。
+
+| 消费或交互 | 合同与检查点 |
+| --- | --- |
+| 查询与日期 | GET `/api/autoflow/integrations/fop/sales-performance`，from/to/grain及可选ownerId；周按周一分桶并裁切所选范围。默认本年初至UTC+8今天；后台限制日期从2020起、结束不晚于今天且跨度差最多365天；不能传历史asOf |
+| 人员候选 | 使用响应owners、selectedOwner、canSelectOwner；个人不显示可越权切换入口，经理／业务管理员仅能在授权候选中选择；姓名同名时保持稳定ID，不自己构造全员目录 |
+| 收款金额 | orderAmount=履约实收、stockAmount=全款备货实收、collectionsAmount=两者之和；总计线不与来源柱再次相加。全款备货使用不能另造第二笔回款；明细FopReceipt.orderAmount是应收核对字段，语义不同 |
+| 净毛利 | 已结算与预计分别展示、预计用明确标识，不生成合并“总利润”；amount为当期净毛利贡献，允许负数。不能用收款金额直接减成本或用页面缓存重新算月结 |
+| 无日分配 | settledGrossProfit=null显示“—／待补充分期明细”，图表connectNulls=false；unallocatedSettlements月结参考与日／周小计分开；不得均摊月差额或把null格式化为$0 |
+| 状态 | profitStatus为none/estimated/settled/mixed/unallocated；mixed不是完成结算、也不是可相加许可。已结算表示对应版本已审核，不代表该订单未来再无调整 |
+| 明细请求 | GET `/sales-performance/details`继承已应用from/to/grain/ownerId，kind=receipts或profit，可选periodId；page/pageSize只影响当前行，不改变完整筛选totals；不另传客户端权限列表 |
+| 利润明细 | 显示归属日／月、状态／版本、审批及截止、收入和调整、商品／运费／退款／退货／其他成本、previousRecognizedProfit和roundingAdjustment；源CNY与USD、FX方向／日期／来源可核对；财务手续费归otherCost等分类由后台定义 |
+| 金额精度 | 前端只格式化返回USD分币，不采用当前Dashboard汇率重算历史月结。换汇尾差为审计分量，不能与其他成本混写；展示负数符号和null区别 |
+| 日期归属 | 收款按paidAt，利润按recognitionMonth/date；approvedAt、knownAt、cutoffAt是追溯／资格信息，不能替代利润日。历史range展示当前已审核该月值，不表示历史审批回放 |
+| 图表和统计表 | 时间轴升序，统计表倒序、固定列宽；图表使用EChart滑块并保持外层滚动；筛选切换重置分页／关闭旧明细，标题来自实际应用条件 |
+| 失败和会话 | 加载／失败／换人／退出／换号清理旧金额与候选，递增请求标识丢弃晚到响应；明细无权限也应使父统计失效，不能保留先前金额；403与合法空数据、503与0分开 |
+| 数据来源 | source=mock明确显示MOCK；无真实provider不展示“已接通FOP”。asOf是本次计算时刻，不能写为上游最后同步成功或账期关闭时间 |
+
+实际视觉验收至少包含AT-18–AT-24、D16–D22：本人和经理、当前未结算、历史完整月、部分月／日周null、负调整、月结参考、长姓名、窄屏／暗色、筛选竞态及明细分页。组件单测若使用图表stub，不能证明SVG、tooltip、滑块、断线和弹窗布局正确。完整测试及截图记录只以VERIFICATION为准；FOP事件账本、真实授权、换汇和财务对账仍由T21–T26完成。

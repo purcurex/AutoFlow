@@ -9,6 +9,7 @@ import OrderVolumeOrdersView from './OrderVolumeOrdersView.vue'
 import OrderVolumeAnalysis from '@/components/order-volume/OrderVolumeAnalysis.vue'
 import FopReceiptsView from './FopReceiptsView.vue'
 import FopFreightView from './FopFreightView.vue'
+import SalesPerformanceView from './SalesPerformanceView.vue'
 import FopOrdersView from './FopOrdersView.vue'
 import FopDataAccessNotice from '@/components/FopDataAccessNotice.vue'
 import { useWorkbenchAccess } from '@/composables/useWorkbenchAccess'
@@ -43,8 +44,9 @@ function queueLink(value: string) { return { name: 'RoleWorkbench', params: { ro
       <nav class="role-tabs" :aria-label="text('岗位工作台', 'Role workbenches')"><RouterLink v-for="item in roles" :key="item" :to="roleLink(item)" :class="{ active: role === item }" :aria-current="role === item ? 'page' : undefined"><component :is="icons[item]" :size="19" /><span>{{ workbenchNames[item][zh ? 0 : 1] }}</span></RouterLink></nav>
       <template v-if="allowed && role">
         <FopDataAccessNotice @recheck="dataRevision++" />
-        <nav class="workbench-queues" :aria-label="text('工作台功能', 'Workbench functions')"><RouterLink :to="queueLink('order-analysis')" :class="{ active: choice === 'order-analysis' || choice === 'order-volume' || choice === 'receipts' }">{{ text('订单分析', 'Order analysis') }}</RouterLink><RouterLink :to="queueLink('freight')" :class="{ active: choice === 'freight' }">{{ text('物流运费', 'Actual freight') }}</RouterLink><RouterLink v-if="role === 'sales'" :to="queueLink('overview')" :class="{ active: choice === 'overview' }">{{ text('客户开发概览', 'Prospecting overview') }}</RouterLink><RouterLink v-for="item in workbenchQueues[role]" :key="item" :to="queueLink(item)" :class="{ active: choice === item }">{{ queueNames[item][zh ? 0 : 1] }}{{ text('清单', item === 'exceptions' ? '' : ' orders') }}</RouterLink></nav>
+        <nav class="workbench-queues" :aria-label="text('工作台功能', 'Workbench functions')"><RouterLink v-if="role === 'sales'" :to="queueLink('performance')" :class="{ active: choice === 'performance' }">{{ text('个人收款与毛利', 'Personal receipts and profit') }}</RouterLink><RouterLink :to="queueLink('order-analysis')" :class="{ active: choice === 'order-analysis' || choice === 'order-volume' || choice === 'receipts' }">{{ text('订单分析', 'Order analysis') }}</RouterLink><RouterLink :to="queueLink('freight')" :class="{ active: choice === 'freight' }">{{ text('物流运费', 'Actual freight') }}</RouterLink><RouterLink v-if="role === 'sales'" :to="queueLink('overview')" :class="{ active: choice === 'overview' }">{{ text('客户开发概览', 'Prospecting overview') }}</RouterLink><RouterLink v-for="item in workbenchQueues[role]" :key="item" :to="queueLink(item)" :class="{ active: choice === item }">{{ queueNames[item][zh ? 0 : 1] }}{{ text('清单', item === 'exceptions' ? '' : ' orders') }}</RouterLink></nav>
         <SalesOverview v-if="choice === 'overview' && role === 'sales'" />
+        <SalesPerformanceView v-else-if="choice === 'performance' && role === 'sales'" :key="dataRevision" />
         <FopFreightView v-else-if="choice === 'freight'" :key="dataRevision" />
         <FopReceiptsView v-else-if="choice === 'receipts'" :key="dataRevision" />
         <OrderVolumeOrdersView v-else-if="choice === 'order-volume'" :key="dataRevision" />

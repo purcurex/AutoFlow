@@ -1,3 +1,5 @@
+import { aggregateSalesPerformance, performanceDetails, performancePeriods, effectiveProfits } from './sales-performance'
+import type { FopProfit, PerformanceData, PerformanceDetailsQuery, PerformanceOwner, PerformancePage, PerformanceQuery } from './sales-performance.types'
 import { aggregateFreight, freightDetails, freightPeriods, publicFreight } from './fop-freight'
 import type { FopFreight, FreightQuery, FreightDetailsQuery } from './fop-freight.types'
 import { BadRequestException, ForbiddenException, Inject, Injectable, ServiceUnavailableException, UnauthorizedException } from '@nestjs/common'
@@ -103,10 +105,13 @@ export class FopDataService {
     if (grant.allowedFreightIds !== undefined && (!Array.isArray(grant.allowedFreightIds) || grant.allowedFreightIds.some(id => typeof id !== 'string' || !id.trim()))) {
       throw new ForbiddenException({ code: 'fop_permission_denied', message: 'Invalid FOP freight permissions' })
     }
-    if (grant.analyticsScopes !== undefined && (!Array.isArray(grant.analyticsScopes) || grant.analyticsScopes.some(scope => !['rates', 'registrations', 'receipts', 'freight'].includes(scope)))) {
+    if (grant.allowedProfitIds !== undefined && (!Array.isArray(grant.allowedProfitIds) || grant.allowedProfitIds.some(id => typeof id !== 'string' || !id.trim()))) {
+      throw new ForbiddenException({ code: 'fop_permission_denied', message: 'Invalid FOP profit permissions' })
+    }
+    if (grant.analyticsScopes !== undefined && (!Array.isArray(grant.analyticsScopes) || grant.analyticsScopes.some(scope => !['rates', 'registrations', 'receipts', 'freight', 'sales_profit'].includes(scope)))) {
       throw new ForbiddenException({ code: 'fop_permission_denied', message: 'Invalid FOP analytics permissions' })
     }
-    return { subject: { ...identity }, allowedOrderIds: [...new Set(grant.allowedOrderIds)], allowedReceiptIds: [...new Set(grant.allowedReceiptIds ?? [])], allowedFreightIds: [...new Set(grant.allowedFreightIds ?? [])], analyticsScopes: [...new Set(grant.analyticsScopes ?? [])] }
+    return { subject: { ...identity }, allowedOrderIds: [...new Set(grant.allowedOrderIds)], allowedReceiptIds: [...new Set(grant.allowedReceiptIds ?? [])], allowedFreightIds: [...new Set(grant.allowedFreightIds ?? [])], allowedProfitIds: [...new Set(grant.allowedProfitIds ?? [])], analyticsScopes: [...new Set(grant.analyticsScopes ?? [])] }
   }
 
   private async providerCall<T>(operation: () => Promise<T>): Promise<T> {
@@ -175,14 +180,16 @@ export class FopDataService {
     const allowed = new Set(scoped.permission.allowedReceiptIds ?? [])
     if (!allowed.size) return []
     const identity = Object.freeze({ ...scoped.permission.subject })
-    const grant = Object.freeze({ ...scoped.permission, subject: identity, allowedOrderIds: Object.freeze([...scoped.permission.allowedOrderIds]), allowedReceiptIds: Object.freeze([...allowed]) })
+    const grant = Object.freeze({ ...scoped.permission, subject: identity, allowedOrderIds: Object.freeze([...scoped.permission.allowedOrderIds]), allowedReceiptIds: Object.freeze([...allowed]), allowedProfitIds: Object.freeze([...(scoped.permission.allowedProfitIds ?? [])]), allowedFreightIds: Object.freeze([...(scoped.permission.allowedFreightIds ?? [])]), analyticsScopes: Object.freeze([...(scoped.permission.analyticsScopes ?? [])]) })
     const candidates = await this.providerCall(() => this.provider.listReceipts(identity, grant))
     await this.assertUnchanged(userId, scoped.initial)
     return this.providerCall(async () => {
       if (!Array.isArray(candidates)) throw new Error('Invalid FOP receipt response')
       const seen = new Set<string>()
       return candidates.filter(candidate => {
-        if (!candidate || candidate.tenantId !== identity.tenantId || !allowed.has(candidate.id) || !matchesBusinessScope(scoped.initial.business, candidate)) return false
+        if (!candidate || candidate.tenantId !== identity.tenantId || !allowed.has(candidate.id)) return false
+        this.validateAncestry(candidate.departmentPathIds)
+        if (!matchesBusinessScope(scoped.initial.business, candidate)) return false
         if (seen.has(candidate.id)) throw new Error('Duplicate authorized receipt ID')
         seen.add(candidate.id)
         return true
@@ -214,6 +221,77 @@ export class FopDataService {
       }).map(publicFreight)
     })
     return { records, initial }
+  }
+
+  private validateAncestry(path: unknown): void {
+    if (path !== undefined && (!Array.isArray(path) || path.some(id => typeof id !== 'string' || !id.trim()) || new Set(path).size !== path.length)) throw new Error('Invalid resource department ancestry')
+  }
+
+  private async scopedPerformance(userId: string, now: Date) {
+    const initial = await this.scope(userId)
+    if (!initial.roles.includes('sales')) throw new ForbiddenException('Sales workbench access denied')
+    const permission = await this.permissions(userId, initial)
+    if (!permission.analyticsScopes?.includes('receipts') || !permission.analyticsScopes.includes('sales_profit')) throw new ForbiddenException({ code: 'fop_permission_denied', message: 'Independent receipt and sales profit access is required' })
+    // Receipt authorization is independent of order enumeration and order access.
+    const receipts = await this.scopedReceipts(userId, { permission, initial })
+    const allowed = new Set(permission.allowedProfitIds ?? [])
+    let profits: FopProfit[] = []
+    if (allowed.size) {
+      const identity = Object.freeze({ ...permission.subject })
+      const grant = Object.freeze({ subject: identity, allowedOrderIds: Object.freeze([...permission.allowedOrderIds]), allowedProfitIds: Object.freeze([...allowed]), analyticsScopes: Object.freeze([...(permission.analyticsScopes ?? [])]) })
+      const candidates = await this.providerCall(() => this.provider.listProfits(identity, grant))
+      await this.assertUnchanged(userId, initial)
+      profits = await this.providerCall(async () => {
+        if (!Array.isArray(candidates)) throw new Error('Invalid profit response')
+        const seen = new Set<string>()
+        return effectiveProfits(candidates.filter(candidate => {
+          if (!candidate || candidate.tenantId !== identity.tenantId || !allowed.has(candidate.id)) return false
+          this.validateAncestry(candidate.departmentPathIds)
+          if (!matchesBusinessScope(initial.business, candidate)) return false
+          if (seen.has(candidate.id)) throw new Error('Duplicate authorized profit ID')
+          seen.add(candidate.id)
+          return true
+        }), now)
+      })
+    }
+    await this.assertUnchanged(userId, initial)
+    return { receipts, profits, initial }
+  }
+
+  private performanceOwner(scoped: { receipts: FopReceipt[]; profits: FopProfit[]; initial: Scope }, query: PerformanceQuery, now: Date) {
+    const canSelectOwner = ['admin', 'department_manager'].includes(scoped.initial.business.role)
+    const byId = new Map<string, PerformanceOwner>()
+    const knownProfits = scoped.profits.filter(row => Date.parse(row.knownAt) <= now.getTime() && (!row.approvedAt || Date.parse(row.approvedAt) <= now.getTime())
+      && (row.recognitionDate ? row.recognitionDate <= businessDate(now) : row.recognitionMonth <= businessDate(now).slice(0, 7)))
+    for (const row of [...eligibleReceipts(scoped.receipts, now), ...knownProfits]) {
+      if (row.owner && row.department) byId.set(row.owner.id, { id: row.owner.id, name: row.owner.name, department: { id: row.department.id, name: row.department.name } })
+    }
+    const owners = [...byId.values()].sort((a, b) => a.id.localeCompare(b.id))
+    const boundId = scoped.initial.business.employeeId
+    if (query.ownerId !== undefined && (canSelectOwner ? !byId.has(query.ownerId) : query.ownerId !== boundId)) throw new ForbiddenException({ code: 'fop_permission_denied', message: 'Salesperson is outside the authorized scope' })
+    const ownerId = canSelectOwner ? query.ownerId ?? (boundId && byId.has(boundId) ? boundId : owners[0]?.id) : boundId ?? undefined
+    return { canSelectOwner, owners, selectedOwner: ownerId ? byId.get(ownerId) ?? null : null, ownerId,
+      receipts: scoped.receipts.filter(row => row.owner?.id === ownerId), profits: scoped.profits.filter(row => row.owner.id === ownerId) }
+  }
+
+  async getSalesPerformance(userId: string, query: PerformanceQuery): Promise<PerformanceData> {
+    const now = new Date()
+    performancePeriods(query, now)
+    const scoped = await this.scopedPerformance(userId, now)
+    const selected = this.performanceOwner(scoped, query, now)
+    const result = await this.providerCall(async () => aggregateSalesPerformance(selected.receipts, selected.profits, { ...query, ...(selected.ownerId ? { ownerId: selected.ownerId } : {}) }, now))
+    await this.assertUnchanged(userId, scoped.initial)
+    return { source: this.provider.source ?? 'fop', ...result, owners: selected.owners, selectedOwner: selected.selectedOwner, canSelectOwner: selected.canSelectOwner }
+  }
+
+  async getSalesPerformanceDetails(userId: string, query: PerformanceDetailsQuery): Promise<PerformancePage> {
+    const now = new Date()
+    performanceDetails([], [], query, now)
+    const scoped = await this.scopedPerformance(userId, now)
+    const selected = this.performanceOwner(scoped, query, now)
+    const result = await this.providerCall(async () => performanceDetails(selected.receipts, selected.profits, query, now))
+    await this.assertUnchanged(userId, scoped.initial)
+    return { source: this.provider.source ?? 'fop', ...result }
   }
 
   async getFreight(userId: string, query: FreightQuery) {

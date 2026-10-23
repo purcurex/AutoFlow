@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="hyperzone-html-style" content="1.0">
-<title>ECharts 诊断与 API 对接需求</title>
+<title>完整需求与 API 对接方案</title>
 <style>/* HyperZone HTML Standard v1.0 — shared canonical stylesheet */
 
 :root{--ink:#172b43;--muted:#5b6e80;--blue:#165a9b;--teal:#087f8c;--line:#dbe5ed;--bg:#f3f6fa;--nav:274px}
@@ -42,20 +42,20 @@ article h2:target{color:#087f8c} .hero h1{font-size:32px} .table-wrap td{overflo
 <aside class="sidebar">
   <img class="brand-logo" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHhtbG5zOnhsaW5rPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5L3hsaW5rIiB2ZXJzaW9uPSIxLjAiIHg9IjAiIHk9IjAiIHdpZHRoPSIyNDAwIiBoZWlnaHQ9IjU1My4yMzk1OTE5NTE5NTg2IiB2aWV3Qm94PSI2Ni43NTA1MDE1NTYzOTY0OSAxMDEuMTk5MjkzMDYwMzAyNzQgMjA2LjQ5ODk5Njg4NzIwNzAzIDQ3LjYwMTQyNTMyMzQ4NjMyNSIgcHJlc2VydmVBc3BlY3RSYXRpbz0ieE1pZFlNaWQgbWVldCIgY29sb3ItaW50ZXJwb2xhdGlvbi1maWx0ZXJzPSJzUkdCIj48Zz48ZGVmcz48bGluZWFyR3JhZGllbnQgaWQ9IjkyIiB4MT0iMCUiIHkxPSIwJSIgeDI9IjEwMCUiIHkyPSIwJSI+PHN0b3Agb2Zmc2V0PSIwJSIgc3RvcC1jb2xvcj0iI2ZhNzFjZCI+PC9zdG9wPiA8c3RvcCBvZmZzZXQ9IjEwMCUiIHN0b3AtY29sb3I9IiM5YjU5YjYiPjwvc3RvcD48L2xpbmVhckdyYWRpZW50PjxsaW5lYXJHcmFkaWVudCBpZD0iOTMiIHgxPSIwJSIgeTE9IjAlIiB4Mj0iMTAwJSIgeTI9IjAlIj48c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjZjlkNDIzIj48L3N0b3A+IDxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iI2Y4MzYwMCI+PC9zdG9wPjwvbGluZWFyR3JhZGllbnQ+PGxpbmVhckdyYWRpZW50IGlkPSI5NCIgeDE9IjAlIiB5MT0iMCUiIHgyPSIxMDAlIiB5Mj0iMCUiPjxzdG9wIG9mZnNldD0iMCUiIHN0b3AtY29sb3I9IiMwMDY0ZDIiPjwvc3RvcD4gPHN0b3Agb2Zmc2V0PSIxMDAlIiBzdG9wLWNvbG9yPSIjMWNiMGY2Ij48L3N0b3A+PC9saW5lYXJHcmFkaWVudD48bGluZWFyR3JhZGllbnQgaWQ9Ijk1IiB4MT0iMCUiIHkxPSIwJSIgeDI9IjEwMCUiIHkyPSIwJSI+PHN0b3Agb2Zmc2V0PSIwJSIgc3RvcC1jb2xvcj0iI2YwMDk3OCI+PC9zdG9wPiA8c3RvcCBvZmZzZXQ9IjEwMCUiIHN0b3AtY29sb3I9IiMzZjUxYjEiPjwvc3RvcD48L2xpbmVhckdyYWRpZW50PjxsaW5lYXJHcmFkaWVudCBpZD0iOTYiIHgxPSIwJSIgeTE9IjAlIiB4Mj0iMTAwJSIgeTI9IjAlIj48c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjNzg3M2Y1Ij48L3N0b3A+IDxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iI2VjNzdhYiI+PC9zdG9wPjwvbGluZWFyR3JhZGllbnQ+PGxpbmVhckdyYWRpZW50IGlkPSI5NyIgeDE9IjAlIiB5MT0iMCUiIHgyPSIxMDAlIiB5Mj0iMCUiPjxzdG9wIG9mZnNldD0iMCUiIHN0b3AtY29sb3I9IiNmOWQ0MjMiPjwvc3RvcD4gPHN0b3Agb2Zmc2V0PSIxMDAlIiBzdG9wLWNvbG9yPSIjZTE0ZmFkIj48L3N0b3A+PC9saW5lYXJHcmFkaWVudD48bGluZWFyR3JhZGllbnQgaWQ9Ijk4IiB4MT0iMCUiIHkxPSIwJSIgeDI9IjEwMCUiIHkyPSIwJSI+PHN0b3Agb2Zmc2V0PSIwJSIgc3RvcC1jb2xvcj0iIzAwOWVmZCI+PC9zdG9wPiA8c3RvcCBvZmZzZXQ9IjEwMCUiIHN0b3AtY29sb3I9IiMyYWY1OTgiPjwvc3RvcD48L2xpbmVhckdyYWRpZW50PjxsaW5lYXJHcmFkaWVudCBpZD0iOTkiIHgxPSIwJSIgeTE9IjAlIiB4Mj0iMTAwJSIgeTI9IjAlIj48c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjZmZjYzAwIj48L3N0b3A+IDxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iIzAwYjE0MCI+PC9zdG9wPjwvbGluZWFyR3JhZGllbnQ+PGxpbmVhckdyYWRpZW50IGlkPSIxMDAiIHgxPSIwJSIgeTE9IjAlIiB4Mj0iMTAwJSIgeTI9IjAlIj48c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjZDUxMDA3Ij48L3N0b3A+IDxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iI2ZmODE3NyI+PC9zdG9wPjwvbGluZWFyR3JhZGllbnQ+PGxpbmVhckdyYWRpZW50IGlkPSIxMDIiIHgxPSIwJSIgeTE9IjAlIiB4Mj0iMTAwJSIgeTI9IjAlIj48c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjYTJiNmRmIj48L3N0b3A+IDxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iIzBjMzQ4MyI+PC9zdG9wPjwvbGluZWFyR3JhZGllbnQ+PGxpbmVhckdyYWRpZW50IGlkPSIxMDMiIHgxPSIwJSIgeTE9IjAlIiB4Mj0iMTAwJSIgeTI9IjAlIj48c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjN2FjNWQ4Ij48L3N0b3A+IDxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iI2VlYTJhMiI+PC9zdG9wPjwvbGluZWFyR3JhZGllbnQ+PGxpbmVhckdyYWRpZW50IGlkPSIxMDQiIHgxPSIwJSIgeTE9IjAlIiB4Mj0iMTAwJSIgeTI9IjAlIj48c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjMDBlY2JjIj48L3N0b3A+IDxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iIzAwN2FkZiI+PC9zdG9wPjwvbGluZWFyR3JhZGllbnQ+PGxpbmVhckdyYWRpZW50IGlkPSIxMDUiIHgxPSIwJSIgeTE9IjAlIiB4Mj0iMTAwJSIgeTI9IjAlIj48c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjYjg4NzQ2Ij48L3N0b3A+IDxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iI2ZkZjVhNiI+PC9zdG9wPjwvbGluZWFyR3JhZGllbnQ+PC9kZWZzPjxnIGZpbGw9IiNmZmZmZmYiIGNsYXNzPSJpY29uLXRleHQtd3JhcHBlciBpY29uLXN2Zy1ncm91cCBpY29uc3ZnIiB0cmFuc2Zvcm09InRyYW5zbGF0ZSg2OC43NzUwMDE1MjcwOTAyNCwxMDMuMjIzNzg3MzA3NzM5MjYpIj48ZyBjbGFzcz0iaWNvbnN2Zy1pbWFnZXN2ZyIgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMCwwKSI+PGc+PHJlY3QgZmlsbD0iI2ZmZmZmZiIgZmlsbC1vcGFjaXR5PSIwIiBzdHJva2Utd2lkdGg9IjIiIHg9IjAiIHk9IjAiIHdpZHRoPSI2MCIgaGVpZ2h0PSI0My41NTI0MjYyMzMwNzgwNjYiIGNsYXNzPSJpbWFnZS1yZWN0Ij48L3JlY3Q+IDxzdmcgeD0iMCIgeT0iMCIgd2lkdGg9IjYwIiBoZWlnaHQ9IjQzLjU1MjQyNjIzMzA3ODA2NiIgZmlsdGVyc2VjPSJjb2xvcnNiMTQ2MjY1MDgxNCIgY2xhc3M9ImltYWdlLXN2Zy1zdmcgcHJpbWFyeSIgc3R5bGU9Im92ZXJmbG93OiB2aXNpYmxlOyI+PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAuMDUwMjAwNDYyMzQxMzA4NTk0IC0wLjAxNjg5MDA0ODk4MDcxMjg5IDE4NC41MjE2ODI3MzkyNTc4IDEzMy45Mzk0MjI2MDc0MjE4OCI+PHBhdGggZD0iTTg4LjU5IDU0LjIxYzE4LjkyIDAgMzcuODUtLjMxIDU2Ljc1LjE4IDcuMjMuMTggMTEuNTctMS41MSAxMi42MS05LjE3LjMyLTIuMzMuNzctNS41OSAzLjctNiAyLjM5LS4zNiAzLjc3IDIuMjggNS4xMSA0IDUuMzkgNyAxMC41OSAxNC4xMiAxNiAyMS4xIDIuNzEgMy41MSAyLjQ3IDYuMDgtMS4zMyA4Ljc1LTEwLjcyIDcuNTMtMjEuMjYgMTUuMzMtMzEuOSAyMy0xLjU2IDEuMTItMy4yNyAzLjEyLTUuMzEgMS41NXMtLjU4LTMuNjktLjM0LTUuNjVjLjM0LTIuNzggMy45NC02LjctMS43LTcuODMtNC40Mi0uODktOC41MS0uMjgtMTAgNS4zNC0zIDExLjQ1LTYuNjMgMjIuNzQtOS41MiAzNC4yMi0xLjc5IDcuMTUtNS4xOSAxMC43NS0xMy4xNCAxMC4xNi04LjUzLS42My0xNy4xNC0uMDgtMjUuNzItLjE3cy05LjE5LTEtNi43Mi05LjQycTQuNzEtMTUuOTQgOS42NC0zMS44MmMyLjI1LTcuMjQgMS41MS04LjY0LTYuMTItOC41My0yNy4wOC4zNy0yMS4xNy00LjA3LTI4LjU1IDIxLTIuMiA3LjQ5LTQuNjIgMTQuOTItNi43NyAyMi40Mi0xLjE5IDQuMTctMy40MyA2LjQyLTggNi4zNS0xMC41OS0uMTUtMjEuMTktLjA5LTMxLjc4IDAtNC44NiAwLTYuMjktMi4zMi01LTYuNzdDNy4wNiAxMDQuNDMgMTMuNyA4MiAyMC4yMyA1OS40NmMxLjMyLTQuNTQgNC4yNi01LjM4IDguNTgtNS4zMyAxOS45Mi4xOCAzOS44NS4wOCA1OS43OC4wOHoiIGZpbGw9IiNmYWJlMDAiPjwvcGF0aD48cGF0aCBkPSJNMTIzLjE2IDQ1Ljg5aC0xNS44NWMtNC42LjA1LTYuNDItMS40OC00LjktNi40NCAzLjI1LTEwLjU3IDYuMTgtMjEuMjMgOS0zMS45MiAxLjMzLTUuMDcgMy44NS03LjcgOS40Ny03LjU0IDEwLjA2LjMgMjAuMTIuMjEgMzAuMTkuMDEgNS4zOC0uMDkgNy40NiAxLjc5IDUuNzQgNy4yNnEtNS4zMyAxNi44OC0xMC4zMyAzMy44N2MtMSAzLjU0LTMuMzMgNC43NS02LjcxIDQuNzMtNS41NC4wMS0xMS4wOC4wMy0xNi42MS4wM3pNNDcuODMgNDUuODloLTE2LjZjLTQuMDUgMC02LjE2LTEuMjYtNC43NC02UTMxLjUgMjMuMzEgMzYgNi41NkMzNy4yIDEuOTIgMzkuODYgMCA0NC42MSAwYzEwLjMxLjE1IDIwLjYzLjEyIDMwLjk0IDAgNC44NCAwIDcuMTkgMS41NyA1LjU2IDYuNzlxLTUuMzUgMTcuMjctMTAuNTIgMzQuNmMtMS4wOCAzLjYzLTMuNjMgNC40Ni02LjkxIDQuNDQtNS4yOC4wNS0xMC41Ny4wNy0xNS44NS4wNnoiIGZpbGw9IiNlYTU1MDQiPjwvcGF0aD48L3N2Zz48L3N2Zz4gPC9nPjwvZz4gPGcgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoNjgsNy4zMjYyMTI4ODI5OTU2MDU1KSI+PGcgZmlsbC1ydWxlPSIiIGNsYXNzPSJ0cC1uYW1lIGljb25zdmctbmFtZXN2ZyI+PGcgdHJhbnNmb3JtPSJzY2FsZSgxKSI+PGc+PHBhdGggZD0iTTUuNzcgMEwyLjk3IDAgMi45Ny0yMS45IDUuNzctMjEuOSA1Ljc3LTEyLjcxIDE1Ljk4LTEyLjcxIDE1Ljk4LTIxLjkgMTguNzItMjEuOSAxOC43MiAwIDE1Ljk4IDAgMTUuOTgtMTAuMzIgNS43Ny0xMC4zMiA1Ljc3IDBaTTIyLjcyIDdMMjIuNzIgN1EyMS42NyA3IDIwLjgzIDYuNjVMMjAuODMgNi42NSAyMS4zNSA0LjQ5UTIyLjA4IDQuNzUgMjIuNTggNC43NUwyMi41OCA0Ljc1UTI1LjA5IDQuNjkgMjYuMjUgMS4yNUwyNi4yNSAxLjI1IDI2LjYzIDAuMDMgMjAuMS0xNi4yMSAyMi45Ni0xNi4yMSAyNi4yNS03LjJRMjYuNTEtNi40MSAyNy4xMy00LjY5TDI3LjEzLTQuNjlRMjcuNjItMy4yOSAyNy44My0yLjY1TDI3LjgzLTIuNjUgMjcuOTctMi42NVEyOS4wNS02LjI3IDI5LjM0LTcuMkwyOS4zNC03LjIgMzIuMjMtMTYuMjEgMzQuODgtMTYuMjEgMjguNzYgMS4zNFEyNy4xNiA1LjgzIDI0LjQ0IDYuNzRMMjQuNDQgNi43NFEyMy42MyA3IDIyLjcyIDdaTTM4LjcxIDYuODJMMzYgNi44MiAzNi0xNi4yMSAzOC4yNS0xNi4yMSAzOC40OC0xNC4zNyAzOC41Ny0xNC4zN1E0MS4zMS0xNi41OSA0My43My0xNi42Mkw0My43My0xNi42MlE0Ny42NC0xNi42MiA0OS4yNy0xMy4xMkw0OS4yNy0xMy4xMlE1MC4yLTExLjE3IDUwLjItOC4zN0w1MC4yLTguMzdRNTAuMi0zLjczIDQ3LjQzLTEuMjhMNDcuNDMtMS4yOFE0NS41NyAwLjM4IDQzLjE1IDAuMzhMNDMuMTUgMC4zOFE0MC45MyAwLjM1IDM4LjY2LTEuNDlMMzguNjYtMS40OSAzOC43MSAxLjM0IDM4LjcxIDYuODJaTTQyLjcxLTEuOUw0Mi43MS0xLjlRNDUuMTktMS45IDQ2LjQ3LTQuMzJMNDYuNDctNC4zMlE0Ny4zNC01Ljk4IDQ3LjM0LTguMzRMNDcuMzQtOC4zNFE0Ny4yOS0xNC4zMiA0My4wOS0xNC4zNEw0My4wOS0xNC4zNFE0MS4xLTE0LjMyIDM4LjcxLTEyLjFMMzguNzEtMTIuMSAzOC43MS0zLjU5UTQwLjctMS45IDQyLjcxLTEuOVpNNTkuMDIgMC4zOEw1OS4wMiAwLjM4UTU1LjM3IDAuMzggNTMuMTktMi4yNUw1My4xOS0yLjI1UTUxLjI2LTQuNTggNTEuMjYtOC4xMUw1MS4yNi04LjExUTUxLjI2LTEyLjMgNTMuOTQtMTQuNzVMNTMuOTQtMTQuNzVRNTUuOTktMTYuNjIgNTguNTgtMTYuNjJMNTguNTgtMTYuNjJRNjIuNTItMTYuNjIgNjQuMTUtMTMuMzJMNjQuMTUtMTMuMzJRNjUuMDItMTEuNDkgNjUuMDItOS4wMUw2NS4wMi05LjAxUTY1LjAyLTguMjIgNjQuOTEtNy40Nkw2NC45MS03LjQ2IDUzLjk3LTcuNDZRNTQuMTUtNC4wOCA1Ni40OC0yLjU5TDU2LjQ4LTIuNTlRNTcuNzMtMS43OCA1OS4zNy0xLjc4TDU5LjM3LTEuNzhRNjEuNTUtMS44MSA2My40Mi0zLjA2TDYzLjQyLTMuMDYgNjQuNDEtMS4yOFE2MS44NSAwLjM4IDU5LjAyIDAuMzhaTTUzLjk0LTkuNDJMNTMuOTQtOS40MiA2Mi42My05LjQyUTYyLjYzLTEzLjQ3IDU5Ljg5LTE0LjI5TDU5Ljg5LTE0LjI5UTU5LjI4LTE0LjQ2IDU4LjYxLTE0LjQ2TDU4LjYxLTE0LjQ2UTU2LjMxLTE0LjQ2IDU0Ljk3LTEyLjQyTDU0Ljk3LTEyLjQyUTU0LjEyLTExLjE0IDUzLjk0LTkuNDJaTTY5LjczIDBMNjcuMDIgMCA2Ny4wMi0xNi4yMSA2OS4yNi0xNi4yMSA2OS41LTEzLjI3IDY5LjU4LTEzLjI3UTcxLjE5LTE2LjE1IDczLjU1LTE2LjU2TDczLjU1LTE2LjU2UTczLjg3LTE2LjYyIDc0LjE5LTE2LjYyTDc0LjE5LTE2LjYyUTc1LjI3LTE2LjYyIDc1LjkxLTE2LjI3TDc1LjkxLTE2LjI3IDc1LjQyLTEzLjg4UTc0LjcyLTE0LjE0IDczLjg0LTE0LjE0TDczLjg0LTE0LjE0UTcxLjg2LTE0LjE0IDcwLjQzLTExLjg0TDcwLjQzLTExLjg0UTcwLjA1LTExLjIgNjkuNzMtMTAuNDFMNjkuNzMtMTAuNDEgNjkuNzMgMFpNOTAuNDEgMEw3NS4zNCAwIDc1LjM0LTEuNjMgODYuODktMTkuNTYgNzYuMzktMTkuNTYgNzYuMzktMjEuOSA5MC4zLTIxLjkgOTAuMy0yMC4yNiA3OC43NS0yLjM2IDkwLjQxLTIuMzYgOTAuNDEgMFpNOTguODggMC4zOEw5OC44OCAwLjM4UTk1LjYxIDAuMzggOTMuNDYtMi4wNEw5My40Ni0yLjA0UTkxLjM2LTQuNDMgOTEuMzYtOC4xMUw5MS4zNi04LjExUTkxLjM2LTEyLjU0IDk0LjIyLTE0Ljk2TDk0LjIyLTE0Ljk2UTk2LjI2LTE2LjYyIDk4Ljg4LTE2LjYyTDk4Ljg4LTE2LjYyUTEwMi4xNy0xNi42MiAxMDQuMzMtMTQuMTdMMTA0LjMzLTE0LjE3UTEwNi40LTExLjc4IDEwNi40LTguMTFMMTA2LjQtOC4xMVExMDYuNC0zLjcgMTAzLjU1LTEuMzFMMTAzLjU1LTEuMzFRMTAxLjUzIDAuMzggOTguODggMC4zOFpNOTguODgtMS45TDk4Ljg4LTEuOVExMDEuNDUtMS45IDEwMi43Ni00LjMyTDEwMi43Ni00LjMyUTEwMy42LTUuOTIgMTAzLjYtOC4xMUwxMDMuNi04LjExUTEwMy42LTExLjY5IDEwMS41Ni0xMy40MUwxMDEuNTYtMTMuNDFRMTAwLjQtMTQuMzcgOTguODgtMTQuMzdMOTguODgtMTQuMzdROTYuMzQtMTQuMzcgOTUuMDYtMTEuOTJMOTUuMDYtMTEuOTJROTQuMjItMTAuMzIgOTQuMjItOC4xMUw5NC4yMi04LjExUTk0LjIyLTQuNCA5Ni4zMS0yLjc3TDk2LjMxLTIuNzdROTcuNDItMS45IDk4Ljg4LTEuOVpNMTExLjM3IDBMMTA4LjY2IDAgMTA4LjY2LTE2LjIxIDExMC45LTE2LjIxIDExMS4xNC0xMy44OCAxMTEuMjItMTMuODhRMTEzLjg4LTE2LjQ3IDExNi4zNi0xNi42MkwxMTYuMzYtMTYuNjJRMTE2LjUzLTE2LjYyIDExNi42OC0xNi42MkwxMTYuNjgtMTYuNjJRMTIxLjYtMTYuNTYgMTIxLjYzLTEwLjI2TDEyMS42My0xMC4yNiAxMjEuNjMgMCAxMTguODkgMCAxMTguODktOS45MVExMTguODktMTMuMzggMTE3LjA2LTE0LjA1TDExNy4wNi0xNC4wNVExMTYuNS0xNC4yMyAxMTUuODMtMTQuMjNMMTE1LjgzLTE0LjIzUTExNC4wOC0xNC4yMyAxMTIuMjctMTIuNjJMMTEyLjI3LTEyLjYyUTExMS44Ny0xMi4yNSAxMTEuMzctMTEuNzVMMTExLjM3LTExLjc1IDExMS4zNyAwWk0xMzEuNDEgMC4zOEwxMzEuNDEgMC4zOFExMjcuNzcgMC4zOCAxMjUuNTgtMi4yNUwxMjUuNTgtMi4yNVExMjMuNjYtNC41OCAxMjMuNjYtOC4xMUwxMjMuNjYtOC4xMVExMjMuNjYtMTIuMyAxMjYuMzQtMTQuNzVMMTI2LjM0LTE0Ljc1UTEyOC4zOC0xNi42MiAxMzAuOTgtMTYuNjJMMTMwLjk4LTE2LjYyUTEzNC45MS0xNi42MiAxMzYuNTQtMTMuMzJMMTM2LjU0LTEzLjMyUTEzNy40Mi0xMS40OSAxMzcuNDItOS4wMUwxMzcuNDItOS4wMVExMzcuNDItOC4yMiAxMzcuMy03LjQ2TDEzNy4zLTcuNDYgMTI2LjM3LTcuNDZRMTI2LjU0LTQuMDggMTI4Ljg4LTIuNTlMMTI4Ljg4LTIuNTlRMTMwLjEzLTEuNzggMTMxLjc2LTEuNzhMMTMxLjc2LTEuNzhRMTMzLjk1LTEuODEgMTM1LjgyLTMuMDZMMTM1LjgyLTMuMDYgMTM2LjgxLTEuMjhRMTM0LjI0IDAuMzggMTMxLjQxIDAuMzhaTTEyNi4zNC05LjQyTDEyNi4zNC05LjQyIDEzNS4wMy05LjQyUTEzNS4wMy0xMy40NyAxMzIuMjktMTQuMjlMMTMyLjI5LTE0LjI5UTEzMS42Ny0xNC40NiAxMzEtMTQuNDZMMTMxLTE0LjQ2UTEyOC43LTE0LjQ2IDEyNy4zNi0xMi40MkwxMjcuMzYtMTIuNDJRMTI2LjUxLTExLjE0IDEyNi4zNC05LjQyWiIgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoLTIuOTcwMDAwMDI4NjEwMjI5NSwgMjEuODk5OTk5NjE4NTMwMjczKSI+PC9wYXRoPjwvZz4gPC9nPjwvZz4gPC9nPjwvZz48ZGVmcyB2LWdyYT0ib2QiPjwvZGVmcz48L2c+PC9zdmc+" alt="HyperZone 品牌 Logo" width="2400" height="553">
   <div class="brand">HYPERZONE</div>
-  <h2>ECharts 诊断与 API 对接需求</h2>
-  <nav aria-label="文档目录"><div class="toc"><ul><li><a href="#hz-section-1">1. 交付结论与阅读方式</a></li><li><a href="#hz-section-2">2. 图表与业务模块总览</a></li><li><a href="#hz-section-3">3. 对接架构与责任边界</a></li><li><a href="#hz-section-4">4. 统一统计口径与待对齐项</a></li><li><a href="#hz-section-5">5. FOP 上游字段映射需求清单</a></li><li><a href="#hz-section-6">6. 联调与验收用例</a></li><li><a href="#hz-section-7">7. 交付与接入顺序、后续待办及人工核对</a></li><li><a href="#hz-section-8">8. OpenAPI 接口清单与请求/响应定义</a></li><li><a href="#hz-section-9">9. 字段级数据字典</a></li><li><a href="#hz-section-10">10. 前端功能诊断与复现证据</a></li><li><a href="#hz-section-11">11. 后端契约诊断与生产接入差距</a></li><li><a href="#hz-section-12">12. 本次验证记录与限制</a></li><li><a href="#hz-section-13">13. HyperZone FOP 源码字段映射</a></li><li><a href="#hz-section-14">14. 规范来源与文档再生成</a></li></ul></div></nav>
-  <div class="sidebar-foot">2026-10-22 OpenAPI 3.1.1</div>
+  <h2>完整需求与 API 对接方案</h2>
+  <nav aria-label="文档目录"><div class="toc"><ul><li><a href="#hz-section-1">1. 交付结论与阅读方式</a></li><li><a href="#hz-section-2">2. 图表与业务模块总览</a></li><li><a href="#hz-section-3">3. 对接架构与责任边界</a></li><li><a href="#hz-section-4">4. 统一统计口径与待对齐项</a></li><li><a href="#hz-section-5">5. FOP 上游字段映射需求清单</a></li><li><a href="#hz-section-6">6. 联调与验收用例</a></li><li><a href="#hz-section-7">7. 交付与接入顺序、后续待办及人工核对</a></li><li><a href="#hz-section-8">8. 销售个人收款与净毛利（月／周／天）</a></li><li><a href="#hz-section-9">9. OpenAPI 接口清单与请求/响应定义</a></li><li><a href="#hz-section-10">10. 字段级数据字典</a></li><li><a href="#hz-section-11">11. 前端功能诊断与复现证据</a></li><li><a href="#hz-section-12">12. 后端契约诊断与生产接入差距</a></li><li><a href="#hz-section-13">13. 本次验证记录与限制</a></li><li><a href="#hz-section-14">14. HyperZone FOP 源码字段映射</a></li><li><a href="#hz-section-15">15. IT 交付导航与实施顺序</a></li><li><a href="#hz-section-16">16. 规范来源与文档再生成</a></li></ul></div></nav>
+  <div class="sidebar-foot">2026-10-23 OpenAPI 3.1.1 · 2026-10-23</div>
 </aside>
 <main class="page">
-  <div class="toolbar"><span>HyperZone · ECharts 诊断与 API 对接需求</span><button type="button" onclick="window.print()">打印 / 保存 PDF</button></div>
+  <div class="toolbar"><span>HyperZone · 完整需求与 API 对接方案</span><button type="button" onclick="window.print()">打印 / 保存 PDF</button></div>
   <header class="hero">
     <div class="hero-brand"><img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHhtbG5zOnhsaW5rPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5L3hsaW5rIiB2ZXJzaW9uPSIxLjAiIHg9IjAiIHk9IjAiIHdpZHRoPSIyNDAwIiBoZWlnaHQ9IjU1My4yMzk1OTE5NTE5NTg2IiB2aWV3Qm94PSI2Ni43NTA1MDE1NTYzOTY0OSAxMDEuMTk5MjkzMDYwMzAyNzQgMjA2LjQ5ODk5Njg4NzIwNzAzIDQ3LjYwMTQyNTMyMzQ4NjMyNSIgcHJlc2VydmVBc3BlY3RSYXRpbz0ieE1pZFlNaWQgbWVldCIgY29sb3ItaW50ZXJwb2xhdGlvbi1maWx0ZXJzPSJzUkdCIj48Zz48ZGVmcz48bGluZWFyR3JhZGllbnQgaWQ9IjkyIiB4MT0iMCUiIHkxPSIwJSIgeDI9IjEwMCUiIHkyPSIwJSI+PHN0b3Agb2Zmc2V0PSIwJSIgc3RvcC1jb2xvcj0iI2ZhNzFjZCI+PC9zdG9wPiA8c3RvcCBvZmZzZXQ9IjEwMCUiIHN0b3AtY29sb3I9IiM5YjU5YjYiPjwvc3RvcD48L2xpbmVhckdyYWRpZW50PjxsaW5lYXJHcmFkaWVudCBpZD0iOTMiIHgxPSIwJSIgeTE9IjAlIiB4Mj0iMTAwJSIgeTI9IjAlIj48c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjZjlkNDIzIj48L3N0b3A+IDxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iI2Y4MzYwMCI+PC9zdG9wPjwvbGluZWFyR3JhZGllbnQ+PGxpbmVhckdyYWRpZW50IGlkPSI5NCIgeDE9IjAlIiB5MT0iMCUiIHgyPSIxMDAlIiB5Mj0iMCUiPjxzdG9wIG9mZnNldD0iMCUiIHN0b3AtY29sb3I9IiMwMDY0ZDIiPjwvc3RvcD4gPHN0b3Agb2Zmc2V0PSIxMDAlIiBzdG9wLWNvbG9yPSIjMWNiMGY2Ij48L3N0b3A+PC9saW5lYXJHcmFkaWVudD48bGluZWFyR3JhZGllbnQgaWQ9Ijk1IiB4MT0iMCUiIHkxPSIwJSIgeDI9IjEwMCUiIHkyPSIwJSI+PHN0b3Agb2Zmc2V0PSIwJSIgc3RvcC1jb2xvcj0iI2YwMDk3OCI+PC9zdG9wPiA8c3RvcCBvZmZzZXQ9IjEwMCUiIHN0b3AtY29sb3I9IiMzZjUxYjEiPjwvc3RvcD48L2xpbmVhckdyYWRpZW50PjxsaW5lYXJHcmFkaWVudCBpZD0iOTYiIHgxPSIwJSIgeTE9IjAlIiB4Mj0iMTAwJSIgeTI9IjAlIj48c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjNzg3M2Y1Ij48L3N0b3A+IDxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iI2VjNzdhYiI+PC9zdG9wPjwvbGluZWFyR3JhZGllbnQ+PGxpbmVhckdyYWRpZW50IGlkPSI5NyIgeDE9IjAlIiB5MT0iMCUiIHgyPSIxMDAlIiB5Mj0iMCUiPjxzdG9wIG9mZnNldD0iMCUiIHN0b3AtY29sb3I9IiNmOWQ0MjMiPjwvc3RvcD4gPHN0b3Agb2Zmc2V0PSIxMDAlIiBzdG9wLWNvbG9yPSIjZTE0ZmFkIj48L3N0b3A+PC9saW5lYXJHcmFkaWVudD48bGluZWFyR3JhZGllbnQgaWQ9Ijk4IiB4MT0iMCUiIHkxPSIwJSIgeDI9IjEwMCUiIHkyPSIwJSI+PHN0b3Agb2Zmc2V0PSIwJSIgc3RvcC1jb2xvcj0iIzAwOWVmZCI+PC9zdG9wPiA8c3RvcCBvZmZzZXQ9IjEwMCUiIHN0b3AtY29sb3I9IiMyYWY1OTgiPjwvc3RvcD48L2xpbmVhckdyYWRpZW50PjxsaW5lYXJHcmFkaWVudCBpZD0iOTkiIHgxPSIwJSIgeTE9IjAlIiB4Mj0iMTAwJSIgeTI9IjAlIj48c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjZmZjYzAwIj48L3N0b3A+IDxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iIzAwYjE0MCI+PC9zdG9wPjwvbGluZWFyR3JhZGllbnQ+PGxpbmVhckdyYWRpZW50IGlkPSIxMDAiIHgxPSIwJSIgeTE9IjAlIiB4Mj0iMTAwJSIgeTI9IjAlIj48c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjZDUxMDA3Ij48L3N0b3A+IDxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iI2ZmODE3NyI+PC9zdG9wPjwvbGluZWFyR3JhZGllbnQ+PGxpbmVhckdyYWRpZW50IGlkPSIxMDIiIHgxPSIwJSIgeTE9IjAlIiB4Mj0iMTAwJSIgeTI9IjAlIj48c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjYTJiNmRmIj48L3N0b3A+IDxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iIzBjMzQ4MyI+PC9zdG9wPjwvbGluZWFyR3JhZGllbnQ+PGxpbmVhckdyYWRpZW50IGlkPSIxMDMiIHgxPSIwJSIgeTE9IjAlIiB4Mj0iMTAwJSIgeTI9IjAlIj48c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjN2FjNWQ4Ij48L3N0b3A+IDxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iI2VlYTJhMiI+PC9zdG9wPjwvbGluZWFyR3JhZGllbnQ+PGxpbmVhckdyYWRpZW50IGlkPSIxMDQiIHgxPSIwJSIgeTE9IjAlIiB4Mj0iMTAwJSIgeTI9IjAlIj48c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjMDBlY2JjIj48L3N0b3A+IDxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iIzAwN2FkZiI+PC9zdG9wPjwvbGluZWFyR3JhZGllbnQ+PGxpbmVhckdyYWRpZW50IGlkPSIxMDUiIHgxPSIwJSIgeTE9IjAlIiB4Mj0iMTAwJSIgeTI9IjAlIj48c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjYjg4NzQ2Ij48L3N0b3A+IDxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iI2ZkZjVhNiI+PC9zdG9wPjwvbGluZWFyR3JhZGllbnQ+PC9kZWZzPjxnIGZpbGw9IiNmZmZmZmYiIGNsYXNzPSJpY29uLXRleHQtd3JhcHBlciBpY29uLXN2Zy1ncm91cCBpY29uc3ZnIiB0cmFuc2Zvcm09InRyYW5zbGF0ZSg2OC43NzUwMDE1MjcwOTAyNCwxMDMuMjIzNzg3MzA3NzM5MjYpIj48ZyBjbGFzcz0iaWNvbnN2Zy1pbWFnZXN2ZyIgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMCwwKSI+PGc+PHJlY3QgZmlsbD0iI2ZmZmZmZiIgZmlsbC1vcGFjaXR5PSIwIiBzdHJva2Utd2lkdGg9IjIiIHg9IjAiIHk9IjAiIHdpZHRoPSI2MCIgaGVpZ2h0PSI0My41NTI0MjYyMzMwNzgwNjYiIGNsYXNzPSJpbWFnZS1yZWN0Ij48L3JlY3Q+IDxzdmcgeD0iMCIgeT0iMCIgd2lkdGg9IjYwIiBoZWlnaHQ9IjQzLjU1MjQyNjIzMzA3ODA2NiIgZmlsdGVyc2VjPSJjb2xvcnNiMTQ2MjY1MDgxNCIgY2xhc3M9ImltYWdlLXN2Zy1zdmcgcHJpbWFyeSIgc3R5bGU9Im92ZXJmbG93OiB2aXNpYmxlOyI+PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAuMDUwMjAwNDYyMzQxMzA4NTk0IC0wLjAxNjg5MDA0ODk4MDcxMjg5IDE4NC41MjE2ODI3MzkyNTc4IDEzMy45Mzk0MjI2MDc0MjE4OCI+PHBhdGggZD0iTTg4LjU5IDU0LjIxYzE4LjkyIDAgMzcuODUtLjMxIDU2Ljc1LjE4IDcuMjMuMTggMTEuNTctMS41MSAxMi42MS05LjE3LjMyLTIuMzMuNzctNS41OSAzLjctNiAyLjM5LS4zNiAzLjc3IDIuMjggNS4xMSA0IDUuMzkgNyAxMC41OSAxNC4xMiAxNiAyMS4xIDIuNzEgMy41MSAyLjQ3IDYuMDgtMS4zMyA4Ljc1LTEwLjcyIDcuNTMtMjEuMjYgMTUuMzMtMzEuOSAyMy0xLjU2IDEuMTItMy4yNyAzLjEyLTUuMzEgMS41NXMtLjU4LTMuNjktLjM0LTUuNjVjLjM0LTIuNzggMy45NC02LjctMS43LTcuODMtNC40Mi0uODktOC41MS0uMjgtMTAgNS4zNC0zIDExLjQ1LTYuNjMgMjIuNzQtOS41MiAzNC4yMi0xLjc5IDcuMTUtNS4xOSAxMC43NS0xMy4xNCAxMC4xNi04LjUzLS42My0xNy4xNC0uMDgtMjUuNzItLjE3cy05LjE5LTEtNi43Mi05LjQycTQuNzEtMTUuOTQgOS42NC0zMS44MmMyLjI1LTcuMjQgMS41MS04LjY0LTYuMTItOC41My0yNy4wOC4zNy0yMS4xNy00LjA3LTI4LjU1IDIxLTIuMiA3LjQ5LTQuNjIgMTQuOTItNi43NyAyMi40Mi0xLjE5IDQuMTctMy40MyA2LjQyLTggNi4zNS0xMC41OS0uMTUtMjEuMTktLjA5LTMxLjc4IDAtNC44NiAwLTYuMjktMi4zMi01LTYuNzdDNy4wNiAxMDQuNDMgMTMuNyA4MiAyMC4yMyA1OS40NmMxLjMyLTQuNTQgNC4yNi01LjM4IDguNTgtNS4zMyAxOS45Mi4xOCAzOS44NS4wOCA1OS43OC4wOHoiIGZpbGw9IiNmYWJlMDAiPjwvcGF0aD48cGF0aCBkPSJNMTIzLjE2IDQ1Ljg5aC0xNS44NWMtNC42LjA1LTYuNDItMS40OC00LjktNi40NCAzLjI1LTEwLjU3IDYuMTgtMjEuMjMgOS0zMS45MiAxLjMzLTUuMDcgMy44NS03LjcgOS40Ny03LjU0IDEwLjA2LjMgMjAuMTIuMjEgMzAuMTkuMDEgNS4zOC0uMDkgNy40NiAxLjc5IDUuNzQgNy4yNnEtNS4zMyAxNi44OC0xMC4zMyAzMy44N2MtMSAzLjU0LTMuMzMgNC43NS02LjcxIDQuNzMtNS41NC4wMS0xMS4wOC4wMy0xNi42MS4wM3pNNDcuODMgNDUuODloLTE2LjZjLTQuMDUgMC02LjE2LTEuMjYtNC43NC02UTMxLjUgMjMuMzEgMzYgNi41NkMzNy4yIDEuOTIgMzkuODYgMCA0NC42MSAwYzEwLjMxLjE1IDIwLjYzLjEyIDMwLjk0IDAgNC44NCAwIDcuMTkgMS41NyA1LjU2IDYuNzlxLTUuMzUgMTcuMjctMTAuNTIgMzQuNmMtMS4wOCAzLjYzLTMuNjMgNC40Ni02LjkxIDQuNDQtNS4yOC4wNS0xMC41Ny4wNy0xNS44NS4wNnoiIGZpbGw9IiNlYTU1MDQiPjwvcGF0aD48L3N2Zz48L3N2Zz4gPC9nPjwvZz4gPGcgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoNjgsNy4zMjYyMTI4ODI5OTU2MDU1KSI+PGcgZmlsbC1ydWxlPSIiIGNsYXNzPSJ0cC1uYW1lIGljb25zdmctbmFtZXN2ZyI+PGcgdHJhbnNmb3JtPSJzY2FsZSgxKSI+PGc+PHBhdGggZD0iTTUuNzcgMEwyLjk3IDAgMi45Ny0yMS45IDUuNzctMjEuOSA1Ljc3LTEyLjcxIDE1Ljk4LTEyLjcxIDE1Ljk4LTIxLjkgMTguNzItMjEuOSAxOC43MiAwIDE1Ljk4IDAgMTUuOTgtMTAuMzIgNS43Ny0xMC4zMiA1Ljc3IDBaTTIyLjcyIDdMMjIuNzIgN1EyMS42NyA3IDIwLjgzIDYuNjVMMjAuODMgNi42NSAyMS4zNSA0LjQ5UTIyLjA4IDQuNzUgMjIuNTggNC43NUwyMi41OCA0Ljc1UTI1LjA5IDQuNjkgMjYuMjUgMS4yNUwyNi4yNSAxLjI1IDI2LjYzIDAuMDMgMjAuMS0xNi4yMSAyMi45Ni0xNi4yMSAyNi4yNS03LjJRMjYuNTEtNi40MSAyNy4xMy00LjY5TDI3LjEzLTQuNjlRMjcuNjItMy4yOSAyNy44My0yLjY1TDI3LjgzLTIuNjUgMjcuOTctMi42NVEyOS4wNS02LjI3IDI5LjM0LTcuMkwyOS4zNC03LjIgMzIuMjMtMTYuMjEgMzQuODgtMTYuMjEgMjguNzYgMS4zNFEyNy4xNiA1LjgzIDI0LjQ0IDYuNzRMMjQuNDQgNi43NFEyMy42MyA3IDIyLjcyIDdaTTM4LjcxIDYuODJMMzYgNi44MiAzNi0xNi4yMSAzOC4yNS0xNi4yMSAzOC40OC0xNC4zNyAzOC41Ny0xNC4zN1E0MS4zMS0xNi41OSA0My43My0xNi42Mkw0My43My0xNi42MlE0Ny42NC0xNi42MiA0OS4yNy0xMy4xMkw0OS4yNy0xMy4xMlE1MC4yLTExLjE3IDUwLjItOC4zN0w1MC4yLTguMzdRNTAuMi0zLjczIDQ3LjQzLTEuMjhMNDcuNDMtMS4yOFE0NS41NyAwLjM4IDQzLjE1IDAuMzhMNDMuMTUgMC4zOFE0MC45MyAwLjM1IDM4LjY2LTEuNDlMMzguNjYtMS40OSAzOC43MSAxLjM0IDM4LjcxIDYuODJaTTQyLjcxLTEuOUw0Mi43MS0xLjlRNDUuMTktMS45IDQ2LjQ3LTQuMzJMNDYuNDctNC4zMlE0Ny4zNC01Ljk4IDQ3LjM0LTguMzRMNDcuMzQtOC4zNFE0Ny4yOS0xNC4zMiA0My4wOS0xNC4zNEw0My4wOS0xNC4zNFE0MS4xLTE0LjMyIDM4LjcxLTEyLjFMMzguNzEtMTIuMSAzOC43MS0zLjU5UTQwLjctMS45IDQyLjcxLTEuOVpNNTkuMDIgMC4zOEw1OS4wMiAwLjM4UTU1LjM3IDAuMzggNTMuMTktMi4yNUw1My4xOS0yLjI1UTUxLjI2LTQuNTggNTEuMjYtOC4xMUw1MS4yNi04LjExUTUxLjI2LTEyLjMgNTMuOTQtMTQuNzVMNTMuOTQtMTQuNzVRNTUuOTktMTYuNjIgNTguNTgtMTYuNjJMNTguNTgtMTYuNjJRNjIuNTItMTYuNjIgNjQuMTUtMTMuMzJMNjQuMTUtMTMuMzJRNjUuMDItMTEuNDkgNjUuMDItOS4wMUw2NS4wMi05LjAxUTY1LjAyLTguMjIgNjQuOTEtNy40Nkw2NC45MS03LjQ2IDUzLjk3LTcuNDZRNTQuMTUtNC4wOCA1Ni40OC0yLjU5TDU2LjQ4LTIuNTlRNTcuNzMtMS43OCA1OS4zNy0xLjc4TDU5LjM3LTEuNzhRNjEuNTUtMS44MSA2My40Mi0zLjA2TDYzLjQyLTMuMDYgNjQuNDEtMS4yOFE2MS44NSAwLjM4IDU5LjAyIDAuMzhaTTUzLjk0LTkuNDJMNTMuOTQtOS40MiA2Mi42My05LjQyUTYyLjYzLTEzLjQ3IDU5Ljg5LTE0LjI5TDU5Ljg5LTE0LjI5UTU5LjI4LTE0LjQ2IDU4LjYxLTE0LjQ2TDU4LjYxLTE0LjQ2UTU2LjMxLTE0LjQ2IDU0Ljk3LTEyLjQyTDU0Ljk3LTEyLjQyUTU0LjEyLTExLjE0IDUzLjk0LTkuNDJaTTY5LjczIDBMNjcuMDIgMCA2Ny4wMi0xNi4yMSA2OS4yNi0xNi4yMSA2OS41LTEzLjI3IDY5LjU4LTEzLjI3UTcxLjE5LTE2LjE1IDczLjU1LTE2LjU2TDczLjU1LTE2LjU2UTczLjg3LTE2LjYyIDc0LjE5LTE2LjYyTDc0LjE5LTE2LjYyUTc1LjI3LTE2LjYyIDc1LjkxLTE2LjI3TDc1LjkxLTE2LjI3IDc1LjQyLTEzLjg4UTc0LjcyLTE0LjE0IDczLjg0LTE0LjE0TDczLjg0LTE0LjE0UTcxLjg2LTE0LjE0IDcwLjQzLTExLjg0TDcwLjQzLTExLjg0UTcwLjA1LTExLjIgNjkuNzMtMTAuNDFMNjkuNzMtMTAuNDEgNjkuNzMgMFpNOTAuNDEgMEw3NS4zNCAwIDc1LjM0LTEuNjMgODYuODktMTkuNTYgNzYuMzktMTkuNTYgNzYuMzktMjEuOSA5MC4zLTIxLjkgOTAuMy0yMC4yNiA3OC43NS0yLjM2IDkwLjQxLTIuMzYgOTAuNDEgMFpNOTguODggMC4zOEw5OC44OCAwLjM4UTk1LjYxIDAuMzggOTMuNDYtMi4wNEw5My40Ni0yLjA0UTkxLjM2LTQuNDMgOTEuMzYtOC4xMUw5MS4zNi04LjExUTkxLjM2LTEyLjU0IDk0LjIyLTE0Ljk2TDk0LjIyLTE0Ljk2UTk2LjI2LTE2LjYyIDk4Ljg4LTE2LjYyTDk4Ljg4LTE2LjYyUTEwMi4xNy0xNi42MiAxMDQuMzMtMTQuMTdMMTA0LjMzLTE0LjE3UTEwNi40LTExLjc4IDEwNi40LTguMTFMMTA2LjQtOC4xMVExMDYuNC0zLjcgMTAzLjU1LTEuMzFMMTAzLjU1LTEuMzFRMTAxLjUzIDAuMzggOTguODggMC4zOFpNOTguODgtMS45TDk4Ljg4LTEuOVExMDEuNDUtMS45IDEwMi43Ni00LjMyTDEwMi43Ni00LjMyUTEwMy42LTUuOTIgMTAzLjYtOC4xMUwxMDMuNi04LjExUTEwMy42LTExLjY5IDEwMS41Ni0xMy40MUwxMDEuNTYtMTMuNDFRMTAwLjQtMTQuMzcgOTguODgtMTQuMzdMOTguODgtMTQuMzdROTYuMzQtMTQuMzcgOTUuMDYtMTEuOTJMOTUuMDYtMTEuOTJROTQuMjItMTAuMzIgOTQuMjItOC4xMUw5NC4yMi04LjExUTk0LjIyLTQuNCA5Ni4zMS0yLjc3TDk2LjMxLTIuNzdROTcuNDItMS45IDk4Ljg4LTEuOVpNMTExLjM3IDBMMTA4LjY2IDAgMTA4LjY2LTE2LjIxIDExMC45LTE2LjIxIDExMS4xNC0xMy44OCAxMTEuMjItMTMuODhRMTEzLjg4LTE2LjQ3IDExNi4zNi0xNi42MkwxMTYuMzYtMTYuNjJRMTE2LjUzLTE2LjYyIDExNi42OC0xNi42MkwxMTYuNjgtMTYuNjJRMTIxLjYtMTYuNTYgMTIxLjYzLTEwLjI2TDEyMS42My0xMC4yNiAxMjEuNjMgMCAxMTguODkgMCAxMTguODktOS45MVExMTguODktMTMuMzggMTE3LjA2LTE0LjA1TDExNy4wNi0xNC4wNVExMTYuNS0xNC4yMyAxMTUuODMtMTQuMjNMMTE1LjgzLTE0LjIzUTExNC4wOC0xNC4yMyAxMTIuMjctMTIuNjJMMTEyLjI3LTEyLjYyUTExMS44Ny0xMi4yNSAxMTEuMzctMTEuNzVMMTExLjM3LTExLjc1IDExMS4zNyAwWk0xMzEuNDEgMC4zOEwxMzEuNDEgMC4zOFExMjcuNzcgMC4zOCAxMjUuNTgtMi4yNUwxMjUuNTgtMi4yNVExMjMuNjYtNC41OCAxMjMuNjYtOC4xMUwxMjMuNjYtOC4xMVExMjMuNjYtMTIuMyAxMjYuMzQtMTQuNzVMMTI2LjM0LTE0Ljc1UTEyOC4zOC0xNi42MiAxMzAuOTgtMTYuNjJMMTMwLjk4LTE2LjYyUTEzNC45MS0xNi42MiAxMzYuNTQtMTMuMzJMMTM2LjU0LTEzLjMyUTEzNy40Mi0xMS40OSAxMzcuNDItOS4wMUwxMzcuNDItOS4wMVExMzcuNDItOC4yMiAxMzcuMy03LjQ2TDEzNy4zLTcuNDYgMTI2LjM3LTcuNDZRMTI2LjU0LTQuMDggMTI4Ljg4LTIuNTlMMTI4Ljg4LTIuNTlRMTMwLjEzLTEuNzggMTMxLjc2LTEuNzhMMTMxLjc2LTEuNzhRMTMzLjk1LTEuODEgMTM1LjgyLTMuMDZMMTM1LjgyLTMuMDYgMTM2LjgxLTEuMjhRMTM0LjI0IDAuMzggMTMxLjQxIDAuMzhaTTEyNi4zNC05LjQyTDEyNi4zNC05LjQyIDEzNS4wMy05LjQyUTEzNS4wMy0xMy40NyAxMzIuMjktMTQuMjlMMTMyLjI5LTE0LjI5UTEzMS42Ny0xNC40NiAxMzEtMTQuNDZMMTMxLTE0LjQ2UTEyOC43LTE0LjQ2IDEyNy4zNi0xMi40MkwxMjcuMzYtMTIuNDJRMTI2LjUxLTExLjE0IDEyNi4zNC05LjQyWiIgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoLTIuOTcwMDAwMDI4NjEwMjI5NSwgMjEuODk5OTk5NjE4NTMwMjczKSI+PC9wYXRoPjwvZz4gPC9nPjwvZz4gPC9nPjwvZz48ZGVmcyB2LWdyYT0ib2QiPjwvZGVmcz48L2c+PC9zdmc+" alt="HyperZone 品牌 Logo" width="2400" height="553"></div>
-    <h1>ECharts 诊断与 API 对接需求</h1>
-    <p>HyperZone 智能办公平台 · 字段级契约、统计口径与 FOP 接入验收</p>
-    <div class="badges"><span>2026-10-22 OpenAPI 3.1.1</span></div>
+    <h1>完整需求与 API 对接方案</h1>
+    <p>HyperZone 智能办公平台 · Dashboard、销售工作台、收款、毛利及 FOP 接入验收</p>
+    <div class="badges"><span>2026-10-23 OpenAPI 3.1.1 · 2026-10-23</span></div>
   </header>
   <article id="report" style="margin-top:28px">
-<p>核对日期：2026-10-22。适用对象：前端、平台后端、FOP（金蝶云苍穹上的 HyperZone 自研应用）开发、测试与实施人员。</p>
+<p>更新日期：2026-10-23（UTC+8）；保留2026-10-22既有诊断和需求。适用对象：前端、平台后端、FOP（金蝶云苍穹上的 HyperZone 自研应用）开发、测试与实施人员。</p>
 <h2 id="hz-section-1">1. 交付结论与阅读方式</h2>
 <p>本轮覆盖仓库中所有 ECharts 运行入口：共享 EChart 包装器、注册会员、部门回款、业务员回款、业务订单量趋势/排名、客户订单量/金额排名、客户趋势弹窗，以及物流运费并列柱状图和单服务商趋势弹窗。履约卡片、任务、异常、工作日历虽不全部属于 ECharts，仍核对其图表相关数据依赖和边界。</p>
 <p>当前项目具备前后端分析契约、服务端演示数据、用户级权限过滤与工作台跳转。<strong>真实 FOP 数据提供器、授权解析和组织同步尚未完成；本文件不是已接入金蝶生产环境的证明。</strong> 本轮已按用户确认的方案 2 更新本工程聚合、Mock、前端和契约；历史诊断单独标注，验证结果以 VERIFICATION.md 为准。后台源码只读核查，未改生产应用。</p>
@@ -65,6 +65,7 @@ article h2:target{color:#087f8c} .hero h1{font-size:32px} .table-wrap td{overflo
 <li><code>docs/openapi/hyperzone-analytics.openapi.json</code>：可供 Swagger Editor、Apifox、Postman 等支持 OpenAPI 的工具导入的契约；描述当前平台 HTTP API，而非虚构的金蝶原生接口。</li>
 <li><code>ECHARTS_FRONTEND_AUDIT.md</code>、<code>ECHARTS_BACKEND_CONTRACT_AUDIT.md</code>：独立诊断证据，内容也收录在本文附录。</li>
 <li><code>VERIFICATION.md</code>：本次实际检查与限制。</li>
+<li><code>IT_HANDOFF.md</code>：最新全量交付的阅读顺序、实施边界、后台剩余工作和资料输入入口。</li>
 <li><code>FOLLOW_UP_CHECKLIST.md</code>：第7章补充的后续待办与人工核对清单；按T/H编号记录优先级、建议负责人、输入、产物和完成标准，并提供脱敏验收样本及回填模板。</li>
 </ul>
 <p>采用 <a href="https://spec.openapis.org/oas/v3.1.1.html" rel="noopener noreferrer">OpenAPI Specification 3.1.1</a> 的 <code>paths</code>、<code>operationId</code>、<code>parameters</code>、<code>requestBody</code>、<code>responses</code>、<code>components/schemas</code>、<code>securitySchemes</code> 结构。可空使用 JSON Schema 的 <code>null</code> 类型；必填与可空分别表达。该版本选择用于稳定契约，不宣称它是最新规范版本。</p>
@@ -158,6 +159,20 @@ article h2:target{color:#087f8c} .hero h1{font-size:32px} .table-wrap td{overflo
 <td>居中趋势弹窗；发运单原币/汇率/成本明细进入当前可访问岗位工作台</td>
 </tr>
 <tr>
+<td>CH-12</td>
+<td>销售个人收款业绩</td>
+<td>销售工作台；月/周/天、日期范围；个人强制本人，经理/业务管理员可选授权人员</td>
+<td><code>sales-performance.periods</code> 的 <code>orderAmount/stockAmount/collectionsAmount</code>，按收款paidAt归期</td>
+<td>统计表及收款分录明细；同一筛选下分页前合计；全款备货不重复计款</td>
+</tr>
+<tr>
+<td>CH-13</td>
+<td>销售个人净毛利</td>
+<td>与CH-12共用筛选；已结算与预计分开，USD；利润使用独立归属日期/月</td>
+<td><code>settledGrossProfit/estimatedGrossProfit/unallocatedCount</code>、<code>unallocatedSettlements</code>，不能按paidAt代替利润归属</td>
+<td>月结来源/版本与收入成本明细；无日分配的月结在周/天显示待拆分，不均摊、不显示为0</td>
+</tr>
+<tr>
 <td>AUX-01</td>
 <td>履约卡片/异常/任务</td>
 <td>当前授权队列，不跟随注册日期范围</td>
@@ -191,7 +206,7 @@ article h2:target{color:#087f8c} .hero h1{font-size:32px} .table-wrap td{overflo
 </ol>
 <h2 id="hz-section-4">4. 统一统计口径与待对齐项</h2>
 <h3>4.1 日期与时间</h3>
-<p>统一口径：订单与收款统计按 <code>paidAt</code> 先转换 UTC+8，再取业务日期/月；范围包含开始和结束当天。传输时间戳必须携带时区（推荐 ISO 8601 UTC <code>Z</code>），纯业务日期使用 <code>YYYY-MM-DD</code>。</p>
+<p>统一口径：订单与收款统计按 <code>paidAt</code> 先转换 UTC+8，再取业务日期/月；范围包含开始和结束当天。新增毛利独立使用 <code>recognitionMonth/recognitionDate</code>，详见第8节，不沿用付款日。传输时间戳必须携带时区（推荐 ISO 8601 UTC <code>Z</code>），纯业务日期使用 <code>YYYY-MM-DD</code>。</p>
 <p>当前订单、收款、Dashboard 日期默认值和校验均使用 UTC+8。历史诊断中的直接截取支付字符串月份、UTC／浏览器本地上限差异已由共享业务时间转换替换；跨月和跨年仍须在真实源数据联调时核验。</p>
 <ul>
 <li>按月：当年1月至当前月；历史年份12个月。</li>
@@ -555,7 +570,7 @@ article h2:target{color:#087f8c} .hero h1{font-size:32px} .table-wrap td{overflo
 </ol>
 <p>本次交付包含当前项目的代码与文档基线；不包含本机数据库、用户密码、密钥和运行产物，也不表示已部署到生产服务器。</p>
 <p>本章后续收录 <a href="FOLLOW_UP_CHECKLIST.md">后续待办与人工核对清单</a>：保留T01–T16、H01–H17、D01–D10，并追加物流运费T17–T20、H18–H22、D11–D15及回填模板。清单以方案2及运费当前快照契约为基线；未确认的生产信息保持待核对，不改写当前业务口径，也不把Mock完成状态当成真实FOP接入完成。</p>
-<p>适用基线：方案2代码提交 <code>d60fd5d</code>、本次物流运费成本快照扩展、当前 OpenAPI 19个操作／82个模型、HyperZone FOP 源码映射。本文作为完整需求第7章的补充，区分“已经实现”“待开发”“待提供资料”，便于业务、财务、FOP研发与实施人员逐项回填。方案2历史测试数量保留作证据，运费测试结果以 VERIFICATION.md 新增记录为准。</p>
+<p>更新日期：2026-10-23（UTC+8）。适用基线：方案2代码提交 <code>d60fd5d</code>、物流运费成本快照及销售个人收款／净毛利扩展、最新OpenAPI与HyperZone FOP源码映射。物流阶段19个操作／82个模型属于历史规模，当前数量以规范文件为准。本文作为完整需求第7章的补充，区分“已经实现”“待开发”“待提供资料”，便于业务、财务、FOP研发与实施人员逐项回填。历史测试数量保留作证据，本次实际验证以 VERIFICATION.md 为准。</p>
 <p>建议负责人仅表示职责，不代表已指定人员或承诺工期。P0表示开始真实接入前必须具备的输入或能力，P1表示正式上线前必须完成，P2表示确认存在需求后安排；它们不是漏洞等级。未完成项不因 Mock 验收通过而关闭。</p>
 <h3>已确认基线，不重复征求方案选择</h3>
 <div class="table-wrap"><table>
@@ -1136,8 +1151,289 @@ article h2:target{color:#087f8c} .hero h1{font-size:32px} .table-wrap td{overflo
 <li><strong>完成口径和规模验收：</strong>T08–T14依据已回填规则验证退款边界、跨期、快照／实时一致性、性能、浏览器和各岗位数据范围；未决项注明影响本期上线还是可后置。</li>
 <li><strong>按已批准范围实施发布：</strong>T15完成试点和部署验收；T16仅对确需扩展的能力另行安排。本清单不预设上线日期，也不代表已执行生产发布。</li>
 </ol>
-<h2 id="hz-section-8">8. OpenAPI 接口清单与请求/响应定义</h2>
-<p>本规范覆盖 <strong>19 个操作、82 个数据模型</strong>。以下清单由同目录 OpenAPI JSON 生成。Base URL 为 <code>/api</code>，表中路径不重复此前缀。响应为实际裸 JSON，不额外包装成 <code>{code,data}</code>。时间序列数值数组必须与对应时间轴等长：counts 对应 registrations、amounts 对应 months、values 及 warehouses 内数组对应 periods；items/series/options 等集合不适用。该跨字段规则需联调测试，单纯 schema 校验不能证明。</p>
+<h3>销售个人收款与净毛利新增基线（2026-10-23）</h3>
+<p>原T01–T20、H01–H22、D01–D15全部保留。此次目标是本工程销售工作台、BFF／Mock、契约及权限一致，实际测试结论由VERIFICATION记录；下列P0是真实FOP接入前尚需完成的后台及业务工作，不能因页面或Mock完成而关闭。</p>
+<ul>
+<li>收款按 <code>paidAt</code>；利润按独立 <code>recognitionMonth/recognitionDate</code>，不以收款日或审核日伪造利润日。</li>
+<li>已审核月结取本期净毛利delta和冻结归属；同订单同月结算替换预计，跨期调整独立确认。预计与结算分别汇总，不合成总利润。</li>
+<li>未结算必须使用预估运费及截至本次查询 <code>asOf</code> 已知的收入／成本；新接口不接收历史asOf回放参数。历史range允许展示当前已审核的历史月结，不代表能恢复历史审批现场。</li>
+<li>完整自然月可以取无日归属的月结；周／天或部分月保留null和月结参考，不能均摊。预计日／周需事件账本／历史快照差分，不能累加整单累计快照。</li>
+<li>利润使用独立 <code>sales_profit</code> scope 和 <code>allowedProfitIds</code>。既有订单、收款、成本许可及系统管理员身份都不能隐式授予利润权限。</li>
+</ul>
+<h4>追加P0实施任务</h4>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>编号</th>
+<th>优先级／当前状态</th>
+<th>待办与已有基础</th>
+<th>前置人工输入</th>
+<th>完成标准与交付物</th>
+<th>建议负责</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>T21</td>
+<td>P0 · 待FOP实施</td>
+<td>发布只读利润事实／月结版本查询并实现真实provider；已有本工程类型、聚合／明细与Mock目标</td>
+<td>H01、H23</td>
+<td>提供真实路径、字段、分页、版本、权限和脱敏响应；返回归一贡献行及原结算ID；故障不得回退Mock；源代码服务不能直接冒充已发布HTTP</td>
+<td>FOP研发＋平台后端</td>
+</tr>
+<tr>
+<td>T22</td>
+<td>P0 · 待数据能力</td>
+<td>建立预计利润事件账本或历史快照差分，覆盖预估运费、采购、库存使用、退款／退货／调价与knownAt；旧实时计算不直接复用</td>
+<td>H24、H26</td>
+<td>记录稳定事件ID、发生／获知／审批时间、cutoff和版本；每期贡献可解释且不重复累计；未来事实排除；缺关键成本明确不可计算；不会将现有忽略cutoff查询包装成历史准确</td>
+<td>FOP研发＋财务＋平台后端</td>
+</tr>
+<tr>
+<td>T23</td>
+<td>P0 · 待月结适配</td>
+<td>月结C状态、版本差额、冻结归属、同期间预计替换与跨月调整；无日分配保持null</td>
+<td>H23、H25</td>
+<td>月汇总与FOP <code>hzkj_gp_net_delta_total</code> 对账；草稿不入结算；整单累计只用于版本核对；日／周不均摊；记录旧版本缺净毛利字段的兼容影响</td>
+<td>FOP研发＋财务＋平台后端</td>
+</tr>
+<tr>
+<td>T24</td>
+<td>P0 · 待财务规则／适配</td>
+<td>收入成本分量与CNY冻结净毛利USD审计换汇</td>
+<td>H26、H27</td>
+<td>每行公式到分可核对；调整与备货转入各计一次；明确退款收入／成本、手续费／仓储／国内物流分类；原额、历史汇率、日期／来源、换汇尾差可追溯，不用当前FX覆盖已审原值</td>
+<td>财务＋FOP研发＋平台后端</td>
+</tr>
+<tr>
+<td>T25</td>
+<td>P0 · 待真实授权</td>
+<td>独立利润可见权、冻结业绩归属与当前访问权分离、人员候选及在途复查</td>
+<td>H03、H04、H28</td>
+<td><code>sales_profit</code>及独立profit IDs接入；本人／经理／业务管理员、调岗／离职、跨租户及空授权均核对；月结service不得以空owner或org=0放开；系统管理不等于业务许可</td>
+<td>FOP权限研发＋IT＋平台后端</td>
+</tr>
+<tr>
+<td>T26</td>
+<td>P0 · 待真实对账验收</td>
+<td>销售工作台真实收款／利润联调与回归，覆盖原全部图表</td>
+<td>H23–H28、D16–D22</td>
+<td>AT-18–AT-24逐项有真实样本／预期／结果；财务签收月结差额和USD；预计日周具备证据后才验收；真实浏览器与HTTP／分页总计一致；缺能力标未具备而不是0</td>
+<td>测试＋财务＋销售＋FOP及平台研发</td>
+</tr>
+</tbody>
+</table></div>
+<h4>追加人工核对与输入</h4>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>编号</th>
+<th>建议答复方</th>
+<th>需要核对、阐述或提供的信息</th>
+<th>当前基线与影响</th>
+<th>关联待办</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>H23</td>
+<td>FOP研发／财务</td>
+<td>实际发布毛利只读接口、月结/订单版本稳定ID、C审核状态、审核时间、归属月、cutoff、冻结业务员／客户；脱敏首结、重算、零差额、草稿及旧版本样本</td>
+<td>源码只证实原生表单/Java服务；本工程两条GET不是FOP发布证明；月报用净毛利delta</td>
+<td>T21、T23、T26</td>
+</tr>
+<tr>
+<td>H24</td>
+<td>FOP研发／财务／物流</td>
+<td>各收入成本的发生、获知、审核、修改／失效时间；预估运费字段币种及版本；采购付款、库存使用、仓储通知的历史来源；是否已有事件账本／快照差分</td>
+<td>旧实时入口无cutoff且无运费按0；采购无截止，备货cutoff未用，仓储不按通知日期截断；不具备证据不得承诺预计日周准确</td>
+<td>T22、T26</td>
+</tr>
+<tr>
+<td>H25</td>
+<td>财务／销售负责人</td>
+<td>月结月份与利润发生日的区别、跨期补差与负调整、同订单同月多版本如何规范；若需要日周已结算，提供权威分配依据和可追溯明细</td>
+<td>当前只有结算月、审核写入日及cutoff；日期为空时完整月可用，周／天为null并保留月参考，不能均摊或用支付日替代</td>
+<td>T23、T26</td>
+</tr>
+<tr>
+<td>H26</td>
+<td>财务／售后／采购／仓储</td>
+<td>收款调整、退款、退货、采购调价、物流补收退费／重派、备货使用及退回的唯一关联、方向、状态和时间；商品／国内物流／仓储／手续费成本分类</td>
+<td>收入已含调整；备货按使用转入而非收款再次确认利润；物流后续费用采集停用，不能将未采集视为0或重复扣减</td>
+<td>T22、T24、T26</td>
+</tr>
+<tr>
+<td>H27</td>
+<td>财务／FOP研发</td>
+<td>冻结CNY累计/前值/delta、原始收入调整、各分量币种，统一USD的取价日／来源／历史汇率、逐分量与总差额的舍入及尾差规则</td>
+<td>原始冻结月结不得重算；公开USD分量和amount要同时可核对；运费Rmb变量名不证明原币；缺汇率不能补1</td>
+<td>T24、T26</td>
+</tr>
+<tr>
+<td>H28</td>
+<td>IT／FOP权限开发／销售负责人</td>
+<td>利润单据／金额／成本分量可见权；冻结业务员转岗或离职后的本人及经理访问；人员目录、当前组织边界；两名差异权限用户的预期</td>
+<td>旧月报service无独立身份校验，实时非业务员可查组织全部；新个人接口必须独立授权并与当前业务范围求交，不能照搬放宽分支</td>
+<td>T21、T25、T26</td>
+</tr>
+</tbody>
+</table></div>
+<p>沿用上文H编号回填模板；本次新增项同样需要答复人、版本和脱敏证据，不交接凭证本体。</p>
+<h4>追加利润验收样本</h4>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>样本</th>
+<th>必须覆盖的事实</th>
+<th>预期核对点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>D16 支付与利润跨月</td>
+<td>本月收款、次月首结、再次跨月负调整；历史range查询时已完成审核</td>
+<td>收款按支付月，利润按各自归属月；累计毛利不在多期重复；查询asOf为当前且不承诺历史审批回放</td>
+</tr>
+<tr>
+<td>D17 预计切结算</td>
+<td>同订单同月预计、A/B草稿、C审核、V1/V2；另有已结算后下一期待结调整</td>
+<td>同期已审替换预计，草稿不能替换；跨期调整保留；已结算／预计分列，禁止合并总利润</td>
+</tr>
+<tr>
+<td>D18 无日归属</td>
+<td><code>recognitionDate=null</code>月结，完整月、部分月、跨月周、日查询</td>
+<td>完整月正确；不完整归属为null／unallocated并保留月参考；参考额不计入日周总额、不均摊</td>
+</tr>
+<tr>
+<td>D19 asOf已知与预估成本</td>
+<td>查询时刻之后的采购／使用／退款／退货／调价／审核／FX；已存在实际运费但仍未月结；缺预估字段</td>
+<td>未知／未来事实排除；未结算只用预估运费；缺必要数据不可计算，不能默认为0；不能累计每天存量快照</td>
+</tr>
+<tr>
+<td>D20 分量及备货防重</td>
+<td>跨月全款备货回款、多次部分库存使用、零追加产品款、收入已含调整、退款／退货及手续费</td>
+<td>收款不重复；利润收入按有效使用转入一次；调整和退款不双加／双扣；所有成本只归一类，金额恒等式到分成立</td>
+</tr>
+<tr>
+<td>D21 CNY月结换汇</td>
+<td>正/负/零冻结delta、旧净毛利字段缺失、不同历史FX、缺汇率、USD非1及舍入尾差</td>
+<td>原始CNY权威值不改，USD有日期／来源及尾差依据；错误拒收，分量与总值同账本对账</td>
+</tr>
+<tr>
+<td>D22 权限与交互</td>
+<td>本人、经理、业务管理员、仅系统管理员、无利润许可、空profit IDs、调岗、撤权在途；月周天及明细分页</td>
+<td>人员候选／统计／明细同范围；source及错误状态正确；已结算null、负数、倒序固定列宽、已应用筛选和分页前合计可核验</td>
+</tr>
+</tbody>
+</table></div>
+<p>销售毛利实施顺序：H23/H28及T21/T25先确立可信身份和只读协议，T23适配权威月结，T22补齐预计贡献事实，T24审计金额／换汇，最后T26真实对账。可以先实现本工程Mock，但真实适配的缺口不得改写为已完成。</p>
+<h2 id="hz-section-8">8. 销售个人收款与净毛利（月／周／天）</h2>
+<p>本节追加2026-10-23需求，保留前述所有模块和编号。交付目标是本工程销售工作台、BFF聚合／明细、独立授权、Mock和机器契约同步；其完成及测试结论以 <code>VERIFICATION.md</code> 为准。<strong>这些产物不等于真实FOP已发布查询、具备历史利润账本或通过生产财务验收。</strong> 后台源码本轮只读，真实适配保持未配置边界。</p>
+<h3>8.1 页面、查询和权限</h3>
+<p>入口为销售工作台，显示所选人员、应用日期、粒度、USD、UTC+8、数据来源和计算时刻。收款图分履约收款／全款备货收款；净毛利图和统计表分已结算／预计，不提供将两者相加的“总利润”。<code>mixed</code> 只表示范围内存在两种来源，不意味着可以无条件相加。负毛利和负调整允许展示。</p>
+<p>平台接口（相对于 <code>/api</code>）为 <code>GET /autoflow/integrations/fop/sales-performance</code> 和 <code>GET /autoflow/integrations/fop/sales-performance/details</code>。共同查询 <code>from/to/grain=month|week|day/ownerId?</code>；明细另有 <code>kind=receipts|profit</code>、<code>periodId?</code>、<code>page/pageSize</code>。响应是裸对象，准确字段以 <code>backend/src/modules/fop-data/sales-performance.types.ts</code> 及OpenAPI为准，接口地址不是FOP原生发布地址。</p>
+<p>个人账号必须由服务端锁定本人；经理／业务管理员只能选择当前授权交集中的人员。系统管理员身份不自动授予业务权限。利润要求独立 <code>sales_profit</code> scope 与 <code>allowedProfitIds</code>，收款仍使用 <code>receipts</code> 与 <code>allowedReceiptIds</code>；不得从订单、收款或运费授权推导利润可见性。人物候选、聚合、明细、分页合计均先做同一租户／身份／业务范围校验。退出、换号、撤权、筛选失败和在途请求不得保留越权旧数据。</p>
+<h3>8.2 收款与利润是两个独立事实</h3>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>概念</th>
+<th>固定口径／契约</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>收款日期与金额</td>
+<td>复用方案2，按有效收款分录 <code>paidAt</code> 归UTC+8日/月；<code>orderAmount</code> 是本响应的履约收款合计，<code>stockAmount</code> 是全款备货收款合计，二者之和为 <code>collectionsAmount</code>。此处汇总字段不等于单条 <code>FopReceipt.orderAmount</code> 应收订单金额</td>
+</tr>
+<tr>
+<td>利润归属</td>
+<td><code>recognitionMonth=YYYY-MM</code>、<code>recognitionDate=YYYY-MM-DD|null</code>；不从paidAt、订单创建日、月结审核日猜测。月结版本关联月与跨期调整月分别保存</td>
+</tr>
+<tr>
+<td>已结算</td>
+<td>只认已审核月结和对应不可覆盖的订单结算版本。<code>amount</code> 是该期净毛利差额；不能累计各版本整单毛利。<code>approvedAt</code> 是审核已知门槛，不是经济归属日</td>
+</tr>
+<tr>
+<td>未结算</td>
+<td><code>status=estimated</code>、<code>freightBasis=estimated</code>，使用截至asOf已知的收入、采购、库存转入、退款／退货／调价等事实和预估运费；即使已有实际运费，也不能在审核结算前擅自切为实际成本</td>
+</tr>
+<tr>
+<td>结算替换</td>
+<td>同一订单、同一利润归属月存在合格已审核结算时，以该期权威贡献替换该期预计贡献；不能双计。跨月后续调整独立落入其结算／确认月，不覆盖历史月、不重复确认完整订单利润</td>
+</tr>
+<tr>
+<td>汇总</td>
+<td><code>settledGrossProfit:number|null</code>、<code>estimatedGrossProfit:number</code>分别返回；名称沿用接口，业务展示明确为净毛利。<code>receiptCount/profitCount</code>是各自事实行数，不是履约订单数</td>
+</tr>
+<tr>
+<td>版本和截止</td>
+<td><code>id/orderId/settlementId/version/knownAt/approvedAt/cutoffAt</code>保留追溯；截至asOf未知、未来发生或未来审核的事实不准进入。响应asOf只是计算边界，历史完备性必须由上游账本证明</td>
+</tr>
+</tbody>
+</table></div>
+<p>全款备货回款只进入收款指标。利润仅在有效库存使用时，按用量转入对应销售收入和成本；履约实际追加收款中的产品额已在FOP减免，不补回第二次。<code>incomeAmount</code>的认定与收款实收不是同一数值模型，不能拿 <code>collectionsAmount</code> 减成本替代利润。</p>
+<p><code>asOf</code>由服务端在本次查询生成，查询参数不接受历史asOf回放。查询历史日期范围时，可以展示截至当前查询时刻已完成审核的该月权威结算值；这不表示平台已经能够还原当月末当时的审批状态。发生／known／approved时间和cutoff是上游事实归属及当前截断证据，历史审批回放仍是未交付能力。</p>
+<h3>8.3 月结无法直接拆为周／天</h3>
+<p>完整自然月可使用 <code>recognitionDate=null</code> 的已审核月结贡献，按 <code>recognitionMonth</code> 入月。周／天或只覆盖部分月份的查询，无法可靠分配这类月结金额时，<code>settledGrossProfit=null</code>，<code>unallocatedCount&gt;0</code>，并保留 <code>unallocatedSettlements[{month,amount,count}]</code> 作月结参考。页面显示“月结金额待日分配”；参考金额不进入当前日／周小计，也不能按天数均摊。空事实为0、未分配为null、无权／上游错误是不同状态。</p>
+<p>预计日／周金额也必须是该期贡献差额。上游应建立带发生时间、获知时间、审核时间和版本的事件账本，或可复现的历史快照差分；<strong>不能把每天的整单累计预计毛利相加</strong>。现有实时FOP报告按订单创建时间筛候选、读取查询时全部当前数据，不能直接作为本接口的历史日报。没有可靠历史事实的部分必须标注不具备能力，不能伪造日归属。</p>
+<h3>8.4 金额构成、币种和审计换汇</h3>
+<p>契约恒等式：<code>amount = incomeAmount + adjustmentIncome − productCost − freightCost − refundCost − returnCost − otherCost − previousRecognizedProfit + roundingAdjustment</code>。所有公开分量和结果均为USD；<code>otherCost</code>需明确包含国内采购物流、仓储、财务手续费等未单列成本，每项只归一处。退款收入冲减与退款成本须按真实事实分别映射，不能对同一退款在两个位置重复扣减。<code>roundingAdjustment</code>只用于可审计的换汇分币尾差，绝对值不超过0.10 USD，不能隐藏缺项成本或业务调价。</p>
+<p>FOP快照的 <code>hzkj_gp_income_usd/rmb</code> 已经包含收款调整。适配器若另填 <code>adjustmentIncome</code>，必须先从 <code>incomeAmount</code> 中扣除该调整；或者收入保留含调整值、独立调整分量为0并在审计明细追溯，不得再次增加调整。备货转入收入／成本只各计一次。已确认的前版本累计利润通过 <code>previousRecognizedProfit</code> 抵减，得出本期delta；不能将当前累计利润直接放入 <code>amount</code>。</p>
+<p>已审核CNY冻结金额应作为权威原额保存，不用最新成本或最新汇率重算历史月结。归一字段保留 <code>originalAmount/originalCurrency/fxRateToUsd/fxRateDate/fxRateSource</code>，按有证据的审计换汇规则生成USD差额并验证分量恒等式；USD原币rate=1。若差额原币换汇与逐分量换汇存在舍入差异，必须定义可追溯处理规则，不任意修改成本凑数。缺预估运费、币种、历史汇率或截止证据属于未具备可靠核算能力，不能默认为零。</p>
+<h3>8.5 新增验收场景与实施待办</h3>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>编号</th>
+<th>场景</th>
+<th>验收要求</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>AT-18</td>
+<td>个人与人员选择权限</td>
+<td>本人强制限定，经理只见授权团队，系统管理不扩大业务；独立利润授权、空集合、跨租户和在途撤权均正确</td>
+</tr>
+<tr>
+<td>AT-19</td>
+<td>支付与利润日期分离</td>
+<td>跨月支付／首次结算／后续调整分别归期；已结算订单不按付款日重复计完整利润</td>
+</tr>
+<tr>
+<td>AT-20</td>
+<td>预计与月结版本</td>
+<td>未结算强制预估运费；同订单同月结算替换预计；草稿不可当结算，跨月负调整独立贡献，汇总不合并预计与结算</td>
+</tr>
+<tr>
+<td>AT-21</td>
+<td>无日归属月结</td>
+<td>完整月按结算月，周／天及部分月返回null／待拆分及月结参考；无均摊、无伪零、无参考额重复合计</td>
+</tr>
+<tr>
+<td>AT-22</td>
+<td>asOf与未来事实</td>
+<td>晚于本次查询asOf的付款、采购、库存使用、退款、退货、调价、汇率、审核或knownAt均排除；历史range可展示当前已审核月结，但不得宣称支持历史审批状态回放</td>
+</tr>
+<tr>
+<td>AT-23</td>
+<td>成本分量与备货防重</td>
+<td>恒等式到分一致；调整已含收入不重复加，全款备货回款与库存使用不重复确认利润；CNY冻结差额及USD换汇可追溯</td>
+</tr>
+<tr>
+<td>AT-24</td>
+<td>页面、明细及错误</td>
+<td>月周天／人员切换、倒序固定列表、负数与null、同筛选明细及分页前合计；会话切换、错误和过期响应清空；真实ECharts渲染与窄屏验收另记结果</td>
+</tr>
+</tbody>
+</table></div>
+<p>后台缺口及逐项源码证据见源码映射第10节；新增任务T21–T26、人工资料H23–H28、样本D16–D22见后续清单。所有验收结果统一由 <code>VERIFICATION.md</code> 记录，需求存在和Mock样例不表示已通过验收。</p>
+<h3>8.6 冻结归属变更与预估撤销</h3>
+<p>同订单同确认月发生业务员调整时，BFF在已授权业务范围内先做结算替代，再选择业务员，避免管理员选择旧业务员时仍看到已替代的预估。若最终冻结月结属于另一主体且当前用户没有该事实权限，平台不得越权读取其金额用于去重；FOP适配器必须在授权返回前撤销／过滤已替代预估，或提供不含他人金额的可信失效标识。该能力属于T22/T24上线前条件，纳入H25人工核对及D18/D22验收。</p>
+<h2 id="hz-section-9">9. OpenAPI 接口清单与请求/响应定义</h2>
+<p>本规范覆盖 <strong>21 个操作、92 个数据模型</strong>。以下清单由同目录 OpenAPI JSON 生成。Base URL 为 <code>/api</code>，表中路径不重复此前缀。响应为实际裸 JSON，不额外包装成 <code>{code,data}</code>。时间序列数值数组必须与对应时间轴等长：counts 对应 registrations、amounts 对应 months、values 及 warehouses 内数组对应 periods；items/series/options 等集合不适用。该跨字段规则需联调测试，单纯 schema 校验不能证明。</p>
 <div class="table-wrap"><table>
 <thead>
 <tr>
@@ -1262,10 +1558,22 @@ article h2:target{color:#087f8c} .hero h1{font-size:32px} .table-wrap td{overflo
 <td><code>getFreightDetails</code></td>
 <td>岗位工作台物流运费发运单明细</td>
 </tr>
+<tr>
+<td>GET</td>
+<td><code>/autoflow/integrations/fop/sales-performance</code></td>
+<td><code>getSalesPerformance</code></td>
+<td>销售工作台个人收款与毛利统计</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/autoflow/integrations/fop/sales-performance/details</code></td>
+<td><code>getSalesPerformanceDetails</code></td>
+<td>销售工作台个人收款与毛利明细</td>
+</tr>
 </tbody>
 </table></div>
-<h3>8.1 公共鉴权与响应说明</h3>
-<p>字段级源码快照，仅记录已实现HTTP路由，不将计划FOP上游写为paths。响应裸JSON，无{code,data,message}包装。required=序列化必有；type:null=显式空值；可省略字段不在required中。参数跨字段依赖及已知口径差距见操作描述和配套审计。示例为脱敏契约样例，不是生产数据。 FOP为金蝶云苍穹上的HyperZone自研应用，源码只读核实；本工程方案2收款聚合和Mock已实现，真实生产网络适配器仍未配置。订单与收款各自授权，回款采用实际结算分录，统一UTC+8。 物流运费使用独立freight scope及allowedFreightIds，已实现Mock成本快照；必须保留原币与明确USD折算，按确认时间归期。最终结算、补收退款、调价及真实成本查询/授权仍待核对。</p>
+<h3>9.1 公共鉴权与响应说明</h3>
+<p>字段级源码快照，仅记录已实现HTTP路由，不将计划FOP上游写为paths。响应裸JSON，无{code,data,message}包装。required=序列化必有；type:null=显式空值；可省略字段不在required中。参数跨字段依赖及已知口径差距见操作描述和配套审计。示例为脱敏契约样例，不是生产数据。 FOP为金蝶云苍穹上的HyperZone自研应用，源码只读核实；本工程方案2收款聚合和Mock已实现，真实生产网络适配器仍未配置。订单与收款各自授权，回款采用实际结算分录，统一UTC+8。 物流运费使用独立freight scope及allowedFreightIds，已实现Mock成本快照；必须保留原币与明确USD折算，按确认时间归期。最终结算、补收退款、调价及真实成本查询/授权仍待核对。 销售工作台增加个人收款与毛利：独立sales_profit授权、已审核净毛利差额优先、无日分配返回null；预估期间事件账本和严格asOf成本链仍是FOP对接前置条件。</p>
 <ul>
 <li>
 <p><code>BearerAuth</code>：Authorization: Bearer <JWT>；角色每次查当前数据库。；type=http，in=Authorization，name=bearer。</p>
@@ -1274,7 +1582,7 @@ article h2:target{color:#087f8c} .hero h1{font-size:32px} .table-wrap td{overflo
 <p><code>SessionCookie</code>：浏览器使用HttpOnly会话cookie；和Bearer是OR，提取器优先cookie，过期cookie可能覆盖有效Bearer导致401。；type=apiKey，in=cookie，name=autoflow_session。</p>
 </li>
 </ul>
-<h3>8.2 读取FOP绑定及访问状态</h3>
+<h3>9.2 读取FOP绑定及访问状态</h3>
 <p><code>GET /api/autoflow/integrations/fop/data-access</code> · operationId: <code>getFopDataAccess</code></p>
 <p>无query；空DTO拒绝额外字段。允许businessRole=none并返回denied。FOP失败通常转为200状态对象，不抛503；ready允许空订单授权。</p>
 <p>实现状态：implemented</p>
@@ -1338,7 +1646,7 @@ Accept: application/json
 }
 </code></pre>
 <p>实现证据：<code>backend/src/modules/users/workbench.controller.ts</code>, <code>backend/src/modules/fop-data/fop-data.service.ts</code>。</p>
-<h3>8.3 读取订单量及客户USD金额图表</h3>
+<h3>9.3 读取订单量及客户USD金额图表</h3>
 <p><code>GET /api/autoflow/integrations/fop/order-volume</code> · operationId: <code>getOrderVolume</code></p>
 <p>至少一个工作台角色；绑定、租户、独立订单／收款 allowlist 与 businessScope 求交。时间模式二选一：grain+year，day 另需 month；或 category=customer 且 from/to 同时提供，禁止 grain/year/month/weekOf。日期为 2020-01-01 至 UTC+8 今天含首尾。订单数仅 paid、reviewStatus=approved、有效 paidAt&lt;=asOf、未取消的履约订单；非 carrier 要求报表部门。备货不计订单数。未来日 null，已发生空期 0。客户有 receipts scope 时 amounts 来自独立授权的有效收款分录，无 scope 省略 amounts。Top10 按履约数量，只有备货回款的客户仍进入总计／other 和搜索。筛选参数不能扩大权限。</p>
 <p>实现状态：implemented</p>
@@ -1635,7 +1943,7 @@ Accept: application/json
 }
 </code></pre>
 <p>实现证据：<code>backend/src/modules/users/workbench.controller.ts</code>, <code>backend/src/modules/fop-data/fop-data.service.ts</code>, <code>backend/src/modules/fop-data/order-volume.dto.ts</code>, <code>backend/src/modules/fop-data/order-volume.ts</code>。</p>
-<h3>8.4 图表series/period钻取订单</h3>
+<h3>9.4 图表series/period钻取订单</h3>
 <p><code>GET /api/autoflow/integrations/fop/order-volume/orders</code> · operationId: <code>getOrderVolumeDetails</code></p>
 <p>至少一个工作台角色；绑定、租户、独立订单／收款 allowlist 与 businessScope 求交。时间模式二选一：grain+year，day 另需 month；或 category=customer 且 from/to 同时提供，禁止 grain/year/month/weekOf。日期为 2020-01-01 至 UTC+8 今天含首尾。订单数仅 paid、reviewStatus=approved、有效 paidAt&lt;=asOf、未取消的履约订单；非 carrier 要求报表部门。备货不计订单数。未来日 null，已发生空期 0。客户有 receipts scope 时 amounts 来自独立授权的有效收款分录，无 scope 省略 amounts。Top10 按履约数量，只有备货回款的客户仍进入总计／other 和搜索。筛选参数不能扩大权限。 额外要求 workbenchRole；先完整范围重建 TopN/other，再收窄 period/detailWarehouse，查询仓和明细仓取交集。按 paidAt 倒序/id 排序，totals 在分页前计算；此端点返回履约订单金额，不是实收明细。</p>
 <p>实现状态：implemented</p>
@@ -1856,7 +2164,7 @@ Accept: application/json
 }
 </code></pre>
 <p>实现证据：<code>backend/src/modules/users/workbench.controller.ts</code>, <code>backend/src/modules/fop-data/fop-data.service.ts</code>, <code>backend/src/modules/fop-data/order-volume.dto.ts</code>, <code>backend/src/modules/fop-data/order-volume.ts</code>, <code>backend/src/modules/fop-data/fop-order-totals.ts</code>。</p>
-<h3>8.5 搜索授权客户</h3>
+<h3>9.5 搜索授权客户</h3>
 <p><code>GET /api/autoflow/integrations/fop/order-volume/customers</code> · operationId: <code>searchOrderCustomers</code></p>
 <p>至少一个工作台角色。授权已审核、未取消未退款、有报表部门及 customerId 的订单（可含未支付），与独立授权的有效收款客户共同构建目录；没有收款 scope 时只用订单。只有全款备货收款的客户可搜索。编码精确命中优先，随后编码/ID 排序。无日期／仓库参数，未知字段 400。</p>
 <p>实现状态：implemented</p>
@@ -1977,7 +2285,7 @@ Accept: application/json
 }
 </code></pre>
 <p>实现证据：<code>backend/src/modules/users/workbench.controller.ts</code>, <code>backend/src/modules/fop-data/fop-data.service.ts</code>, <code>backend/src/modules/fop-data/order-volume.dto.ts</code>, <code>backend/src/modules/fop-data/order-volume.ts</code>。</p>
-<h3>8.6 读取履约队列订单</h3>
+<h3>9.6 读取履约队列订单</h3>
 <p><code>GET /api/autoflow/integrations/fop/fulfillment-orders</code> · operationId: <code>getFulfillmentOrders</code></p>
 <p>queue角色：review/exceptions=sales，procurement=procurement，allocation=allocation，dispatch=dispatch，shipping=warehouse。均排除取消/退款；review=reviewStatus pending；procurement=approved+paid+procurement pending；allocation=approved+paid+allocation pending；dispatch=paid+allocated+dispatch pending；shipping=paid+dispatched+shipping pending；exceptions=paid+未shipped+exception非null。按createdAt倒序/id排序，totals全筛选集。</p>
 <p>实现状态：implemented</p>
@@ -2110,7 +2418,7 @@ Accept: application/json
 }
 </code></pre>
 <p>实现证据：<code>backend/src/modules/users/workbench.controller.ts</code>, <code>backend/src/modules/fop-data/fop-data.service.ts</code>, <code>backend/src/modules/users/dto/workbench.dto.ts</code>, <code>backend/src/modules/fop-data/fop-order-totals.ts</code>。</p>
-<h3>8.7 读取FOP仪表盘</h3>
+<h3>9.7 读取FOP仪表盘</h3>
 <p><code>GET /api/autoflow/integrations/fop/dashboard</code> · operationId: <code>getFopDashboard</code></p>
 <p>from&lt;=to，end-start&lt;=365 天（含首尾最多 366 天），to&lt;=UTC+8 今天，year&lt;=UTC+8 当前年。from/to 仅注册，year 仅回款；队列／异常／任务不受日期筛选。rates/registrations/receipts 分别需 analyticsScopes；无 scope 返回空。注册明细按业务范围过滤，缺失时仅业务 admin 可读旧日汇总。回款以独立授权的 hzkj_real_receive_amt 分录为准：USD、paid、源单与收款单均 approved、未取消且支付已发生，来源履约＋全款备货，不含押金／样品，按 UTC+8 支付月归属。包含来源拆分和上年12月基线；非银行现金流保证。</p>
 <p>实现状态：implemented</p>
@@ -2235,7 +2543,7 @@ Accept: application/json
 }
 </code></pre>
 <p>实现证据：<code>backend/src/modules/users/workbench.controller.ts</code>, <code>backend/src/modules/fop-data/fop-data.service.ts</code>, <code>backend/src/modules/fop-data/fop-data.dto.ts</code>, <code>backend/src/modules/fop-data/fop-registration.ts</code>, <code>backend/src/modules/fop-data/fop-receipts.ts</code>, <code>backend/src/modules/fop-data/fop-business-time.ts</code>。</p>
-<h3>8.8 读取当前工作台入口权限</h3>
+<h3>9.8 读取当前工作台入口权限</h3>
 <p><code>GET /api/workbench/access</code> · operationId: <code>getWorkbenchAccess</code></p>
 <p>允许businessRole=none；当前数据库重新读取授权，不信任JWT角色。无Query DTO，额外query当前忽略。</p>
 <p>实现状态：implemented</p>
@@ -2287,7 +2595,7 @@ Accept: application/json
 }
 </code></pre>
 <p>实现证据：<code>backend/src/modules/users/workbench.controller.ts</code>, <code>backend/src/modules/users/workbench-access.service.ts</code>。</p>
-<h3>8.9 校验指定入口权限</h3>
+<h3>9.9 校验指定入口权限</h3>
 <p><code>GET /api/workbench/{role}/access</code> · operationId: <code>getWorkbenchRoleAccess</code></p>
 <p>未知role400，已知但未授权403。</p>
 <p>实现状态：implemented</p>
@@ -2370,7 +2678,7 @@ Accept: application/json
 }
 </code></pre>
 <p>实现证据：<code>backend/src/modules/users/workbench.controller.ts</code>, <code>backend/src/modules/users/workbench-access.service.ts</code>。</p>
-<h3>8.10 管理员分页列出账户权限</h3>
+<h3>9.10 管理员分页列出账户权限</h3>
 <p><code>GET /api/users/workbench-accounts</code> · operationId: <code>listWorkbenchAccounts</code></p>
 <p>仅系统role=admin；businessRole=none也可管理。按displayId/id排序；响应仅items/total。</p>
 <p>实现状态：implemented</p>
@@ -2466,7 +2774,7 @@ Accept: application/json
 }
 </code></pre>
 <p>实现证据：<code>backend/src/modules/users/users.controller.ts</code>, <code>backend/src/modules/users/users.service.ts</code>, <code>backend/src/modules/users/workbench-access.service.ts</code>。</p>
-<h3>8.11 设置入口角色</h3>
+<h3>9.11 设置入口角色</h3>
 <p><code>PUT /api/users/{id}/workbench-roles</code> · operationId: <code>updateWorkbenchRoles</code></p>
 <p>仅系统管理员。替换全数组，[]撤销入口；不修改FOP绑定/业务范围。</p>
 <p>实现状态：implemented</p>
@@ -2553,7 +2861,7 @@ Accept: application/json
 </tbody>
 </table></div>
 <p>实现证据：<code>backend/src/modules/users/users.controller.ts</code>, <code>backend/src/modules/users/users.service.ts</code>, <code>backend/src/modules/users/workbench-access.service.ts</code>。</p>
-<h3>8.12 绑定或解绑FOP身份</h3>
+<h3>9.12 绑定或解绑FOP身份</h3>
 <p><code>PUT /api/users/{id}/fop-binding</code> · operationId: <code>updateFopBinding</code></p>
 <p>仅系统管理员。两字段同时非空或同时null；同一FOP身份只能绑定一个账户，冲突409。</p>
 <p>实现状态：implemented</p>
@@ -2643,7 +2951,7 @@ Accept: application/json
 </tbody>
 </table></div>
 <p>实现证据：<code>backend/src/modules/users/users.controller.ts</code>, <code>backend/src/modules/users/users.service.ts</code>, <code>backend/src/modules/users/workbench-access.service.ts</code>。</p>
-<h3>8.13 设置业务范围</h3>
+<h3>9.13 设置业务范围</h3>
 <p><code>PUT /api/users/{id}/business-scope</code> · operationId: <code>updateBusinessScope</code></p>
 <p>仅系统管理员。经理要求departmentId，销售要求employeeId；未分配字段显式null。当前不验证ID属于真实FOP目录。</p>
 <p>实现状态：implemented</p>
@@ -2729,7 +3037,7 @@ Accept: application/json
 </tbody>
 </table></div>
 <p>实现证据：<code>backend/src/modules/users/users.controller.ts</code>, <code>backend/src/modules/users/users.service.ts</code>, <code>backend/src/modules/users/workbench-access.service.ts</code>。</p>
-<h3>8.14 设置系统管理角色</h3>
+<h3>9.14 设置系统管理角色</h3>
 <p><code>PUT /api/users/{id}/management-role</code> · operationId: <code>updateManagementRole</code></p>
 <p>仅系统管理员。不改变业务范围；不能撤销自己管理权限，409；事务内重新校验操作者。</p>
 <p>实现状态：implemented</p>
@@ -2818,7 +3126,7 @@ Accept: application/json
 </tbody>
 </table></div>
 <p>实现证据：<code>backend/src/modules/users/users.controller.ts</code>, <code>backend/src/modules/users/users.service.ts</code>, <code>backend/src/modules/users/workbench-access.service.ts</code>。</p>
-<h3>8.15 读取本地组织/员工上下文</h3>
+<h3>9.15 读取本地组织/员工上下文</h3>
 <p><code>GET /api/organization</code> · operationId: <code>getOrganizationWorkspace</code></p>
 <p>仅系统管理员。每个本地账户独立mock组织，非FOP目录；首次GET可在事务内初始化种子，有本地写副作用。空Query DTO拒绝额外字段。组织写接口不在本规范。</p>
 <p>实现状态：implemented</p>
@@ -2879,7 +3187,7 @@ Accept: application/json
 }
 </code></pre>
 <p>实现证据：<code>backend/src/modules/organization/organization.controller.ts</code>, <code>backend/src/modules/organization/organization.service.ts</code>, <code>backend/src/modules/organization/organization.types.ts</code>。</p>
-<h3>8.16 读取本地AutoFlow业务概览</h3>
+<h3>9.16 读取本地AutoFlow业务概览</h3>
 <p><code>GET /api/autoflow/dashboard</code> · operationId: <code>getLocalAutoflowDashboard</code></p>
 <p>需要sales入口与当前业务范围，readBusinessOwners限定同租户/部门或本人。无查询DTO，额外query当前忽略。无FOP source/updatedAt；funnel.value固定0不表示真实金额。</p>
 <p>实现状态：implemented</p>
@@ -2991,7 +3299,7 @@ Accept: application/json
 }
 </code></pre>
 <p>实现证据：<code>backend/src/modules/autoflow/autoflow.controller.ts</code>, <code>backend/src/modules/autoflow/autoflow.service.ts</code>, <code>backend/src/modules/autoflow/autoflow.types.ts</code>, <code>backend/src/modules/users/business-data-access.ts</code>。</p>
-<h3>8.17 客户同一数量排名集合下钻收款分录</h3>
+<h3>9.17 客户同一数量排名集合下钻收款分录</h3>
 <p><code>GET /api/autoflow/integrations/fop/order-volume/receipts</code> · operationId: <code>getOrderVolumeReceipts</code></p>
 <p>仅 category=customer；沿用客户统计时间、部门、仓库及完整查询范围数量 Top10/other 客户集合，再应用 periodId/detailWarehouse。需要 workbenchRole、receipts scope 与独立 allowedReceiptIds；没有 scope 返回403，缺失/空白名单为空。订单 allowlist 不能替代收款授权。只返回有效 USD 履约／全款备货分录；不含押金、样品。状态、UTC+8 日期及来源口径同 Dashboard。total/totals 分页前计算，按 paidAt 倒序/id 稳定排序；客户端不能传身份/权限字段。</p>
 <p>实现状态：implemented</p>
@@ -3217,7 +3525,7 @@ Accept: application/json
 }
 </code></pre>
 <p>实现证据：<code>backend/src/modules/users/workbench.controller.ts</code>, <code>backend/src/modules/fop-data/fop-data.service.ts</code>, <code>backend/src/modules/fop-data/order-volume.dto.ts</code>, <code>backend/src/modules/fop-data/order-volume.ts</code>, <code>backend/src/modules/fop-data/fop-receipts.ts</code>。</p>
-<h3>8.18 读取获授权实收分录及完整筛选合计</h3>
+<h3>9.18 读取获授权实收分录及完整筛选合计</h3>
 <p><code>GET /api/autoflow/integrations/fop/receipts</code> · operationId: <code>getReceipts</code></p>
 <p>Dashboard回款下钻。from/to 必填且严格有效，2020-01-01&lt;=from&lt;=to&lt;=UTC+8 今天，含首尾；当前无最大跨度。department/ownerId/customerId/warehouse/sourceType 仅收窄范围。需拥有 workbenchRole、receipts scope 及独立 allowedReceiptIds；无 scope 403，缺失/空 allowlist 合法空结果。按绑定租户与部门/员工业务范围过滤，读取前后复核本地授权变化。有效分录要求 USD、paid、源单及收款单均 approved、未取消、已发生 paidAt，来源仅履约或全款备货。实收不是银行现金保证，源单金额与手续费单独返回。畸形授权分录/重复ID为503，禁止由订单金额合成。total/totals 分页前计算，paidAt倒序/id稳定排序；未知身份/权限参数400。</p>
 <p>实现状态：implemented</p>
@@ -3387,7 +3695,7 @@ Accept: application/json
 }
 </code></pre>
 <p>实现证据：<code>backend/src/modules/users/workbench.controller.ts</code>, <code>backend/src/modules/fop-data/fop-data.service.ts</code>, <code>backend/src/modules/fop-data/fop-receipts.dto.ts</code>, <code>backend/src/modules/fop-data/fop-receipts.ts</code>, <code>backend/src/modules/fop-data/fop-business-time.ts</code>。</p>
-<h3>8.19 物流实际运费聚合及完整上期环比</h3>
+<h3>9.19 物流实际运费聚合及完整上期环比</h3>
 <p><code>GET /api/autoflow/integrations/fop/freight</code> · operationId: <code>getFreight</code></p>
 <p>独立成本权限：必须有freight analytics scope，否则403；allowedFreightIds缺失/空数组返回空范围，不能从订单或收款授权推导。服务端与租户、本地本人/部门及下属/业务管理员范围求交，系统管理员也不能绕过。每次请求复查绑定和授权变化；客户端不得传tenantId、userId、授权白名单或scope。只纳入已审核、已确认、正数且确认时刻已发生的发运单快照。原币、明确汇率日期/来源及折算一致性必需，目标USD；确认时间按UTC+8，不是银行付款或最终结算证明。真实FOP网络适配器未完成，Mock为独立成本样本。 返回合计与固定六类服务商并列系列；carrierCode过滤时仅合计与该商。单服务商趋势在居中弹窗展示；原始发运单在工作台下钻。</p>
 <p>实现状态：implemented; server-side mock available; real FOP network adapter pending</p>
@@ -3667,7 +3975,7 @@ Accept: application/json
 }
 </code></pre>
 <p>实现证据：<code>backend/src/modules/users/workbench.controller.ts</code>, <code>backend/src/modules/fop-data/fop-data.service.ts</code>, <code>backend/src/modules/fop-data/fop-freight.dto.ts</code>, <code>backend/src/modules/fop-data/fop-freight.ts</code>, <code>backend/src/modules/fop-data/fop-freight.types.ts</code>。</p>
-<h3>8.20 岗位工作台物流运费发运单明细</h3>
+<h3>9.20 岗位工作台物流运费发运单明细</h3>
 <p><code>GET /api/autoflow/integrations/fop/freight/details</code> · operationId: <code>getFreightDetails</code></p>
 <p>独立成本权限：必须有freight analytics scope，否则403；allowedFreightIds缺失/空数组返回空范围，不能从订单或收款授权推导。服务端与租户、本地本人/部门及下属/业务管理员范围求交，系统管理员也不能绕过。每次请求复查绑定和授权变化；客户端不得传tenantId、userId、授权白名单或scope。只纳入已审核、已确认、正数且确认时刻已发生的发运单快照。原币、明确汇率日期/来源及折算一致性必需，目标USD；确认时间按UTC+8，不是银行付款或最终结算证明。真实FOP网络适配器未完成，Mock为独立成本样本。 明细必须通过workbenchRole入口权限；periodId仅能是该查询返回的一期，comparisonPeriod默认current，previous选择完整上期。省略periodId时选择全部显示周期对应范围；确认时间倒序、ID稳定排序。total/totals在分页前计算，越界页仍保留完整合计；原币逐币种合计。</p>
 <p>实现状态：implemented; server-side mock available; real FOP network adapter pending</p>
@@ -3892,7 +4200,377 @@ Accept: application/json
 }
 </code></pre>
 <p>实现证据：<code>backend/src/modules/users/workbench.controller.ts</code>, <code>backend/src/modules/fop-data/fop-data.service.ts</code>, <code>backend/src/modules/fop-data/fop-freight.dto.ts</code>, <code>backend/src/modules/fop-data/fop-freight.ts</code>, <code>backend/src/modules/fop-data/fop-freight.types.ts</code>。</p>
-<h2 id="hz-section-9">9. 字段级数据字典</h2>
+<h3>9.21 销售工作台个人收款与毛利统计</h3>
+<p><code>GET /api/autoflow/integrations/fop/sales-performance</code> · operationId: <code>getSalesPerformance</code></p>
+<p>必须具备sales工作台、receipts及sales_profit analytics scope。服务端重新读取用户FOP绑定、业务角色范围，分别以allowedReceiptIds/allowedProfitIds授权并与租户/业务员/部门范围求交，不从订单权限推导。普通业务员仅自身；业务管理员/部门经理可选择已授权业务员，显式越权ownerId为403。身份/权限查询参数禁止。from/to为UTC+8含首尾日期，2020起、不晚于今天，最大366天；grain month/week/day，周一开始，首尾裁剪。收款复用方案2（履约实际收款+全款备货收款，排除押金），按支付日期；毛利按独立确认日期/月，已结算取冻结净毛利差额、预估以预估运费及已知成本收入计算期间贡献。不会把全款备货回款直接再加利润。同订单同确认月已结算替代预估，跨期差额保留。无可信日明细的结算只能进入完整自然月month桶；week/day/部分月返回null和整月参考，不均摊。未来knownAt/approvedAt/paidAt排除；不支持客户端asOf历史回放。现有FOP原生实时服务未满足严格cutoff/预估成本，新事件账本与只读适配器待实现。</p>
+<p>实现状态：本工程BFF/Mock及前端实现；对应FOP生产只读适配器、严格截止历史成本与日级贡献账本待IT实现。</p>
+<p>鉴权：<code>[{"BearerAuth": []}, {"SessionCookie": []}]</code>。</p>
+<p>请求示例（日期和主体为脱敏样例，联调时替换）：</p>
+<pre><code class="language-http">GET /api/autoflow/integrations/fop/sales-performance?from=2026-01-01&amp;to=2026-10-23&amp;grain=month
+Authorization: Bearer &lt;有效会话JWT&gt;
+Accept: application/json
+</code></pre>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>参数</th>
+<th>位置</th>
+<th>类型</th>
+<th>必填</th>
+<th>说明</th>
+<th>约束/默认值</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>from</code></td>
+<td>query</td>
+<td>string (date)</td>
+<td>是</td>
+<td>起始日期，UTC+8，含当日；不早于2020-01-01。</td>
+<td>pattern="^\d{4}-\d{2}-\d{2}$"</td>
+</tr>
+<tr>
+<td><code>to</code></td>
+<td>query</td>
+<td>string (date)</td>
+<td>是</td>
+<td>结束日期，UTC+8，含当日，不晚于今天；最多366天。</td>
+<td>pattern="^\d{4}-\d{2}-\d{2}$"</td>
+</tr>
+<tr>
+<td><code>grain</code></td>
+<td>query</td>
+<td>PerformanceGrain</td>
+<td>是</td>
+<td>见引用模型</td>
+<td>enum=["month", "week", "day"]</td>
+</tr>
+<tr>
+<td><code>ownerId</code></td>
+<td>query</td>
+<td>string</td>
+<td>否</td>
+<td>授权业务员稳定ID。不是FOP登录用户ID；仅缩小服务端范围。</td>
+<td>minLength=1</td>
+</tr>
+</tbody>
+</table></div>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>状态码</th>
+<th>说明</th>
+<th>Content-Type / 响应模型</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>200</td>
+<td>成功，裸JSON；在独立scope已授予但allowlist为空时返回空范围。</td>
+<td>application/json: PerformanceData</td>
+</tr>
+<tr>
+<td>400</td>
+<td>400：DTO失败、未知DTO字段、日期或跨参数条件错误。</td>
+<td>application/json: HttpError</td>
+</tr>
+<tr>
+<td>401</td>
+<td>401：缺失/过期/无效JWT或账户不存在。</td>
+<td>application/json: HttpError</td>
+</tr>
+<tr>
+<td>403</td>
+<td>403：入口/系统管理权限不足、业务禁用、绑定/范围缺失、FOP拒绝或请求期间授权变更。</td>
+<td>application/json: ErrorResponse</td>
+</tr>
+<tr>
+<td>429</td>
+<td>429：AppModule全局默认每60秒120次；实际计数受部署IP/代理策略影响。</td>
+<td>application/json: HttpError</td>
+</tr>
+<tr>
+<td>500</td>
+<td>500：未捕获服务/数据库异常。</td>
+<td>application/json: HttpError</td>
+</tr>
+<tr>
+<td>503</td>
+<td>503：FOP provider未配置或调用异常；不会降级mock。</td>
+<td>application/json: FopError</td>
+</tr>
+</tbody>
+</table></div>
+<p>200 响应示例（application/json）：</p>
+<pre><code class="language-json">{
+  &quot;source&quot;: &quot;mock&quot;,
+  &quot;query&quot;: {
+    &quot;from&quot;: &quot;2026-09-01&quot;,
+    &quot;to&quot;: &quot;2026-09-30&quot;,
+    &quot;grain&quot;: &quot;month&quot;,
+    &quot;ownerId&quot;: &quot;employee-example&quot;
+  },
+  &quot;timeZone&quot;: &quot;UTC+8&quot;,
+  &quot;currency&quot;: &quot;USD&quot;,
+  &quot;asOf&quot;: &quot;2026-10-23T12:00:00+08:00&quot;,
+  &quot;owners&quot;: [
+    {
+      &quot;id&quot;: &quot;employee-example&quot;,
+      &quot;name&quot;: &quot;曹可滢（Ruth）&quot;,
+      &quot;department&quot;: {
+        &quot;id&quot;: &quot;sales1-example&quot;,
+        &quot;name&quot;: &quot;业务一部&quot;
+      }
+    }
+  ],
+  &quot;selectedOwner&quot;: {
+    &quot;id&quot;: &quot;employee-example&quot;,
+    &quot;name&quot;: &quot;曹可滢（Ruth）&quot;,
+    &quot;department&quot;: {
+      &quot;id&quot;: &quot;sales1-example&quot;,
+      &quot;name&quot;: &quot;业务一部&quot;
+    }
+  },
+  &quot;canSelectOwner&quot;: false,
+  &quot;periods&quot;: [
+    {
+      &quot;orderAmount&quot;: 0,
+      &quot;stockAmount&quot;: 0,
+      &quot;collectionsAmount&quot;: 0,
+      &quot;settledGrossProfit&quot;: 8,
+      &quot;estimatedGrossProfit&quot;: 0,
+      &quot;unallocatedCount&quot;: 0,
+      &quot;receiptCount&quot;: 0,
+      &quot;profitCount&quot;: 1,
+      &quot;id&quot;: &quot;2026-09&quot;,
+      &quot;label&quot;: &quot;2026-09&quot;,
+      &quot;from&quot;: &quot;2026-09-01&quot;,
+      &quot;to&quot;: &quot;2026-09-30&quot;,
+      &quot;profitStatus&quot;: &quot;settled&quot;
+    }
+  ],
+  &quot;totals&quot;: {
+    &quot;orderAmount&quot;: 0,
+    &quot;stockAmount&quot;: 0,
+    &quot;collectionsAmount&quot;: 0,
+    &quot;settledGrossProfit&quot;: 8,
+    &quot;estimatedGrossProfit&quot;: 0,
+    &quot;unallocatedCount&quot;: 0,
+    &quot;receiptCount&quot;: 0,
+    &quot;profitCount&quot;: 1
+  },
+  &quot;unallocatedSettlements&quot;: []
+}
+</code></pre>
+<p>实现证据：<code>backend/src/modules/fop-data/sales-performance.ts</code>, <code>backend/src/modules/fop-data/sales-performance.dto.ts</code>, <code>backend/src/modules/fop-data/fop-data.service.ts</code>, <code>backend/src/modules/users/workbench.controller.ts</code>。</p>
+<h3>9.22 销售工作台个人收款与毛利明细</h3>
+<p><code>GET /api/autoflow/integrations/fop/sales-performance/details</code> · operationId: <code>getSalesPerformanceDetails</code></p>
+<p>必须具备sales工作台、receipts及sales_profit analytics scope。服务端重新读取用户FOP绑定、业务角色范围，分别以allowedReceiptIds/allowedProfitIds授权并与租户/业务员/部门范围求交，不从订单权限推导。普通业务员仅自身；业务管理员/部门经理可选择已授权业务员，显式越权ownerId为403。身份/权限查询参数禁止。from/to为UTC+8含首尾日期，2020起、不晚于今天，最大366天；grain month/week/day，周一开始，首尾裁剪。收款复用方案2（履约实际收款+全款备货收款，排除押金），按支付日期；毛利按独立确认日期/月，已结算取冻结净毛利差额、预估以预估运费及已知成本收入计算期间贡献。不会把全款备货回款直接再加利润。同订单同确认月已结算替代预估，跨期差额保留。无可信日明细的结算只能进入完整自然月month桶；week/day/部分月返回null和整月参考，不均摊。未来knownAt/approvedAt/paidAt排除；不支持客户端asOf历史回放。现有FOP原生实时服务未满足严格cutoff/预估成本，新事件账本与只读适配器待实现。 分页前计算合计；明细kind仅切换事实清单，periodId不得扩大日期范围。</p>
+<p>实现状态：本工程BFF/Mock及前端实现；对应FOP生产只读适配器、严格截止历史成本与日级贡献账本待IT实现。</p>
+<p>鉴权：<code>[{"BearerAuth": []}, {"SessionCookie": []}]</code>。</p>
+<p>请求示例（日期和主体为脱敏样例，联调时替换）：</p>
+<pre><code class="language-http">GET /api/autoflow/integrations/fop/sales-performance/details?from=2026-01-01&amp;to=2026-10-23&amp;grain=month&amp;kind=profit&amp;periodId=2026-09&amp;page=1&amp;pageSize=20
+Authorization: Bearer &lt;有效会话JWT&gt;
+Accept: application/json
+</code></pre>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>参数</th>
+<th>位置</th>
+<th>类型</th>
+<th>必填</th>
+<th>说明</th>
+<th>约束/默认值</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>from</code></td>
+<td>query</td>
+<td>string (date)</td>
+<td>是</td>
+<td>起始日期，UTC+8，含当日；不早于2020-01-01。</td>
+<td>pattern="^\d{4}-\d{2}-\d{2}$"</td>
+</tr>
+<tr>
+<td><code>to</code></td>
+<td>query</td>
+<td>string (date)</td>
+<td>是</td>
+<td>结束日期，UTC+8，含当日，不晚于今天；最多366天。</td>
+<td>pattern="^\d{4}-\d{2}-\d{2}$"</td>
+</tr>
+<tr>
+<td><code>grain</code></td>
+<td>query</td>
+<td>PerformanceGrain</td>
+<td>是</td>
+<td>见引用模型</td>
+<td>enum=["month", "week", "day"]</td>
+</tr>
+<tr>
+<td><code>ownerId</code></td>
+<td>query</td>
+<td>string</td>
+<td>否</td>
+<td>授权业务员稳定ID。不是FOP登录用户ID；仅缩小服务端范围。</td>
+<td>minLength=1</td>
+</tr>
+<tr>
+<td><code>kind</code></td>
+<td>query</td>
+<td>string</td>
+<td>是</td>
+<td>明细类别。</td>
+<td>enum=["receipts", "profit"]</td>
+</tr>
+<tr>
+<td><code>periodId</code></td>
+<td>query</td>
+<td>string</td>
+<td>否</td>
+<td>省略时全查询范围；提供时必须是summary返回的期ID。</td>
+<td>minLength=1; pattern="^\d{4}-\d{2}(?:-\d{2})?$"</td>
+</tr>
+<tr>
+<td><code>page</code></td>
+<td>query</td>
+<td>integer</td>
+<td>否</td>
+<td>分页参数。</td>
+<td>default=1; minimum=1; maximum=1000000</td>
+</tr>
+<tr>
+<td><code>pageSize</code></td>
+<td>query</td>
+<td>integer</td>
+<td>否</td>
+<td>分页参数。</td>
+<td>default=20; minimum=1; maximum=100</td>
+</tr>
+</tbody>
+</table></div>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>状态码</th>
+<th>说明</th>
+<th>Content-Type / 响应模型</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>200</td>
+<td>成功，裸JSON；在独立scope已授予但allowlist为空时返回空范围。</td>
+<td>application/json: PerformancePage</td>
+</tr>
+<tr>
+<td>400</td>
+<td>400：DTO失败、未知DTO字段、日期或跨参数条件错误。</td>
+<td>application/json: HttpError</td>
+</tr>
+<tr>
+<td>401</td>
+<td>401：缺失/过期/无效JWT或账户不存在。</td>
+<td>application/json: HttpError</td>
+</tr>
+<tr>
+<td>403</td>
+<td>403：入口/系统管理权限不足、业务禁用、绑定/范围缺失、FOP拒绝或请求期间授权变更。</td>
+<td>application/json: ErrorResponse</td>
+</tr>
+<tr>
+<td>429</td>
+<td>429：AppModule全局默认每60秒120次；实际计数受部署IP/代理策略影响。</td>
+<td>application/json: HttpError</td>
+</tr>
+<tr>
+<td>500</td>
+<td>500：未捕获服务/数据库异常。</td>
+<td>application/json: HttpError</td>
+</tr>
+<tr>
+<td>503</td>
+<td>503：FOP provider未配置或调用异常；不会降级mock。</td>
+<td>application/json: FopError</td>
+</tr>
+</tbody>
+</table></div>
+<p>200 响应示例（application/json）：</p>
+<pre><code class="language-json">{
+  &quot;source&quot;: &quot;mock&quot;,
+  &quot;timeZone&quot;: &quot;UTC+8&quot;,
+  &quot;currency&quot;: &quot;USD&quot;,
+  &quot;asOf&quot;: &quot;2026-10-23T12:00:00+08:00&quot;,
+  &quot;kind&quot;: &quot;profit&quot;,
+  &quot;total&quot;: 1,
+  &quot;page&quot;: 1,
+  &quot;pageSize&quot;: 20,
+  &quot;receipts&quot;: [],
+  &quot;profits&quot;: [
+    {
+      &quot;id&quot;: &quot;gp-example&quot;,
+      &quot;orderId&quot;: &quot;order-example&quot;,
+      &quot;orderNumber&quot;: &quot;TO-202609-001&quot;,
+      &quot;customerCode&quot;: &quot;C001&quot;,
+      &quot;customerName&quot;: &quot;示例客户&quot;,
+      &quot;owner&quot;: {
+        &quot;id&quot;: &quot;employee-example&quot;,
+        &quot;name&quot;: &quot;曹可滢（Ruth）&quot;
+      },
+      &quot;department&quot;: {
+        &quot;id&quot;: &quot;sales1-example&quot;,
+        &quot;name&quot;: &quot;业务一部&quot;
+      },
+      &quot;salesDepartmentCode&quot;: &quot;sales1&quot;,
+      &quot;recognitionMonth&quot;: &quot;2026-09&quot;,
+      &quot;recognitionDate&quot;: null,
+      &quot;knownAt&quot;: &quot;2026-10-08T10:00:00+08:00&quot;,
+      &quot;status&quot;: &quot;settled&quot;,
+      &quot;settlementId&quot;: &quot;GP-202609-RUTH&quot;,
+      &quot;version&quot;: &quot;2&quot;,
+      &quot;approvedAt&quot;: &quot;2026-10-08T10:00:00+08:00&quot;,
+      &quot;cutoffAt&quot;: &quot;2026-10-01T00:00:00+08:00&quot;,
+      &quot;freightBasis&quot;: &quot;frozen&quot;,
+      &quot;incomeAmount&quot;: 100,
+      &quot;adjustmentIncome&quot;: 5,
+      &quot;productCost&quot;: 60,
+      &quot;freightCost&quot;: 10,
+      &quot;refundCost&quot;: 4,
+      &quot;returnCost&quot;: 1,
+      &quot;otherCost&quot;: 2,
+      &quot;previousRecognizedProfit&quot;: 20,
+      &quot;roundingAdjustment&quot;: 0,
+      &quot;amount&quot;: 8,
+      &quot;currency&quot;: &quot;USD&quot;,
+      &quot;originalAmount&quot;: 8,
+      &quot;originalCurrency&quot;: &quot;USD&quot;,
+      &quot;fxRateToUsd&quot;: 1,
+      &quot;fxRateDate&quot;: &quot;2026-09-30&quot;,
+      &quot;fxRateSource&quot;: &quot;mock-contract-example&quot;
+    }
+  ],
+  &quot;totals&quot;: {
+    &quot;orderAmount&quot;: 0,
+    &quot;stockAmount&quot;: 0,
+    &quot;collectionsAmount&quot;: 0,
+    &quot;settledGrossProfit&quot;: 8,
+    &quot;estimatedGrossProfit&quot;: 0,
+    &quot;unallocatedCount&quot;: 0,
+    &quot;receiptCount&quot;: 0,
+    &quot;profitCount&quot;: 1
+  },
+  &quot;range&quot;: {
+    &quot;from&quot;: &quot;2026-09-01&quot;,
+    &quot;to&quot;: &quot;2026-09-30&quot;
+  },
+  &quot;unallocatedSettlements&quot;: []
+}
+</code></pre>
+<p>实现证据：<code>backend/src/modules/fop-data/sales-performance.ts</code>, <code>backend/src/modules/fop-data/sales-performance.dto.ts</code>, <code>backend/src/modules/fop-data/fop-data.service.ts</code>, <code>backend/src/modules/users/workbench.controller.ts</code>。</p>
+<h2 id="hz-section-10">10. 字段级数据字典</h2>
 <p>模型引用按名称交叉查阅。例如 <code>OrderVolumeData.series[] → VolumeSeries.amounts → VolumeAmounts</code>；每一层字段均在下表列出。必填是相对于当前父对象；父对象本身可选时不强制创建。可空只以类型中的 <code>null</code> 或 <code>anyOf/oneOf</code> null 分支为准。示例不是生产值。内部 FOP 提供器模型若标注为内部，则不能从浏览器直接传入。</p>
 <h3>DataSource</h3>
 <p>mock=本地演示；fop标签本身不证明真实上游已接通。</p>
@@ -9253,11 +9931,1030 @@ Accept: application/json
 </tr>
 </tbody>
 </table></div>
-<h2 id="hz-section-10">10. 前端功能诊断与复现证据</h2>
-<p>诊断日期：2026-10-22。范围：<code>work-app/frontend</code> 全部 ECharts 实例、调用组件、直接相关 API 客户端、统计工具、路由、权限与测试。本文源码路径均相对于 <code>work-app/</code>。原诊断行号保留作历史定位；方案2修改后应以当前函数／组件名定位，最终验证见 VERIFICATION.md。</p>
+<h3>PerformanceGrain</h3>
+<p>分期粒度；周一为周起点，首尾按查询日期裁剪。</p>
+<p>类型：<code>string</code>；约束：enum=["month", "week", "day"]。</p>
+<h3>PerformanceQuery</h3>
+<p>查询使用支付日期统计收款，使用利润确认期间统计毛利；两种归属不可混同。</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>字段路径</th>
+<th>类型/引用</th>
+<th>必填</th>
+<th>说明</th>
+<th>约束/示例</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>from</code></td>
+<td>string (date)</td>
+<td>是</td>
+<td>起始日期，UTC+8，含当日；不早于2020-01-01。</td>
+<td>pattern="^\d{4}-\d{2}-\d{2}$"</td>
+</tr>
+<tr>
+<td><code>to</code></td>
+<td>string (date)</td>
+<td>是</td>
+<td>结束日期，UTC+8，含当日，不晚于今天；最多366天。</td>
+<td>pattern="^\d{4}-\d{2}-\d{2}$"</td>
+</tr>
+<tr>
+<td><code>grain</code></td>
+<td>PerformanceGrain</td>
+<td>是</td>
+<td>见引用模型/接口说明</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>ownerId</code></td>
+<td>string</td>
+<td>否</td>
+<td>授权业务员稳定ID。不是FOP登录用户ID；仅缩小服务端范围。</td>
+<td>minLength=1; maxLength=128</td>
+</tr>
+</tbody>
+</table></div>
+<h3>PerformanceOwner</h3>
+<p>来自已授权收款及毛利事实的可选业务员，不是全公司目录。</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>字段路径</th>
+<th>类型/引用</th>
+<th>必填</th>
+<th>说明</th>
+<th>约束/示例</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>id</code></td>
+<td>string</td>
+<td>是</td>
+<td>授权业务员稳定ID。</td>
+<td>minLength=1</td>
+</tr>
+<tr>
+<td><code>name</code></td>
+<td>string</td>
+<td>是</td>
+<td>中英文展示名称。</td>
+<td>minLength=1</td>
+</tr>
+<tr>
+<td><code>department</code></td>
+<td>NamedEntity</td>
+<td>是</td>
+<td>授权范围内归属部门。</td>
+<td>—</td>
+</tr>
+</tbody>
+</table></div>
+<pre><code class="language-json">{
+  &quot;id&quot;: &quot;employee-example&quot;,
+  &quot;name&quot;: &quot;曹可滢（Ruth）&quot;,
+  &quot;department&quot;: {
+    &quot;id&quot;: &quot;sales1-example&quot;,
+    &quot;name&quot;: &quot;业务一部&quot;
+  }
+}
+</code></pre>
+<h3>FopProfit</h3>
+<p>白名单公开利润贡献事实：同订单同确认月已结算优先替代预估，不跨月抹掉后续差额；禁止重复累计快照。tenantId/departmentPathIds仅provider内部使用。 当前归一规则：同订单同确认月只接收一个已审核结算版本；若上游返回多个版本，应先在可信适配器选取/合并为唯一期间贡献，不得把累计版本直接透传相加。预估同订单同月每日最多一个去重贡献，多个当日事件先在适配器合并。 适配器须撤销已被审核结算替代的预估，即使冻结owner已变且当前查看人无新owner利润权限；BFF不可越权读取他人金额去重。在授权businessScope交集内先替代再选择owner。</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>字段路径</th>
+<th>类型/引用</th>
+<th>必填</th>
+<th>说明</th>
+<th>约束/示例</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>id</code></td>
+<td>string</td>
+<td>是</td>
+<td>利润贡献事实唯一ID，独立allowedProfitIds授权；不能复用订单授权。</td>
+<td>minLength=1</td>
+</tr>
+<tr>
+<td><code>orderId</code></td>
+<td>string</td>
+<td>是</td>
+<td>履约订单稳定ID。</td>
+<td>minLength=1</td>
+</tr>
+<tr>
+<td><code>orderNumber</code></td>
+<td>string</td>
+<td>是</td>
+<td>履约订单编号。</td>
+<td>minLength=1</td>
+</tr>
+<tr>
+<td><code>customerCode</code></td>
+<td>string</td>
+<td>是</td>
+<td>客户编码。</td>
+<td>minLength=1</td>
+</tr>
+<tr>
+<td><code>customerName</code></td>
+<td>string</td>
+<td>是</td>
+<td>客户名称。</td>
+<td>minLength=1</td>
+</tr>
+<tr>
+<td><code>owner</code></td>
+<td>NamedEntity</td>
+<td>是</td>
+<td>结算利润为首次月结冻结业务员；后续版本沿用。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>department</code></td>
+<td>NamedEntity</td>
+<td>是</td>
+<td>用于权限交集的可信归属部门。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>salesDepartmentCode</code></td>
+<td>SalesDepartment</td>
+<td>是</td>
+<td>见引用模型/接口说明</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>recognitionMonth</code></td>
+<td>string</td>
+<td>是</td>
+<td>毛利贡献结算/确认月，不等于订单支付月。</td>
+<td>pattern="^\d{4}-\d{2}$"</td>
+</tr>
+<tr>
+<td><code>recognitionDate</code></td>
+<td>string / null</td>
+<td>是</td>
+<td>可信利润事件归属日，必须属于recognitionMonth。现有FOP月结仅有月份时为null；禁止审核日代替、禁止均摊。预估分期事件必须有日期。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>knownAt</code></td>
+<td>string (date-time)</td>
+<td>是</td>
+<td>该贡献及全部组成事实已知时刻；晚于服务端asOf的事实不参与。不是HTTP客户端可指定值。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>status</code></td>
+<td>string</td>
+<td>是</td>
+<td>settled仅已审核冻结结算；estimated为新适配器按预估运费和已知事实计算的期间贡献差额。</td>
+<td>enum=["estimated", "settled"]</td>
+</tr>
+<tr>
+<td><code>settlementId</code></td>
+<td>string / null</td>
+<td>是</td>
+<td>审核月结单ID，settled必填；estimated为null。</td>
+<td>minLength=1</td>
+</tr>
+<tr>
+<td><code>version</code></td>
+<td>string</td>
+<td>是</td>
+<td>冻结结算版本或预估事实版本，可追溯且不可静默覆盖。</td>
+<td>minLength=1</td>
+</tr>
+<tr>
+<td><code>approvedAt</code></td>
+<td>string / null</td>
+<td>是</td>
+<td>月结审核时刻，settled必填且不得晚于asOf；不是利润业务日期。estimated为null。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>cutoffAt</code></td>
+<td>string (date-time)</td>
+<td>是</td>
+<td>构成快照业务排他截止时刻，通常下月1日；可以是未来窗口边界。recognitionDate的UTC+8日始必须严格早于cutoffAt；实际组成事实还须符合knownAt/asOf，不能把未来窗口当事实已知。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>freightBasis</code></td>
+<td>string</td>
+<td>是</td>
+<td>未结算强制estimated，已结算使用frozen快照；缺失预估成本不能填0冒充完整。</td>
+<td>enum=["estimated", "frozen"]</td>
+</tr>
+<tr>
+<td><code>incomeAmount</code></td>
+<td>number</td>
+<td>是</td>
+<td>快照累计收入USD；不含另列adjustmentIncome。全款备货只按有效使用关系转收入，不直接加备货收款。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>adjustmentIncome</code></td>
+<td>number</td>
+<td>是</td>
+<td>快照差价调整等收入USD，可为负；如上游收入已含调整须拆出，不能重复加。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>productCost</code></td>
+<td>number</td>
+<td>是</td>
+<td>快照商品/采购成本USD，含有效备货使用分摊。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>freightCost</code></td>
+<td>number</td>
+<td>是</td>
+<td>快照国际物流成本USD；estimated使用hzkj_estimate_freight的可信历史版本，settled用冻结快照。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>refundCost</code></td>
+<td>number</td>
+<td>是</td>
+<td>截至截止时刻已知、已生效退款成本USD；与负收入拆分互斥。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>returnCost</code></td>
+<td>number</td>
+<td>是</td>
+<td>已知退货相关成本USD；与退款及其他成本去重。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>otherCost</code></td>
+<td>number</td>
+<td>是</td>
+<td>国内物流、仓储、财务手续费等其余净毛利成本USD；不能遗漏或与product/freight重复。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>previousRecognizedProfit</code></td>
+<td>number</td>
+<td>是</td>
+<td>此前已确认累计净毛利USD，从本版本累计值扣除得到期间差额；不是本期额。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>roundingAdjustment</code></td>
+<td>number</td>
+<td>是</td>
+<td>逐项换汇与原币差额整体换汇的USD尾差；明确展示，不能伪装为费用。</td>
+<td>minimum=-0.1; maximum=0.1</td>
+</tr>
+<tr>
+<td><code>amount</code></td>
+<td>number</td>
+<td>是</td>
+<td>期间净毛利USD贡献 = incomeAmount + adjustmentIncome - productCost - freightCost - refundCost - returnCost - otherCost - previousRecognizedProfit + roundingAdjustment；可负。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>currency</code></td>
+<td>"USD"</td>
+<td>是</td>
+<td>统一展示币种。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>originalAmount</code></td>
+<td>number</td>
+<td>是</td>
+<td>原币期间净毛利差额。已审核FOP月结通常CNY net_delta_rmb，不能冒充USD。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>originalCurrency</code></td>
+<td>string</td>
+<td>是</td>
+<td>明确原币代码。</td>
+<td>pattern="^[A-Z]{3}$"</td>
+</tr>
+<tr>
+<td><code>fxRateToUsd</code></td>
+<td>number</td>
+<td>是</td>
+<td>每单位原币折USD，有限且正；USD必须1。</td>
+<td>exclusiveMinimum=0</td>
+</tr>
+<tr>
+<td><code>fxRateDate</code></td>
+<td>string (date)</td>
+<td>是</td>
+<td>冻结/指定的审计汇率日期。 晚于当前UTC+8日期的汇率事实不参与统计或业务员选项。</td>
+<td>pattern="^\d{4}-\d{2}-\d{2}$"</td>
+</tr>
+<tr>
+<td><code>fxRateSource</code></td>
+<td>string</td>
+<td>是</td>
+<td>可信汇率来源，禁止用今天汇率隐式改写历史。</td>
+<td>minLength=1</td>
+</tr>
+</tbody>
+</table></div>
+<p>组合规则 <code>allOf</code>：<code>见 schema</code>, <code>见 schema</code>。完整约束见 OpenAPI JSON。</p>
+<pre><code class="language-json">{
+  &quot;id&quot;: &quot;gp-example&quot;,
+  &quot;orderId&quot;: &quot;order-example&quot;,
+  &quot;orderNumber&quot;: &quot;TO-202609-001&quot;,
+  &quot;customerCode&quot;: &quot;C001&quot;,
+  &quot;customerName&quot;: &quot;示例客户&quot;,
+  &quot;owner&quot;: {
+    &quot;id&quot;: &quot;employee-example&quot;,
+    &quot;name&quot;: &quot;曹可滢（Ruth）&quot;
+  },
+  &quot;department&quot;: {
+    &quot;id&quot;: &quot;sales1-example&quot;,
+    &quot;name&quot;: &quot;业务一部&quot;
+  },
+  &quot;salesDepartmentCode&quot;: &quot;sales1&quot;,
+  &quot;recognitionMonth&quot;: &quot;2026-09&quot;,
+  &quot;recognitionDate&quot;: null,
+  &quot;knownAt&quot;: &quot;2026-10-08T10:00:00+08:00&quot;,
+  &quot;status&quot;: &quot;settled&quot;,
+  &quot;settlementId&quot;: &quot;GP-202609-RUTH&quot;,
+  &quot;version&quot;: &quot;2&quot;,
+  &quot;approvedAt&quot;: &quot;2026-10-08T10:00:00+08:00&quot;,
+  &quot;cutoffAt&quot;: &quot;2026-10-01T00:00:00+08:00&quot;,
+  &quot;freightBasis&quot;: &quot;frozen&quot;,
+  &quot;incomeAmount&quot;: 100,
+  &quot;adjustmentIncome&quot;: 5,
+  &quot;productCost&quot;: 60,
+  &quot;freightCost&quot;: 10,
+  &quot;refundCost&quot;: 4,
+  &quot;returnCost&quot;: 1,
+  &quot;otherCost&quot;: 2,
+  &quot;previousRecognizedProfit&quot;: 20,
+  &quot;roundingAdjustment&quot;: 0,
+  &quot;amount&quot;: 8,
+  &quot;currency&quot;: &quot;USD&quot;,
+  &quot;originalAmount&quot;: 8,
+  &quot;originalCurrency&quot;: &quot;USD&quot;,
+  &quot;fxRateToUsd&quot;: 1,
+  &quot;fxRateDate&quot;: &quot;2026-09-30&quot;,
+  &quot;fxRateSource&quot;: &quot;mock-contract-example&quot;
+}
+</code></pre>
+<h3>PerformanceMetrics</h3>
+<p>同权限、同业务员、同日期范围的全量合计。金额安全分币累加，负调整允许，不求和百分比。</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>字段路径</th>
+<th>类型/引用</th>
+<th>必填</th>
+<th>说明</th>
+<th>约束/示例</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>orderAmount</code></td>
+<td>number</td>
+<td>是</td>
+<td>已审核已支付履约订单实际收款，不是订单名义总价。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>stockAmount</code></td>
+<td>number</td>
+<td>是</td>
+<td>已审核已支付全款备货实际收款，不含押金备货。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>collectionsAmount</code></td>
+<td>number</td>
+<td>是</td>
+<td>orderAmount + stockAmount；使用库存时不补回SKU产品款。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>settledGrossProfit</code></td>
+<td>number / null</td>
+<td>是</td>
+<td>本期审核结算净毛利差额；存在不能可靠分期的月结时为null，而不是零或局部合计。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>estimatedGrossProfit</code></td>
+<td>number</td>
+<td>是</td>
+<td>本期未结算预计净毛利贡献差额，使用预估运费和已知收入成本。不能把每日存量快照相加；与结算毛利分开展示。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>unallocatedCount</code></td>
+<td>integer</td>
+<td>是</td>
+<td>当前期间涉及但缺可靠日分配的结算事实数量。</td>
+<td>minimum=0</td>
+</tr>
+<tr>
+<td><code>receiptCount</code></td>
+<td>integer</td>
+<td>是</td>
+<td>有效收款行数；不是订单数。</td>
+<td>minimum=0</td>
+</tr>
+<tr>
+<td><code>profitCount</code></td>
+<td>integer</td>
+<td>是</td>
+<td>利润贡献事实数量；含缺分期的结算事实，不是订单数。</td>
+<td>minimum=0</td>
+</tr>
+</tbody>
+</table></div>
+<pre><code class="language-json">{
+  &quot;orderAmount&quot;: 0,
+  &quot;stockAmount&quot;: 0,
+  &quot;collectionsAmount&quot;: 0,
+  &quot;settledGrossProfit&quot;: 8,
+  &quot;estimatedGrossProfit&quot;: 0,
+  &quot;unallocatedCount&quot;: 0,
+  &quot;receiptCount&quot;: 0,
+  &quot;profitCount&quot;: 1
+}
+</code></pre>
+<h3>PerformancePeriod</h3>
+<p>收款和毛利独立时间归属的分期指标。数据按时间升序提供，明细表前端倒序。</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>字段路径</th>
+<th>类型/引用</th>
+<th>必填</th>
+<th>说明</th>
+<th>约束/示例</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>id</code></td>
+<td>string</td>
+<td>是</td>
+<td>接口生成期ID，明细仅接受本次query存在的ID。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>label</code></td>
+<td>string</td>
+<td>是</td>
+<td>分期展示文本。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>from</code></td>
+<td>string (date)</td>
+<td>是</td>
+<td>裁剪后起始日期。</td>
+<td>pattern="^\d{4}-\d{2}-\d{2}$"</td>
+</tr>
+<tr>
+<td><code>to</code></td>
+<td>string (date)</td>
+<td>是</td>
+<td>裁剪后结束日期。</td>
+<td>pattern="^\d{4}-\d{2}-\d{2}$"</td>
+</tr>
+<tr>
+<td><code>orderAmount</code></td>
+<td>number</td>
+<td>是</td>
+<td>已审核已支付履约订单实际收款，不是订单名义总价。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>stockAmount</code></td>
+<td>number</td>
+<td>是</td>
+<td>已审核已支付全款备货实际收款，不含押金备货。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>collectionsAmount</code></td>
+<td>number</td>
+<td>是</td>
+<td>orderAmount + stockAmount；使用库存时不补回SKU产品款。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>settledGrossProfit</code></td>
+<td>number / null</td>
+<td>是</td>
+<td>本期审核结算净毛利差额；存在不能可靠分期的月结时为null，而不是零或局部合计。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>estimatedGrossProfit</code></td>
+<td>number</td>
+<td>是</td>
+<td>本期未结算预计净毛利贡献差额，使用预估运费和已知收入成本。不能把每日存量快照相加；与结算毛利分开展示。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>unallocatedCount</code></td>
+<td>integer</td>
+<td>是</td>
+<td>当前期间涉及但缺可靠日分配的结算事实数量。</td>
+<td>minimum=0</td>
+</tr>
+<tr>
+<td><code>receiptCount</code></td>
+<td>integer</td>
+<td>是</td>
+<td>有效收款行数；不是订单数。</td>
+<td>minimum=0</td>
+</tr>
+<tr>
+<td><code>profitCount</code></td>
+<td>integer</td>
+<td>是</td>
+<td>利润贡献事实数量；含缺分期的结算事实，不是订单数。</td>
+<td>minimum=0</td>
+</tr>
+<tr>
+<td><code>profitStatus</code></td>
+<td>string</td>
+<td>是</td>
+<td>none无利润；estimated仅预估；settled仅结算；mixed混合；unallocated存在月结待分期。</td>
+<td>enum=["none", "estimated", "settled", "mixed", "unallocated"]</td>
+</tr>
+</tbody>
+</table></div>
+<pre><code class="language-json">{
+  &quot;orderAmount&quot;: 0,
+  &quot;stockAmount&quot;: 0,
+  &quot;collectionsAmount&quot;: 0,
+  &quot;settledGrossProfit&quot;: 8,
+  &quot;estimatedGrossProfit&quot;: 0,
+  &quot;unallocatedCount&quot;: 0,
+  &quot;receiptCount&quot;: 0,
+  &quot;profitCount&quot;: 1,
+  &quot;id&quot;: &quot;2026-09&quot;,
+  &quot;label&quot;: &quot;2026-09&quot;,
+  &quot;from&quot;: &quot;2026-09-01&quot;,
+  &quot;to&quot;: &quot;2026-09-30&quot;,
+  &quot;profitStatus&quot;: &quot;settled&quot;
+}
+</code></pre>
+<h3>PerformanceUnallocated</h3>
+<p>整月参考值，用于解释null；涉及多周时不可按周相加。</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>字段路径</th>
+<th>类型/引用</th>
+<th>必填</th>
+<th>说明</th>
+<th>约束/示例</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>month</code></td>
+<td>string</td>
+<td>是</td>
+<td>尚无日分期的结算月。</td>
+<td>pattern="^\d{4}-\d{2}$"</td>
+</tr>
+<tr>
+<td><code>amount</code></td>
+<td>number</td>
+<td>是</td>
+<td>该月获授权结算参考金额，不冒充当前所选周/日金额，不重复加入合计。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>count</code></td>
+<td>integer</td>
+<td>是</td>
+<td>待分期结算事实数。</td>
+<td>minimum=1</td>
+</tr>
+</tbody>
+</table></div>
+<h3>PerformanceData</h3>
+<p>销售工作台个人收款与毛利响应。当前Mock/BFF已实现，FOP历史事件和只读网络适配待IT对接。</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>字段路径</th>
+<th>类型/引用</th>
+<th>必填</th>
+<th>说明</th>
+<th>约束/示例</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>source</code></td>
+<td>string</td>
+<td>是</td>
+<td>数据来源。</td>
+<td>enum=["mock", "fop"]</td>
+</tr>
+<tr>
+<td><code>query</code></td>
+<td>PerformanceQuery</td>
+<td>是</td>
+<td>见引用模型/接口说明</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>timeZone</code></td>
+<td>"UTC+8"</td>
+<td>是</td>
+<td>业务日期归属。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>currency</code></td>
+<td>"USD"</td>
+<td>是</td>
+<td>展示币种。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>asOf</code></td>
+<td>string (date-time)</td>
+<td>是</td>
+<td>服务端当前查询快照时刻，不是支持历史回放的承诺。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>owners</code></td>
+<td>PerformanceOwner[]</td>
+<td>是</td>
+<td>当前用户权限范围内业务员。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>selectedOwner</code></td>
+<td>PerformanceOwner anyOf null</td>
+<td>是</td>
+<td>本次实际选择；空范围null。普通员工仅自己。管理员/经理无绑定时默认首个并明确显示姓名。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>canSelectOwner</code></td>
+<td>boolean</td>
+<td>是</td>
+<td>普通业务员false，业务管理员/部门经理true；仍不得越权。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>periods</code></td>
+<td>PerformancePeriod[]</td>
+<td>是</td>
+<td>查询期分桶，含零值期。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>totals</code></td>
+<td>PerformanceMetrics</td>
+<td>是</td>
+<td>见引用模型/接口说明</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>unallocatedSettlements</code></td>
+<td>PerformanceUnallocated[]</td>
+<td>是</td>
+<td>未分期月结参考。</td>
+<td>—</td>
+</tr>
+</tbody>
+</table></div>
+<pre><code class="language-json">{
+  &quot;source&quot;: &quot;mock&quot;,
+  &quot;query&quot;: {
+    &quot;from&quot;: &quot;2026-09-01&quot;,
+    &quot;to&quot;: &quot;2026-09-30&quot;,
+    &quot;grain&quot;: &quot;month&quot;,
+    &quot;ownerId&quot;: &quot;employee-example&quot;
+  },
+  &quot;timeZone&quot;: &quot;UTC+8&quot;,
+  &quot;currency&quot;: &quot;USD&quot;,
+  &quot;asOf&quot;: &quot;2026-10-23T12:00:00+08:00&quot;,
+  &quot;owners&quot;: [
+    {
+      &quot;id&quot;: &quot;employee-example&quot;,
+      &quot;name&quot;: &quot;曹可滢（Ruth）&quot;,
+      &quot;department&quot;: {
+        &quot;id&quot;: &quot;sales1-example&quot;,
+        &quot;name&quot;: &quot;业务一部&quot;
+      }
+    }
+  ],
+  &quot;selectedOwner&quot;: {
+    &quot;id&quot;: &quot;employee-example&quot;,
+    &quot;name&quot;: &quot;曹可滢（Ruth）&quot;,
+    &quot;department&quot;: {
+      &quot;id&quot;: &quot;sales1-example&quot;,
+      &quot;name&quot;: &quot;业务一部&quot;
+    }
+  },
+  &quot;canSelectOwner&quot;: false,
+  &quot;periods&quot;: [
+    {
+      &quot;orderAmount&quot;: 0,
+      &quot;stockAmount&quot;: 0,
+      &quot;collectionsAmount&quot;: 0,
+      &quot;settledGrossProfit&quot;: 8,
+      &quot;estimatedGrossProfit&quot;: 0,
+      &quot;unallocatedCount&quot;: 0,
+      &quot;receiptCount&quot;: 0,
+      &quot;profitCount&quot;: 1,
+      &quot;id&quot;: &quot;2026-09&quot;,
+      &quot;label&quot;: &quot;2026-09&quot;,
+      &quot;from&quot;: &quot;2026-09-01&quot;,
+      &quot;to&quot;: &quot;2026-09-30&quot;,
+      &quot;profitStatus&quot;: &quot;settled&quot;
+    }
+  ],
+  &quot;totals&quot;: {
+    &quot;orderAmount&quot;: 0,
+    &quot;stockAmount&quot;: 0,
+    &quot;collectionsAmount&quot;: 0,
+    &quot;settledGrossProfit&quot;: 8,
+    &quot;estimatedGrossProfit&quot;: 0,
+    &quot;unallocatedCount&quot;: 0,
+    &quot;receiptCount&quot;: 0,
+    &quot;profitCount&quot;: 1
+  },
+  &quot;unallocatedSettlements&quot;: []
+}
+</code></pre>
+<h3>PerformancePage</h3>
+<p>工作台明细响应，金额和计数总计在分页前计算。</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>字段路径</th>
+<th>类型/引用</th>
+<th>必填</th>
+<th>说明</th>
+<th>约束/示例</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>source</code></td>
+<td>string</td>
+<td>是</td>
+<td>来源。</td>
+<td>enum=["mock", "fop"]</td>
+</tr>
+<tr>
+<td><code>timeZone</code></td>
+<td>"UTC+8"</td>
+<td>是</td>
+<td>UTC+8归属。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>currency</code></td>
+<td>"USD"</td>
+<td>是</td>
+<td>金额币种。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>asOf</code></td>
+<td>string (date-time)</td>
+<td>是</td>
+<td>查询快照时刻。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>kind</code></td>
+<td>string</td>
+<td>是</td>
+<td>明细类别。</td>
+<td>enum=["receipts", "profit"]</td>
+</tr>
+<tr>
+<td><code>total</code></td>
+<td>integer</td>
+<td>是</td>
+<td>当前kind全量行数。</td>
+<td>minimum=0</td>
+</tr>
+<tr>
+<td><code>page</code></td>
+<td>integer</td>
+<td>是</td>
+<td>见引用模型/接口说明</td>
+<td>minimum=1</td>
+</tr>
+<tr>
+<td><code>pageSize</code></td>
+<td>integer</td>
+<td>是</td>
+<td>见引用模型/接口说明</td>
+<td>minimum=1; maximum=100</td>
+</tr>
+<tr>
+<td><code>receipts</code></td>
+<td>FopReceipt[]</td>
+<td>是</td>
+<td>kind=receipts时返回收款行，否则空。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>profits</code></td>
+<td>FopProfit[]</td>
+<td>是</td>
+<td>kind=profit时返回利润事实，否则空；无日分配的月结为参考，不能冒充当前周日。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>totals</code></td>
+<td>PerformanceMetrics</td>
+<td>是</td>
+<td>全范围合计，分页不影响。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>range</code></td>
+<td>object</td>
+<td>是</td>
+<td>详情范围。</td>
+<td>additionalProperties=false</td>
+</tr>
+<tr>
+<td><code>range.from</code></td>
+<td>string (date)</td>
+<td>是</td>
+<td>本次详情开始。</td>
+<td>pattern="^\d{4}-\d{2}-\d{2}$"</td>
+</tr>
+<tr>
+<td><code>range.to</code></td>
+<td>string (date)</td>
+<td>是</td>
+<td>本次详情结束。</td>
+<td>pattern="^\d{4}-\d{2}-\d{2}$"</td>
+</tr>
+<tr>
+<td><code>unallocatedSettlements</code></td>
+<td>PerformanceUnallocated[]</td>
+<td>是</td>
+<td>月结整月参考。</td>
+<td>—</td>
+</tr>
+</tbody>
+</table></div>
+<pre><code class="language-json">{
+  &quot;source&quot;: &quot;mock&quot;,
+  &quot;timeZone&quot;: &quot;UTC+8&quot;,
+  &quot;currency&quot;: &quot;USD&quot;,
+  &quot;asOf&quot;: &quot;2026-10-23T12:00:00+08:00&quot;,
+  &quot;kind&quot;: &quot;profit&quot;,
+  &quot;total&quot;: 1,
+  &quot;page&quot;: 1,
+  &quot;pageSize&quot;: 20,
+  &quot;receipts&quot;: [],
+  &quot;profits&quot;: [
+    {
+      &quot;id&quot;: &quot;gp-example&quot;,
+      &quot;orderId&quot;: &quot;order-example&quot;,
+      &quot;orderNumber&quot;: &quot;TO-202609-001&quot;,
+      &quot;customerCode&quot;: &quot;C001&quot;,
+      &quot;customerName&quot;: &quot;示例客户&quot;,
+      &quot;owner&quot;: {
+        &quot;id&quot;: &quot;employee-example&quot;,
+        &quot;name&quot;: &quot;曹可滢（Ruth）&quot;
+      },
+      &quot;department&quot;: {
+        &quot;id&quot;: &quot;sales1-example&quot;,
+        &quot;name&quot;: &quot;业务一部&quot;
+      },
+      &quot;salesDepartmentCode&quot;: &quot;sales1&quot;,
+      &quot;recognitionMonth&quot;: &quot;2026-09&quot;,
+      &quot;recognitionDate&quot;: null,
+      &quot;knownAt&quot;: &quot;2026-10-08T10:00:00+08:00&quot;,
+      &quot;status&quot;: &quot;settled&quot;,
+      &quot;settlementId&quot;: &quot;GP-202609-RUTH&quot;,
+      &quot;version&quot;: &quot;2&quot;,
+      &quot;approvedAt&quot;: &quot;2026-10-08T10:00:00+08:00&quot;,
+      &quot;cutoffAt&quot;: &quot;2026-10-01T00:00:00+08:00&quot;,
+      &quot;freightBasis&quot;: &quot;frozen&quot;,
+      &quot;incomeAmount&quot;: 100,
+      &quot;adjustmentIncome&quot;: 5,
+      &quot;productCost&quot;: 60,
+      &quot;freightCost&quot;: 10,
+      &quot;refundCost&quot;: 4,
+      &quot;returnCost&quot;: 1,
+      &quot;otherCost&quot;: 2,
+      &quot;previousRecognizedProfit&quot;: 20,
+      &quot;roundingAdjustment&quot;: 0,
+      &quot;amount&quot;: 8,
+      &quot;currency&quot;: &quot;USD&quot;,
+      &quot;originalAmount&quot;: 8,
+      &quot;originalCurrency&quot;: &quot;USD&quot;,
+      &quot;fxRateToUsd&quot;: 1,
+      &quot;fxRateDate&quot;: &quot;2026-09-30&quot;,
+      &quot;fxRateSource&quot;: &quot;mock-contract-example&quot;
+    }
+  ],
+  &quot;totals&quot;: {
+    &quot;orderAmount&quot;: 0,
+    &quot;stockAmount&quot;: 0,
+    &quot;collectionsAmount&quot;: 0,
+    &quot;settledGrossProfit&quot;: 8,
+    &quot;estimatedGrossProfit&quot;: 0,
+    &quot;unallocatedCount&quot;: 0,
+    &quot;receiptCount&quot;: 0,
+    &quot;profitCount&quot;: 1
+  },
+  &quot;range&quot;: {
+    &quot;from&quot;: &quot;2026-09-01&quot;,
+    &quot;to&quot;: &quot;2026-09-30&quot;
+  },
+  &quot;unallocatedSettlements&quot;: []
+}
+</code></pre>
+<h3>FopSalesProfitAuthorization</h3>
+<p>内部权限投影，浏览器不可写。sales_profit + receipts scopes + sales岗位同时必需；毛利、收款独立白名单并与本地业务范围求交。FOP冻结业务员身份应映射到当前可信员工绑定。</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>字段路径</th>
+<th>类型/引用</th>
+<th>必填</th>
+<th>说明</th>
+<th>约束/示例</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>subject</code></td>
+<td>object</td>
+<td>是</td>
+<td>可信provider解析主体，必须与服务端绑定完全匹配。</td>
+<td>additionalProperties=false</td>
+</tr>
+<tr>
+<td><code>subject.tenantId</code></td>
+<td>string</td>
+<td>是</td>
+<td>绑定租户。</td>
+<td>minLength=1</td>
+</tr>
+<tr>
+<td><code>subject.userId</code></td>
+<td>string</td>
+<td>是</td>
+<td>绑定FOP用户。</td>
+<td>minLength=1</td>
+</tr>
+<tr>
+<td><code>analyticsScopes</code></td>
+<td>string[]</td>
+<td>否</td>
+<td>销售个人统计要求sales_profit及receipts，缺scope为403。</td>
+<td>uniqueItems=true</td>
+</tr>
+<tr>
+<td><code>allowedProfitIds</code></td>
+<td>string[]</td>
+<td>否</td>
+<td>独立利润贡献事实ID白名单，缺失/空不授予毛利事实；不能从订单/收款/运费推导。</td>
+<td>uniqueItems=true</td>
+</tr>
+<tr>
+<td><code>allowedReceiptIds</code></td>
+<td>string[]</td>
+<td>否</td>
+<td>独立收款行白名单；缺失/空不授予收款事实。</td>
+<td>uniqueItems=true</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="hz-section-11">11. 前端功能诊断与复现证据</h2>
+<p>更新日期：2026-10-23（UTC+8），保留2026-10-22诊断。范围：<code>work-app/frontend</code> 全部 ECharts 实例、调用组件、直接相关 API 客户端、统计工具、路由、权限与测试。本文源码路径均相对于 <code>work-app/</code>。原诊断行号保留作历史定位；方案2及后续扩展应以当前函数／组件名定位，最终验证见 VERIFICATION.md。</p>
 <p>原始诊断为只读；本轮按方案2更新了收款口径、来源拆分和工作台下钻，并修复 FE-01/FE-02。本文历史测试只证明当时结果，不能代替本轮验证。没有访问生产 FOP。结论区分“源码已实现”“本地测试已验证”“未实现”“生产待验证”，不能将 mock/stub 测试等同于真实浏览器或生产验收。</p>
 <h3>1. 覆盖范围与结论</h3>
-<p>全量搜索 <code>echarts</code>、<code>EChart</code>、<code>dataZoom</code>、<code>toolbox</code> 确认：只有 <strong>1 个 ECharts 初始化包装器、3 个业务调用文件、6 处 <code>&lt;EChart&gt;</code> 模板调用点、9 类面向用户的逻辑图表</strong>。没有发现另外的原生 <code>echarts.init</code> 实例、饼图、地图或独立第三方图表包装器。</p>
+<p>2026-10-22初始全量搜索 <code>echarts</code>、<code>EChart</code>、<code>dataZoom</code>、<code>toolbox</code> 的历史基线为 <strong>1 个 ECharts 初始化包装器、3 个业务调用文件、6 处 <code>&lt;EChart&gt;</code> 模板调用点、9 类面向用户的逻辑图表</strong>，当时未发现另外的原生 <code>echarts.init</code> 实例、饼图、地图或独立第三方图表包装器。后续物流G10–G11和本次个人收款／净毛利G12–G13追加如下，不能将历史调用数当成当前全量数量。</p>
 <ul>
 <li>包装器：<code>frontend/src/components/charts/EChart.vue:3</code>、<code>:60</code>。</li>
 <li>业务调用：<code>frontend/src/views/autoflow/FopDashboardView.vue:222</code>、<code>:247</code>、<code>:257</code>；<code>frontend/src/components/order-volume/OrderVolumeResults.vue:67</code>、<code>:68</code>；<code>frontend/src/components/order-volume/CustomerOrderResults.vue:103</code>。</li>
@@ -9341,6 +11038,18 @@ Accept: application/json
 <td><code>FreightTrendDialog.vue</code>，复用已返回响应，按选中carrierCode筛出单商；接口另支持carrierCode查询</td>
 <td>继承已应用时间/仓库，0基期比例为null或0，前端不自造百分比</td>
 <td>居中弹窗；原始成本从柱/表下钻当前可访问岗位工作台，展示原币、汇率与USD；分页前合计</td>
+</tr>
+<tr>
+<td>G12 个人收款趋势</td>
+<td><code>SalesPerformanceView.vue</code>，<code>periods[].orderAmount/stockAmount</code>收款来源柱与collectionsAmount合计线</td>
+<td>销售工作台；from/to、month/week/day、授权ownerId；金额是独立分录实收，按paidAt归期</td>
+<td>同筛选收款明细；统计表倒序和分页；数据来源、UTC+8、USD及asOf可见</td>
+</tr>
+<tr>
+<td>G13 个人净毛利趋势</td>
+<td>同页面，settledGrossProfit与estimatedGrossProfit两条独立曲线</td>
+<td>已审核月结期间delta／预计贡献；归属月/日不沿用收款日，结算与预计不加成总利润</td>
+<td>null断线及待补充分期提示；月结参考独立展示；利润明细有收入／成本、上期已确认、版本、原币和FX</td>
 </tr>
 </tbody>
 </table></div>
@@ -9915,9 +11624,74 @@ describe('ECharts audit: assertions of current incorrect behavior', () =&gt; {
 </tbody>
 </table></div>
 <p>源码定位：<code>frontend/src/components/freight/FreightAnalysis.vue</code>、<code>FreightResults.vue</code>、<code>FreightTrendDialog.vue</code>、<code>frontend/src/utils/freight.ts</code>、<code>frontend/src/api/fop-freight.ts</code>、<code>frontend/src/views/autoflow/FopFreightView.vue</code>。工作台路由为<code>/workbench/:role/freight</code>（RoleWorkbenchFreight），由WorkbenchView和路由守卫校验岗位入口。以上已核对源码；测试、HTTP和浏览器实际验收状态以VERIFICATION.md为准。真实最终结算定义、汇率、后续补收退款/调价、成本可见权及服务商映射见H18–H22，不用本地Mock截图关闭生产待办。</p>
-<h2 id="hz-section-11">11. 后端契约诊断与生产接入差距</h2>
-<p>审计日期：2026-10-22。依据当前工作区源码、DTO、序列化器、前端API类型与测试；方案 2 实现后同步契约；未连接或验证真实 FOP 生产服务。FOP 为金蝶云苍穹上的 HyperZone 自研应用，后台 <code>/Library/VSCode/dtr5b</code> 只读核查。</p>
-<p>机器可读交付：<a href="../openapi/hyperzone-analytics.openapi.json">hyperzone-analytics.openapi.json</a>，OpenAPI <strong>3.1.1</strong>，<strong>19条路径、19个操作、82个数据模型、8组通用错误响应</strong>。物流运费新增2个操作及13个模型；仅列当前平台HTTP接口，未实现的 FOP 上游签名、同步和分页接口没有被写成已实现路径。格式依据<a href="https://spec.openapis.org/oas/v3.1.1.html" rel="noopener noreferrer">OpenAPI 3.1.1官方规范</a>。</p>
+<h3>10. 销售个人收款与净毛利前端审计补充</h3>
+<p>本次前端源码入口为 <code>frontend/src/views/autoflow/SalesPerformanceView.vue</code>，API为 <code>frontend/src/api/fop-sales-performance.ts</code>，明细为 <code>frontend/src/components/sales-performance/SalesPerformanceDetails.vue</code>。新增页面与已有EChart包装器共用展示基础；本节描述合同与检查点，<strong>不宣称测试或真实浏览器验收完成</strong>。本地功能验证与生产FOP验收分开记录。</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>消费或交互</th>
+<th>合同与检查点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>查询与日期</td>
+<td>GET <code>/api/autoflow/integrations/fop/sales-performance</code>，from/to/grain及可选ownerId；周按周一分桶并裁切所选范围。默认本年初至UTC+8今天；后台限制日期从2020起、结束不晚于今天且跨度差最多365天；不能传历史asOf</td>
+</tr>
+<tr>
+<td>人员候选</td>
+<td>使用响应owners、selectedOwner、canSelectOwner；个人不显示可越权切换入口，经理／业务管理员仅能在授权候选中选择；姓名同名时保持稳定ID，不自己构造全员目录</td>
+</tr>
+<tr>
+<td>收款金额</td>
+<td>orderAmount=履约实收、stockAmount=全款备货实收、collectionsAmount=两者之和；总计线不与来源柱再次相加。全款备货使用不能另造第二笔回款；明细FopReceipt.orderAmount是应收核对字段，语义不同</td>
+</tr>
+<tr>
+<td>净毛利</td>
+<td>已结算与预计分别展示、预计用明确标识，不生成合并“总利润”；amount为当期净毛利贡献，允许负数。不能用收款金额直接减成本或用页面缓存重新算月结</td>
+</tr>
+<tr>
+<td>无日分配</td>
+<td>settledGrossProfit=null显示“—／待补充分期明细”，图表connectNulls=false；unallocatedSettlements月结参考与日／周小计分开；不得均摊月差额或把null格式化为$0</td>
+</tr>
+<tr>
+<td>状态</td>
+<td>profitStatus为none/estimated/settled/mixed/unallocated；mixed不是完成结算、也不是可相加许可。已结算表示对应版本已审核，不代表该订单未来再无调整</td>
+</tr>
+<tr>
+<td>明细请求</td>
+<td>GET <code>/sales-performance/details</code>继承已应用from/to/grain/ownerId，kind=receipts或profit，可选periodId；page/pageSize只影响当前行，不改变完整筛选totals；不另传客户端权限列表</td>
+</tr>
+<tr>
+<td>利润明细</td>
+<td>显示归属日／月、状态／版本、审批及截止、收入和调整、商品／运费／退款／退货／其他成本、previousRecognizedProfit和roundingAdjustment；源CNY与USD、FX方向／日期／来源可核对；财务手续费归otherCost等分类由后台定义</td>
+</tr>
+<tr>
+<td>金额精度</td>
+<td>前端只格式化返回USD分币，不采用当前Dashboard汇率重算历史月结。换汇尾差为审计分量，不能与其他成本混写；展示负数符号和null区别</td>
+</tr>
+<tr>
+<td>日期归属</td>
+<td>收款按paidAt，利润按recognitionMonth/date；approvedAt、knownAt、cutoffAt是追溯／资格信息，不能替代利润日。历史range展示当前已审核该月值，不表示历史审批回放</td>
+</tr>
+<tr>
+<td>图表和统计表</td>
+<td>时间轴升序，统计表倒序、固定列宽；图表使用EChart滑块并保持外层滚动；筛选切换重置分页／关闭旧明细，标题来自实际应用条件</td>
+</tr>
+<tr>
+<td>失败和会话</td>
+<td>加载／失败／换人／退出／换号清理旧金额与候选，递增请求标识丢弃晚到响应；明细无权限也应使父统计失效，不能保留先前金额；403与合法空数据、503与0分开</td>
+</tr>
+<tr>
+<td>数据来源</td>
+<td>source=mock明确显示MOCK；无真实provider不展示“已接通FOP”。asOf是本次计算时刻，不能写为上游最后同步成功或账期关闭时间</td>
+</tr>
+</tbody>
+</table></div>
+<p>实际视觉验收至少包含AT-18–AT-24、D16–D22：本人和经理、当前未结算、历史完整月、部分月／日周null、负调整、月结参考、长姓名、窄屏／暗色、筛选竞态及明细分页。组件单测若使用图表stub，不能证明SVG、tooltip、滑块、断线和弹窗布局正确。完整测试及截图记录只以VERIFICATION为准；FOP事件账本、真实授权、换汇和财务对账仍由T21–T26完成。</p>
+<h2 id="hz-section-12">12. 后端契约诊断与生产接入差距</h2>
+<p>更新日期：2026-10-23（UTC+8），保留2026-10-22审计。依据当前工作区源码、DTO、序列化器、前端API类型与历史测试；方案2、运费及销售个人收款／净毛利契约同步。未连接或验证真实FOP生产服务。FOP为金蝶云苍穹上的HyperZone自研应用，后台 <code>/Library/VSCode/dtr5b</code> 只读核查。</p>
+<p>机器可读交付：<a href="../openapi/hyperzone-analytics.openapi.json">hyperzone-analytics.openapi.json</a>，OpenAPI <strong>3.1.1</strong>。物流阶段为19条路径／19个操作／82个模型／8组通用错误响应，本次追加销售分析及明细两项契约；最新数量以机器文件为准。仅列平台HTTP接口，未实现的FOP上游签名、同步和分页接口没有被写成已实现路径。格式依据<a href="https://spec.openapis.org/oas/v3.1.1.html" rel="noopener noreferrer">OpenAPI 3.1.1官方规范</a>。</p>
 <h3>1. 当前交付判断</h3>
 <p>图表所需的前后端聚合、查询、权限交集、明细钻取与分页汇总已经存在；<strong>生产FOP数据接入尚未完成</strong>。<code>UsersModule</code>只选择<code>DemoFopDataProvider</code>或<code>UnconfiguredFopDataProvider</code>，没有真实FOP数据适配器。演示仅在<code>FOP_DATA_MODE=demo</code>且<code>NODE_ENV</code>为<code>development/test/local</code>生效。没有演示开关时保持未配置状态，不会把fixture当真实业务数据展示。</p>
 <p>客户 <code>series.amounts</code> 与 Dashboard <code>receipts</code> 已改为<strong>独立授权的收款分录</strong>：<code>amount=hzkj_real_receive_amt</code>；源单已支付、已审核且收款单已审核，来源履约＋全款备货，排除押金备货与样品，按支付时刻 UTC+8 归月。<code>orderAmount</code>、<code>handlingFee</code> 保留核对；使用已全款备货库存的履约不补回产品款。钱包授信可产生此类结算，因此不等同于银行新增现金流。历史期间按当前有效状态重算，未新增结账锁定、部分退款／冲销系统。</p>
@@ -10051,6 +11825,18 @@ describe('ECharts audit: assertions of current incorrect behavior', () =&gt; {
 <td><code>getFreightDetails</code></td>
 <td>同分析查询＋periodId/comparisonPeriod/workbenchRole/分页；<code>FreightPage</code></td>
 <td>岗位权限再校验；current默认，previous完整上期；分页前USD/原币合计</td>
+</tr>
+<tr>
+<td>GET <code>/autoflow/integrations/fop/sales-performance</code></td>
+<td><code>getSalesPerformance</code></td>
+<td>from/to/grain、可选ownerId；<code>PerformanceData</code></td>
+<td>sales工作台入口＋独立receipts/sales_profit scopes和各自IDs；本人锁定，经理／业务管理员选授权人员；预计与结算分开</td>
+</tr>
+<tr>
+<td>GET <code>/autoflow/integrations/fop/sales-performance/details</code></td>
+<td><code>getSalesPerformanceDetails</code></td>
+<td>同查询＋kind/periodId?/page/pageSize；<code>PerformancePage</code></td>
+<td>相同人员和资源权限；收款／毛利明细分开，分页前总计，未分配月结参考单列</td>
 </tr>
 <tr>
 <td>GET <code>/autoflow/integrations/fop/dashboard</code></td>
@@ -10406,9 +12192,144 @@ describe('ECharts audit: assertions of current incorrect behavior', () =&gt; {
 </tbody>
 </table></div>
 <p>实现定位：<code>backend/src/modules/fop-data/fop-freight.types.ts</code>、<code>fop-freight.dto.ts</code>、<code>fop-freight.ts</code>、<code>fop-data.service.ts</code>、provider，以及 <code>backend/src/modules/users/workbench.controller.ts</code>。FOP源证据见源码映射第9节；联调资料和验收标准统一使用T17–T20、H18–H22、D11–D15。实际测试结论仅记录到VERIFICATION.md，本文不以契约或Mock存在推断生产验收通过。</p>
-<h2 id="hz-section-12">12. 本次验证记录与限制</h2>
-<p>业务方案版本：2026-10-22；最终执行时刻所在业务日期为 2026-10-23（UTC+8）。环境：macOS、Node.js 22.23.3、npm 10.9.9、本地隔离 PostgreSQL 16。执行结果不等同于生产 FOP 验收。</p>
-<h3>本轮物流运费分析验证（2026-10-23 UTC+8）</h3>
+<h3>9. 销售个人收款与净毛利新增契约及FOP实施缺口</h3>
+<p>本工程以 <code>sales-performance.types.ts</code>、<code>sales-performance.ts</code>、<code>fop-data.service.ts</code> 和provider边界实现平台合同；前端/BFF／Mock交付及测试状态以VERIFICATION为准。<strong>正式FOP只读HTTP、事件台账、历史成本／汇率、月结差额和真实用户权限仍需T21–T26实施验收，不能标为FOP ready。</strong></p>
+<h4>9.1 归一接口与校验</h4>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>主题</th>
+<th>本工程契约／当前实现</th>
+<th>FOP真实适配责任</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>查询</td>
+<td>from/to为UTC+8业务日，2020起、不晚于今天，日期差最多365天；grain=month/week/day，周一分桶并裁切范围；ownerId可选</td>
+<td>来源完整分页；不得把分页第一批当全量；新HTTP不接受历史asOf回放参数</td>
+</tr>
+<tr>
+<td>响应</td>
+<td>source/query/timeZone/currency/asOf、owners/selectedOwner/canSelectOwner、periods/totals/unallocatedSettlements</td>
+<td>source=fop必须来自真实配置的provider；asOf为本次查询时间，不代表上游一致快照或关账时刻</td>
+</tr>
+<tr>
+<td>双资源权限</td>
+<td>sales入口＋receipts及sales_profit两个scope，独立allowedReceiptIds/allowedProfitIds，与tenant、本地本人／部门求交；无需枚举订单来推导许可</td>
+<td>绑定真实用户，不用共用管理员扩大范围；独立成本／利润字段可见权和人员目录需映射</td>
+</tr>
+<tr>
+<td>公开字段</td>
+<td><code>FopProfitCandidate</code>的tenantId/departmentPathIds仅在服务端；publicProfit白名单重建FopProfit</td>
+<td>原始私有字段不能透传；未获授权候选先过滤，再校验／公开</td>
+</tr>
+<tr>
+<td>利润日期</td>
+<td>recognitionMonth必填；estimated必须有recognitionDate，settled允许null；knownAt/cutoffAt必填；settled需approvedAt和settlementId</td>
+<td>发生／获知／审核日期不能互代；目前已知的历史月结可展示，不能据此声称历史审批回放</td>
+</tr>
+<tr>
+<td>状态与运费</td>
+<td>estimated要求freightBasis=estimated、settlementId/approvedAt=null；settled要求frozen、有效审批和结算ID</td>
+<td>未结算即使有实际运费仍用预估；missing不是0；已审核来源冻结，不从当前成本重算</td>
+</tr>
+<tr>
+<td>去重和版本</td>
+<td>id重复拒收；同订单同recognitionMonth多条已结算视为歧义拒收；一条已结算替换该组全部预计；预计同日期／同版本重复拒收</td>
+<td>如上游同月有多版本，先规范成一个可追溯当期权威贡献；预计日内多事件需先归一日贡献，不能提交重复快照</td>
+</tr>
+<tr>
+<td>当前asOf</td>
+<td>晚于查询时刻knownAt／approvedAt、未来recognitionDate不进入；客户端不能传权限或历史asOf</td>
+<td>各分量发生时间、knownAt、审批与cutoff证据由上游账本保证；BFF不能从合计行反推未来成本是否混入</td>
+</tr>
+<tr>
+<td>未分配</td>
+<td>无日归属月结在完整月使用；周／天／部分月settledGrossProfit=null、unallocatedCount及月结参考；参考不进入日周小计</td>
+<td>需要日分配则提供权威分配明细；不能用审核日、付款日或均摊替代</td>
+</tr>
+<tr>
+<td>明细与总计</td>
+<td>kind=receipts或profit；periodId必须在同一查询生成的桶内；page≥1、pageSize≤100；total/totals在分页前计算</td>
+<td>统计和明细同账本、同授权；只有一种kind的数组返回行，另一数组为空；不能前端累计当前页当总计</td>
+</tr>
+</tbody>
+</table></div>
+<p><code>orderAmount/stockAmount/collectionsAmount</code>表示履约／全款备货／合计的实收业绩，复用方案2；不要与单条收款的orderAmount应收字段混淆。<code>settledGrossProfit/estimatedGrossProfit</code>沿用接口名称但业务含义是净毛利贡献，两项分列，不提供合并总利润。profitCount和receiptCount为事实行数，不能当订单数量。</p>
+<h4>9.2 金额恒等式与结算审计</h4>
+<p><code>amount = incomeAmount + adjustmentIncome − productCost − freightCost − refundCost − returnCost − otherCost − previousRecognizedProfit + roundingAdjustment</code>。原始金额和结果允许有符号的分币；每项及合计必须有限、安全，amount与分量严格到分一致。roundingAdjustment仅为可审计换汇尾差，绝对值不超过0.10 USD。不能靠改变otherCost或尾差掩盖遗漏业务项。</p>
+<p>所有公开分量为USD；保留originalAmount/originalCurrency/fxRateToUsd/fxRateDate/fxRateSource，原币USD要求rate=1，按显式汇率精确十进制HALF_UP到分验证正负原额的USD结果。FOP权威结算是CNY冻结delta，适配器不得用当前FX或当前收入成本重写它。逐分量换汇与最终delta换汇的尾差需可追溯；当前Dashboard汇率不是历史审计汇率。</p>
+<p>FOP累计收入已经包含调整，<code>adjustmentIncome</code>单列时必须先从基础收入剔除，避免再加一次。全款备货按使用量转入收入与成本；备货收款不能再次确认为利润收入。国内采购物流、仓储、财务手续费在otherCost等约定分组中各计一次。previousRecognizedProfit用于从累计快照得到本期贡献，不能同时再减已扣过的前值。退款／退货收入冲减、成本返还与新增支出须分别定义符号，不能对一笔事件双扣。</p>
+<h4>9.3 当前FOP源码的P0差距</h4>
+<ol>
+<li>月报只有C审核的月结净毛利delta和冻结归属；订单历史记录只有结算月、审核写入日、cutoff，没有权威日贡献。完整月可适配，周／天分配尚未具备。</li>
+<li><code>calculateRealtime</code>传null cutoff，缺国际运费按0；本次未结算强制预估的需求不能直接复用。候选按订单创建时间而非利润事件日。</li>
+<li>采购查询无cutoff；备货传入cutoff但未使用、忽略使用时间／状态；仓储明确不按通知日期截止。即便换用月结calculate(order,cutoff)，仍不能保证历史期间预计贡献不含未来事件。</li>
+<li>当前收款／调整按业务时间筛选，但读取当前审核状态；FX缺少历史取价能力；运费服务忽略源币种且后续费用／退款采集停用。需要发生／known／approved时间、版本、显式币种和事件账本，不能用0填缺口。</li>
+<li>未发现毛利分析HTTP发布证据。月报service接收空owner、org≤0不加组织过滤；实时非业务员默认组织全部。新个人入口必须独立身份／授权，不直接暴露服务参数。</li>
+</ol>
+<p>逐项文件与行号证据见 <code>HYPERZONE_FOP_SOURCE_MAPPING.md</code> 第10节；这五项是已读源码限制，不是对线上部署行为的猜测。执行T21–T26、回填H23–H28并完成D16–D22／AT-18–AT-24后才能判定真实接入完成。本文不记录未经运行的测试通过数量。</p>
+<h2 id="hz-section-13">13. 本次验证记录与限制</h2>
+<p>业务方案版本：2026-10-23（UTC+8）；本轮追加销售个人收款与净毛利，以下保留各轮独立验证记录。环境：macOS、Node.js 22.23.3、npm 10.9.9、本地隔离 PostgreSQL 16。执行结果不等同于生产 FOP 验收。</p>
+<h3>本轮销售个人收款与净毛利验证（2026-10-23 UTC+8）</h3>
+<p>本轮前端／BFF／Mock实现并保留真实FOP接入边界；未改写 <code>/Library/VSCode/dtr5b</code>。以下 <strong>605项</strong> 为最终完整回归：前端187＋后端318＋E2E100，不叠加历史基线或独立复核重复用例。</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>检查</th>
+<th>实际结果</th>
+<th>覆盖与限制</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>全量前端</td>
+<td>42文件、187用例通过；Vue类型检查通过</td>
+<td>新增个人统计18例：筛选／366天限制、请求竞态、会话清空、详情分页、构成展开、日周部分月参考与完整月区分</td>
+</tr>
+<tr>
+<td>全量后端</td>
+<td>40套、318用例通过</td>
+<td>独立毛利与收款授权、权限数组冻结、本人／部门、冻结归属变更替代、未来事实／汇率、跨期负贡献、十进制分币、排他截止、无日月结与全量分页合计</td>
+</tr>
+<tr>
+<td>全量E2E</td>
+<td>4套、100用例通过</td>
+<td>隔离数据库autoflow_test；新HTTP契约参数、401/403/400、同会话权限变化、脱敏503与资源范围</td>
+</tr>
+<tr>
+<td>Lint与构建</td>
+<td>前后端lint、backend tsc、frontend生产build通过；前端资产打包成功</td>
+<td>backend使用独立输出目录避免影响当前开发服务；未改依赖，ECharts大chunk/Browserslist提示为已知构建提示</td>
+</tr>
+<tr>
+<td>HTTP契约对账</td>
+<td>28份实际响应通过OpenAPI/JSON Schema及格式校验；12组分期明细与统计合计一致；4组非法请求拒绝通过</td>
+<td>月／周／天，分页前全量合计、越界空页、owner切换、身份注入及错误日期；保存的响应仅在忽略目录，不包含于交付包</td>
+</tr>
+<tr>
+<td>隔离生产冒烟</td>
+<td>health+数据库up，首页、Dashboard、销售工作台深层路由均200，CSP/nosniff存在</td>
+<td>临时普通目录、新进程3198端口，真实FOP禁用，验证后清理；不等于生产FOP联调</td>
+</tr>
+<tr>
+<td>独立代码复核</td>
+<td>已修复未来汇率事实、跨业务员旧预估残留和未分期月结金额误读；无剩余阻塞问题</td>
+<td>复核者独立运行60项后端、18项前端目标测试；这些已包含在上述完整套件中，不重复计数</td>
+</tr>
+<tr>
+<td>浏览器</td>
+<td>月／周／天切换、历史月结日视图null提示、毛利弹窗、构成展开、分页及默认月视图恢复通过</td>
+<td>实际Mock账号；图表处滚轮使最外层main.scrollTop从353到439，横轴仍为2026-05至2026-10；未宣称覆盖所有设备和读屏工具</td>
+</tr>
+</tbody>
+</table></div>
+<p>本轮样本（UTC+8 2026-10-23）：选定林世龙（Jaylen）时，本年收款$7,247.99=履约$1,557.99＋全款备货$5,690.00；完整月口径结算净毛利$4,375.50、预估净毛利$1,853.00。周／天仍有9笔无日分配月结，因此结算合计为null，展示整月参考而非补零。Mock随日期和账号目录变化，以上只是本次验收快照，不是业务预测。</p>
+<p>截图：<a href="sales-performance-browser-smoke.png">月度双图与指标</a>、<a href="sales-profit-unallocated-browser-smoke.png">日粒度月结参考弹窗</a>。未分配月结在“本期净毛利”列显示“—”，金额仅作整月参考；完整月可直接使用已审核差额。</p>
+<p>首次并行回归时，既有 <code>AutoFlow persistence API › enforces three live business scopes across every business read, detail and export</code> 出现一次 <code>socket hang up</code>（99通过／1失败）。未改断言或业务逻辑，随后停止并行验证并完整串行重跑100/100通过；未单独证明该瞬时连接问题的根因，不能把首次失败隐藏成从未发生。</p>
+<p>本轮明确限制：当前查询asOf来自服务端，不提供历史asOf回放；严格采购／备货使用／仓储／汇率历史与预估运费版本，以及日级净毛利贡献账本，仍需FOP开发。缺失事实不能以零成本上线；未授权主体的结算替代信息不能通过越权查询补齐，须由上游撤销已失效预估。</p>
+<h3>历史物流运费分析验证（2026-10-23 UTC+8）</h3>
 <p>新增独立实际运费成本资源、月/周/年汇总及环比、工作台明细、单物流商趋势弹窗，使用与公开接口同结构的 Mock。下列结果为本轮执行，不将此前基线重复计数。</p>
 <div class="table-wrap"><table>
 <thead>
@@ -10552,13 +12473,13 @@ describe('ECharts audit: assertions of current incorrect behavior', () =&gt; {
 <li>历史审计附录中的修复前复现仅作为问题证据，不作为当前仍然存在的错误。</li>
 </ul>
 <h3>文档与 Git</h3>
-<p>MD/HTML从同一需求源及OpenAPI生成，包含FOP源码字段映射和后续待办清单。物流运费补充后的HTML使用共享HyperZone CSS与透明SVG Logo；离线检查通过：新增字段表及两组接口响应表、15个有效页内链接、2处内嵌Logo，并包含移动及打印规则。具体表格数量以本轮生成器输出为准。浏览器工具之前拒绝本地文件URL，本轮未绕过该限制，因此未宣称完成文档的浏览器视觉/打印预览。</p>
+<p>MD/HTML从同一需求源及OpenAPI生成，包含FOP源码字段映射和后续待办清单。物流运费补充后的HTML使用共享HyperZone CSS与透明SVG Logo；离线检查通过：新增字段表及两组接口响应表、原物流版本15个有效页内链接、2处内嵌Logo，并包含移动及打印规则。具体表格数量以本轮生成器输出为准。浏览器工具之前拒绝本地文件URL，本轮未绕过该限制，因此未宣称完成文档的浏览器视觉/打印预览。</p>
 <p>提交只包含本工程代码、测试、项目事实和交付文档；运行库、密码、会话和测试日志保留于忽略目录，不进入Git。提交与远端同步结果以Git记录和最终交付消息为准。</p>
 <h3>后续待办清单补充的验证范围</h3>
 <p>本次后续文档补充以代码提交 <code>d60fd5d</code> 为基线，只更新需求、源码映射说明、README和文档生成入口，不改变应用代码、业务口径或OpenAPI字段。新增16项T待办、17项H人工核对、10组D验收场景及回填模板；已检查编号唯一、引用有效、与完整MD/HTML内容同步，生成器仍通过OpenAPI结构及186处示例验证，Git差异检查通过。</p>
 <p>上文468项代码测试、19组HTTP响应及浏览器记录是方案2实施时的已完成基线，本次纯文档补充未重新运行这些应用测试，也没有将待办清单中的生产联调事项标为完成。</p>
-<h2 id="hz-section-13">13. HyperZone FOP 源码字段映射</h2>
-<p>核查日期：2026-10-22。源码目录：<code>/Library/VSCode/dtr5b</code>，HEAD：<code>bd4c115c</code>（核查当前工作树，不代表生产部署版本）。仅阅读业务 Java、苍穹元数据与转换规则；未连接生产、未读取配置密钥、未修改后端。</p>
+<h2 id="hz-section-14">14. HyperZone FOP 源码字段映射</h2>
+<p>更新日期：2026-10-23（UTC+8），保留2026-10-22原核查。源码目录：<code>/Library/VSCode/dtr5b</code>，原核查HEAD：<code>bd4c115c</code>（核查当前工作树，不代表生产部署版本）。仅阅读业务 Java、苍穹元数据与转换规则；未连接生产、未读取配置密钥、未修改FOP后端。</p>
 <p>本文件区分源码事实、此次业务口径和仍待接口样本确认的映射。FOP 在本项目指金蝶苍穹上的 HyperZone 自定义应用。</p>
 <h3>1. 此次业务口径与已有报表的差异</h3>
 <p>此次用户明确：客户已支付且公司已审核的履约订单收款，以及<strong>全款备货</strong>订单收款计入月业绩；<strong>押金备货</strong>不计入。备货没有海外承运商；已审核履约订单的仓库、物流渠道由上游校验。履约使用已全款支付的备货后，产品款不会再次收取。</p>
@@ -10960,7 +12881,213 @@ hzkj_total_amount = hzkj_fre_quo_amount + hzkj_fixed_tax_fee
 <p>可信权限模式可参考 <code>FreightExceptionService.currentOrg/requireRight</code>：检查当前登录组织、<code>hasViewPermission</code> 和单据 <code>checkOperationRule</code>。它是可借鉴的服务端权限实现，仍需正式定义运费金额是否有额外字段权限。平台当前同时要求 <code>freight</code> analytics scope、独立 <code>allowedFreightIds</code>，并与 tenant、本人／部门／业务管理员范围求交；系统管理身份和订单 allowlist 均不授予成本可见性。公开序列化剥离 <code>tenantId/departmentPathIds</code>。</p>
 <p>证据：<a href="/Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/logistics/service/DeliveredOrderVolumeReportService.java:137">单量报表当前组织和员工范围</a>；<a href="/Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/logistics/service/DeliveredOrderVolumeReportService.java:180">有无业务员档案的分支</a>；<a href="/Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/logistics/exception/FreightExceptionService.java:49">组织及单据权限校验</a>。</p>
 <p><code>JsexpActualFreightController</code> 的 <code>/actualFreight</code> 是 POST同步并回写发运单的维护接口，不是只读分析接口，不应由分析页面调用。<a href="/Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/logistics/controller/JsexpActualFreightController.java:23">控制器写入行为</a>。真实只读URL、鉴权、分页完整性、授权刷新和脱敏响应须由FOP研发提供；最终结算、币种汇率、调价补收退款、成本权限和服务商映射分别见 H18–H22。</p>
-<h2 id="hz-section-14">14. 规范来源与文档再生成</h2>
+<h3>10. 销售个人净毛利：月结版本、预计贡献和真实缺口</h3>
+<p>核查日期：2026-10-23（UTC+8），后台只读。本节确认当前工作树实现，不确认生产发布状态。本工程契约见 <code>backend/src/modules/fop-data/sales-performance.types.ts</code>；新增两条平台GET及Mock不能证明FOP拥有可查询的历史利润账本。预计与已结算净毛利分别输出，收款仍独立按paidAt归期。</p>
+<h4>10.1 月结候选、草稿与已审核版本</h4>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>环节／字段</th>
+<th>已确认实现</th>
+<th>对本次适配的约束</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>候选 <code>OrderGrossProfitMonthlyCandidateService</code></td>
+<td>已审核发运单正数 <code>hzkj_actual_freight</code>，按 <code>hzkj_actual_freight_time</code>；已审核 <code>hzkj_adjust_bill</code> 按 <code>createtime</code>；正常收款不触发</td>
+<td>月结触发日不是付款日，也不是自动可拆分的日利润；直接复用候选会漏掉仍需预估运费的订单</td>
+</tr>
+<tr>
+<td>草稿 <code>hzkj_gp_monthly_settle</code></td>
+<td>A暂存、B提交、C审核；仅A可重算；按组织／月／业务员生成</td>
+<td>草稿金额不得标为已结算；存在草稿不等于已生成订单结算历史</td>
+</tr>
+<tr>
+<td>月报维度</td>
+<td><code>billstatus=C</code>、<code>hzkj_gp_dimension=salesperson</code>、<code>hzkj_gp_month</code>、<code>hzkj_gp_owner</code></td>
+<td>完整月按结算月和冻结业务员取权威值，不按订单当前业务员或paidAt重分配历史业绩</td>
+</tr>
+<tr>
+<td>月报金额</td>
+<td>表头 <code>hzkj_gp_net_delta_total</code>；分录 <code>hzkj_gp_net_delta_rmb</code></td>
+<td>这是本期净毛利差额，不是 <code>hzkj_gp_net_total/net_rmb</code> 整单累计值；跨期累计delta，不能累计各期累计快照</td>
+</tr>
+<tr>
+<td>版本关联</td>
+<td>月结分录 <code>hzkj_gp_order_no/prev_ver/version/settle_type</code>；订单 <code>hzkj_gp_settle_entry</code></td>
+<td>保留稳定订单、月结单、版本及上版关联；同期间结算替换预计，跨期调整独立确认</td>
+</tr>
+</tbody>
+</table></div>
+<p>证据：<a href="/Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/ordercenter/service/OrderGrossProfitMonthlyCandidateService.java:42">候选与停用费用扫描，42–97行</a>；<a href="/Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/ordercenter/service/OrderGrossProfitMonthlyBillService.java:36">草稿字段与状态，36–94行</a>；<a href="/Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/ordercenter/service/OrderGrossProfitMonthlyBillService.java:244">仅暂存可重算</a>；<a href="/Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/ordercenter/service/SalespersonMonthlyGrossProfitReportService.java:58">月报C筛选及delta汇总，58–108行</a>。</p>
+<p>审核插件禁止反审核，审核时重新计算、比较草稿版本与金额，在当前审核事务内批量保存订单版本。<code>hzkj_gp_time</code>取审核处理时 <code>new Date()</code>；<code>hzkj_gp_cutoff_e</code>取下月首日；<code>hzkj_gp_month</code>独立保存结算月。版本冻结业务员 <code>hzkj_gp_owner_e</code> 和客户 <code>hzkj_gp_customer_e</code>，后续版本沿用前版本归属，不应以当前客户／业务员重新分组。订单头 <code>hzkj_gp_status=settled</code> 仅证明曾结算，不证明随后调整已全部结清。</p>
+<p>证据：<a href="/Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/ordercenter/plugin/operate/OrderGrossProfitMonthlyAuditOperationPlugin.java:49">审核事务与日期，49–143行</a>；<a href="/Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/ordercenter/plugin/operate/OrderGrossProfitMonthlyAuditOperationPlugin.java:181">草稿金额／版本校验</a>；<a href="/Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/ordercenter/service/OrderGrossProfitSettlementRecordService.java:166">订单版本与冻结归属，166–242行</a>。元数据也存在<a href="/Library/VSCode/dtr5b/datamodel/hzkj_CRM/1.5/main/hzkj_ordercenter/metadata/hzkj_orders.dym:4103">结算月份／时间／cutoff</a>及<a href="/Library/VSCode/dtr5b/datamodel/hzkj_CRM/1.5/main/hzkj_ordercenter/metadata/hzkj_orders.dym:4384">净毛利差额</a>。</p>
+<h4>10.2 累计金额与本期贡献的映射</h4>
+<p>订单结算分录保存收入 <code>hzkj_gp_income_usd/rmb</code>、调整 <code>hzkj_gp_adjust_usd</code>、收入汇率 <code>hzkj_gp_rate</code>，商品成本 <code>hzkj_gp_pur_rmb</code>、国内物流 <code>hzkj_gp_dom_ship_rmb</code>、国际物流 <code>hzkj_gp_ship_rmb</code>、仓储 <code>hzkj_gp_wh_cost_rmb</code>、财务手续费 <code>hzkj_gp_fin_fee_rmb</code>，以及毛利 <code>hzkj_gp_total_rmb</code>、净毛利 <code>hzkj_gp_net_rmb</code>、前净毛利 <code>hzkj_gp_prev_net_rmb</code> 和净差额 <code>hzkj_gp_net_delta_rmb</code>。</p>
+<p>FOP公式是：累计收入（含收款调整与全款备货使用转入）减商品／国内物流／国际物流／仓储成本得毛利，再减财务手续费得净毛利。本版净毛利减上版累计净毛利得本期delta。旧版本缺净毛利时，代码会以旧毛利值兜底，真实历史数据需专项核对，不能把兼容分支解释为历史已逐项补齐手续费。</p>
+<p>证据：<a href="/Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/ordercenter/service/OrderGrossProfitSnapshotService.java:124">快照公式，124–161行</a>；<a href="/Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/ordercenter/service/OrderGrossProfitMonthlyCalculationService.java:114">草稿delta和旧版兼容</a>；<a href="/Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/ordercenter/service/OrderGrossProfitSettlementRecordService.java:318">历史净毛利回退</a>。</p>
+<p>平台 <code>FopProfit.amount</code> 是USD期间贡献；成本分量通过 <code>previousRecognizedProfit</code> 抵减此前已确认部分，不能将累计值重复写为各期amount。<code>incomeAmount</code>与<code>adjustmentIncome</code>必须互不重复：FOP收入字段已经含调整，拆出调整时先从基础收入扣除。<code>otherCost</code>须明确覆盖未单列的国内物流、仓储、手续费，并与product/freight/refund/return各类别互斥。不能用未经确认的退款金额填两个成本项，也不能为了满足等式任意增加成本。<code>roundingAdjustment</code>另列可审计换汇尾差，绝对值最多0.10 USD；业务金额差异不能塞入尾差。</p>
+<h4>10.3 全款备货和调整的防重复规则</h4>
+<p>利润收款读取源类型A履约／B样品、收款C审核且B已收，按分录 <code>hzkj_samount</code> 与 <code>hzkj_handle_fee</code> 读取，不直接读取C类备货收款。它与本次收款业绩使用 <code>hzkj_real_receive_amt</code>、排除样品的方案2不是同一金额／候选口径，不能直接互换。<a href="/Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/ordercenter/service/OrderGrossProfitSnapshotService.java:191">收款读取及校验，191–275行</a>。</p>
+<p>全款备货利润转入来自 <code>hzkj_stock_order_new.hzkj_stock_type=1</code>、使用表 <code>hzkj_sale_order_use.hzkj_sale_order_billno/hzkj_use_qty</code>；销售、商品成本、国内运费单价分别为 <code>hzkj_settled_price/hzkj_settled_cost_price/hzkj_settled_shipping_pri</code>。收入／成本按使用数量分摊给履约订单。备货回款已在付款月进入收款指标，不能在收款时再作为利润收入，更不能在库存使用时重复增加收款。<a href="/Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/einkauf/service/ReservedStockProfitAllocationService.java:37">备货使用与单价，37–47、114–138行</a>。</p>
+<p>调整严格通过 <code>hzkj_adjust_bill.hzkj_entryentity.hzkj_sales_order_number</code> 关联履约订单，取有符号 <code>hzkj_adjust_amount1</code>；原单号可能是RMA，不能回退混用。正负调整已纳入累计收入，展示调整分量不等于再次计入利润。<a href="/Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/ordercenter/service/OrderGrossProfitSnapshotService.java:279">调整关联及金额，279–321行</a>。</p>
+<h4>10.4 现有实时／cutoff服务不能直接满足预计日周</h4>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>缺口</th>
+<th>具体源码证据</th>
+<th>必须补齐的能力</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>无运费按0、无历史截止</td>
+<td><code>calculateRealtime(order)</code>调用 <code>calculate(order,null,false)</code>，注释明确取查询时全部当前数据、未确认国际运费按0</td>
+<td>新口径未结算始终用有版本的预估运费，缺失不可默认为0；不能直接调用此入口</td>
+</tr>
+<tr>
+<td>候选日期不是利润日</td>
+<td><code>findByCreatedTime</code>按订单 <code>createtime</code> 筛选，并要求当前订单已收</td>
+<td>付款仅作收款归属／预计准入；利润归属独立；月结触发也不能补全未结算候选</td>
+</tr>
+<tr>
+<td>采购未按cutoff</td>
+<td><code>OrderPurchaseCostQueryService.calculate(order)</code>仅按当前 <code>hzkj_pay_status=1</code> 取 <code>hzkj_settlement_amount</code> 与运费分摊</td>
+<td>采购支付／成本修改发生时间、knownAt及历史版本；防止未来采购进入较早期间贡献</td>
+</tr>
+<tr>
+<td>备货cutoff参数未使用</td>
+<td><code>ReservedStockProfitAllocationService.calculate(order,cutoff)</code>未向下传入；所有正数使用量计入，注释明确不以状态／使用时间作条件</td>
+<td>使用发生／获知／有效状态及撤销退回事件；单价和成本版本可追溯</td>
+</tr>
+<tr>
+<td>仓储不按通知日期截断</td>
+<td><code>WarehouseHandlingCostQueryService</code>明确后补通知不按日期截止，cutoff只确定杭州收费生效月份</td>
+<td>可用于预计贡献的仓储事件日期及knownAt，避免后补数据伪装成先前已知</td>
+</tr>
+<tr>
+<td>审核不是历史快照</td>
+<td>收款按receive_time、调整按createtime截止，但均查询当前C状态</td>
+<td>当前asOf资格须有可信审批时间；不能声称可复原过去任意时刻的审批状态</td>
+</tr>
+</tbody>
+</table></div>
+<p>证据：<a href="/Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/ordercenter/service/OrderGrossProfitSnapshotService.java:68">实时入口，68–79行</a>；<a href="/Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/ordercenter/service/OrderGrossProfitReportCandidateService.java:108">创建时间候选，108–143行</a>；<a href="/Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/einkauf/service/OrderPurchaseCostQueryService.java:26">采购无cutoff，26–90行</a>；<a href="/Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/einkauf/service/ReservedStockProfitAllocationService.java:25">备货cutoff与使用条件，25–31、56–70、157–183行</a>；<a href="/Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/logistics/service/WarehouseHandlingCostQueryService.java:48">仓储明确限制，48–51行</a>。</p>
+<p>已确认发运预估字段为 <code>hzkj_deliver_bill.hzkj_estimate_freight</code>，按渠道／国家／重量计算写入；但该代码未建立历史预估版本或knownAt保证，不能将当前值推定为历史值。客户运费报价 <code>hzkj_fre_quo_amount</code> 也不能未经财务核对当作物流成本。<a href="/Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/logistics/util/LogisticUtils.java:28">预估运费计算</a>；<a href="/Library/VSCode/dtr5b/datamodel/hzkj_CRM/1.5/main/hzkj_logistics/metadata/hzkj_deliver_bill.dym:3775">预估字段元数据</a>。</p>
+<p>需要建立稳定事件ID／版本、发生／known／approved时间和cutoff的事实账本或历史快照差分，提供预计期间delta；仅把现有 <code>calculate(order,cutoff)</code> 传入日期仍不能解决上述缺口。平台当前查询的asOf是查询时刻，不接受过去asOf回放；读取历史range可显示目前已审核月结，不能据此宣称历史预计贡献和审批状态可完整复现。</p>
+<h4>10.5 无日分配、币种与HTTP权限边界</h4>
+<p>月结只提供结算月、审核写入时间、cutoff；没有权威日利润分配。完整自然月可用 <code>recognitionDate=null</code> 月结值；周／天／部分月返回 <code>settledGrossProfit=null</code>、<code>unallocatedCount</code>及 <code>unallocatedSettlements</code> 月参考。审核日不是利润发生日，不能均摊月delta。预计也须按期间差额计，不累加每日存量快照。</p>
+<p>FOP收入使用收款 <code>hzkj_exrate</code>；没有收款汇率时回退当前 <code>bd_exrate_tree.indirectexrate</code>，不是带日期的历史FX查询。<a href="/Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/ordercenter/service/OrderGrossProfitSnapshotService.java:120">收款汇率</a>；<a href="/Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/ordercenter/service/OrderGrossProfitExchangeRateService.java:24">当前汇率树</a>。物流成本查询未读原币而直接加到Rmb变量，后续重派／退款采集停用，详见第9节。已审CNY净毛利delta保留权威原额，再按明确日期／来源换USD并审计分量与舍入；不能用最新FX或最新原始成本改写冻结月结。</p>
+<p>检索毛利服务调用发现的是原生表单插件，未发现对应毛利分析HTTP controller；真实地址、认证及分页仍待H23。实时权限按当前 <code>hzkj_operator</code>，业务员限本人，但非业务员默认可查当前组织全部；月报service允许空业务员，组织ID≤0时不加组织过滤。新个人工作台不能直接将这些宽松参数暴露为HTTP。</p>
+<p>证据：<a href="/Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/ordercenter/service/OrderGrossProfitReportPermissionService.java:49">实时身份及范围，49–78、139–146行</a>；<a href="/Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/ordercenter/service/SalespersonMonthlyGrossProfitReportService.java:52">月报筛选，52–68行</a>；<a href="/Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/ordercenter/plugin/form/SalespersonMonthlyGrossProfitReportFormPlugin.java:103">月报表单调用</a>；<a href="/Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/ordercenter/plugin/form/OrderGrossProfitRealtimeReportFormPlugin.java:192">实时表单调用</a>。</p>
+<p>真实适配必须以当前可信用户／组织建立独立 <code>sales_profit</code> scope 与 <code>allowedProfitIds</code>，与本地本人／部门权限求交；冻结业绩归属与当前访问权分开。资料与完成标准见T21–T26、H23–H28、D16–D22；未经真实联调不得标为FOP ready。</p>
+<h2 id="hz-section-15">15. IT 交付导航与实施顺序</h2>
+<p>更新日期：2026-10-23（UTC+8）。本次在原有全量需求上追加销售个人收款／净毛利月、周、天统计；注册、部门／业务员回款、订单量、客户分析、物流运费、权限和全部历史待办保留。</p>
+<h3>阅读顺序</h3>
+<ol>
+<li><a href="HYPERZONE_ECHARTS_API_REQUIREMENTS.html">完整需求HTML</a> 或 <a href="HYPERZONE_ECHARTS_API_REQUIREMENTS.md">完整需求Markdown</a>：业务、页面、字段、审计与验收的全量交付。源正文为 <a href="REQUIREMENTS_OVERVIEW.md">REQUIREMENTS_OVERVIEW.md</a>，个人收款／净毛利在第8节。</li>
+<li><a href="../openapi/hyperzone-analytics.openapi.json">OpenAPI</a>：可导入API工具的平台HTTP契约，servers为<code>/api</code>；不是FOP原生接口目录。新增 <code>/autoflow/integrations/fop/sales-performance</code> 与 <code>/sales-performance/details</code>。</li>
+<li><a href="HYPERZONE_FOP_SOURCE_MAPPING.md">FOP源码映射</a>：实体／字段／Java行号证据。第9节是物流成本，第10节是月结毛利、预计贡献和当前数据缺口。</li>
+<li><a href="FOLLOW_UP_CHECKLIST.md">后续待办与人工核对</a>：原T01–T20/H01–H22/D01–D15保留；本次新增T21–T26/H23–H28/D16–D22，按模板分配、回填和关闭。</li>
+<li><a href="VERIFICATION.md">验证记录</a>：仅此处记录实际执行的测试、HTTP、浏览器、生成物检查与限制；文档或Mock存在不能替代验证。详细消费检查见 <a href="ECHARTS_FRONTEND_AUDIT.md">前端审计</a> 和 <a href="ECHARTS_BACKEND_CONTRACT_AUDIT.md">后台契约审计</a>。</li>
+</ol>
+<h3>当前交付边界</h3>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>层次</th>
+<th>本次范围</th>
+<th>不代表已经完成</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>平台前端／BFF</td>
+<td>销售工作台、月周天、授权人员、独立收款／利润、图表统计、分页明细、来源与错误状态；源代码及契约同步</td>
+<td>生产FOP已连接、正式员工授权已导入、真实数据已财务对账</td>
+</tr>
+<tr>
+<td>Mock</td>
+<td>演示审核月结delta、预计贡献、跨期调整、无日分配及权限边界</td>
+<td>可从现有FOP实时服务直接取得同样完备事件，或历史预计毛利已经可复原</td>
+</tr>
+<tr>
+<td>原FOP后台</td>
+<td><code>/Library/VSCode/dtr5b</code>只读核查；确认月结、快照、业务字段和已知缺口</td>
+<td>本次已修改／部署FOP生产实现，或Java服务名就是可调用HTTP URL</td>
+</tr>
+<tr>
+<td>验证</td>
+<td>实际结果由VERIFICATION回填</td>
+<td>未执行的测试通过、真实FOP联调或生产上线完成</td>
+</tr>
+</tbody>
+</table></div>
+<p>真实provider、授权解析和正式组织同步仍是独立实施工作。未配置／上游故障保持403或503等明确状态，不得自动回退Mock或全量管理员数据。</p>
+<h3>必须保持的财务与时间规则</h3>
+<ul>
+<li>收款沿用方案2：已支付且两类审核合格的履约／全款备货实收，按 <code>paidAt</code> 的UTC+8日期归期；排除押金备货及样品。使用已全款备货库存不补回产品款、不重复收款。</li>
+<li>利润采用净毛利的期间贡献，独立 <code>recognitionMonth/recognitionDate</code>；已审月结用冻结CNY净毛利delta，不累计多版整单毛利。相同订单同月结算替换预计，跨期调整保留各自月份。</li>
+<li>未结算必须使用预估运费及本次查询asOf已知收入／成本；不能因为当前取得实际运费就改变未结算口径。缺关键事实不能默认为0。</li>
+<li>已结算／预计分别汇总，不合并总利润。完整月可用无日归属月结；周／天／部分月返回null和待拆分，月结参考单列，不均摊。</li>
+<li>新查询不接受历史asOf回放。历史range可展示截至当前查询已审核的历史月结，不能声称恢复历史审批状态。预计日周需要有发生／known／approved时间的事件台账或可靠快照差分，不能累计每日存量快照。</li>
+<li>金额统一USD、明确原币及FX日期／来源；CNY已审原值不重写。收入调整和备货转入各计一次；成本分类互斥；<code>previousRecognizedProfit</code>与可审计 <code>roundingAdjustment</code>保证期间delta可核对，尾差绝对值不超过0.10 USD。</li>
+<li>权限必须分别校验receipts与sales_profit scopes及对应IDs；系统管理员、订单可见、运费可见都不自动授予利润可见。冻结业绩归属与当前查看权限分开。</li>
+</ul>
+<h3>FOP及平台后台剩余实施顺序</h3>
+<ol>
+<li><strong>协议和授权：T21/T25。</strong> FOP提供只读发布接口、版本、分页及真实用户授权；IT提供账号—租户用户—业务员工—部门映射。先验最小权限，再读金额。</li>
+<li><strong>权威月结：T23。</strong> 读取C审核月结和订单版本，验证净毛利delta、冻结业务员、结算月、审批/cutoff；规范同月多版本；无日分配保持null。</li>
+<li><strong>预计贡献：T22。</strong> 补事件台账／快照差分。现有实时入口运费缺失按0、采购无cutoff、备货未使用cutoff、仓储不按通知日截止，不能直接复用为预计日报。</li>
+<li><strong>金额及FX：T24。</strong> 核对调整、退款、退货、采购调价、物流补退费和库存使用；审计冻结CNY至USD及分量尾差，不以Rmb变量名猜原币。</li>
+<li><strong>真实对账：T26。</strong> 按D16–D22和AT-18–AT-24验证收款、月结、预计、权限与页面，并回归既有图表。完成后再按T15安排生产切换和回滚，不预设上线时间。</li>
+</ol>
+<h3>需要交接的输入清单</h3>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>输入</th>
+<th>回填编号</th>
+<th>最小产物</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>正式只读接口与部署版本</td>
+<td>H01、H23</td>
+<td>URL/方法/字段/认证交接位置、分页和错误码、完整脱敏样本；不在文档填写凭证</td>
+</tr>
+<tr>
+<td>利润权限与人员归属</td>
+<td>H03、H04、H28</td>
+<td>稳定员工和组织ID、独立利润授权、经理后代范围、转岗／离职及两名不同权限用户预期</td>
+</tr>
+<tr>
+<td>月结版本与日分配</td>
+<td>H23、H25</td>
+<td>首结／重算／零差额／草稿／跨期负调整、C审核和时间、冻结归属、是否存在权威日分配</td>
+</tr>
+<tr>
+<td>预计事件和预估运费</td>
+<td>H24</td>
+<td>发生／known／approved时间、cutoff、预估字段币种与版本、采购／使用／仓储历史来源</td>
+</tr>
+<tr>
+<td>收入成本和备货调整</td>
+<td>H26</td>
+<td>调整／退款／退货／调价／重派／使用退回的ID、关联、方向、状态、时间及对账等式</td>
+</tr>
+<tr>
+<td>冻结CNY与USD汇率</td>
+<td>H27</td>
+<td>原额、各分量、历史取价日／来源、汇率和尾差规则，以及正／负／零真实样本</td>
+</tr>
+</tbody>
+</table></div>
+<p>每项资料标注答复人、环境、版本、日期及差异处置。资料已提供、接口可调用、Mock已演示和真实财务验收是不同阶段；仅在对应证据齐全后关闭清单。</p>
+<h2 id="hz-section-16">16. 规范来源与文档再生成</h2>
 <p>OpenAPI 结构参考 <a href="https://spec.openapis.org/oas/v3.1.1.html" rel="noopener noreferrer">OpenAPI Specification 3.1.1</a>。产品事实来自本仓库源码和本次诊断，不来自通用规范。HTML 使用项目共享 HyperZone 样式、内嵌 CSS 和透明 SVG Logo，可离线打开及打印。</p>
 <pre><code class="language-sh">python3 -m venv .runtime/local-demo/docs-venv
 .runtime/local-demo/docs-venv/bin/pip install -r scripts/docs/requirements.txt
@@ -10968,7 +13095,7 @@ hzkj_total_amount = hzkj_fre_quo_amount + hzkj_fixed_tax_fee
   --style-root /Library/VSCode/.hyperzone/html-style
 </code></pre>
 <p><code>REQUIREMENTS_OVERVIEW.md</code> 是业务需求源，接口及字段表从 OpenAPI JSON 生成；修改后执行上述脚本同步两种交付格式。不同机器需提供同版本 HyperZone 共享样式目录；生成后的 HTML 本身无此路径依赖。</p></article>
-  <footer class="footer">HyperZone · ECharts 诊断与 API 对接需求</footer>
+  <footer class="footer">HyperZone · 完整需求与 API 对接方案</footer>
 </main>
 </body>
 </html>

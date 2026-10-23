@@ -1,4 +1,5 @@
 import type { FopFreightCandidate } from './fop-freight.types'
+import type { FopProfitCandidate } from './sales-performance.types'
 export const SALES_DEPARTMENTS = [
   { id: 'sales1', name: '业务一部' }, { id: 'sales2', name: '业务二部' },
   { id: 'sales3', name: '业务三部' }, { id: 'sales4', name: '业务四部' },
@@ -15,10 +16,12 @@ export interface FopPermissionGrant {
   allowedReceiptIds?: readonly string[]
   /** Independent actual freight-cost resource grant; never inferred from orders. */
   allowedFreightIds?: readonly string[]
+  /** Independent net-profit resource grant; never inherited from orders or receipts. */
+  allowedProfitIds?: readonly string[]
   analyticsScopes?: readonly FopAnalyticsScope[]
 }
 
-export type FopAnalyticsScope = 'rates' | 'registrations' | 'receipts' | 'freight'
+export type FopAnalyticsScope = 'rates' | 'registrations' | 'receipts' | 'freight' | 'sales_profit'
 export interface FopRegistrationEntry {
   departmentPathIds?: string[]
   date: string
@@ -124,6 +127,9 @@ export abstract class FopDataProvider {
   abstract isConfigured(): boolean
   abstract resolvePermissions(identity: Readonly<FopIdentity>): Promise<FopPermissionGrant>
   abstract listOrders(identity: Readonly<FopIdentity>, permission: Readonly<FopPermissionGrant>): Promise<FopOrderCandidate[]>
+  async listProfits(_identity: Readonly<FopIdentity>, _permission: Readonly<FopPermissionGrant>): Promise<FopProfitCandidate[]> {
+    throw new Error('Profit contribution provider is not configured')
+  }
   async listFreight(_identity: Readonly<FopIdentity>, _permission: Readonly<FopPermissionGrant>): Promise<FopFreightCandidate[]> {
     throw new Error('Freight data provider is not configured')
   }

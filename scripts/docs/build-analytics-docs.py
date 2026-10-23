@@ -18,6 +18,8 @@ ROOT = Path(__file__).resolve().parents[2]
 SPEC = ROOT / 'docs/openapi/hyperzone-analytics.openapi.json'
 DOCS = ROOT / 'docs/analytics'
 REQUEST_QUERIES = {
+    '/autoflow/integrations/fop/sales-performance': 'from=2026-01-01&to=2026-10-23&grain=month',
+    '/autoflow/integrations/fop/sales-performance/details': 'from=2026-01-01&to=2026-10-23&grain=month&kind=profit&periodId=2026-09&page=1&pageSize=20',
     '/autoflow/integrations/fop/freight': 'grain=year&year=2026&warehouse=ALL&carrierCode=YT',
     '/autoflow/integrations/fop/freight/details': 'grain=month&year=2026&warehouse=ALL&carrierCode=YT&periodId=2026-10&comparisonPeriod=current&workbenchRole=sales&page=1&pageSize=20',
     '/autoflow/integrations/fop/receipts': 'from=2026-09-01&to=2026-10-22&warehouse=ALL&workbenchRole=sales&page=1&pageSize=20',
@@ -103,19 +105,21 @@ def appendix(text):
 
 
 def build(spec):
-    parts = [(DOCS / 'REQUIREMENTS_OVERVIEW.md').read_text(), appendix((DOCS / 'FOLLOW_UP_CHECKLIST.md').read_text())]
+    overview = (DOCS / 'REQUIREMENTS_OVERVIEW.md').read_text()
+    before_sales, sales = overview.split('\n## 8. ', 1)
+    parts = [before_sales, appendix((DOCS / 'FOLLOW_UP_CHECKLIST.md').read_text()), '\n## 8. ' + sales]
     operations = [(path, method, operation) for path, entry in spec['paths'].items() for method, operation in entry.items() if method in ('get', 'post', 'put', 'patch', 'delete')]
-    parts += ['## 8. OpenAPI 接口清单与请求/响应定义',
+    parts += ['## 9. OpenAPI 接口清单与请求/响应定义',
               f"本规范覆盖 **{len(operations)} 个操作、{len(spec['components']['schemas'])} 个数据模型**。以下清单由同目录 OpenAPI JSON 生成。Base URL 为 `/api`，表中路径不重复此前缀。响应为实际裸 JSON，不额外包装成 `{{code,data}}`。时间序列数值数组必须与对应时间轴等长：counts 对应 registrations、amounts 对应 months、values 及 warehouses 内数组对应 periods；items/series/options 等集合不适用。该跨字段规则需联调测试，单纯 schema 校验不能证明。",
               '| 方法 | 路径 | operationId | 用途 |', '| --- | --- | --- | --- |']
     for path, method, operation in operations:
         parts.append(f"| {method.upper()} | `{path}` | `{operation['operationId']}` | {cell(operation.get('summary', ''))} |")
-    parts.append('\n### 8.1 公共鉴权与响应说明\n')
+    parts.append('\n### 9.1 公共鉴权与响应说明\n')
     parts.append(spec.get('info', {}).get('description', ''))
     for name, scheme in spec['components'].get('securitySchemes', {}).items():
         parts.append(f"- `{name}`：{scheme.get('description', '')}；type={scheme.get('type')}，in={scheme.get('in', 'Authorization')}，name={scheme.get('name', scheme.get('scheme', ''))}。")
     for index, (path, method, operation) in enumerate(operations, 2):
-        parts.append(f"\n### 8.{index} {operation.get('summary', operation['operationId'])}\n\n`{method.upper()} /api{path}` · operationId: `{operation['operationId']}`\n")
+        parts.append(f"\n### 9.{index} {operation.get('summary', operation['operationId'])}\n\n`{method.upper()} /api{path}` · operationId: `{operation['operationId']}`\n")
         parts.append(operation.get('description', ''))
         if operation.get('x-implementation-status'):
             parts.append('\n实现状态：' + cell(operation['x-implementation-status']))
@@ -154,7 +158,7 @@ def build(spec):
                     parts.append(f'\n{status} 响应示例（{media}）：\n\n```json\n' + json.dumps(content['example'], ensure_ascii=False, indent=2) + '\n```')
         if 'x-source-files' in operation:
             parts.append('\n实现证据：' + ', '.join('`' + cell(f) + '`' for f in operation['x-source-files']) + '。')
-    parts += ['\n## 9. 字段级数据字典',
+    parts += ['\n## 10. 字段级数据字典',
               '模型引用按名称交叉查阅。例如 `OrderVolumeData.series[] → VolumeSeries.amounts → VolumeAmounts`；每一层字段均在下表列出。必填是相对于当前父对象；父对象本身可选时不强制创建。可空只以类型中的 `null` 或 `anyOf/oneOf` null 分支为准。示例不是生产值。内部 FOP 提供器模型若标注为内部，则不能从浏览器直接传入。']
     for name, schema in spec['components']['schemas'].items():
         parts.append(f'\n### {name}\n')
@@ -169,9 +173,9 @@ def build(spec):
                 parts.append(f"组合规则 `{key}`：" + ', '.join(f'`{type_name(s)}`' for s in schema[key]) + '。完整约束见 OpenAPI JSON。')
         if schema.get('examples'):
             parts.append('\n```json\n' + json.dumps(schema['examples'][0], ensure_ascii=False, indent=2) + '\n```')
-    for title, filename in [('10. 前端功能诊断与复现证据', 'ECHARTS_FRONTEND_AUDIT.md'), ('11. 后端契约诊断与生产接入差距', 'ECHARTS_BACKEND_CONTRACT_AUDIT.md'), ('12. 本次验证记录与限制', 'VERIFICATION.md'), ('13. HyperZone FOP 源码字段映射', 'HYPERZONE_FOP_SOURCE_MAPPING.md')]:
+    for title, filename in [('11. 前端功能诊断与复现证据', 'ECHARTS_FRONTEND_AUDIT.md'), ('12. 后端契约诊断与生产接入差距', 'ECHARTS_BACKEND_CONTRACT_AUDIT.md'), ('13. 本次验证记录与限制', 'VERIFICATION.md'), ('14. HyperZone FOP 源码字段映射', 'HYPERZONE_FOP_SOURCE_MAPPING.md'), ('15. IT 交付导航与实施顺序', 'IT_HANDOFF.md')]:
         parts.append(f'\n## {title}\n\n' + appendix((DOCS / filename).read_text()))
-    parts.append('\n## 14. 规范来源与文档再生成\n\nOpenAPI 结构参考 [OpenAPI Specification 3.1.1](https://spec.openapis.org/oas/v3.1.1.html)。产品事实来自本仓库源码和本次诊断，不来自通用规范。HTML 使用项目共享 HyperZone 样式、内嵌 CSS 和透明 SVG Logo，可离线打开及打印。\n\n```sh\npython3 -m venv .runtime/local-demo/docs-venv\n.runtime/local-demo/docs-venv/bin/pip install -r scripts/docs/requirements.txt\n.runtime/local-demo/docs-venv/bin/python scripts/docs/build-analytics-docs.py \\\n  --style-root /Library/VSCode/.hyperzone/html-style\n```\n\n`REQUIREMENTS_OVERVIEW.md` 是业务需求源，接口及字段表从 OpenAPI JSON 生成；修改后执行上述脚本同步两种交付格式。不同机器需提供同版本 HyperZone 共享样式目录；生成后的 HTML 本身无此路径依赖。\n')
+    parts.append('\n## 16. 规范来源与文档再生成\n\nOpenAPI 结构参考 [OpenAPI Specification 3.1.1](https://spec.openapis.org/oas/v3.1.1.html)。产品事实来自本仓库源码和本次诊断，不来自通用规范。HTML 使用项目共享 HyperZone 样式、内嵌 CSS 和透明 SVG Logo，可离线打开及打印。\n\n```sh\npython3 -m venv .runtime/local-demo/docs-venv\n.runtime/local-demo/docs-venv/bin/pip install -r scripts/docs/requirements.txt\n.runtime/local-demo/docs-venv/bin/python scripts/docs/build-analytics-docs.py \\\n  --style-root /Library/VSCode/.hyperzone/html-style\n```\n\n`REQUIREMENTS_OVERVIEW.md` 是业务需求源，接口及字段表从 OpenAPI JSON 生成；修改后执行上述脚本同步两种交付格式。不同机器需提供同版本 HyperZone 共享样式目录；生成后的 HTML 本身无此路径依赖。\n')
     text = '\n\n'.join(parts).rstrip() + '\n'
     # Table rows must remain adjacent for Markdown to render field dictionaries.
     return re.sub(r'(?m)(^\|[^\n]*\|)\n\n(?=\|)', r'\1\n', text)
@@ -221,7 +225,7 @@ def main():
     loader = importlib.util.spec_from_file_location('hyperzone_style', args.style_root / 'render_html.py')
     renderer = importlib.util.module_from_spec(loader)
     loader.loader.exec_module(renderer)
-    html = renderer.render('ECharts 诊断与 API 对接需求', 'HyperZone 智能办公平台 · 字段级契约、统计口径与 FOP 接入验收', body, 'OpenAPI 3.1.1', '2026-10-22')
+    html = renderer.render('完整需求与 API 对接方案', 'HyperZone 智能办公平台 · Dashboard、销售工作台、收款、毛利及 FOP 接入验收', body, 'OpenAPI 3.1.1 · ' + spec['info']['version'], spec['info']['version'])
     renderer.validate(html)
     out = DOCS / 'HYPERZONE_ECHARTS_API_REQUIREMENTS.html'
     out.write_text(html)
