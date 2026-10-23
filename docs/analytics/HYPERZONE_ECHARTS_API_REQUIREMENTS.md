@@ -6598,6 +6598,8 @@ MD/HTML从同一需求源及OpenAPI生成，包含FOP源码字段映射和后续
 
 浏览器实测：1280px宽度五卡同排且顺序正确；点击待采购进入采购工作台，共41单、显示供应商发货状态和订单／Shopify／客户／SKU／金额字段；配货清单共77单。验收截图位于本地忽略目录 `.runtime/local-demo/fulfillment-five-queues.png`。
 
+独立最终代码审查（6e9a3c9..43df7d7）：无Critical/Important/Minor问题。真实FOP多包裹、部分取消／退款、撤审的归一化暂不作生产正确性结论，仍须T31/H33样本联调。
+
 
 ## 15. HyperZone FOP 源码字段映射
 
@@ -6917,7 +6919,7 @@ FOP收入使用收款 `hzkj_exrate`；没有收款汇率时回退当前 `bd_exra
 1. [完整需求HTML](HYPERZONE_ECHARTS_API_REQUIREMENTS.html) 或 [完整需求Markdown](HYPERZONE_ECHARTS_API_REQUIREMENTS.md)：业务、页面、字段、审计与验收的全量交付。源正文为 [REQUIREMENTS_OVERVIEW.md](REQUIREMENTS_OVERVIEW.md)，个人收款／净毛利在第8节。
 2. [OpenAPI](../openapi/hyperzone-analytics.openapi.json)：23项平台HTTP操作、112个模型，servers为`/api`；不是FOP原生接口目录。最新增加 `/autoflow/integrations/fop/chart-access` 与 `/users/{id}/chart-permissions`，包含内部FOP授权、客户当前归属和独立组织汇总字段契约。
 3. [FOP源码映射](HYPERZONE_FOP_SOURCE_MAPPING.md)：实体／字段／Java行号证据。第9节是物流成本，第10节是月结毛利、预计贡献和当前数据缺口。
-4. [后续待办与人工核对](FOLLOW_UP_CHECKLIST.md)：完整T01–T30、H01–H32、D01–D29；最新权限任务为T27–T30/H29–H32/D23–D29，按模板分配、回填和关闭。
+4. [后续待办与人工核对](FOLLOW_UP_CHECKLIST.md)：完整T01–T31、H01–H33、D01–D30；最新权限任务为T27–T30/H29–H32/D23–D29，按模板分配、回填和关闭。
 5. [验证记录](VERIFICATION.md)：仅此处记录实际执行的测试、HTTP、浏览器、生成物检查与限制；文档或Mock存在不能替代验证。详细消费检查见 [前端审计](ECHARTS_FRONTEND_AUDIT.md) 和 [后台契约审计](ECHARTS_BACKEND_CONTRACT_AUDIT.md)。
 
 ### 当前交付边界

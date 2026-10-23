@@ -27,8 +27,10 @@
 - [x] 实现类型、筛选、序列化校验及 Mock；更新前端卡片和列表，新增实际状态呈现。
 - [x] 前端校验与 UI 测试覆盖相同边界及五张卡片正确跳转；Expected: PASS。
 - [x] 核对 FOP 源码，更新接口 schema、样例、字段映射与待办；生成 MD/HTML。
-- [ ] 完整前后端测试、lint/build、隔离数据库 E2E、OpenAPI 校验及浏览器核对；Expected: PASS。
-- [ ] 完整变更提交，按 executing-plans 做最终独立审查，修复实质问题，推送既有远程分支。
+- [x] 完整前后端测试、lint/build、隔离数据库 E2E、OpenAPI 校验及浏览器核对；Expected: PASS。
+- [x] 完整变更提交，按 executing-plans 做最终独立审查，修复实质问题，推送既有远程分支。
 
 
-执行记录：前端239、后端486、E2E121通过；两端lint/build通过；OpenAPI270样例通过；实际HTTP五队列计数等于明细合计。未付款审核门槛测试已观察RED后通过GREEN。沿用既有工作区及用户的直接执行授权，未新建工作树。最终独立审查待回填。
+执行记录：前端239、后端486、E2E121通过；两端lint/build通过；OpenAPI270样例通过；实际HTTP五队列计数等于明细合计。未付款审核门槛测试已观察RED后通过GREEN。沿用既有工作区及用户的直接执行授权，未新建工作树。独立代码审查完成（6e9a3c9..43df7d7）：无Critical/Important/Minor问题。
+
+Final: Ruling: 真实FOP多包裹、部分取消／退款、撤审归一化继续由T31/H33联调 — 真实适配器未配置且本次禁止修改FOP生产实现；本次仅验证Mock/BFF契约，生产队列准确性仍需样本对账后确认。

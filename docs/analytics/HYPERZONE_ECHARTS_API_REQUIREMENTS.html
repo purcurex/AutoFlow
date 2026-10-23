@@ -14796,6 +14796,7 @@ describe('ECharts audit: assertions of current incorrect behavior', () =&gt; {
 <li>本次不修改FOP源代码、不连接生产FOP。真实SKU/包裹归一化及状态枚举联调继续由T31/H33/D30跟踪。</li>
 </ul>
 <p>浏览器实测：1280px宽度五卡同排且顺序正确；点击待采购进入采购工作台，共41单、显示供应商发货状态和订单／Shopify／客户／SKU／金额字段；配货清单共77单。验收截图位于本地忽略目录 <code>.runtime/local-demo/fulfillment-five-queues.png</code>。</p>
+<p>独立最终代码审查（6e9a3c9..43df7d7）：无Critical/Important/Minor问题。真实FOP多包裹、部分取消／退款、撤审的归一化暂不作生产正确性结论，仍须T31/H33样本联调。</p>
 <h2 id="hz-section-15">15. HyperZone FOP 源码字段映射</h2>
 <p>更新日期：2026-10-23（UTC+8），保留2026-10-22原核查。源码目录：<code>/Library/VSCode/dtr5b</code>，原核查HEAD：<code>bd4c115c</code>（核查当前工作树，不代表生产部署版本）。仅阅读业务 Java、苍穹元数据与转换规则；未连接生产、未读取配置密钥、未修改FOP后端。</p>
 <p>本文件区分源码事实、此次业务口径和仍待接口样本确认的映射。FOP 在本项目指金蝶苍穹上的 HyperZone 自定义应用。</p>
@@ -15361,7 +15362,7 @@ hzkj_total_amount = hzkj_fre_quo_amount + hzkj_fixed_tax_fee
 <li><a href="HYPERZONE_ECHARTS_API_REQUIREMENTS.html">完整需求HTML</a> 或 <a href="HYPERZONE_ECHARTS_API_REQUIREMENTS.md">完整需求Markdown</a>：业务、页面、字段、审计与验收的全量交付。源正文为 <a href="REQUIREMENTS_OVERVIEW.md">REQUIREMENTS_OVERVIEW.md</a>，个人收款／净毛利在第8节。</li>
 <li><a href="../openapi/hyperzone-analytics.openapi.json">OpenAPI</a>：23项平台HTTP操作、112个模型，servers为<code>/api</code>；不是FOP原生接口目录。最新增加 <code>/autoflow/integrations/fop/chart-access</code> 与 <code>/users/{id}/chart-permissions</code>，包含内部FOP授权、客户当前归属和独立组织汇总字段契约。</li>
 <li><a href="HYPERZONE_FOP_SOURCE_MAPPING.md">FOP源码映射</a>：实体／字段／Java行号证据。第9节是物流成本，第10节是月结毛利、预计贡献和当前数据缺口。</li>
-<li><a href="FOLLOW_UP_CHECKLIST.md">后续待办与人工核对</a>：完整T01–T30、H01–H32、D01–D29；最新权限任务为T27–T30/H29–H32/D23–D29，按模板分配、回填和关闭。</li>
+<li><a href="FOLLOW_UP_CHECKLIST.md">后续待办与人工核对</a>：完整T01–T31、H01–H33、D01–D30；最新权限任务为T27–T30/H29–H32/D23–D29，按模板分配、回填和关闭。</li>
 <li><a href="VERIFICATION.md">验证记录</a>：仅此处记录实际执行的测试、HTTP、浏览器、生成物检查与限制；文档或Mock存在不能替代验证。详细消费检查见 <a href="ECHARTS_FRONTEND_AUDIT.md">前端审计</a> 和 <a href="ECHARTS_BACKEND_CONTRACT_AUDIT.md">后台契约审计</a>。</li>
 </ol>
 <h3>当前交付边界</h3>
