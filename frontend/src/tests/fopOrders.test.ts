@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { getFopOrders, type FopOrderQueue } from '@/api/fop-orders'
+import { getFopOrders, matchesFopQueue, type FopOrderQueue } from '@/api/fop-orders'
+
+import { mockFopOrders } from '@/api/fop-order-fixtures'
 
 const get = vi.hoisted(() => vi.fn())
 vi.mock('@/api/index', () => ({ default: { get } }))
@@ -22,5 +24,20 @@ describe('authenticated fulfillment provider', () => {
     await expect(getFopOrders({ queue: 'all' as FopOrderQueue, page: 1, pageSize: 20 })).rejects.toThrow()
     await expect(getFopOrders({ queue: 'review', page: 0, pageSize: 20 })).rejects.toThrow()
     expect(get).not.toHaveBeenCalled()
+  })
+})
+
+describe('fulfillment queue response validation', () => {
+  it('rejects unpaid review and derives overlapping queues from independent progress', () => {
+    const base = { ...mockFopOrders[0]!, reviewStatus: 'approved' as const, paymentStatus: 'paid' as const, cancelled: false, exception: null }
+    expect(matchesFopQueue({ ...base, reviewStatus: 'pending', paymentStatus: 'unpaid' }, 'review')).toBe(false)
+    const waiting = { ...base, fulfillmentProgress: { shopifySync: 'pending', supplierShipment: 'partial', stockReadiness: 'incomplete', allocationReview: 'pending', outbound: 'pending' } as const }
+    for (const queue of ['dispatch', 'procurement', 'allocation'] as const) expect(matchesFopQueue(waiting, queue)).toBe(true)
+    expect(matchesFopQueue(waiting, 'shipping')).toBe(false)
+    const ready = { ...waiting, fulfillmentProgress: { ...waiting.fulfillmentProgress, stockReadiness: 'ready' as const, allocationReview: 'approved' as const } }
+    expect(matchesFopQueue(ready, 'allocation')).toBe(false)
+    expect(matchesFopQueue(ready, 'shipping')).toBe(true)
+    expect(matchesFopQueue({ ...ready, cancelled: true }, 'shipping')).toBe(false)
+    expect(matchesFopQueue({ ...ready, paymentStatus: 'refunded' }, 'shipping')).toBe(false)
   })
 })

@@ -33,6 +33,7 @@ describe('FOP user isolation HTTP API (repository and provider boundaries stubbe
   const dashboard = (id = alice, extra = '') => get(`/autoflow/integrations/fop/dashboard?from=2020-01-01&to=2020-01-31&year=2020${extra}`, id)
   const access = (id = alice) => get('/autoflow/integrations/fop/data-access', id)
   const order = (id: string, extra = {}) => ({
+    fulfillmentProgress: { shopifySync: 'pending', supplierShipment: 'pending', stockReadiness: 'incomplete', allocationReview: 'pending', outbound: 'pending' },
     owner: { id: 'alice-owner', name: 'Alice' }, tenantId: 'tenant-1', id, orderNumber: id.toUpperCase(), shopifyOrderNumber: `#${id}`, customerName: `Customer ${id}`,
     storeName: `Store ${id}`, items: [{ sku: id, name: id, imageUrl: null, variant: '', quantity: 1 }],
     amount: 10, currency: 'USD', paymentStatus: 'paid', reviewStatus: 'pending', procurementStatus: 'pending',
@@ -594,7 +595,7 @@ describe('FOP user isolation HTTP API (repository and provider boundaries stubbe
     expect(recentRange.body.exceptions).toEqual(a.body.exceptions)
     accounts.get(alice).workbenchRoles = ['allocation']
     const restricted = await dashboard().expect(200)
-    expect(restricted.body.queues).toEqual({ review: 0, allocation: 1, dispatch: 0, shipping: 0 })
+    expect(restricted.body.queues).toEqual({ review: 0, allocation: 1, dispatch: 0, procurement: 0, shipping: 0 })
     expect(restricted.body.exceptions).toEqual([])
     expect(restricted.body.tasks.map((task: any) => task.kind)).toEqual(['allocation'])
   })

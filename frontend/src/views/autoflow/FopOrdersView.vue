@@ -6,7 +6,7 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ChevronLeft, ChevronRight, PackageSearch, RefreshCw, Search } from 'lucide-vue-next'
-import { getFopOrders, isFopOrderQueue, matchesFopQueue, type FopOrderPage } from '@/api/fop-orders'
+import { getFopOrders, isFopOrderQueue, matchesFopQueue, type FopOrder, type FopOrderPage } from '@/api/fop-orders'
 import { fopAccessError } from '@/api/fop-access'
 
 import { defaultWorkbenchQueue, isWorkbenchRole, workbenchOrderLocation, workbenchQueues } from '@/utils/workbench'
@@ -21,16 +21,28 @@ const queue = computed(() => {
   const value = route.query.queue ?? defaultWorkbenchQueue(role.value)
   return isFopOrderQueue(value) && workbenchQueues[role.value].includes(value) ? value : undefined
 })
-const labels = computed(() => ({ procurement: text('待采购', 'Pending purchase'), review: text('待审核', 'Pending review'), allocation: text('待配货', 'Pending allocation'), dispatch: text('待发运', 'Pending shipment'), shipping: text('待发货', 'Pending dispatch'), exceptions: text('异常订单', 'Order exceptions') }))
-const columns = computed(() => ({ procurement: text('采购状态', 'Purchase status'), review: text('审核状态', 'Review status'), allocation: text('配货状态', 'Allocation status'), dispatch: text('发运状态', 'Shipment status'), shipping: text('发货状态', 'Dispatch status'), exceptions: text('异常原因', 'Exception reason') }))
+const labels = computed(() => ({ procurement: text('待采购', 'Pending purchase'), review: text('待审核', 'Pending review'), allocation: text('待配货', 'Pending allocation'), dispatch: text('待履约', 'Pending fulfillment'), shipping: text('待出库', 'Pending outbound'), exceptions: text('异常订单', 'Order exceptions') }))
+const columns = computed(() => ({ procurement: text('供应商发货状态', 'Supplier shipment status'), review: text('审核状态', 'Review status'), allocation: text('配货状态', 'Allocation status'), dispatch: text('Shopify 履约状态', 'Shopify fulfillment status'), shipping: text('出库状态', 'Outbound status'), exceptions: text('异常原因', 'Exception reason') }))
 const descriptions = computed(() => ({
-  procurement: text('仅显示已审核、已支付且等待采购的履约订单。', 'Approved, paid fulfillment orders awaiting procurement.'),
-  review: text('仅显示等待审核的有效履约订单。', 'Active fulfillment orders awaiting review.'),
-  allocation: text('仅显示已审核、已支付且等待配货的履约订单。', 'Approved, paid fulfillment orders awaiting allocation.'),
-  dispatch: text('仅显示已支付、已配货且等待发运的履约订单。', 'Paid, allocated fulfillment orders awaiting shipment.'),
-  shipping: text('仅显示已支付、已发运且等待仓库发货的履约订单。', 'Paid orders handed over for shipment and awaiting warehouse dispatch.'),
+  procurement: text('已审核履约订单中，供应商尚未全部发货的订单。', 'Approved fulfillment orders with outstanding supplier shipments.'),
+  review: text('已付款、等待审核的履约订单。', 'Paid fulfillment orders awaiting review.'),
+  allocation: text('库存未齐套，或已齐套但配货尚未审核的履约订单。', 'Orders with incomplete stock, or complete stock awaiting allocation approval.'),
+  dispatch: text('已审核、等待同步 Shopify 发货的履约订单。', 'Approved fulfillment orders awaiting Shopify fulfillment synchronization.'),
+  shipping: text('配货已齐套并审核、尚未全部出库的履约订单。', 'Orders with complete, approved allocation awaiting warehouse outbound completion.'),
   exceptions: text('仅显示已支付、尚未发货且存在异常的履约订单。', 'Paid, unshipped fulfillment orders with an active exception.'),
 }))
+function queueStatus(order: FopOrder) {
+  const progress = order.fulfillmentProgress
+  switch (queue.value) {
+    case 'review': return text('待审核', 'Pending review')
+    case 'dispatch': return progress.shopifySync === 'partial' ? text('部分同步 · 待完成', 'Partially synced · pending') : text('待同步 Shopify 发货', 'Shopify sync pending')
+    case 'procurement': return progress.supplierShipment === 'partial' ? text('供应商部分发货', 'Supplier partially shipped') : text('供应商未发货', 'Supplier shipment pending')
+    case 'allocation': return progress.stockReadiness === 'incomplete' ? text('库存未齐套', 'Stock incomplete') : text('已齐套 · 待审核', 'Stock ready · approval pending')
+    case 'shipping': return progress.outbound === 'partial' ? text('部分出库 · 待完成', 'Partially outbound · pending') : text('配货已完成 · 待出库', 'Allocation approved · outbound pending')
+    case 'exceptions': return order.exception ? reasons.value[order.exception.reason] : '—'
+    default: return '—'
+  }
+}
 const reasons = computed(() => ({ stock: text('库存不足', 'Insufficient stock'), address: text('地址待核验', 'Address verification'), tracking: text('物流单号异常', 'Tracking issue') }))
 const payments = computed(() => ({ paid: text('已支付', 'Paid'), unpaid: text('未支付', 'Unpaid'), refunded: text('已退款', 'Refunded') }))
 const search = ref('')
@@ -105,7 +117,7 @@ const formatMoney = (amount: number, currency: string) => formatCurrency(amount,
                 <td class="order-cell"><strong>{{ order.orderNumber }}</strong></td><td class="mono">{{ order.shopifyOrderNumber }}</td><td>{{ order.customerName }}</td>
                 <td class="product-cell"><div v-for="(item, index) in order.items" :key="index" class="product"><img v-if="item.imageUrl && !failedImages.has(item.imageUrl)" :src="item.imageUrl" :alt="item.name" loading="lazy" @error="failedImages.add(item.imageUrl!)" /><span v-else class="image-fallback"><PackageSearch :size="20" /></span><span>{{ item.name }}</span></div></td>
                 <td><span class="status-pill" :class="order.paymentStatus">{{ payments[order.paymentStatus] }}</span></td>
-                <td><span class="status-pill pending">{{ queue === 'exceptions' ? (order.exception ? reasons[order.exception.reason] : '—') : labels[queue] }}</span></td><td>{{ order.organization?.name || '—' }}</td><td><RouterLink v-if="order.department" :to="{ name: 'Organization', query: { node: order.department.id } }" class="text-indigo-600">{{ order.department.name }}</RouterLink><span v-else>—</span></td><td>{{ order.storeName }}</td>
+                <td><span class="status-pill pending">{{ queueStatus(order) }}</span></td><td>{{ order.organization?.name || '—' }}</td><td><RouterLink v-if="order.department" :to="{ name: 'Organization', query: { node: order.department.id } }" class="text-indigo-600">{{ order.department.name }}</RouterLink><span v-else>—</span></td><td>{{ order.storeName }}</td>
                 <td><div v-for="(item, index) in order.items" :key="index" class="sku-item"><strong>{{ item.sku }}</strong><small>{{ item.variant }}</small></div></td>
                 <td><div v-for="(item, index) in order.items" :key="index" class="quantity-item">{{ item.quantity }}</div></td><td class="money">{{ formatMoney(order.amount, order.currency) }}</td>
 

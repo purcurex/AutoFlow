@@ -68,7 +68,17 @@ export interface FopOrderItem {
   quantity: number
 }
 
+/** Independent, normalized FOP facts; unknown must never be inferred as pending. */
+export interface FulfillmentProgress {
+  shopifySync: 'pending' | 'partial' | 'synced' | 'not_required' | 'unknown'
+  supplierShipment: 'pending' | 'partial' | 'shipped' | 'not_required' | 'unknown'
+  stockReadiness: 'incomplete' | 'ready' | 'unknown'
+  allocationReview: 'pending' | 'approved' | 'unknown'
+  outbound: 'pending' | 'partial' | 'completed' | 'unknown'
+}
+
 export interface FopOrder {
+  fulfillmentProgress: FulfillmentProgress
   departmentPathIds?: string[]
   /** Normalized reporting department supplied by the trusted FOP adapter. */
   salesDepartmentCode?: SalesDepartmentCode

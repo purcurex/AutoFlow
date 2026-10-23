@@ -11,7 +11,7 @@ export const workbenchNames: Record<WorkbenchRole, readonly [string, string]> = 
   sales: ['销售工作台', 'Sales Workbench'], procurement: ['采购工作台', 'Procurement Workbench'], allocation: ['配货工作台', 'Allocation Workbench'], dispatch: ['发运工作台', 'Shipment Workbench'], warehouse: ['仓库工作台', 'Warehouse Workbench'],
 }
 export const queueNames: Record<FopOrderQueue, readonly [string, string]> = {
-  review: ['待审核', 'Pending review'], procurement: ['待采购', 'Pending purchase'], allocation: ['待配货', 'Pending allocation'], dispatch: ['待发运', 'Pending shipment'], shipping: ['待发货', 'Pending dispatch'], exceptions: ['异常订单', 'Order exceptions'],
+  review: ['待审核', 'Pending review'], procurement: ['待采购', 'Pending purchase'], allocation: ['待配货', 'Pending allocation'], dispatch: ['待履约', 'Pending fulfillment'], shipping: ['待出库', 'Pending outbound'], exceptions: ['异常订单', 'Order exceptions'],
 }
 export function isWorkbenchRole(value: unknown): value is WorkbenchRole {
   return typeof value === 'string' && (workbenchRoles as readonly string[]).includes(value)

@@ -16,7 +16,7 @@ vi.mock('@/api/fop-dashboard', async importOriginal => ({ ...await importOrigina
 const sample: FopDashboardData = {
   chartAccess: chartAccessFixture().charts, departmentReceipts: { currency: 'USD', months: [], departments: [] },
   source: 'fop', updatedAt: '2026-10-21T12:00:00Z',
-  queues: { review: 1, allocation: 2, dispatch: 3, shipping: 4 }, rates: [], registrations: [],
+  queues: { procurement: 5, review: 1, allocation: 2, dispatch: 3, shipping: 4 }, rates: [], registrations: [],
   exceptions: [{ id: 'AUTHORIZED-ORDER', customer: 'My customer', reason: 'stock', hours: 10 }],
   tasks: [{ id: 'allocation', kind: 'allocation', count: 2, time: '', priority: 'normal' }],
   receipts: { currency: 'USD', months: [], departments: [] },
@@ -84,12 +84,13 @@ describe('FOP Dashboard interactions', () => {
   it('links fulfillment cards and tasks to workbenches, and exceptions to an authorized order', async () => {
     const wrapper = mountView()
     await flushPromises()
-    expect(wrapper.text()).toContain('待发运')
+    expect(wrapper.text()).toContain('待履约')
     expect(wrapper.text()).not.toContain('待打单')
     expect(wrapper.text()).not.toContain('MOCK')
+    expect(wrapper.findAll('.card-top span').map(node => node.text())).toEqual(['待审核', '待履约', '待采购', '待配货', '待出库'])
     const links = wrapper.findAllComponents(RouterLinkStub)
-    for (const queue of ['review', 'allocation', 'dispatch', 'shipping']) {
-      const role = ({ review: 'sales', allocation: 'allocation', dispatch: 'dispatch', shipping: 'warehouse' } as Record<string, string>)[queue]
+    for (const queue of ['review', 'dispatch', 'procurement', 'allocation', 'shipping']) {
+      const role = ({ review: 'sales', procurement: 'procurement', allocation: 'allocation', dispatch: 'dispatch', shipping: 'warehouse' } as Record<string, string>)[queue]
       expect(links.some(link => { const to = link.props('to'); return typeof to !== 'string' && to.name === 'RoleWorkbench' && to.params?.role === role && to.query?.queue === queue })).toBe(true)
     }
     expect(links.some(link => { const to = link.props('to'); return typeof to !== 'string' && to.query?.orderNumber === 'AUTHORIZED-ORDER' })).toBe(true)
@@ -279,7 +280,7 @@ describe('FOP Dashboard interactions', () => {
     await flushPromises()
     expect(wrapper.find('[role=alert]').text()).toContain('员工账号尚未关联')
     expect(wrapper.text()).not.toContain('My customer')
-    expect(wrapper.findAll('.summary-card strong').map(node => node.text())).toEqual(['—', '—', '—', '—'])
+    expect(wrapper.findAll('.summary-card strong').map(node => node.text())).toEqual(['—', '—', '—', '—', '—'])
     expect(wrapper.findAll('.task-row')).toHaveLength(0)
     wrapper.unmount()
   })

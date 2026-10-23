@@ -171,7 +171,7 @@
 | 订单金额与支付 | amount、currency、paymentStatus、reviewStatus、paidAt、cancelled | paid/unpaid/refunded；pending/approved；paidAt 可空且带时区 | 订单 amount 仅用于订单明细，不代替实收；订单量需 paid＋approved |
 | 订单时间 | `createdAt`, `paidAt` | ISO8601时间戳；paidAt=null为未获取/未支付，不回退createdAt | 排序与支付日期统计独立于创建日期 |
 | SKU行 | `items[].productId/sku/name/imageUrl/variant/quantity` | quantity为数量，图片可空，产品ID可缺失 | 一订单多SKU；失效图片降级；图片地址应为获授权可访问资源 |
-| 履约状态 | `reviewStatus`, `procurementStatus`, `allocationStatus`, `dispatchStatus`, `shippingStatus` | 枚举见完整schema | 分别映射审核、采购、配货、发运、仓库出库状态；不能合并一个大状态字段 |
+| 履约状态 | `reviewStatus`、`fulfillmentProgress.shopifySync/supplierShipment/stockReadiness/allocationReview/outbound` | 枚举见完整 schema | 审核与五项独立进度驱动待办，见第9节；旧采购／发运字段保留兼容但不驱动五队列 |
 | 仓库 | `warehouseCode`, `warehouse` | 已审核履约／收款必须 HZ/SZ；未知拒收 | 订单分仓对比。若同单跨仓，需另行约定“订单归属仓”或“按仓发运单数”，不得直接双计订单 |
 | 服务商 | `carrierCode`, `carrier`, `trackingNumber` | 标准代码映射；名称/跟踪号可空 | 固定六类，已知其他明确映射 OTHER，未知／缺失不能掩盖；备货 carrierCode=null |
 | 异常 | `exception.reason/hours` | stock/address/tracking；hours为持续时长 | 异常清单和任务，是否可同单多异常需定义 |
@@ -430,6 +430,15 @@
 | D29 | 查询途中撤权、解绑、换号、纯系统管理员 | 迟到响应丢弃；界面旧金额清空；无数据、无权和上游错误不混成0；管理界面仍可维护独立权限 |
 
 
+### 五类履约待办追加交付（2026-10-23）
+
+| 编号 | 类型 | 待办／需提供信息 | 验收结果 |
+| --- | --- | --- | --- |
+| T31 | IT对接 | 实现订单级`fulfillmentProgress`真实适配器；读取平台同步、有效采购商品供应商发货、配货齐套/审核、审核出库事实；保留用户授权交集 | 五卡与工作台逐单对账，分页全量合计一致，无重复SKU/包裹计数，无跨部门泄露 |
+| H33 | 人工核对 | 提供多包裹、部分供应商发货、虚拟SKU、使用备货、已齐套未审核、配货撤审、部分出库/反审核、Shopify部分履约、历史缺配货单样本；确认来源字段枚举、有效数量、更新时间与关联键 | 逐例填写五队列应入/应出及证据；缺事实不得以0或pending兜底 |
+| D30 | 验收数据 | 一单同时待履约+待采购+待配货；一单齐套待审核；一单配货已审待出库；一单部分出库；一单完成；未付款、已取消、退款、未知状态反例 | 同队列订单ID只计一次，队列可交叠；角色不可越权，未知不推断；金额统计规则不变 |
+
+
 ## 8. 销售个人收款与净毛利（月／周／天）
 
 本节追加2026-10-23需求，保留前述所有模块和编号。交付目标是本工程销售工作台、BFF聚合／明细、独立授权、Mock和机器契约同步；其完成及测试结论以 `VERIFICATION.md` 为准。**这些产物不等于真实FOP已发布查询、具备历史利润账本或通过生产财务验收。** 后台源码本轮只读，真实适配保持未配置边界。
@@ -491,9 +500,32 @@ FOP快照的 `hzkj_gp_income_usd/rmb` 已经包含收款调整。适配器若另
 同订单同确认月发生业务员调整时，BFF在已授权业务范围内先做结算替代，再选择业务员，避免管理员选择旧业务员时仍看到已替代的预估。若最终冻结月结属于另一主体且当前用户没有该事实权限，平台不得越权读取其金额用于去重；FOP适配器必须在授权返回前撤销／过滤已替代预估，或提供不含他人金额的可信失效标识。该能力属于T22/T24上线前条件，纳入H25人工核对及D18/D22验收。
 
 
-## 9. OpenAPI 接口清单与请求/响应定义
+## 9. 五类履约待办队列（2026-10-23 修订）
 
-本规范覆盖 **23 个操作、111 个数据模型**。以下清单由同目录 OpenAPI JSON 生成。Base URL 为 `/api`，表中路径不重复此前缀。响应为实际裸 JSON，不额外包装成 `{code,data}`。时间序列数值数组必须与对应时间轴等长：counts 对应 registrations、amounts 对应 months、values 及 warehouses 内数组对应 periods；items/series/options 等集合不适用。该跨字段规则需联调测试，单纯 schema 校验不能证明。
+Dashboard 依次显示 **待审核 → 待履约 → 待采购 → 待配货 → 待出库**。原“待发运”改“待履约”，原“待发货”改“待出库”；新增采购卡片。点击卡片直接进入对应岗位工作台清单，订单号、Shopify 单号、客户、商品图片、SKU、数量、金额、支付状态、业务员等字段继续保留。状态列只展示当前队列相关事实，分页及金额／数量合计沿用全筛选结果。
+
+| 顺序／名称 | API 队列键／岗位 | 入选条件（共通：已付款、未取消、未退款） | 清单状态显示 |
+| --- | --- | --- | --- |
+| 1 待审核 | `review`／sales | `reviewStatus=pending` | 待审核 |
+| 2 待履约 | `dispatch`／dispatch | 已审核，`shopifySync=pending/partial` | 待同步 Shopify 发货／部分同步·待完成 |
+| 3 待采购 | `procurement`／procurement | 已审核，`supplierShipment=pending/partial` | 供应商未发货／供应商部分发货 |
+| 4 待配货 | `allocation`／allocation | 已审核，`stockReadiness=incomplete`，或 `ready` 且 `allocationReview=pending` | 库存未齐套／已齐套·待审核 |
+| 5 待出库 | `shipping`／warehouse | 已审核，`stockReadiness=ready`、`allocationReview=approved`、`outbound=pending/partial` | 配货已完成·待出库／部分出库·待完成 |
+
+- Shopify 同步、供应商发货、库存齐套、配货审核、仓库出库是独立事实，不能用单一顺序状态推导。采购下单不等于供应商已发货；已齐套不等于配货已审核；Shopify 已同步不等于仓库已出库。
+- **统计粒度为履约订单**。上游先汇总有效 SKU、来源分录及包裹，再提供订单级进度；同队列订单 ID 去重。不同队列允许重叠，五卡数量不得相加称作订单总量。
+- 部分同步／部分供应商发货／部分出库仍有剩余事项，计入相应待办。无需采购的备货库存及虚拟商品不能制造供应商待发货；无 Shopify 发货同步需求返回 `not_required`。状态语义与真实枚举由适配器归一化，不能按空字符串猜测。
+- 新增 `FopOrder.fulfillmentProgress` 必填对象：`shopifySync`、`supplierShipment`、`stockReadiness`、`allocationReview`、`outbound`。枚举含 `unknown`，只在有明确信息时入选相应队列；缺失／非法进度返回 `503 fop_unavailable`，不悄悄回退旧逻辑或 Mock。
+- 保留 `dispatch/shipping` URL 与 API 键及岗位授权，以兼容旧收藏；**这两个键的业务筛选口径已经更新**。既有 `procurementStatus/allocationStatus/dispatchStatus/shippingStatus` 保留兼容，前五队列不再使用这些旧粗粒度字段；异常队列旧口径保持。
+- `dashboard.queues` 新增必填 `procurement`；`tasks.kind/id` 扩展到五个队列，有权限且非空才输出，顺序与卡片相同。日期控件仍不影响待办队列。
+- 全局数据隔离继续生效：先取登录账号对应的 FOP 订单白名单与本人／部门／管理员交集，再按岗位过滤和统计；没有采购岗位权限不能查看采购清单。卡片、清单、分页合计必须来自同一口径。
+
+**当前落地**：前端、BFF、Mock、OpenAPI 已同步；真实 FOP 网络适配器仍未接通。本次不修改财务统计规则或 FOP 源代码。字段证据见源码映射第12节，后续联调见 T31/H33/D30。
+
+
+## 10. OpenAPI 接口清单与请求/响应定义
+
+本规范覆盖 **23 个操作、112 个数据模型**。以下清单由同目录 OpenAPI JSON 生成。Base URL 为 `/api`，表中路径不重复此前缀。响应为实际裸 JSON，不额外包装成 `{code,data}`。时间序列数值数组必须与对应时间轴等长：counts 对应 registrations、amounts 对应 months、values 及 warehouses 内数组对应 periods；items/series/options 等集合不适用。该跨字段规则需联调测试，单纯 schema 校验不能证明。
 
 | 方法 | 路径 | operationId | 用途 |
 | --- | --- | --- | --- |
@@ -522,17 +554,17 @@ FOP快照的 `hzkj_gp_income_usd/rmb` 已经包含收款调整。适配器若另
 | GET | `/autoflow/integrations/fop/chart-access` | `getChartAccess` | 读取当前账号有效图表能力 |
 
 
-### 9.1 公共鉴权与响应说明
+### 10.1 公共鉴权与响应说明
 
 
-字段级源码快照，仅记录已实现HTTP路由，不将计划FOP上游写为paths。响应裸JSON，无{code,data,message}包装。required=序列化必有；type:null=显式空值；可省略字段不在required中。参数跨字段依赖及已知口径差距见操作描述和配套审计。示例为脱敏契约样例，不是生产数据。 FOP为金蝶云苍穹上的HyperZone自研应用，源码只读核实；本工程方案2收款聚合和Mock已实现，真实生产网络适配器仍未配置。订单与收款各自授权，回款采用实际结算分录，统一UTC+8。 物流运费使用独立freight scope及allowedFreightIds，已实现Mock成本快照；必须保留原币与明确USD折算，按确认时间归期。最终结算、补收退款、调价及真实成本查询/授权仍待核对。 销售工作台增加个人收款与毛利：独立sales_profit授权、已审核净毛利差额优先、无日分配返回null；预估期间事件账本和严格asOf成本链仍是FOP对接前置条件。 全局P0：逐图许可和数据范围独立；普通员工本人，经理部门及下级，所有统计/排名/合计/搜索/趋势/明细先过滤再计算。组织整体汇总另行授权，只返聚合；客户当前分配不重写历史业绩。
+字段级源码快照，仅记录已实现HTTP路由，不将计划FOP上游写为paths。响应裸JSON，无{code,data,message}包装。required=序列化必有；type:null=显式空值；可省略字段不在required中。参数跨字段依赖及已知口径差距见操作描述和配套审计。示例为脱敏契约样例，不是生产数据。 FOP为金蝶云苍穹上的HyperZone自研应用，源码只读核实；本工程方案2收款聚合和Mock已实现，真实生产网络适配器仍未配置。订单与收款各自授权，回款采用实际结算分录，统一UTC+8。 物流运费使用独立freight scope及allowedFreightIds，已实现Mock成本快照；必须保留原币与明确USD折算，按确认时间归期。最终结算、补收退款、调价及真实成本查询/授权仍待核对。 销售工作台增加个人收款与毛利：独立sales_profit授权、已审核净毛利差额优先、无日分配返回null；预估期间事件账本和严格asOf成本链仍是FOP对接前置条件。 全局P0：逐图许可和数据范围独立；普通员工本人，经理部门及下级，所有统计/排名/合计/搜索/趋势/明细先过滤再计算。组织整体汇总另行授权，只返聚合；客户当前分配不重写历史业绩。 五类履约待办按独立Shopify／供应商／库存／配货审核／出库事实统计，旧队列键保持兼容，新增采购卡片与fulfillmentProgress必填模型。
 
 - `BearerAuth`：Authorization: Bearer <JWT>；角色每次查当前数据库。；type=http，in=Authorization，name=bearer。
 
 - `SessionCookie`：浏览器使用HttpOnly会话cookie；和Bearer是OR，提取器优先cookie，过期cookie可能覆盖有效Bearer导致401。；type=apiKey，in=cookie，name=autoflow_session。
 
 
-### 9.2 读取FOP绑定及访问状态
+### 10.2 读取FOP绑定及访问状态
 
 `GET /api/autoflow/integrations/fop/data-access` · operationId: `getFopDataAccess`
 
@@ -590,7 +622,7 @@ Accept: application/json
 实现证据：`backend/src/modules/users/workbench.controller.ts`, `backend/src/modules/fop-data/fop-data.service.ts`。
 
 
-### 9.3 读取订单量及客户USD金额图表
+### 10.3 读取订单量及客户USD金额图表
 
 `GET /api/autoflow/integrations/fop/order-volume` · operationId: `getOrderVolume`
 
@@ -800,7 +832,7 @@ Accept: application/json
 实现证据：`backend/src/modules/users/workbench.controller.ts`, `backend/src/modules/fop-data/fop-data.service.ts`, `backend/src/modules/fop-data/order-volume.dto.ts`, `backend/src/modules/fop-data/order-volume.ts`。
 
 
-### 9.4 图表series/period钻取订单
+### 10.4 图表series/period钻取订单
 
 `GET /api/autoflow/integrations/fop/order-volume/orders` · operationId: `getOrderVolumeDetails`
 
@@ -877,7 +909,7 @@ Accept: application/json
 实现证据：`backend/src/modules/users/workbench.controller.ts`, `backend/src/modules/fop-data/fop-data.service.ts`, `backend/src/modules/fop-data/order-volume.dto.ts`, `backend/src/modules/fop-data/order-volume.ts`, `backend/src/modules/fop-data/fop-order-totals.ts`。
 
 
-### 9.5 搜索授权客户
+### 10.5 搜索授权客户
 
 `GET /api/autoflow/integrations/fop/order-volume/customers` · operationId: `searchOrderCustomers`
 
@@ -954,12 +986,12 @@ Accept: application/json
 实现证据：`backend/src/modules/users/workbench.controller.ts`, `backend/src/modules/fop-data/fop-data.service.ts`, `backend/src/modules/fop-data/order-volume.dto.ts`, `backend/src/modules/fop-data/order-volume.ts`。
 
 
-### 9.6 读取履约队列订单
+### 10.6 读取履约队列订单
 
 `GET /api/autoflow/integrations/fop/fulfillment-orders` · operationId: `getFulfillmentOrders`
 
 
-queue角色：review/exceptions=sales，procurement=procurement，allocation=allocation，dispatch=dispatch，shipping=warehouse。均排除取消/退款；review=reviewStatus pending；procurement=approved+paid+procurement pending；allocation=approved+paid+allocation pending；dispatch=paid+allocated+dispatch pending；shipping=paid+dispatched+shipping pending；exceptions=paid+未shipped+exception非null。按createdAt倒序/id排序，totals全筛选集。
+queue角色：review/exceptions=sales，dispatch=dispatch，procurement=procurement，allocation=allocation，shipping=warehouse。待审核：paid且reviewStatus=pending。待履约：paid、approved，shopifySync=pending/partial。待采购：paid、approved，supplierShipment=pending/partial。待配货：paid、approved，stockReadiness=incomplete，或ready且allocationReview=pending。待出库：paid、approved，stockReadiness=ready且allocationReview=approved，outbound=pending/partial。 五类均排除取消、未支付、退款。队列可重叠，每队列按订单ID去重；partial表示尚有未完成事项。unknown不推断；进度缺失或非法返回503。exceptions继续使用paid+未shipped+exception非null。按createdAt倒序/id排序，totals覆盖完整筛选集。保留dispatch/shipping键兼容旧URL，已不再使用旧发运/发货筛选逻辑。
 
 
 实现状态：implemented
@@ -979,7 +1011,7 @@ Accept: application/json
 
 | 参数 | 位置 | 类型 | 必填 | 说明 | 约束/默认值 |
 | --- | --- | --- | --- | --- | --- |
-| `queue` | query | string | 是 | — | enum=["review", "exceptions", "procurement", "allocation", "dispatch", "shipping"] |
+| `queue` | query | string | 是 | 按卡片顺序 review待审核、dispatch待履约、procurement待采购、allocation待配货、shipping待出库；另有exceptions异常订单。 | enum=["review", "exceptions", "procurement", "allocation", "dispatch", "shipping"] |
 | `workbenchRole` | query | WorkbenchRole | 否 | 可选，提供时必须匹配queue所需角色，否则400。 | enum=["sales", "procurement", "allocation", "dispatch", "warehouse"] |
 | `search` | query | string | 否 | trim/忽略大小写，匹配orderNumber/shopifyOrderNumber/customerName/storeName/items.sku。 | maxLength=200 |
 | `orderNumber` | query | string | 否 | FOP业务订单号精确匹配，不trim。 | maxLength=100 |
@@ -1019,7 +1051,7 @@ Accept: application/json
 实现证据：`backend/src/modules/users/workbench.controller.ts`, `backend/src/modules/fop-data/fop-data.service.ts`, `backend/src/modules/users/dto/workbench.dto.ts`, `backend/src/modules/fop-data/fop-order-totals.ts`。
 
 
-### 9.7 读取FOP仪表盘
+### 10.7 读取FOP仪表盘
 
 `GET /api/autoflow/integrations/fop/dashboard` · operationId: `getFopDashboard`
 
@@ -1073,8 +1105,9 @@ Accept: application/json
   "updatedAt": "2026-10-22T08:00:00.000Z",
   "queues": {
     "review": 0,
-    "allocation": 0,
     "dispatch": 0,
+    "procurement": 0,
+    "allocation": 0,
     "shipping": 0
   },
   "rates": [],
@@ -1106,7 +1139,7 @@ Accept: application/json
 实现证据：`backend/src/modules/users/workbench.controller.ts`, `backend/src/modules/fop-data/fop-data.service.ts`, `backend/src/modules/fop-data/fop-data.dto.ts`, `backend/src/modules/fop-data/fop-registration.ts`, `backend/src/modules/fop-data/fop-receipts.ts`, `backend/src/modules/fop-data/fop-business-time.ts`。
 
 
-### 9.8 读取当前工作台入口权限
+### 10.8 读取当前工作台入口权限
 
 `GET /api/workbench/access` · operationId: `getWorkbenchAccess`
 
@@ -1156,7 +1189,7 @@ Accept: application/json
 实现证据：`backend/src/modules/users/workbench.controller.ts`, `backend/src/modules/users/workbench-access.service.ts`。
 
 
-### 9.9 校验指定入口权限
+### 10.9 校验指定入口权限
 
 `GET /api/workbench/{role}/access` · operationId: `getWorkbenchRoleAccess`
 
@@ -1210,7 +1243,7 @@ Accept: application/json
 实现证据：`backend/src/modules/users/workbench.controller.ts`, `backend/src/modules/users/workbench-access.service.ts`。
 
 
-### 9.10 管理员分页列出账户权限
+### 10.10 管理员分页列出账户权限
 
 `GET /api/users/workbench-accounts` · operationId: `listWorkbenchAccounts`
 
@@ -1263,7 +1296,7 @@ Accept: application/json
 实现证据：`backend/src/modules/users/users.controller.ts`, `backend/src/modules/users/users.service.ts`, `backend/src/modules/users/workbench-access.service.ts`。
 
 
-### 9.11 设置入口角色
+### 10.11 设置入口角色
 
 `PUT /api/users/{id}/workbench-roles` · operationId: `updateWorkbenchRoles`
 
@@ -1318,7 +1351,7 @@ Accept: application/json
 实现证据：`backend/src/modules/users/users.controller.ts`, `backend/src/modules/users/users.service.ts`, `backend/src/modules/users/workbench-access.service.ts`。
 
 
-### 9.12 绑定或解绑FOP身份
+### 10.12 绑定或解绑FOP身份
 
 `PUT /api/users/{id}/fop-binding` · operationId: `updateFopBinding`
 
@@ -1372,7 +1405,7 @@ Accept: application/json
 实现证据：`backend/src/modules/users/users.controller.ts`, `backend/src/modules/users/users.service.ts`, `backend/src/modules/users/workbench-access.service.ts`。
 
 
-### 9.13 设置业务范围
+### 10.13 设置业务范围
 
 `PUT /api/users/{id}/business-scope` · operationId: `updateBusinessScope`
 
@@ -1426,7 +1459,7 @@ Accept: application/json
 实现证据：`backend/src/modules/users/users.controller.ts`, `backend/src/modules/users/users.service.ts`, `backend/src/modules/users/workbench-access.service.ts`。
 
 
-### 9.14 设置系统管理角色
+### 10.14 设置系统管理角色
 
 `PUT /api/users/{id}/management-role` · operationId: `updateManagementRole`
 
@@ -1479,7 +1512,7 @@ Accept: application/json
 实现证据：`backend/src/modules/users/users.controller.ts`, `backend/src/modules/users/users.service.ts`, `backend/src/modules/users/workbench-access.service.ts`。
 
 
-### 9.15 读取本地组织/员工上下文
+### 10.15 读取本地组织/员工上下文
 
 `GET /api/organization` · operationId: `getOrganizationWorkspace`
 
@@ -1530,7 +1563,7 @@ Accept: application/json
 实现证据：`backend/src/modules/organization/organization.controller.ts`, `backend/src/modules/organization/organization.service.ts`, `backend/src/modules/organization/organization.types.ts`。
 
 
-### 9.16 读取本地AutoFlow业务概览
+### 10.16 读取本地AutoFlow业务概览
 
 `GET /api/autoflow/dashboard` · operationId: `getLocalAutoflowDashboard`
 
@@ -1636,7 +1669,7 @@ Accept: application/json
 实现证据：`backend/src/modules/autoflow/autoflow.controller.ts`, `backend/src/modules/autoflow/autoflow.service.ts`, `backend/src/modules/autoflow/autoflow.types.ts`, `backend/src/modules/users/business-data-access.ts`。
 
 
-### 9.17 客户同一数量排名集合下钻收款分录
+### 10.17 客户同一数量排名集合下钻收款分录
 
 `GET /api/autoflow/integrations/fop/order-volume/receipts` · operationId: `getOrderVolumeReceipts`
 
@@ -1718,7 +1751,7 @@ Accept: application/json
 实现证据：`backend/src/modules/users/workbench.controller.ts`, `backend/src/modules/fop-data/fop-data.service.ts`, `backend/src/modules/fop-data/order-volume.dto.ts`, `backend/src/modules/fop-data/order-volume.ts`, `backend/src/modules/fop-data/fop-receipts.ts`。
 
 
-### 9.18 读取获授权实收分录及完整筛选合计
+### 10.18 读取获授权实收分录及完整筛选合计
 
 `GET /api/autoflow/integrations/fop/receipts` · operationId: `getReceipts`
 
@@ -1793,7 +1826,7 @@ Accept: application/json
 实现证据：`backend/src/modules/users/workbench.controller.ts`, `backend/src/modules/fop-data/fop-data.service.ts`, `backend/src/modules/fop-data/fop-receipts.dto.ts`, `backend/src/modules/fop-data/fop-receipts.ts`, `backend/src/modules/fop-data/fop-business-time.ts`。
 
 
-### 9.19 物流实际运费聚合及完整上期环比
+### 10.19 物流实际运费聚合及完整上期环比
 
 `GET /api/autoflow/integrations/fop/freight` · operationId: `getFreight`
 
@@ -2026,7 +2059,7 @@ Accept: application/json
 实现证据：`backend/src/modules/users/workbench.controller.ts`, `backend/src/modules/fop-data/fop-data.service.ts`, `backend/src/modules/fop-data/fop-freight.dto.ts`, `backend/src/modules/fop-data/fop-freight.ts`, `backend/src/modules/fop-data/fop-freight.types.ts`。
 
 
-### 9.20 岗位工作台物流运费发运单明细
+### 10.20 岗位工作台物流运费发运单明细
 
 `GET /api/autoflow/integrations/fop/freight/details` · operationId: `getFreightDetails`
 
@@ -2169,7 +2202,7 @@ Accept: application/json
 实现证据：`backend/src/modules/users/workbench.controller.ts`, `backend/src/modules/fop-data/fop-data.service.ts`, `backend/src/modules/fop-data/fop-freight.dto.ts`, `backend/src/modules/fop-data/fop-freight.ts`, `backend/src/modules/fop-data/fop-freight.types.ts`。
 
 
-### 9.21 销售工作台个人收款与毛利统计
+### 10.21 销售工作台个人收款与毛利统计
 
 `GET /api/autoflow/integrations/fop/sales-performance` · operationId: `getSalesPerformance`
 
@@ -2289,7 +2322,7 @@ Accept: application/json
 实现证据：`backend/src/modules/fop-data/sales-performance.ts`, `backend/src/modules/fop-data/sales-performance.dto.ts`, `backend/src/modules/fop-data/fop-data.service.ts`, `backend/src/modules/users/workbench.controller.ts`。
 
 
-### 9.22 销售工作台个人收款与毛利明细
+### 10.22 销售工作台个人收款与毛利明细
 
 `GET /api/autoflow/integrations/fop/sales-performance/details` · operationId: `getSalesPerformanceDetails`
 
@@ -2423,7 +2456,7 @@ Accept: application/json
 实现证据：`backend/src/modules/fop-data/sales-performance.ts`, `backend/src/modules/fop-data/sales-performance.dto.ts`, `backend/src/modules/fop-data/fop-data.service.ts`, `backend/src/modules/users/workbench.controller.ts`。
 
 
-### 9.23 设置账号逐图授权
+### 10.23 设置账号逐图授权
 
 `PUT /api/users/{id}/chart-permissions` · operationId: `updateChartPermissions`
 
@@ -2485,7 +2518,7 @@ Accept: application/json
 实现证据：`backend/src/modules/users/users.controller.ts`, `backend/src/modules/users/users.service.ts`, `backend/src/modules/users/workbench-access.service.ts`。
 
 
-### 9.24 读取当前账号有效图表能力
+### 10.24 读取当前账号有效图表能力
 
 `GET /api/autoflow/integrations/fop/chart-access` · operationId: `getChartAccess`
 
@@ -2523,7 +2556,7 @@ Accept: application/json
 实现证据：`backend/src/modules/users/chart-permissions.ts`, `backend/src/modules/fop-data/fop-data.service.ts`, `backend/src/modules/users/workbench.controller.ts`。
 
 
-## 10. 字段级数据字典
+## 11. 字段级数据字典
 
 模型引用按名称交叉查阅。例如 `OrderVolumeData.series[] → VolumeSeries.amounts → VolumeAmounts`；每一层字段均在下表列出。必填是相对于当前父对象；父对象本身可选时不强制创建。可空只以类型中的 `null` 或 `anyOf/oneOf` null 分支为准。示例不是生产值。内部 FOP 提供器模型若标注为内部，则不能从浏览器直接传入。
 
@@ -2706,12 +2739,12 @@ publicOrder白名单输出，不含tenantId、departmentPathIds或任意provider
 | `owner` | NamedEntity | 否 | 订单归属业务员工ID与名称；owner.id用于员工权限和业务员分组。 | — |
 | `amount` | Money | 是 | 订单总金额，单位为currency主单位；当前不是独立实收金额。 | — |
 | `currency` | string | 是 | trim+uppercase，空值默认USD；不会换汇。 | — |
-| `paymentStatus` | string | 是 | paid已支付、unpaid未支付、refunded已退款；统计要求paid，review队列可含unpaid。 | enum=["paid", "unpaid", "refunded"] |
+| `paymentStatus` | string | 是 | paid已支付、unpaid未支付、refunded已退款；五类待办均只统计paid，待审核也排除unpaid。 | enum=["paid", "unpaid", "refunded"] |
 | `reviewStatus` | string | 是 | pending待审核，approved已审核。 | enum=["pending", "approved"] |
-| `procurementStatus` | string | 是 | pending待采购，purchased已采购，not_required无需采购。 | enum=["pending", "purchased", "not_required"] |
-| `allocationStatus` | string | 是 | pending待配货，allocated已配货，not_ready尚未进入配货环节。 | enum=["pending", "allocated", "not_ready"] |
-| `dispatchStatus` | string | 是 | pending待调度，dispatched已调度，not_ready尚未进入调度环节。 | enum=["pending", "dispatched", "not_ready"] |
-| `shippingStatus` | string | 是 | pending待发货，shipped已发货，not_ready尚未进入发货环节。 | enum=["pending", "shipped", "not_ready"] |
+| `procurementStatus` | string | 是 | pending待采购，purchased已采购，not_required无需采购。 兼容旧展示／异常逻辑；五类待办使用fulfillmentProgress独立事实，不得从旧字段推导。 | enum=["pending", "purchased", "not_required"] |
+| `allocationStatus` | string | 是 | pending待配货，allocated已配货，not_ready尚未进入配货环节。 兼容旧展示／异常逻辑；五类待办使用fulfillmentProgress独立事实，不得从旧字段推导。 | enum=["pending", "allocated", "not_ready"] |
+| `dispatchStatus` | string | 是 | pending待调度，dispatched已调度，not_ready尚未进入调度环节。 兼容旧展示／异常逻辑；五类待办使用fulfillmentProgress独立事实，不得从旧字段推导。 | enum=["pending", "dispatched", "not_ready"] |
+| `shippingStatus` | string | 是 | pending待发货，shipped已发货，not_ready尚未进入发货环节。 兼容旧展示／异常逻辑；五类待办使用fulfillmentProgress独立事实，不得从旧字段推导。 | enum=["pending", "shipped", "not_ready"] |
 | `warehouse` | string | 是 | 展示名，不用于归仓。 | — |
 | `carrier` | string anyOf null | 是 | 物流服务商展示名；无服务商为null，不用于统计归类。 | — |
 | `trackingNumber` | string anyOf null | 是 | 物流跟踪号；尚未生成时null。 | — |
@@ -2720,6 +2753,7 @@ publicOrder白名单输出，不含tenantId、departmentPathIds或任意provider
 | `paidAt` | string (date-time) anyOf null | 是 | 带明确时区的订单支付时刻，转换 UTC+8 归桶；缺失不回退 createdAt。 | — |
 | `cancelled` | boolean | 是 | true表示订单取消，从订单量/收款/履约队列排除。 | — |
 | `exception` | OrderException anyOf null | 是 | 订单异常详情；无异常明确为null。 | — |
+| `fulfillmentProgress` | FulfillmentProgress | 是 | 五类队列权威状态，缺失／非法字段时BFF返回503 fop_unavailable；旧状态字段仅保留兼容，不能驱动新队列。 | — |
 
 组合规则 `allOf`：`见 schema`。完整约束见 OpenAPI JSON。
 
@@ -2773,7 +2807,14 @@ publicOrder白名单输出，不含tenantId、departmentPathIds或任意provider
   "createdAt": "2026-10-21T01:00:00Z",
   "paidAt": "2026-10-21T01:15:00Z",
   "cancelled": false,
-  "exception": null
+  "exception": null,
+  "fulfillmentProgress": {
+    "shopifySync": "synced",
+    "supplierShipment": "shipped",
+    "stockReadiness": "ready",
+    "allocationReview": "approved",
+    "outbound": "completed"
+  }
 }
 ```
 
@@ -3072,15 +3113,16 @@ publicOrder白名单输出，不含tenantId、departmentPathIds或任意provider
 ### DashboardQueues
 
 
-
+按review/dispatch/procurement/allocation/shipping展示五张卡片。队列可重叠，不可相加作为唯一订单总量。
 
 
 | 字段路径 | 类型/引用 | 必填 | 说明 | 约束/示例 |
 | --- | --- | --- | --- | --- |
-| `review` | integer | 是 | 无对应角色为0；不受日期筛选。 | minimum=0 |
-| `allocation` | integer | 是 | 无对应角色为0；不受日期筛选。 | minimum=0 |
-| `dispatch` | integer | 是 | 无对应角色为0；不受日期筛选。 | minimum=0 |
-| `shipping` | integer | 是 | 无对应角色为0；不受日期筛选。 | minimum=0 |
+| `review` | integer | 是 | 待审核：paid且reviewStatus=pending。 排除取消，按订单ID去重；无对应岗位权限为0，不受日期筛选。 | minimum=0 |
+| `dispatch` | integer | 是 | 待履约：paid、approved，shopifySync=pending/partial。 排除取消，按订单ID去重；无对应岗位权限为0，不受日期筛选。 | minimum=0 |
+| `procurement` | integer | 是 | 待采购：paid、approved，supplierShipment=pending/partial。 排除取消，按订单ID去重；无对应岗位权限为0，不受日期筛选。 | minimum=0 |
+| `allocation` | integer | 是 | 待配货：paid、approved，stockReadiness=incomplete，或ready且allocationReview=pending。 排除取消，按订单ID去重；无对应岗位权限为0，不受日期筛选。 | minimum=0 |
+| `shipping` | integer | 是 | 待出库：paid、approved，stockReadiness=ready且allocationReview=approved，outbound=pending/partial。 排除取消，按订单ID去重；无对应岗位权限为0，不受日期筛选。 | minimum=0 |
 
 
 ### DashboardException
@@ -3105,8 +3147,8 @@ publicOrder白名单输出，不含tenantId、departmentPathIds或任意provider
 
 | 字段路径 | 类型/引用 | 必填 | 说明 | 约束/示例 |
 | --- | --- | --- | --- | --- |
-| `id` | string | 是 | 任务卡稳定键，与kind相同。 | enum=["review", "allocation", "shipping"] |
-| `kind` | string | 是 | review审核、allocation配货、shipping发货。 | enum=["review", "allocation", "shipping"] |
+| `id` | string | 是 | 任务卡稳定键，与kind相同。 | enum=["review", "dispatch", "procurement", "allocation", "shipping"] |
+| `kind` | string | 是 | review待审核、dispatch待履约、procurement待采购、allocation待配货、shipping待出库。 | enum=["review", "dispatch", "procurement", "allocation", "shipping"] |
 | `count` | integer | 是 | 对应队列当前待处理数，只输出大于0且有入口权限的队列。 | minimum=0 |
 | `time` | string | 是 | 最早待办创建时刻转换 UTC+8 后的 HH:mm；无可用时刻为空字符串。 | — |
 | `priority` | string | 是 | allocation为normal，其余high。 | enum=["high", "normal"] |
@@ -3173,11 +3215,11 @@ publicOrder白名单输出，不含tenantId、departmentPathIds或任意provider
 | `businessScope` | BusinessScope | 是 | 此次响应所使用的当前业务数据范围。 | — |
 | `source` | DataSource | 是 | provider来源标识，不是独立金融系统来源。 | — |
 | `updatedAt` | string (date-time) | 是 | 本次计算时刻，非上游刷新时间。 | — |
-| `queues` | DashboardQueues | 是 | 审核、配货、调度、发货当前队列数量；无入口权限时对应0。 | — |
+| `queues` | DashboardQueues | 是 | 待审核、待履约、待采购、待配货、待出库当前数量；先权限过滤再分类。 | — |
 | `rates` | ExchangeRate[] | 是 | 无rates scope空。 | — |
 | `registrations` | DailyRegistration[] | 是 | 明细台账补齐0；仅旧汇总时只业务admin可读且不补齐日期。 | — |
 | `registrationDepartments` | RegistrationDepartment[] | 是 | 后端始终输出；无台账/权限空。 | — |
-| `tasks` | DashboardTask[] | 是 | 审核/配货/发货中有权限且非空的任务卡；不含调度或采购。 | — |
+| `tasks` | DashboardTask[] | 是 | 五类队列中有岗位权限且非空的待办，顺序与卡片一致。 | — |
 | `exceptions` | DashboardException[] | 是 | 仅sales有权限。 | — |
 | `receipts` | DashboardReceipts | 是 | 独立授权的 USD 实收分录按 UTC+8 月度汇总，含履约／全款备货来源拆分及上年12月基线。 | — |
 | `chartAccess` | EffectiveChartAccess[] | 是 | 有效图表能力；拒绝项对应数据不返回敏感值。 | — |
@@ -3195,8 +3237,9 @@ publicOrder白名单输出，不含tenantId、departmentPathIds或任意provider
   "updatedAt": "2026-10-22T08:00:00Z",
   "queues": {
     "review": 2,
-    "allocation": 1,
     "dispatch": 0,
+    "procurement": 0,
+    "allocation": 1,
     "shipping": 3
   },
   "rates": [
@@ -5798,7 +5841,33 @@ provider内部归一候选事实（有效字段口径同FopReceipt）；不直�
 组合规则 `allOf`：`见 schema`。完整约束见 OpenAPI JSON。
 
 
-## 11. 前端功能诊断与复现证据
+### FulfillmentProgress
+
+
+五项独立履约事实，必填。真实适配器按订单汇总有效SKU／包裹，unknown不推断为待办。
+
+
+| 字段路径 | 类型/引用 | 必填 | 说明 | 约束/示例 |
+| --- | --- | --- | --- | --- |
+| `shopifySync` | string | 是 | Shopify 发货同步：待同步／部分同步／已同步／不适用／未知。由平台回执事实归一化，不从配货或出库推导。 | enum=["pending", "partial", "synced", "not_required", "unknown"] |
+| `supplierShipment` | string | 是 | 供应商发货：未发货／部分发货／全部发货或入库／无需采购／未知。采购已下单不等于已发货。 | enum=["pending", "partial", "shipped", "not_required", "unknown"] |
+| `stockReadiness` | string | 是 | 有效库存与配货需求是否齐套。已齐套不代表配货已审核。 | enum=["incomplete", "ready", "unknown"] |
+| `allocationReview` | string | 是 | 有效配货单是否全部审核放行；撤审重新进入待审核。无相关事实返回unknown，不得猜测。 | enum=["pending", "approved", "unknown"] |
+| `outbound` | string | 是 | 仓库实物出库进度，按有效来源商品需求及审核出库数量归一化，不能用Shopify履约状态替代。 | enum=["pending", "partial", "completed", "unknown"] |
+
+
+```json
+{
+  "shopifySync": "pending",
+  "supplierShipment": "pending",
+  "stockReadiness": "incomplete",
+  "allocationReview": "pending",
+  "outbound": "pending"
+}
+```
+
+
+## 12. 前端功能诊断与复现证据
 
 
 更新日期：2026-10-23（UTC+8），保留2026-10-22诊断。范围：`work-app/frontend` 全部 ECharts 实例、调用组件、直接相关 API 客户端、统计工具、路由、权限与测试。本文源码路径均相对于 `work-app/`。原诊断行号保留作历史定位；方案2及后续扩展应以当前函数／组件名定位，最终验证见 VERIFICATION.md。
@@ -6174,7 +6243,7 @@ describe('ECharts audit: assertions of current incorrect behavior', () => {
 本轮不改变业务金额口径和ECharts结构；仅按返回有效能力决定可见范围与动作。组件stub无法替代浏览器验收，实际结果见VERIFICATION。
 
 
-## 12. 后端契约诊断与生产接入差距
+## 13. 后端契约诊断与生产接入差距
 
 
 更新日期：2026-10-23（UTC+8），保留2026-10-22审计。依据当前工作区源码、DTO、序列化器、前端API类型与历史测试；方案2、运费及销售个人收款／净毛利契约同步。未连接或验证真实FOP生产服务。FOP为金蝶云苍穹上的HyperZone自研应用，后台 `/Library/VSCode/dtr5b` 只读核查。
@@ -6253,7 +6322,7 @@ describe('ECharts audit: assertions of current incorrect behavior', () => {
 | `detailWarehouse` | 与查询warehouse取交集；先构建完整排名/other，再缩窄明细期间与仓库 | `order-volume.ts:143`至`:150` |
 | `totals` | 分页前完整筛选范围；订单数、所有商品件数、原币种金额各自求和；USD排序优先 | `fop-order-totals.ts`、`fop-data.service.ts:167`及`:190` |
 | 客户搜索 | 授权已审核有效订单客户（可含未支付）并入有效获授权收款客户；编码精确优先，编码/ID排序 | `order-volume.ts` |
-| Dashboard队列 | 当前全部授权订单，日期控件不影响队列；review/异常为sales，采购/配货/调度/仓库分别对应角色 | `dto/workbench.dto.ts`、`fop-data.service.ts:15`及`:203` |
+| Dashboard队列 | 当前全部授权订单，日期控件不影响队列；review/异常为sales，dispatch待履约、procurement待采购、allocation待配货、shipping待出库分别对应原岗位角色；fulfillmentProgress独立状态驱动五队列（最新需求第9节） | `dto/workbench.dto.ts`、`fop-data.service.ts:15`及`:203` |
 | Dashboard注册 | 注册明细优先，按owner/部门业务范围过滤后合并、补0、校验重复键；缺台账时只有业务admin读取旧日汇总 | `fop-registration.ts`、`fop-data.service.ts:224` |
 | Dashboard金额 | 独立收款分录，UTC+8 支付月；履约＋全款备货；上年12月 previousAmount/previousBreakdown，basis=actual_received | `fop-receipts.ts`、`fop-business-time.ts` |
 | Dashboard任务/异常 | task.time 按 UTC+8 显示；异常 id 实际 orderNumber，不是 order.id | `fop-data.service.ts` |
@@ -6372,7 +6441,7 @@ FOP累计收入已经包含调整，`adjustmentIncome`单列时必须先从基�
 合同审计关注：未知图表默认拒绝；账号override唯一且不能扩大记录范围；PUT仅系统管理员；管理角色不授业务范围；明细chartId只能证明所请求的固定业务入口而不能任意选宽权限；经理个人默认绑定员工，缺失则不选择他人；客户当前归属与冻结历史分开。实际测试及代码检查结果统一记录VERIFICATION，本节不是测试通过证明。
 
 
-## 13. 本次验证记录与限制
+## 14. 本次验证记录与限制
 
 
 业务方案版本：2026-10-23（UTC+8）；最新追加逐图授权与员工数据隔离，以下保留各轮独立验证记录。环境：macOS、Node.js 22.23.3、npm 10.9.9、本地隔离 PostgreSQL 16。执行结果不等同于生产 FOP 验收。
@@ -6517,7 +6586,20 @@ MD/HTML从同一需求源及OpenAPI生成，包含FOP源码字段映射和后续
 上文468项代码测试、19组HTTP响应及浏览器记录是方案2实施时的已完成基线，本次纯文档补充未重新运行这些应用测试，也没有将待办清单中的生产联调事项标为完成。
 
 
-## 14. HyperZone FOP 源码字段映射
+### 五类履约待办修订验证（2026-10-23，UTC+8）
+
+- Dashboard 调整为待审核、待履约、待采购、待配货、待出库；明细与卡片使用独立履约事实，保留既有岗位和用户数据隔离。
+- 前端 Vitest：46文件、239测试通过；后端 Jest：55套、486测试通过；隔离数据库 E2E：4套、121测试通过。
+- 前后端 ESLint、Vue TypeScript/Vite、Nest构建通过。保留既有Vite大包提示，本次未新增依赖。
+- 回归覆盖已付款审核门槛、未审核反例、跨队列重叠、队列内重复订单去重、齐套待审核与已审核待出库分流、部分同步/供应商发货/出库、取消/退款/unknown排除、缺进度拒绝、旧状态不驱动新队列；HTTP权限回归包含撤权后队列归零。
+- 本地真实HTTP（Mock provider）验证五卡与清单 total/totals.orderCount 一致：review=13、dispatch=129、procurement=41、allocation=77、shipping=66。数量为当前演示数据，不是生产业务量。
+- OpenAPI 3.1校验及270个schema样例通过；生成MD/HTML，锚点与内嵌品牌Logo检查通过。
+- 本次不修改FOP源代码、不连接生产FOP。真实SKU/包裹归一化及状态枚举联调继续由T31/H33/D30跟踪。
+
+浏览器实测：1280px宽度五卡同排且顺序正确；点击待采购进入采购工作台，共41单、显示供应商发货状态和订单／Shopify／客户／SKU／金额字段；配货清单共77单。验收截图位于本地忽略目录 `.runtime/local-demo/fulfillment-five-queues.png`。
+
+
+## 15. HyperZone FOP 源码字段映射
 
 
 更新日期：2026-10-23（UTC+8），保留2026-10-22原核查。源码目录：`/Library/VSCode/dtr5b`，原核查HEAD：`bd4c115c`（核查当前工作树，不代表生产部署版本）。仅阅读业务 Java、苍穹元数据与转换规则；未连接生产、未读取配置密钥、未修改FOP后端。
@@ -6809,15 +6891,31 @@ FOP收入使用收款 `hzkj_exrate`；没有收款汇率时回退当前 `bd_exra
 需要真实输入：H29账号图表矩阵、H30汇总授权及只读接口、H31客户转交/历史访问、H32多账号验收样本。既有FOP姓名查询不能替代这些稳定身份、数据权限和移交规则。
 
 
-## 15. IT 交付导航与实施顺序
+### 12. 五类履约待办的独立状态映射
+
+源码根目录 `/Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/`，2026-10-23只读核查。以下是已确认的业务字段与映射建议，不代表已发布HTTP接口。
+
+| 前端标准字段 | 已核实实体／字段和源码 | 映射要求 |
+| --- | --- | --- |
+| `paymentStatus/reviewStatus` | `member/common/service/ShopifyPaidFulfillmentService.java:111`：本地订单状态及成功收款凭据判付；`ordercenter/allocation/AllocationConstants.java:90`：C为已审核、订单2/3/4/5为已支付后续状态 | 已付款才进入待审核；不可只使用Shopify financial_status。五队列的付款门槛不改变回款的双审核口径 |
+| `fulfillmentProgress.shopifySync` | `member/plugin/task/SyncShopifyOrdersTask.java:2066` 读取Shopify `fulfillment_status` 写入订单 `hzkj_fulfillment_status`；`hzkj_fulfillment_gid`独立同步。发运推单回写见 `logistics/plugin/op/DeliverBillCreateOrderOpPlugin.java:757` | 平台履约回执归一化pending/partial/synced；不能从调度、配货、仓库出库反推。已获取未履约与尚未取得平台事实要区分，后者unknown |
+| `fulfillmentProgress.supplierShipment` | `ordercenter/plugin/util/OrderPurchaseStatusUtil.java:32`：`hzkj_purchase_status`、分录`hzkj_entrypurc_status`；0未采购、1部分采购、2采购中、3已入库、4供应商已发货；`setHeadPurchaseStatus`处理组合父件、虚拟SKU及备货使用 | 先取有效物理商品明细：供应商仍有未发货数量才pending/partial；全部发货/入库则shipped；全部无需采购则not_required。**不能将表头1直接等同“部分供应商发货”**，因为混合已入库/采购中也可能是1 |
+| `fulfillmentProgress.stockReadiness` | `ordercenter/allocation/AllocationConstants.java:58`：pending/available/completed/error/voided；配货实体`hzkj_alloc_bill`及`hzkj_alloc_status` | 有效需求与实际可配库存决定incomplete/ready；completed代表已齐套。缺配货记录或error不能无证据推断齐套；需要需求／库存计算才能判incomplete，否则unknown |
+| `fulfillmentProgress.allocationReview` | `ordercenter/allocation/AllocationReleaseGateService.java:191`：同时要求`hzkj_alloc_status=completed`与`billstatus=C`，并校验有效分录；重复已审核齐套包裹会报错 | 订单有效包裹全部配货审核完成才approved；齐套未审pending；作废、撤审、重复配货须按有效记录处理，不从履约订单审核状态推导 |
+| `fulfillmentProgress.outbound` | `ordercenter/plugin/util/OrderOutboundStatusUtil.java:31`：`hzkj_orders`、`hzkj_orders_billentry.hzkj_outbound_qty/hzkj_outbound_status`、`hzkj_delivery_status`及出库时间；审核／反审核按来源分录回写 | 按审核出库数量相对有效应出数量归一化pending/partial/completed；不能用物流单号是否存在或Shopify同步状态代替；反审核须重新计算 |
+
+订单级多包裹、组合商品、虚拟SKU、使用备货、部分取消/退款、撤审/反审核和历史无配货单的样本需要IT回填H33。当前平台按归一化事实过滤，不在浏览器直接解析金蝶枚举。生产适配器必须保证每个订单进度来源一致、同队列去重，不能把部分齐套包裹冒充整单配货完成。
 
 
-更新日期：2026-10-23（UTC+8）。最新追加P0全局图表授权及员工数据隔离，完整需求第1.1–1.3节优先约束全部图表。本次在原有全量需求上追加销售个人收款／净毛利月、周、天统计；注册、部门／业务员回款、订单量、客户分析、物流运费、权限和全部历史待办保留。
+## 16. IT 交付导航与实施顺序
+
+
+更新日期：2026-10-23（UTC+8）。最新修订五类履约待办：待审核、待履约、待采购、待配货、待出库；完整需求第9节、源码映射第12节及T31/H33/D30为新增对接入口。最新追加P0全局图表授权及员工数据隔离，完整需求第1.1–1.3节优先约束全部图表。本次在原有全量需求上追加销售个人收款／净毛利月、周、天统计；注册、部门／业务员回款、订单量、客户分析、物流运费、权限和全部历史待办保留。
 
 ### 阅读顺序
 
 1. [完整需求HTML](HYPERZONE_ECHARTS_API_REQUIREMENTS.html) 或 [完整需求Markdown](HYPERZONE_ECHARTS_API_REQUIREMENTS.md)：业务、页面、字段、审计与验收的全量交付。源正文为 [REQUIREMENTS_OVERVIEW.md](REQUIREMENTS_OVERVIEW.md)，个人收款／净毛利在第8节。
-2. [OpenAPI](../openapi/hyperzone-analytics.openapi.json)：23项平台HTTP操作、111个模型，servers为`/api`；不是FOP原生接口目录。最新增加 `/autoflow/integrations/fop/chart-access` 与 `/users/{id}/chart-permissions`，包含内部FOP授权、客户当前归属和独立组织汇总字段契约。
+2. [OpenAPI](../openapi/hyperzone-analytics.openapi.json)：23项平台HTTP操作、112个模型，servers为`/api`；不是FOP原生接口目录。最新增加 `/autoflow/integrations/fop/chart-access` 与 `/users/{id}/chart-permissions`，包含内部FOP授权、客户当前归属和独立组织汇总字段契约。
 3. [FOP源码映射](HYPERZONE_FOP_SOURCE_MAPPING.md)：实体／字段／Java行号证据。第9节是物流成本，第10节是月结毛利、预计贡献和当前数据缺口。
 4. [后续待办与人工核对](FOLLOW_UP_CHECKLIST.md)：完整T01–T30、H01–H32、D01–D29；最新权限任务为T27–T30/H29–H32/D23–D29，按模板分配、回填和关闭。
 5. [验证记录](VERIFICATION.md)：仅此处记录实际执行的测试、HTTP、浏览器、生成物检查与限制；文档或Mock存在不能替代验证。详细消费检查见 [前端审计](ECHARTS_FRONTEND_AUDIT.md) 和 [后台契约审计](ECHARTS_BACKEND_CONTRACT_AUDIT.md)。
@@ -6877,7 +6975,7 @@ FOP收入使用收款 `hzkj_exrate`；没有收款汇率时回退当前 `bd_exra
 部署前先备份账户库，再应用 `1784733000000-AddChartPermissions`；默认空数组继承模板。非空逐图配置存在时，迁移拒绝回滚，避免静默丢失限制。配置入口：系统管理员侧栏“账号与权限”→“配置图表权限”；不需要给普通员工系统管理权限。部署后按D23–D29验证直接接口访问、跨账号缓存、客户移交及经理本人默认。
 
 
-## 16. 规范来源与文档再生成
+## 17. 规范来源与文档再生成
 
 OpenAPI 结构参考 [OpenAPI Specification 3.1.1](https://spec.openapis.org/oas/v3.1.1.html)。产品事实来自本仓库源码和本次诊断，不来自通用规范。HTML 使用项目共享 HyperZone 样式、内嵌 CSS 和透明 SVG Logo，可离线打开及打印。
 

@@ -171,7 +171,7 @@
 | 订单金额与支付 | amount、currency、paymentStatus、reviewStatus、paidAt、cancelled | paid/unpaid/refunded；pending/approved；paidAt 可空且带时区 | 订单 amount 仅用于订单明细，不代替实收；订单量需 paid＋approved |
 | 订单时间 | `createdAt`, `paidAt` | ISO8601时间戳；paidAt=null为未获取/未支付，不回退createdAt | 排序与支付日期统计独立于创建日期 |
 | SKU行 | `items[].productId/sku/name/imageUrl/variant/quantity` | quantity为数量，图片可空，产品ID可缺失 | 一订单多SKU；失效图片降级；图片地址应为获授权可访问资源 |
-| 履约状态 | `reviewStatus`, `procurementStatus`, `allocationStatus`, `dispatchStatus`, `shippingStatus` | 枚举见完整schema | 分别映射审核、采购、配货、发运、仓库出库状态；不能合并一个大状态字段 |
+| 履约状态 | `reviewStatus`、`fulfillmentProgress.shopifySync/supplierShipment/stockReadiness/allocationReview/outbound` | 枚举见完整 schema | 审核与五项独立进度驱动待办，见第9节；旧采购／发运字段保留兼容但不驱动五队列 |
 | 仓库 | `warehouseCode`, `warehouse` | 已审核履约／收款必须 HZ/SZ；未知拒收 | 订单分仓对比。若同单跨仓，需另行约定“订单归属仓”或“按仓发运单数”，不得直接双计订单 |
 | 服务商 | `carrierCode`, `carrier`, `trackingNumber` | 标准代码映射；名称/跟踪号可空 | 固定六类，已知其他明确映射 OTHER，未知／缺失不能掩盖；备货 carrierCode=null |
 | 异常 | `exception.reason/hours` | stock/address/tracking；hours为持续时长 | 异常清单和任务，是否可同单多异常需定义 |
@@ -278,3 +278,26 @@ FOP快照的 `hzkj_gp_income_usd/rmb` 已经包含收款调整。适配器若另
 ### 8.6 冻结归属变更与预估撤销
 
 同订单同确认月发生业务员调整时，BFF在已授权业务范围内先做结算替代，再选择业务员，避免管理员选择旧业务员时仍看到已替代的预估。若最终冻结月结属于另一主体且当前用户没有该事实权限，平台不得越权读取其金额用于去重；FOP适配器必须在授权返回前撤销／过滤已替代预估，或提供不含他人金额的可信失效标识。该能力属于T22/T24上线前条件，纳入H25人工核对及D18/D22验收。
+
+
+## 9. 五类履约待办队列（2026-10-23 修订）
+
+Dashboard 依次显示 **待审核 → 待履约 → 待采购 → 待配货 → 待出库**。原“待发运”改“待履约”，原“待发货”改“待出库”；新增采购卡片。点击卡片直接进入对应岗位工作台清单，订单号、Shopify 单号、客户、商品图片、SKU、数量、金额、支付状态、业务员等字段继续保留。状态列只展示当前队列相关事实，分页及金额／数量合计沿用全筛选结果。
+
+| 顺序／名称 | API 队列键／岗位 | 入选条件（共通：已付款、未取消、未退款） | 清单状态显示 |
+| --- | --- | --- | --- |
+| 1 待审核 | `review`／sales | `reviewStatus=pending` | 待审核 |
+| 2 待履约 | `dispatch`／dispatch | 已审核，`shopifySync=pending/partial` | 待同步 Shopify 发货／部分同步·待完成 |
+| 3 待采购 | `procurement`／procurement | 已审核，`supplierShipment=pending/partial` | 供应商未发货／供应商部分发货 |
+| 4 待配货 | `allocation`／allocation | 已审核，`stockReadiness=incomplete`，或 `ready` 且 `allocationReview=pending` | 库存未齐套／已齐套·待审核 |
+| 5 待出库 | `shipping`／warehouse | 已审核，`stockReadiness=ready`、`allocationReview=approved`、`outbound=pending/partial` | 配货已完成·待出库／部分出库·待完成 |
+
+- Shopify 同步、供应商发货、库存齐套、配货审核、仓库出库是独立事实，不能用单一顺序状态推导。采购下单不等于供应商已发货；已齐套不等于配货已审核；Shopify 已同步不等于仓库已出库。
+- **统计粒度为履约订单**。上游先汇总有效 SKU、来源分录及包裹，再提供订单级进度；同队列订单 ID 去重。不同队列允许重叠，五卡数量不得相加称作订单总量。
+- 部分同步／部分供应商发货／部分出库仍有剩余事项，计入相应待办。无需采购的备货库存及虚拟商品不能制造供应商待发货；无 Shopify 发货同步需求返回 `not_required`。状态语义与真实枚举由适配器归一化，不能按空字符串猜测。
+- 新增 `FopOrder.fulfillmentProgress` 必填对象：`shopifySync`、`supplierShipment`、`stockReadiness`、`allocationReview`、`outbound`。枚举含 `unknown`，只在有明确信息时入选相应队列；缺失／非法进度返回 `503 fop_unavailable`，不悄悄回退旧逻辑或 Mock。
+- 保留 `dispatch/shipping` URL 与 API 键及岗位授权，以兼容旧收藏；**这两个键的业务筛选口径已经更新**。既有 `procurementStatus/allocationStatus/dispatchStatus/shippingStatus` 保留兼容，前五队列不再使用这些旧粗粒度字段；异常队列旧口径保持。
+- `dashboard.queues` 新增必填 `procurement`；`tasks.kind/id` 扩展到五个队列，有权限且非空才输出，顺序与卡片相同。日期控件仍不影响待办队列。
+- 全局数据隔离继续生效：先取登录账号对应的 FOP 订单白名单与本人／部门／管理员交集，再按岗位过滤和统计；没有采购岗位权限不能查看采购清单。卡片、清单、分页合计必须来自同一口径。
+
+**当前落地**：前端、BFF、Mock、OpenAPI 已同步；真实 FOP 网络适配器仍未接通。本次不修改财务统计规则或 FOP 源代码。字段证据见源码映射第12节，后续联调见 T31/H33/D30。

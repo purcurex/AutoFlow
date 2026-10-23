@@ -28,14 +28,16 @@ type Scope = { binding: FopIdentity | null; roles: WorkbenchRole[]; business: Bu
 type ChartContext = { initial: Scope; permission: FopPermissionGrant; access: EffectiveChartAccess; chartId: ChartId }
 
 function matchesQueue(order: FopOrder, queue: Queue): boolean {
-  if (order.cancelled || order.paymentStatus === 'refunded') return false
+  if (order.cancelled || order.paymentStatus !== 'paid') return false
+  if (queue === 'review') return order.reviewStatus === 'pending'
+  if (queue === 'exceptions') return order.shippingStatus !== 'shipped' && order.exception !== null
+  if (order.reviewStatus !== 'approved' || !order.fulfillmentProgress) return false
+  const progress = order.fulfillmentProgress
   switch (queue) {
-    case 'review': return order.reviewStatus === 'pending'
-    case 'procurement': return order.reviewStatus === 'approved' && order.paymentStatus === 'paid' && order.procurementStatus === 'pending'
-    case 'allocation': return order.reviewStatus === 'approved' && order.paymentStatus === 'paid' && order.allocationStatus === 'pending'
-    case 'dispatch': return order.paymentStatus === 'paid' && order.allocationStatus === 'allocated' && order.dispatchStatus === 'pending'
-    case 'shipping': return order.paymentStatus === 'paid' && order.dispatchStatus === 'dispatched' && order.shippingStatus === 'pending'
-    case 'exceptions': return order.paymentStatus === 'paid' && order.shippingStatus !== 'shipped' && order.exception !== null
+    case 'dispatch': return progress.shopifySync === 'pending' || progress.shopifySync === 'partial'
+    case 'procurement': return progress.supplierShipment === 'pending' || progress.supplierShipment === 'partial'
+    case 'allocation': return progress.stockReadiness === 'incomplete' || progress.stockReadiness === 'ready' && progress.allocationReview === 'pending'
+    case 'shipping': return progress.stockReadiness === 'ready' && progress.allocationReview === 'approved' && (progress.outbound === 'pending' || progress.outbound === 'partial')
   }
 }
 
@@ -48,8 +50,20 @@ function publicOrder(order: FopOrderCandidate): FopOrder {
   if (order.reviewStatus === 'approved' && (!['HZ', 'SZ'].includes(order.warehouseCode ?? '') || !['YT', '4PX', 'WB', 'YW', 'JS', 'OTHER'].includes(order.carrierCode ?? ''))) {
     throw new Error('Approved fulfillment requires mapped warehouse and logistics channel')
   }
+  const progress = order.fulfillmentProgress
+  const values = {
+    shopifySync: ['pending', 'partial', 'synced', 'not_required', 'unknown'],
+    supplierShipment: ['pending', 'partial', 'shipped', 'not_required', 'unknown'],
+    stockReadiness: ['incomplete', 'ready', 'unknown'],
+    allocationReview: ['pending', 'approved', 'unknown'],
+    outbound: ['pending', 'partial', 'completed', 'unknown'],
+  }
+  if (!progress || Object.entries(values).some(([key, allowed]) => !allowed.includes(progress[key as keyof typeof progress]))) {
+    throw new Error('Missing or invalid fulfillment progress')
+  }
   return {
     ...(order.salesDepartmentCode ? { salesDepartmentCode: order.salesDepartmentCode } : {}),
+    fulfillmentProgress: { shopifySync: progress.shopifySync, supplierShipment: progress.supplierShipment, stockReadiness: progress.stockReadiness, allocationReview: progress.allocationReview, outbound: progress.outbound },
     id: order.id, orderNumber: order.orderNumber, shopifyOrderNumber: order.shopifyOrderNumber,
     customerId: order.customerId, customerCode: order.customerCode, warehouseCode: order.warehouseCode, carrierCode: order.carrierCode,
     customerName: order.customerName, storeName: order.storeName,
@@ -525,8 +539,8 @@ export class FopDataService {
     const orders = scoped.orders
     const allowed = (queue: Queue) => scoped.roles.includes(FULFILLMENT_QUEUE_ROLES[queue])
     const count = (queue: Queue) => allowed(queue) ? orders.filter((order) => matchesQueue(order, queue)).length : 0
-    const queues = { review: count('review'), allocation: count('allocation'), dispatch: count('dispatch'), shipping: count('shipping') }
-    const tasks = (['review', 'allocation', 'shipping'] as const).filter((queue) => allowed(queue) && queues[queue] > 0)
+    const queues = { review: count('review'), dispatch: count('dispatch'), procurement: count('procurement'), allocation: count('allocation'), shipping: count('shipping') }
+    const tasks = (['review', 'dispatch', 'procurement', 'allocation', 'shipping'] as const).filter((queue) => allowed(queue) && queues[queue] > 0)
       .map((queue) => {
         const oldest = orders.filter(order => matchesQueue(order, queue)).map(order => Date.parse(order.createdAt)).filter(Number.isFinite).sort((a, b) => a - b)[0]
         const time = oldest === undefined ? '' : new Date(oldest + 8 * 3_600_000).toISOString().slice(11, 16)

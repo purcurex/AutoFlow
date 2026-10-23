@@ -287,3 +287,19 @@ FOP收入使用收款 `hzkj_exrate`；没有收款汇率时回退当前 `bd_exra
 本地逐图策略只是功能入口与范围上限，真实数据继续与绑定FOP用户的资源许可取交集。完整组织汇总新增独立provider契约，必须由FOP提供纯部门聚合和独立汇总部门授权；本轮未发现足够证据确认一个现有通用HTTP接口已经满足此能力。没有独立汇总实现时保持未配置，不读取域外成员或把登录用户临时提升为管理员。
 
 需要真实输入：H29账号图表矩阵、H30汇总授权及只读接口、H31客户转交/历史访问、H32多账号验收样本。既有FOP姓名查询不能替代这些稳定身份、数据权限和移交规则。
+
+
+## 12. 五类履约待办的独立状态映射
+
+源码根目录 `/Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/`，2026-10-23只读核查。以下是已确认的业务字段与映射建议，不代表已发布HTTP接口。
+
+| 前端标准字段 | 已核实实体／字段和源码 | 映射要求 |
+| --- | --- | --- |
+| `paymentStatus/reviewStatus` | `member/common/service/ShopifyPaidFulfillmentService.java:111`：本地订单状态及成功收款凭据判付；`ordercenter/allocation/AllocationConstants.java:90`：C为已审核、订单2/3/4/5为已支付后续状态 | 已付款才进入待审核；不可只使用Shopify financial_status。五队列的付款门槛不改变回款的双审核口径 |
+| `fulfillmentProgress.shopifySync` | `member/plugin/task/SyncShopifyOrdersTask.java:2066` 读取Shopify `fulfillment_status` 写入订单 `hzkj_fulfillment_status`；`hzkj_fulfillment_gid`独立同步。发运推单回写见 `logistics/plugin/op/DeliverBillCreateOrderOpPlugin.java:757` | 平台履约回执归一化pending/partial/synced；不能从调度、配货、仓库出库反推。已获取未履约与尚未取得平台事实要区分，后者unknown |
+| `fulfillmentProgress.supplierShipment` | `ordercenter/plugin/util/OrderPurchaseStatusUtil.java:32`：`hzkj_purchase_status`、分录`hzkj_entrypurc_status`；0未采购、1部分采购、2采购中、3已入库、4供应商已发货；`setHeadPurchaseStatus`处理组合父件、虚拟SKU及备货使用 | 先取有效物理商品明细：供应商仍有未发货数量才pending/partial；全部发货/入库则shipped；全部无需采购则not_required。**不能将表头1直接等同“部分供应商发货”**，因为混合已入库/采购中也可能是1 |
+| `fulfillmentProgress.stockReadiness` | `ordercenter/allocation/AllocationConstants.java:58`：pending/available/completed/error/voided；配货实体`hzkj_alloc_bill`及`hzkj_alloc_status` | 有效需求与实际可配库存决定incomplete/ready；completed代表已齐套。缺配货记录或error不能无证据推断齐套；需要需求／库存计算才能判incomplete，否则unknown |
+| `fulfillmentProgress.allocationReview` | `ordercenter/allocation/AllocationReleaseGateService.java:191`：同时要求`hzkj_alloc_status=completed`与`billstatus=C`，并校验有效分录；重复已审核齐套包裹会报错 | 订单有效包裹全部配货审核完成才approved；齐套未审pending；作废、撤审、重复配货须按有效记录处理，不从履约订单审核状态推导 |
+| `fulfillmentProgress.outbound` | `ordercenter/plugin/util/OrderOutboundStatusUtil.java:31`：`hzkj_orders`、`hzkj_orders_billentry.hzkj_outbound_qty/hzkj_outbound_status`、`hzkj_delivery_status`及出库时间；审核／反审核按来源分录回写 | 按审核出库数量相对有效应出数量归一化pending/partial/completed；不能用物流单号是否存在或Shopify同步状态代替；反审核须重新计算 |
+
+订单级多包裹、组合商品、虚拟SKU、使用备货、部分取消/退款、撤审/反审核和历史无配货单的样本需要IT回填H33。当前平台按归一化事实过滤，不在浏览器直接解析金蝶枚举。生产适配器必须保证每个订单进度来源一致、同队列去重，不能把部分齐套包裹冒充整单配货完成。

@@ -8,7 +8,17 @@ export interface FopOrderItem {
   variant: string
   quantity: number
 }
+/** Independent, normalized FOP facts; unknown must never be inferred as pending. */
+export interface FulfillmentProgress {
+  shopifySync: 'pending' | 'partial' | 'synced' | 'not_required' | 'unknown'
+  supplierShipment: 'pending' | 'partial' | 'shipped' | 'not_required' | 'unknown'
+  stockReadiness: 'incomplete' | 'ready' | 'unknown'
+  allocationReview: 'pending' | 'approved' | 'unknown'
+  outbound: 'pending' | 'partial' | 'completed' | 'unknown'
+}
+
 export interface FopOrder {
+  fulfillmentProgress: FulfillmentProgress
   departmentPathIds?: string[]
   salesDepartmentCode?: 'sales1' | 'sales2' | 'sales3' | 'sales4'
   organization?: { id: string; name: string }
@@ -75,14 +85,16 @@ function validateQuery(query: FopOrderQuery) {
 }
 
 export function matchesFopQueue(order: FopOrder, queue: FopOrderQueue): boolean {
-  if (order.cancelled || order.paymentStatus === 'refunded') return false
+  if (order.cancelled || order.paymentStatus !== 'paid') return false
+  if (queue === 'review') return order.reviewStatus === 'pending'
+  if (queue === 'exceptions') return order.shippingStatus !== 'shipped' && order.exception !== null
+  if (order.reviewStatus !== 'approved' || !order.fulfillmentProgress) return false
+  const progress = order.fulfillmentProgress
   switch (queue) {
-    case 'review': return order.reviewStatus === 'pending'
-    case 'procurement': return order.reviewStatus === 'approved' && order.paymentStatus === 'paid' && order.procurementStatus === 'pending'
-    case 'allocation': return order.reviewStatus === 'approved' && order.paymentStatus === 'paid' && order.allocationStatus === 'pending'
-    case 'dispatch': return order.paymentStatus === 'paid' && order.allocationStatus === 'allocated' && order.dispatchStatus === 'pending'
-    case 'shipping': return order.paymentStatus === 'paid' && order.dispatchStatus === 'dispatched' && order.shippingStatus === 'pending'
-    case 'exceptions': return order.paymentStatus === 'paid' && order.shippingStatus !== 'shipped' && order.exception !== null
+    case 'dispatch': return progress.shopifySync === 'pending' || progress.shopifySync === 'partial'
+    case 'procurement': return progress.supplierShipment === 'pending' || progress.supplierShipment === 'partial'
+    case 'allocation': return progress.stockReadiness === 'incomplete' || progress.stockReadiness === 'ready' && progress.allocationReview === 'pending'
+    case 'shipping': return progress.stockReadiness === 'ready' && progress.allocationReview === 'approved' && (progress.outbound === 'pending' || progress.outbound === 'partial')
   }
 }
 

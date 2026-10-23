@@ -30,8 +30,8 @@ const descriptions = computed(() => ({
   sales: text('统筹客户开发、订单审核与异常跟进，衔接业务成交与履约。', 'Coordinate prospecting, order review and exception follow-up from customer work to fulfillment.'),
   procurement: text('查看采购需求与订单明细，跟进商品采购和供应进度。', 'Review procurement needs and order details, and follow up on purchasing and supply progress.'),
   allocation: text('核对待配货订单与商品需求，协调库存分配和后续发运。', 'Check order and product requirements, and coordinate stock allocation before shipment.'),
-  dispatch: text('汇集待发运订单，核对物流信息并跟进发运安排。', 'Review orders ready for shipment, check logistics details and coordinate shipping arrangements.'),
-  warehouse: text('查看仓库待发货清单，核对商品、仓库与物流信息。', 'Review warehouse dispatch queues and check product, warehouse and tracking details.'),
+  dispatch: text('跟进已审核履约订单，同步 Shopify 发货信息。', 'Follow up approved fulfillment orders and synchronize Shopify fulfillment.'),
+  warehouse: text('查看仓库待出库清单，核对商品、仓库与物流信息。', 'Review warehouse dispatch queues and check product, warehouse and tracking details.'),
 }))
 function roleLink(value: WorkbenchRole) { return { name: 'RoleWorkbench', params: { role: value } } }
 function queueLink(value: string) { return { name: 'RoleWorkbench', params: { role: role.value }, query: { queue: value } } }

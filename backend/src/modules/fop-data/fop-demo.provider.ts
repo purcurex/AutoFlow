@@ -227,6 +227,13 @@ export class DemoFopDataProvider extends FopDataProvider {
         ...(salesDepartmentCode ? { salesDepartmentCode } : {}),
         currentCustomerOwner: { id: owner.id, departmentId: owner.departmentId, departmentPathIds: departmentPath(workspace, owner.departmentId) }, departmentPathIds: departmentPath(workspace, owner.departmentId), organization: { id: organization.id, name: organization.name }, department: { id: department.id, name: department.name }, owner: { id: owner.id, name: owner.name },
         amount: cents / 100, currency: 'USD', paymentStatus: paid ? 'paid' : 'unpaid', reviewStatus: completed || stage !== 0 ? 'approved' : 'pending',
+        fulfillmentProgress: {
+          shopifySync: completed ? 'synced' : stage === 0 ? 'unknown' : stage === 4 && index % 3 === 0 ? 'synced' : index % 5 === 0 ? 'partial' : 'pending',
+          supplierShipment: completed || stage >= 2 && stage <= 4 ? 'shipped' : stage === 0 ? 'unknown' : index % 3 === 0 ? 'partial' : 'pending',
+          stockReadiness: completed || allocated || stage === 2 && index % 2 === 0 ? 'ready' : stage === 0 ? 'unknown' : 'incomplete',
+          allocationReview: completed || allocated ? 'approved' : 'pending',
+          outbound: completed ? 'completed' : stage === 4 && index % 4 === 0 ? 'partial' : 'pending',
+        },
         procurementStatus: completed || stage >= 2 ? 'purchased' : 'pending', allocationStatus: allocated ? 'allocated' : stage === 2 ? 'pending' : 'not_ready',
         dispatchStatus: shipping ? 'dispatched' : stage === 3 ? 'pending' : 'not_ready', shippingStatus: completed ? 'shipped' : stage === 4 ? 'pending' : 'not_ready',
         warehouseCode: (index + Math.floor(index / 12)) % 3 === 0 ? 'SZ' : 'HZ', warehouse: (index + Math.floor(index / 12)) % 3 === 0 ? '深圳仓' : '杭州仓', carrierCode: carrier.id, carrier: carrier.label,

@@ -7,12 +7,12 @@ export interface FopDashboardData {
   departmentReceipts: FopDashboardData['receipts']
   source: 'mock' | 'fop'
   updatedAt: string
-  queues: { review: number; allocation: number; dispatch: number; shipping: number }
+  queues: { procurement: number; review: number; allocation: number; dispatch: number; shipping: number }
   rates: { currency: string; cnyPerUnit: number }[]
   registrations: { date: string; count: number }[]
   registrationDepartments?: { id: string; name: string; counts: number[]; salespeople: { id: string; name: string; counts: number[] }[] }[]
   exceptions: { id: string; customer: string; reason: 'stock' | 'address' | 'tracking'; hours: number }[]
-  tasks: { id: string; kind: 'review' | 'allocation' | 'shipping'; count: number; time: string; priority: 'high' | 'normal' }[]
+  tasks: { id: string; kind: 'review' | 'dispatch' | 'procurement' | 'allocation' | 'shipping'; count: number; time: string; priority: 'high' | 'normal' }[]
   receipts: { timeZone?: 'UTC+8'; basis?: 'actual_received'; currency: 'USD'; months: string[]; previousMonth?: string; marketingCenter?: ReceiptSeries | null; departments: (ReceiptSeries & { salespeople: (ReceiptSeries & { name: string })[] })[] }
 }
 

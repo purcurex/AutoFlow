@@ -4,7 +4,7 @@
   "info": {
     "title": "HyperZone AutoFlow Analytics 当前实现契约",
     "version": "2026-10-23",
-    "description": "字段级源码快照，仅记录已实现HTTP路由，不将计划FOP上游写为paths。响应裸JSON，无{code,data,message}包装。required=序列化必有；type:null=显式空值；可省略字段不在required中。参数跨字段依赖及已知口径差距见操作描述和配套审计。示例为脱敏契约样例，不是生产数据。 FOP为金蝶云苍穹上的HyperZone自研应用，源码只读核实；本工程方案2收款聚合和Mock已实现，真实生产网络适配器仍未配置。订单与收款各自授权，回款采用实际结算分录，统一UTC+8。 物流运费使用独立freight scope及allowedFreightIds，已实现Mock成本快照；必须保留原币与明确USD折算，按确认时间归期。最终结算、补收退款、调价及真实成本查询/授权仍待核对。 销售工作台增加个人收款与毛利：独立sales_profit授权、已审核净毛利差额优先、无日分配返回null；预估期间事件账本和严格asOf成本链仍是FOP对接前置条件。 全局P0：逐图许可和数据范围独立；普通员工本人，经理部门及下级，所有统计/排名/合计/搜索/趋势/明细先过滤再计算。组织整体汇总另行授权，只返聚合；客户当前分配不重写历史业绩。"
+    "description": "字段级源码快照，仅记录已实现HTTP路由，不将计划FOP上游写为paths。响应裸JSON，无{code,data,message}包装。required=序列化必有；type:null=显式空值；可省略字段不在required中。参数跨字段依赖及已知口径差距见操作描述和配套审计。示例为脱敏契约样例，不是生产数据。 FOP为金蝶云苍穹上的HyperZone自研应用，源码只读核实；本工程方案2收款聚合和Mock已实现，真实生产网络适配器仍未配置。订单与收款各自授权，回款采用实际结算分录，统一UTC+8。 物流运费使用独立freight scope及allowedFreightIds，已实现Mock成本快照；必须保留原币与明确USD折算，按确认时间归期。最终结算、补收退款、调价及真实成本查询/授权仍待核对。 销售工作台增加个人收款与毛利：独立sales_profit授权、已审核净毛利差额优先、无日分配返回null；预估期间事件账本和严格asOf成本链仍是FOP对接前置条件。 全局P0：逐图许可和数据范围独立；普通员工本人，经理部门及下级，所有统计/排名/合计/搜索/趋势/明细先过滤再计算。组织整体汇总另行授权，只返聚合；客户当前分配不重写历史业绩。 五类履约待办按独立Shopify／供应商／库存／配货审核／出库事实统计，旧队列键保持兼容，新增采购卡片与fulfillmentProgress必填模型。"
   },
   "servers": [
     {
@@ -862,7 +862,7 @@
         "tags": [
           "履约"
         ],
-        "description": "queue角色：review/exceptions=sales，procurement=procurement，allocation=allocation，dispatch=dispatch，shipping=warehouse。均排除取消/退款；review=reviewStatus pending；procurement=approved+paid+procurement pending；allocation=approved+paid+allocation pending；dispatch=paid+allocated+dispatch pending；shipping=paid+dispatched+shipping pending；exceptions=paid+未shipped+exception非null。按createdAt倒序/id排序，totals全筛选集。",
+        "description": "queue角色：review/exceptions=sales，dispatch=dispatch，procurement=procurement，allocation=allocation，shipping=warehouse。待审核：paid且reviewStatus=pending。待履约：paid、approved，shopifySync=pending/partial。待采购：paid、approved，supplierShipment=pending/partial。待配货：paid、approved，stockReadiness=incomplete，或ready且allocationReview=pending。待出库：paid、approved，stockReadiness=ready且allocationReview=approved，outbound=pending/partial。 五类均排除取消、未支付、退款。队列可重叠，每队列按订单ID去重；partial表示尚有未完成事项。unknown不推断；进度缺失或非法返回503。exceptions继续使用paid+未shipped+exception非null。按createdAt倒序/id排序，totals覆盖完整筛选集。保留dispatch/shipping键兼容旧URL，已不再使用旧发运/发货筛选逻辑。",
         "responses": {
           "200": {
             "description": "成功，裸JSON响应。",
@@ -936,7 +936,8 @@
                 "dispatch",
                 "shipping"
               ]
-            }
+            },
+            "description": "按卡片顺序 review待审核、dispatch待履约、procurement待采购、allocation待配货、shipping待出库；另有exceptions异常订单。"
           },
           {
             "name": "workbenchRole",
@@ -1027,8 +1028,9 @@
                   "updatedAt": "2026-10-22T08:00:00.000Z",
                   "queues": {
                     "review": 0,
-                    "allocation": 0,
                     "dispatch": 0,
+                    "procurement": 0,
+                    "allocation": 0,
                     "shipping": 0
                   },
                   "rates": [],
@@ -3778,7 +3780,7 @@
               "unpaid",
               "refunded"
             ],
-            "description": "paid已支付、unpaid未支付、refunded已退款；统计要求paid，review队列可含unpaid。"
+            "description": "paid已支付、unpaid未支付、refunded已退款；五类待办均只统计paid，待审核也排除unpaid。"
           },
           "reviewStatus": {
             "type": "string",
@@ -3795,7 +3797,7 @@
               "purchased",
               "not_required"
             ],
-            "description": "pending待采购，purchased已采购，not_required无需采购。"
+            "description": "pending待采购，purchased已采购，not_required无需采购。 兼容旧展示／异常逻辑；五类待办使用fulfillmentProgress独立事实，不得从旧字段推导。"
           },
           "allocationStatus": {
             "type": "string",
@@ -3804,7 +3806,7 @@
               "allocated",
               "not_ready"
             ],
-            "description": "pending待配货，allocated已配货，not_ready尚未进入配货环节。"
+            "description": "pending待配货，allocated已配货，not_ready尚未进入配货环节。 兼容旧展示／异常逻辑；五类待办使用fulfillmentProgress独立事实，不得从旧字段推导。"
           },
           "dispatchStatus": {
             "type": "string",
@@ -3813,7 +3815,7 @@
               "dispatched",
               "not_ready"
             ],
-            "description": "pending待调度，dispatched已调度，not_ready尚未进入调度环节。"
+            "description": "pending待调度，dispatched已调度，not_ready尚未进入调度环节。 兼容旧展示／异常逻辑；五类待办使用fulfillmentProgress独立事实，不得从旧字段推导。"
           },
           "shippingStatus": {
             "type": "string",
@@ -3822,7 +3824,7 @@
               "shipped",
               "not_ready"
             ],
-            "description": "pending待发货，shipped已发货，not_ready尚未进入发货环节。"
+            "description": "pending待发货，shipped已发货，not_ready尚未进入发货环节。 兼容旧展示／异常逻辑；五类待办使用fulfillmentProgress独立事实，不得从旧字段推导。"
           },
           "warehouse": {
             "type": "string",
@@ -3886,6 +3888,10 @@
               }
             ],
             "description": "订单异常详情；无异常明确为null。"
+          },
+          "fulfillmentProgress": {
+            "$ref": "#/components/schemas/FulfillmentProgress",
+            "description": "五类队列权威状态，缺失／非法字段时BFF返回503 fop_unavailable；旧状态字段仅保留兼容，不能驱动新队列。"
           }
         },
         "required": [
@@ -3910,7 +3916,8 @@
           "createdAt",
           "paidAt",
           "cancelled",
-          "exception"
+          "exception",
+          "fulfillmentProgress"
         ],
         "additionalProperties": false,
         "description": "publicOrder白名单输出，不含tenantId、departmentPathIds或任意provider元数据。上游金额/时间等尚无完整运行时schema验证。",
@@ -3963,7 +3970,14 @@
             "createdAt": "2026-10-21T01:00:00Z",
             "paidAt": "2026-10-21T01:15:00Z",
             "cancelled": false,
-            "exception": null
+            "exception": null,
+            "fulfillmentProgress": {
+              "shopifySync": "synced",
+              "supplierShipment": "shipped",
+              "stockReadiness": "ready",
+              "allocationReview": "approved",
+              "outbound": "completed"
+            }
           }
         ],
         "allOf": [
@@ -4844,32 +4858,39 @@
         "properties": {
           "review": {
             "type": "integer",
-            "description": "无对应角色为0；不受日期筛选。",
-            "minimum": 0
-          },
-          "allocation": {
-            "type": "integer",
-            "description": "无对应角色为0；不受日期筛选。",
-            "minimum": 0
+            "minimum": 0,
+            "description": "待审核：paid且reviewStatus=pending。 排除取消，按订单ID去重；无对应岗位权限为0，不受日期筛选。"
           },
           "dispatch": {
             "type": "integer",
-            "description": "无对应角色为0；不受日期筛选。",
-            "minimum": 0
+            "minimum": 0,
+            "description": "待履约：paid、approved，shopifySync=pending/partial。 排除取消，按订单ID去重；无对应岗位权限为0，不受日期筛选。"
+          },
+          "procurement": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "待采购：paid、approved，supplierShipment=pending/partial。 排除取消，按订单ID去重；无对应岗位权限为0，不受日期筛选。"
+          },
+          "allocation": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "待配货：paid、approved，stockReadiness=incomplete，或ready且allocationReview=pending。 排除取消，按订单ID去重；无对应岗位权限为0，不受日期筛选。"
           },
           "shipping": {
             "type": "integer",
-            "description": "无对应角色为0；不受日期筛选。",
-            "minimum": 0
+            "minimum": 0,
+            "description": "待出库：paid、approved，stockReadiness=ready且allocationReview=approved，outbound=pending/partial。 排除取消，按订单ID去重；无对应岗位权限为0，不受日期筛选。"
           }
         },
         "required": [
           "review",
-          "allocation",
           "dispatch",
+          "procurement",
+          "allocation",
           "shipping"
         ],
-        "additionalProperties": false
+        "additionalProperties": false,
+        "description": "按review/dispatch/procurement/allocation/shipping展示五张卡片。队列可重叠，不可相加作为唯一订单总量。"
       },
       "DashboardException": {
         "type": "object",
@@ -4911,6 +4932,8 @@
             "type": "string",
             "enum": [
               "review",
+              "dispatch",
+              "procurement",
               "allocation",
               "shipping"
             ],
@@ -4920,10 +4943,12 @@
             "type": "string",
             "enum": [
               "review",
+              "dispatch",
+              "procurement",
               "allocation",
               "shipping"
             ],
-            "description": "review审核、allocation配货、shipping发货。"
+            "description": "review待审核、dispatch待履约、procurement待采购、allocation待配货、shipping待出库。"
           },
           "count": {
             "type": "integer",
@@ -5115,7 +5140,7 @@
           },
           "queues": {
             "$ref": "#/components/schemas/DashboardQueues",
-            "description": "审核、配货、调度、发货当前队列数量；无入口权限时对应0。"
+            "description": "待审核、待履约、待采购、待配货、待出库当前数量；先权限过滤再分类。"
           },
           "rates": {
             "type": "array",
@@ -5143,7 +5168,7 @@
             "items": {
               "$ref": "#/components/schemas/DashboardTask"
             },
-            "description": "审核/配货/发货中有权限且非空的任务卡；不含调度或采购。"
+            "description": "五类队列中有岗位权限且非空的待办，顺序与卡片一致。"
           },
           "exceptions": {
             "type": "array",
@@ -5194,8 +5219,9 @@
             "updatedAt": "2026-10-22T08:00:00Z",
             "queues": {
               "review": 2,
-              "allocation": 1,
               "dispatch": 0,
+              "procurement": 0,
+              "allocation": 1,
               "shipping": 3
             },
             "rates": [
@@ -11369,6 +11395,79 @@
                 }
               }
             }
+          }
+        ]
+      },
+      "FulfillmentProgress": {
+        "type": "object",
+        "description": "五项独立履约事实，必填。真实适配器按订单汇总有效SKU／包裹，unknown不推断为待办。",
+        "properties": {
+          "shopifySync": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "partial",
+              "synced",
+              "not_required",
+              "unknown"
+            ],
+            "description": "Shopify 发货同步：待同步／部分同步／已同步／不适用／未知。由平台回执事实归一化，不从配货或出库推导。"
+          },
+          "supplierShipment": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "partial",
+              "shipped",
+              "not_required",
+              "unknown"
+            ],
+            "description": "供应商发货：未发货／部分发货／全部发货或入库／无需采购／未知。采购已下单不等于已发货。"
+          },
+          "stockReadiness": {
+            "type": "string",
+            "enum": [
+              "incomplete",
+              "ready",
+              "unknown"
+            ],
+            "description": "有效库存与配货需求是否齐套。已齐套不代表配货已审核。"
+          },
+          "allocationReview": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "approved",
+              "unknown"
+            ],
+            "description": "有效配货单是否全部审核放行；撤审重新进入待审核。无相关事实返回unknown，不得猜测。"
+          },
+          "outbound": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "partial",
+              "completed",
+              "unknown"
+            ],
+            "description": "仓库实物出库进度，按有效来源商品需求及审核出库数量归一化，不能用Shopify履约状态替代。"
+          }
+        },
+        "required": [
+          "shopifySync",
+          "supplierShipment",
+          "stockReadiness",
+          "allocationReview",
+          "outbound"
+        ],
+        "additionalProperties": false,
+        "examples": [
+          {
+            "shopifySync": "pending",
+            "supplierShipment": "pending",
+            "stockReadiness": "incomplete",
+            "allocationReview": "pending",
+            "outbound": "pending"
           }
         ]
       }

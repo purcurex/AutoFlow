@@ -5,6 +5,7 @@ const period = { from: '2026-01-01', to: '2026-01-31', year: 2026 }
 const volume = { category: 'customer' as const, grain: 'month' as const, year: 2026, warehouse: 'ALL' as const }
 const override = (chartId: string, values = {}) => ({ chartId, visibility: 'inherit', dataScope: 'inherit', summaryMode: 'inherit', summaryDepartments: [], details: 'inherit', export: 'inherit', ...values })
 const order = (owner: string, index: number): FopOrderCandidate => ({
+  fulfillmentProgress: { shopifySync: 'synced', supplierShipment: 'shipped', stockReadiness: 'ready', allocationReview: 'approved', outbound: 'completed' },
   tenantId: 't', id: `${owner}-${index}`, orderNumber: `${owner}-${index}`, shopifyOrderNumber: `#${index}`, customerId: `${owner}-customer-${index}`, customerCode: `${owner}-${index}`, customerName: `${owner} customer ${index}`, storeName: 'Store', items: [],
   organization: { id: 'org', name: 'Org' }, department: { id: owner === 'carol' ? 'd2' : 'd1', name: 'Department' }, departmentPathIds: [owner === 'carol' ? 'd2' : 'd1'], owner: { id: owner, name: owner }, salesDepartmentCode: owner === 'carol' ? 'sales2' : 'sales1',
   amount: 10, currency: 'USD', paymentStatus: 'paid', reviewStatus: 'approved', procurementStatus: 'purchased', allocationStatus: 'allocated', dispatchStatus: 'dispatched', shippingStatus: 'shipped', warehouse: '杭州仓', warehouseCode: 'HZ', carrier: '云途', carrierCode: 'YT', trackingNumber: 'TRACK', salesperson: owner, createdAt: '2026-01-10T08:00:00+08:00', paidAt: '2026-01-10T08:00:00+08:00', cancelled: false, exception: null,

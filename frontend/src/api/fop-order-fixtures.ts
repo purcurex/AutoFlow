@@ -32,6 +32,13 @@ export const mockFopOrders: FopOrder[] = stages.flatMap((stage, stageIndex) => A
     storeName: ['Everyday', 'Northstar', 'Studio', 'Harbor'][stageIndex]!,
     items: [{ sku: `DEMO-SKU-${String(index % 3 + 1).padStart(3, '0')}`, name: product.name, imageUrl: productImage(product.image, product.color), variant: product.variant, quantity: index % 3 + 1 }],
     amount: Math.round((11.88 + index * 2.5) * 100) / 100, currency: 'USD', paymentStatus: paid ? 'paid' : 'unpaid',
+    fulfillmentProgress: {
+      shopifySync: stage === 'dispatch' ? 'pending' : 'synced',
+      supplierShipment: 'shipped',
+      stockReadiness: stage === 'review' ? 'unknown' : stage === 'allocation' && index % 2 === 0 ? 'incomplete' : 'ready',
+      allocationReview: stage === 'allocation' || stage === 'review' ? 'pending' : 'approved',
+      outbound: stage === 'shipping' ? 'pending' : 'unknown',
+    },
     reviewStatus: stage === 'review' ? 'pending' : 'approved',
     procurementStatus: stage === 'review' ? 'not_required' : 'purchased',
     allocationStatus: stage === 'review' ? 'not_ready' : stage === 'allocation' ? 'pending' : 'allocated',
@@ -48,13 +55,14 @@ export const mockFopOrders: FopOrder[] = stages.flatMap((stage, stageIndex) => A
 
 mockFopOrders.push(...Array.from({ length: 8 }, (_, index): FopOrder => ({
   ...mockFopOrders[6 + index]!, id: `DEMO-PO-${40001 + index}`, orderNumber: `DEMO-PO-${40001 + index}`,
+  fulfillmentProgress: { shopifySync: 'synced', supplierShipment: 'pending', stockReadiness: 'incomplete', allocationReview: 'pending', outbound: 'pending' },
   shopifyOrderNumber: `#${1401 + index}`, procurementStatus: 'pending', allocationStatus: 'not_ready', exception: null,
 })))
 
 // These records deliberately never enter a pending queue.
 mockFopOrders.push(
   { ...mockFopOrders[6]!, id: 'DEMO-CANCELLED', orderNumber: 'DEMO-CANCELLED', cancelled: true, exception: null },
-  { ...mockFopOrders[40]!, id: 'DEMO-SHIPPED', orderNumber: 'DEMO-SHIPPED', shippingStatus: 'shipped', exception: null },
+  { ...mockFopOrders[40]!, id: 'DEMO-SHIPPED', orderNumber: 'DEMO-SHIPPED', fulfillmentProgress: { shopifySync: 'synced', supplierShipment: 'shipped', stockReadiness: 'ready', allocationReview: 'approved', outbound: 'completed' }, shippingStatus: 'shipped', exception: null },
 )
 
 export function mockFopQueueCount(queue: FopOrderQueue): number {

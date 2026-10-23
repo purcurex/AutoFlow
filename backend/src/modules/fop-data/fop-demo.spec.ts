@@ -1,6 +1,6 @@
 import { ORGANIZATION_EMPLOYEE_SEEDS, ORGANIZATION_NODE_SEEDS } from '../organization/organization.seed'
 import { FopDataService } from './fop-data.service'
-import { FopDataProvider, FopIdentity, UnconfiguredFopDataProvider } from './fop-data.types'
+import { FopDataProvider, FopOrderCandidate, FopIdentity, UnconfiguredFopDataProvider } from './fop-data.types'
 import { UsersService } from '../users/users.service'
 import { UserRole } from '../users/user.entity'
 
@@ -69,6 +69,55 @@ describe('isolated mock FOP dataset', () => {
     expect(dashboard.receipts.months).toHaveLength(10)
     expect(dashboard.receipts.departments.map(dept => dept.name)).toEqual(['业务一部', '业务二部', '业务三部', '业务四部'])
     expect((dashboard.receipts.departments as {amounts:number[]}[])[0].amounts.some((amount: number) => amount > 0)).toBe(true)
+  })
+  it('uses independent fulfillment facts, excludes unpaid orders, and counts overlapping queues once per order', async () => {
+    const provider = new DemoFopDataProvider(organizations, env)
+    const identity = { tenantId: 'demo:alice', userId: 'alice' }
+    const grant = await provider.resolvePermissions(identity)
+    const seeds = await provider.listOrders(identity, grant)
+    const progress = { shopifySync: 'synced', supplierShipment: 'shipped', stockReadiness: 'ready', allocationReview: 'approved', outbound: 'completed' } as const
+    const examples = [
+      { orderNumber: 'PAID-REVIEW', reviewStatus: 'pending' as const },
+      { orderNumber: 'UNPAID-REVIEW', reviewStatus: 'pending' as const, paymentStatus: 'unpaid' as const },
+      { orderNumber: 'OVERLAP', fulfillmentProgress: { ...progress, shopifySync: 'pending' as const, supplierShipment: 'pending' as const, stockReadiness: 'incomplete' as const, allocationReview: 'pending' as const, outbound: 'pending' as const } },
+      { orderNumber: 'READY-REVIEW', fulfillmentProgress: { ...progress, allocationReview: 'pending' as const, outbound: 'pending' as const } },
+      { orderNumber: 'READY-OUTBOUND', fulfillmentProgress: { ...progress, outbound: 'pending' as const } },
+      { orderNumber: 'PARTIAL', fulfillmentProgress: { ...progress, shopifySync: 'partial' as const, supplierShipment: 'partial' as const, stockReadiness: 'incomplete' as const, allocationReview: 'pending' as const, outbound: 'pending' as const } },
+      { orderNumber: 'PARTIAL-OUTBOUND', fulfillmentProgress: { ...progress, outbound: 'partial' as const } },
+      { orderNumber: 'CANCELLED', cancelled: true, fulfillmentProgress: { ...progress, shopifySync: 'pending' as const } },
+      { orderNumber: 'REFUNDED', paymentStatus: 'refunded' as const, fulfillmentProgress: { ...progress, outbound: 'pending' as const } },
+      { orderNumber: 'UNKNOWN', fulfillmentProgress: { shopifySync: 'unknown', supplierShipment: 'unknown', stockReadiness: 'unknown', allocationReview: 'unknown', outbound: 'unknown' } as const },
+      { orderNumber: 'COMPLETE' },
+    ]
+    provider.listOrders = async () => {
+      const rows = examples.map<FopOrderCandidate>((row, index) => ({ ...seeds[index], reviewStatus: 'approved', paymentStatus: 'paid', cancelled: false, exception: null,
+        // Deliberately conflicting legacy fields must not drive the new queues.
+        procurementStatus: 'purchased', allocationStatus: 'allocated', dispatchStatus: 'dispatched', shippingStatus: 'shipped',
+        fulfillmentProgress: progress, ...row,
+      }))
+      return [...rows, rows[2]]
+    }
+    const data = new FopDataService(users, provider)
+    const expected = { review: ['PAID-REVIEW'], dispatch: ['OVERLAP', 'PARTIAL'], procurement: ['OVERLAP', 'PARTIAL'], allocation: ['OVERLAP', 'READY-REVIEW', 'PARTIAL'], shipping: ['READY-OUTBOUND', 'PARTIAL-OUTBOUND'] }
+    for (const queue of Object.keys(expected) as (keyof typeof expected)[]) {
+      const result = await data.getOrders('alice', { queue, page: 1, pageSize: 100 })
+      expect(result.items.map(row => row.orderNumber).sort()).toEqual(expected[queue].sort())
+      expect(result.totals.orderCount).toBe(expected[queue].length)
+    }
+    const dashboard = await data.getDashboard('alice', query)
+    expect(dashboard.queues).toEqual({ review: 1, dispatch: 2, procurement: 2, allocation: 3, shipping: 2 })
+    expect(dashboard.tasks.map(task => task.kind)).toEqual(['review', 'dispatch', 'procurement', 'allocation', 'shipping'])
+  })
+  it('fails closed for missing or invalid progress instead of inventing pending counts', async () => {
+    const provider = new DemoFopDataProvider(organizations, env)
+    const original = provider.listOrders.bind(provider)
+    provider.listOrders = async (identity, grant) => (await original(identity, grant)).map(row => {
+      Reflect.deleteProperty(row, 'fulfillmentProgress')
+      return row
+    })
+    const data = new FopDataService(users, provider)
+    await expect(data.getDashboard('alice', query)).rejects.toMatchObject({ response: { code: 'fop_unavailable' } })
+    await expect(data.getOrders('alice', { queue: 'allocation', page: 1, pageSize: 20 })).rejects.toMatchObject({ response: { code: 'fop_unavailable' } })
   })
   it('displays the oldest task creation time in UTC+8 across timestamp offsets', async () => {
     const provider = new DemoFopDataProvider(organizations, env)

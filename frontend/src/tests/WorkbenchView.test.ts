@@ -45,7 +45,7 @@ describe('role workbench content', () => {
   it('puts procurement details inside its workbench and rejects another role’s queue', async () => {
     const { wrapper, router } = await setup('/workbench/procurement')
     expect(wrapper.find('h1').text()).toBe('采购工作台')
-    expect(wrapper.find('thead').text()).toContain('采购状态')
+    expect(wrapper.find('thead').text()).toContain('供应商发货状态')
     expect(wrapper.find('thead').text()).not.toContain('配货状态')
     expect(wrapper.findAll('tbody tr')).toHaveLength(8)
     await router.push('/workbench/procurement?queue=shipping')
