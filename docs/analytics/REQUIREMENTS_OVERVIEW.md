@@ -14,6 +14,7 @@
 - `docs/openapi/hyperzone-analytics.openapi.json`：可供 Swagger Editor、Apifox、Postman 等支持 OpenAPI 的工具导入的契约；描述当前平台 HTTP API，而非虚构的金蝶原生接口。
 - `ECHARTS_FRONTEND_AUDIT.md`、`ECHARTS_BACKEND_CONTRACT_AUDIT.md`：独立诊断证据，内容也收录在本文附录。
 - `VERIFICATION.md`：本次实际检查与限制。
+- `FOLLOW_UP_CHECKLIST.md`：第7章补充的后续待办与人工核对清单；按T/H编号记录优先级、建议负责人、输入、产物和完成标准，并提供脱敏验收样本及回填模板。
 
 采用 [OpenAPI Specification 3.1.1](https://spec.openapis.org/oas/v3.1.1.html) 的 `paths`、`operationId`、`parameters`、`requestBody`、`responses`、`components/schemas`、`securitySchemes` 结构。可空使用 JSON Schema 的 `null` 类型；必填与可空分别表达。该版本选择用于稳定契约，不宣称它是最新规范版本。
 
@@ -141,7 +142,7 @@
 | AT-13 | 大规模真实数据 | 用实际业务量压测权限集合、全量聚合、客户搜索及大日期跨度；先协商响应时间和容量指标，再签收 |
 | AT-14 | 文案和数据一致性 | 当前条件与最后成功应用条件分离；在途改筛选不能改变已返回数据标题；失败不把旧图标成新条件 |
 
-## 7. 交付与接入顺序
+## 7. 交付与接入顺序、后续待办及人工核对
 
 1. 按已确认方案 2 与源码字段映射取得正式 FOP 响应样本，核验状态、金额、支付日期及归属。
 2. 完成真实用户身份/权限适配，再读取任何业务数据；通过管理与业务权限分离验收。
@@ -151,3 +152,5 @@
 6. 先在测试环境小范围员工验收，再切生产；数据库、附件和配置按部署文档单独备份迁移。
 
 本次交付包含当前项目的代码与文档基线；不包含本机数据库、用户密码、密钥和运行产物，也不表示已部署到生产服务器。
+
+本章后续收录 [后续待办与人工核对清单](FOLLOW_UP_CHECKLIST.md)：16项开发／交付待办、17项人工资料核对、10组最小验收场景及回填模板。清单以已实现方案2为基线；未确认的生产信息保持待核对，不改写当前业务口径，也不把Mock完成状态当成真实FOP接入完成。

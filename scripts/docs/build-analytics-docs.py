@@ -101,7 +101,7 @@ def appendix(text):
 
 
 def build(spec):
-    parts = [(DOCS / 'REQUIREMENTS_OVERVIEW.md').read_text()]
+    parts = [(DOCS / 'REQUIREMENTS_OVERVIEW.md').read_text(), appendix((DOCS / 'FOLLOW_UP_CHECKLIST.md').read_text())]
     operations = [(path, method, operation) for path, entry in spec['paths'].items() for method, operation in entry.items() if method in ('get', 'post', 'put', 'patch', 'delete')]
     parts += ['## 8. OpenAPI 接口清单与请求/响应定义',
               f"本规范覆盖 **{len(operations)} 个操作、{len(spec['components']['schemas'])} 个数据模型**。以下清单由同目录 OpenAPI JSON 生成。Base URL 为 `/api`，表中路径不重复此前缀。响应为实际裸 JSON，不额外包装成 `{{code,data}}`。时间序列数值数组必须与对应时间轴等长：counts 对应 registrations、amounts 对应 months、values 及 warehouses 内数组对应 periods；items/series/options 等集合不适用。该跨字段规则需联调测试，单纯 schema 校验不能证明。",

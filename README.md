@@ -48,6 +48,7 @@ HyperZone 是面向公司领导、销售、采购、订单、发运、仓库及 
 - [后端契约与 FOP 对接诊断](docs/analytics/ECHARTS_BACKEND_CONTRACT_AUDIT.md)
 - [本次验证记录](docs/analytics/VERIFICATION.md)
 - [HyperZone FOP 源码字段与适配证据](docs/analytics/HYPERZONE_FOP_SOURCE_MAPPING.md)
+- [后续待办与人工核对清单 · 优先级、责任、资料和验收](docs/analytics/FOLLOW_UP_CHECKLIST.md)
 
 既有细分约定：[Dashboard](docs/FOP_DASHBOARD_INTEGRATION.md)、[订单统计](docs/FOP_ORDER_VOLUME_API.md)、[用户数据权限](docs/FOP_USER_DATA_ACCESS.md)、[全局合计](docs/TABLE_TOTALS.md)、[控件交互](docs/UI_CONTROLS.md)。最新综合诊断优先说明当前行为及已知差距；历史方案不等同于生产实现。
 
