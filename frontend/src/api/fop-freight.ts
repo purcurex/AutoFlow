@@ -1,3 +1,4 @@
+import type { EffectiveChartAccess } from './fop-chart-access'
 import api from './index'
 import type { WorkbenchRole } from '@/utils/workbench'
 
@@ -30,6 +31,7 @@ export interface FreightSeries {
   totals: FreightValue; values: FreightValue[]; billCount: number
 }
 export interface FreightData {
+  chartAccess: EffectiveChartAccess
   source: 'mock' | 'fop'; query: FreightQuery; timeZone: 'UTC+8'; currency: 'USD'; dateBasis: 'freight_confirmed_at'; asOf: string
   periods: FreightPeriod[]; series: FreightSeries[]; totals: FreightValue; billCount: number
 }

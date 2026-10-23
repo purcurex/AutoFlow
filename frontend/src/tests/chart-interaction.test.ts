@@ -38,4 +38,15 @@ describe('chart horizontal navigation', () => {
     expect(wrapper.emitted('zoom')).toEqual([[{ start: 0, end: 50 }]])
     wrapper.unmount()
   })
+  it('removes image and data exports when export capability is denied and updates on revocation', async () => {
+    const option = { toolbox: { feature: { saveAsImage: { type: 'svg' }, dataView: { readOnly: true }, restore: {} } } }
+    const wrapper = mount(EChart, { props: { option, label: 'Authorized chart', canExport: true } })
+    expect(state.options.toolbox.feature).toHaveProperty('saveAsImage')
+    await wrapper.setProps({ canExport: false })
+    expect(state.options.toolbox.feature).not.toHaveProperty('saveAsImage')
+    expect(state.options.toolbox.feature).not.toHaveProperty('dataView')
+    expect(state.options.toolbox.feature).toHaveProperty('restore')
+    wrapper.unmount()
+  })
+
 })

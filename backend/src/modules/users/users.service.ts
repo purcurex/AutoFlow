@@ -1,6 +1,6 @@
 import { businessScope } from './business-scope'
 import type { UpdateBusinessScopeDto } from './dto/business-scope.dto'
-import { ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common'
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common'
 import { InjectRepository } from '@nestjs/typeorm'
 import { ILike, Repository } from 'typeorm'
 import * as bcrypt from 'bcrypt'
@@ -8,11 +8,13 @@ import { User, UserRole } from './user.entity'
 import type { UpdateProfileDto } from './dto/update-profile.dto'
 import type { ListWorkbenchAccountsDto } from './dto/workbench.dto'
 import type { WorkbenchRole } from './workbench-role'
+import { ChartPermissionOverride, validateChartPermissions } from './chart-permissions'
 
 function workbenchAccount(user: User) {
   return {
     id: user.id, displayId: user.displayId, email: user.email, username: user.username, role: user.role, workbenchRoles: user.workbenchRoles,
     businessScope: businessScope(user),
+    chartPermissions: user.chartPermissions ?? [],
     fopBinding: user.fopTenantId && user.fopUserId ? { tenantId: user.fopTenantId, userId: user.fopUserId } : null,
   }
 }
@@ -39,6 +41,7 @@ export class UsersService {
       role,
       displayId,
       workbenchRoles: ['sales'],
+      chartPermissions: [],
     })
     return this.usersRepository.save(user)
   }
@@ -51,7 +54,7 @@ export class UsersService {
     const search = query.search?.trim()
     const pattern = search ? ILike(`%${search.replace(/[\\%_]/g, '\\$&')}%`) : undefined
     const [users, total] = await this.usersRepository.findAndCount({
-      select: { id: true, displayId: true, email: true, username: true, role: true, workbenchRoles: true, fopTenantId: true, fopUserId: true, businessRole: true, businessDepartmentId: true, businessEmployeeId: true },
+      select: { id: true, displayId: true, email: true, username: true, role: true, workbenchRoles: true, chartPermissions: true, fopTenantId: true, fopUserId: true, businessRole: true, businessDepartmentId: true, businessEmployeeId: true },
       where: pattern ? [{ username: pattern }, { email: pattern }, { displayId: pattern }] : {},
       order: { displayId: 'ASC', id: 'ASC' },
       skip: (query.page - 1) * query.pageSize,
@@ -86,6 +89,24 @@ export class UsersService {
       if (!await repository.existsBy({ id })) throw new NotFoundException('用户不存在')
       await repository.update(id, { role })
       return workbenchAccount((await repository.findOneBy({ id }))!)
+    })
+  }
+
+  async updateChartPermissions(actorId: string, id: string, chartPermissions: ChartPermissionOverride[]) {
+    if (!validateChartPermissions(chartPermissions)) throw new BadRequestException('Invalid chart permissions')
+    const permissions = chartPermissions.map(row => ({ ...row, summaryDepartments: [...row.summaryDepartments] }))
+    return this.usersRepository.manager.transaction(async (manager) => {
+      // Use the same lock as management-role mutations. A stale controller check
+      // cannot authorize an administrator who was demoted while waiting to save.
+      await manager.query("SELECT pg_advisory_xact_lock(hashtextextended('autoflow:management-roles', 0))")
+      const repository = manager.getRepository(User)
+      const actor = await repository.findOne({ where: { id: actorId }, lock: { mode: 'pessimistic_read' } })
+      if (actor?.role !== UserRole.ADMIN) throw new ForbiddenException('Administrator access required')
+      const target = await repository.findOne({ where: { id }, lock: { mode: 'pessimistic_write' } })
+      if (!target) throw new NotFoundException('用户不存在')
+      // Partial writes preserve business roles, workbench grants and FOP identity.
+      await repository.update(id, { chartPermissions: permissions })
+      return workbenchAccount((await repository.findOne({ where: { id } }))!)
     })
   }
 

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useChartAccess } from '@/composables/useChartAccess'
 import { computed, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { X } from 'lucide-vue-next'
@@ -27,12 +28,15 @@ function isMonthlyReference(profit: FopProfit) {
   return props.query.grain !== 'month' || !data.value || data.value.range.from > monthStart || data.value.range.to < monthEnd
 }
 const hasMonthlyReferences = computed(() => Boolean(data.value?.unallocatedSettlements.length || data.value?.profits.some(isMonthlyReference)))
+const { requireDetails } = useChartAccess(() => 'sales_performance')
 let requestId = 0, opener: HTMLElement | undefined
 async function load() {
   const id = ++requestId
   data.value = undefined; error.value = ''; busy.value = true; expanded.value = ''
   if (scroller.value) scroller.value.scrollTop = 0
   try {
+    await requireDetails()
+    if (id !== requestId) return
     const result = await getSalesPerformanceDetails({ ...props.query, page: page.value })
     if (id === requestId) data.value = result
   } catch (cause) {

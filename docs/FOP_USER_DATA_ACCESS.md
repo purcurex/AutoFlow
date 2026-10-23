@@ -2,6 +2,14 @@
 
 > 本地已新增显式 Mock 验收模式，详见 [Demo验收与API约定](FOP_DEMO_ACCEPTANCE.md)。该模式使用独立模拟身份，保留本节的真实FOP默认拒绝边界；不会自动绑定真实后台用户。
 
+## 最新全局补充（2026-10-23）
+
+逐图权限新增持久化chartPermissions，账号管理员通过PUT /users/:id/chart-permissions整组配置；GET /autoflow/integrations/fop/chart-access解析当前有效能力。本人/部门/FOP资源边界继续生效，图表可见不是全业务许可。客户Top10、other、数量/金额占比先按授权事实过滤。完整组织统计另需organizationSummaries许可和纯聚合provider，不借单据权限推导。
+
+Dashboard的departmentReceipts承载组织汇总，receipts为获授权业务员回款；纯汇总没有成员/单据。旧文中全部回款共用receipts的描述以本节及最新OpenAPI为准。经理个人工作台绑定员工后默认本人，未绑定不默认同事。客户当前归属与历史事实owner、冻结毛利不同；缺当前归属的旧provider会明确标注历史归属兼容模式，生产仍需补齐真实移交许可。
+
+完整字段、组织汇总provider和真实接入待办见docs/analytics完整需求第1.1–1.3节及T27–T30/H29–H32。该规则不放宽已有岗位、操作或独立财务资源权限。
+
 ## 已实现与未接入范围
 
 本项目面向公司内部员工，采用三层独立授权：

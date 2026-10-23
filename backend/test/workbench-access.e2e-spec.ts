@@ -28,6 +28,9 @@ describe('Workbench authorization HTTP API (repository boundary stub)', () => {
   const get = (path: string, id = userId) => request(app.getHttpServer()).get(`/api${path}`).auth(token(id), { type: 'bearer' })
   const put = (roles: unknown, id = adminId) => request(app.getHttpServer())
     .put(`/api/users/${userId}/workbench-roles`).auth(token(id), { type: 'bearer' }).send({ workbenchRoles: roles })
+  const chartOverride = { chartId: 'customer_orders', visibility: 'deny', dataScope: 'inherit', summaryMode: 'inherit', summaryDepartments: [], details: 'inherit', export: 'inherit' }
+  const putCharts = (chartPermissions: unknown, id = adminId) => request(app.getHttpServer())
+    .put(`/api/users/${userId}/chart-permissions`).auth(token(id), { type: 'bearer' }).send({ chartPermissions })
 
   beforeAll(async () => {
     const repository = {
@@ -40,6 +43,9 @@ describe('Workbench authorization HTTP API (repository boundary stub)', () => {
         [...accounts.values()].slice(skip, skip + take), accounts.size,
       ],
     }
+    Object.assign(repository, { manager: { transaction: async (callback: (manager: any) => Promise<unknown>) => callback({
+      query: async () => undefined, getRepository: () => repository,
+    }) } })
     const module = await Test.createTestingModule({
       imports: [UsersModule, JwtModule.register({ secret })],
       controllers: [AuthController, AutoflowController],
@@ -109,6 +115,38 @@ describe('Workbench authorization HTTP API (repository boundary stub)', () => {
   it.each([null, 'sales', ['admin'], ['sales', 'sales'], ['sales', 'procurement', 'allocation', 'dispatch', 'warehouse', 'sales']])('rejects invalid role input %j', async (roles) => {
     await put(roles).expect(400)
     expect(accounts.get(userId).workbenchRoles).toEqual(['sales'])
+  })
+
+  it('persists chart policy only for current administrators and exposes it in account listings', async () => {
+    await request(app.getHttpServer()).put(`/api/users/${userId}/chart-permissions`).send({ chartPermissions: [] }).expect(401)
+    await putCharts([chartOverride], userId).expect(403)
+    const response = await putCharts([chartOverride]).expect(200)
+    expect(response.body).toMatchObject({ id: userId, role: 'user', workbenchRoles: ['sales'], chartPermissions: [chartOverride] })
+    expect(response.body).not.toHaveProperty('password')
+    const listing = await get('/users/workbench-accounts', adminId).expect(200)
+    expect(listing.body.items.find((account: any) => account.id === userId).chartPermissions).toEqual([chartOverride])
+    accounts.get(adminId).role = UserRole.USER
+    await putCharts([]).expect(403)
+    expect(accounts.get(userId).chartPermissions).toEqual([chartOverride])
+  })
+
+  it.each([
+    null, {}, [chartOverride, chartOverride], [{ ...chartOverride, chartId: 'future_chart' }],
+    [{ ...chartOverride, dataScope: 'all' }], [{ ...chartOverride, injected: true }],
+    [{ ...chartOverride, chartId: 'registrations', summaryMode: 'selected', summaryDepartments: [] }],
+    [{ ...chartOverride, chartId: 'registrations', summaryMode: 'selected', summaryDepartments: ['sales1', 'sales1'] }],
+    [{ ...chartOverride, chartId: 'freight', summaryMode: 'marketing' }],
+  ])('rejects invalid chart policy %j without changing saved grants', async value => {
+    await putCharts(value).expect(400)
+    expect(accounts.get(userId).chartPermissions ?? []).toEqual([])
+  })
+
+  it('rejects privilege fields beside chart policy and in self profile changes', async () => {
+    await request(app.getHttpServer()).put(`/api/users/${userId}/chart-permissions`).auth(token(adminId), { type: 'bearer' })
+      .send({ chartPermissions: [], role: 'admin', businessRole: 'admin' }).expect(400)
+    await request(app.getHttpServer()).put('/api/users/profile').auth(token(), { type: 'bearer' })
+      .send({ chartPermissions: [chartOverride] }).expect(400)
+    expect(accounts.get(userId).role).toBe('user')
   })
 
   it('prevents self profile escalation and validates bounded account queries', async () => {

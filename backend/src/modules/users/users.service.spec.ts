@@ -1,6 +1,7 @@
 import type { Repository } from 'typeorm'
 import { User, UserRole } from './user.entity'
 import { UsersService } from './users.service'
+import type { ChartPermissionOverride } from './chart-permissions'
 
 describe('UsersService profile updates', () => {
   it('updates only profile fields even when an unsafe runtime property is supplied', async () => {
@@ -92,5 +93,61 @@ describe('UsersService workbench persistence', () => {
     expect(options.where).toHaveLength(3)
     expect(options.where[0].username.value).toBe('%sales\\_\\%%')
     expect(options.select).not.toHaveProperty('password')
+  })
+})
+
+describe('UsersService chart permission persistence', () => {
+  const chartPermissions: ChartPermissionOverride[] = [{ chartId: 'customer_orders', visibility: 'deny', dataScope: 'inherit', summaryMode: 'inherit', summaryDepartments: [], details: 'inherit', export: 'inherit' }]
+  const setup = (admin = true, revokeBeforeLock = false) => {
+    const actor = { id: 'admin', role: admin ? UserRole.ADMIN : UserRole.USER }
+    const target = { id: 'sales', username: 'sales', role: UserRole.USER, businessRole: 'salesperson', businessEmployeeId: 'employee-a', businessDepartmentId: 'sales1', workbenchRoles: ['sales'], fopTenantId: 'tenant', fopUserId: 'fop-a', chartPermissions: [], password: 'secret' }
+    let locked = false
+    const repository = {
+      findOne: async ({ where }: any) => {
+        if (!locked) throw new Error('Account read outside authorization transaction')
+        return where.id === actor.id ? { ...actor } : where.id === target.id ? { ...target } : null
+      },
+      update: async (id: string, changes: object) => {
+        if (!locked || id !== target.id) throw new Error('Invalid mutation')
+        Object.assign(target, changes)
+      },
+      manager: { transaction: async (callback: (manager: any) => Promise<unknown>) => callback({
+        query: async () => { locked = true; if (revokeBeforeLock) actor.role = UserRole.USER },
+        getRepository: () => repository,
+      }) },
+    } as unknown as Repository<User>
+    return { service: new UsersService(repository), target }
+  }
+
+  it('persists only chart overrides and returns the complete safe account after authorization', async () => {
+    const { service, target } = setup()
+    const result = await service.updateChartPermissions('admin', 'sales', chartPermissions)
+    expect(result).toMatchObject({ id: 'sales', chartPermissions, role: 'user', businessScope: { role: 'salesperson', employeeId: 'employee-a' }, fopBinding: { tenantId: 'tenant', userId: 'fop-a' } })
+    expect(target).toMatchObject({ workbenchRoles: ['sales'], businessRole: 'salesperson', businessEmployeeId: 'employee-a', fopTenantId: 'tenant', fopUserId: 'fop-a' })
+    expect(result).not.toHaveProperty('password')
+    chartPermissions[0].summaryDepartments.push('sales1')
+    expect(target.chartPermissions).not.toEqual(chartPermissions)
+    chartPermissions[0].summaryDepartments.pop()
+  })
+
+  it.each([[false, false], [true, true]])('rejects nonadministrators and demotion at transaction entry (%s, %s)', async (admin, revoke) => {
+    const { service, target } = setup(admin, revoke)
+    await expect(service.updateChartPermissions('admin', 'sales', chartPermissions)).rejects.toMatchObject({ status: 403 })
+    expect(target.chartPermissions).toEqual([])
+  })
+
+  it('rejects duplicate chart IDs before persistence and missing targets after authorization', async () => {
+    const { service, target } = setup()
+    await expect(service.updateChartPermissions('admin', 'sales', [...chartPermissions, ...chartPermissions])).rejects.toMatchObject({ status: 400 })
+    await expect(service.updateChartPermissions('admin', 'missing', chartPermissions)).rejects.toMatchObject({ status: 404 })
+    expect(target.chartPermissions).toEqual([])
+  })
+
+  it('returns persisted policy with account listings and defaults legacy accounts to inheritance', async () => {
+    const repository = { findAndCount: jest.fn().mockResolvedValue([[{ id: 'a', chartPermissions }, { id: 'b' }], 2]) } as unknown as Repository<User>
+    const result = await new UsersService(repository).listWorkbenchAccounts({ page: 1, pageSize: 20 })
+    expect(result.items[0].chartPermissions).toEqual(chartPermissions)
+    expect(result.items[1].chartPermissions).toEqual([])
+    expect((repository.findAndCount as jest.Mock).mock.calls[0][0].select.chartPermissions).toBe(true)
   })
 })

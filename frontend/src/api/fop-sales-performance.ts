@@ -1,3 +1,4 @@
+import type { EffectiveChartAccess } from './fop-chart-access'
 import api from './index'
 import type { FopReceipt } from './fop-receipts'
 
@@ -23,6 +24,7 @@ export interface PerformanceMetrics {
 export interface PerformancePeriod extends PerformanceMetrics { id: string; label: string; from: string; to: string; profitStatus: 'none' | 'estimated' | 'settled' | 'mixed' | 'unallocated' }
 export interface PerformanceUnallocated { month: string; amount: number; count: number }
 export interface PerformanceData {
+  chartAccess: EffectiveChartAccess
   source: 'mock' | 'fop'; query: PerformanceQuery; timeZone: 'UTC+8'; currency: 'USD'; asOf: string
   owners: PerformanceOwner[]; selectedOwner: PerformanceOwner | null; canSelectOwner: boolean
   periods: PerformancePeriod[]; totals: PerformanceMetrics; unallocatedSettlements: PerformanceUnallocated[]

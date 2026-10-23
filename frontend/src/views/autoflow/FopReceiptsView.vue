@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useChartAccess } from '@/composables/useChartAccess'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -32,11 +33,15 @@ const carrierName = (code: string | null) => code ? ({ YT: '云途YT', '4PX': '4
 const sourceName = (source: ReceiptSource) => source === 'fulfillment' ? t('履约订单', 'Fulfillment') : source === 'full_payment_stock' ? t('全款备货', 'Full-payment stocking') : t('押金备货', 'Deposit stocking')
 const money = (amount: number) => formatChartCurrency(amount, String(locale.value))
 const date = (value: string) => new Date(value).toLocaleString(String(locale.value), { timeZone: 'Asia/Shanghai', hour12: false })
+const { requireDetails } = useChartAccess(() => textQuery('mode') === 'customer' ? 'customer_orders' : 'salesperson_receipts')
 let requestId = 0
 async function load() {
   const id = ++requestId
   data.value = undefined; error.value = ''; busy.value = true
   try {
+    if (textQuery('chartId') && textQuery('chartId') !== 'salesperson_receipts') throw { code: 'chart_details_denied' }
+    await requireDetails()
+    if (id !== requestId) return
     const role = route.params.role
     if (!isWorkbenchRole(role)) throw new Error('Invalid role')
     const base = { warehouse: textQuery('warehouse') || 'ALL', workbenchRole: role, page: page.value, pageSize: pageSize.value }

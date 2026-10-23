@@ -4,7 +4,7 @@
   "info": {
     "title": "HyperZone AutoFlow Analytics 当前实现契约",
     "version": "2026-10-23",
-    "description": "字段级源码快照，仅记录已实现HTTP路由，不将计划FOP上游写为paths。响应裸JSON，无{code,data,message}包装。required=序列化必有；type:null=显式空值；可省略字段不在required中。参数跨字段依赖及已知口径差距见操作描述和配套审计。示例为脱敏契约样例，不是生产数据。 FOP为金蝶云苍穹上的HyperZone自研应用，源码只读核实；本工程方案2收款聚合和Mock已实现，真实生产网络适配器仍未配置。订单与收款各自授权，回款采用实际结算分录，统一UTC+8。 物流运费使用独立freight scope及allowedFreightIds，已实现Mock成本快照；必须保留原币与明确USD折算，按确认时间归期。最终结算、补收退款、调价及真实成本查询/授权仍待核对。 销售工作台增加个人收款与毛利：独立sales_profit授权、已审核净毛利差额优先、无日分配返回null；预估期间事件账本和严格asOf成本链仍是FOP对接前置条件。"
+    "description": "字段级源码快照，仅记录已实现HTTP路由，不将计划FOP上游写为paths。响应裸JSON，无{code,data,message}包装。required=序列化必有；type:null=显式空值；可省略字段不在required中。参数跨字段依赖及已知口径差距见操作描述和配套审计。示例为脱敏契约样例，不是生产数据。 FOP为金蝶云苍穹上的HyperZone自研应用，源码只读核实；本工程方案2收款聚合和Mock已实现，真实生产网络适配器仍未配置。订单与收款各自授权，回款采用实际结算分录，统一UTC+8。 物流运费使用独立freight scope及allowedFreightIds，已实现Mock成本快照；必须保留原币与明确USD折算，按确认时间归期。最终结算、补收退款、调价及真实成本查询/授权仍待核对。 销售工作台增加个人收款与毛利：独立sales_profit授权、已审核净毛利差额优先、无日分配返回null；预估期间事件账本和严格asOf成本链仍是FOP对接前置条件。 全局P0：逐图许可和数据范围独立；普通员工本人，经理部门及下级，所有统计/排名/合计/搜索/趋势/明细先过滤再计算。组织整体汇总另行授权，只返聚合；客户当前分配不重写历史业绩。"
   },
   "servers": [
     {
@@ -118,7 +118,7 @@
         "tags": [
           "订单分析"
         ],
-        "description": "至少一个工作台角色；绑定、租户、独立订单／收款 allowlist 与 businessScope 求交。时间模式二选一：grain+year，day 另需 month；或 category=customer 且 from/to 同时提供，禁止 grain/year/month/weekOf。日期为 2020-01-01 至 UTC+8 今天含首尾。订单数仅 paid、reviewStatus=approved、有效 paidAt<=asOf、未取消的履约订单；非 carrier 要求报表部门。备货不计订单数。未来日 null，已发生空期 0。客户有 receipts scope 时 amounts 来自独立授权的有效收款分录，无 scope 省略 amounts。Top10 按履约数量，只有备货回款的客户仍进入总计／other 和搜索。筛选参数不能扩大权限。",
+        "description": "至少一个工作台角色；绑定、租户、独立订单／收款 allowlist 与 businessScope 求交。时间模式二选一：grain+year，day 另需 month；或 category=customer 且 from/to 同时提供，禁止 grain/year/month/weekOf。日期为 2020-01-01 至 UTC+8 今天含首尾。订单数仅 paid、reviewStatus=approved、有效 paidAt<=asOf、未取消的履约订单；非 carrier 要求报表部门。备货不计订单数。未来日 null，已发生空期 0。客户有 receipts scope 时 amounts 来自独立授权的有效收款分录，无 scope 省略 amounts。Top10 按履约数量，只有备货回款的客户仍进入总计／other 和搜索。筛选参数不能扩大权限。 统计前按图表有效记录范围过滤，再生成Top10及other。summary视图仅组织类别并使用独立组织汇总；任何summary业务明细请求拒绝。",
         "responses": {
           "200": {
             "description": "成功，裸JSON响应。",
@@ -260,7 +260,18 @@
                         "label": "示例业务员"
                       }
                     ]
-                  }
+                  },
+                  "chartAccess": {
+                    "chartId": "customer_orders",
+                    "visible": true,
+                    "dataScope": "all",
+                    "scopeLabel": "全部授权业务数据",
+                    "canViewDetails": true,
+                    "canExport": true,
+                    "summaryOnly": false,
+                    "summaryDepartments": []
+                  },
+                  "summaryOnly": false
                 }
               }
             }
@@ -422,6 +433,18 @@
               "default": "ALL",
               "description": "ALL全仓，HZ杭州，SZ深圳；UNASSIGNED仅兼容查询，已审核履约／有效收款不得未知仓；默认ALL。"
             }
+          },
+          {
+            "name": "view",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "records",
+                "summary"
+              ],
+              "description": "缺省records；summary仅category=organization，采用独立组织汇总，不能下钻成员/订单。"
+            }
           }
         ],
         "x-cross-parameter-rules": [
@@ -441,7 +464,7 @@
         "tags": [
           "订单分析"
         ],
-        "description": "至少一个工作台角色；绑定、租户、独立订单／收款 allowlist 与 businessScope 求交。时间模式二选一：grain+year，day 另需 month；或 category=customer 且 from/to 同时提供，禁止 grain/year/month/weekOf。日期为 2020-01-01 至 UTC+8 今天含首尾。订单数仅 paid、reviewStatus=approved、有效 paidAt<=asOf、未取消的履约订单；非 carrier 要求报表部门。备货不计订单数。未来日 null，已发生空期 0。客户有 receipts scope 时 amounts 来自独立授权的有效收款分录，无 scope 省略 amounts。Top10 按履约数量，只有备货回款的客户仍进入总计／other 和搜索。筛选参数不能扩大权限。 额外要求 workbenchRole；先完整范围重建 TopN/other，再收窄 period/detailWarehouse，查询仓和明细仓取交集。按 paidAt 倒序/id 排序，totals 在分页前计算；此端点返回履约订单金额，不是实收明细。",
+        "description": "至少一个工作台角色；绑定、租户、独立订单／收款 allowlist 与 businessScope 求交。时间模式二选一：grain+year，day 另需 month；或 category=customer 且 from/to 同时提供，禁止 grain/year/month/weekOf。日期为 2020-01-01 至 UTC+8 今天含首尾。订单数仅 paid、reviewStatus=approved、有效 paidAt<=asOf、未取消的履约订单；非 carrier 要求报表部门。备货不计订单数。未来日 null，已发生空期 0。客户有 receipts scope 时 amounts 来自独立授权的有效收款分录，无 scope 省略 amounts。Top10 按履约数量，只有备货回款的客户仍进入总计／other 和搜索。筛选参数不能扩大权限。 额外要求 workbenchRole；先完整范围重建 TopN/other，再收窄 period/detailWarehouse，查询仓和明细仓取交集。按 paidAt 倒序/id 排序，totals 在分页前计算；此端点返回履约订单金额，不是实收明细。 统计前按图表有效记录范围过滤，再生成Top10及other。summary视图仅组织类别并使用独立组织汇总；任何summary业务明细请求拒绝。",
         "responses": {
           "200": {
             "description": "成功，裸JSON响应。",
@@ -691,6 +714,18 @@
               "maximum": 100,
               "default": 20
             }
+          },
+          {
+            "name": "view",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "records",
+                "summary"
+              ],
+              "description": "缺省records；summary仅category=organization，采用独立组织汇总，不能下钻成员/订单。"
+            }
           }
         ]
       }
@@ -734,7 +769,17 @@
                   ],
                   "total": 1,
                   "page": 1,
-                  "pageSize": 10
+                  "pageSize": 10,
+                  "chartAccess": {
+                    "chartId": "customer_orders",
+                    "visible": true,
+                    "dataScope": "all",
+                    "scopeLabel": "全部授权业务数据",
+                    "canViewDetails": true,
+                    "canExport": true,
+                    "summaryOnly": false,
+                    "summaryDepartments": []
+                  }
                 }
               }
             }
@@ -954,7 +999,7 @@
         "tags": [
           "仪表盘"
         ],
-        "description": "from<=to，end-start<=365 天（含首尾最多 366 天），to<=UTC+8 今天，year<=UTC+8 当前年。from/to 仅注册，year 仅回款；队列／异常／任务不受日期筛选。rates/registrations/receipts 分别需 analyticsScopes；无 scope 返回空。注册明细按业务范围过滤，缺失时仅业务 admin 可读旧日汇总。回款以独立授权的 hzkj_real_receive_amt 分录为准：USD、paid、源单与收款单均 approved、未取消且支付已发生，来源履约＋全款备货，不含押金／样品，按 UTC+8 支付月归属。包含来源拆分和上年12月基线；非银行现金流保证。",
+        "description": "from<=to，end-start<=365 天（含首尾最多 366 天），to<=UTC+8 今天，year<=UTC+8 当前年。from/to 仅注册，year 仅回款；队列／异常／任务不受日期筛选。rates/registrations/receipts 分别需 analyticsScopes；无 scope 返回空。注册明细按业务范围过滤，缺失时仅业务 admin 可读旧日汇总。回款以独立授权的 hzkj_real_receive_amt 分录为准：USD、paid、源单与收款单均 approved、未取消且支付已发生，来源履约＋全款备货，不含押金／样品，按 UTC+8 支付月归属。包含来源拆分和上年12月基线；非银行现金流保证。 逐图策略分别控制注册、部门回款、业务员回款；departmentReceipts为独立组织聚合，receipts为获授权业务员事实。禁止图表不能仅由浏览器隐藏，响应也不得包含其数据。",
         "responses": {
           "200": {
             "description": "成功，裸JSON响应。",
@@ -992,6 +1037,15 @@
                   "tasks": [],
                   "exceptions": [],
                   "receipts": {
+                    "currency": "USD",
+                    "months": [],
+                    "marketingCenter": null,
+                    "departments": [],
+                    "basis": "actual_received",
+                    "timeZone": "UTC+8"
+                  },
+                  "chartAccess": [],
+                  "departmentReceipts": {
                     "currency": "USD",
                     "months": [],
                     "marketingCenter": null,
@@ -1786,7 +1840,7 @@
         "tags": [
           "收款分析"
         ],
-        "description": "仅 category=customer；沿用客户统计时间、部门、仓库及完整查询范围数量 Top10/other 客户集合，再应用 periodId/detailWarehouse。需要 workbenchRole、receipts scope 与独立 allowedReceiptIds；没有 scope 返回403，缺失/空白名单为空。订单 allowlist 不能替代收款授权。只返回有效 USD 履约／全款备货分录；不含押金、样品。状态、UTC+8 日期及来源口径同 Dashboard。total/totals 分页前计算，按 paidAt 倒序/id 稳定排序；客户端不能传身份/权限字段。",
+        "description": "仅 category=customer；沿用客户统计时间、部门、仓库及完整查询范围数量 Top10/other 客户集合，再应用 periodId/detailWarehouse。需要 workbenchRole、receipts scope 与独立 allowedReceiptIds；没有 scope 返回403，缺失/空白名单为空。订单 allowlist 不能替代收款授权。只返回有效 USD 履约／全款备货分录；不含押金、样品。状态、UTC+8 日期及来源口径同 Dashboard。total/totals 分页前计算，按 paidAt 倒序/id 稳定排序；客户端不能传身份/权限字段。 统计前按图表有效记录范围过滤，再生成Top10及other。summary视图仅组织类别并使用独立组织汇总；任何summary业务明细请求拒绝。",
         "responses": {
           "200": {
             "description": "成功，裸JSON响应。",
@@ -2035,6 +2089,18 @@
               "maximum": 100,
               "default": 20
             }
+          },
+          {
+            "name": "view",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "records",
+                "summary"
+              ],
+              "description": "缺省records；summary仅category=organization，采用独立组织汇总，不能下钻成员/订单。"
+            }
           }
         ]
       }
@@ -2046,7 +2112,7 @@
         "tags": [
           "收款分析"
         ],
-        "description": "Dashboard回款下钻。from/to 必填且严格有效，2020-01-01<=from<=to<=UTC+8 今天，含首尾；当前无最大跨度。department/ownerId/customerId/warehouse/sourceType 仅收窄范围。需拥有 workbenchRole、receipts scope 及独立 allowedReceiptIds；无 scope 403，缺失/空 allowlist 合法空结果。按绑定租户与部门/员工业务范围过滤，读取前后复核本地授权变化。有效分录要求 USD、paid、源单及收款单均 approved、未取消、已发生 paidAt，来源仅履约或全款备货。实收不是银行现金保证，源单金额与手续费单独返回。畸形授权分录/重复ID为503，禁止由订单金额合成。total/totals 分页前计算，paidAt倒序/id稳定排序；未知身份/权限参数400。",
+        "description": "Dashboard回款下钻。from/to 必填且严格有效，2020-01-01<=from<=to<=UTC+8 今天，含首尾；当前无最大跨度。department/ownerId/customerId/warehouse/sourceType 仅收窄范围。需拥有 workbenchRole、receipts scope 及独立 allowedReceiptIds；无 scope 403，缺失/空 allowlist 合法空结果。按绑定租户与部门/员工业务范围过滤，读取前后复核本地授权变化。有效分录要求 USD、paid、源单及收款单均 approved、未取消、已发生 paidAt，来源仅履约或全款备货。实收不是银行现金保证，源单金额与手续费单独返回。畸形授权分录/重复ID为503，禁止由订单金额合成。total/totals 分页前计算，paidAt倒序/id稳定排序；未知身份/权限参数400。 要求salesperson_receipts有效可见及明细能力；部门组织汇总不授此端点。",
         "responses": {
           "200": {
             "description": "成功，裸JSON响应。",
@@ -2218,6 +2284,18 @@
               "maximum": 100,
               "default": 20
             }
+          },
+          {
+            "name": "chartId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "salesperson_receipts",
+                "department_receipts"
+              ],
+              "description": "缺省salesperson_receipts；department_receipts仅识别旧入口并返回403，组织汇总不授业务明细。"
+            }
           }
         ]
       }
@@ -2229,7 +2307,7 @@
         "tags": [
           "物流运费分析"
         ],
-        "description": "独立成本权限：必须有freight analytics scope，否则403；allowedFreightIds缺失/空数组返回空范围，不能从订单或收款授权推导。服务端与租户、本地本人/部门及下属/业务管理员范围求交，系统管理员也不能绕过。每次请求复查绑定和授权变化；客户端不得传tenantId、userId、授权白名单或scope。只纳入已审核、已确认、正数且确认时刻已发生的发运单快照。原币、明确汇率日期/来源及折算一致性必需，目标USD；确认时间按UTC+8，不是银行付款或最终结算证明。真实FOP网络适配器未完成，Mock为独立成本样本。 返回合计与固定六类服务商并列系列；carrierCode过滤时仅合计与该商。单服务商趋势在居中弹窗展示；原始发运单在工作台下钻。",
+        "description": "独立成本权限：必须有freight analytics scope，否则403；allowedFreightIds缺失/空数组返回空范围，不能从订单或收款授权推导。服务端与租户、本地本人/部门及下属/业务管理员范围求交，系统管理员也不能绕过。每次请求复查绑定和授权变化；客户端不得传tenantId、userId、授权白名单或scope。只纳入已审核、已确认、正数且确认时刻已发生的发运单快照。原币、明确汇率日期/来源及折算一致性必需，目标USD；确认时间按UTC+8，不是银行付款或最终结算证明。真实FOP网络适配器未完成，Mock为独立成本样本。 返回合计与固定六类服务商并列系列；carrierCode过滤时仅合计与该商。单服务商趋势在居中弹窗展示；原始发运单在工作台下钻。 同时校验freight逐图有效权限与范围；响应chartAccess为本次实际能力，前端必须覆盖预查询能力并清理失效数据。",
         "parameters": [
           {
             "name": "grain",
@@ -2464,7 +2542,17 @@
                     "delta": 14,
                     "percent": 140
                   },
-                  "billCount": 2
+                  "billCount": 2,
+                  "chartAccess": {
+                    "chartId": "freight",
+                    "visible": true,
+                    "dataScope": "all",
+                    "scopeLabel": "全部授权业务数据",
+                    "canViewDetails": true,
+                    "canExport": true,
+                    "summaryOnly": false,
+                    "summaryDepartments": []
+                  }
                 }
               }
             }
@@ -2512,7 +2600,7 @@
         "tags": [
           "物流运费分析"
         ],
-        "description": "独立成本权限：必须有freight analytics scope，否则403；allowedFreightIds缺失/空数组返回空范围，不能从订单或收款授权推导。服务端与租户、本地本人/部门及下属/业务管理员范围求交，系统管理员也不能绕过。每次请求复查绑定和授权变化；客户端不得传tenantId、userId、授权白名单或scope。只纳入已审核、已确认、正数且确认时刻已发生的发运单快照。原币、明确汇率日期/来源及折算一致性必需，目标USD；确认时间按UTC+8，不是银行付款或最终结算证明。真实FOP网络适配器未完成，Mock为独立成本样本。 明细必须通过workbenchRole入口权限；periodId仅能是该查询返回的一期，comparisonPeriod默认current，previous选择完整上期。省略periodId时选择全部显示周期对应范围；确认时间倒序、ID稳定排序。total/totals在分页前计算，越界页仍保留完整合计；原币逐币种合计。",
+        "description": "独立成本权限：必须有freight analytics scope，否则403；allowedFreightIds缺失/空数组返回空范围，不能从订单或收款授权推导。服务端与租户、本地本人/部门及下属/业务管理员范围求交，系统管理员也不能绕过。每次请求复查绑定和授权变化；客户端不得传tenantId、userId、授权白名单或scope。只纳入已审核、已确认、正数且确认时刻已发生的发运单快照。原币、明确汇率日期/来源及折算一致性必需，目标USD；确认时间按UTC+8，不是银行付款或最终结算证明。真实FOP网络适配器未完成，Mock为独立成本样本。 明细必须通过workbenchRole入口权限；periodId仅能是该查询返回的一期，comparisonPeriod默认current，previous选择完整上期。省略periodId时选择全部显示周期对应范围；确认时间倒序、ID稳定排序。total/totals在分页前计算，越界页仍保留完整合计；原币逐币种合计。 同时校验freight逐图有效权限与范围；响应chartAccess为本次实际能力，前端必须覆盖预查询能力并清理失效数据。直接明细入口还要求canViewDetails。",
         "parameters": [
           {
             "name": "grain",
@@ -2713,6 +2801,16 @@
                   "range": {
                     "from": "2026-10-01",
                     "to": "2026-10-22"
+                  },
+                  "chartAccess": {
+                    "chartId": "freight",
+                    "visible": true,
+                    "dataScope": "all",
+                    "scopeLabel": "全部授权业务数据",
+                    "canViewDetails": true,
+                    "canExport": true,
+                    "summaryOnly": false,
+                    "summaryDepartments": []
                   }
                 }
               }
@@ -2762,7 +2860,7 @@
         "tags": [
           "个人收款与毛利"
         ],
-        "description": "必须具备sales工作台、receipts及sales_profit analytics scope。服务端重新读取用户FOP绑定、业务角色范围，分别以allowedReceiptIds/allowedProfitIds授权并与租户/业务员/部门范围求交，不从订单权限推导。普通业务员仅自身；业务管理员/部门经理可选择已授权业务员，显式越权ownerId为403。身份/权限查询参数禁止。from/to为UTC+8含首尾日期，2020起、不晚于今天，最大366天；grain month/week/day，周一开始，首尾裁剪。收款复用方案2（履约实际收款+全款备货收款，排除押金），按支付日期；毛利按独立确认日期/月，已结算取冻结净毛利差额、预估以预估运费及已知成本收入计算期间贡献。不会把全款备货回款直接再加利润。同订单同确认月已结算替代预估，跨期差额保留。无可信日明细的结算只能进入完整自然月month桶；week/day/部分月返回null和整月参考，不均摊。未来knownAt/approvedAt/paidAt排除；不支持客户端asOf历史回放。现有FOP原生实时服务未满足严格cutoff/预估成本，新事件账本与只读适配器待实现。",
+        "description": "必须具备sales工作台、receipts及sales_profit analytics scope。服务端重新读取用户FOP绑定、业务角色范围，分别以allowedReceiptIds/allowedProfitIds授权并与租户/业务员/部门范围求交，不从订单权限推导。普通业务员仅自身；业务管理员/部门经理可选择已授权业务员，显式越权ownerId为403。身份/权限查询参数禁止。from/to为UTC+8含首尾日期，2020起、不晚于今天，最大366天；grain month/week/day，周一开始，首尾裁剪。收款复用方案2（履约实际收款+全款备货收款，排除押金），按支付日期；毛利按独立确认日期/月，已结算取冻结净毛利差额、预估以预估运费及已知成本收入计算期间贡献。不会把全款备货回款直接再加利润。同订单同确认月已结算替代预估，跨期差额保留。无可信日明细的结算只能进入完整自然月month桶；week/day/部分月返回null和整月参考，不均摊。未来knownAt/approvedAt/paidAt排除；不支持客户端asOf历史回放。现有FOP原生实时服务未满足严格cutoff/预估成本，新事件账本与只读适配器待实现。 同时校验sales_performance逐图有效权限与范围；响应chartAccess为本次实际能力，前端必须覆盖预查询能力并清理失效数据。",
         "parameters": [
           {
             "name": "from",
@@ -2883,7 +2981,17 @@
                     "receiptCount": 0,
                     "profitCount": 1
                   },
-                  "unallocatedSettlements": []
+                  "unallocatedSettlements": [],
+                  "chartAccess": {
+                    "chartId": "sales_performance",
+                    "visible": true,
+                    "dataScope": "all",
+                    "scopeLabel": "全部授权业务数据",
+                    "canViewDetails": true,
+                    "canExport": true,
+                    "summaryOnly": false,
+                    "summaryDepartments": []
+                  }
                 }
               }
             }
@@ -2923,7 +3031,7 @@
         "tags": [
           "个人收款与毛利"
         ],
-        "description": "必须具备sales工作台、receipts及sales_profit analytics scope。服务端重新读取用户FOP绑定、业务角色范围，分别以allowedReceiptIds/allowedProfitIds授权并与租户/业务员/部门范围求交，不从订单权限推导。普通业务员仅自身；业务管理员/部门经理可选择已授权业务员，显式越权ownerId为403。身份/权限查询参数禁止。from/to为UTC+8含首尾日期，2020起、不晚于今天，最大366天；grain month/week/day，周一开始，首尾裁剪。收款复用方案2（履约实际收款+全款备货收款，排除押金），按支付日期；毛利按独立确认日期/月，已结算取冻结净毛利差额、预估以预估运费及已知成本收入计算期间贡献。不会把全款备货回款直接再加利润。同订单同确认月已结算替代预估，跨期差额保留。无可信日明细的结算只能进入完整自然月month桶；week/day/部分月返回null和整月参考，不均摊。未来knownAt/approvedAt/paidAt排除；不支持客户端asOf历史回放。现有FOP原生实时服务未满足严格cutoff/预估成本，新事件账本与只读适配器待实现。 分页前计算合计；明细kind仅切换事实清单，periodId不得扩大日期范围。",
+        "description": "必须具备sales工作台、receipts及sales_profit analytics scope。服务端重新读取用户FOP绑定、业务角色范围，分别以allowedReceiptIds/allowedProfitIds授权并与租户/业务员/部门范围求交，不从订单权限推导。普通业务员仅自身；业务管理员/部门经理可选择已授权业务员，显式越权ownerId为403。身份/权限查询参数禁止。from/to为UTC+8含首尾日期，2020起、不晚于今天，最大366天；grain month/week/day，周一开始，首尾裁剪。收款复用方案2（履约实际收款+全款备货收款，排除押金），按支付日期；毛利按独立确认日期/月，已结算取冻结净毛利差额、预估以预估运费及已知成本收入计算期间贡献。不会把全款备货回款直接再加利润。同订单同确认月已结算替代预估，跨期差额保留。无可信日明细的结算只能进入完整自然月month桶；week/day/部分月返回null和整月参考，不均摊。未来knownAt/approvedAt/paidAt排除；不支持客户端asOf历史回放。现有FOP原生实时服务未满足严格cutoff/预估成本，新事件账本与只读适配器待实现。 分页前计算合计；明细kind仅切换事实清单，periodId不得扩大日期范围。 同时校验sales_performance逐图有效权限与范围；响应chartAccess为本次实际能力，前端必须覆盖预查询能力并清理失效数据。直接明细入口还要求canViewDetails。",
         "parameters": [
           {
             "name": "from",
@@ -3104,7 +3212,17 @@
                     "from": "2026-09-01",
                     "to": "2026-09-30"
                   },
-                  "unallocatedSettlements": []
+                  "unallocatedSettlements": [],
+                  "chartAccess": {
+                    "chartId": "sales_performance",
+                    "visible": true,
+                    "dataScope": "all",
+                    "scopeLabel": "全部授权业务数据",
+                    "canViewDetails": true,
+                    "canExport": true,
+                    "summaryOnly": false,
+                    "summaryDepartments": []
+                  }
                 }
               }
             }
@@ -3135,6 +3253,146 @@
           "backend/src/modules/users/workbench.controller.ts"
         ],
         "x-implementation-status": "本工程BFF/Mock及前端实现；对应FOP生产只读适配器、严格截止历史成本与日级贡献账本待IT实现。"
+      }
+    },
+    "/users/{id}/chart-permissions": {
+      "put": {
+        "operationId": "updateChartPermissions",
+        "summary": "设置账号逐图授权",
+        "tags": [
+          "权限管理"
+        ],
+        "description": "仅当前数据库系统管理员，可在无业务权限时维护。整组替换chartPermissions；校验七类资源唯一、枚举及summaryMode跨字段规则。事务内重新核查管理员，不更新业务角色/FOP身份。",
+        "responses": {
+          "200": {
+            "description": "成功，裸JSON响应。",
+            "headers": {
+              "Cache-Control": {
+                "description": "JWT guard设置private, no-store；全局429可先于guard返回，不保证此头。",
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkbenchAccount"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "x-implementation-status": "implemented",
+        "x-source-files": [
+          "backend/src/modules/users/users.controller.ts",
+          "backend/src/modules/users/users.service.ts",
+          "backend/src/modules/users/workbench-access.service.ts"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "本地UUID。",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateChartPermissions"
+              },
+              "example": {
+                "chartPermissions": [
+                  {
+                    "chartId": "customer_orders",
+                    "visibility": "allow",
+                    "dataScope": "self",
+                    "summaryMode": "none",
+                    "summaryDepartments": [],
+                    "details": "deny",
+                    "export": "deny"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/autoflow/integrations/fop/chart-access": {
+      "get": {
+        "operationId": "getChartAccess",
+        "summary": "读取当前账号有效图表能力",
+        "tags": [
+          "权限管理"
+        ],
+        "description": "从会话解析本地账号/岗位/范围/逐图策略，与绑定FOP用户资源及组织汇总许可求交。无需客户端身份参数。结果不得作为后续请求的凭证。",
+        "responses": {
+          "200": {
+            "description": "成功，裸JSON响应。",
+            "headers": {
+              "Cache-Control": {
+                "description": "JWT guard设置private, no-store；全局429可先于guard返回，不保证此头。",
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChartAccessData"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "x-implementation-status": "implemented",
+        "x-source-files": [
+          "backend/src/modules/users/chart-permissions.ts",
+          "backend/src/modules/fop-data/fop-data.service.ts",
+          "backend/src/modules/users/workbench.controller.ts"
+        ],
+        "parameters": []
       }
     }
   },
@@ -3818,6 +4076,13 @@
             "minimum": 1,
             "maximum": 100,
             "description": "本次每页大小，最多100。"
+          },
+          "customerOwnershipBasis": {
+            "$ref": "#/components/schemas/CustomerOwnershipBasis"
+          },
+          "chartAccess": {
+            "$ref": "#/components/schemas/EffectiveChartAccess",
+            "description": "当前响应的逐图有效能力，每次查询重新解析。"
           }
         },
         "required": [
@@ -3909,6 +4174,14 @@
             ],
             "default": "ALL",
             "description": "ALL全仓，HZ杭州，SZ深圳；UNASSIGNED仅兼容查询，已审核履约／有效收款不得未知仓；默认ALL。"
+          },
+          "view": {
+            "type": "string",
+            "enum": [
+              "records",
+              "summary"
+            ],
+            "description": "缺省records；summary仅category=organization，采用独立组织汇总，不能下钻成员/订单。"
           }
         },
         "required": [
@@ -4297,8 +4570,11 @@
             "minimum": 0
           },
           "customerCount": {
-            "type": "integer",
-            "description": "筛选范围内非空客户 ID 去重；customer 类别包含有效收款客户，可含订单数为0的全款备货客户。",
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "授权事实涉及的去重客户数；纯组织汇总不含客户标识，返回null，不伪造0。",
             "minimum": 0
           },
           "periods": {
@@ -4318,6 +4594,17 @@
           "options": {
             "$ref": "#/components/schemas/VolumeOptions",
             "description": "根据授权有效订单生成的可选部门和对象，不表示额外授权。"
+          },
+          "customerOwnershipBasis": {
+            "$ref": "#/components/schemas/CustomerOwnershipBasis"
+          },
+          "chartAccess": {
+            "$ref": "#/components/schemas/EffectiveChartAccess",
+            "description": "当前响应的逐图有效能力，每次查询重新解析。"
+          },
+          "summaryOnly": {
+            "type": "boolean",
+            "description": "仅组织聚合时true，禁止业务下钻；records视图false。"
           }
         },
         "required": [
@@ -4329,7 +4616,9 @@
           "customerCount",
           "periods",
           "series",
-          "options"
+          "options",
+          "chartAccess",
+          "summaryOnly"
         ],
         "additionalProperties": false,
         "description": "业务员 Top5、客户 Top10 按已支付已审核履约数量排序；客户 Top10 仅 count>0，只有备货收款的客户归 other（显式 customerId 时正常显示该客户）。金额来自同客户集合的独立收款。物流固定顺序。",
@@ -4425,6 +4714,13 @@
             "minimum": 1,
             "maximum": 50,
             "description": "当前每页客户数，最多50。"
+          },
+          "customerOwnershipBasis": {
+            "$ref": "#/components/schemas/CustomerOwnershipBasis"
+          },
+          "chartAccess": {
+            "$ref": "#/components/schemas/EffectiveChartAccess",
+            "description": "当前响应的逐图有效能力，每次查询重新解析。"
           }
         },
         "required": [
@@ -4432,7 +4728,8 @@
           "items",
           "total",
           "page",
-          "pageSize"
+          "pageSize",
+          "chartAccess"
         ],
         "additionalProperties": false,
         "description": "无totals；按授权未取消未退款订单构建客户集，包含未支付，不受图表日期/仓库筛选。"
@@ -4858,6 +5155,17 @@
           "receipts": {
             "$ref": "#/components/schemas/DashboardReceipts",
             "description": "独立授权的 USD 实收分录按 UTC+8 月度汇总，含履约／全款备货来源拆分及上年12月基线。"
+          },
+          "chartAccess": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EffectiveChartAccess"
+            },
+            "description": "有效图表能力；拒绝项对应数据不返回敏感值。"
+          },
+          "departmentReceipts": {
+            "$ref": "#/components/schemas/DashboardReceipts",
+            "description": "独立组织汇总。salespeople必须为空，不与个人或部门内授权记录小计混同。"
           }
         },
         "required": [
@@ -4870,7 +5178,9 @@
           "registrationDepartments",
           "tasks",
           "exceptions",
-          "receipts"
+          "receipts",
+          "chartAccess",
+          "departmentReceipts"
         ],
         "additionalProperties": false,
         "examples": [
@@ -5279,6 +5589,314 @@
               ],
               "basis": "actual_received",
               "timeZone": "UTC+8"
+            },
+            "chartAccess": [],
+            "departmentReceipts": {
+              "currency": "USD",
+              "months": [
+                "2026-01",
+                "2026-02",
+                "2026-03",
+                "2026-04",
+                "2026-05",
+                "2026-06",
+                "2026-07",
+                "2026-08",
+                "2026-09",
+                "2026-10"
+              ],
+              "previousMonth": "2025-12",
+              "marketingCenter": {
+                "id": "marketing",
+                "name": "营销中心",
+                "previousAmount": 100,
+                "amounts": [
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  125.5
+                ],
+                "breakdown": {
+                  "fulfillment": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    125.5
+                  ],
+                  "fullPaymentStock": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                  ]
+                },
+                "previousBreakdown": {
+                  "fulfillment": 100,
+                  "fullPaymentStock": 0
+                }
+              },
+              "departments": [
+                {
+                  "id": "sales1",
+                  "name": "业务一部",
+                  "previousAmount": 100,
+                  "amounts": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    125.5
+                  ],
+                  "salespeople": [
+                    {
+                      "id": "employee-example",
+                      "name": "示例业务员",
+                      "previousAmount": 100,
+                      "amounts": [
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        125.5
+                      ],
+                      "breakdown": {
+                        "fulfillment": [
+                          0,
+                          0,
+                          0,
+                          0,
+                          0,
+                          0,
+                          0,
+                          0,
+                          0,
+                          125.5
+                        ],
+                        "fullPaymentStock": [
+                          0,
+                          0,
+                          0,
+                          0,
+                          0,
+                          0,
+                          0,
+                          0,
+                          0,
+                          0
+                        ]
+                      },
+                      "previousBreakdown": {
+                        "fulfillment": 100,
+                        "fullPaymentStock": 0
+                      }
+                    }
+                  ],
+                  "breakdown": {
+                    "fulfillment": [
+                      0,
+                      0,
+                      0,
+                      0,
+                      0,
+                      0,
+                      0,
+                      0,
+                      0,
+                      125.5
+                    ],
+                    "fullPaymentStock": [
+                      0,
+                      0,
+                      0,
+                      0,
+                      0,
+                      0,
+                      0,
+                      0,
+                      0,
+                      0
+                    ]
+                  },
+                  "previousBreakdown": {
+                    "fulfillment": 100,
+                    "fullPaymentStock": 0
+                  }
+                },
+                {
+                  "id": "sales2",
+                  "name": "业务二部",
+                  "previousAmount": 0,
+                  "amounts": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "salespeople": [],
+                  "breakdown": {
+                    "fulfillment": [
+                      0,
+                      0,
+                      0,
+                      0,
+                      0,
+                      0,
+                      0,
+                      0,
+                      0,
+                      0
+                    ],
+                    "fullPaymentStock": [
+                      0,
+                      0,
+                      0,
+                      0,
+                      0,
+                      0,
+                      0,
+                      0,
+                      0,
+                      0
+                    ]
+                  },
+                  "previousBreakdown": {
+                    "fulfillment": 0,
+                    "fullPaymentStock": 0
+                  }
+                },
+                {
+                  "id": "sales3",
+                  "name": "业务三部",
+                  "previousAmount": 0,
+                  "amounts": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "salespeople": [],
+                  "breakdown": {
+                    "fulfillment": [
+                      0,
+                      0,
+                      0,
+                      0,
+                      0,
+                      0,
+                      0,
+                      0,
+                      0,
+                      0
+                    ],
+                    "fullPaymentStock": [
+                      0,
+                      0,
+                      0,
+                      0,
+                      0,
+                      0,
+                      0,
+                      0,
+                      0,
+                      0
+                    ]
+                  },
+                  "previousBreakdown": {
+                    "fulfillment": 0,
+                    "fullPaymentStock": 0
+                  }
+                },
+                {
+                  "id": "sales4",
+                  "name": "业务四部",
+                  "previousAmount": 0,
+                  "amounts": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "salespeople": [],
+                  "breakdown": {
+                    "fulfillment": [
+                      0,
+                      0,
+                      0,
+                      0,
+                      0,
+                      0,
+                      0,
+                      0,
+                      0,
+                      0
+                    ],
+                    "fullPaymentStock": [
+                      0,
+                      0,
+                      0,
+                      0,
+                      0,
+                      0,
+                      0,
+                      0,
+                      0,
+                      0
+                    ]
+                  },
+                  "previousBreakdown": {
+                    "fulfillment": 0,
+                    "fullPaymentStock": 0
+                  }
+                }
+              ],
+              "basis": "actual_received",
+              "timeZone": "UTC+8"
             }
           }
         ]
@@ -5333,6 +5951,13 @@
               }
             ],
             "description": "真实FOP租户/用户绑定，未绑定时null；不包含密码或JWT。"
+          },
+          "chartPermissions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChartPermissionOverride"
+            },
+            "description": "已持久化账号图表例外，空数组继承模板。"
           }
         },
         "required": [
@@ -5343,7 +5968,8 @@
           "role",
           "workbenchRoles",
           "businessScope",
-          "fopBinding"
+          "fopBinding",
+          "chartPermissions"
         ],
         "additionalProperties": false
       },
@@ -6710,7 +7336,9 @@
               "fop_not_configured",
               "fop_permission_denied",
               "fop_binding_changed",
-              "fop_unavailable"
+              "fop_unavailable",
+              "chart_access_denied",
+              "fop_summary_not_configured"
             ],
             "description": "可供前端i18n映射的业务错误码；具体HTTP状态由对应响应定义。"
           },
@@ -7116,6 +7744,13 @@
                 }
               ]
             }
+          },
+          "customerOwnershipBasis": {
+            "$ref": "#/components/schemas/CustomerOwnershipBasis"
+          },
+          "chartAccess": {
+            "$ref": "#/components/schemas/EffectiveChartAccess",
+            "description": "当前响应的逐图有效能力，每次查询重新解析。"
           }
         },
         "required": [
@@ -8023,6 +8658,10 @@
             "type": "integer",
             "description": "显示期间有效发运单总数，不重复加各系列。",
             "minimum": 0
+          },
+          "chartAccess": {
+            "$ref": "#/components/schemas/EffectiveChartAccess",
+            "description": "当前响应的逐图有效能力，每次查询重新解析。"
           }
         },
         "required": [
@@ -8035,7 +8674,8 @@
           "periods",
           "series",
           "totals",
-          "billCount"
+          "billCount",
+          "chartAccess"
         ],
         "additionalProperties": false,
         "description": "当前用户独立成本授权内的运费聚合。缺freight scope=403；空/缺失allowedFreightIds=各期0值空范围。source=mock明确演示；真实FOP网络适配未完成。",
@@ -8196,7 +8836,17 @@
               "delta": 14,
               "percent": 140
             },
-            "billCount": 2
+            "billCount": 2,
+            "chartAccess": {
+              "chartId": "freight",
+              "visible": true,
+              "dataScope": "all",
+              "scopeLabel": "本租户授权数据",
+              "canViewDetails": true,
+              "canExport": true,
+              "summaryOnly": false,
+              "summaryDepartments": []
+            }
           }
         ]
       },
@@ -8419,6 +9069,10 @@
             ],
             "additionalProperties": false,
             "description": "请求实际选择的周期范围；并集由有效查询周期推导。"
+          },
+          "chartAccess": {
+            "$ref": "#/components/schemas/EffectiveChartAccess",
+            "description": "当前响应的逐图有效能力，每次查询重新解析。"
           }
         },
         "required": [
@@ -8431,7 +9085,8 @@
           "pageSize",
           "items",
           "totals",
-          "range"
+          "range",
+          "chartAccess"
         ],
         "additionalProperties": false,
         "description": "独立成本授权加岗位权限；total/totals分页前计算，越界页items=[]且合计保留；不公开tenantId/departmentPathIds。",
@@ -8496,6 +9151,16 @@
             "range": {
               "from": "2026-10-01",
               "to": "2026-10-22"
+            },
+            "chartAccess": {
+              "chartId": "freight",
+              "visible": true,
+              "dataScope": "all",
+              "scopeLabel": "本租户授权数据",
+              "canViewDetails": true,
+              "canExport": true,
+              "summaryOnly": false,
+              "summaryDepartments": []
             }
           },
           {
@@ -8515,6 +9180,16 @@
             "range": {
               "from": "2026-10-01",
               "to": "2026-10-22"
+            },
+            "chartAccess": {
+              "chartId": "freight",
+              "visible": true,
+              "dataScope": "all",
+              "scopeLabel": "本租户授权数据",
+              "canViewDetails": true,
+              "canExport": true,
+              "summaryOnly": false,
+              "summaryDepartments": []
             }
           }
         ]
@@ -8568,6 +9243,13 @@
             },
             "description": "运费两个端点均要求包含freight；缺失/不包含返回403。",
             "uniqueItems": true
+          },
+          "organizationSummaries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FopOrganizationSummaryGrant"
+            },
+            "description": "独立组织聚合授权，缺失/空不授组织整体统计。"
           }
         },
         "required": [
@@ -9286,7 +9968,7 @@
                 "type": "null"
               }
             ],
-            "description": "本次实际选择；空范围null。普通员工仅自己。管理员/经理无绑定时默认首个并明确显示姓名。"
+            "description": "本次实际选择；个人强制本人；经理/管理员默认绑定员工，未绑定不静默选择同事，需主动选择授权人员。"
           },
           "canSelectOwner": {
             "type": "boolean",
@@ -9308,6 +9990,10 @@
             "items": {
               "$ref": "#/components/schemas/PerformanceUnallocated"
             }
+          },
+          "chartAccess": {
+            "$ref": "#/components/schemas/EffectiveChartAccess",
+            "description": "当前响应的逐图有效能力，每次查询重新解析。"
           }
         },
         "required": [
@@ -9321,7 +10007,8 @@
           "canSelectOwner",
           "periods",
           "totals",
-          "unallocatedSettlements"
+          "unallocatedSettlements",
+          "chartAccess"
         ],
         "additionalProperties": false,
         "examples": [
@@ -9382,7 +10069,17 @@
               "receiptCount": 0,
               "profitCount": 1
             },
-            "unallocatedSettlements": []
+            "unallocatedSettlements": [],
+            "chartAccess": {
+              "chartId": "sales_performance",
+              "visible": true,
+              "dataScope": "all",
+              "scopeLabel": "本租户授权数据",
+              "canViewDetails": true,
+              "canExport": true,
+              "summaryOnly": false,
+              "summaryDepartments": []
+            }
           }
         ]
       },
@@ -9482,6 +10179,10 @@
             "items": {
               "$ref": "#/components/schemas/PerformanceUnallocated"
             }
+          },
+          "chartAccess": {
+            "$ref": "#/components/schemas/EffectiveChartAccess",
+            "description": "当前响应的逐图有效能力，每次查询重新解析。"
           }
         },
         "required": [
@@ -9497,7 +10198,8 @@
           "profits",
           "totals",
           "range",
-          "unallocatedSettlements"
+          "unallocatedSettlements",
+          "chartAccess"
         ],
         "additionalProperties": false,
         "examples": [
@@ -9568,7 +10270,17 @@
               "from": "2026-09-01",
               "to": "2026-09-30"
             },
-            "unallocatedSettlements": []
+            "unallocatedSettlements": [],
+            "chartAccess": {
+              "chartId": "sales_performance",
+              "visible": true,
+              "dataScope": "all",
+              "scopeLabel": "本租户授权数据",
+              "canViewDetails": true,
+              "canExport": true,
+              "summaryOnly": false,
+              "summaryDepartments": []
+            }
           }
         ]
       },
@@ -9630,6 +10342,13 @@
             },
             "uniqueItems": true,
             "description": "独立收款行白名单；缺失/空不授予收款事实。"
+          },
+          "organizationSummaries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FopOrganizationSummaryGrant"
+            },
+            "description": "独立组织聚合授权，缺失/空不授组织整体统计。"
           }
         },
         "required": [
@@ -9637,6 +10356,1021 @@
         ],
         "additionalProperties": false,
         "description": "内部权限投影，浏览器不可写。sales_profit + receipts scopes + sales岗位同时必需；毛利、收款独立白名单并与本地业务范围求交。FOP冻结业务员身份应映射到当前可信员工绑定。"
+      },
+      "ChartId": {
+        "type": "string",
+        "enum": [
+          "registrations",
+          "department_receipts",
+          "salesperson_receipts",
+          "order_volume",
+          "customer_orders",
+          "freight",
+          "sales_performance"
+        ],
+        "description": "稳定图表授权资源；主图、排名及同源趋势共用此许可。未知资源拒绝。"
+      },
+      "ChartVisibility": {
+        "type": "string",
+        "enum": [
+          "inherit",
+          "allow",
+          "deny"
+        ],
+        "description": "继承岗位模板／允许／禁止；允许不扩大数据范围，明确禁止优先。"
+      },
+      "ChartPermissionOverride": {
+        "type": "object",
+        "description": "系统管理员设置的账号图表例外。summaryMode跨字段规则由HTTP验证；源FOP独立汇总许可仍是上限。",
+        "properties": {
+          "chartId": {
+            "$ref": "#/components/schemas/ChartId"
+          },
+          "visibility": {
+            "$ref": "#/components/schemas/ChartVisibility"
+          },
+          "dataScope": {
+            "type": "string",
+            "enum": [
+              "inherit",
+              "self",
+              "department"
+            ],
+            "description": "继承账号范围、仅本人、本部门；最终与账号及FOP范围求交，不能扩大权限。"
+          },
+          "summaryMode": {
+            "type": "string",
+            "enum": [
+              "inherit",
+              "none",
+              "selected",
+              "marketing"
+            ],
+            "description": "组织汇总独立授权：继承、不开放、指定业务部门、营销中心。仅注册、部门回款、组织订单量可设置selected/marketing。"
+          },
+          "summaryDepartments": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "sales1",
+                "sales2",
+                "sales3",
+                "sales4"
+              ],
+              "description": "报表业务部门编码，非任意员工部门UUID。"
+            },
+            "description": "selected时非空且去重；其他模式必须为空。",
+            "uniqueItems": true,
+            "maxItems": 4
+          },
+          "details": {
+            "$ref": "#/components/schemas/ChartVisibility"
+          },
+          "export": {
+            "$ref": "#/components/schemas/ChartVisibility"
+          }
+        },
+        "required": [
+          "chartId",
+          "visibility",
+          "dataScope",
+          "summaryMode",
+          "summaryDepartments",
+          "details",
+          "export"
+        ],
+        "additionalProperties": false
+      },
+      "UpdateChartPermissions": {
+        "type": "object",
+        "description": "只改图表策略，不修改业务角色、系统角色、员工、岗位或FOP绑定。",
+        "properties": {
+          "chartPermissions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChartPermissionOverride"
+            },
+            "description": "整组替换该账号例外；空数组恢复角色/岗位模板。chartId必须唯一。",
+            "maxItems": 7
+          }
+        },
+        "required": [
+          "chartPermissions"
+        ],
+        "additionalProperties": false
+      },
+      "EffectiveChartAccess": {
+        "type": "object",
+        "description": "最终有效能力由服务端当前账号和FOP许可解析，不接受浏览器回传为授权。",
+        "properties": {
+          "chartId": {
+            "$ref": "#/components/schemas/ChartId"
+          },
+          "visible": {
+            "type": "boolean",
+            "description": "本次请求有效图表可见能力；false时不得读取图表数据。"
+          },
+          "dataScope": {
+            "type": "string",
+            "enum": [
+              "none",
+              "self",
+              "department",
+              "all"
+            ],
+            "description": "有效记录范围，已经与本地账号范围求交；不是FOP订单白名单。"
+          },
+          "scopeLabel": {
+            "type": "string",
+            "description": "服务端范围提示，不拼入部门下拉选项。"
+          },
+          "canViewDetails": {
+            "type": "boolean",
+            "description": "可进入底层业务明细；每次请求仍重新鉴权。纯组织汇总不授明细。"
+          },
+          "canExport": {
+            "type": "boolean",
+            "description": "可使用已存在的导出/图片下载能力，不承诺新增业务导出接口。"
+          },
+          "summaryOnly": {
+            "type": "boolean",
+            "description": "仅组织聚合，不得附带员工/客户/单据，禁止业务下钻。"
+          },
+          "summaryDepartments": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "sales1",
+                "sales2",
+                "sales3",
+                "sales4"
+              ],
+              "description": "已授权报表部门。"
+            },
+            "description": "本地汇总策略与FOP部门汇总许可的交集；空数组无完整组织汇总。",
+            "uniqueItems": true
+          }
+        },
+        "required": [
+          "chartId",
+          "visible",
+          "dataScope",
+          "scopeLabel",
+          "canViewDetails",
+          "canExport",
+          "summaryOnly",
+          "summaryDepartments"
+        ],
+        "additionalProperties": false
+      },
+      "ChartAccessData": {
+        "type": "object",
+        "description": "登录账号当前图表能力，不含授权业务记录ID清单。",
+        "properties": {
+          "source": {
+            "$ref": "#/components/schemas/DataSource"
+          },
+          "businessScope": {
+            "$ref": "#/components/schemas/BusinessScope"
+          },
+          "charts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EffectiveChartAccess"
+            },
+            "description": "完整已知七类能力清单；被禁项visible=false。"
+          }
+        },
+        "required": [
+          "source",
+          "businessScope",
+          "charts"
+        ],
+        "additionalProperties": false
+      },
+      "OrganizationSummaryChartId": {
+        "type": "string",
+        "enum": [
+          "registrations",
+          "department_receipts",
+          "order_volume"
+        ],
+        "description": "内部FOP组织汇总资源；订单量仅organization视图。"
+      },
+      "FopOrganizationSummaryDepartment": {
+        "type": "object",
+        "description": "内部汇总部门授权描述。",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "sales1",
+              "sales2",
+              "sales3",
+              "sales4"
+            ],
+            "description": "稳定报表部门编码。"
+          },
+          "departmentId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "FOP可信部门ID，用于与本地经理部门范围求交。"
+          },
+          "departmentPathIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": "可信祖先路径；不从浏览器接受。",
+            "uniqueItems": true
+          }
+        },
+        "required": [
+          "code",
+          "departmentId"
+        ],
+        "additionalProperties": false
+      },
+      "FopOrganizationSummaryGrant": {
+        "type": "object",
+        "description": "内部provider权限契约；不是已发布的FOP HTTP URL或用户可提交的授权。",
+        "properties": {
+          "chartId": {
+            "$ref": "#/components/schemas/OrganizationSummaryChartId"
+          },
+          "departments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FopOrganizationSummaryDepartment"
+            },
+            "description": "绑定FOP用户有权查看的完整部门聚合；不授单据/成员数据。"
+          }
+        },
+        "required": [
+          "chartId",
+          "departments"
+        ],
+        "additionalProperties": false
+      },
+      "FopOrganizationSummaryQuery": {
+        "type": "object",
+        "description": "由平台后台构造的独立组织汇总请求，不能用更换用户身份实现。",
+        "properties": {
+          "chartId": {
+            "$ref": "#/components/schemas/OrganizationSummaryChartId"
+          },
+          "departments": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "sales1",
+                "sales2",
+                "sales3",
+                "sales4"
+              ],
+              "description": "部门代码。"
+            },
+            "description": "已求交允许的部门。",
+            "uniqueItems": true,
+            "minItems": 1
+          },
+          "from": {
+            "type": "string",
+            "format": "date",
+            "description": "UTC+8开始日期，包含当天。"
+          },
+          "to": {
+            "type": "string",
+            "format": "date",
+            "description": "UTC+8结束日期，包含当天；回款可包含上年12月基线。"
+          }
+        },
+        "required": [
+          "chartId",
+          "departments",
+          "from",
+          "to"
+        ],
+        "additionalProperties": false
+      },
+      "FopOrganizationSummaryRow": {
+        "type": "object",
+        "description": "内部聚合行，只允许部门/日期/必要仓库/计数与金额；禁止员工/客户/单据标识。跨字段约束按chartId执行。",
+        "properties": {
+          "date": {
+            "type": "string",
+            "format": "date",
+            "description": "UTC+8业务日期。"
+          },
+          "salesDepartmentCode": {
+            "type": "string",
+            "enum": [
+              "sales1",
+              "sales2",
+              "sales3",
+              "sales4"
+            ],
+            "description": "获授权的业务部门。"
+          },
+          "warehouseCode": {
+            "type": "string",
+            "enum": [
+              "HZ",
+              "SZ",
+              "UNASSIGNED"
+            ],
+            "description": "订单量组织汇总的仓库，保留分仓；收款/注册按合同可不适用。"
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "有效事实数；订单量/注册为对应计数，不能混为收款金额。"
+          },
+          "amount": {
+            "$ref": "#/components/schemas/Money",
+            "description": "仅部门回款，USD实收金额。"
+          },
+          "currency": {
+            "type": "string",
+            "const": "USD",
+            "description": "amount币种。"
+          },
+          "sourceType": {
+            "type": "string",
+            "enum": [
+              "fulfillment",
+              "full_payment_stock"
+            ],
+            "description": "部门回款必须区分履约及全款备货，不能合入押金或样品。"
+          }
+        },
+        "required": [
+          "date",
+          "salesDepartmentCode",
+          "count"
+        ],
+        "additionalProperties": false
+      },
+      "FopOrganizationSummaryData": {
+        "type": "object",
+        "description": "FOP内部provider响应；公开平台接口转换成既有图表结构，不透传主体或源权限。",
+        "properties": {
+          "subject": {
+            "type": "object",
+            "description": "与服务端绑定一致的FOP主体。",
+            "properties": {
+              "tenantId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "userId": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "tenantId",
+              "userId"
+            ],
+            "additionalProperties": false
+          },
+          "chartId": {
+            "$ref": "#/components/schemas/OrganizationSummaryChartId"
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FopOrganizationSummaryRow"
+            },
+            "description": "只含请求部门/日期范围；重复或畸形行拒绝。"
+          }
+        },
+        "required": [
+          "subject",
+          "chartId",
+          "rows"
+        ],
+        "additionalProperties": false
+      },
+      "CustomerOwnershipBasis": {
+        "type": "string",
+        "enum": [
+          "current_assignment",
+          "historical_attribution",
+          "mixed"
+        ],
+        "description": "当前客户分配已提供／旧记录仅历史归属／两类混合；历史或混合时前端明确提示，不能声称完整当前客户归属。"
+      },
+      "FopCurrentCustomerOwner": {
+        "type": "object",
+        "description": "provider专用：客户当前分配与事实历史owner分开；仅缩小客户访问，不能扩大历史事实授权；不向浏览器返回。",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "当前客户业务员稳定ID。"
+          },
+          "departmentId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "当前负责部门。"
+          },
+          "departmentPathIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": "可信部门祖先。"
+          }
+        },
+        "required": [
+          "id",
+          "departmentId"
+        ],
+        "additionalProperties": false
+      },
+      "FopIdentity": {
+        "type": "object",
+        "properties": {
+          "tenantId": {
+            "type": "string",
+            "description": "绑定租户。",
+            "minLength": 1
+          },
+          "userId": {
+            "type": "string",
+            "description": "绑定FOP用户。",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "tenantId",
+          "userId"
+        ],
+        "additionalProperties": false,
+        "description": "可信provider解析主体，必须与服务端绑定完全匹配。"
+      },
+      "FopPermissionGrant": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "subject",
+          "allowedOrderIds"
+        ],
+        "description": "服务端可信provider内部授权契约，不是浏览器请求体；业务管理员也受租户及此授权上限约束。各资源独立，空/缺失不得推导为全部。",
+        "properties": {
+          "subject": {
+            "$ref": "#/components/schemas/FopIdentity"
+          },
+          "allowedOrderIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "uniqueItems": true,
+            "description": "履约订单稳定ID白名单；空为无订单记录。"
+          },
+          "allowedReceiptIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "uniqueItems": true,
+            "description": "独立收款行白名单；缺失/空不授予收款事实。"
+          },
+          "allowedProfitIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": "获授权发运单ID。",
+              "minLength": 1
+            },
+            "description": "独立利润贡献事实ID白名单，缺失/空不授予毛利事实；不能从订单/收款/运费推导。",
+            "uniqueItems": true
+          },
+          "allowedFreightIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": "获授权发运单ID。",
+              "minLength": 1
+            },
+            "description": "独立成本白名单，缺失或空为无运费记录；不能从allowedOrderIds/allowedReceiptIds推导。",
+            "uniqueItems": true
+          },
+          "analyticsScopes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": "独立分析资源。",
+              "enum": [
+                "rates",
+                "registrations",
+                "receipts",
+                "freight",
+                "sales_profit"
+              ]
+            },
+            "description": "独立资源能力；registrations/receipts/freight/sales_profit分别校验，不从其他资源推导。",
+            "uniqueItems": true
+          },
+          "organizationSummaries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FopOrganizationSummaryGrant"
+            },
+            "description": "独立组织聚合授权，缺失/空不授组织整体统计。"
+          }
+        }
+      },
+      "FopProviderCapabilities": {
+        "type": "object",
+        "required": [
+          "customerOwnershipMode"
+        ],
+        "additionalProperties": false,
+        "description": "内部适配器只读能力；不是HTTP查询参数。正式新adapter默认current_required，只有经明确批准的旧适配器才能选择legacy_historical。",
+        "properties": {
+          "customerOwnershipMode": {
+            "type": "string",
+            "enum": [
+              "current_required",
+              "legacy_historical"
+            ],
+            "default": "current_required",
+            "description": "current_required缺少当前客户归属返回503。legacy_historical可降级历史归属，但仍校验历史事实和本地范围，并返回customerOwnershipBasis，页面明确提示；不得声称已完成当前客户隔离。"
+          }
+        }
+      },
+      "FopOrderCandidate": {
+        "type": "object",
+        "properties": {
+          "salesDepartmentCode": {
+            "$ref": "#/components/schemas/SalesDepartment",
+            "description": "可信适配器归一化后的报表部门；非物流维度统计及收款按此字段归属。"
+          },
+          "id": {
+            "type": "string",
+            "description": "FOP订单ID；授权白名单与去重键。"
+          },
+          "orderNumber": {
+            "type": "string",
+            "description": "FOP业务订单号。"
+          },
+          "shopifyOrderNumber": {
+            "type": "string",
+            "description": "来源Shopify订单展示号，例如#10401；参与模糊检索。"
+          },
+          "customerId": {
+            "type": "string",
+            "description": "稳定客户ID；客户去重、客户搜索、筛选与customer:<id> series使用。"
+          },
+          "customerCode": {
+            "type": "string",
+            "description": "业务侧客户编码，客户搜索可按此字段匹配；缺失时序列化省略。"
+          },
+          "warehouseCode": {
+            "type": "string",
+            "description": "已审核履约必须 HZ/SZ；缺失或未知代码拒收。"
+          },
+          "carrierCode": {
+            "type": "string",
+            "description": "已审核履约必须已映射 YT/4PX/WB/YW/JS/OTHER；缺失或未知代码拒收。"
+          },
+          "customerName": {
+            "type": "string",
+            "description": "客户展示名称，参与履约模糊检索。"
+          },
+          "storeName": {
+            "type": "string",
+            "description": "所属店铺展示名称，参与履约模糊检索。"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FopOrderItem"
+            },
+            "description": "订单商品行；商品数量汇总来自全部items.quantity。"
+          },
+          "organization": {
+            "$ref": "#/components/schemas/NamedEntity",
+            "description": "订单所属组织ID与名称；上游未提供时省略。"
+          },
+          "department": {
+            "$ref": "#/components/schemas/NamedEntity",
+            "description": "订单所属实际部门ID与名称；用于经理直接部门范围匹配。"
+          },
+          "owner": {
+            "$ref": "#/components/schemas/NamedEntity",
+            "description": "订单归属业务员工ID与名称；owner.id用于员工权限和业务员分组。"
+          },
+          "amount": {
+            "$ref": "#/components/schemas/Money",
+            "description": "订单总金额，单位为currency主单位；当前不是独立实收金额。"
+          },
+          "currency": {
+            "type": "string",
+            "description": "trim+uppercase，空值默认USD；不会换汇。"
+          },
+          "paymentStatus": {
+            "type": "string",
+            "enum": [
+              "paid",
+              "unpaid",
+              "refunded"
+            ],
+            "description": "paid已支付、unpaid未支付、refunded已退款；统计要求paid，review队列可含unpaid。"
+          },
+          "reviewStatus": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "approved"
+            ],
+            "description": "pending待审核，approved已审核。"
+          },
+          "procurementStatus": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "purchased",
+              "not_required"
+            ],
+            "description": "pending待采购，purchased已采购，not_required无需采购。"
+          },
+          "allocationStatus": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "allocated",
+              "not_ready"
+            ],
+            "description": "pending待配货，allocated已配货，not_ready尚未进入配货环节。"
+          },
+          "dispatchStatus": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "dispatched",
+              "not_ready"
+            ],
+            "description": "pending待调度，dispatched已调度，not_ready尚未进入调度环节。"
+          },
+          "shippingStatus": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "shipped",
+              "not_ready"
+            ],
+            "description": "pending待发货，shipped已发货，not_ready尚未进入发货环节。"
+          },
+          "warehouse": {
+            "type": "string",
+            "description": "展示名，不用于归仓。"
+          },
+          "carrier": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "物流服务商展示名；无服务商为null，不用于统计归类。"
+          },
+          "trackingNumber": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "物流跟踪号；尚未生成时null。"
+          },
+          "salesperson": {
+            "type": "string",
+            "description": "展示名，权限使用owner.id。"
+          },
+          "createdAt": {
+            "type": "string",
+            "description": "订单创建时间，履约列表按此时间降序，时刻相同按id排序。",
+            "format": "date-time"
+          },
+          "paidAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "带时区的支付时间，订单量按 UTC+8 业务日期归桶。",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "带明确时区的订单支付时刻，转换 UTC+8 归桶；缺失不回退 createdAt。"
+          },
+          "cancelled": {
+            "type": "boolean",
+            "description": "true表示订单取消，从订单量/收款/履约队列排除。"
+          },
+          "exception": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OrderException"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "订单异常详情；无异常明确为null。"
+          },
+          "tenantId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "必须与绑定租户及授权subject一致。"
+          },
+          "currentCustomerOwner": {
+            "$ref": "#/components/schemas/FopCurrentCustomerOwner"
+          },
+          "departmentPathIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": "事实所属部门的可信祖先ID；与当前客户归属的部门路径分开。"
+          }
+        },
+        "required": [
+          "id",
+          "orderNumber",
+          "shopifyOrderNumber",
+          "customerName",
+          "storeName",
+          "items",
+          "amount",
+          "currency",
+          "paymentStatus",
+          "reviewStatus",
+          "procurementStatus",
+          "allocationStatus",
+          "dispatchStatus",
+          "shippingStatus",
+          "warehouse",
+          "carrier",
+          "trackingNumber",
+          "salesperson",
+          "createdAt",
+          "paidAt",
+          "cancelled",
+          "exception",
+          "tenantId"
+        ],
+        "additionalProperties": false,
+        "description": "provider内部归一候选事实（有效字段口径同FopOrder）；不直接输出浏览器。tenantId/currentCustomerOwner先验证后剥离，历史owner保留用于业务业绩归属。",
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "reviewStatus": {
+                  "const": "approved"
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "warehouseCode",
+                "carrierCode"
+              ],
+              "properties": {
+                "warehouseCode": {
+                  "type": "string",
+                  "enum": [
+                    "HZ",
+                    "SZ"
+                  ]
+                },
+                "carrierCode": {
+                  "$ref": "#/components/schemas/CarrierCode"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "FopReceiptCandidate": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "唯一收款分录 ID，独立授权及去重键，不是重复的收款表头 ID。"
+          },
+          "documentId": {
+            "type": "string",
+            "description": "源履约或备货单稳定 ID；可信适配器解析，不以显示单号替代。"
+          },
+          "documentNumber": {
+            "type": "string",
+            "description": "源单业务单号，原收款 entryentity.hzkj_src_order 为单号而非 ID。"
+          },
+          "customerId": {
+            "type": "string",
+            "description": "业务归属客户稳定 ID。"
+          },
+          "customerCode": {
+            "type": "string",
+            "description": "客户编码，未提供时空字符串。"
+          },
+          "customerName": {
+            "type": "string",
+            "description": "客户展示名。"
+          },
+          "warehouse": {
+            "type": "string",
+            "description": "国内仓库展示名。"
+          },
+          "sourceType": {
+            "type": "string",
+            "enum": [
+              "fulfillment",
+              "full_payment_stock",
+              "deposit_stock"
+            ],
+            "description": "归一来源。公开有效分录端点只返回履约及全款备货，押金备货不进入业绩，样品不在本资源范围。"
+          },
+          "organization": {
+            "$ref": "#/components/schemas/NamedEntity"
+          },
+          "department": {
+            "$ref": "#/components/schemas/NamedEntity"
+          },
+          "owner": {
+            "$ref": "#/components/schemas/NamedEntity"
+          },
+          "salesDepartmentCode": {
+            "$ref": "#/components/schemas/SalesDepartment"
+          },
+          "warehouseCode": {
+            "type": "string",
+            "enum": [
+              "HZ",
+              "SZ"
+            ]
+          },
+          "carrierCode": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CarrierCode"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "履约必须已映射服务商；全款／押金备货必须 null，表示不适用。未知物流不能兜底为 OTHER。"
+          },
+          "amount": {
+            "$ref": "#/components/schemas/Money",
+            "minimum": 0,
+            "description": "收款分录 hzkj_real_receive_amt 实收，业务结算含钱包授信，并非银行现金流保证。"
+          },
+          "orderAmount": {
+            "$ref": "#/components/schemas/Money",
+            "minimum": 0,
+            "description": "收款分录 hzkj_samount 订单金额，不用于实收业绩。"
+          },
+          "handlingFee": {
+            "$ref": "#/components/schemas/Money",
+            "minimum": 0,
+            "description": "收款分录 hzkj_handle_fee 手续费，单独保留用于对账。"
+          },
+          "currency": {
+            "type": "string",
+            "pattern": "^[A-Z]{3}$",
+            "description": "明确原币种，不隐式换汇；公开业绩分录页仅 USD。"
+          },
+          "paidAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "带明确时区的支付时刻，转换 UTC+8 归日／月；有效分录页必为已发生的非空时刻。"
+          },
+          "reviewStatus": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "approved"
+            ],
+            "description": "源履约或备货单审核，不等于收款单审核。"
+          },
+          "receiptReviewStatus": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "approved"
+            ],
+            "description": "收款单审核，业绩要求源单及收款单均 approved。"
+          },
+          "paymentStatus": {
+            "type": "string",
+            "enum": [
+              "paid",
+              "unpaid",
+              "refunded"
+            ],
+            "description": "归一支付状态。paid 必须同时满足源履约／备货订单的支付条件及收款单已收条件（hzkj_receive_status=B）；不能只根据收款单 B 推定源单已支付。源单两类枚举不同，按已核实映射处理。"
+          },
+          "cancelled": {
+            "type": "boolean"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FopOrderItem"
+            }
+          },
+          "tenantId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "必须与绑定租户及授权subject一致。"
+          },
+          "currentCustomerOwner": {
+            "$ref": "#/components/schemas/FopCurrentCustomerOwner"
+          },
+          "departmentPathIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": "事实所属部门的可信祖先ID；与当前客户归属的部门路径分开。"
+          }
+        },
+        "required": [
+          "id",
+          "documentId",
+          "documentNumber",
+          "customerId",
+          "customerCode",
+          "customerName",
+          "warehouse",
+          "sourceType",
+          "department",
+          "owner",
+          "salesDepartmentCode",
+          "warehouseCode",
+          "carrierCode",
+          "amount",
+          "orderAmount",
+          "handlingFee",
+          "currency",
+          "paidAt",
+          "reviewStatus",
+          "receiptReviewStatus",
+          "paymentStatus",
+          "cancelled",
+          "items",
+          "tenantId"
+        ],
+        "additionalProperties": false,
+        "description": "provider内部归一候选事实（有效字段口径同FopReceipt）；不直接输出浏览器。tenantId/currentCustomerOwner先验证后剥离，历史owner保留用于业务业绩归属。",
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "sourceType": {
+                  "const": "fulfillment"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "carrierCode": {
+                  "$ref": "#/components/schemas/CarrierCode"
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "carrierCode": {
+                  "type": "null"
+                }
+              }
+            }
+          }
+        ]
       }
     },
     "responses": {

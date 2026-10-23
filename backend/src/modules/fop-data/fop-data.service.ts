@@ -1,3 +1,7 @@
+import { CHART_IDS, ChartId, ChartSummaryPolicy, EffectiveChartAccess, resolveChartAccess, resolveChartSummaryPolicy } from '../users/chart-permissions'
+import { summaryOrderVolume, summaryReceipts, summaryRegistrations } from './fop-organization-summary'
+import { FopCurrentCustomerOwner, FopOrganizationSummaryGrant, FopOrganizationSummaryNotConfiguredError, FopOrganizationSummaryQuery, FopOrganizationSummaryRow, SALES_DEPARTMENTS } from './fop-data.types'
+import { orderVolumePeriods } from './order-volume'
 import { aggregateSalesPerformance, performanceDetails, performancePeriods, effectiveProfits } from './sales-performance'
 import type { FopProfit, PerformanceData, PerformanceDetailsQuery, PerformanceOwner, PerformancePage, PerformanceQuery } from './sales-performance.types'
 import { aggregateFreight, freightDetails, freightPeriods, publicFreight } from './fop-freight'
@@ -20,7 +24,8 @@ import { businessDate, BUSINESS_TIME_ZONE, validBusinessDay } from './fop-busine
 import { ReceiptQueryDto } from './fop-receipts.dto'
 
 type Queue = keyof typeof FULFILLMENT_QUEUE_ROLES
-type Scope = { binding: FopIdentity | null; roles: WorkbenchRole[]; business: BusinessScope }
+type Scope = { binding: FopIdentity | null; roles: WorkbenchRole[]; business: BusinessScope; charts: EffectiveChartAccess[]; summaryPolicies: Record<ChartId, ChartSummaryPolicy>; customerAttribution?: { current: number; historical: number; assignments: Map<string, string> } }
+type ChartContext = { initial: Scope; permission: FopPermissionGrant; access: EffectiveChartAccess; chartId: ChartId }
 
 function matchesQueue(order: FopOrder, queue: Queue): boolean {
   if (order.cancelled || order.paymentStatus === 'refunded') return false
@@ -73,6 +78,8 @@ export class FopDataService {
     if (!user) throw new UnauthorizedException('Account no longer exists')
     return {
       business: businessScope(user),
+      charts: resolveChartAccess(user),
+      summaryPolicies: Object.fromEntries(CHART_IDS.map(chartId => [chartId, resolveChartSummaryPolicy(user, chartId)])) as Record<ChartId, ChartSummaryPolicy>,
       binding: this.provider.demoIdentity?.(userId) ?? (user.fopTenantId && user.fopUserId ? { tenantId: user.fopTenantId, userId: user.fopUserId } : null),
       roles: businessScope(user).role === 'none' ? [] : businessScope(user).role === 'admin' ? [...WORKBENCH_ROLES] : (user.workbenchRoles ?? []).filter(isWorkbenchRole),
     }
@@ -80,7 +87,8 @@ export class FopDataService {
 
   private async assertUnchanged(userId: string, initial: Scope): Promise<void> {
     const current = await this.scope(userId)
-    if (JSON.stringify(current.business) !== JSON.stringify(initial.business)
+    if (JSON.stringify(current.charts) !== JSON.stringify(initial.charts) || JSON.stringify(current.summaryPolicies) !== JSON.stringify(initial.summaryPolicies)
+      || JSON.stringify(current.business) !== JSON.stringify(initial.business)
       || !sameIdentity(current.binding, initial.binding)
       || [...current.roles].sort().join(',') !== [...initial.roles].sort().join(',')) {
       throw new ForbiddenException({ code: 'fop_binding_changed', message: 'FOP binding or workbench access changed; reload before continuing' })
@@ -111,11 +119,113 @@ export class FopDataService {
     if (grant.analyticsScopes !== undefined && (!Array.isArray(grant.analyticsScopes) || grant.analyticsScopes.some(scope => !['rates', 'registrations', 'receipts', 'freight', 'sales_profit'].includes(scope)))) {
       throw new ForbiddenException({ code: 'fop_permission_denied', message: 'Invalid FOP analytics permissions' })
     }
-    return { subject: { ...identity }, allowedOrderIds: [...new Set(grant.allowedOrderIds)], allowedReceiptIds: [...new Set(grant.allowedReceiptIds ?? [])], allowedFreightIds: [...new Set(grant.allowedFreightIds ?? [])], allowedProfitIds: [...new Set(grant.allowedProfitIds ?? [])], analyticsScopes: [...new Set(grant.analyticsScopes ?? [])] }
+    const summaries = grant.organizationSummaries ?? []
+    if (!Array.isArray(summaries) || new Set(summaries.map((s: FopOrganizationSummaryGrant) => s?.chartId)).size !== summaries.length || summaries.some((s: FopOrganizationSummaryGrant) => !s || !['registrations', 'department_receipts', 'order_volume'].includes(s.chartId) || !Array.isArray(s.departments) || new Set(s.departments.map((d: FopOrganizationSummaryGrant['departments'][number]) => d?.code)).size !== s.departments.length || s.departments.some((d: FopOrganizationSummaryGrant['departments'][number]) => !d || !SALES_DEPARTMENTS.some(item => item.id === d.code) || typeof d.departmentId !== 'string' || !d.departmentId.trim() || d.departmentPathIds !== undefined && (!Array.isArray(d.departmentPathIds) || d.departmentPathIds.some((id: unknown) => typeof id !== 'string' || !id.trim()) || new Set(d.departmentPathIds).size !== d.departmentPathIds.length)))) throw new ForbiddenException({ code: 'fop_permission_denied', message: 'Invalid organization summary grant' })
+    return { organizationSummaries: summaries.map((s: FopOrganizationSummaryGrant) => ({ chartId: s.chartId, departments: s.departments.map((d: FopOrganizationSummaryGrant['departments'][number]) => ({ code: d.code, departmentId: d.departmentId, ...(d.departmentPathIds ? { departmentPathIds: [...d.departmentPathIds] } : {}) })) })), subject: { ...identity }, allowedOrderIds: [...new Set(grant.allowedOrderIds)], allowedReceiptIds: [...new Set(grant.allowedReceiptIds ?? [])], allowedFreightIds: [...new Set(grant.allowedFreightIds ?? [])], allowedProfitIds: [...new Set(grant.allowedProfitIds ?? [])], analyticsScopes: [...new Set(grant.analyticsScopes ?? [])] }
+  }
+
+  private effectiveCharts(initial: Scope, permission: FopPermissionGrant): EffectiveChartAccess[] {
+    return initial.charts.map(local => {
+      if (!initial.roles.length || local.chartId === 'sales_performance' && !initial.roles.includes('sales')) return { ...local, visible: false, dataScope: 'none', scopeLabel: '工作台岗位未授权', summaryDepartments: [], summaryOnly: false, canViewDetails: false, canExport: false }
+      const policy = initial.summaryPolicies[local.chartId]
+      const granted = permission.organizationSummaries?.find(g => g.chartId === local.chartId)?.departments ?? []
+      const summaryDepartments = !local.visible ? [] : granted.filter(d => policy.mode === 'marketing'
+        || policy.mode === 'selected' && policy.departments.includes(d.code)
+        || policy.mode === 'department' && !!initial.business.departmentId && (d.departmentId === initial.business.departmentId || d.departmentPathIds?.includes(initial.business.departmentId))).map(d => d.code)
+      const resourceEnabled = local.chartId === 'registrations' ? permission.analyticsScopes?.includes('registrations')
+        : local.chartId === 'salesperson_receipts' ? permission.analyticsScopes?.includes('receipts')
+          : local.chartId === 'freight' ? permission.analyticsScopes?.includes('freight')
+            : local.chartId === 'sales_performance' ? permission.analyticsScopes?.includes('receipts') && permission.analyticsScopes?.includes('sales_profit')
+              : local.chartId !== 'department_receipts'
+      const dataScope = local.visible && resourceEnabled ? local.dataScope : 'none'
+      const visible = local.visible && (dataScope !== 'none' || summaryDepartments.length > 0)
+      const summaryOnly = visible && dataScope === 'none'
+      return { ...local, visible, dataScope, summaryDepartments, summaryOnly,
+        scopeLabel: !visible ? '未授权' : summaryOnly ? `${summaryDepartments.map(code => SALES_DEPARTMENTS.find(d => d.id === code)!.name).join('、')}汇总` : summaryDepartments.length ? `成员范围：${local.scopeLabel}；组织汇总：${summaryDepartments.map(code => SALES_DEPARTMENTS.find(d => d.id === code)!.name).join('、')}` : local.scopeLabel,
+        canViewDetails: visible && !summaryOnly && local.canViewDetails,
+        canExport: visible && local.canExport }
+    })
+  }
+
+  async getChartAccess(userId: string) {
+    const initial = await this.scope(userId)
+    if (initial.business.role === 'none') return { source: this.provider.source ?? 'fop', businessScope: initial.business, charts: initial.charts }
+    const permission = await this.permissions(userId, initial)
+    return { source: this.provider.source ?? 'fop', businessScope: initial.business, charts: this.effectiveCharts(initial, permission) }
+  }
+
+  private async chartContext(userId: string, chartId: ChartId, details = false, requiredRole?: WorkbenchRole): Promise<ChartContext> {
+    const initial = await this.scope(userId)
+    if (!initial.charts.find(c => c.chartId === chartId)?.visible || (requiredRole && !initial.roles.includes(requiredRole))) throw new ForbiddenException({ code: 'chart_access_denied', message: 'Chart access denied' })
+    const permission = await this.permissions(userId, initial)
+    const access = this.effectiveCharts(initial, permission).find(c => c.chartId === chartId)!
+    if (!access.visible || details && !access.canViewDetails) throw new ForbiddenException({ code: 'chart_access_denied', message: 'Chart or detail access denied' })
+    if (chartId === 'customer_orders') initial.customerAttribution = { current: 0, historical: 0, assignments: new Map() }
+    return { initial, permission, access, chartId }
+  }
+
+  private matchesChart(context: ChartContext, record: { owner?: { id: string }; department?: { id: string }; departmentPathIds?: readonly string[] }): boolean {
+    if (!matchesBusinessScope(context.initial.business, record)) return false
+    switch (context.access.dataScope) {
+      case 'all': return true
+      case 'self': return !!context.initial.business.employeeId && record.owner?.id === context.initial.business.employeeId
+      case 'department': return !!context.initial.business.departmentId && (record.department?.id === context.initial.business.departmentId || !!record.departmentPathIds?.includes(context.initial.business.departmentId))
+      default: return false
+    }
+  }
+
+  private matchesCustomer(context: ChartContext | undefined, row: { customerId?: string; currentCustomerOwner?: FopCurrentCustomerOwner }): boolean {
+    if (context?.chartId !== 'customer_orders') return true
+    const state = context.initial.customerAttribution!
+    const owner = row.currentCustomerOwner
+    if (!owner) {
+      if (this.provider.customerOwnershipMode === 'current_required') throw new Error('Current customer assignment is required by this adapter')
+      state.historical++; return true
+    }
+    if (typeof owner.id !== 'string' || !owner.id.trim() || typeof owner.departmentId !== 'string' || !owner.departmentId.trim()) throw new Error('Invalid current customer assignment')
+    this.validateAncestry(owner.departmentPathIds)
+    const key = JSON.stringify([owner.id, owner.departmentId, [...(owner.departmentPathIds ?? [])].sort()])
+    if (row.customerId && state.assignments.has(row.customerId) && state.assignments.get(row.customerId) !== key) throw new Error('Conflicting current customer assignments')
+    if (row.customerId) state.assignments.set(row.customerId, key)
+    if (!this.matchesChart(context, { owner, department: { id: owner.departmentId }, departmentPathIds: owner.departmentPathIds })) return false
+    state.current++
+    return true
+  }
+
+  private customerBasis(context: ChartContext): 'current_assignment' | 'historical_attribution' | 'mixed' {
+    const state = context.initial.customerAttribution!
+    return state.historical ? state.current ? 'mixed' : 'historical_attribution' : 'current_assignment'
+  }
+
+  private async organizationSummary(userId: string, context: ChartContext, query: FopOrganizationSummaryQuery): Promise<FopOrganizationSummaryRow[]> {
+    const departments = context.access.summaryDepartments.filter(code => query.departments.includes(code))
+    if (!departments.length) throw new ForbiddenException({ code: 'chart_summary_denied', message: 'Organization summary access denied' })
+    const identity = Object.freeze({ ...context.permission.subject })
+    // The provider receives aggregate grants only, with no detail allowlist to expand.
+    const permission = Object.freeze({ subject: identity, allowedOrderIds: Object.freeze([] as string[]), organizationSummaries: Object.freeze((context.permission.organizationSummaries ?? []).filter(g => g.chartId === context.chartId).map(g => Object.freeze({ chartId: g.chartId, departments: Object.freeze(g.departments.filter(d => departments.includes(d.code)).map(d => Object.freeze({ ...d, departmentPathIds: Object.freeze([...(d.departmentPathIds ?? [])]) }))) }))) })
+    const result = await this.providerCall(() => this.provider.getOrganizationSummary(identity, permission, Object.freeze({ ...query, departments: Object.freeze([...departments]) })))
+    await this.assertUnchanged(userId, context.initial)
+    if (!sameIdentity(result?.subject, identity) || result?.chartId !== query.chartId) throw new ForbiddenException({ code: 'fop_permission_denied', message: 'Organization summary subject mismatch' })
+    return this.providerCall(async () => {
+      if (!Array.isArray(result.rows)) throw new Error('Invalid organization summary response')
+      const seen = new Set<string>()
+      return result.rows.filter(row => row && departments.includes(row.salesDepartmentCode)).map(row => {
+        if (!validBusinessDay(row.date) || row.date < query.from || row.date > query.to || !Number.isSafeInteger(row.count) || row.count < 0
+          || query.chartId === 'department_receipts' && (row.currency !== 'USD' || !Number.isFinite(row.amount) || row.amount! < 0 || !['fulfillment', 'full_payment_stock'].includes(row.sourceType ?? ''))
+          || query.chartId === 'order_volume' && !['HZ', 'SZ', 'UNASSIGNED'].includes(row.warehouseCode ?? '')) throw new Error('Invalid summary metric')
+        const key = JSON.stringify([row.date, row.salesDepartmentCode, query.chartId === 'order_volume' ? row.warehouseCode : undefined, query.chartId === 'department_receipts' ? row.sourceType : undefined])
+        if (seen.has(key)) throw new Error('Duplicate summary metric')
+        seen.add(key)
+        return { date: row.date, salesDepartmentCode: row.salesDepartmentCode, count: row.count,
+          ...(query.chartId === 'order_volume' ? { warehouseCode: row.warehouseCode } : {}),
+          ...(query.chartId === 'department_receipts' ? { amount: row.amount, currency: 'USD' as const, sourceType: row.sourceType } : {}) }
+      })
+    })
   }
 
   private async providerCall<T>(operation: () => Promise<T>): Promise<T> {
     try { return await operation() } catch (error) {
+      if (error instanceof FopOrganizationSummaryNotConfiguredError) throw new ServiceUnavailableException({ code: 'fop_summary_not_configured', message: 'FOP organization summary integration is not configured' })
       if (error instanceof FopPermissionDeniedError) throw new ForbiddenException({ code: 'fop_permission_denied', message: 'FOP denied access to this employee account' })
       // Even framework exceptions from adapters may contain private upstream diagnostics.
       throw new ServiceUnavailableException({ code: 'fop_unavailable', message: 'FOP data access is unavailable' })
@@ -151,12 +261,12 @@ export class FopDataService {
     }
   }
 
-  private async scopedOrders(userId: string, requiredRole?: WorkbenchRole): Promise<{ orders: FopOrder[]; roles: WorkbenchRole[]; permission: FopPermissionGrant; initial: Scope }> {
-    const initial = await this.scope(userId)
+  private async scopedOrders(userId: string, requiredRole?: WorkbenchRole, context?: ChartContext): Promise<{ orders: FopOrder[]; roles: WorkbenchRole[]; permission: FopPermissionGrant; initial: Scope }> {
+    const initial = context?.initial ?? await this.scope(userId)
     if (requiredRole ? !initial.roles.includes(requiredRole) : initial.roles.length === 0) {
       throw new ForbiddenException('Workbench access denied')
     }
-    const permission = await this.permissions(userId, initial)
+    const permission = context?.permission ?? await this.permissions(userId, initial)
     const allowedIds = new Set(permission.allowedOrderIds)
     if (!allowedIds.size) return { orders: [], roles: initial.roles, permission, initial }
     const identity = Object.freeze({ ...permission.subject })
@@ -168,6 +278,8 @@ export class FopDataService {
       const seen = new Set<string>()
       const orders = candidates.filter((candidate) => {
         if (!candidate || candidate.tenantId !== identity.tenantId || !allowedIds.has(candidate.id) || seen.has(candidate.id) || !matchesBusinessScope(initial.business, candidate)) return false
+        this.validateAncestry(candidate.departmentPathIds)
+        if (context && !this.matchesChart(context, candidate) || !this.matchesCustomer(context, candidate)) return false
         seen.add(candidate.id)
         return true
       }).map(publicOrder)
@@ -175,7 +287,7 @@ export class FopDataService {
     })
   }
 
-  private async scopedReceipts(userId: string, scoped: { permission: FopPermissionGrant; initial: Scope }): Promise<FopReceipt[]> {
+  private async scopedReceipts(userId: string, scoped: { permission: FopPermissionGrant; initial: Scope }, context?: ChartContext): Promise<FopReceipt[]> {
     if (!scoped.permission.analyticsScopes?.includes('receipts')) return []
     const allowed = new Set(scoped.permission.allowedReceiptIds ?? [])
     if (!allowed.size) return []
@@ -189,7 +301,7 @@ export class FopDataService {
       return candidates.filter(candidate => {
         if (!candidate || candidate.tenantId !== identity.tenantId || !allowed.has(candidate.id)) return false
         this.validateAncestry(candidate.departmentPathIds)
-        if (!matchesBusinessScope(scoped.initial.business, candidate)) return false
+        if (!matchesBusinessScope(scoped.initial.business, candidate) || context && !this.matchesChart(context, candidate) || !this.matchesCustomer(context, candidate)) return false
         if (seen.has(candidate.id)) throw new Error('Duplicate authorized receipt ID')
         seen.add(candidate.id)
         return true
@@ -197,13 +309,13 @@ export class FopDataService {
     })
   }
 
-  private async scopedFreight(userId: string, requiredRole?: WorkbenchRole): Promise<{ records: FopFreight[]; initial: Scope }> {
-    const initial = await this.scope(userId)
+  private async scopedFreight(userId: string, requiredRole?: WorkbenchRole, details = false): Promise<{ records: FopFreight[]; initial: Scope; access: EffectiveChartAccess }> {
+    const context = await this.chartContext(userId, 'freight', details, requiredRole)
+    const { initial, permission } = context
     if (requiredRole ? !initial.roles.includes(requiredRole) : !initial.roles.length) throw new ForbiddenException('Workbench access denied')
-    const permission = await this.permissions(userId, initial)
     if (!permission.analyticsScopes?.includes('freight')) throw new ForbiddenException({ code: 'fop_permission_denied', message: 'Freight cost access denied' })
     const allowed = new Set(permission.allowedFreightIds ?? [])
-    if (!allowed.size) return { records: [], initial }
+    if (!allowed.size) return { records: [], initial, access: context.access }
     const identity = Object.freeze({ ...permission.subject })
     const grant = Object.freeze({ subject: identity, allowedOrderIds: Object.freeze([...permission.allowedOrderIds]), allowedFreightIds: Object.freeze([...allowed]), analyticsScopes: Object.freeze([...(permission.analyticsScopes ?? [])]) })
     const candidates = await this.providerCall(() => this.provider.listFreight(identity, grant))
@@ -214,26 +326,26 @@ export class FopDataService {
       return candidates.filter(candidate => {
         if (!candidate || candidate.tenantId !== identity.tenantId || !allowed.has(candidate.id)) return false
         if (candidate.departmentPathIds !== undefined && (!Array.isArray(candidate.departmentPathIds) || candidate.departmentPathIds.some(id => typeof id !== 'string' || !id.trim()))) throw new Error('Invalid freight department ancestry')
-        if (!matchesBusinessScope(initial.business, candidate)) return false
+        if (!this.matchesChart(context, candidate)) return false
         if (seen.has(candidate.id)) throw new Error('Duplicate authorized freight ID')
         seen.add(candidate.id)
         return true
       }).map(publicFreight)
     })
-    return { records, initial }
+    return { records, initial, access: context.access }
   }
 
   private validateAncestry(path: unknown): void {
     if (path !== undefined && (!Array.isArray(path) || path.some(id => typeof id !== 'string' || !id.trim()) || new Set(path).size !== path.length)) throw new Error('Invalid resource department ancestry')
   }
 
-  private async scopedPerformance(userId: string, now: Date) {
-    const initial = await this.scope(userId)
+  private async scopedPerformance(userId: string, now: Date, details = false) {
+    const context = await this.chartContext(userId, 'sales_performance', details, 'sales')
+    const { initial, permission } = context
     if (!initial.roles.includes('sales')) throw new ForbiddenException('Sales workbench access denied')
-    const permission = await this.permissions(userId, initial)
     if (!permission.analyticsScopes?.includes('receipts') || !permission.analyticsScopes.includes('sales_profit')) throw new ForbiddenException({ code: 'fop_permission_denied', message: 'Independent receipt and sales profit access is required' })
     // Receipt authorization is independent of order enumeration and order access.
-    const receipts = await this.scopedReceipts(userId, { permission, initial })
+    const receipts = await this.scopedReceipts(userId, { permission, initial }, context)
     const allowed = new Set(permission.allowedProfitIds ?? [])
     let profits: FopProfit[] = []
     if (allowed.size) {
@@ -247,7 +359,7 @@ export class FopDataService {
         return effectiveProfits(candidates.filter(candidate => {
           if (!candidate || candidate.tenantId !== identity.tenantId || !allowed.has(candidate.id)) return false
           this.validateAncestry(candidate.departmentPathIds)
-          if (!matchesBusinessScope(initial.business, candidate)) return false
+          if (!this.matchesChart(context, candidate)) return false
           if (seen.has(candidate.id)) throw new Error('Duplicate authorized profit ID')
           seen.add(candidate.id)
           return true
@@ -255,11 +367,11 @@ export class FopDataService {
       })
     }
     await this.assertUnchanged(userId, initial)
-    return { receipts, profits, initial }
+    return { receipts, profits, initial, access: context.access }
   }
 
   private performanceOwner(scoped: { receipts: FopReceipt[]; profits: FopProfit[]; initial: Scope }, query: PerformanceQuery, now: Date) {
-    const canSelectOwner = ['admin', 'department_manager'].includes(scoped.initial.business.role)
+    const canSelectOwner = ['admin', 'department_manager'].includes(scoped.initial.business.role) && scoped.initial.charts.find(c => c.chartId === 'sales_performance')?.dataScope !== 'self'
     const byId = new Map<string, PerformanceOwner>()
     const knownProfits = scoped.profits.filter(row => Date.parse(row.knownAt) <= now.getTime() && (!row.approvedAt || Date.parse(row.approvedAt) <= now.getTime())
       && (row.recognitionDate ? row.recognitionDate <= businessDate(now) : row.recognitionMonth <= businessDate(now).slice(0, 7)))
@@ -269,7 +381,7 @@ export class FopDataService {
     const owners = [...byId.values()].sort((a, b) => a.id.localeCompare(b.id))
     const boundId = scoped.initial.business.employeeId
     if (query.ownerId !== undefined && (canSelectOwner ? !byId.has(query.ownerId) : query.ownerId !== boundId)) throw new ForbiddenException({ code: 'fop_permission_denied', message: 'Salesperson is outside the authorized scope' })
-    const ownerId = canSelectOwner ? query.ownerId ?? (boundId && byId.has(boundId) ? boundId : owners[0]?.id) : boundId ?? undefined
+    const ownerId = canSelectOwner ? query.ownerId ?? (boundId && byId.has(boundId) ? boundId : undefined) : boundId ?? undefined
     return { canSelectOwner, owners, selectedOwner: ownerId ? byId.get(ownerId) ?? null : null, ownerId,
       receipts: scoped.receipts.filter(row => row.owner?.id === ownerId), profits: scoped.profits.filter(row => row.owner.id === ownerId) }
   }
@@ -281,36 +393,36 @@ export class FopDataService {
     const selected = this.performanceOwner(scoped, query, now)
     const result = await this.providerCall(async () => aggregateSalesPerformance(selected.receipts, selected.profits, { ...query, ...(selected.ownerId ? { ownerId: selected.ownerId } : {}) }, now))
     await this.assertUnchanged(userId, scoped.initial)
-    return { source: this.provider.source ?? 'fop', ...result, owners: selected.owners, selectedOwner: selected.selectedOwner, canSelectOwner: selected.canSelectOwner }
+    return { source: this.provider.source ?? 'fop', chartAccess: scoped.access, ...result, owners: selected.owners, selectedOwner: selected.selectedOwner, canSelectOwner: selected.canSelectOwner }
   }
 
   async getSalesPerformanceDetails(userId: string, query: PerformanceDetailsQuery): Promise<PerformancePage> {
     const now = new Date()
     performanceDetails([], [], query, now)
-    const scoped = await this.scopedPerformance(userId, now)
+    const scoped = await this.scopedPerformance(userId, now, true)
     const selected = this.performanceOwner(scoped, query, now)
     const result = await this.providerCall(async () => performanceDetails(selected.receipts, selected.profits, query, now))
     await this.assertUnchanged(userId, scoped.initial)
-    return { source: this.provider.source ?? 'fop', ...result }
+    return { source: this.provider.source ?? 'fop', chartAccess: scoped.access, ...result }
   }
 
   async getFreight(userId: string, query: FreightQuery) {
     const now = new Date()
     freightPeriods(query, now)
-    const { records, initial } = await this.scopedFreight(userId)
+    const { records, initial, access } = await this.scopedFreight(userId)
     const result = await this.providerCall(async () => aggregateFreight(records, query, now))
     await this.assertUnchanged(userId, initial)
-    return { source: this.provider.source ?? 'fop', ...result }
+    return { source: this.provider.source ?? 'fop', chartAccess: access, ...result }
   }
 
   async getFreightDetails(userId: string, query: FreightDetailsQuery) {
     const now = new Date()
     // Validate period IDs before data fetch; malformed user filters are HTTP 400.
     freightDetails([], query, now)
-    const { records, initial } = await this.scopedFreight(userId, query.workbenchRole)
+    const { records, initial, access } = await this.scopedFreight(userId, query.workbenchRole, true)
     const result = await this.providerCall(async () => freightDetails(records, query, now))
     await this.assertUnchanged(userId, initial)
-    return { source: this.provider.source ?? 'fop', ...result }
+    return { source: this.provider.source ?? 'fop', chartAccess: access, ...result }
   }
 
   private receiptPage(rows: FopReceipt[], query: { page: number; pageSize: number }) {
@@ -319,26 +431,28 @@ export class FopDataService {
   }
 
   async getReceipts(userId: string, query: ReceiptQueryDto) {
+    if (query.chartId && query.chartId !== 'salesperson_receipts') throw new ForbiddenException({ code: 'chart_access_denied', message: 'Organization summaries do not grant receipt details' })
     if (!validBusinessDay(query.from) || !validBusinessDay(query.to) || query.from < '2020-01-01' || query.from > query.to || query.to > businessDate(new Date())) throw new BadRequestException('Invalid receipt date range')
-    const scoped = await this.scopedOrders(userId, query.workbenchRole)
-    if (!scoped.permission.analyticsScopes?.includes('receipts')) throw new ForbiddenException('Receipt access denied')
-    const records = await this.scopedReceipts(userId, scoped)
+    const context = await this.chartContext(userId, 'salesperson_receipts', true, query.workbenchRole)
+    const records = await this.scopedReceipts(userId, context, context)
     const rows = eligibleReceipts(records).filter(r => businessDate(r.paidAt!) >= query.from && businessDate(r.paidAt!) <= query.to
       && (!query.department || r.salesDepartmentCode === query.department) && (!query.ownerId || r.owner?.id === query.ownerId)
       && (!query.customerId || r.customerId === query.customerId) && (query.warehouse === 'ALL' || r.warehouseCode === query.warehouse)
       && (!query.sourceType || r.sourceType === query.sourceType))
-    await this.assertUnchanged(userId, scoped.initial)
-    return this.receiptPage(rows, query)
+    await this.assertUnchanged(userId, context.initial)
+    return { ...this.receiptPage(rows, query), chartAccess: context.access }
   }
 
   async getOrderVolumeReceipts(userId: string, query: OrderVolumeDetailsDto) {
     if (query.category !== 'customer') throw new BadRequestException('Receipt cohort requires customer category')
-    const scoped = await this.scopedOrders(userId, query.workbenchRole)
+    if (query.view === 'summary') throw new ForbiddenException({ code: 'chart_access_denied', message: 'Organization summaries do not grant receipt details' })
+    const context = await this.chartContext(userId, 'customer_orders', true, query.workbenchRole)
+    const scoped = await this.scopedOrders(userId, query.workbenchRole, context)
     if (!scoped.permission.analyticsScopes?.includes('receipts')) throw new ForbiddenException('Receipt access denied')
-    const receipts = await this.scopedReceipts(userId, scoped)
+    const receipts = await this.scopedReceipts(userId, scoped, context)
     const rows = orderVolumeReceiptDetails(scoped.orders, receipts, query)
     await this.assertUnchanged(userId, scoped.initial)
-    return this.receiptPage(rows, query)
+    return { ...this.receiptPage(rows, query), chartAccess: context.access, customerOwnershipBasis: this.customerBasis(context) }
   }
 
   async getOrders(userId: string, query: ListFulfillmentOrdersDto) {
@@ -356,27 +470,44 @@ export class FopDataService {
   }
 
   async getOrderVolume(userId: string, query: OrderVolumeQueryDto) {
-    const scoped = await this.scopedOrders(userId)
-    const receipts = query.category === 'customer' && scoped.permission.analyticsScopes?.includes('receipts') ? await this.scopedReceipts(userId, scoped) : undefined
-    const result = aggregateOrderVolume(scoped.orders, query, new Date(), receipts)
+    const now = new Date()
+    const periods = orderVolumePeriods(query, now)
+    const chartId = query.category === 'customer' ? 'customer_orders' : 'order_volume'
+    const context = await this.chartContext(userId, chartId)
+    if (query.view === 'summary') {
+      if (query.category !== 'organization') throw new BadRequestException('Summary view requires organization category')
+      const rows = await this.organizationSummary(userId, context, { chartId: 'order_volume', departments: context.access.summaryDepartments, from: periods[0].from, to: periods[periods.length - 1].to })
+      const result = await this.providerCall(async () => summaryOrderVolume(rows, context.access.summaryDepartments, query, now))
+      await this.assertUnchanged(userId, context.initial)
+      return { source: this.provider.source ?? 'fop', chartAccess: { ...context.access, summaryOnly: true, canViewDetails: false }, ...result }
+    }
+    if (context.access.dataScope === 'none') throw new ForbiddenException({ code: 'chart_access_denied', message: 'Record chart scope denied' })
+    const scoped = await this.scopedOrders(userId, undefined, context)
+    const receipts = query.category === 'customer' && scoped.permission.analyticsScopes?.includes('receipts') ? await this.scopedReceipts(userId, scoped, context) : undefined
+    const result = aggregateOrderVolume(scoped.orders, query, now, receipts)
+    if (query.category === 'organization' && result.series[0]) result.series[0].label = context.access.dataScope === 'self' ? '本人订单合计' : '授权人员订单合计'
     await this.assertUnchanged(userId, scoped.initial)
-    return { source: this.provider.source ?? 'fop', ...result }
+    return { source: this.provider.source ?? 'fop', chartAccess: context.access, summaryOnly: false, ...(chartId === 'customer_orders' ? { customerOwnershipBasis: this.customerBasis(context) } : {}), ...result }
   }
 
   async searchOrderCustomers(userId: string, query: OrderCustomerSearchDto) {
-    const scoped = await this.scopedOrders(userId)
-    const receipts = await this.scopedReceipts(userId, scoped)
+    const context = await this.chartContext(userId, 'customer_orders')
+    const scoped = await this.scopedOrders(userId, undefined, context)
+    const receipts = await this.scopedReceipts(userId, scoped, context)
     const result = searchOrderCustomers(scoped.orders, query, receipts)
     await this.assertUnchanged(userId, scoped.initial)
-    return { source: this.provider.source ?? 'fop', ...result }
+    return { source: this.provider.source ?? 'fop', chartAccess: context.access, customerOwnershipBasis: this.customerBasis(context), ...result }
   }
 
   async getOrderVolumeDetails(userId: string, query: OrderVolumeDetailsDto) {
-    const scoped = await this.scopedOrders(userId, query.workbenchRole)
-    const receipts = query.category === 'customer' ? await this.scopedReceipts(userId, scoped) : []
+    if (query.view === 'summary') throw new ForbiddenException({ code: 'chart_access_denied', message: 'Organization summaries do not grant order details' })
+    const chartId = query.category === 'customer' ? 'customer_orders' : 'order_volume'
+    const context = await this.chartContext(userId, chartId, true, query.workbenchRole)
+    const scoped = await this.scopedOrders(userId, query.workbenchRole, context)
+    const receipts = query.category === 'customer' ? await this.scopedReceipts(userId, scoped, context) : []
     const rows = orderVolumeDetails(scoped.orders, query, new Date(), receipts)
     await this.assertUnchanged(userId, scoped.initial)
-    return { source: this.provider.source ?? 'fop', total: rows.length, totals: summarizeFopOrders(rows), page: query.page, pageSize: query.pageSize, items: rows.slice((query.page - 1) * query.pageSize, query.page * query.pageSize) }
+    return { source: this.provider.source ?? 'fop', chartAccess: context.access, ...(chartId === 'customer_orders' ? { customerOwnershipBasis: this.customerBasis(context) } : {}), total: rows.length, totals: summarizeFopOrders(rows), page: query.page, pageSize: query.pageSize, items: rows.slice((query.page - 1) * query.pageSize, query.page * query.pageSize) }
   }
 
   async getDashboard(userId: string, query: FopDashboardQueryDto) {
@@ -401,7 +532,12 @@ export class FopDataService {
         const time = oldest === undefined ? '' : new Date(oldest + 8 * 3_600_000).toISOString().slice(11, 16)
         return { id: queue, kind: queue, count: queues[queue], time, priority: queue === 'allocation' ? 'normal' : 'high' }
       })
-    const analyticsScopes = scoped.permission.analyticsScopes ?? []
+    const chartAccess = this.effectiveCharts(scoped.initial, scoped.permission)
+    const context = (chartId: ChartId): ChartContext => ({ chartId, initial: scoped.initial, permission: scoped.permission, access: chartAccess.find(c => c.chartId === chartId)! })
+    const registrationContext = context('registrations')
+    const receiptContext = context('salesperson_receipts')
+    const departmentContext = context('department_receipts')
+    const analyticsScopes = (scoped.permission.analyticsScopes ?? []).filter(scope => scope === 'rates' || scope === 'registrations' && registrationContext.access.visible && registrationContext.access.dataScope !== 'none')
     const analytics = analyticsScopes.length
       ? await this.providerCall(() => this.provider.getAnalytics(Object.freeze({ ...scoped.permission.subject }), Object.freeze({ ...scoped.permission, allowedOrderIds: Object.freeze([...scoped.permission.allowedOrderIds]), analyticsScopes: Object.freeze([...analyticsScopes]) }), query))
       : { subject: scoped.permission.subject, rates: [], registrations: [] }
@@ -414,17 +550,31 @@ export class FopDataService {
     })
     const rates = analyticsScopes.includes('rates') ? analytics.rates.map(({ currency, cnyPerUnit }) => ({ currency, cnyPerUnit })) : []
     const dailyRegistrations = analyticsScopes.includes('registrations') ? analytics.registrations.filter(item => item.date >= query.from && item.date <= query.to).map(({ date, count }) => ({ date, count })) : []
-    const registrationData = analyticsScopes.includes('registrations') && analytics.registrationEntries !== undefined
-      ? await this.providerCall(async () => aggregateRegistrations(analytics.registrationEntries!.filter(entry => matchesBusinessScope(scoped.initial.business, entry)), query.from, query.to))
-      : { registrations: scoped.initial.business.role === 'admin' ? dailyRegistrations : [], registrationDepartments: [] }
-    const receiptRecords = await this.scopedReceipts(userId, scoped)
-    const receipts = await this.providerCall(async () => monthlyReceipts(receiptRecords, query.year, analyticsScopes.includes('receipts'), now))
+    let registrationData = analyticsScopes.includes('registrations') && analytics.registrationEntries !== undefined
+      ? await this.providerCall(async () => aggregateRegistrations(analytics.registrationEntries!.filter(entry => { this.validateAncestry(entry?.departmentPathIds); return !!entry && this.matchesChart(registrationContext, entry) }), query.from, query.to))
+      : { registrations: registrationContext.access.visible && registrationContext.access.dataScope === 'all' ? dailyRegistrations : [], registrationDepartments: [] }
+    if (registrationContext.access.visible && registrationContext.access.summaryDepartments.length) {
+      const summaryRows = await this.organizationSummary(userId, registrationContext, { chartId: 'registrations', departments: registrationContext.access.summaryDepartments, from: query.from, to: query.to })
+      const summary = await this.providerCall(async () => summaryRegistrations(summaryRows, registrationContext.access.summaryDepartments, query.from, query.to))
+      // Only already-authorized record series can accompany aggregate department totals.
+      // Cross-department summary permission never materializes another member.
+      for (const department of summary.registrationDepartments) department.salespeople = registrationData.registrationDepartments.find(d => d.id === department.id)?.salespeople ?? []
+      registrationData = summary
+    }
+    const receiptRecords = receiptContext.access.visible && receiptContext.access.dataScope !== 'none' ? await this.scopedReceipts(userId, scoped, receiptContext) : []
+    const receipts = await this.providerCall(async () => monthlyReceipts(receiptRecords, query.year, receiptContext.access.visible, now))
+    if (receipts.marketingCenter) receipts.marketingCenter.name = receiptContext.access.dataScope === 'self' ? '本人回款合计' : '授权人员回款合计'
+    let departmentReceipts = monthlyReceipts([], query.year, false, now)
+    if (departmentContext.access.visible) {
+      const summaryRows = await this.organizationSummary(userId, departmentContext, { chartId: 'department_receipts', departments: departmentContext.access.summaryDepartments, from: `${query.year - 1}-12-01`, to: query.year === Number(businessDate(now).slice(0, 4)) ? businessDate(now) : `${query.year}-12-31` })
+      departmentReceipts = await this.providerCall(async () => summaryReceipts(summaryRows, departmentContext.access.summaryDepartments, query.year, now))
+    }
     await this.assertUnchanged(userId, scoped.initial)
     return {
       businessScope: scoped.initial.business, source: this.provider.source ?? 'fop', updatedAt: now.toISOString(), queues, rates, ...registrationData, tasks,
       exceptions: allowed('exceptions') ? orders.filter((order) => matchesQueue(order, 'exceptions'))
         .map((order) => ({ id: order.orderNumber, customer: order.customerName, reason: order.exception!.reason, hours: order.exception!.hours })) : [],
-      receipts,
+      receipts, departmentReceipts, chartAccess,
     }
   }
 }

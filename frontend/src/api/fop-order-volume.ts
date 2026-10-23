@@ -1,3 +1,4 @@
+import type { EffectiveChartAccess } from './fop-chart-access'
 import api from './index'
 import type { FopReceiptPage } from './fop-receipts'
 import type { FopOrderPage } from './fop-orders'
@@ -6,7 +7,7 @@ export type VolumeCategory = 'carrier' | 'organization' | 'salesperson' | 'custo
 export type VolumeGrain = 'month' | 'week' | 'day'
 export type VolumeWarehouse = 'HZ' | 'SZ' | 'UNASSIGNED'
 export interface OrderVolumeQuery {
-  category: VolumeCategory; grain?: VolumeGrain; year?: number; month?: number; weekOf?: string
+  view?: 'records' | 'summary'; category: VolumeCategory; grain?: VolumeGrain; year?: number; month?: number; weekOf?: string
   from?: string; to?: string
   department?: string; objectId?: string; customerId?: string; warehouse: 'ALL' | VolumeWarehouse
 }
@@ -18,12 +19,14 @@ export interface VolumeSeries {
   amounts?: { currency: 'USD'; total: number; values: (number | null)[]; warehouses: Record<VolumeWarehouse, (number | null)[]>; excludedOrderCount: number; breakdown?: { fulfillment: number; fullPaymentStock: number } }
 }
 export interface OrderVolumeData {
-  source: 'mock' | 'fop'; query: OrderVolumeQuery; timeZone: string; asOf: string; total: number; customerCount: number
+  chartAccess: EffectiveChartAccess
+  customerOwnershipBasis?: 'current_assignment' | 'historical_attribution' | 'mixed'
+  source: 'mock' | 'fop'; query: OrderVolumeQuery; timeZone: string; asOf: string; total: number; customerCount: number | null
   periods: VolumePeriod[]; series: VolumeSeries[]
   options: { departments: { id: string; label: string }[]; objects: { id: string; label: string }[] }
 }
 export interface OrderCustomer { id: string; code: string; name: string; departments: string[] }
-export interface OrderCustomerPage { source: 'mock' | 'fop'; items: OrderCustomer[]; total: number; page: number; pageSize: number }
+export interface OrderCustomerPage { chartAccess: EffectiveChartAccess; source: 'mock' | 'fop'; items: OrderCustomer[]; total: number; page: number; pageSize: number }
 export interface OrderVolumeDetailsQuery extends OrderVolumeQuery { workbenchRole: WorkbenchRole; detailWarehouse?: VolumeWarehouse; seriesId?: string; periodId?: string; page: number; pageSize: number }
 const root = '/autoflow/integrations/fop/order-volume'
 export const getOrderVolume = (query: OrderVolumeQuery): Promise<OrderVolumeData> => api.get(root, { params: query })

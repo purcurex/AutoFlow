@@ -77,13 +77,13 @@ describe('independently authorized sales performance', () => {
     expect((await service.getSalesPerformance('u', { ...query, ownerId: 'bob' })).totals).toMatchObject({ collectionsAmount: 80, estimatedGrossProfit: 0, settledGrossProfit: 0 })
     expect((await service.getSalesPerformance('u', { ...query, ownerId: 'alice' })).totals.settledGrossProfit).toBe(60)
   })
-  it('lets managers select only authorized department owners, preferring their binding then deterministic first owner', async () => {
+  it('lets managers select only authorized department owners, defaulting to their binding and never silently selecting a colleague', async () => {
     const rows = [profit('a'), profit('b', { owner: { id: 'bob', name: 'Bob' } }), profit('outside', { department: { id: 'd2', name: 'Private' }, departmentPathIds: ['d2'] })]
     const { service, account } = setup({ profits: rows, account: { businessRole: 'department_manager', businessDepartmentId: 'sales', businessEmployeeId: 'bob' } })
     expect(await service.getSalesPerformance('u', query)).toMatchObject({ canSelectOwner: true, selectedOwner: { id: 'bob' }, totals: { collectionsAmount: 0, estimatedGrossProfit: 60 } })
     expect((await service.getSalesPerformance('u', { ...query, ownerId: 'alice' })).totals.collectionsAmount).toBe(80)
     account.businessEmployeeId = 'not-present'
-    expect((await service.getSalesPerformance('u', query)).selectedOwner?.id).toBe('alice')
+    expect((await service.getSalesPerformance('u', query)).selectedOwner).toBeNull()
     await expect(service.getSalesPerformance('u', { ...query, ownerId: 'not-present' })).rejects.toMatchObject({ status: 403 })
   })
   it.each(['profit', 'receipt'])('rejects duplicate or malformed authorized %s ancestry before scope matching', async kind => {

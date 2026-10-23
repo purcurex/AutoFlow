@@ -1,3 +1,6 @@
+vi.mock('@/api/fop-chart-access', async importOriginal => { const { chartAccessFixture } = await import('./chart-access-fixtures'); return { ...await importOriginal<object>(), getChartAccess: vi.fn(async () => chartAccessFixture()) } })
+import { getChartAccess } from '@/api/fop-chart-access'
+import { chartAccessFixture } from './chart-access-fixtures'
 import { DOMWrapper, enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import { createMemoryHistory, createRouter } from 'vue-router'
@@ -20,6 +23,7 @@ const metrics = { orderAmount: 100, stockAmount: 200, collectionsAmount: 300, se
 const owner = { id: 'owner-1', name: 'Alice', department: { id: 'dept-1', name: '业务一部' } }
 const otherOwner = { id: 'owner-2', name: 'Bob', department: { id: 'dept-2', name: '业务二部' } }
 const sample = {
+  chartAccess: chartAccessFixture().charts.find(item => item.chartId === 'sales_performance')!,
   source: 'mock', query: { from: '2026-01-01', to: '2026-10-23', grain: 'month' }, timeZone: 'UTC+8', currency: 'USD', asOf: '2026-10-22T16:30:00Z',
   owners: [owner, otherOwner], selectedOwner: owner, canSelectOwner: true,
   periods: [
@@ -198,14 +202,17 @@ describe('sales performance workbench', () => {
     let resolveDetail!: (value: unknown) => void
     get.mockReturnValueOnce(new Promise(r => { resolveDetail = r }))
     await wrapper.findAll('button').find(b => b.text() === '毛利明细')!.trigger('click')
+    await flushPromises()
     expect(wrapper.find('dialog [role=status]').exists()).toBe(true)
     invalidateSession(); resolveDetail({ ...details, kind: 'profit', profits: [profit] }); await flushPromises()
     expect(wrapper.text()).not.toContain('ORDER-001')
+    wrapper.unmount()
+    const fresh = await setup()
     let resolveMain!: (value: unknown) => void
     get.mockReturnValueOnce(new Promise(r => { resolveMain = r }))
-    await wrapper.find('form').trigger('submit')
+    await fresh.wrapper.find('form').trigger('submit'); await flushPromises()
     invalidateSession(); resolveMain(sample); await flushPromises()
-    expect(wrapper.text()).not.toContain('Alice')
+    expect(fresh.wrapper.text()).not.toContain('Alice')
   })
   it('handles empty detail pages and clears stale detail amounts on failure', async () => {
     const { wrapper } = await setup()
@@ -257,4 +264,25 @@ describe('sales performance workbench', () => {
     expect(wrapper.findAll('.performance-table tbody tr')).toHaveLength(8)
     expect(wrapper.find('.performance-table tfoot').text()).toContain('$300.00')
   })
+  it('clears old employee choices as soon as a narrowed-scope refresh begins', async () => {
+    const { wrapper } = await setup()
+    expect(wrapper.get('select[aria-label="业务员"]').text()).toContain('Bob')
+    vi.mocked(getChartAccess).mockResolvedValueOnce({ ...chartAccessFixture(), charts: chartAccessFixture().charts.map(item => ({ ...item, dataScope: 'self' })) })
+    let resolve!: (value: unknown) => void
+    get.mockReturnValueOnce(new Promise(r => { resolve = r }))
+    await wrapper.find('form').trigger('submit'); await flushPromises()
+    expect(wrapper.text()).not.toContain('Bob')
+    invalidateSession(); resolve(sample); await flushPromises()
+  })
+
+  it('requires an explicit employee choice when a manager has no bound personal owner', async () => {
+    get.mockResolvedValueOnce({ ...sample, selectedOwner: null, periods: [], totals: { ...metrics, collectionsAmount: 0, orderAmount: 0, stockAmount: 0, settledGrossProfit: 0, estimatedGrossProfit: 0 } })
+    const { wrapper } = await setup()
+    const select = wrapper.get('select[aria-label="业务员"]')
+    expect(select.element).toHaveProperty('value', '')
+    expect(select.find('option[value=""]').text()).toContain('绑定员工后默认本人')
+    expect(wrapper.find('.performance-charts').exists()).toBe(false)
+    expect(get.mock.calls[0]![1].params).not.toHaveProperty('ownerId')
+  })
+
 })

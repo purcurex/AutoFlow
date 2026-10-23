@@ -1,3 +1,5 @@
+import { eligibleReceipts } from './fop-receipts'
+import { FopOrganizationSummary, FopOrganizationSummaryQuery, FopOrganizationSummaryRow } from './fop-data.types'
 import { demoProfits } from './sales-performance-demo'
 import type { FopProfitCandidate } from './sales-performance.types'
 import { demoFreight } from './fop-freight-demo'
@@ -67,7 +69,13 @@ export class DemoFopDataProvider extends FopDataProvider {
   }
   async resolvePermissions(identity: Readonly<FopIdentity>): Promise<FopPermissionGrant> {
     this.assertIdentity(identity)
-    return { subject: { ...identity }, allowedOrderIds: (await this.orders(identity)).map(order => order.id), allowedReceiptIds: (await this.receipts(identity)).map(receipt => receipt.id), allowedFreightIds: demoFreight(identity, await this.orders(identity)).map(row => row.id), allowedProfitIds: demoProfits(identity, await this.orders(identity)).map(row => row.id), analyticsScopes: ['rates', 'registrations', 'receipts', 'freight', 'sales_profit'] }
+    const workspace = await this.organizations.getWorkspace(identity.userId)
+    const departments = SALES_DEPARTMENTS.flatMap(d => {
+      const node = workspace.nodes.find(node => node.kind === 'department' && node.name === d.name)
+      return node ? [{ code: d.id, departmentId: node.id, departmentPathIds: departmentPath(workspace, node.id) }] : []
+    })
+    const organizationSummaries = (['registrations', 'department_receipts', 'order_volume'] as const).map(chartId => ({ chartId, departments }))
+    return { organizationSummaries, subject: { ...identity }, allowedOrderIds: (await this.orders(identity)).map(order => order.id), allowedReceiptIds: (await this.receipts(identity)).map(receipt => receipt.id), allowedFreightIds: demoFreight(identity, await this.orders(identity)).map(row => row.id), allowedProfitIds: demoProfits(identity, await this.orders(identity)).map(row => row.id), analyticsScopes: ['rates', 'registrations', 'receipts', 'freight', 'sales_profit'] }
   }
   async listOrders(identity: Readonly<FopIdentity>, permission: Readonly<FopPermissionGrant>): Promise<FopOrderCandidate[]> {
     this.assertIdentity(identity, permission)
@@ -91,12 +99,42 @@ export class DemoFopDataProvider extends FopDataProvider {
     const allowed = new Set(permission.allowedFreightIds ?? [])
     return demoFreight(identity, await this.orders(identity)).filter(row => allowed.has(row.id))
   }
+  async getOrganizationSummary(identity: Readonly<FopIdentity>, permission: Readonly<FopPermissionGrant>, query: Readonly<FopOrganizationSummaryQuery>): Promise<FopOrganizationSummary> {
+    this.assertIdentity(identity, permission)
+    const allowed = permission.organizationSummaries?.find(g => g.chartId === query.chartId)?.departments.map(d => d.code) ?? []
+    if (!query.departments.length || query.departments.some(code => !allowed.includes(code))) throw new FopPermissionDeniedError('Organization summary access denied')
+    const rows = new Map<string, FopOrganizationSummaryRow>()
+    const add = (row: FopOrganizationSummaryRow) => {
+      if (!query.departments.includes(row.salesDepartmentCode) || row.date < query.from || row.date > query.to) return
+      const key = JSON.stringify([row.date, row.salesDepartmentCode, row.warehouseCode, row.sourceType])
+      const previous = rows.get(key)
+      rows.set(key, { ...row, count: (previous?.count ?? 0) + row.count, ...(row.amount !== undefined ? { amount: Math.round(((previous?.amount ?? 0) + row.amount) * 100) / 100 } : {}) })
+    }
+    // Aggregation belongs to the provider boundary; it never exposes these source facts.
+    if (query.chartId === 'department_receipts') {
+      for (const receipt of eligibleReceipts(await this.receipts(identity))) if (receipt.currency === 'USD') add({ date: businessDate(receipt.paidAt!), salesDepartmentCode: receipt.salesDepartmentCode!, count: 1, amount: receipt.amount, currency: 'USD', sourceType: receipt.sourceType as 'fulfillment' | 'full_payment_stock' })
+    } else if (query.chartId === 'order_volume') {
+      for (const order of await this.orders(identity)) if (order.salesDepartmentCode && !order.cancelled && order.reviewStatus === 'approved' && order.paymentStatus === 'paid' && order.paidAt && Date.parse(order.paidAt) <= Date.now()) add({ date: businessDate(order.paidAt), salesDepartmentCode: order.salesDepartmentCode, count: 1, warehouseCode: order.warehouseCode === 'HZ' || order.warehouseCode === 'SZ' ? order.warehouseCode : 'UNASSIGNED' })
+    } else {
+      const workspace = await this.organizations.getWorkspace(identity.userId)
+      for (let at = Date.parse(`${query.from}T00:00:00Z`); at <= Date.parse(`${query.to}T00:00:00Z`); at += DAY) {
+        const date = new Date(at).toISOString().slice(0, 10)
+        for (const owner of workspace.employees.filter(owner => owner.workbenchRoles.includes('sales'))) {
+          const code = salesDepartmentFor(workspace, owner.departmentId)
+          if (!code) continue
+          const count = createHash('sha256').update(`${identity.tenantId}:registration:${owner.id}:${date}`).digest().readUInt32BE(0) % 18
+          add({ date, salesDepartmentCode: code, count })
+        }
+      }
+    }
+    return { subject: { ...identity }, chartId: query.chartId, rows: [...rows.values()] }
+  }
   private async receipts(identity: Readonly<FopIdentity>): Promise<FopReceiptCandidate[]> {
     const orders = await this.orders(identity)
     const rows: FopReceiptCandidate[] = orders.filter(o => o.salesDepartmentCode && o.paymentStatus === 'paid').map(o => {
       const fee = Math.round(o.amount * 100 * .02) / 100
       return { tenantId: o.tenantId, departmentPathIds: o.departmentPathIds, id: `${o.id}:receipt:1`, sourceType: 'fulfillment', documentId: o.id, documentNumber: o.orderNumber,
-        customerId: o.customerId!, customerCode: o.customerCode!, customerName: o.customerName, organization: o.organization, department: o.department, owner: o.owner, salesDepartmentCode: o.salesDepartmentCode,
+        currentCustomerOwner: o.currentCustomerOwner, customerId: o.customerId!, customerCode: o.customerCode!, customerName: o.customerName, organization: o.organization, department: o.department, owner: o.owner, salesDepartmentCode: o.salesDepartmentCode,
         warehouseCode: o.warehouseCode!, warehouse: o.warehouse, carrierCode: o.carrierCode!, amount: Math.round((o.amount - fee) * 100) / 100, orderAmount: o.amount, handlingFee: fee, currency: 'USD', paidAt: o.paidAt,
         reviewStatus: o.reviewStatus, receiptReviewStatus: 'approved', paymentStatus: o.paymentStatus, cancelled: o.cancelled, items: o.items }
     })
@@ -109,7 +147,7 @@ export class DemoFopDataProvider extends FopDataProvider {
       const index = seen.size, amount = 350 + (index % 9) * 85
       rows.push({ ...base, id: `stock:${key}:receipt:1`, sourceType: 'full_payment_stock', documentId: `stock:${key}`, documentNumber: `ST-${month.replace('-', '')}-${String(index).padStart(4, '0')}`,
         amount, orderAmount: amount, handlingFee: 0, carrierCode: null, paidAt: `${month}-05T09:00:00+08:00`,
-        ...(index % 5 === 0 ? { customerId: `${identity.tenantId}:stock-customer:${index % 3}`, customerCode: `STC00${index % 3 + 1}`, customerName: ['Prepaid Supply Co', 'Reserve Living', 'Future Stock Studio'][index % 3] } : {}) })
+        ...(index % 5 === 0 ? { customerId: `${identity.tenantId}:stock-customer:${order.owner!.id}:${index % 3}`, customerCode: `STC00${index % 3 + 1}`, customerName: ['Prepaid Supply Co', 'Reserve Living', 'Future Stock Studio'][index % 3] } : {}) })
       if (index % 7 === 0) rows.push({ ...base, id: `deposit:${key}:receipt:1`, documentId: `deposit:${key}`, documentNumber: `DP-${index}`, sourceType: 'deposit_stock', amount: 250, orderAmount: 250, handlingFee: 0, carrierCode: null })
     }
     const prepaid = orders.find(o => o.id.endsWith(':prepaid-fulfillment'))
@@ -168,6 +206,7 @@ export class DemoFopDataProvider extends FopDataProvider {
         organization = parent
       }
       if (organization.kind !== 'organization') return
+      const customerIndex = Math.floor(index / employees.length) % CUSTOMERS.length
       const product = PRODUCTS[index % PRODUCTS.length]
       const quantity = index % 3 + 1
       const paid = completed || stage !== 0 || index % 4 !== 0
@@ -184,9 +223,9 @@ export class DemoFopDataProvider extends FopDataProvider {
       const carrier = FOP_CARRIERS[CARRIER_THRESHOLDS.findIndex(limit => carrierSeed < limit)]
       orders.push({
         tenantId: identity.tenantId, id: `${accountKey}:order:${suffix}`, orderNumber: `AF-${accountKey.slice(0, 4).toUpperCase()}-${suffix}`,
-        shopifyOrderNumber: `#${10400 + index}`, customerId: `${accountKey}:customer:${index % CUSTOMERS.length + 1}`, customerCode: `C${String(index % CUSTOMERS.length + 1).padStart(3, '0')}`, customerName: CUSTOMERS[index % CUSTOMERS.length], storeName: STORES[index % STORES.length], items,
+        shopifyOrderNumber: `#${10400 + index}`, customerId: `${accountKey}:customer:${owner.id}:${customerIndex + 1}`, customerCode: `${owner.code}-C${String(customerIndex + 1).padStart(3, '0')}`, customerName: `${CUSTOMERS[customerIndex]} (${owner.name})`, storeName: STORES[index % STORES.length], items,
         ...(salesDepartmentCode ? { salesDepartmentCode } : {}),
-        departmentPathIds: departmentPath(workspace, owner.departmentId), organization: { id: organization.id, name: organization.name }, department: { id: department.id, name: department.name }, owner: { id: owner.id, name: owner.name },
+        currentCustomerOwner: { id: owner.id, departmentId: owner.departmentId, departmentPathIds: departmentPath(workspace, owner.departmentId) }, departmentPathIds: departmentPath(workspace, owner.departmentId), organization: { id: organization.id, name: organization.name }, department: { id: department.id, name: department.name }, owner: { id: owner.id, name: owner.name },
         amount: cents / 100, currency: 'USD', paymentStatus: paid ? 'paid' : 'unpaid', reviewStatus: completed || stage !== 0 ? 'approved' : 'pending',
         procurementStatus: completed || stage >= 2 ? 'purchased' : 'pending', allocationStatus: allocated ? 'allocated' : stage === 2 ? 'pending' : 'not_ready',
         dispatchStatus: shipping ? 'dispatched' : stage === 3 ? 'pending' : 'not_ready', shippingStatus: completed ? 'shipped' : stage === 4 ? 'pending' : 'not_ready',

@@ -12,6 +12,7 @@ import type { BusinessRole } from './business-scope'
 import { Note } from '../notes/note.entity'
 import { Folder } from '../folders/folder.entity'
 import type { WorkbenchRole } from './workbench-role'
+import type { ChartPermissionOverride } from './chart-permissions'
 
 export enum UserRole {
   ADMIN = 'admin',
@@ -19,6 +20,7 @@ export enum UserRole {
 }
 
 @Entity('users')
+@Check('chk_users_chart_permissions', 'autoflow_valid_chart_permissions(chart_permissions)')
 @Check('chk_users_business_role', "business_role IN ('none','admin','department_manager','salesperson')")
 @Check('chk_users_business_ids', "(business_department_id IS NULL OR (char_length(business_department_id) > 0 AND business_department_id = btrim(business_department_id))) AND (business_employee_id IS NULL OR (char_length(business_employee_id) > 0 AND business_employee_id = btrim(business_employee_id)))")
 @Unique('uq_users_fop_identity', ['fopTenantId', 'fopUserId'])
@@ -87,6 +89,9 @@ export class User {
 
   @Column({ name: 'workbench_roles', type: 'text', array: true, default: () => "ARRAY['sales']::text[]" })
   workbenchRoles: WorkbenchRole[]
+
+  @Column({ name: 'chart_permissions', type: 'jsonb', default: () => "'[]'::jsonb" })
+  chartPermissions: ChartPermissionOverride[]
 
   @Column({ name: 'business_role', type: 'varchar', length: 24, default: 'salesperson' })
   businessRole: BusinessRole

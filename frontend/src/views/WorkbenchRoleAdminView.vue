@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import ChartPermissionsDialog from '@/components/admin/ChartPermissionsDialog.vue'
+import { onSessionReset } from '@/utils/session'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { AppLayout } from '@/components/layout'
@@ -14,6 +16,14 @@ const text = (cn: string, en: string) => zh.value ? cn : en
 const userStore = useUserStore()
 const managementRoles = ref<Record<string, WorkbenchAccount['role']>>({})
 const accounts = ref<WorkbenchAccount[]>([])
+const chartAccount = ref<WorkbenchAccount>()
+function chartsSaved(saved: WorkbenchAccount) {
+  const account = accounts.value.find(item => item.id === saved.id)
+  if (account) account.chartPermissions = saved.chartPermissions
+  chartAccount.value = undefined
+  success.value = text(`${saved.username} 的图表权限已保存。`, `Chart permissions saved for ${saved.username}.`)
+}
+const offSession = onSessionReset(() => { requestId++; accounts.value = []; chartAccount.value = undefined })
 const drafts = ref<Record<string, WorkbenchRole[]>>({})
 const bindings = ref<Record<string, FopBinding>>({})
 const scopes = ref<Record<string, BusinessScope>>({})
@@ -126,7 +136,7 @@ async function saveManagement(account: WorkbenchAccount) {
   } finally { saving.value = '' }
 }
 onMounted(() => load())
-onBeforeUnmount(() => { requestId++ })
+onBeforeUnmount(() => { requestId++; offSession() })
 </script>
 
 <template>
@@ -138,7 +148,7 @@ onBeforeUnmount(() => { requestId++ })
     <section class="panel overflow-hidden" :aria-busy="busy">
       <form class="flex gap-3 border-b p-4" @submit.prevent="load(true)"><input v-model="search" type="search" class="input max-w-lg" :placeholder="text('搜索账号、邮箱或用户编号', 'Search username, email or user ID')" :aria-label="text('搜索账号', 'Search accounts')" /><button class="btn btn-secondary" :disabled="busy || !!saving">{{ text('查询', 'Search') }}</button></form>
       <p v-if="busy" class="p-10 text-center text-sm text-slate-500">{{ text('正在加载…', 'Loading…') }}</p>
-      <div v-else class="overflow-x-auto"><table class="data-table min-w-[950px]"><thead><tr><th>{{ text('账号', 'Account') }}</th><th>{{ text('系统管理权限', 'System management') }}</th><th>{{ text('业务数据权限', 'Business data scope') }}</th><th>{{ text('工作台岗位', 'Workbench roles') }}</th><th>{{ text('FOP 用户数据绑定', 'FOP user data binding') }}</th></tr></thead><tbody><tr v-for="account in accounts" :key="account.id"><td class="min-w-[180px]"><strong>{{ account.username }}</strong><p class="mt-1 text-xs text-slate-500">{{ account.email }}</p><p class="text-xs text-slate-400">ID {{ account.displayId }}</p></td><td class="min-w-[230px]">
+      <div v-else class="overflow-x-auto"><table class="data-table min-w-[950px]"><thead><tr><th>{{ text('账号', 'Account') }}</th><th>{{ text('系统管理权限', 'System management') }}</th><th>{{ text('业务数据权限', 'Business data scope') }}</th><th>{{ text('工作台岗位', 'Workbench roles') }}</th><th>{{ text('图表权限', 'Chart permissions') }}</th><th>{{ text('FOP 用户数据绑定', 'FOP user data binding') }}</th></tr></thead><tbody><tr v-for="account in accounts" :key="account.id"><td class="min-w-[180px]"><strong>{{ account.username }}</strong><p class="mt-1 text-xs text-slate-500">{{ account.email }}</p><p class="text-xs text-slate-400">ID {{ account.displayId }}</p></td><td class="min-w-[230px]">
         <form class="space-y-2 py-2" @submit.prevent="saveManagement(account)">
           <select v-model="managementRoles[account.id]" class="input" :disabled="!!saving" :aria-label="`${account.username} · ${text('系统管理角色', 'Management role')}`">
             <option value="user">{{ text('普通账号 · 无管理权限', 'Standard account · No management') }}</option>
@@ -169,7 +179,7 @@ onBeforeUnmount(() => { requestId++ })
           <p v-if="account.businessScope?.role === 'none'" class="text-xs text-slate-500">{{ text('岗位配置保留；业务数据关闭期间不开放工作台。', 'Assignments retained; workbenches remain closed while business access is disabled.') }}</p>
           <button v-if="account.businessScope?.role !== 'admin'" data-save class="btn btn-secondary" :disabled="!!saving || !changed(account)" @click="save(account)">{{ text('保存岗位权限', 'Save workbench access') }}</button>
         </div>
-      </td><td class="min-w-[320px]">
+      </td><td class="min-w-[180px]"><button data-chart-permissions class="btn btn-secondary" :disabled="!!saving" @click="chartAccount = account">{{ text('配置图表权限', 'Configure charts') }}</button><p class="mt-2 text-xs text-slate-500">{{ text('逐图配置可见性、范围、汇总、明细与导出。', 'Visibility, scope, summaries, details and exports per chart.') }}</p></td><td class="min-w-[320px]">
         <form class="space-y-2 py-2" @submit.prevent="saveBinding(account)">
           <p class="text-xs" :class="account.fopBinding ? 'text-emerald-600' : 'text-amber-600'">{{ account.fopBinding ? text('已绑定 · 后台授权后可访问数据', 'Linked · FOP authorization required') : text('未绑定 · 不可访问 FOP 数据', 'Unlinked · No FOP data access') }}</p>
           <label class="flex items-center gap-2 text-xs"><span class="w-16 shrink-0">{{ text('租户 ID', 'Tenant ID') }}</span><input v-model="bindings[account.id]!.tenantId" class="input" maxlength="128" autocomplete="off" :disabled="!!saving" :aria-label="`${account.username} · FOP ${text('租户 ID', 'tenant ID')}`" /></label>
@@ -179,5 +189,5 @@ onBeforeUnmount(() => { requestId++ })
       </td></tr></tbody></table><p v-if="!accounts.length" class="p-10 text-center text-sm text-slate-500">{{ text('暂无账号', 'No accounts found') }}</p></div>
       <footer class="flex items-center justify-between border-t p-4 text-xs text-slate-500"><span>{{ text(`共 ${total} 个账号`, `${total} accounts`) }}</span><div class="flex items-center gap-4"><button :disabled="busy || !!saving || page <= 1" @click="page--; load()">{{ text('上一页', 'Previous') }}</button><span>{{ page }} / {{ Math.max(1, Math.ceil(total / 20)) }}</span><button :disabled="busy || !!saving || page * 20 >= total" @click="page++; load()">{{ text('下一页', 'Next') }}</button></div></footer>
     </section>
-  </div></AppLayout>
+  </div><ChartPermissionsDialog v-if="chartAccount" :account="chartAccount" @close="chartAccount = undefined" @saved="chartsSaved" /></AppLayout>
 </template>

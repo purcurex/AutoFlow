@@ -4,7 +4,7 @@ import { FopDataProvider, FopIdentity, UnconfiguredFopDataProvider } from './fop
 import { UsersService } from '../users/users.service'
 import { UserRole } from '../users/user.entity'
 
-const users = { findById: async (id: string) => ({ id, role: UserRole.ADMIN, businessRole: 'admin', fopTenantId: null, fopUserId: null, workbenchRoles: [] }) } as unknown as UsersService
+const users = { findById: async (id: string) => ({ id, role: UserRole.ADMIN, businessRole: 'admin', businessEmployeeId: 'employee-1', fopTenantId: null, fopUserId: null, workbenchRoles: [] }) } as unknown as UsersService
 class OptInDemoProvider extends FopDataProvider {
   readonly source = 'mock' as const
   demoIdentity(id: string) { return { tenantId: `demo:${id}`, userId: id } }
@@ -174,7 +174,7 @@ describe('isolated mock FOP dataset', () => {
     const data = new FopDataService(users, new DemoFopDataProvider(organizations, env))
     const first = await data.getDashboard('alice', query)
     const narrowed = await data.getDashboard('alice', { ...query, from: '2026-10-10', to: '2026-10-12' })
-    expect(first.registrationDepartments.map(dept => dept.id)).toEqual(['sales1', 'sales2', 'sales3', 'sales4'])
+    expect(first.registrationDepartments.map(dept => dept.id)).toEqual(['sales1', 'sales2'])
     for (const [day, total] of first.registrations.entries()) {
       expect(total.count).toBe(first.registrationDepartments.reduce((sum, dept) => sum + dept.counts[day], 0))
       for (const dept of first.registrationDepartments) expect(dept.counts[day]).toBe(dept.salespeople.reduce((sum, person) => sum + person.counts[day], 0))
@@ -187,7 +187,7 @@ describe('isolated mock FOP dataset', () => {
     const provider = new DemoFopDataProvider(organizations, env)
     const identity = { tenantId: 'demo:alice', userId: 'alice' }
     const grant = await provider.resolvePermissions(identity)
-    jest.spyOn(provider, 'resolvePermissions').mockResolvedValue({ ...grant, analyticsScopes: ['rates'] })
+    jest.spyOn(provider, 'resolvePermissions').mockResolvedValue({ ...grant, analyticsScopes: ['rates'], organizationSummaries: [] })
     const dashboard = await new FopDataService(users, provider).getDashboard('alice', query)
     expect(dashboard.registrations).toEqual([])
     expect(dashboard.registrationDepartments).toEqual([])
@@ -306,7 +306,8 @@ describe('business role data scope', () => {
     const dept = await manager.getDashboard('alice', query)
     const own = await sales.getDashboard('alice', query)
     expect(dept.registrations).toEqual(own.registrations)
-    expect(dept.receipts).toEqual(own.receipts)
+    expect(dept.receipts.departments).toEqual(own.receipts.departments)
+    expect(dept.receipts.marketingCenter?.amounts).toEqual(own.receipts.marketingCenter?.amounts)
     expect(dept.registrations.reduce((sum, row) => sum + row.count, 0)).toBeLessThan(all.registrations.reduce((sum, row) => sum + row.count, 0))
     expect(dept.registrationDepartments.flatMap(row => row.salespeople).map(row => row.id)).toEqual(['employee-1'])
     expect(dept.receipts.departments[1].amounts.every(value => value === 0)).toBe(true)
@@ -336,6 +337,34 @@ describe('business role data scope', () => {
   it('never exposes unscoped legacy aggregate analytics to managers', async () => {
     const provider = new DemoFopDataProvider(organizations, env)
     provider.getAnalytics = async identity => ({ subject: identity, rates: [], registrations: [{ date: query.from, count: 999999 }] })
+    const resolve = provider.resolvePermissions.bind(provider)
+    provider.resolvePermissions = async identity => ({ ...await resolve(identity), organizationSummaries: [] })
     expect((await service(user({ businessRole: 'department_manager', businessDepartmentId: 'sales-1' }), provider).getDashboard('alice', query)).registrations).toEqual([])
+  })
+})
+
+
+describe('demo independent organization summary', () => {
+  beforeEach(() => jest.useFakeTimers().setSystemTime(new Date('2026-10-21T12:00:00Z')))
+  afterEach(() => jest.useRealTimers())
+  it('gives each owner more than ten distinct current customers without sharing another owner customer ID', async () => {
+    const provider = new DemoFopDataProvider(organizations, env), identity = provider.demoIdentity('alice')!
+    const orders = await provider.listOrders(identity, await provider.resolvePermissions(identity))
+    const one = new Set(orders.filter(o => o.owner?.id === 'employee-1').map(o => o.customerId))
+    const two = new Set(orders.filter(o => o.owner?.id === 'employee-2').map(o => o.customerId))
+    expect(one.size).toBeGreaterThan(10); expect(two.size).toBeGreaterThan(10)
+    expect([...one].some(id => two.has(id))).toBe(false)
+    expect(orders.every(o => o.currentCustomerOwner?.id === o.owner?.id)).toBe(true)
+  })
+  it('returns authorized department metrics with empty raw-resource grants and no record identity', async () => {
+    const provider = new DemoFopDataProvider(organizations, env), identity = provider.demoIdentity('alice')!
+    const grant = await provider.resolvePermissions(identity)
+    const context = { ...grant, allowedOrderIds: [], allowedReceiptIds: [] }
+    const result = await provider.getOrganizationSummary(identity, context, { chartId: 'department_receipts', departments: ['sales1'], from: '2026-01-01', to: '2026-10-21' })
+    expect(result.rows.length).toBeGreaterThan(0)
+    expect(result.rows.every(r => r.salesDepartmentCode === 'sales1' && r.currency === 'USD')).toBe(true)
+    expect(result.rows.some(r => r.sourceType === 'full_payment_stock' && r.amount! > 0)).toBe(true)
+    for (const row of result.rows) for (const key of ['owner', 'customerId', 'documentId', 'orderId']) expect(row).not.toHaveProperty(key)
+    await expect(provider.getOrganizationSummary(identity, { ...context, organizationSummaries: [] }, { chartId: 'department_receipts', departments: ['sales1'], from: '2026-01-01', to: '2026-10-21' })).rejects.toThrow()
   })
 })

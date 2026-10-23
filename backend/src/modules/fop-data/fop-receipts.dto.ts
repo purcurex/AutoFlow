@@ -3,6 +3,7 @@ import { IsIn, IsInt, IsOptional, IsString, Matches, Max, MaxLength, Min, MinLen
 import { WORKBENCH_ROLES, WorkbenchRole } from '../users/workbench-role'
 
 export class ReceiptQueryDto {
+  @IsOptional() @IsIn(['salesperson_receipts', 'department_receipts']) chartId?: 'salesperson_receipts' | 'department_receipts'
   @IsString() @Matches(/^\d{4}-\d{2}-\d{2}$/) from: string
   @IsString() @Matches(/^\d{4}-\d{2}-\d{2}$/) to: string
   @IsOptional() @IsIn(['sales1', 'sales2', 'sales3', 'sales4']) department?: string

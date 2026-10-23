@@ -1,12 +1,15 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useChartCapabilities } from '@/composables/useChartAccess'
 import { init, use, type EChartsCoreOption, type EChartsType } from 'echarts/core'
 import { BarChart, LineChart } from 'echarts/charts'
 import { AriaComponent, DataZoomComponent, GridComponent, LegendComponent, MarkLineComponent, TooltipComponent, ToolboxComponent } from 'echarts/components'
 import { SVGRenderer } from 'echarts/renderers'
 
 use([BarChart, LineChart, AriaComponent, DataZoomComponent, GridComponent, LegendComponent, MarkLineComponent, TooltipComponent, ToolboxComponent, SVGRenderer])
-const props = defineProps<{ option: EChartsCoreOption; label: string }>()
+const props = withDefaults(defineProps<{ option: EChartsCoreOption; label: string; canExport?: boolean }>(), { canExport: undefined })
+const { canExport: inheritedExport } = useChartCapabilities()
+const allowExport = computed(() => props.canExport ?? inheritedExport.value)
 export interface ChartClick { seriesId?: string; dataIndex?: number; name?: string }
 export interface ChartZoom { start?: number; end?: number; startValue?: number; endValue?: number; batch?: ChartZoom[] }
 const emit = defineEmits<{ select: [event: ChartClick]; zoom: [event: ChartZoom] }>()
@@ -32,7 +35,13 @@ function renderOption() {
   const sliders = (Array.isArray(raw) ? raw : raw ? [raw] : [])
     .filter(item => item.type !== 'inside')
     .map(item => ({ ...item, brushSelect: false, zoomLock: true }))
-  chart.setOption({ ...props.option, dataZoom: sliders }, { notMerge: true })
+  const filterToolbox = (item: Record<string, any>) => {
+    const feature = { ...item.feature }
+    if (!allowExport.value) { delete feature.saveAsImage; delete feature.dataView }
+    return { ...item, feature }
+  }
+  const toolbox = props.option.toolbox
+  chart.setOption({ ...props.option, ...(toolbox ? { toolbox: Array.isArray(toolbox) ? toolbox.map(filterToolbox) : filterToolbox(toolbox) } : {}), dataZoom: sliders }, { notMerge: true })
   dragged = false
   rememberRange()
 }
@@ -70,7 +79,7 @@ onMounted(() => {
   })
   observer.observe(element.value)
 })
-watch(() => props.option, renderOption)
+watch([() => props.option, allowExport], renderOption)
 onBeforeUnmount(() => {
   observer?.disconnect()
   if (frame !== undefined) cancelAnimationFrame(frame)

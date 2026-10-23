@@ -3,6 +3,7 @@ import { IsIn, IsInt, IsOptional, IsString, Matches, Max, MaxLength, Min, MinLen
 import { WORKBENCH_ROLES, WorkbenchRole } from '../users/workbench-role'
 
 export class OrderVolumeQueryDto {
+  @IsOptional() @IsIn(['records', 'summary']) view?: 'records' | 'summary'
   @IsIn(['carrier', 'organization', 'salesperson', 'customer']) category: 'carrier' | 'organization' | 'salesperson' | 'customer'
   @IsOptional() @IsIn(['month', 'week', 'day']) grain?: 'month' | 'week' | 'day'
   @IsOptional() @Type(() => Number) @IsInt() @Min(2020) @Max(9999) year?: number

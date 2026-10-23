@@ -6,6 +6,26 @@ export const SALES_DEPARTMENTS = [
 ] as const
 export type SalesDepartmentCode = typeof SALES_DEPARTMENTS[number]['id']
 
+export type FopSummaryChartId = 'registrations' | 'department_receipts' | 'order_volume'
+export interface FopOrganizationSummaryGrant {
+  chartId: FopSummaryChartId
+  departments: readonly { code: SalesDepartmentCode; departmentId: string; departmentPathIds?: readonly string[] }[]
+}
+export interface FopOrganizationSummaryQuery { chartId: FopSummaryChartId; departments: readonly SalesDepartmentCode[]; from: string; to: string }
+/** Aggregates only: no employee, customer, receipt or order identity is permitted. */
+export interface FopOrganizationSummaryRow {
+  date: string
+  salesDepartmentCode: SalesDepartmentCode
+  count: number
+  warehouseCode?: 'HZ' | 'SZ' | 'UNASSIGNED'
+  amount?: number
+  currency?: 'USD'
+  sourceType?: 'fulfillment' | 'full_payment_stock'
+}
+export interface FopOrganizationSummary { subject: FopIdentity; chartId: FopSummaryChartId; rows: FopOrganizationSummaryRow[] }
+/** Current assignment and historical document attribution are separate facts. */
+export interface FopCurrentCustomerOwner { id: string; departmentId: string; departmentPathIds?: readonly string[] }
+
 export interface FopIdentity { tenantId: string; userId: string }
 
 export interface FopPermissionGrant {
@@ -19,6 +39,8 @@ export interface FopPermissionGrant {
   /** Independent net-profit resource grant; never inherited from orders or receipts. */
   allowedProfitIds?: readonly string[]
   analyticsScopes?: readonly FopAnalyticsScope[]
+  /** Independent aggregate grants; never inferred from record allowlists. */
+  organizationSummaries?: readonly FopOrganizationSummaryGrant[]
 }
 
 export type FopAnalyticsScope = 'rates' | 'registrations' | 'receipts' | 'freight' | 'sales_profit'
@@ -82,7 +104,7 @@ export interface FopOrder {
 }
 
 /** Provider-only tenant provenance. It is validated and removed before client output. */
-export interface FopOrderCandidate extends FopOrder { tenantId: string }
+export interface FopOrderCandidate extends FopOrder { tenantId: string; currentCustomerOwner?: FopCurrentCustomerOwner }
 
 /** One actual settled receipt line, never a header repeated for each source order. */
 export interface FopReceipt {
@@ -113,16 +135,21 @@ export interface FopReceipt {
   cancelled: boolean
   items: FopOrderItem[]
 }
-export interface FopReceiptCandidate extends FopReceipt { tenantId: string; departmentPathIds?: string[] }
+export interface FopReceiptCandidate extends FopReceipt { tenantId: string; departmentPathIds?: string[]; currentCustomerOwner?: FopCurrentCustomerOwner }
 
 export const FOP_DATA_PROVIDER = 'FOP_DATA_PROVIDER'
 
 /** No employee identity, permission grant or scope is ever accepted from an HTTP client. */
 export abstract class FopDataProvider {
   readonly source: 'mock' | 'fop' = 'fop'
+  /** New adapters must provide current assignment; legacy attribution requires explicit opt-in. */
+  readonly customerOwnershipMode: 'current_required' | 'legacy_historical' = 'current_required'
   demoIdentity(_localUserId: string): FopIdentity | null { return null }
   async getAnalytics(identity: Readonly<FopIdentity>, _permission: Readonly<FopPermissionGrant>, _range: { from: string; to: string }): Promise<FopAnalytics> {
     return { subject: { ...identity }, rates: [], registrations: [] }
+  }
+  async getOrganizationSummary(_identity: Readonly<FopIdentity>, _permission: Readonly<FopPermissionGrant>, _query: Readonly<FopOrganizationSummaryQuery>): Promise<FopOrganizationSummary> {
+    throw new FopOrganizationSummaryNotConfiguredError('Organization summary provider is not configured')
   }
   abstract isConfigured(): boolean
   abstract resolvePermissions(identity: Readonly<FopIdentity>): Promise<FopPermissionGrant>
@@ -140,6 +167,7 @@ export abstract class FopDataProvider {
 }
 
 export class FopPermissionDeniedError extends Error {}
+export class FopOrganizationSummaryNotConfiguredError extends Error {}
 
 export class UnconfiguredFopDataProvider extends FopDataProvider {
   isConfigured() { return false }

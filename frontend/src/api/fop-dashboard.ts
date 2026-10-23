@@ -1,7 +1,10 @@
+import type { EffectiveChartAccess } from './fop-chart-access'
 /** Authenticated backend contract. No client-side mock fallback or scope selection. */
 export interface FopDashboardQuery { from: string; to: string; year: number }
 export interface ReceiptSeries { id: string; name?: string; amounts: number[]; previousAmount?: number | null; breakdown?: { fulfillment: number[]; fullPaymentStock: number[] }; previousBreakdown?: { fulfillment: number; fullPaymentStock: number } }
 export interface FopDashboardData {
+  chartAccess: EffectiveChartAccess[]
+  departmentReceipts: FopDashboardData['receipts']
   source: 'mock' | 'fop'
   updatedAt: string
   queues: { review: number; allocation: number; dispatch: number; shipping: number }

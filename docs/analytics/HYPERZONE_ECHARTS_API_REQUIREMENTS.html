@@ -69,6 +69,59 @@ article h2:target{color:#087f8c} .hero h1{font-size:32px} .table-wrap td{overflo
 <li><code>FOLLOW_UP_CHECKLIST.md</code>：第7章补充的后续待办与人工核对清单；按T/H编号记录优先级、建议负责人、输入、产物和完成标准，并提供脱敏验收样本及回填模板。</li>
 </ul>
 <p>采用 <a href="https://spec.openapis.org/oas/v3.1.1.html" rel="noopener noreferrer">OpenAPI Specification 3.1.1</a> 的 <code>paths</code>、<code>operationId</code>、<code>parameters</code>、<code>requestBody</code>、<code>responses</code>、<code>components/schemas</code>、<code>securitySchemes</code> 结构。可空使用 JSON Schema 的 <code>null</code> 类型；必填与可空分别表达。该版本选择用于稳定契约，不宣称它是最新规范版本。</p>
+<h3>1.1 全局强制规则：图表授权与员工数据范围</h3>
+<p><strong>优先级：P0，适用于全部业务模块。</strong> 平台定位是公司内部员工办公。登录身份、岗位、员工／部门绑定及FOP授权由服务端读取；先限定数据范围，再做统计、排名、合计、占比、环比、搜索和分页。统计结果不能先按全公司计算再仅隐藏他人明细。图表、趋势、明细、搜索、下载和导出共用有效范围；筛选条件只能缩小范围。</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>身份</th>
+<th>客户订单分析</th>
+<th>业务员回款／订单量／物流费用</th>
+<th>销售个人工作台</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>业务员</td>
+<td>本人授权客户Top10＋授权范围内其他客户</td>
+<td>本人获授权业务事实</td>
+<td>强制本人</td>
+</tr>
+<tr>
+<td>部门经理</td>
+<td>管理部门及子部门成员的授权客户Top10＋其他</td>
+<td>部门成员，包含经理本人；不能查看其他部门明细</td>
+<td>默认本人；绑定缺失不得静默改成同事个人业绩</td>
+</tr>
+<tr>
+<td>业务数据管理员</td>
+<td>同租户、FOP许可的全部客户</td>
+<td>同租户、FOP许可的全部业务事实</td>
+<td>本人或主动选择的授权业务员</td>
+</tr>
+<tr>
+<td>仅系统管理员</td>
+<td>不因管理角色获得业务数据</td>
+<td>组织、账号、角色维护与业务范围独立</td>
+<td>仍需业务授权及销售岗位</td>
+</tr>
+</tbody>
+</table></div>
+<p>客户原有数量排名、金额两行、分仓和趋势结构不变。Top10必须在权限过滤后排序，金额沿用同一客户集合；其他客户、客户数及占比均来自相同授权候选，不泄露全公司数量。例：员工18个符合条件客户，显示其前10个与余下8个合计，不能先取全公司前10再过滤本人。</p>
+<h3>1.2 逐图授权、组织汇总与明细分离</h3>
+<p>七个稳定授权资源为 <code>registrations</code>、<code>department_receipts</code>、<code>salesperson_receipts</code>、<code>order_volume</code>、<code>customer_orders</code>、<code>freight</code>、<code>sales_performance</code>。一个资源可以对应既有主图、排名、表格及趋势弹窗，不重新拆分ECharts页面。岗位／业务角色模板批量决定缺省权限，账号例外通过管理员配置；明确禁止优先，未知新图表默认拒绝。</p>
+<ul>
+<li>图表可见性：继承／允许／禁止。允许图表不扩大订单、收款、费用或利润资源权限。</li>
+<li>记录范围：继承／仅本人／本部门；最终不超过账号业务范围及FOP授权。销售、费用和毛利各自资源许可保持独立。</li>
+<li>组织汇总：继承／不开放／指定业务部门／营销中心，独立于记录范围。只用于注册的组织汇总、部门回款和订单量的组织类别；不支持将客户或业务员图借此变为公司明细。</li>
+<li>明细和导出：独立配置。图内已授权的统计表不等于底层业务单据明细；查看组织合计不授予成员、客户、订单或费用单据。没有业务导出接口的图不因配置而虚构CSV功能；图片下载也遵守导出能力。</li>
+</ul>
+<p>组织统计维度保持原结构，不能以个人金额冒充“部门合计”。完整部门／营销中心汇总仅从独立授权的组织聚合源返回，不通过临时改成管理员、扩大订单白名单或向浏览器下发全量明细实现。普通员工默认没有完整部门汇总；经理默认管理部门；跨部门或营销中心汇总必须有明确本地授权和FOP许可。纯汇总响应不附带业务员／客户／订单标识，切换到成员或明细入口仍校验对应业务数据范围。</p>
+<p>部门与营销中心完整汇总、本人／部门授权业务小计分别标明，范围提示不拼入“营销中心”下拉选项。图表布局、色彩、列宽、环比、时间控件、最新月份、USD及UTC+8规范维持原样。</p>
+<h3>1.3 身份、客户归属与历史业绩</h3>
+<p>登录账号必须绑定稳定员工ID和FOP用户；业务员姓名、邮箱、浏览器传入ownerId均不能决定权限。客户当前所属业务员用于当前客户管理；订单／收款归属用于对应事实的业绩；月结毛利沿用冻结业务员。客户转交不得自动把历史业绩转给新员工，历史可见性须由FOP移交授权明确。只有可信历史访问事实的记录才进入统计，不能靠当前客户姓名／当前归属重写历史。</p>
+<p>新FOP适配器默认 <code>customerOwnershipMode=current_required</code>，必须提供 <code>currentCustomerOwner</code> 及历史访问规则，缺失时返回503。只有显式选择 <code>legacy_historical</code> 的旧适配器才可按历史授权事实兼容展示，并返回 <code>customerOwnershipBasis=historical_attribution</code> 或 <code>mixed</code> 供页面提示；不能声称已实现完整当前客户移交。当前归属用于进一步收窄客户范围，不扩大历史订单／收款访问，也不改变冻结毛利。</p>
+<p>经理“包含本人”是指管理部门内自身业务；不自动并入其他部门的个人历史记录，跨部门历史访问仍需明确业务授权。经理Dashboard看部门管理数据，销售工作台默认看本人。单客户搜索是客户维度，不等于经理本人业绩。账号改权、解绑、调岗、禁用或会话切换后重新核验，迟到响应不得恢复撤销数据。权限缺失与合法无数据分开，禁止用0冒充无权限。</p>
 <h2 id="hz-section-2">2. 图表与业务模块总览</h2>
 <div class="table-wrap"><table>
 <thead>
@@ -92,7 +145,7 @@ article h2:target{color:#087f8c} .hero h1{font-size:32px} .table-wrap td{overflo
 <td>CH-02</td>
 <td>部门月度回款分析</td>
 <td>年份；营销中心＋四业务部；独立上月环比</td>
-<td><code>receipts.months</code>、<code>previousMonth</code>、<code>marketingCenter</code>、<code>departments[].amounts/previousAmount</code></td>
+<td><code>departmentReceipts.months</code>、<code>previousMonth</code>、<code>marketingCenter</code>、<code>departments[].amounts/previousAmount</code></td>
 <td>金额/差额/比例；合计；月份倒排；环比自动展开明细，取消保持展开</td>
 </tr>
 <tr>
@@ -1328,6 +1381,174 @@ article h2:target{color:#087f8c} .hero h1{font-size:32px} .table-wrap td{overflo
 </tbody>
 </table></div>
 <p>销售毛利实施顺序：H23/H28及T21/T25先确立可信身份和只读协议，T23适配权威月结，T22补齐预计贡献事实，T24审计金额／换汇，最后T26真实对账。可以先实现本工程Mock，但真实适配的缺口不得改写为已完成。</p>
+<h3>全局图表授权与用户数据隔离（2026-10-23）</h3>
+<p>本节为P0强制规则，覆盖旧清单涉及的全部经营统计；原T01–T26/H01–H28/D01–D22保留。普通员工本人、经理部门成员、纯系统管理员无默认业务权；图表开放、底层记录、组织聚合、明细和导出是不同许可。真实验证结论仅见VERIFICATION，不以Mock成功关闭生产任务。</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>编号</th>
+<th>优先级／状态</th>
+<th>后续工作</th>
+<th>人工输入</th>
+<th>完成标准</th>
+<th>负责</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>T27</td>
+<td>P0 · 待正式账号接入</td>
+<td>FOP逐资源授权与本地七类图表策略联调，后台每个入口求交</td>
+<td>H02–H04、H29</td>
+<td>账号/FOP/员工/部门映射稳定，禁止图表无响应数据，直接API与综合dashboard同时受控；撤权后不恢复旧响应</td>
+<td>IT＋FOP＋平台后台</td>
+</tr>
+<tr>
+<td>T28</td>
+<td>P0 · 待独立汇总接口</td>
+<td>发布仅部门/日期/指标的组织汇总及独立部门授权，默认provider不假定已有</td>
+<td>H30</td>
+<td>组织范围与本人单据范围独立，前端及BFF输出不含成员/客户/单据；FOP校验绑定主体，禁止通过管理身份代查；统计筛选包含上期与仓库</td>
+<td>FOP＋平台后台</td>
+</tr>
+<tr>
+<td>T29</td>
+<td>P0 · 待移交规则确认</td>
+<td>当前客户归属、历史访问、订单/收款业绩及冻结毛利映射</td>
+<td>H06、H28、H31</td>
+<td>客户稳定ID、当前owner、历史事实owner和转移日期/授权分别返回；A转B不转移冻结业绩，B历史查询取明确许可，不能按姓名推断</td>
+<td>销售负责人＋FOP＋财务</td>
+</tr>
+<tr>
+<td>T30</td>
+<td>P0 · 待正式多账号验收</td>
+<td>以真实员工、经理、业务管理员及纯管理账号验证所有图表/明细/导出</td>
+<td>H29–H32</td>
+<td>D23–D29逐项签收；Top10与其他、占比分母、两仓/上期/分页前总计不含域外事实；页面结构保持；异常与无数据区分</td>
+<td>测试＋各部门代表＋IT</td>
+</tr>
+<tr>
+<td>编号</td>
+<td>需要人工提供／确认的信息</td>
+<td>产物与责任</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>---</td>
+<td>---</td>
+<td>---</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>H29</td>
+<td>正式人员图表模板：七类图表哪些岗位默认可见，哪些账号例外，哪些账号可看明细及导出；经理员工ID和管理部门/下级范围</td>
+<td>IT＋部门负责人提供配置矩阵，系统管理权与业务权两栏分离；业务员完整部门汇总默认不开放</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>H30</td>
+<td>可公开的完整部门/营销中心统计范围、每个FOP用户独立组织汇总权限、已发布只读URL及完整脱敏响应</td>
+<td>FOP＋业务负责人；明确仅汇总权不能获得业务员、客户、订单/收款/成本ID，资料不含令牌</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>H31</td>
+<td>客户转交、共管、离职、跨部门历史可见性与业绩归属；同客户多业务员的实际案例</td>
+<td>销售＋财务＋FOP；提供稳定ID、发生日、移交前后两名员工预期、至少一笔已结月结；不假设当前owner可以重写历史</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>H32</td>
+<td>正式验收账号：同部门两个业务员、另部门业务员、兼任业务员经理、业务管理员、仅系统管理员；至少两个业务员各&gt;10客户</td>
+<td>测试＋IT提供预期统计对账表、账号权限配置与环境；凭证经安全渠道交付，不写入文档</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>编号</td>
+<td>最小验收场景</td>
+<td>必须断言</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>---</td>
+<td>---</td>
+<td>---</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>D23</td>
+<td>A、B各至少12个有订单客户，排名交错</td>
+<td>A看到自己Top10和其他；B客户名、总数、金额和占比分母不出现在A响应；搜索/趋势同范围</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>D24</td>
+<td>经理M含本人及下级两部门，另有域外部门</td>
+<td>Dashboard部门包含M本人且不含域外；销售工作台默认M本人；无员工绑定提示主动选择，不默认同事</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>D25</td>
+<td>A只有本人业务＋完整业务二部组织汇总</td>
+<td>组织汇总正确，JSON不含部门成员或单据；客户、业务员及明细仍本人；不存在汇总绕过路径</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>D26</td>
+<td>单图明确deny、明细deny、导出deny</td>
+<td>直接端点/旧链接拒绝；dashboard不附带被禁统计；图内合法汇总表可保留；图片下载遵守导出许可</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>D27</td>
+<td>经理将某图dataScope改self、查询伪造owner/部门/chartId</td>
+<td>仅本人；不能改参数切换图表获得更宽同源明细；合计/Top10/其他不泄漏全部门</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>D28</td>
+<td>客户A转B及历史收款、审核月结冻结A</td>
+<td>当前客户访问和历史权限分别处理；B不能自动取得A历史业绩；已结净毛利归属不重写</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>D29</td>
+<td>查询途中撤权、解绑、换号、纯系统管理员</td>
+<td>迟到响应丢弃；界面旧金额清空；无数据、无权和上游错误不混成0；管理界面仍可维护独立权限</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table></div>
 <h2 id="hz-section-8">8. 销售个人收款与净毛利（月／周／天）</h2>
 <p>本节追加2026-10-23需求，保留前述所有模块和编号。交付目标是本工程销售工作台、BFF聚合／明细、独立授权、Mock和机器契约同步；其完成及测试结论以 <code>VERIFICATION.md</code> 为准。<strong>这些产物不等于真实FOP已发布查询、具备历史利润账本或通过生产财务验收。</strong> 后台源码本轮只读，真实适配保持未配置边界。</p>
 <h3>8.1 页面、查询和权限</h3>
@@ -1433,7 +1654,7 @@ article h2:target{color:#087f8c} .hero h1{font-size:32px} .table-wrap td{overflo
 <h3>8.6 冻结归属变更与预估撤销</h3>
 <p>同订单同确认月发生业务员调整时，BFF在已授权业务范围内先做结算替代，再选择业务员，避免管理员选择旧业务员时仍看到已替代的预估。若最终冻结月结属于另一主体且当前用户没有该事实权限，平台不得越权读取其金额用于去重；FOP适配器必须在授权返回前撤销／过滤已替代预估，或提供不含他人金额的可信失效标识。该能力属于T22/T24上线前条件，纳入H25人工核对及D18/D22验收。</p>
 <h2 id="hz-section-9">9. OpenAPI 接口清单与请求/响应定义</h2>
-<p>本规范覆盖 <strong>21 个操作、92 个数据模型</strong>。以下清单由同目录 OpenAPI JSON 生成。Base URL 为 <code>/api</code>，表中路径不重复此前缀。响应为实际裸 JSON，不额外包装成 <code>{code,data}</code>。时间序列数值数组必须与对应时间轴等长：counts 对应 registrations、amounts 对应 months、values 及 warehouses 内数组对应 periods；items/series/options 等集合不适用。该跨字段规则需联调测试，单纯 schema 校验不能证明。</p>
+<p>本规范覆盖 <strong>23 个操作、111 个数据模型</strong>。以下清单由同目录 OpenAPI JSON 生成。Base URL 为 <code>/api</code>，表中路径不重复此前缀。响应为实际裸 JSON，不额外包装成 <code>{code,data}</code>。时间序列数值数组必须与对应时间轴等长：counts 对应 registrations、amounts 对应 months、values 及 warehouses 内数组对应 periods；items/series/options 等集合不适用。该跨字段规则需联调测试，单纯 schema 校验不能证明。</p>
 <div class="table-wrap"><table>
 <thead>
 <tr>
@@ -1570,10 +1791,22 @@ article h2:target{color:#087f8c} .hero h1{font-size:32px} .table-wrap td{overflo
 <td><code>getSalesPerformanceDetails</code></td>
 <td>销售工作台个人收款与毛利明细</td>
 </tr>
+<tr>
+<td>PUT</td>
+<td><code>/users/{id}/chart-permissions</code></td>
+<td><code>updateChartPermissions</code></td>
+<td>设置账号逐图授权</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/autoflow/integrations/fop/chart-access</code></td>
+<td><code>getChartAccess</code></td>
+<td>读取当前账号有效图表能力</td>
+</tr>
 </tbody>
 </table></div>
 <h3>9.1 公共鉴权与响应说明</h3>
-<p>字段级源码快照，仅记录已实现HTTP路由，不将计划FOP上游写为paths。响应裸JSON，无{code,data,message}包装。required=序列化必有；type:null=显式空值；可省略字段不在required中。参数跨字段依赖及已知口径差距见操作描述和配套审计。示例为脱敏契约样例，不是生产数据。 FOP为金蝶云苍穹上的HyperZone自研应用，源码只读核实；本工程方案2收款聚合和Mock已实现，真实生产网络适配器仍未配置。订单与收款各自授权，回款采用实际结算分录，统一UTC+8。 物流运费使用独立freight scope及allowedFreightIds，已实现Mock成本快照；必须保留原币与明确USD折算，按确认时间归期。最终结算、补收退款、调价及真实成本查询/授权仍待核对。 销售工作台增加个人收款与毛利：独立sales_profit授权、已审核净毛利差额优先、无日分配返回null；预估期间事件账本和严格asOf成本链仍是FOP对接前置条件。</p>
+<p>字段级源码快照，仅记录已实现HTTP路由，不将计划FOP上游写为paths。响应裸JSON，无{code,data,message}包装。required=序列化必有；type:null=显式空值；可省略字段不在required中。参数跨字段依赖及已知口径差距见操作描述和配套审计。示例为脱敏契约样例，不是生产数据。 FOP为金蝶云苍穹上的HyperZone自研应用，源码只读核实；本工程方案2收款聚合和Mock已实现，真实生产网络适配器仍未配置。订单与收款各自授权，回款采用实际结算分录，统一UTC+8。 物流运费使用独立freight scope及allowedFreightIds，已实现Mock成本快照；必须保留原币与明确USD折算，按确认时间归期。最终结算、补收退款、调价及真实成本查询/授权仍待核对。 销售工作台增加个人收款与毛利：独立sales_profit授权、已审核净毛利差额优先、无日分配返回null；预估期间事件账本和严格asOf成本链仍是FOP对接前置条件。 全局P0：逐图许可和数据范围独立；普通员工本人，经理部门及下级，所有统计/排名/合计/搜索/趋势/明细先过滤再计算。组织整体汇总另行授权，只返聚合；客户当前分配不重写历史业绩。</p>
 <ul>
 <li>
 <p><code>BearerAuth</code>：Authorization: Bearer <JWT>；角色每次查当前数据库。；type=http，in=Authorization，name=bearer。</p>
@@ -1648,7 +1881,7 @@ Accept: application/json
 <p>实现证据：<code>backend/src/modules/users/workbench.controller.ts</code>, <code>backend/src/modules/fop-data/fop-data.service.ts</code>。</p>
 <h3>9.3 读取订单量及客户USD金额图表</h3>
 <p><code>GET /api/autoflow/integrations/fop/order-volume</code> · operationId: <code>getOrderVolume</code></p>
-<p>至少一个工作台角色；绑定、租户、独立订单／收款 allowlist 与 businessScope 求交。时间模式二选一：grain+year，day 另需 month；或 category=customer 且 from/to 同时提供，禁止 grain/year/month/weekOf。日期为 2020-01-01 至 UTC+8 今天含首尾。订单数仅 paid、reviewStatus=approved、有效 paidAt&lt;=asOf、未取消的履约订单；非 carrier 要求报表部门。备货不计订单数。未来日 null，已发生空期 0。客户有 receipts scope 时 amounts 来自独立授权的有效收款分录，无 scope 省略 amounts。Top10 按履约数量，只有备货回款的客户仍进入总计／other 和搜索。筛选参数不能扩大权限。</p>
+<p>至少一个工作台角色；绑定、租户、独立订单／收款 allowlist 与 businessScope 求交。时间模式二选一：grain+year，day 另需 month；或 category=customer 且 from/to 同时提供，禁止 grain/year/month/weekOf。日期为 2020-01-01 至 UTC+8 今天含首尾。订单数仅 paid、reviewStatus=approved、有效 paidAt&lt;=asOf、未取消的履约订单；非 carrier 要求报表部门。备货不计订单数。未来日 null，已发生空期 0。客户有 receipts scope 时 amounts 来自独立授权的有效收款分录，无 scope 省略 amounts。Top10 按履约数量，只有备货回款的客户仍进入总计／other 和搜索。筛选参数不能扩大权限。 统计前按图表有效记录范围过滤，再生成Top10及other。summary视图仅组织类别并使用独立组织汇总；任何summary业务明细请求拒绝。</p>
 <p>实现状态：implemented</p>
 <p>鉴权：<code>[{"BearerAuth": []}, {"SessionCookie": []}]</code>。</p>
 <p>请求示例（日期和主体为脱敏样例，联调时替换）：</p>
@@ -1765,6 +1998,14 @@ Accept: application/json
 <td>否</td>
 <td>ALL全仓，HZ杭州，SZ深圳；UNASSIGNED仅兼容查询，已审核履约／有效收款不得未知仓；默认ALL。</td>
 <td>enum=["ALL", "HZ", "SZ", "UNASSIGNED"]; default="ALL"</td>
+</tr>
+<tr>
+<td><code>view</code></td>
+<td>query</td>
+<td>string</td>
+<td>否</td>
+<td>缺省records；summary仅category=organization，采用独立组织汇总，不能下钻成员/订单。</td>
+<td>enum=["records", "summary"]</td>
 </tr>
 </tbody>
 </table></div>
@@ -1939,13 +2180,24 @@ Accept: application/json
         &quot;label&quot;: &quot;示例业务员&quot;
       }
     ]
-  }
+  },
+  &quot;chartAccess&quot;: {
+    &quot;chartId&quot;: &quot;customer_orders&quot;,
+    &quot;visible&quot;: true,
+    &quot;dataScope&quot;: &quot;all&quot;,
+    &quot;scopeLabel&quot;: &quot;全部授权业务数据&quot;,
+    &quot;canViewDetails&quot;: true,
+    &quot;canExport&quot;: true,
+    &quot;summaryOnly&quot;: false,
+    &quot;summaryDepartments&quot;: []
+  },
+  &quot;summaryOnly&quot;: false
 }
 </code></pre>
 <p>实现证据：<code>backend/src/modules/users/workbench.controller.ts</code>, <code>backend/src/modules/fop-data/fop-data.service.ts</code>, <code>backend/src/modules/fop-data/order-volume.dto.ts</code>, <code>backend/src/modules/fop-data/order-volume.ts</code>。</p>
 <h3>9.4 图表series/period钻取订单</h3>
 <p><code>GET /api/autoflow/integrations/fop/order-volume/orders</code> · operationId: <code>getOrderVolumeDetails</code></p>
-<p>至少一个工作台角色；绑定、租户、独立订单／收款 allowlist 与 businessScope 求交。时间模式二选一：grain+year，day 另需 month；或 category=customer 且 from/to 同时提供，禁止 grain/year/month/weekOf。日期为 2020-01-01 至 UTC+8 今天含首尾。订单数仅 paid、reviewStatus=approved、有效 paidAt&lt;=asOf、未取消的履约订单；非 carrier 要求报表部门。备货不计订单数。未来日 null，已发生空期 0。客户有 receipts scope 时 amounts 来自独立授权的有效收款分录，无 scope 省略 amounts。Top10 按履约数量，只有备货回款的客户仍进入总计／other 和搜索。筛选参数不能扩大权限。 额外要求 workbenchRole；先完整范围重建 TopN/other，再收窄 period/detailWarehouse，查询仓和明细仓取交集。按 paidAt 倒序/id 排序，totals 在分页前计算；此端点返回履约订单金额，不是实收明细。</p>
+<p>至少一个工作台角色；绑定、租户、独立订单／收款 allowlist 与 businessScope 求交。时间模式二选一：grain+year，day 另需 month；或 category=customer 且 from/to 同时提供，禁止 grain/year/month/weekOf。日期为 2020-01-01 至 UTC+8 今天含首尾。订单数仅 paid、reviewStatus=approved、有效 paidAt&lt;=asOf、未取消的履约订单；非 carrier 要求报表部门。备货不计订单数。未来日 null，已发生空期 0。客户有 receipts scope 时 amounts 来自独立授权的有效收款分录，无 scope 省略 amounts。Top10 按履约数量，只有备货回款的客户仍进入总计／other 和搜索。筛选参数不能扩大权限。 额外要求 workbenchRole；先完整范围重建 TopN/other，再收窄 period/detailWarehouse，查询仓和明细仓取交集。按 paidAt 倒序/id 排序，totals 在分页前计算；此端点返回履约订单金额，不是实收明细。 统计前按图表有效记录范围过滤，再生成Top10及other。summary视图仅组织类别并使用独立组织汇总；任何summary业务明细请求拒绝。</p>
 <p>实现状态：implemented</p>
 <p>鉴权：<code>[{"BearerAuth": []}, {"SessionCookie": []}]</code>。</p>
 <p>请求示例（日期和主体为脱敏样例，联调时替换）：</p>
@@ -2100,6 +2352,14 @@ Accept: application/json
 <td>否</td>
 <td>—</td>
 <td>default=20; minimum=1; maximum=100</td>
+</tr>
+<tr>
+<td><code>view</code></td>
+<td>query</td>
+<td>string</td>
+<td>否</td>
+<td>缺省records；summary仅category=organization，采用独立组织汇总，不能下钻成员/订单。</td>
+<td>enum=["records", "summary"]</td>
 </tr>
 </tbody>
 </table></div>
@@ -2281,7 +2541,17 @@ Accept: application/json
   ],
   &quot;total&quot;: 1,
   &quot;page&quot;: 1,
-  &quot;pageSize&quot;: 10
+  &quot;pageSize&quot;: 10,
+  &quot;chartAccess&quot;: {
+    &quot;chartId&quot;: &quot;customer_orders&quot;,
+    &quot;visible&quot;: true,
+    &quot;dataScope&quot;: &quot;all&quot;,
+    &quot;scopeLabel&quot;: &quot;全部授权业务数据&quot;,
+    &quot;canViewDetails&quot;: true,
+    &quot;canExport&quot;: true,
+    &quot;summaryOnly&quot;: false,
+    &quot;summaryDepartments&quot;: []
+  }
 }
 </code></pre>
 <p>实现证据：<code>backend/src/modules/users/workbench.controller.ts</code>, <code>backend/src/modules/fop-data/fop-data.service.ts</code>, <code>backend/src/modules/fop-data/order-volume.dto.ts</code>, <code>backend/src/modules/fop-data/order-volume.ts</code>。</p>
@@ -2420,7 +2690,7 @@ Accept: application/json
 <p>实现证据：<code>backend/src/modules/users/workbench.controller.ts</code>, <code>backend/src/modules/fop-data/fop-data.service.ts</code>, <code>backend/src/modules/users/dto/workbench.dto.ts</code>, <code>backend/src/modules/fop-data/fop-order-totals.ts</code>。</p>
 <h3>9.7 读取FOP仪表盘</h3>
 <p><code>GET /api/autoflow/integrations/fop/dashboard</code> · operationId: <code>getFopDashboard</code></p>
-<p>from&lt;=to，end-start&lt;=365 天（含首尾最多 366 天），to&lt;=UTC+8 今天，year&lt;=UTC+8 当前年。from/to 仅注册，year 仅回款；队列／异常／任务不受日期筛选。rates/registrations/receipts 分别需 analyticsScopes；无 scope 返回空。注册明细按业务范围过滤，缺失时仅业务 admin 可读旧日汇总。回款以独立授权的 hzkj_real_receive_amt 分录为准：USD、paid、源单与收款单均 approved、未取消且支付已发生，来源履约＋全款备货，不含押金／样品，按 UTC+8 支付月归属。包含来源拆分和上年12月基线；非银行现金流保证。</p>
+<p>from&lt;=to，end-start&lt;=365 天（含首尾最多 366 天），to&lt;=UTC+8 今天，year&lt;=UTC+8 当前年。from/to 仅注册，year 仅回款；队列／异常／任务不受日期筛选。rates/registrations/receipts 分别需 analyticsScopes；无 scope 返回空。注册明细按业务范围过滤，缺失时仅业务 admin 可读旧日汇总。回款以独立授权的 hzkj_real_receive_amt 分录为准：USD、paid、源单与收款单均 approved、未取消且支付已发生，来源履约＋全款备货，不含押金／样品，按 UTC+8 支付月归属。包含来源拆分和上年12月基线；非银行现金流保证。 逐图策略分别控制注册、部门回款、业务员回款；departmentReceipts为独立组织聚合，receipts为获授权业务员事实。禁止图表不能仅由浏览器隐藏，响应也不得包含其数据。</p>
 <p>实现状态：implemented</p>
 <p>鉴权：<code>[{"BearerAuth": []}, {"SessionCookie": []}]</code>。</p>
 <p>请求示例（日期和主体为脱敏样例，联调时替换）：</p>
@@ -2533,6 +2803,15 @@ Accept: application/json
   &quot;tasks&quot;: [],
   &quot;exceptions&quot;: [],
   &quot;receipts&quot;: {
+    &quot;currency&quot;: &quot;USD&quot;,
+    &quot;months&quot;: [],
+    &quot;marketingCenter&quot;: null,
+    &quot;departments&quot;: [],
+    &quot;basis&quot;: &quot;actual_received&quot;,
+    &quot;timeZone&quot;: &quot;UTC+8&quot;
+  },
+  &quot;chartAccess&quot;: [],
+  &quot;departmentReceipts&quot;: {
     &quot;currency&quot;: &quot;USD&quot;,
     &quot;months&quot;: [],
     &quot;marketingCenter&quot;: null,
@@ -3301,7 +3580,7 @@ Accept: application/json
 <p>实现证据：<code>backend/src/modules/autoflow/autoflow.controller.ts</code>, <code>backend/src/modules/autoflow/autoflow.service.ts</code>, <code>backend/src/modules/autoflow/autoflow.types.ts</code>, <code>backend/src/modules/users/business-data-access.ts</code>。</p>
 <h3>9.17 客户同一数量排名集合下钻收款分录</h3>
 <p><code>GET /api/autoflow/integrations/fop/order-volume/receipts</code> · operationId: <code>getOrderVolumeReceipts</code></p>
-<p>仅 category=customer；沿用客户统计时间、部门、仓库及完整查询范围数量 Top10/other 客户集合，再应用 periodId/detailWarehouse。需要 workbenchRole、receipts scope 与独立 allowedReceiptIds；没有 scope 返回403，缺失/空白名单为空。订单 allowlist 不能替代收款授权。只返回有效 USD 履约／全款备货分录；不含押金、样品。状态、UTC+8 日期及来源口径同 Dashboard。total/totals 分页前计算，按 paidAt 倒序/id 稳定排序；客户端不能传身份/权限字段。</p>
+<p>仅 category=customer；沿用客户统计时间、部门、仓库及完整查询范围数量 Top10/other 客户集合，再应用 periodId/detailWarehouse。需要 workbenchRole、receipts scope 与独立 allowedReceiptIds；没有 scope 返回403，缺失/空白名单为空。订单 allowlist 不能替代收款授权。只返回有效 USD 履约／全款备货分录；不含押金、样品。状态、UTC+8 日期及来源口径同 Dashboard。total/totals 分页前计算，按 paidAt 倒序/id 稳定排序；客户端不能传身份/权限字段。 统计前按图表有效记录范围过滤，再生成Top10及other。summary视图仅组织类别并使用独立组织汇总；任何summary业务明细请求拒绝。</p>
 <p>实现状态：implemented</p>
 <p>鉴权：<code>[{"BearerAuth": []}, {"SessionCookie": []}]</code>。</p>
 <p>请求示例（日期和主体为脱敏样例，联调时替换）：</p>
@@ -3457,6 +3736,14 @@ Accept: application/json
 <td>—</td>
 <td>default=20; minimum=1; maximum=100</td>
 </tr>
+<tr>
+<td><code>view</code></td>
+<td>query</td>
+<td>string</td>
+<td>否</td>
+<td>缺省records；summary仅category=organization，采用独立组织汇总，不能下钻成员/订单。</td>
+<td>enum=["records", "summary"]</td>
+</tr>
 </tbody>
 </table></div>
 <div class="table-wrap"><table>
@@ -3527,7 +3814,7 @@ Accept: application/json
 <p>实现证据：<code>backend/src/modules/users/workbench.controller.ts</code>, <code>backend/src/modules/fop-data/fop-data.service.ts</code>, <code>backend/src/modules/fop-data/order-volume.dto.ts</code>, <code>backend/src/modules/fop-data/order-volume.ts</code>, <code>backend/src/modules/fop-data/fop-receipts.ts</code>。</p>
 <h3>9.18 读取获授权实收分录及完整筛选合计</h3>
 <p><code>GET /api/autoflow/integrations/fop/receipts</code> · operationId: <code>getReceipts</code></p>
-<p>Dashboard回款下钻。from/to 必填且严格有效，2020-01-01&lt;=from&lt;=to&lt;=UTC+8 今天，含首尾；当前无最大跨度。department/ownerId/customerId/warehouse/sourceType 仅收窄范围。需拥有 workbenchRole、receipts scope 及独立 allowedReceiptIds；无 scope 403，缺失/空 allowlist 合法空结果。按绑定租户与部门/员工业务范围过滤，读取前后复核本地授权变化。有效分录要求 USD、paid、源单及收款单均 approved、未取消、已发生 paidAt，来源仅履约或全款备货。实收不是银行现金保证，源单金额与手续费单独返回。畸形授权分录/重复ID为503，禁止由订单金额合成。total/totals 分页前计算，paidAt倒序/id稳定排序；未知身份/权限参数400。</p>
+<p>Dashboard回款下钻。from/to 必填且严格有效，2020-01-01&lt;=from&lt;=to&lt;=UTC+8 今天，含首尾；当前无最大跨度。department/ownerId/customerId/warehouse/sourceType 仅收窄范围。需拥有 workbenchRole、receipts scope 及独立 allowedReceiptIds；无 scope 403，缺失/空 allowlist 合法空结果。按绑定租户与部门/员工业务范围过滤，读取前后复核本地授权变化。有效分录要求 USD、paid、源单及收款单均 approved、未取消、已发生 paidAt，来源仅履约或全款备货。实收不是银行现金保证，源单金额与手续费单独返回。畸形授权分录/重复ID为503，禁止由订单金额合成。total/totals 分页前计算，paidAt倒序/id稳定排序；未知身份/权限参数400。 要求salesperson_receipts有效可见及明细能力；部门组织汇总不授此端点。</p>
 <p>实现状态：implemented</p>
 <p>鉴权：<code>[{"BearerAuth": []}, {"SessionCookie": []}]</code>。</p>
 <p>请求示例（日期和主体为脱敏样例，联调时替换）：</p>
@@ -3627,6 +3914,14 @@ Accept: application/json
 <td>—</td>
 <td>default=20; minimum=1; maximum=100</td>
 </tr>
+<tr>
+<td><code>chartId</code></td>
+<td>query</td>
+<td>string</td>
+<td>否</td>
+<td>缺省salesperson_receipts；department_receipts仅识别旧入口并返回403，组织汇总不授业务明细。</td>
+<td>enum=["salesperson_receipts", "department_receipts"]</td>
+</tr>
 </tbody>
 </table></div>
 <div class="table-wrap"><table>
@@ -3697,7 +3992,7 @@ Accept: application/json
 <p>实现证据：<code>backend/src/modules/users/workbench.controller.ts</code>, <code>backend/src/modules/fop-data/fop-data.service.ts</code>, <code>backend/src/modules/fop-data/fop-receipts.dto.ts</code>, <code>backend/src/modules/fop-data/fop-receipts.ts</code>, <code>backend/src/modules/fop-data/fop-business-time.ts</code>。</p>
 <h3>9.19 物流实际运费聚合及完整上期环比</h3>
 <p><code>GET /api/autoflow/integrations/fop/freight</code> · operationId: <code>getFreight</code></p>
-<p>独立成本权限：必须有freight analytics scope，否则403；allowedFreightIds缺失/空数组返回空范围，不能从订单或收款授权推导。服务端与租户、本地本人/部门及下属/业务管理员范围求交，系统管理员也不能绕过。每次请求复查绑定和授权变化；客户端不得传tenantId、userId、授权白名单或scope。只纳入已审核、已确认、正数且确认时刻已发生的发运单快照。原币、明确汇率日期/来源及折算一致性必需，目标USD；确认时间按UTC+8，不是银行付款或最终结算证明。真实FOP网络适配器未完成，Mock为独立成本样本。 返回合计与固定六类服务商并列系列；carrierCode过滤时仅合计与该商。单服务商趋势在居中弹窗展示；原始发运单在工作台下钻。</p>
+<p>独立成本权限：必须有freight analytics scope，否则403；allowedFreightIds缺失/空数组返回空范围，不能从订单或收款授权推导。服务端与租户、本地本人/部门及下属/业务管理员范围求交，系统管理员也不能绕过。每次请求复查绑定和授权变化；客户端不得传tenantId、userId、授权白名单或scope。只纳入已审核、已确认、正数且确认时刻已发生的发运单快照。原币、明确汇率日期/来源及折算一致性必需，目标USD；确认时间按UTC+8，不是银行付款或最终结算证明。真实FOP网络适配器未完成，Mock为独立成本样本。 返回合计与固定六类服务商并列系列；carrierCode过滤时仅合计与该商。单服务商趋势在居中弹窗展示；原始发运单在工作台下钻。 同时校验freight逐图有效权限与范围；响应chartAccess为本次实际能力，前端必须覆盖预查询能力并清理失效数据。</p>
 <p>实现状态：implemented; server-side mock available; real FOP network adapter pending</p>
 <p>鉴权：<code>[{"BearerAuth": []}, {"SessionCookie": []}]</code>。</p>
 <p>请求示例（日期和主体为脱敏样例，联调时替换）：</p>
@@ -3971,13 +4266,23 @@ Accept: application/json
     &quot;delta&quot;: 14,
     &quot;percent&quot;: 140
   },
-  &quot;billCount&quot;: 2
+  &quot;billCount&quot;: 2,
+  &quot;chartAccess&quot;: {
+    &quot;chartId&quot;: &quot;freight&quot;,
+    &quot;visible&quot;: true,
+    &quot;dataScope&quot;: &quot;all&quot;,
+    &quot;scopeLabel&quot;: &quot;全部授权业务数据&quot;,
+    &quot;canViewDetails&quot;: true,
+    &quot;canExport&quot;: true,
+    &quot;summaryOnly&quot;: false,
+    &quot;summaryDepartments&quot;: []
+  }
 }
 </code></pre>
 <p>实现证据：<code>backend/src/modules/users/workbench.controller.ts</code>, <code>backend/src/modules/fop-data/fop-data.service.ts</code>, <code>backend/src/modules/fop-data/fop-freight.dto.ts</code>, <code>backend/src/modules/fop-data/fop-freight.ts</code>, <code>backend/src/modules/fop-data/fop-freight.types.ts</code>。</p>
 <h3>9.20 岗位工作台物流运费发运单明细</h3>
 <p><code>GET /api/autoflow/integrations/fop/freight/details</code> · operationId: <code>getFreightDetails</code></p>
-<p>独立成本权限：必须有freight analytics scope，否则403；allowedFreightIds缺失/空数组返回空范围，不能从订单或收款授权推导。服务端与租户、本地本人/部门及下属/业务管理员范围求交，系统管理员也不能绕过。每次请求复查绑定和授权变化；客户端不得传tenantId、userId、授权白名单或scope。只纳入已审核、已确认、正数且确认时刻已发生的发运单快照。原币、明确汇率日期/来源及折算一致性必需，目标USD；确认时间按UTC+8，不是银行付款或最终结算证明。真实FOP网络适配器未完成，Mock为独立成本样本。 明细必须通过workbenchRole入口权限；periodId仅能是该查询返回的一期，comparisonPeriod默认current，previous选择完整上期。省略periodId时选择全部显示周期对应范围；确认时间倒序、ID稳定排序。total/totals在分页前计算，越界页仍保留完整合计；原币逐币种合计。</p>
+<p>独立成本权限：必须有freight analytics scope，否则403；allowedFreightIds缺失/空数组返回空范围，不能从订单或收款授权推导。服务端与租户、本地本人/部门及下属/业务管理员范围求交，系统管理员也不能绕过。每次请求复查绑定和授权变化；客户端不得传tenantId、userId、授权白名单或scope。只纳入已审核、已确认、正数且确认时刻已发生的发运单快照。原币、明确汇率日期/来源及折算一致性必需，目标USD；确认时间按UTC+8，不是银行付款或最终结算证明。真实FOP网络适配器未完成，Mock为独立成本样本。 明细必须通过workbenchRole入口权限；periodId仅能是该查询返回的一期，comparisonPeriod默认current，previous选择完整上期。省略periodId时选择全部显示周期对应范围；确认时间倒序、ID稳定排序。total/totals在分页前计算，越界页仍保留完整合计；原币逐币种合计。 同时校验freight逐图有效权限与范围；响应chartAccess为本次实际能力，前端必须覆盖预查询能力并清理失效数据。直接明细入口还要求canViewDetails。</p>
 <p>实现状态：implemented; server-side mock available; real FOP network adapter pending</p>
 <p>鉴权：<code>[{"BearerAuth": []}, {"SessionCookie": []}]</code>。</p>
 <p>请求示例（日期和主体为脱敏样例，联调时替换）：</p>
@@ -4196,13 +4501,23 @@ Accept: application/json
   &quot;range&quot;: {
     &quot;from&quot;: &quot;2026-10-01&quot;,
     &quot;to&quot;: &quot;2026-10-22&quot;
+  },
+  &quot;chartAccess&quot;: {
+    &quot;chartId&quot;: &quot;freight&quot;,
+    &quot;visible&quot;: true,
+    &quot;dataScope&quot;: &quot;all&quot;,
+    &quot;scopeLabel&quot;: &quot;全部授权业务数据&quot;,
+    &quot;canViewDetails&quot;: true,
+    &quot;canExport&quot;: true,
+    &quot;summaryOnly&quot;: false,
+    &quot;summaryDepartments&quot;: []
   }
 }
 </code></pre>
 <p>实现证据：<code>backend/src/modules/users/workbench.controller.ts</code>, <code>backend/src/modules/fop-data/fop-data.service.ts</code>, <code>backend/src/modules/fop-data/fop-freight.dto.ts</code>, <code>backend/src/modules/fop-data/fop-freight.ts</code>, <code>backend/src/modules/fop-data/fop-freight.types.ts</code>。</p>
 <h3>9.21 销售工作台个人收款与毛利统计</h3>
 <p><code>GET /api/autoflow/integrations/fop/sales-performance</code> · operationId: <code>getSalesPerformance</code></p>
-<p>必须具备sales工作台、receipts及sales_profit analytics scope。服务端重新读取用户FOP绑定、业务角色范围，分别以allowedReceiptIds/allowedProfitIds授权并与租户/业务员/部门范围求交，不从订单权限推导。普通业务员仅自身；业务管理员/部门经理可选择已授权业务员，显式越权ownerId为403。身份/权限查询参数禁止。from/to为UTC+8含首尾日期，2020起、不晚于今天，最大366天；grain month/week/day，周一开始，首尾裁剪。收款复用方案2（履约实际收款+全款备货收款，排除押金），按支付日期；毛利按独立确认日期/月，已结算取冻结净毛利差额、预估以预估运费及已知成本收入计算期间贡献。不会把全款备货回款直接再加利润。同订单同确认月已结算替代预估，跨期差额保留。无可信日明细的结算只能进入完整自然月month桶；week/day/部分月返回null和整月参考，不均摊。未来knownAt/approvedAt/paidAt排除；不支持客户端asOf历史回放。现有FOP原生实时服务未满足严格cutoff/预估成本，新事件账本与只读适配器待实现。</p>
+<p>必须具备sales工作台、receipts及sales_profit analytics scope。服务端重新读取用户FOP绑定、业务角色范围，分别以allowedReceiptIds/allowedProfitIds授权并与租户/业务员/部门范围求交，不从订单权限推导。普通业务员仅自身；业务管理员/部门经理可选择已授权业务员，显式越权ownerId为403。身份/权限查询参数禁止。from/to为UTC+8含首尾日期，2020起、不晚于今天，最大366天；grain month/week/day，周一开始，首尾裁剪。收款复用方案2（履约实际收款+全款备货收款，排除押金），按支付日期；毛利按独立确认日期/月，已结算取冻结净毛利差额、预估以预估运费及已知成本收入计算期间贡献。不会把全款备货回款直接再加利润。同订单同确认月已结算替代预估，跨期差额保留。无可信日明细的结算只能进入完整自然月month桶；week/day/部分月返回null和整月参考，不均摊。未来knownAt/approvedAt/paidAt排除；不支持客户端asOf历史回放。现有FOP原生实时服务未满足严格cutoff/预估成本，新事件账本与只读适配器待实现。 同时校验sales_performance逐图有效权限与范围；响应chartAccess为本次实际能力，前端必须覆盖预查询能力并清理失效数据。</p>
 <p>实现状态：本工程BFF/Mock及前端实现；对应FOP生产只读适配器、严格截止历史成本与日级贡献账本待IT实现。</p>
 <p>鉴权：<code>[{"BearerAuth": []}, {"SessionCookie": []}]</code>。</p>
 <p>请求示例（日期和主体为脱敏样例，联调时替换）：</p>
@@ -4360,13 +4675,23 @@ Accept: application/json
     &quot;receiptCount&quot;: 0,
     &quot;profitCount&quot;: 1
   },
-  &quot;unallocatedSettlements&quot;: []
+  &quot;unallocatedSettlements&quot;: [],
+  &quot;chartAccess&quot;: {
+    &quot;chartId&quot;: &quot;sales_performance&quot;,
+    &quot;visible&quot;: true,
+    &quot;dataScope&quot;: &quot;all&quot;,
+    &quot;scopeLabel&quot;: &quot;全部授权业务数据&quot;,
+    &quot;canViewDetails&quot;: true,
+    &quot;canExport&quot;: true,
+    &quot;summaryOnly&quot;: false,
+    &quot;summaryDepartments&quot;: []
+  }
 }
 </code></pre>
 <p>实现证据：<code>backend/src/modules/fop-data/sales-performance.ts</code>, <code>backend/src/modules/fop-data/sales-performance.dto.ts</code>, <code>backend/src/modules/fop-data/fop-data.service.ts</code>, <code>backend/src/modules/users/workbench.controller.ts</code>。</p>
 <h3>9.22 销售工作台个人收款与毛利明细</h3>
 <p><code>GET /api/autoflow/integrations/fop/sales-performance/details</code> · operationId: <code>getSalesPerformanceDetails</code></p>
-<p>必须具备sales工作台、receipts及sales_profit analytics scope。服务端重新读取用户FOP绑定、业务角色范围，分别以allowedReceiptIds/allowedProfitIds授权并与租户/业务员/部门范围求交，不从订单权限推导。普通业务员仅自身；业务管理员/部门经理可选择已授权业务员，显式越权ownerId为403。身份/权限查询参数禁止。from/to为UTC+8含首尾日期，2020起、不晚于今天，最大366天；grain month/week/day，周一开始，首尾裁剪。收款复用方案2（履约实际收款+全款备货收款，排除押金），按支付日期；毛利按独立确认日期/月，已结算取冻结净毛利差额、预估以预估运费及已知成本收入计算期间贡献。不会把全款备货回款直接再加利润。同订单同确认月已结算替代预估，跨期差额保留。无可信日明细的结算只能进入完整自然月month桶；week/day/部分月返回null和整月参考，不均摊。未来knownAt/approvedAt/paidAt排除；不支持客户端asOf历史回放。现有FOP原生实时服务未满足严格cutoff/预估成本，新事件账本与只读适配器待实现。 分页前计算合计；明细kind仅切换事实清单，periodId不得扩大日期范围。</p>
+<p>必须具备sales工作台、receipts及sales_profit analytics scope。服务端重新读取用户FOP绑定、业务角色范围，分别以allowedReceiptIds/allowedProfitIds授权并与租户/业务员/部门范围求交，不从订单权限推导。普通业务员仅自身；业务管理员/部门经理可选择已授权业务员，显式越权ownerId为403。身份/权限查询参数禁止。from/to为UTC+8含首尾日期，2020起、不晚于今天，最大366天；grain month/week/day，周一开始，首尾裁剪。收款复用方案2（履约实际收款+全款备货收款，排除押金），按支付日期；毛利按独立确认日期/月，已结算取冻结净毛利差额、预估以预估运费及已知成本收入计算期间贡献。不会把全款备货回款直接再加利润。同订单同确认月已结算替代预估，跨期差额保留。无可信日明细的结算只能进入完整自然月month桶；week/day/部分月返回null和整月参考，不均摊。未来knownAt/approvedAt/paidAt排除；不支持客户端asOf历史回放。现有FOP原生实时服务未满足严格cutoff/预估成本，新事件账本与只读适配器待实现。 分页前计算合计；明细kind仅切换事实清单，periodId不得扩大日期范围。 同时校验sales_performance逐图有效权限与范围；响应chartAccess为本次实际能力，前端必须覆盖预查询能力并清理失效数据。直接明细入口还要求canViewDetails。</p>
 <p>实现状态：本工程BFF/Mock及前端实现；对应FOP生产只读适配器、严格截止历史成本与日级贡献账本待IT实现。</p>
 <p>鉴权：<code>[{"BearerAuth": []}, {"SessionCookie": []}]</code>。</p>
 <p>请求示例（日期和主体为脱敏样例，联调时替换）：</p>
@@ -4566,10 +4891,162 @@ Accept: application/json
     &quot;from&quot;: &quot;2026-09-01&quot;,
     &quot;to&quot;: &quot;2026-09-30&quot;
   },
-  &quot;unallocatedSettlements&quot;: []
+  &quot;unallocatedSettlements&quot;: [],
+  &quot;chartAccess&quot;: {
+    &quot;chartId&quot;: &quot;sales_performance&quot;,
+    &quot;visible&quot;: true,
+    &quot;dataScope&quot;: &quot;all&quot;,
+    &quot;scopeLabel&quot;: &quot;全部授权业务数据&quot;,
+    &quot;canViewDetails&quot;: true,
+    &quot;canExport&quot;: true,
+    &quot;summaryOnly&quot;: false,
+    &quot;summaryDepartments&quot;: []
+  }
 }
 </code></pre>
 <p>实现证据：<code>backend/src/modules/fop-data/sales-performance.ts</code>, <code>backend/src/modules/fop-data/sales-performance.dto.ts</code>, <code>backend/src/modules/fop-data/fop-data.service.ts</code>, <code>backend/src/modules/users/workbench.controller.ts</code>。</p>
+<h3>9.23 设置账号逐图授权</h3>
+<p><code>PUT /api/users/{id}/chart-permissions</code> · operationId: <code>updateChartPermissions</code></p>
+<p>仅当前数据库系统管理员，可在无业务权限时维护。整组替换chartPermissions；校验七类资源唯一、枚举及summaryMode跨字段规则。事务内重新核查管理员，不更新业务角色/FOP身份。</p>
+<p>实现状态：implemented</p>
+<p>鉴权：<code>[{"BearerAuth": []}, {"SessionCookie": []}]</code>。</p>
+<p>请求示例（日期和主体为脱敏样例，联调时替换）：</p>
+<pre><code class="language-http">PUT /api/users/00000000-0000-4000-8000-000000000001/chart-permissions
+Authorization: Bearer &lt;有效会话JWT&gt;
+Accept: application/json
+</code></pre>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>参数</th>
+<th>位置</th>
+<th>类型</th>
+<th>必填</th>
+<th>说明</th>
+<th>约束/默认值</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>id</code></td>
+<td>path</td>
+<td>string (uuid)</td>
+<td>是</td>
+<td>本地UUID。</td>
+<td>—</td>
+</tr>
+</tbody>
+</table></div>
+<p>请求体：<code>application/json</code>；必需：True；模型：<code>UpdateChartPermissions</code>。</p>
+<pre><code class="language-json">{
+  &quot;chartPermissions&quot;: [
+    {
+      &quot;chartId&quot;: &quot;customer_orders&quot;,
+      &quot;visibility&quot;: &quot;allow&quot;,
+      &quot;dataScope&quot;: &quot;self&quot;,
+      &quot;summaryMode&quot;: &quot;none&quot;,
+      &quot;summaryDepartments&quot;: [],
+      &quot;details&quot;: &quot;deny&quot;,
+      &quot;export&quot;: &quot;deny&quot;
+    }
+  ]
+}
+</code></pre>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>状态码</th>
+<th>说明</th>
+<th>Content-Type / 响应模型</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>200</td>
+<td>成功，裸JSON响应。</td>
+<td>application/json: WorkbenchAccount</td>
+</tr>
+<tr>
+<td>400</td>
+<td>400：DTO失败、未知DTO字段、日期或跨参数条件错误。</td>
+<td>application/json: HttpError</td>
+</tr>
+<tr>
+<td>401</td>
+<td>401：缺失/过期/无效JWT或账户不存在。</td>
+<td>application/json: HttpError</td>
+</tr>
+<tr>
+<td>403</td>
+<td>403：入口/系统管理权限不足、业务禁用、绑定/范围缺失、FOP拒绝或请求期间授权变更。</td>
+<td>application/json: ErrorResponse</td>
+</tr>
+<tr>
+<td>404</td>
+<td>404：目标本地用户不存在。</td>
+<td>application/json: HttpError</td>
+</tr>
+<tr>
+<td>429</td>
+<td>429：AppModule全局默认每60秒120次；实际计数受部署IP/代理策略影响。</td>
+<td>application/json: HttpError</td>
+</tr>
+<tr>
+<td>500</td>
+<td>500：未捕获服务/数据库异常。</td>
+<td>application/json: HttpError</td>
+</tr>
+</tbody>
+</table></div>
+<p>实现证据：<code>backend/src/modules/users/users.controller.ts</code>, <code>backend/src/modules/users/users.service.ts</code>, <code>backend/src/modules/users/workbench-access.service.ts</code>。</p>
+<h3>9.24 读取当前账号有效图表能力</h3>
+<p><code>GET /api/autoflow/integrations/fop/chart-access</code> · operationId: <code>getChartAccess</code></p>
+<p>从会话解析本地账号/岗位/范围/逐图策略，与绑定FOP用户资源及组织汇总许可求交。无需客户端身份参数。结果不得作为后续请求的凭证。</p>
+<p>实现状态：implemented</p>
+<p>鉴权：<code>[{"BearerAuth": []}, {"SessionCookie": []}]</code>。</p>
+<p>请求示例（日期和主体为脱敏样例，联调时替换）：</p>
+<pre><code class="language-http">GET /api/autoflow/integrations/fop/chart-access
+Authorization: Bearer &lt;有效会话JWT&gt;
+Accept: application/json
+</code></pre>
+<p>无查询/路径参数。</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>状态码</th>
+<th>说明</th>
+<th>Content-Type / 响应模型</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>200</td>
+<td>成功，裸JSON响应。</td>
+<td>application/json: ChartAccessData</td>
+</tr>
+<tr>
+<td>400</td>
+<td>400：DTO失败、未知DTO字段、日期或跨参数条件错误。</td>
+<td>application/json: HttpError</td>
+</tr>
+<tr>
+<td>401</td>
+<td>401：缺失/过期/无效JWT或账户不存在。</td>
+<td>application/json: HttpError</td>
+</tr>
+<tr>
+<td>429</td>
+<td>429：AppModule全局默认每60秒120次；实际计数受部署IP/代理策略影响。</td>
+<td>application/json: HttpError</td>
+</tr>
+<tr>
+<td>500</td>
+<td>500：未捕获服务/数据库异常。</td>
+<td>application/json: HttpError</td>
+</tr>
+</tbody>
+</table></div>
+<p>实现证据：<code>backend/src/modules/users/chart-permissions.ts</code>, <code>backend/src/modules/fop-data/fop-data.service.ts</code>, <code>backend/src/modules/users/workbench.controller.ts</code>。</p>
 <h2 id="hz-section-10">10. 字段级数据字典</h2>
 <p>模型引用按名称交叉查阅。例如 <code>OrderVolumeData.series[] → VolumeSeries.amounts → VolumeAmounts</code>；每一层字段均在下表列出。必填是相对于当前父对象；父对象本身可选时不强制创建。可空只以类型中的 <code>null</code> 或 <code>anyOf/oneOf</code> null 分支为准。示例不是生产值。内部 FOP 提供器模型若标注为内部，则不能从浏览器直接传入。</p>
 <h3>DataSource</h3>
@@ -5250,6 +5727,20 @@ Accept: application/json
 <td>本次每页大小，最多100。</td>
 <td>minimum=1; maximum=100</td>
 </tr>
+<tr>
+<td><code>customerOwnershipBasis</code></td>
+<td>CustomerOwnershipBasis</td>
+<td>否</td>
+<td>见引用模型/接口说明</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>chartAccess</code></td>
+<td>EffectiveChartAccess</td>
+<td>否</td>
+<td>当前响应的逐图有效能力，每次查询重新解析。</td>
+<td>—</td>
+</tr>
 </tbody>
 </table></div>
 <h3>OrderVolumeQuery</h3>
@@ -5341,6 +5832,13 @@ Accept: application/json
 <td>是</td>
 <td>ALL全仓，HZ杭州，SZ深圳；UNASSIGNED仅兼容查询，已审核履约／有效收款不得未知仓；默认ALL。</td>
 <td>enum=["ALL", "HZ", "SZ", "UNASSIGNED"]; default="ALL"</td>
+</tr>
+<tr>
+<td><code>view</code></td>
+<td>string</td>
+<td>否</td>
+<td>缺省records；summary仅category=organization，采用独立组织汇总，不能下钻成员/订单。</td>
+<td>enum=["records", "summary"]</td>
 </tr>
 </tbody>
 </table></div>
@@ -5712,9 +6210,9 @@ Accept: application/json
 </tr>
 <tr>
 <td><code>customerCount</code></td>
-<td>integer</td>
+<td>integer / null</td>
 <td>是</td>
-<td>筛选范围内非空客户 ID 去重；customer 类别包含有效收款客户，可含订单数为0的全款备货客户。</td>
+<td>授权事实涉及的去重客户数；纯组织汇总不含客户标识，返回null，不伪造0。</td>
 <td>minimum=0</td>
 </tr>
 <tr>
@@ -5736,6 +6234,27 @@ Accept: application/json
 <td>VolumeOptions</td>
 <td>是</td>
 <td>根据授权有效订单生成的可选部门和对象，不表示额外授权。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>customerOwnershipBasis</code></td>
+<td>CustomerOwnershipBasis</td>
+<td>否</td>
+<td>见引用模型/接口说明</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>chartAccess</code></td>
+<td>EffectiveChartAccess</td>
+<td>是</td>
+<td>当前响应的逐图有效能力，每次查询重新解析。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>summaryOnly</code></td>
+<td>boolean</td>
+<td>是</td>
+<td>仅组织聚合时true，禁止业务下钻；records视图false。</td>
 <td>—</td>
 </tr>
 </tbody>
@@ -5830,6 +6349,20 @@ Accept: application/json
 <td>是</td>
 <td>当前每页客户数，最多50。</td>
 <td>minimum=1; maximum=50</td>
+</tr>
+<tr>
+<td><code>customerOwnershipBasis</code></td>
+<td>CustomerOwnershipBasis</td>
+<td>否</td>
+<td>见引用模型/接口说明</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>chartAccess</code></td>
+<td>EffectiveChartAccess</td>
+<td>是</td>
+<td>当前响应的逐图有效能力，每次查询重新解析。</td>
+<td>—</td>
 </tr>
 </tbody>
 </table></div>
@@ -6364,6 +6897,20 @@ Accept: application/json
 <td>独立授权的 USD 实收分录按 UTC+8 月度汇总，含履约／全款备货来源拆分及上年12月基线。</td>
 <td>—</td>
 </tr>
+<tr>
+<td><code>chartAccess</code></td>
+<td>EffectiveChartAccess[]</td>
+<td>是</td>
+<td>有效图表能力；拒绝项对应数据不返回敏感值。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>departmentReceipts</code></td>
+<td>DashboardReceipts</td>
+<td>是</td>
+<td>独立组织汇总。salespeople必须为空，不与个人或部门内授权记录小计混同。</td>
+<td>—</td>
+</tr>
 </tbody>
 </table></div>
 <pre><code class="language-json">{
@@ -6771,6 +7318,314 @@ Accept: application/json
     ],
     &quot;basis&quot;: &quot;actual_received&quot;,
     &quot;timeZone&quot;: &quot;UTC+8&quot;
+  },
+  &quot;chartAccess&quot;: [],
+  &quot;departmentReceipts&quot;: {
+    &quot;currency&quot;: &quot;USD&quot;,
+    &quot;months&quot;: [
+      &quot;2026-01&quot;,
+      &quot;2026-02&quot;,
+      &quot;2026-03&quot;,
+      &quot;2026-04&quot;,
+      &quot;2026-05&quot;,
+      &quot;2026-06&quot;,
+      &quot;2026-07&quot;,
+      &quot;2026-08&quot;,
+      &quot;2026-09&quot;,
+      &quot;2026-10&quot;
+    ],
+    &quot;previousMonth&quot;: &quot;2025-12&quot;,
+    &quot;marketingCenter&quot;: {
+      &quot;id&quot;: &quot;marketing&quot;,
+      &quot;name&quot;: &quot;营销中心&quot;,
+      &quot;previousAmount&quot;: 100,
+      &quot;amounts&quot;: [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        125.5
+      ],
+      &quot;breakdown&quot;: {
+        &quot;fulfillment&quot;: [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          125.5
+        ],
+        &quot;fullPaymentStock&quot;: [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      &quot;previousBreakdown&quot;: {
+        &quot;fulfillment&quot;: 100,
+        &quot;fullPaymentStock&quot;: 0
+      }
+    },
+    &quot;departments&quot;: [
+      {
+        &quot;id&quot;: &quot;sales1&quot;,
+        &quot;name&quot;: &quot;业务一部&quot;,
+        &quot;previousAmount&quot;: 100,
+        &quot;amounts&quot;: [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          125.5
+        ],
+        &quot;salespeople&quot;: [
+          {
+            &quot;id&quot;: &quot;employee-example&quot;,
+            &quot;name&quot;: &quot;示例业务员&quot;,
+            &quot;previousAmount&quot;: 100,
+            &quot;amounts&quot;: [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              125.5
+            ],
+            &quot;breakdown&quot;: {
+              &quot;fulfillment&quot;: [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                125.5
+              ],
+              &quot;fullPaymentStock&quot;: [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ]
+            },
+            &quot;previousBreakdown&quot;: {
+              &quot;fulfillment&quot;: 100,
+              &quot;fullPaymentStock&quot;: 0
+            }
+          }
+        ],
+        &quot;breakdown&quot;: {
+          &quot;fulfillment&quot;: [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            125.5
+          ],
+          &quot;fullPaymentStock&quot;: [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        &quot;previousBreakdown&quot;: {
+          &quot;fulfillment&quot;: 100,
+          &quot;fullPaymentStock&quot;: 0
+        }
+      },
+      {
+        &quot;id&quot;: &quot;sales2&quot;,
+        &quot;name&quot;: &quot;业务二部&quot;,
+        &quot;previousAmount&quot;: 0,
+        &quot;amounts&quot;: [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        &quot;salespeople&quot;: [],
+        &quot;breakdown&quot;: {
+          &quot;fulfillment&quot;: [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          &quot;fullPaymentStock&quot;: [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        &quot;previousBreakdown&quot;: {
+          &quot;fulfillment&quot;: 0,
+          &quot;fullPaymentStock&quot;: 0
+        }
+      },
+      {
+        &quot;id&quot;: &quot;sales3&quot;,
+        &quot;name&quot;: &quot;业务三部&quot;,
+        &quot;previousAmount&quot;: 0,
+        &quot;amounts&quot;: [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        &quot;salespeople&quot;: [],
+        &quot;breakdown&quot;: {
+          &quot;fulfillment&quot;: [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          &quot;fullPaymentStock&quot;: [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        &quot;previousBreakdown&quot;: {
+          &quot;fulfillment&quot;: 0,
+          &quot;fullPaymentStock&quot;: 0
+        }
+      },
+      {
+        &quot;id&quot;: &quot;sales4&quot;,
+        &quot;name&quot;: &quot;业务四部&quot;,
+        &quot;previousAmount&quot;: 0,
+        &quot;amounts&quot;: [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        &quot;salespeople&quot;: [],
+        &quot;breakdown&quot;: {
+          &quot;fulfillment&quot;: [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          &quot;fullPaymentStock&quot;: [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        &quot;previousBreakdown&quot;: {
+          &quot;fulfillment&quot;: 0,
+          &quot;fullPaymentStock&quot;: 0
+        }
+      }
+    ],
+    &quot;basis&quot;: &quot;actual_received&quot;,
+    &quot;timeZone&quot;: &quot;UTC+8&quot;
   }
 }
 </code></pre>
@@ -6840,6 +7695,13 @@ Accept: application/json
 <td>FopBinding anyOf null</td>
 <td>是</td>
 <td>真实FOP租户/用户绑定，未绑定时null；不包含密码或JWT。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>chartPermissions</code></td>
+<td>ChartPermissionOverride[]</td>
+<td>是</td>
+<td>已持久化账号图表例外，空数组继承模板。</td>
 <td>—</td>
 </tr>
 </tbody>
@@ -8166,7 +9028,7 @@ Accept: application/json
 <td>string</td>
 <td>是</td>
 <td>可供前端i18n映射的业务错误码；具体HTTP状态由对应响应定义。</td>
-<td>enum=["business_access_disabled", "business_scope_required", "fop_binding_required", "fop_not_configured", "fop_permission_denied", "fop_binding_changed", "fop_unavailable"]</td>
+<td>enum=["business_access_disabled", "business_scope_required", "fop_binding_required", "fop_not_configured", "fop_permission_denied", "fop_binding_changed", "fop_unavailable", "chart_access_denied", "fop_summary_not_configured"]</td>
 </tr>
 <tr>
 <td><code>message</code></td>
@@ -8586,6 +9448,20 @@ Accept: application/json
 <td>FopReceipt allOf 见 schema[]</td>
 <td>是</td>
 <td>见引用模型/接口说明</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>customerOwnershipBasis</code></td>
+<td>CustomerOwnershipBasis</td>
+<td>否</td>
+<td>见引用模型/接口说明</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>chartAccess</code></td>
+<td>EffectiveChartAccess</td>
+<td>否</td>
+<td>当前响应的逐图有效能力，每次查询重新解析。</td>
 <td>—</td>
 </tr>
 </tbody>
@@ -9423,6 +10299,13 @@ Accept: application/json
 <td>显示期间有效发运单总数，不重复加各系列。</td>
 <td>minimum=0</td>
 </tr>
+<tr>
+<td><code>chartAccess</code></td>
+<td>EffectiveChartAccess</td>
+<td>是</td>
+<td>当前响应的逐图有效能力，每次查询重新解析。</td>
+<td>—</td>
+</tr>
 </tbody>
 </table></div>
 <pre><code class="language-json">{
@@ -9581,7 +10464,17 @@ Accept: application/json
     &quot;delta&quot;: 14,
     &quot;percent&quot;: 140
   },
-  &quot;billCount&quot;: 2
+  &quot;billCount&quot;: 2,
+  &quot;chartAccess&quot;: {
+    &quot;chartId&quot;: &quot;freight&quot;,
+    &quot;visible&quot;: true,
+    &quot;dataScope&quot;: &quot;all&quot;,
+    &quot;scopeLabel&quot;: &quot;本租户授权数据&quot;,
+    &quot;canViewDetails&quot;: true,
+    &quot;canExport&quot;: true,
+    &quot;summaryOnly&quot;: false,
+    &quot;summaryDepartments&quot;: []
+  }
 }
 </code></pre>
 <h3>FreightDetailsQuery</h3>
@@ -9816,6 +10709,13 @@ Accept: application/json
 <td>选定周期并集末日，含末日；current未完期截到UTC+8今天，previous使用完整上期末日。</td>
 <td>pattern="^\d{4}-\d{2}-\d{2}$"</td>
 </tr>
+<tr>
+<td><code>chartAccess</code></td>
+<td>EffectiveChartAccess</td>
+<td>是</td>
+<td>当前响应的逐图有效能力，每次查询重新解析。</td>
+<td>—</td>
+</tr>
 </tbody>
 </table></div>
 <pre><code class="language-json">{
@@ -9878,6 +10778,16 @@ Accept: application/json
   &quot;range&quot;: {
     &quot;from&quot;: &quot;2026-10-01&quot;,
     &quot;to&quot;: &quot;2026-10-22&quot;
+  },
+  &quot;chartAccess&quot;: {
+    &quot;chartId&quot;: &quot;freight&quot;,
+    &quot;visible&quot;: true,
+    &quot;dataScope&quot;: &quot;all&quot;,
+    &quot;scopeLabel&quot;: &quot;本租户授权数据&quot;,
+    &quot;canViewDetails&quot;: true,
+    &quot;canExport&quot;: true,
+    &quot;summaryOnly&quot;: false,
+    &quot;summaryDepartments&quot;: []
   }
 }
 </code></pre>
@@ -9928,6 +10838,13 @@ Accept: application/json
 <td>否</td>
 <td>运费两个端点均要求包含freight；缺失/不包含返回403。</td>
 <td>uniqueItems=true</td>
+</tr>
+<tr>
+<td><code>organizationSummaries</code></td>
+<td>FopOrganizationSummaryGrant[]</td>
+<td>否</td>
+<td>独立组织聚合授权，缺失/空不授组织整体统计。</td>
+<td>—</td>
 </tr>
 </tbody>
 </table></div>
@@ -10610,7 +11527,7 @@ Accept: application/json
 <td><code>selectedOwner</code></td>
 <td>PerformanceOwner anyOf null</td>
 <td>是</td>
-<td>本次实际选择；空范围null。普通员工仅自己。管理员/经理无绑定时默认首个并明确显示姓名。</td>
+<td>本次实际选择；个人强制本人；经理/管理员默认绑定员工，未绑定不静默选择同事，需主动选择授权人员。</td>
 <td>—</td>
 </tr>
 <tr>
@@ -10639,6 +11556,13 @@ Accept: application/json
 <td>PerformanceUnallocated[]</td>
 <td>是</td>
 <td>未分期月结参考。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>chartAccess</code></td>
+<td>EffectiveChartAccess</td>
+<td>是</td>
+<td>当前响应的逐图有效能力，每次查询重新解析。</td>
 <td>—</td>
 </tr>
 </tbody>
@@ -10700,7 +11624,17 @@ Accept: application/json
     &quot;receiptCount&quot;: 0,
     &quot;profitCount&quot;: 1
   },
-  &quot;unallocatedSettlements&quot;: []
+  &quot;unallocatedSettlements&quot;: [],
+  &quot;chartAccess&quot;: {
+    &quot;chartId&quot;: &quot;sales_performance&quot;,
+    &quot;visible&quot;: true,
+    &quot;dataScope&quot;: &quot;all&quot;,
+    &quot;scopeLabel&quot;: &quot;本租户授权数据&quot;,
+    &quot;canViewDetails&quot;: true,
+    &quot;canExport&quot;: true,
+    &quot;summaryOnly&quot;: false,
+    &quot;summaryDepartments&quot;: []
+  }
 }
 </code></pre>
 <h3>PerformancePage</h3>
@@ -10821,6 +11755,13 @@ Accept: application/json
 <td>月结整月参考。</td>
 <td>—</td>
 </tr>
+<tr>
+<td><code>chartAccess</code></td>
+<td>EffectiveChartAccess</td>
+<td>是</td>
+<td>当前响应的逐图有效能力，每次查询重新解析。</td>
+<td>—</td>
+</tr>
 </tbody>
 </table></div>
 <pre><code class="language-json">{
@@ -10890,7 +11831,17 @@ Accept: application/json
     &quot;from&quot;: &quot;2026-09-01&quot;,
     &quot;to&quot;: &quot;2026-09-30&quot;
   },
-  &quot;unallocatedSettlements&quot;: []
+  &quot;unallocatedSettlements&quot;: [],
+  &quot;chartAccess&quot;: {
+    &quot;chartId&quot;: &quot;sales_performance&quot;,
+    &quot;visible&quot;: true,
+    &quot;dataScope&quot;: &quot;all&quot;,
+    &quot;scopeLabel&quot;: &quot;本租户授权数据&quot;,
+    &quot;canViewDetails&quot;: true,
+    &quot;canExport&quot;: true,
+    &quot;summaryOnly&quot;: false,
+    &quot;summaryDepartments&quot;: []
+  }
 }
 </code></pre>
 <h3>FopSalesProfitAuthorization</h3>
@@ -10948,8 +11899,1045 @@ Accept: application/json
 <td>独立收款行白名单；缺失/空不授予收款事实。</td>
 <td>uniqueItems=true</td>
 </tr>
+<tr>
+<td><code>organizationSummaries</code></td>
+<td>FopOrganizationSummaryGrant[]</td>
+<td>否</td>
+<td>独立组织聚合授权，缺失/空不授组织整体统计。</td>
+<td>—</td>
+</tr>
 </tbody>
 </table></div>
+<h3>ChartId</h3>
+<p>稳定图表授权资源；主图、排名及同源趋势共用此许可。未知资源拒绝。</p>
+<p>类型：<code>string</code>；约束：enum=["registrations", "department_receipts", "salesperson_receipts", "order_volume", "customer_orders", "freight", "sales_performance"]。</p>
+<h3>ChartVisibility</h3>
+<p>继承岗位模板／允许／禁止；允许不扩大数据范围，明确禁止优先。</p>
+<p>类型：<code>string</code>；约束：enum=["inherit", "allow", "deny"]。</p>
+<h3>ChartPermissionOverride</h3>
+<p>系统管理员设置的账号图表例外。summaryMode跨字段规则由HTTP验证；源FOP独立汇总许可仍是上限。</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>字段路径</th>
+<th>类型/引用</th>
+<th>必填</th>
+<th>说明</th>
+<th>约束/示例</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>chartId</code></td>
+<td>ChartId</td>
+<td>是</td>
+<td>见引用模型/接口说明</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>visibility</code></td>
+<td>ChartVisibility</td>
+<td>是</td>
+<td>见引用模型/接口说明</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>dataScope</code></td>
+<td>string</td>
+<td>是</td>
+<td>继承账号范围、仅本人、本部门；最终与账号及FOP范围求交，不能扩大权限。</td>
+<td>enum=["inherit", "self", "department"]</td>
+</tr>
+<tr>
+<td><code>summaryMode</code></td>
+<td>string</td>
+<td>是</td>
+<td>组织汇总独立授权：继承、不开放、指定业务部门、营销中心。仅注册、部门回款、组织订单量可设置selected/marketing。</td>
+<td>enum=["inherit", "none", "selected", "marketing"]</td>
+</tr>
+<tr>
+<td><code>summaryDepartments</code></td>
+<td>string[]</td>
+<td>是</td>
+<td>selected时非空且去重；其他模式必须为空。</td>
+<td>maxItems=4; uniqueItems=true</td>
+</tr>
+<tr>
+<td><code>details</code></td>
+<td>ChartVisibility</td>
+<td>是</td>
+<td>见引用模型/接口说明</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>export</code></td>
+<td>ChartVisibility</td>
+<td>是</td>
+<td>见引用模型/接口说明</td>
+<td>—</td>
+</tr>
+</tbody>
+</table></div>
+<h3>UpdateChartPermissions</h3>
+<p>只改图表策略，不修改业务角色、系统角色、员工、岗位或FOP绑定。</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>字段路径</th>
+<th>类型/引用</th>
+<th>必填</th>
+<th>说明</th>
+<th>约束/示例</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>chartPermissions</code></td>
+<td>ChartPermissionOverride[]</td>
+<td>是</td>
+<td>整组替换该账号例外；空数组恢复角色/岗位模板。chartId必须唯一。</td>
+<td>maxItems=7</td>
+</tr>
+</tbody>
+</table></div>
+<h3>EffectiveChartAccess</h3>
+<p>最终有效能力由服务端当前账号和FOP许可解析，不接受浏览器回传为授权。</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>字段路径</th>
+<th>类型/引用</th>
+<th>必填</th>
+<th>说明</th>
+<th>约束/示例</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>chartId</code></td>
+<td>ChartId</td>
+<td>是</td>
+<td>见引用模型/接口说明</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>visible</code></td>
+<td>boolean</td>
+<td>是</td>
+<td>本次请求有效图表可见能力；false时不得读取图表数据。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>dataScope</code></td>
+<td>string</td>
+<td>是</td>
+<td>有效记录范围，已经与本地账号范围求交；不是FOP订单白名单。</td>
+<td>enum=["none", "self", "department", "all"]</td>
+</tr>
+<tr>
+<td><code>scopeLabel</code></td>
+<td>string</td>
+<td>是</td>
+<td>服务端范围提示，不拼入部门下拉选项。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>canViewDetails</code></td>
+<td>boolean</td>
+<td>是</td>
+<td>可进入底层业务明细；每次请求仍重新鉴权。纯组织汇总不授明细。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>canExport</code></td>
+<td>boolean</td>
+<td>是</td>
+<td>可使用已存在的导出/图片下载能力，不承诺新增业务导出接口。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>summaryOnly</code></td>
+<td>boolean</td>
+<td>是</td>
+<td>仅组织聚合，不得附带员工/客户/单据，禁止业务下钻。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>summaryDepartments</code></td>
+<td>string[]</td>
+<td>是</td>
+<td>本地汇总策略与FOP部门汇总许可的交集；空数组无完整组织汇总。</td>
+<td>uniqueItems=true</td>
+</tr>
+</tbody>
+</table></div>
+<h3>ChartAccessData</h3>
+<p>登录账号当前图表能力，不含授权业务记录ID清单。</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>字段路径</th>
+<th>类型/引用</th>
+<th>必填</th>
+<th>说明</th>
+<th>约束/示例</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>source</code></td>
+<td>DataSource</td>
+<td>是</td>
+<td>见引用模型/接口说明</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>businessScope</code></td>
+<td>BusinessScope</td>
+<td>是</td>
+<td>见引用模型/接口说明</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>charts</code></td>
+<td>EffectiveChartAccess[]</td>
+<td>是</td>
+<td>完整已知七类能力清单；被禁项visible=false。</td>
+<td>—</td>
+</tr>
+</tbody>
+</table></div>
+<h3>OrganizationSummaryChartId</h3>
+<p>内部FOP组织汇总资源；订单量仅organization视图。</p>
+<p>类型：<code>string</code>；约束：enum=["registrations", "department_receipts", "order_volume"]。</p>
+<h3>FopOrganizationSummaryDepartment</h3>
+<p>内部汇总部门授权描述。</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>字段路径</th>
+<th>类型/引用</th>
+<th>必填</th>
+<th>说明</th>
+<th>约束/示例</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>code</code></td>
+<td>string</td>
+<td>是</td>
+<td>稳定报表部门编码。</td>
+<td>enum=["sales1", "sales2", "sales3", "sales4"]</td>
+</tr>
+<tr>
+<td><code>departmentId</code></td>
+<td>string</td>
+<td>是</td>
+<td>FOP可信部门ID，用于与本地经理部门范围求交。</td>
+<td>minLength=1</td>
+</tr>
+<tr>
+<td><code>departmentPathIds</code></td>
+<td>string[]</td>
+<td>否</td>
+<td>可信祖先路径；不从浏览器接受。</td>
+<td>uniqueItems=true</td>
+</tr>
+</tbody>
+</table></div>
+<h3>FopOrganizationSummaryGrant</h3>
+<p>内部provider权限契约；不是已发布的FOP HTTP URL或用户可提交的授权。</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>字段路径</th>
+<th>类型/引用</th>
+<th>必填</th>
+<th>说明</th>
+<th>约束/示例</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>chartId</code></td>
+<td>OrganizationSummaryChartId</td>
+<td>是</td>
+<td>见引用模型/接口说明</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>departments</code></td>
+<td>FopOrganizationSummaryDepartment[]</td>
+<td>是</td>
+<td>绑定FOP用户有权查看的完整部门聚合；不授单据/成员数据。</td>
+<td>—</td>
+</tr>
+</tbody>
+</table></div>
+<h3>FopOrganizationSummaryQuery</h3>
+<p>由平台后台构造的独立组织汇总请求，不能用更换用户身份实现。</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>字段路径</th>
+<th>类型/引用</th>
+<th>必填</th>
+<th>说明</th>
+<th>约束/示例</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>chartId</code></td>
+<td>OrganizationSummaryChartId</td>
+<td>是</td>
+<td>见引用模型/接口说明</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>departments</code></td>
+<td>string[]</td>
+<td>是</td>
+<td>已求交允许的部门。</td>
+<td>minItems=1; uniqueItems=true</td>
+</tr>
+<tr>
+<td><code>from</code></td>
+<td>string (date)</td>
+<td>是</td>
+<td>UTC+8开始日期，包含当天。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>to</code></td>
+<td>string (date)</td>
+<td>是</td>
+<td>UTC+8结束日期，包含当天；回款可包含上年12月基线。</td>
+<td>—</td>
+</tr>
+</tbody>
+</table></div>
+<h3>FopOrganizationSummaryRow</h3>
+<p>内部聚合行，只允许部门/日期/必要仓库/计数与金额；禁止员工/客户/单据标识。跨字段约束按chartId执行。</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>字段路径</th>
+<th>类型/引用</th>
+<th>必填</th>
+<th>说明</th>
+<th>约束/示例</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>date</code></td>
+<td>string (date)</td>
+<td>是</td>
+<td>UTC+8业务日期。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>salesDepartmentCode</code></td>
+<td>string</td>
+<td>是</td>
+<td>获授权的业务部门。</td>
+<td>enum=["sales1", "sales2", "sales3", "sales4"]</td>
+</tr>
+<tr>
+<td><code>warehouseCode</code></td>
+<td>string</td>
+<td>否</td>
+<td>订单量组织汇总的仓库，保留分仓；收款/注册按合同可不适用。</td>
+<td>enum=["HZ", "SZ", "UNASSIGNED"]</td>
+</tr>
+<tr>
+<td><code>count</code></td>
+<td>integer</td>
+<td>是</td>
+<td>有效事实数；订单量/注册为对应计数，不能混为收款金额。</td>
+<td>minimum=0</td>
+</tr>
+<tr>
+<td><code>amount</code></td>
+<td>Money</td>
+<td>否</td>
+<td>仅部门回款，USD实收金额。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>currency</code></td>
+<td>"USD"</td>
+<td>否</td>
+<td>amount币种。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>sourceType</code></td>
+<td>string</td>
+<td>否</td>
+<td>部门回款必须区分履约及全款备货，不能合入押金或样品。</td>
+<td>enum=["fulfillment", "full_payment_stock"]</td>
+</tr>
+</tbody>
+</table></div>
+<h3>FopOrganizationSummaryData</h3>
+<p>FOP内部provider响应；公开平台接口转换成既有图表结构，不透传主体或源权限。</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>字段路径</th>
+<th>类型/引用</th>
+<th>必填</th>
+<th>说明</th>
+<th>约束/示例</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>subject</code></td>
+<td>object</td>
+<td>是</td>
+<td>与服务端绑定一致的FOP主体。</td>
+<td>additionalProperties=false</td>
+</tr>
+<tr>
+<td><code>subject.tenantId</code></td>
+<td>string</td>
+<td>是</td>
+<td>见引用模型/接口说明</td>
+<td>minLength=1</td>
+</tr>
+<tr>
+<td><code>subject.userId</code></td>
+<td>string</td>
+<td>是</td>
+<td>见引用模型/接口说明</td>
+<td>minLength=1</td>
+</tr>
+<tr>
+<td><code>chartId</code></td>
+<td>OrganizationSummaryChartId</td>
+<td>是</td>
+<td>见引用模型/接口说明</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>rows</code></td>
+<td>FopOrganizationSummaryRow[]</td>
+<td>是</td>
+<td>只含请求部门/日期范围；重复或畸形行拒绝。</td>
+<td>—</td>
+</tr>
+</tbody>
+</table></div>
+<h3>CustomerOwnershipBasis</h3>
+<p>当前客户分配已提供／旧记录仅历史归属／两类混合；历史或混合时前端明确提示，不能声称完整当前客户归属。</p>
+<p>类型：<code>string</code>；约束：enum=["current_assignment", "historical_attribution", "mixed"]。</p>
+<h3>FopCurrentCustomerOwner</h3>
+<p>provider专用：客户当前分配与事实历史owner分开；仅缩小客户访问，不能扩大历史事实授权；不向浏览器返回。</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>字段路径</th>
+<th>类型/引用</th>
+<th>必填</th>
+<th>说明</th>
+<th>约束/示例</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>id</code></td>
+<td>string</td>
+<td>是</td>
+<td>当前客户业务员稳定ID。</td>
+<td>minLength=1</td>
+</tr>
+<tr>
+<td><code>departmentId</code></td>
+<td>string</td>
+<td>是</td>
+<td>当前负责部门。</td>
+<td>minLength=1</td>
+</tr>
+<tr>
+<td><code>departmentPathIds</code></td>
+<td>string[]</td>
+<td>否</td>
+<td>可信部门祖先。</td>
+<td>—</td>
+</tr>
+</tbody>
+</table></div>
+<h3>FopIdentity</h3>
+<p>可信provider解析主体，必须与服务端绑定完全匹配。</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>字段路径</th>
+<th>类型/引用</th>
+<th>必填</th>
+<th>说明</th>
+<th>约束/示例</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>tenantId</code></td>
+<td>string</td>
+<td>是</td>
+<td>绑定租户。</td>
+<td>minLength=1</td>
+</tr>
+<tr>
+<td><code>userId</code></td>
+<td>string</td>
+<td>是</td>
+<td>绑定FOP用户。</td>
+<td>minLength=1</td>
+</tr>
+</tbody>
+</table></div>
+<h3>FopPermissionGrant</h3>
+<p>服务端可信provider内部授权契约，不是浏览器请求体；业务管理员也受租户及此授权上限约束。各资源独立，空/缺失不得推导为全部。</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>字段路径</th>
+<th>类型/引用</th>
+<th>必填</th>
+<th>说明</th>
+<th>约束/示例</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>subject</code></td>
+<td>FopIdentity</td>
+<td>是</td>
+<td>见引用模型/接口说明</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>allowedOrderIds</code></td>
+<td>string[]</td>
+<td>是</td>
+<td>履约订单稳定ID白名单；空为无订单记录。</td>
+<td>uniqueItems=true</td>
+</tr>
+<tr>
+<td><code>allowedReceiptIds</code></td>
+<td>string[]</td>
+<td>否</td>
+<td>独立收款行白名单；缺失/空不授予收款事实。</td>
+<td>uniqueItems=true</td>
+</tr>
+<tr>
+<td><code>allowedProfitIds</code></td>
+<td>string[]</td>
+<td>否</td>
+<td>独立利润贡献事实ID白名单，缺失/空不授予毛利事实；不能从订单/收款/运费推导。</td>
+<td>uniqueItems=true</td>
+</tr>
+<tr>
+<td><code>allowedFreightIds</code></td>
+<td>string[]</td>
+<td>否</td>
+<td>独立成本白名单，缺失或空为无运费记录；不能从allowedOrderIds/allowedReceiptIds推导。</td>
+<td>uniqueItems=true</td>
+</tr>
+<tr>
+<td><code>analyticsScopes</code></td>
+<td>string[]</td>
+<td>否</td>
+<td>独立资源能力；registrations/receipts/freight/sales_profit分别校验，不从其他资源推导。</td>
+<td>uniqueItems=true</td>
+</tr>
+<tr>
+<td><code>organizationSummaries</code></td>
+<td>FopOrganizationSummaryGrant[]</td>
+<td>否</td>
+<td>独立组织聚合授权，缺失/空不授组织整体统计。</td>
+<td>—</td>
+</tr>
+</tbody>
+</table></div>
+<h3>FopProviderCapabilities</h3>
+<p>内部适配器只读能力；不是HTTP查询参数。正式新adapter默认current_required，只有经明确批准的旧适配器才能选择legacy_historical。</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>字段路径</th>
+<th>类型/引用</th>
+<th>必填</th>
+<th>说明</th>
+<th>约束/示例</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>customerOwnershipMode</code></td>
+<td>string</td>
+<td>是</td>
+<td>current_required缺少当前客户归属返回503。legacy_historical可降级历史归属，但仍校验历史事实和本地范围，并返回customerOwnershipBasis，页面明确提示；不得声称已完成当前客户隔离。</td>
+<td>enum=["current_required", "legacy_historical"]; default="current_required"</td>
+</tr>
+</tbody>
+</table></div>
+<h3>FopOrderCandidate</h3>
+<p>provider内部归一候选事实（有效字段口径同FopOrder）；不直接输出浏览器。tenantId/currentCustomerOwner先验证后剥离，历史owner保留用于业务业绩归属。</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>字段路径</th>
+<th>类型/引用</th>
+<th>必填</th>
+<th>说明</th>
+<th>约束/示例</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>salesDepartmentCode</code></td>
+<td>SalesDepartment</td>
+<td>否</td>
+<td>可信适配器归一化后的报表部门；非物流维度统计及收款按此字段归属。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>id</code></td>
+<td>string</td>
+<td>是</td>
+<td>FOP订单ID；授权白名单与去重键。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>orderNumber</code></td>
+<td>string</td>
+<td>是</td>
+<td>FOP业务订单号。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>shopifyOrderNumber</code></td>
+<td>string</td>
+<td>是</td>
+<td>来源Shopify订单展示号，例如#10401；参与模糊检索。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>customerId</code></td>
+<td>string</td>
+<td>否</td>
+<td>稳定客户ID；客户去重、客户搜索、筛选与customer:<id> series使用。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>customerCode</code></td>
+<td>string</td>
+<td>否</td>
+<td>业务侧客户编码，客户搜索可按此字段匹配；缺失时序列化省略。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>warehouseCode</code></td>
+<td>string</td>
+<td>否</td>
+<td>已审核履约必须 HZ/SZ；缺失或未知代码拒收。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>carrierCode</code></td>
+<td>string</td>
+<td>否</td>
+<td>已审核履约必须已映射 YT/4PX/WB/YW/JS/OTHER；缺失或未知代码拒收。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>customerName</code></td>
+<td>string</td>
+<td>是</td>
+<td>客户展示名称，参与履约模糊检索。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>storeName</code></td>
+<td>string</td>
+<td>是</td>
+<td>所属店铺展示名称，参与履约模糊检索。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>items</code></td>
+<td>FopOrderItem[]</td>
+<td>是</td>
+<td>订单商品行；商品数量汇总来自全部items.quantity。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>organization</code></td>
+<td>NamedEntity</td>
+<td>否</td>
+<td>订单所属组织ID与名称；上游未提供时省略。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>department</code></td>
+<td>NamedEntity</td>
+<td>否</td>
+<td>订单所属实际部门ID与名称；用于经理直接部门范围匹配。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>owner</code></td>
+<td>NamedEntity</td>
+<td>否</td>
+<td>订单归属业务员工ID与名称；owner.id用于员工权限和业务员分组。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>amount</code></td>
+<td>Money</td>
+<td>是</td>
+<td>订单总金额，单位为currency主单位；当前不是独立实收金额。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>currency</code></td>
+<td>string</td>
+<td>是</td>
+<td>trim+uppercase，空值默认USD；不会换汇。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>paymentStatus</code></td>
+<td>string</td>
+<td>是</td>
+<td>paid已支付、unpaid未支付、refunded已退款；统计要求paid，review队列可含unpaid。</td>
+<td>enum=["paid", "unpaid", "refunded"]</td>
+</tr>
+<tr>
+<td><code>reviewStatus</code></td>
+<td>string</td>
+<td>是</td>
+<td>pending待审核，approved已审核。</td>
+<td>enum=["pending", "approved"]</td>
+</tr>
+<tr>
+<td><code>procurementStatus</code></td>
+<td>string</td>
+<td>是</td>
+<td>pending待采购，purchased已采购，not_required无需采购。</td>
+<td>enum=["pending", "purchased", "not_required"]</td>
+</tr>
+<tr>
+<td><code>allocationStatus</code></td>
+<td>string</td>
+<td>是</td>
+<td>pending待配货，allocated已配货，not_ready尚未进入配货环节。</td>
+<td>enum=["pending", "allocated", "not_ready"]</td>
+</tr>
+<tr>
+<td><code>dispatchStatus</code></td>
+<td>string</td>
+<td>是</td>
+<td>pending待调度，dispatched已调度，not_ready尚未进入调度环节。</td>
+<td>enum=["pending", "dispatched", "not_ready"]</td>
+</tr>
+<tr>
+<td><code>shippingStatus</code></td>
+<td>string</td>
+<td>是</td>
+<td>pending待发货，shipped已发货，not_ready尚未进入发货环节。</td>
+<td>enum=["pending", "shipped", "not_ready"]</td>
+</tr>
+<tr>
+<td><code>warehouse</code></td>
+<td>string</td>
+<td>是</td>
+<td>展示名，不用于归仓。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>carrier</code></td>
+<td>string anyOf null</td>
+<td>是</td>
+<td>物流服务商展示名；无服务商为null，不用于统计归类。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>trackingNumber</code></td>
+<td>string anyOf null</td>
+<td>是</td>
+<td>物流跟踪号；尚未生成时null。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>salesperson</code></td>
+<td>string</td>
+<td>是</td>
+<td>展示名，权限使用owner.id。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>createdAt</code></td>
+<td>string (date-time)</td>
+<td>是</td>
+<td>订单创建时间，履约列表按此时间降序，时刻相同按id排序。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>paidAt</code></td>
+<td>string (date-time) anyOf null</td>
+<td>是</td>
+<td>带明确时区的订单支付时刻，转换 UTC+8 归桶；缺失不回退 createdAt。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>cancelled</code></td>
+<td>boolean</td>
+<td>是</td>
+<td>true表示订单取消，从订单量/收款/履约队列排除。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>exception</code></td>
+<td>OrderException anyOf null</td>
+<td>是</td>
+<td>订单异常详情；无异常明确为null。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>tenantId</code></td>
+<td>string</td>
+<td>是</td>
+<td>必须与绑定租户及授权subject一致。</td>
+<td>minLength=1</td>
+</tr>
+<tr>
+<td><code>currentCustomerOwner</code></td>
+<td>FopCurrentCustomerOwner</td>
+<td>否</td>
+<td>见引用模型/接口说明</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>departmentPathIds</code></td>
+<td>string[]</td>
+<td>否</td>
+<td>事实所属部门的可信祖先ID；与当前客户归属的部门路径分开。</td>
+<td>—</td>
+</tr>
+</tbody>
+</table></div>
+<p>组合规则 <code>allOf</code>：<code>见 schema</code>。完整约束见 OpenAPI JSON。</p>
+<h3>FopReceiptCandidate</h3>
+<p>provider内部归一候选事实（有效字段口径同FopReceipt）；不直接输出浏览器。tenantId/currentCustomerOwner先验证后剥离，历史owner保留用于业务业绩归属。</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>字段路径</th>
+<th>类型/引用</th>
+<th>必填</th>
+<th>说明</th>
+<th>约束/示例</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>id</code></td>
+<td>string</td>
+<td>是</td>
+<td>唯一收款分录 ID，独立授权及去重键，不是重复的收款表头 ID。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>documentId</code></td>
+<td>string</td>
+<td>是</td>
+<td>源履约或备货单稳定 ID；可信适配器解析，不以显示单号替代。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>documentNumber</code></td>
+<td>string</td>
+<td>是</td>
+<td>源单业务单号，原收款 entryentity.hzkj_src_order 为单号而非 ID。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>customerId</code></td>
+<td>string</td>
+<td>是</td>
+<td>业务归属客户稳定 ID。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>customerCode</code></td>
+<td>string</td>
+<td>是</td>
+<td>客户编码，未提供时空字符串。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>customerName</code></td>
+<td>string</td>
+<td>是</td>
+<td>客户展示名。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>warehouse</code></td>
+<td>string</td>
+<td>是</td>
+<td>国内仓库展示名。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>sourceType</code></td>
+<td>string</td>
+<td>是</td>
+<td>归一来源。公开有效分录端点只返回履约及全款备货，押金备货不进入业绩，样品不在本资源范围。</td>
+<td>enum=["fulfillment", "full_payment_stock", "deposit_stock"]</td>
+</tr>
+<tr>
+<td><code>organization</code></td>
+<td>NamedEntity</td>
+<td>否</td>
+<td>见引用模型/接口说明</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>department</code></td>
+<td>NamedEntity</td>
+<td>是</td>
+<td>见引用模型/接口说明</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>owner</code></td>
+<td>NamedEntity</td>
+<td>是</td>
+<td>见引用模型/接口说明</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>salesDepartmentCode</code></td>
+<td>SalesDepartment</td>
+<td>是</td>
+<td>见引用模型/接口说明</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>warehouseCode</code></td>
+<td>string</td>
+<td>是</td>
+<td>见引用模型/接口说明</td>
+<td>enum=["HZ", "SZ"]</td>
+</tr>
+<tr>
+<td><code>carrierCode</code></td>
+<td>CarrierCode anyOf null</td>
+<td>是</td>
+<td>履约必须已映射服务商；全款／押金备货必须 null，表示不适用。未知物流不能兜底为 OTHER。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>amount</code></td>
+<td>Money</td>
+<td>是</td>
+<td>收款分录 hzkj_real_receive_amt 实收，业务结算含钱包授信，并非银行现金流保证。</td>
+<td>minimum=0</td>
+</tr>
+<tr>
+<td><code>orderAmount</code></td>
+<td>Money</td>
+<td>是</td>
+<td>收款分录 hzkj_samount 订单金额，不用于实收业绩。</td>
+<td>minimum=0</td>
+</tr>
+<tr>
+<td><code>handlingFee</code></td>
+<td>Money</td>
+<td>是</td>
+<td>收款分录 hzkj_handle_fee 手续费，单独保留用于对账。</td>
+<td>minimum=0</td>
+</tr>
+<tr>
+<td><code>currency</code></td>
+<td>string</td>
+<td>是</td>
+<td>明确原币种，不隐式换汇；公开业绩分录页仅 USD。</td>
+<td>pattern="^[A-Z]{3}$"</td>
+</tr>
+<tr>
+<td><code>paidAt</code></td>
+<td>string / null</td>
+<td>是</td>
+<td>带明确时区的支付时刻，转换 UTC+8 归日／月；有效分录页必为已发生的非空时刻。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>reviewStatus</code></td>
+<td>string</td>
+<td>是</td>
+<td>源履约或备货单审核，不等于收款单审核。</td>
+<td>enum=["pending", "approved"]</td>
+</tr>
+<tr>
+<td><code>receiptReviewStatus</code></td>
+<td>string</td>
+<td>是</td>
+<td>收款单审核，业绩要求源单及收款单均 approved。</td>
+<td>enum=["pending", "approved"]</td>
+</tr>
+<tr>
+<td><code>paymentStatus</code></td>
+<td>string</td>
+<td>是</td>
+<td>归一支付状态。paid 必须同时满足源履约／备货订单的支付条件及收款单已收条件（hzkj_receive_status=B）；不能只根据收款单 B 推定源单已支付。源单两类枚举不同，按已核实映射处理。</td>
+<td>enum=["paid", "unpaid", "refunded"]</td>
+</tr>
+<tr>
+<td><code>cancelled</code></td>
+<td>boolean</td>
+<td>是</td>
+<td>见引用模型/接口说明</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>items</code></td>
+<td>FopOrderItem[]</td>
+<td>是</td>
+<td>见引用模型/接口说明</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>tenantId</code></td>
+<td>string</td>
+<td>是</td>
+<td>必须与绑定租户及授权subject一致。</td>
+<td>minLength=1</td>
+</tr>
+<tr>
+<td><code>currentCustomerOwner</code></td>
+<td>FopCurrentCustomerOwner</td>
+<td>否</td>
+<td>见引用模型/接口说明</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>departmentPathIds</code></td>
+<td>string[]</td>
+<td>否</td>
+<td>事实所属部门的可信祖先ID；与当前客户归属的部门路径分开。</td>
+<td>—</td>
+</tr>
+</tbody>
+</table></div>
+<p>组合规则 <code>allOf</code>：<code>见 schema</code>。完整约束见 OpenAPI JSON。</p>
 <h2 id="hz-section-11">11. 前端功能诊断与复现证据</h2>
 <p>更新日期：2026-10-23（UTC+8），保留2026-10-22诊断。范围：<code>work-app/frontend</code> 全部 ECharts 实例、调用组件、直接相关 API 客户端、统计工具、路由、权限与测试。本文源码路径均相对于 <code>work-app/</code>。原诊断行号保留作历史定位；方案2及后续扩展应以当前函数／组件名定位，最终验证见 VERIFICATION.md。</p>
 <p>原始诊断为只读；本轮按方案2更新了收款口径、来源拆分和工作台下钻，并修复 FE-01/FE-02。本文历史测试只证明当时结果，不能代替本轮验证。没有访问生产 FOP。结论区分“源码已实现”“本地测试已验证”“未实现”“生产待验证”，不能将 mock/stub 测试等同于真实浏览器或生产验收。</p>
@@ -11689,6 +13677,44 @@ describe('ECharts audit: assertions of current incorrect behavior', () =&gt; {
 </tbody>
 </table></div>
 <p>实际视觉验收至少包含AT-18–AT-24、D16–D22：本人和经理、当前未结算、历史完整月、部分月／日周null、负调整、月结参考、长姓名、窄屏／暗色、筛选竞态及明细分页。组件单测若使用图表stub，不能证明SVG、tooltip、滑块、断线和弹窗布局正确。完整测试及截图记录只以VERIFICATION为准；FOP事件账本、真实授权、换汇和财务对账仍由T21–T26完成。</p>
+<h3>全局图表能力与多账号验收</h3>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>编号</th>
+<th>前端验收内容</th>
+<th>对应业务验收</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>AT-25</td>
+<td>禁止图表不渲染、不请求；综合响应不得被前端隐藏当作隔离；保留既有布局/配色/环比/固定列</td>
+<td>D23、D26</td>
+</tr>
+<tr>
+<td>AT-26</td>
+<td>本人/部门范围提示独立展示，不添加“营销中心·授权范围”下拉文案；组织完整汇总不冒充个人小计</td>
+<td>D24、D25</td>
+</tr>
+<tr>
+<td>AT-27</td>
+<td>客户搜索、Top10/其他、趋势、仓库数量与金额链接使用同一权限；禁止明细时移除下钻，图内统计表保持</td>
+<td>D23、D26、D27</td>
+</tr>
+<tr>
+<td>AT-28</td>
+<td>账号逐图设置可继承/允许/禁止，范围与组织汇总分开，保存失败不显示成功；仅系统管理员入口</td>
+<td>D25、D26、D29</td>
+</tr>
+<tr>
+<td>AT-29</td>
+<td>经理个人工作台默认本人，未绑定不默认同事；撤权和会话重置清空旧金额、候选及弹窗；图片导出遵守导出能力</td>
+<td>D24、D29</td>
+</tr>
+</tbody>
+</table></div>
+<p>本轮不改变业务金额口径和ECharts结构；仅按返回有效能力决定可见范围与动作。组件stub无法替代浏览器验收，实际结果见VERIFICATION。</p>
 <h2 id="hz-section-12">12. 后端契约诊断与生产接入差距</h2>
 <p>更新日期：2026-10-23（UTC+8），保留2026-10-22审计。依据当前工作区源码、DTO、序列化器、前端API类型与历史测试；方案2、运费及销售个人收款／净毛利契约同步。未连接或验证真实FOP生产服务。FOP为金蝶云苍穹上的HyperZone自研应用，后台 <code>/Library/VSCode/dtr5b</code> 只读核查。</p>
 <p>机器可读交付：<a href="../openapi/hyperzone-analytics.openapi.json">hyperzone-analytics.openapi.json</a>，OpenAPI <strong>3.1.1</strong>。物流阶段为19条路径／19个操作／82个模型／8组通用错误响应，本次追加销售分析及明细两项契约；最新数量以机器文件为准。仅列平台HTTP接口，未实现的FOP上游签名、同步和分页接口没有被写成已实现路径。格式依据<a href="https://spec.openapis.org/oas/v3.1.1.html" rel="noopener noreferrer">OpenAPI 3.1.1官方规范</a>。</p>
@@ -12270,9 +14296,78 @@ describe('ECharts audit: assertions of current incorrect behavior', () =&gt; {
 <li>未发现毛利分析HTTP发布证据。月报service接收空owner、org≤0不加组织过滤；实时非业务员默认组织全部。新个人入口必须独立身份／授权，不直接暴露服务参数。</li>
 </ol>
 <p>逐项文件与行号证据见 <code>HYPERZONE_FOP_SOURCE_MAPPING.md</code> 第10节；这五项是已读源码限制，不是对线上部署行为的猜测。执行T21–T26、回填H23–H28并完成D16–D22／AT-18–AT-24后才能判定真实接入完成。本文不记录未经运行的测试通过数量。</p>
+<h3>10. 全局逐图授权与聚合范围审计</h3>
+<p>新图表许可在资源许可之前校验；真实数据仍受tenant、独立资源allowlist及本人/部门范围约束。CH-02部门回款与CH-03业务员回款必须使用分离响应字段，综合dashboard也不得附带明确禁止图表的数据。组织汇总必须校验独立FOP部门授权并只返回聚合，不能从当前个人记录伪造完整部门值。<code>Top10</code>、<code>other</code>、客户总数、占比、上期基线、仓库拆分与分页总计均在同一授权事实集上计算。</p>
+<p>合同审计关注：未知图表默认拒绝；账号override唯一且不能扩大记录范围；PUT仅系统管理员；管理角色不授业务范围；明细chartId只能证明所请求的固定业务入口而不能任意选宽权限；经理个人默认绑定员工，缺失则不选择他人；客户当前归属与冻结历史分开。实际测试及代码检查结果统一记录VERIFICATION，本节不是测试通过证明。</p>
 <h2 id="hz-section-13">13. 本次验证记录与限制</h2>
-<p>业务方案版本：2026-10-23（UTC+8）；本轮追加销售个人收款与净毛利，以下保留各轮独立验证记录。环境：macOS、Node.js 22.23.3、npm 10.9.9、本地隔离 PostgreSQL 16。执行结果不等同于生产 FOP 验收。</p>
-<h3>最终集成验证（2026-10-23 UTC+8）</h3>
+<p>业务方案版本：2026-10-23（UTC+8）；最新追加逐图授权与员工数据隔离，以下保留各轮独立验证记录。环境：macOS、Node.js 22.23.3、npm 10.9.9、本地隔离 PostgreSQL 16。执行结果不等同于生产 FOP 验收。</p>
+<h3>最新图表权限集成验证（2026-10-23 UTC+8）</h3>
+<p>保留原图表结构和金额口径，新增七类图表策略、独立组织汇总、服务端先授权后统计及客户当前归属校验。以下843项为本次完整回归，不叠加目标测试、审查复跑或历史用例数。</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>检查</th>
+<th>实际结果</th>
+<th>证据范围</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>全量前端</td>
+<td>46文件、238用例通过；Vue类型检查通过</td>
+<td>图表隐藏与请求阻止、实际响应能力覆盖、成员缓存清空、逐图配置、导出按钮及未绑定本人默认</td>
+</tr>
+<tr>
+<td>全量后端</td>
+<td>55套、484用例通过</td>
+<td>角色模板与例外、独立汇总许可、Top10先过滤、客户移交、当前归属缺失拒绝、所有明细入口及财务回归</td>
+</tr>
+<tr>
+<td>全量E2E</td>
+<td>4套、121用例通过</td>
+<td>隔离autoflow_test；同会话权限变更、直接HTTP拒绝、管理事务锁与授权上限</td>
+</tr>
+<tr>
+<td>合计</td>
+<td><strong>843用例通过</strong></td>
+<td>238＋484＋121；FOP provider使用Mock/stub，不是生产FOP联调</td>
+</tr>
+<tr>
+<td>Lint及构建</td>
+<td>前后端lint、独立backend tsc、frontend生产build、资产打包通过</td>
+<td>不删除运行中的后端watch产物；仍有既有Browserslist和图表大chunk提示</td>
+</tr>
+<tr>
+<td>数据库迁移</td>
+<td>隔离schema up/down/re-up、8类非法JSON拒绝、非空配置阻止回滚；账户其他权限保持</td>
+<td>本地演示库先备份后应用1784733000000；未改生产FOP库</td>
+</tr>
+<tr>
+<td>实际HTTP</td>
+<td>33份成功响应通过OpenAPI/JSON Schema及format检查，5组权限拒绝通过</td>
+<td>24份角色切换/图表管理/个人与部门查询，另9份纯组织汇总/分仓/运费/个人收款及毛利明细</td>
+</tr>
+<tr>
+<td>隔离生产冒烟</td>
+<td>health及数据库up，4条SPA路径200，CSP/nosniff存在</td>
+<td>新编译产物、新进程3198、临时普通目录；首页、Dashboard、个人工作台、账号管理；完成后清理</td>
+</tr>
+<tr>
+<td>独立代码复核</td>
+<td>无剩余关键或重要问题</td>
+<td>已修复权限变窄后旧选项/排名残留、迟到能力覆盖、误用完整合计名称及重试状态；目标用例已包含于完整回归</td>
+</tr>
+<tr>
+<td>浏览器</td>
+<td>七类配置、无业务明细项只读、固定保存栏及Dashboard各图加载通过</td>
+<td>使用本地Mock管理员；没有通过浏览器修改账号授权，没有宣称所有设备和辅助技术均已覆盖</td>
+</tr>
+</tbody>
+</table></div>
+<p>实际HTTP同一账号范围对账：全部211单、本人15单、本人客户12个、管理部门72单；本人Top10与其他集合合计一致。独立授予营销中心汇总后返回四个部门纯汇总，客户事实仍为本人15单；汇总不能访问收款明细。经理已绑定时默认本人，未绑定时不自动选同事；纯系统管理权限不能读取业务图表。验收脚本finally恢复账号原业务范围和图表设置。数值为本次日期与Mock目录快照，不是经营结果。</p>
+<p>截图：<a href="chart-permissions-browser-smoke.png">逐图权限设置</a>。独立组织订单汇总的客户数返回null，不把无法确定的客户数量显示为0。新适配器缺当前归属必须失败；旧适配器显式选择legacy_historical时页面标明来源，不能据此宣称完整的当前客户归属权限已经联调。</p>
+<p>OpenAPI最终为23项操作、111个模型；MD与HTML由同一来源生成并校验全部示例、页内链接、共享CSS和透明Logo。HTML文件浏览器预览仍受此前本地文件URL限制，本轮只做离线结构验证。生产FOP身份、组织汇总接口、客户移交规则、冻结毛利及事件台账仍按T27–T30及既有清单交接，没有自动回退Mock上线。</p>
+<h3>历史销售与远程寻源集成验证（2026-10-23 UTC+8）</h3>
 <p>完成销售统计后，远程master更新至<code>8172a96</code>，包含1688寻源功能及其74条历史提交。本地销售功能提交<code>536ffe3</code>与其无文件冲突，采用普通merge保留双方实现和历史，没有强推覆盖。以下是合并后的最终结果，前述605项为合并前销售功能基线：</p>
 <div class="table-wrap"><table>
 <thead>
@@ -13028,14 +15123,23 @@ hzkj_total_amount = hzkj_fre_quo_amount + hzkj_fixed_tax_fee
 <p>检索毛利服务调用发现的是原生表单插件，未发现对应毛利分析HTTP controller；真实地址、认证及分页仍待H23。实时权限按当前 <code>hzkj_operator</code>，业务员限本人，但非业务员默认可查当前组织全部；月报service允许空业务员，组织ID≤0时不加组织过滤。新个人工作台不能直接将这些宽松参数暴露为HTTP。</p>
 <p>证据：<a href="/Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/ordercenter/service/OrderGrossProfitReportPermissionService.java:49">实时身份及范围，49–78、139–146行</a>；<a href="/Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/ordercenter/service/SalespersonMonthlyGrossProfitReportService.java:52">月报筛选，52–68行</a>；<a href="/Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/ordercenter/plugin/form/SalespersonMonthlyGrossProfitReportFormPlugin.java:103">月报表单调用</a>；<a href="/Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/ordercenter/plugin/form/OrderGrossProfitRealtimeReportFormPlugin.java:192">实时表单调用</a>。</p>
 <p>真实适配必须以当前可信用户／组织建立独立 <code>sales_profit</code> scope 与 <code>allowedProfitIds</code>，与本地本人／部门权限求交；冻结业绩归属与当前访问权分开。资料与完成标准见T21–T26、H23–H28、D16–D22；未经真实联调不得标为FOP ready。</p>
+<h3>11. 图表与员工范围：当前客户及历史事实不可混同</h3>
+<p>本轮只读复核以下已有证据，不推断已发布HTTP能力：</p>
+<ul>
+<li><code>ReceiptPerformanceReportFormPlugin.java:187–198</code>同时读取客户 <code>hzkj_pay_customer.hzkj_biz_user.name</code> 与收款 <code>hzkj_bizperson.name</code>；<code>:372–390</code>按客户主键聚合并单独显示当前客户owner。姓名字段只是展示，不是账号授权稳定ID，也不证明两种归属相同。</li>
+<li><code>OrderGrossProfitReportPermissionService.java:48–78</code>每次读取当前用户/组织；识别为业务员时强制本人，其他人可选owner。该旧报表“非业务员全部”分支不能直接用作新平台经理/员工权限，更不能把没有任职信息当作全公司授权。</li>
+<li>订单的 <code>hzkj_operator</code>、发运单的 <code>hzkj_bizoperator</code>、收款的 <code>hzkj_bizperson</code>与月结的冻结 <code>hzkj_gp_owner_e</code>仍按前述源映射使用。物流录入人不是销售业绩owner；客户当前转交不能重写已冻结毛利。</li>
+</ul>
+<p>本地逐图策略只是功能入口与范围上限，真实数据继续与绑定FOP用户的资源许可取交集。完整组织汇总新增独立provider契约，必须由FOP提供纯部门聚合和独立汇总部门授权；本轮未发现足够证据确认一个现有通用HTTP接口已经满足此能力。没有独立汇总实现时保持未配置，不读取域外成员或把登录用户临时提升为管理员。</p>
+<p>需要真实输入：H29账号图表矩阵、H30汇总授权及只读接口、H31客户转交/历史访问、H32多账号验收样本。既有FOP姓名查询不能替代这些稳定身份、数据权限和移交规则。</p>
 <h2 id="hz-section-15">15. IT 交付导航与实施顺序</h2>
-<p>更新日期：2026-10-23（UTC+8）。本次在原有全量需求上追加销售个人收款／净毛利月、周、天统计；注册、部门／业务员回款、订单量、客户分析、物流运费、权限和全部历史待办保留。</p>
+<p>更新日期：2026-10-23（UTC+8）。最新追加P0全局图表授权及员工数据隔离，完整需求第1.1–1.3节优先约束全部图表。本次在原有全量需求上追加销售个人收款／净毛利月、周、天统计；注册、部门／业务员回款、订单量、客户分析、物流运费、权限和全部历史待办保留。</p>
 <h3>阅读顺序</h3>
 <ol>
 <li><a href="HYPERZONE_ECHARTS_API_REQUIREMENTS.html">完整需求HTML</a> 或 <a href="HYPERZONE_ECHARTS_API_REQUIREMENTS.md">完整需求Markdown</a>：业务、页面、字段、审计与验收的全量交付。源正文为 <a href="REQUIREMENTS_OVERVIEW.md">REQUIREMENTS_OVERVIEW.md</a>，个人收款／净毛利在第8节。</li>
-<li><a href="../openapi/hyperzone-analytics.openapi.json">OpenAPI</a>：可导入API工具的平台HTTP契约，servers为<code>/api</code>；不是FOP原生接口目录。新增 <code>/autoflow/integrations/fop/sales-performance</code> 与 <code>/sales-performance/details</code>。</li>
+<li><a href="../openapi/hyperzone-analytics.openapi.json">OpenAPI</a>：23项平台HTTP操作、111个模型，servers为<code>/api</code>；不是FOP原生接口目录。最新增加 <code>/autoflow/integrations/fop/chart-access</code> 与 <code>/users/{id}/chart-permissions</code>，包含内部FOP授权、客户当前归属和独立组织汇总字段契约。</li>
 <li><a href="HYPERZONE_FOP_SOURCE_MAPPING.md">FOP源码映射</a>：实体／字段／Java行号证据。第9节是物流成本，第10节是月结毛利、预计贡献和当前数据缺口。</li>
-<li><a href="FOLLOW_UP_CHECKLIST.md">后续待办与人工核对</a>：原T01–T20/H01–H22/D01–D15保留；本次新增T21–T26/H23–H28/D16–D22，按模板分配、回填和关闭。</li>
+<li><a href="FOLLOW_UP_CHECKLIST.md">后续待办与人工核对</a>：完整T01–T30、H01–H32、D01–D29；最新权限任务为T27–T30/H29–H32/D23–D29，按模板分配、回填和关闭。</li>
 <li><a href="VERIFICATION.md">验证记录</a>：仅此处记录实际执行的测试、HTTP、浏览器、生成物检查与限制；文档或Mock存在不能替代验证。详细消费检查见 <a href="ECHARTS_FRONTEND_AUDIT.md">前端审计</a> 和 <a href="ECHARTS_BACKEND_CONTRACT_AUDIT.md">后台契约审计</a>。</li>
 </ol>
 <h3>当前交付边界</h3>
@@ -13133,7 +15237,11 @@ hzkj_total_amount = hzkj_fre_quo_amount + hzkj_fixed_tax_fee
 </table></div>
 <p>每项资料标注答复人、环境、版本、日期及差异处置。资料已提供、接口可调用、Mock已演示和真实财务验收是不同阶段；仅在对应证据齐全后关闭清单。</p>
 <h3>同仓库最新客户开发功能</h3>
-<p>交付代码已普通合并远程<code>8172a96</code>的1688寻源功能，保留远程实现与历史。客户开发／寻源专项设计与执行记录位于 <code>docs/superpowers/specs/</code> 和 <code>docs/superpowers/plans/</code> 的2026-08-03至2026-08-05文档；其外部供应商接口不是本21项FOP分析HTTP契约。最终集成验证756项及本地数据库迁移记录见VERIFICATION.md。IT应同时按合并后的package-lock安装依赖，并应用随工程附带的数据库迁移。</p>
+<p>交付代码已普通合并远程<code>8172a96</code>的1688寻源功能，保留远程实现与历史。客户开发／寻源专项设计与执行记录位于 <code>docs/superpowers/specs/</code> 和 <code>docs/superpowers/plans/</code> 的2026-08-03至2026-08-05文档；其外部供应商接口不在本23项FOP分析及权限HTTP契约内。最新权限集成验证843项及本地数据库迁移记录见VERIFICATION.md。IT应按package-lock安装依赖，并应用随工程附带的数据库迁移。</p>
+<h3>图表权限本轮交接</h3>
+<p>采用岗位模板＋账号例外；普通员工本人、经理部门成员，个人工作台默认本人。图表可见、业务记录、组织汇总、明细／导出分别校验。原有ECharts结构保留。IT先核对员工/FOP身份与客户归属，再接独立组织汇总许可，最后执行跨账号排名、趋势与明细对账；不能因个人看不到其他成员而将部门完整合计替换为个人小计。新增待办T27–T30、人工核对H29–H32、验收D23–D29见FOLLOW_UP_CHECKLIST。当前Mock及本工程权限实现不表示正式FOP汇总接口已发布。</p>
+<p>新FOP适配器继承 <code>FopDataProvider.customerOwnershipMode=current_required</code>，订单／收款候选必须携带 <code>currentCustomerOwner</code>；缺少时明确失败。仅显式选择 <code>legacy_historical</code> 的旧适配器可使用历史归属兼容，并返回归属来源提示。组织汇总必须实现 <code>getOrganizationSummary</code> 并取得 <code>organizationSummaries</code> 独立许可，不能用当前员工的订单明细拼成部门完整业绩。</p>
+<p>部署前先备份账户库，再应用 <code>1784733000000-AddChartPermissions</code>；默认空数组继承模板。非空逐图配置存在时，迁移拒绝回滚，避免静默丢失限制。配置入口：系统管理员侧栏“账号与权限”→“配置图表权限”；不需要给普通员工系统管理权限。部署后按D23–D29验证直接接口访问、跨账号缓存、客户移交及经理本人默认。</p>
 <h2 id="hz-section-16">16. 规范来源与文档再生成</h2>
 <p>OpenAPI 结构参考 <a href="https://spec.openapis.org/oas/v3.1.1.html" rel="noopener noreferrer">OpenAPI Specification 3.1.1</a>。产品事实来自本仓库源码和本次诊断，不来自通用规范。HTML 使用项目共享 HyperZone 样式、内嵌 CSS 和透明 SVG Logo，可离线打开及打印。</p>
 <pre><code class="language-sh">python3 -m venv .runtime/local-demo/docs-venv

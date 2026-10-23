@@ -1,3 +1,5 @@
+vi.mock('@/api/fop-chart-access', async importOriginal => { const { chartAccessFixture } = await import('./chart-access-fixtures'); return { ...await importOriginal<object>(), getChartAccess: vi.fn(async () => chartAccessFixture()) } })
+import { chartAccessFixture } from './chart-access-fixtures'
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { createI18n } from 'vue-i18n'
@@ -14,7 +16,7 @@ const series = (id: string, label: string, kind: 'total' | 'detail' | 'other', t
   return { id, label, kind, total, entityId, code: entityId ? 'C001' : undefined, values: [total], warehouses: { HZ: [hz], SZ: [sz], UNASSIGNED: [0] },
     amounts: { currency: 'USD' as const, total: money(total), values: [money(total)], warehouses: { HZ: [money(hz)], SZ: [money(sz)], UNASSIGNED: [0] }, excludedOrderCount: 0 } }
 }
-function result(query: OrderVolumeQuery): OrderVolumeData { return { source: 'mock', query, timeZone: 'Asia/Shanghai', asOf: '2026-10-22T00:00:00Z', total: 12, customerCount: 11, periods: [{ id: '2026-10', label: '10月', from: '2026-10-01', to: '2026-10-31', future: false }], series: query.customerId ? [series('total', '客户合计', 'total', 5)] : [series('total', '合计', 'total', 12), series('customer:c1', 'Northstar', 'detail', 5, 'c1'), series('other', '其他客户', 'other', 7)], options: { departments: [{ id: 'sales1', label: '业务一部' }], objects: [] } } }
+function result(query: OrderVolumeQuery): OrderVolumeData { return { chartAccess: { ...chartAccessFixture().charts.find(item => item.chartId === (query.category === 'customer' ? 'customer_orders' : 'order_volume'))! }, source: 'mock', query, timeZone: 'Asia/Shanghai', asOf: '2026-10-22T00:00:00Z', total: 12, customerCount: 11, periods: [{ id: '2026-10', label: '10月', from: '2026-10-01', to: '2026-10-31', future: false }], series: query.customerId ? [series('total', '客户合计', 'total', 5)] : [series('total', '合计', 'total', 12), series('customer:c1', 'Northstar', 'detail', 5, 'c1'), series('other', '其他客户', 'other', 7)], options: { departments: [{ id: 'sales1', label: '业务一部' }], objects: [] } } }
 enableAutoUnmount(afterEach)
 // jsdom does not implement the native dialog top layer.
 beforeAll(() => {
@@ -98,7 +100,7 @@ describe('customer order analysis', () => {
     await wrapper.find('input[aria-label="客户名称或编码"]').setValue('C001')
     await wrapper.find('.ov-customer-search form').trigger('submit')
     await wrapper.find('input[aria-label="客户名称或编码"]').setValue('C002')
-    resolve({ source: 'mock', total: 1, page: 1, pageSize: 10, items: [{ id: 'c1', code: 'C001', name: 'OLD SECRET', departments: [] }] }); await flushPromises()
+    resolve({ chartAccess: chartAccessFixture().charts.find(item => item.chartId === 'customer_orders')!, source: 'mock', total: 1, page: 1, pageSize: 10, items: [{ id: 'c1', code: 'C001', name: 'OLD SECRET', departments: [] }] }); await flushPromises()
     expect(wrapper.text()).not.toContain('OLD SECRET')
     expect(wrapper.find('.ov-selected').exists()).toBe(false)
     wrapper.unmount()
@@ -116,7 +118,7 @@ describe('customer order analysis', () => {
     wrapper.unmount()
   })
   it('removes searched customer identities and pending responses after authorization is revoked', async () => {
-    vi.mocked(searchOrderCustomers).mockResolvedValueOnce({ source: 'mock', total: 1, page: 1, pageSize: 10, items: [{ id: 'c1', code: 'C001', name: 'PRIVATE CUSTOMER', departments: ['业务一部'] }] })
+    vi.mocked(searchOrderCustomers).mockResolvedValueOnce({ chartAccess: chartAccessFixture().charts.find(item => item.chartId === 'customer_orders')!, source: 'mock', total: 1, page: 1, pageSize: 10, items: [{ id: 'c1', code: 'C001', name: 'PRIVATE CUSTOMER', departments: ['业务一部'] }] })
     const { wrapper } = await setup()
     await wrapper.find('input[aria-label="客户名称或编码"]').setValue('C001')
     await wrapper.find('.ov-customer-search form').trigger('submit'); await flushPromises()
@@ -136,7 +138,7 @@ describe('customer order analysis', () => {
     await wrapper.find('.ov-customer-search form').trigger('submit')
     vi.mocked(getOrderVolume).mockRejectedValueOnce({ code: 'fop_binding_changed' })
     await wrapper.setProps({ revision: 1 }); await flushPromises()
-    resolve({ source: 'mock', total: 1, page: 1, pageSize: 10, items: [{ id: 'c1', code: 'C001', name: 'REVOKED CUSTOMER', departments: [] }] })
+    resolve({ chartAccess: chartAccessFixture().charts.find(item => item.chartId === 'customer_orders')!, source: 'mock', total: 1, page: 1, pageSize: 10, items: [{ id: 'c1', code: 'C001', name: 'REVOKED CUSTOMER', departments: [] }] })
     await flushPromises()
     expect(wrapper.text()).not.toContain('REVOKED CUSTOMER')
     expect(wrapper.find('.ov-candidates').exists()).toBe(false)
@@ -149,7 +151,7 @@ describe('customer order analysis', () => {
     await wrapper.find('input[aria-label="客户名称或编码"]').setValue('C002')
     await wrapper.find('.ov-customer-search form').trigger('submit')
     await wrapper.findAll('button').find(b => b.text() === '趋势')!.trigger('click'); await flushPromises()
-    resolve({ source: 'mock', total: 1, page: 1, pageSize: 10, items: [{ id: 'c2', code: 'C002', name: 'LATE CUSTOMER', departments: [] }] })
+    resolve({ chartAccess: chartAccessFixture().charts.find(item => item.chartId === 'customer_orders')!, source: 'mock', total: 1, page: 1, pageSize: 10, items: [{ id: 'c2', code: 'C002', name: 'LATE CUSTOMER', departments: [] }] })
     await flushPromises()
     expect(wrapper.find('.ov-selected').text()).toContain('Northstar')
     expect(wrapper.find('.ov-selected').text()).not.toContain('LATE CUSTOMER')
@@ -208,8 +210,8 @@ describe('customer order analysis', () => {
     const { wrapper } = await setup(false)
     await wrapper.find('input[aria-label="客户订单开始日期"]').setValue('2026-09-01')
     await wrapper.find('input[aria-label="客户订单结束日期"]').setValue('2026-09-30')
-    await wrapper.find('.ov-filters').trigger('submit')
-    await wrapper.find('select[aria-label="客户订单部门"]').setValue('sales1')
+    await wrapper.find('.ov-filters').trigger('submit'); await flushPromises()
+    await wrapper.find('select[aria-label="客户订单部门"]').setValue('sales1'); await flushPromises()
     await wrapper.find('select[aria-label="订单量仓库"]').setValue('HZ')
     await flushPromises()
     let resolve!: (data: OrderVolumeData) => void
@@ -237,7 +239,7 @@ describe('customer order analysis', () => {
     expect(wrapper.find('.ov-selected').exists()).toBe(false)
   })
   it('opens search matches in the same modal, closes on Escape and clears on session reset', async () => {
-    vi.mocked(searchOrderCustomers).mockResolvedValue({ source: 'mock', total: 1, page: 1, pageSize: 10, items: [{ id: 'c1', code: 'C001', name: 'Northstar', departments: ['业务一部'] }] })
+    vi.mocked(searchOrderCustomers).mockResolvedValue({ chartAccess: chartAccessFixture().charts.find(item => item.chartId === 'customer_orders')!, source: 'mock', total: 1, page: 1, pageSize: 10, items: [{ id: 'c1', code: 'C001', name: 'Northstar', departments: ['业务一部'] }] })
     const { wrapper } = await setup(false)
     await wrapper.find('input[aria-label="客户名称或编码"]').setValue('Northstar')
     await wrapper.find('.ov-customer-search form').trigger('submit'); await flushPromises()

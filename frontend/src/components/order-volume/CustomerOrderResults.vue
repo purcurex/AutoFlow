@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useChartCapabilities } from '@/composables/useChartAccess'
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import EChart, { type ChartClick, type ChartZoom } from '@/components/charts/EChart.vue'
@@ -9,8 +10,10 @@ import { latestVolumeWindow, volumeColor } from '@/utils/order-volume'
 import { formatChartCurrency } from '@/utils/currency'
 import { sumMoney } from '@/utils/tableTotals'
 
-const props = withDefaults(defineProps<{ data: OrderVolumeData; split?: boolean; rankingOnly?: boolean }>(), { split: false, rankingOnly: false })
+const props = withDefaults(defineProps<{ data: OrderVolumeData; split?: boolean; rankingOnly?: boolean; detailsAllowed?: boolean }>(), { split: false, rankingOnly: false, detailsAllowed: true })
 const emit = defineEmits<{ drill: [seriesId: string, periodId?: string, warehouse?: VolumeWarehouse]; receipt: [seriesId: string, periodId?: string, warehouse?: VolumeWarehouse]; customer: [id: string, name: string, code: string] }>()
+const { canViewDetails: inheritedDetails } = useChartCapabilities()
+const canViewDetails = computed(() => inheritedDetails.value && props.detailsAllowed !== false && props.data.query.view !== 'summary')
 const { locale } = useI18n(), { isDark } = useTheme()
 const t = (cn: string, en: string) => String(locale.value).startsWith('zh') ? cn : en
 const metrics = ['orders', 'amount'] as const
@@ -52,6 +55,7 @@ function breakdown(row?: VolumeSeries) {
   return sources ? `${t('履约订单', 'Fulfillment')} ${format(sources.fulfillment, 'amount')} · ${t('全款备货', 'Full-payment stocking')} ${format(sources.fullPaymentStock, 'amount')}` : ''
 }
 function drill(metric: Metric, seriesId: string, periodId?: string, warehouse?: VolumeWarehouse) {
+  if (!canViewDetails.value) return
   if (metric === 'amount') { if (total.value?.amounts) emit('receipt', seriesId, periodId, warehouse) }
   else emit('drill', seriesId, periodId, warehouse)
 }
@@ -100,10 +104,10 @@ function syncZoom(event: ChartZoom) { for (const chart of charts.value) chart.zo
   <div class="ov-results customer-order-results">
     <div class="ov-kpis">
       <div><span>{{ t('履约订单量合计', 'Total fulfillment orders') }}</span><strong>{{ format(data.total, 'orders') }}<small>{{ t('单', 'orders') }}</small></strong></div>
-      <div><span>{{ t('回款业绩金额合计', 'Total collections performance') }}</span><button class="customer-amount-kpi customer-cell-link" :disabled="!total?.amounts" :title="breakdown(total)" @click="drill('amount', 'total')">{{ format(value(total, 'amount'), 'amount') }}</button></div>
+      <div><span>{{ t('回款业绩金额合计', 'Total collections performance') }}</span><button class="customer-amount-kpi customer-cell-link" :disabled="!canViewDetails || (!total?.amounts)" :title="breakdown(total)" @click="drill('amount', 'total')">{{ format(value(total, 'amount'), 'amount') }}</button></div>
       <div v-if="rankingOnly"><span>{{ t('涉及客户', 'Customers') }}</span><b>{{ data.customerCount }}</b></div>
       <div class="ov-period"><span>{{ data.periods[0]?.from }} — {{ data.periods.at(-1)?.to }}</span><small>{{ t('按订单支付日期统计 · UTC+8', 'By order payment date · UTC+8') }} · {{ t('更新于', 'Updated') }} {{ new Date(data.asOf).toLocaleTimeString('zh-CN', { hour12: false, timeZone: 'Asia/Shanghai' }) }}</small></div>
-      <button class="ov-link" @click="emit('drill', 'total')">{{ t('查看订单明细 ↗', 'View orders ↗') }}</button>
+      <button :disabled="!canViewDetails" class="ov-link" @click="emit('drill', 'total')">{{ t('查看订单明细 ↗', 'View orders ↗') }}</button>
     </div>
     <p v-if="total?.amounts?.breakdown" class="ov-scope customer-amount-note">{{ breakdown(total) }} · {{ t('按支付当月计入，押金备货不计入；使用备货库存时不重复计款。', 'Counted in the payment month; deposits excluded and stocked inventory is not counted again.') }}</p>
     <p v-if="!total?.amounts" class="ov-scope customer-amount-note">{{ t('当前无可查看的回款金额权限，履约订单量仍可查看。', 'Receipt amounts are unavailable with the current permissions; fulfillment counts remain available.') }}</p>
@@ -120,15 +124,15 @@ function syncZoom(event: ChartZoom) { for (const chart of charts.value) chart.zo
       <thead><tr><th>{{ t('客户 / 编码', 'Customer / Code') }}</th><th>{{ t('指标', 'Metric') }}</th><th>{{ t('合计', 'Total') }}</th><th>{{ t('占比', 'Share') }}</th><th v-for="code in warehouses" :key="code"><span class="ov-dot" :style="{ background: warehouseColor[code] }" />{{ warehouseName(code) }}</th><th>{{ t('查看', 'View') }}</th></tr></thead>
       <tbody><template v-for="row in tableRows" :key="row.id"><tr v-for="(metric, index) in metrics" :key="metric" :data-row-id="row.id" :data-metric="metric" :class="{ 'customer-pair-first': index === 0, 'customer-money-row': index === 1, 'ov-total': row.kind === 'total' }">
         <td v-if="index === 0" rowspan="2" class="customer-identity"><span class="ov-dot" :style="{ background: volumeColor(row) }" /><strong>{{ row.label }}</strong><small v-if="row.code">{{ row.code }}</small></td>
-        <th scope="row" class="customer-metric-name">{{ metricLabel(metric) }}</th><td><button v-if="metric === 'amount'" class="customer-cell-link" :disabled="!row.amounts" :title="breakdown(row)" @click="drill(metric, row.id)">{{ format(value(row, metric), metric) }}</button><template v-else>{{ format(value(row, metric), metric) }}</template></td><td>{{ share(row, metric) }}</td>
-        <td v-for="code in warehouses" :key="code"><button class="customer-cell-link" :data-warehouse="code" :disabled="metric === 'amount' && !row.amounts" :title="metric === 'amount' ? `${warehouseName(code)} · ${t('查看回款明细', 'View receipt details')}` : undefined" :aria-label="`${row.label} · ${warehouseName(code)} · ${metricLabel(metric)} · ${metric === 'amount' ? t('查看回款', 'View receipts') : t('查看订单', 'View orders')}`" @click="drill(metric, row.id, undefined, code)">{{ format(value(row, metric, code), metric) }}</button></td>
-        <td v-if="index === 0" rowspan="2" class="customer-actions"><button v-if="rankingOnly && row.entityId && row.kind === 'detail'" class="ov-link" @click="emit('customer', row.entityId, row.label, row.code ?? '')">{{ t('趋势', 'Trend') }}</button><button class="ov-link" @click="emit('drill', row.id)">{{ t('订单 ↗', 'Orders ↗') }}</button></td>
+        <th scope="row" class="customer-metric-name">{{ metricLabel(metric) }}</th><td><button v-if="metric === 'amount'" class="customer-cell-link" :disabled="!canViewDetails || (!row.amounts)" :title="breakdown(row)" @click="drill(metric, row.id)">{{ format(value(row, metric), metric) }}</button><template v-else>{{ format(value(row, metric), metric) }}</template></td><td>{{ share(row, metric) }}</td>
+        <td v-for="code in warehouses" :key="code"><button class="customer-cell-link" :data-warehouse="code" :disabled="!canViewDetails || (metric === 'amount' && !row.amounts)" :title="metric === 'amount' ? `${warehouseName(code)} · ${t('查看回款明细', 'View receipt details')}` : undefined" :aria-label="`${row.label} · ${warehouseName(code)} · ${metricLabel(metric)} · ${metric === 'amount' ? t('查看回款', 'View receipts') : t('查看订单', 'View orders')}`" @click="drill(metric, row.id, undefined, code)">{{ format(value(row, metric, code), metric) }}</button></td>
+        <td v-if="index === 0" rowspan="2" class="customer-actions"><button v-if="rankingOnly && row.entityId && row.kind === 'detail'" class="ov-link" @click="emit('customer', row.entityId, row.label, row.code ?? '')">{{ t('趋势', 'Trend') }}</button><button :disabled="!canViewDetails" class="ov-link" @click="emit('drill', row.id)">{{ t('订单 ↗', 'Orders ↗') }}</button></td>
       </tr></template></tbody>
-      <tfoot class="customer-totals"><tr v-for="(metric, index) in metrics" :key="metric"><th v-if="index === 0" rowspan="2" scope="rowgroup">{{ t('合计', 'Total') }}</th><th scope="row" class="customer-metric-name">{{ metricLabel(metric) }}</th><td>{{ format(value(total, metric), metric) }}</td><td>{{ total ? share(total, metric) : '—' }}</td><td v-for="code in warehouses" :key="code"><button class="customer-cell-link" :disabled="metric === 'amount' && !total?.amounts" @click="drill(metric, 'total', undefined, code)">{{ format(value(total, metric, code), metric) }}</button></td><td v-if="index === 0" rowspan="2"><button class="ov-link" @click="emit('drill', 'total')">{{ t('订单 ↗', 'Orders ↗') }}</button></td></tr></tfoot>
+      <tfoot class="customer-totals"><tr v-for="(metric, index) in metrics" :key="metric"><th v-if="index === 0" rowspan="2" scope="rowgroup">{{ t('合计', 'Total') }}</th><th scope="row" class="customer-metric-name">{{ metricLabel(metric) }}</th><td>{{ format(value(total, metric), metric) }}</td><td>{{ total ? share(total, metric) : '—' }}</td><td v-for="code in warehouses" :key="code"><button class="customer-cell-link" :disabled="!canViewDetails || (metric === 'amount' && !total?.amounts)" @click="drill(metric, 'total', undefined, code)">{{ format(value(total, metric, code), metric) }}</button></td><td v-if="index === 0" rowspan="2"><button :disabled="!canViewDetails" class="ov-link" @click="emit('drill', 'total')">{{ t('订单 ↗', 'Orders ↗') }}</button></td></tr></tfoot>
     </table></div>
     <details v-if="!rankingOnly" class="ov-time-detail"><summary>{{ t('每日订单与回款明细', 'Daily order and receipt breakdown') }}<span>{{ t('日期倒序 · 点击数值查看相应明细', 'Latest dates first · Select a value to view details') }}</span></summary>
       <div class="ov-table-scroll customer-daily-table"><table class="ov-table"><thead><tr><th>{{ t('支付日期', 'Payment date') }}</th><th v-for="metric in metrics" :key="metric">{{ metricLabel(metric) }}</th><template v-if="split"><template v-for="code in warehouses" :key="code"><th v-for="metric in metrics" :key="metric">{{ warehouseName(code) }} · {{ metricLabel(metric) }}</th></template></template></tr></thead>
-        <tbody><tr v-for="period in datedRows" :key="period.id"><td>{{ period.label }}</td><td v-for="metric in metrics" :key="metric"><button class="customer-cell-link" :disabled="period.future || (metric === 'amount' && !total?.amounts)" @click="drill(metric, 'total', period.id)">{{ format(metricValues(total, metric)[period.index], metric) }}</button></td><template v-if="split"><template v-for="code in warehouses" :key="code"><td v-for="metric in metrics" :key="metric"><button class="customer-cell-link" :disabled="period.future || (metric === 'amount' && !total?.amounts)" @click="drill(metric, 'total', period.id, code)">{{ format(metricValues(total, metric, code)[period.index], metric) }}</button></td></template></template></tr></tbody>
+        <tbody><tr v-for="period in datedRows" :key="period.id"><td>{{ period.label }}</td><td v-for="metric in metrics" :key="metric"><button class="customer-cell-link" :disabled="!canViewDetails || (period.future || (metric === 'amount' && !total?.amounts))" @click="drill(metric, 'total', period.id)">{{ format(metricValues(total, metric)[period.index], metric) }}</button></td><template v-if="split"><template v-for="code in warehouses" :key="code"><td v-for="metric in metrics" :key="metric"><button class="customer-cell-link" :disabled="!canViewDetails || (period.future || (metric === 'amount' && !total?.amounts))" @click="drill(metric, 'total', period.id, code)">{{ format(metricValues(total, metric, code)[period.index], metric) }}</button></td></template></template></tr></tbody>
         <TableTotals><th scope="row">{{ t('合计', 'Total') }}</th><td v-for="metric in metrics" :key="metric">{{ format(value(total, metric), metric) }}</td><template v-if="split"><template v-for="code in warehouses" :key="code"><td v-for="metric in metrics" :key="metric">{{ format(value(total, metric, code), metric) }}</td></template></template></TableTotals>
       </table></div>
     </details>

@@ -16,6 +16,8 @@ export async function getFopDataAccess(): Promise<FopDataAccess> {
 export function fopAccessError(error: unknown, zh: boolean): string {
   const code = typeof error === 'object' && error !== null && 'code' in error ? error.code : undefined
   const messages: Record<string, [string, string]> = {
+    chart_access_denied: ['当前图表未获授权。', 'This chart is not authorized.'],
+    chart_details_denied: ['当前图表未获明细权限，仅可查看统计。', 'Detail access is not granted for this chart.'],
     business_access_disabled: ['当前账号未分配业务数据权限，系统管理权限不受影响。', 'Business data access is disabled. System management permissions are unchanged.'],
     business_scope_required: ['尚未分配部门或员工数据范围，请联系管理员配置。', 'Your department or employee data scope is not configured. Contact an administrator.'],
     fop_binding_required: ['账号尚未绑定 FOP 用户，请联系管理员完成绑定。', 'Your account is not linked to a FOP user. Contact an administrator.'],

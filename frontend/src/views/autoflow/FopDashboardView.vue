@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import type { ChartId } from '@/api/fop-chart-access'
+import { onSessionReset } from '@/utils/session'
 import { formatChartCurrency } from '@/utils/currency'
 import { sumMoney } from '@/utils/tableTotals'
 import TableTotals from '@/components/ui/TableTotals.vue'
@@ -34,6 +36,9 @@ const currentYear = Number(localDate(today).slice(0, 4))
 const year = ref(currentYear)
 const years = Array.from({ length: 5 }, (_, index) => currentYear - index)
 const data = ref<FopDashboardData>()
+const chart = (id: ChartId) => data.value?.chartAccess?.find(item => item.chartId === id)
+const visible = (id: ChartId) => chart(id)?.visible === true
+const canDetails = (id: ChartId) => visible(id) && chart(id)?.canViewDetails === true && !chart(id)?.summaryOnly
 const busy = ref(false)
 const error = ref('')
 const appliedRange = ref('')
@@ -44,24 +49,26 @@ const money = (value: number) => formatChartCurrency(value, dataLocale.value)
 const updated = computed(() => data.value ? new Date(data.value.updatedAt).toLocaleTimeString(dataLocale.value, { hour12: false, timeZone: 'Asia/Shanghai' }) : '—')
 const registrationScope = ref('marketing')
 const registrationDepartment = computed(() => data.value?.registrationDepartments?.find(item => item.id === registrationScope.value))
-const registrationScopeName = computed(() => registrationScope.value === 'marketing' ? text('营销中心', 'Marketing center') : registrationDepartment.value?.name ?? '')
+const recordTotalLabel = (id: ChartId) => chart(id)?.dataScope === 'self' ? text('本人合计', 'My total') : text('授权人员合计', 'Authorized people total')
+const registrationScopeName = computed(() => chart('registrations')?.summaryDepartments.length ? registrationScope.value === 'marketing' ? text('获授权部门', 'Authorized departments') : registrationDepartment.value?.name ?? '' : recordTotalLabel('registrations'))
 const registrationSeries = computed(() => {
   if (!data.value?.registrations.length) return []
   if (registrationScope.value === 'marketing') return [
-    { id: 'marketing', name: text('营销中心合计', 'Marketing center total'), counts: data.value.registrations.map(item => item.count) },
+    { id: 'marketing', name: chart('registrations')?.summaryDepartments.length ? text('获授权部门合计', 'Authorized departments total') : recordTotalLabel('registrations'), counts: data.value.registrations.map(item => item.count) },
     ...(data.value.registrationDepartments ?? []).map(item => ({ id: item.id, name: item.name, counts: item.counts })),
   ]
   const department = registrationDepartment.value
-  return department ? [{ id: `total:${department.id}`, name: `${department.name}${text('合计', ' total')}`, counts: department.counts }, ...department.salespeople] : []
+  return department ? [{ id: `total:${department.id}`, name: chart('registrations')?.summaryDepartments.includes(department.id as never) ? `${department.name}${text('合计', ' total')}` : `${department.name} · ${recordTotalLabel('registrations')}`, counts: department.counts }, ...(chart('registrations')?.summaryOnly ? [] : department.salespeople)] : []
 })
 // Aggregate and individuals are peer series, but the headline must count only once.
 const registrationTotal = computed(() => registrationSeries.value[0]?.counts.reduce((sum, count) => sum + count, 0) ?? 0)
-const receiptSeries = computed(() => data.value ? [...(data.value.receipts.marketingCenter ? [data.value.receipts.marketingCenter] : []), ...data.value.receipts.departments] : [])
+const receiptSeries = computed(() => data.value?.departmentReceipts ? [...(data.value.departmentReceipts.marketingCenter ? [data.value.departmentReceipts.marketingCenter] : []), ...data.value.departmentReceipts.departments] : [])
 // Preserve each month's source index so all amount columns stay aligned after sorting.
-const receiptRows = computed(() => (data.value?.receipts.months ?? [])
+const receiptRows = computed(() => (data.value?.departmentReceipts?.months ?? [])
   .map((month, index) => ({ month, index }))
   .sort((left, right) => right.month.localeCompare(left.month)))
-const receiptTotal = computed(() => sumMoney(data.value?.receipts.departments.flatMap(item => item.amounts) ?? []))
+const receiptTotal = computed(() => sumMoney(data.value?.departmentReceipts?.departments.flatMap(item => item.amounts) ?? []))
+const salespersonReceiptRows = computed(() => (data.value?.receipts.months ?? []).map((month, index) => ({ month, index })).sort((a, b) => b.month.localeCompare(a.month)))
 const departments = computed<Record<string, string>>(() => ({ sales1: text('业务一部', 'Sales I'), sales2: text('业务二部', 'Sales II'), sales3: text('业务三部', 'Sales III'), sales4: text('业务四部', 'Sales IV') }))
 const selectedDepartmentId = ref('sales1')
 const departmentMom = ref(false), salespersonMom = ref(false)
@@ -75,19 +82,22 @@ const salespersonSeries = computed(() => {
   const department = selectedDepartment.value
   if (!department) return []
   return [
-    { id: `total:${department.id}`, name: `${department.name || departments.value[department.id] || department.id}${text('合计', ' total')}`, amounts: department.amounts, previousAmount: department.previousAmount, breakdown: department.breakdown, previousBreakdown: department.previousBreakdown },
+    { id: `total:${department.id}`, name: `${department.name || departments.value[department.id] || department.id} · ${recordTotalLabel('salesperson_receipts')}`, amounts: department.amounts, previousAmount: department.previousAmount, breakdown: department.breakdown, previousBreakdown: department.previousBreakdown },
     ...department.salespeople,
   ]
 })
 const selectedDepartmentTotal = computed(() => sumMoney(selectedDepartment.value?.amounts ?? []))
-const changesFor = (series: ReceiptSeries) => receiptChanges(series, data.value?.receipts.months ?? [], data.value?.receipts.previousMonth)
+const changesFor = (series: ReceiptSeries) => {
+  const receipts = receiptSeries.value.includes(series) ? data.value?.departmentReceipts : data.value?.receipts
+  return receiptChanges(series, receipts?.months ?? [], receipts?.previousMonth)
+}
 const changeTotalFor = (series: ReceiptSeries) => totalReceiptChange(changesFor(series))
-const latestReceiptMonth = computed(() => data.value?.receipts.months.at(-1) ?? '')
+const latestReceiptMonth = computed(() => data.value?.departmentReceipts?.months.at(-1) ?? '')
 const latestMarketingChange = computed(() => {
-  const receipts = data.value?.receipts
+  const receipts = data.value?.departmentReceipts
   if (!receipts?.departments.length) return undefined
   const total = receipts.marketingCenter ?? { id: 'marketing', amounts: receipts.months.map((_, index) => sumMoney(receipts.departments.map(dept => dept.amounts[index] ?? 0))), previousAmount: receipts.departments.every(dept => dept.previousAmount != null) ? sumMoney(receipts.departments.map(dept => dept.previousAmount!)) : null }
-  return changesFor(total).at(-1)
+  return receiptChanges(total, receipts.months, receipts.previousMonth).at(-1)
 })
 const latestDepartmentChange = computed(() => selectedDepartment.value ? changesFor(selectedDepartment.value).at(-1) : undefined)
 const momHint = computed(() => text('差额 = 本月 − 上月；比例 = 差额 ÷ 上月。1 月对比上年 12 月；本月为截至目前数据。', 'Change = this month − prior month; rate = change ÷ prior month. January compares with December; the current month is to date.'))
@@ -124,7 +134,8 @@ async function refresh() {
     if (id === requestId) error.value = fopAccessError(cause, zh.value)
   } finally { if (id === requestId) busy.value = false }
 }
-onBeforeUnmount(() => { requestId++ })
+const offSession = onSessionReset(() => { requestId++; data.value = undefined; busy.value = false; error.value = ''; appliedRange.value = ''; registrationScope.value = 'marketing'; selectedDepartmentId.value = 'sales1' })
+onBeforeUnmount(() => { requestId++; offSession() })
 onMounted(refresh)
 const axisColor = computed(() => isDark.value ? '#94a3b8' : '#8793a7')
 const gridColor = computed(() => isDark.value ? '#293241' : '#edf0f7')
@@ -132,9 +143,9 @@ const gridColor = computed(() => isDark.value ? '#293241' : '#edf0f7')
 const aggregateColor = '#94A5DD'
 const detailColors = ['#64BDB1', '#E7B96C', '#E49AA5', '#A996D1', '#79B7D2', '#B3BF78']
 const detailColor = (index: number) => detailColors[index % detailColors.length]!
-const receiptColor = (id: string) => id === data.value?.receipts.marketingCenter?.id
+const receiptColor = (id: string) => id === data.value?.departmentReceipts?.marketingCenter?.id
   ? aggregateColor
-  : detailColor(Math.max(0, data.value?.receipts.departments.findIndex(item => item.id === id) ?? 0))
+  : detailColor(Math.max(0, data.value?.departmentReceipts?.departments.findIndex(item => item.id === id) ?? 0))
 const common = computed(() => ({
   animationDuration: 400,
   textStyle: { fontFamily: 'Inter, system-ui, sans-serif', color: axisColor.value },
@@ -146,7 +157,7 @@ const registrationOption = computed(() => ({
   color: [aggregateColor, ...detailColors],
   legend: { type: 'scroll', top: 8, left: 12, right: 50, textStyle: { color: axisColor.value } },
   grid: { left: 42, right: 24, top: 65, bottom: 42 },
-  toolbox: { right: 16, top: 35, feature: { saveAsImage: { title: text('下载图表', 'Save chart'), type: 'svg' } } },
+  toolbox: { right: 16, top: 35, feature: chart('registrations')?.canExport ? { saveAsImage: { title: text('下载图表', 'Save chart'), type: 'svg' } } : {} },
   xAxis: { type: 'category', boundaryGap: false, data: data.value?.registrations.map(item => item.date) ?? [], axisLabel: { formatter: (value: string) => value.slice(5), color: axisColor.value, hideOverlap: true }, axisLine: { lineStyle: { color: gridColor.value } }, axisTick: { show: false } },
   yAxis: { type: 'value', minInterval: 1, splitLine: { lineStyle: { color: gridColor.value, type: 'dashed' } }, axisLabel: { color: axisColor.value } },
   series: registrationSeries.value.map((item, index) => ({ name: item.name, type: 'line', smooth: true, symbol: 'circle', symbolSize: index === 0 ? 6 : 5, showSymbol: false, itemStyle: { color: index === 0 ? aggregateColor : detailColor(index - 1) }, lineStyle: { width: index === 0 ? 3 : 2 }, areaStyle: index === 0 ? { color: aggregateColor, opacity: 0.07 } : undefined, emphasis: { focus: 'series' }, data: item.counts })),
@@ -165,14 +176,16 @@ const receiptBaseOption = computed(() => ({
   yAxis: { type: 'value', name: '$', axisLabel: { color: axisColor.value, formatter: (value: number) => `${value / 1000}K` }, splitLine: { lineStyle: { color: gridColor.value } } },
   dataZoom: [{ ...receiptZoomRange.value, type: 'slider', bottom: 12, height: 22, borderColor: gridColor.value, fillerColor: 'rgba(148,165,221,.14)', dataBackground: { lineStyle: { color: '#c5cee9' }, areaStyle: { color: '#e7ebf6' } }, handleStyle: { color: aggregateColor, borderColor: aggregateColor }, moveHandleStyle: { color: aggregateColor }, selectedDataBackground: { lineStyle: { color: aggregateColor }, areaStyle: { color: '#c5cee9' } } }],
 }))
-function collectionsOption(series: ReceiptSeries[], compare: boolean, colors: string[]) {
+function collectionsOption(series: ReceiptSeries[], compare: boolean, colors: string[], receipts?: FopDashboardData['receipts']) {
   const changes = series.map(changesFor)
   return {
     ...receiptBaseOption.value,
+    xAxis: { ...receiptBaseOption.value.xAxis, data: receipts?.months ?? [] },
+    dataZoom: receiptBaseOption.value.dataZoom.map(zoom => ({ ...zoom, startValue: Math.max(0, (receipts?.months.length ?? 0) - 6), endValue: Math.max(0, (receipts?.months.length ?? 0) - 1) })),
     tooltip: { ...common.value.tooltip, confine: true, ...(compare ? {
       formatter: (raw: unknown) => {
         const points = (Array.isArray(raw) ? raw : [raw]) as { seriesIndex: number; dataIndex: number }[]
-        const month = data.value?.receipts.months[points[0]?.dataIndex ?? 0] ?? ''
+        const month = receipts?.months[points[0]?.dataIndex ?? 0] ?? ''
         return [month + text(' · 较上月', ' · Month over month'), ...points.map(point => {
           const item = series[point.seriesIndex]
           const value = formatReceiptChange(changes[point.seriesIndex]?.[point.dataIndex], dataLocale.value)
@@ -181,7 +194,7 @@ function collectionsOption(series: ReceiptSeries[], compare: boolean, colors: st
       },
     } : { valueFormatter: (value: unknown) => typeof value === 'number' ? money(value) : '—', formatter: (raw: unknown) => {
       const points = (Array.isArray(raw) ? raw : [raw]) as { seriesIndex: number; dataIndex: number }[]
-      return [data.value?.receipts.months[points[0]?.dataIndex ?? 0] ?? '', ...points.flatMap(point => {
+      return [receipts?.months[points[0]?.dataIndex ?? 0] ?? '', ...points.flatMap(point => {
         const item = series[point.seriesIndex]; if (!item) return []
         return [`${item.name || departments.value[item.id] || item.id}: ${money(item.amounts[point.dataIndex] ?? 0)}`, receiptBreakdown(item, point.dataIndex)].filter(Boolean)
       })].join('\n')
@@ -201,13 +214,14 @@ function receiptBreakdown(series?: ReceiptSeries, index?: number) {
   return `${text('履约订单', 'Fulfillment')} ${money(amount(series.breakdown.fulfillment))} · ${text('全款备货', 'Full-payment stocking')} ${money(amount(series.breakdown.fullPaymentStock))}`
 }
 const marketingBreakdown = computed(() => {
-  const receipts = data.value?.receipts
+  const receipts = data.value?.departmentReceipts
   if (!receipts) return ''
   if (receipts.marketingCenter?.breakdown) return receiptBreakdown(receipts.marketingCenter)
   if (!receipts.departments.every(department => department.breakdown)) return ''
   return receiptBreakdown({ id: 'marketing', amounts: [], breakdown: { fulfillment: receipts.departments.flatMap(department => department.breakdown!.fulfillment), fullPaymentStock: receipts.departments.flatMap(department => department.breakdown!.fullPaymentStock) } })
 })
 async function openReceipts(month: string, department?: string, ownerId?: string) {
+  if (!canDetails('salesperson_receipts')) return
   const id = requestId
   try {
     const access = await refreshWorkbenchAccess()
@@ -219,17 +233,18 @@ async function openReceipts(month: string, department?: string, ownerId?: string
     const from = `${month}-01`, monthEnd = `${month}-${String(last).padStart(2, '0')}`, today = localDate(new Date())
     const to = monthEnd < today ? monthEnd : today
     if (from > to) return
-    await router.push({ name: 'RoleWorkbenchReceipts', params: { role }, query: { from, to, warehouse: 'ALL', ...(department ? { department } : {}), ...(ownerId ? { ownerId } : {}) } })
+    await router.push({ name: 'RoleWorkbenchReceipts', params: { role }, query: { from, to, warehouse: 'ALL', chartId: 'salesperson_receipts', ...(department ? { department } : {}), ...(ownerId ? { ownerId } : {}) } })
   } catch (cause) { if (id === requestId) error.value = fopAccessError(cause, zh.value) }
 }
 function selectReceipt(event: ChartClick, employees: boolean) {
+  if (!employees || !canDetails('salesperson_receipts')) return
   if (event.dataIndex === undefined || event.seriesId === undefined || (employees ? salespersonMom.value : departmentMom.value)) return
   const month = data.value?.receipts.months[event.dataIndex]
   const series = (employees ? salespersonSeries.value : receiptSeries.value).find(item => item.id === event.seriesId)
-  if (month && series) void openReceipts(month, employees ? selectedDepartmentId.value : series.id === data.value?.receipts.marketingCenter?.id ? undefined : series.id, employees && !series.id.startsWith('total:') ? series.id : undefined)
+  if (month && series) void openReceipts(month, employees ? selectedDepartmentId.value : series.id === data.value?.departmentReceipts?.marketingCenter?.id ? undefined : series.id, employees && !series.id.startsWith('total:') ? series.id : undefined)
 }
-const receiptOption = computed(() => collectionsOption(receiptSeries.value, departmentMom.value, receiptSeries.value.map(item => receiptColor(item.id))))
-const salespersonOption = computed(() => collectionsOption(salespersonSeries.value, salespersonMom.value, salespersonSeries.value.map((_, index) => index === 0 ? aggregateColor : detailColor(index - 1))))
+const receiptOption = computed(() => collectionsOption(receiptSeries.value, departmentMom.value, receiptSeries.value.map(item => receiptColor(item.id)), data.value?.departmentReceipts))
+const salespersonOption = computed(() => collectionsOption(salespersonSeries.value, salespersonMom.value, salespersonSeries.value.map((_, index) => index === 0 ? aggregateColor : detailColor(index - 1)), data.value?.receipts))
 </script>
 
 <template>
@@ -251,7 +266,7 @@ const salespersonOption = computed(() => collectionsOption(salespersonSeries.val
       </section>
 
       <div class="insights-grid">
-        <section class="dashboard-panel registration-panel">
+        <section v-if="visible('registrations')" class="dashboard-panel registration-panel"><p class="chart-scope" data-chart-scope>{{ chart('registrations')?.scopeLabel }}</p>
           <div class="panel-top statistics-heading"><h2><Users :size="17" />{{ text('每日注册会员统计', 'Daily registrations') }}</h2><div class="statistics-filters">
             <label class="year-filter">{{ text('统计维度', 'Dimension') }}<select v-model="registrationScope" :disabled="busy" :aria-label="text('注册统计维度', 'Registration dimension')"><option value="marketing">{{ text('营销中心', 'Marketing center') }}</option><option v-for="department in data?.registrationDepartments" :key="department.id" :value="department.id">{{ department.name }}</option></select></label>
           </div></div>
@@ -262,7 +277,7 @@ const salespersonOption = computed(() => collectionsOption(salespersonSeries.val
           </form>
 
           <div class="chart-summary"><strong>{{ registrationSeries.length ? number(registrationTotal) : '—' }}</strong><span>{{ registrationScopeName }} · {{ text('区间新增会员', 'new members in range') }}</span><small>{{ appliedRange }}</small></div>
-          <div class="registration-chart"><p v-if="!registrationSeries.length" class="empty-message">{{ data?.registrations.length ? text('所选维度暂无获授权的注册数据', 'No authorized registration data for this dimension') : text('暂无可查看的注册统计', 'No registration statistics available') }}</p><EChart v-else :option="registrationOption" :label="text('每日注册会员趋势图', 'Daily registration trend')" /></div>
+          <div class="registration-chart"><p v-if="!registrationSeries.length" class="empty-message">{{ data?.registrations.length ? text('所选维度暂无获授权的注册数据', 'No authorized registration data for this dimension') : text('暂无可查看的注册统计', 'No registration statistics available') }}</p><EChart v-else :can-export="chart('registrations')?.canExport === true" :option="registrationOption" :label="text('每日注册会员趋势图', 'Daily registration trend')" /></div>
           <div v-if="registrationSeries.length" class="data-details registration-data-list">
             <div class="registration-list-heading"><h3>{{ text('注册会员数据清单', 'Registration data') }}</h3><span>{{ text('合计与成员平级展示，合计不重复累加', 'Totals and members are peers; totals are counted once') }}</span></div>
             <div class="table-scroll"><table><thead><tr><th>{{ text('统计对象', 'Department / salesperson') }}</th><th>{{ text('区间合计', 'Period total') }}</th><th v-for="item in data?.registrations" :key="item.date">{{ item.date.slice(5) }}</th></tr></thead><tbody><tr v-for="series in registrationSeries" :key="series.id" :class="{ 'aggregate-cell': series === registrationSeries[0] }"><td>{{ series.name }}</td><td>{{ number(series.counts.reduce((sum, count) => sum + count, 0)) }}</td><td v-for="(item, index) in data?.registrations" :key="item.date">{{ number(series.counts[index] ?? 0) }}</td></tr></tbody><TableTotals><th scope="row">{{ text('合计', 'Total') }}</th><td>{{ number(registrationTotal) }}</td><td v-for="(item, index) in data?.registrations" :key="item.date">{{ number(registrationSeries[0]?.counts[index] ?? 0) }}</td></TableTotals></table></div>
@@ -283,27 +298,27 @@ const salespersonOption = computed(() => collectionsOption(salespersonSeries.val
         </div>
       </div>
 
-      <section class="dashboard-panel receipts-panel">
-        <div class="panel-top receipts-heading statistics-heading"><div><h2><Wallet :size="17" />{{ text('部门月度回款分析', 'Monthly collections by department') }}</h2><p>{{ appliedYear }} · UTC+8 · {{ data?.receipts.departments.length ? text('营销中心（四部合计）与业务一至四部 · $', 'Marketing center (I–IV total) and sales departments · $') : text('按业务部门对比 · $ · 仅展示获授权数据', 'By sales department · $ · Authorized data only') }}</p></div><div class="statistics-filters"><label class="year-filter">{{ text('年份', 'Year') }}<select v-model.number="year" :aria-label="text('回款年份', 'Collections year')" :disabled="busy" @change="refresh"><option v-for="item in years" :key="item" :value="item">{{ item }}</option></select></label><label class="mom-filter"><input v-model="departmentMom" type="checkbox" aria-label="部门回款上月环比">{{ text('上月环比', 'Month-over-month') }}</label></div></div>
+      <section v-if="visible('department_receipts')" class="dashboard-panel receipts-panel"><p class="chart-scope" data-chart-scope>{{ chart('department_receipts')?.scopeLabel }}</p>
+        <div class="panel-top receipts-heading statistics-heading"><div><h2><Wallet :size="17" />{{ text('部门月度回款分析', 'Monthly collections by department') }}</h2><p>{{ appliedYear }} · UTC+8 · {{ data?.departmentReceipts.departments.length ? text('获授权部门组织汇总 · $', 'Authorized department summaries · $') : text('按业务部门对比 · $ · 仅展示获授权数据', 'By sales department · $ · Authorized data only') }}</p></div><div class="statistics-filters"><label class="year-filter">{{ text('年份', 'Year') }}<select v-model.number="year" :aria-label="text('回款年份', 'Collections year')" :disabled="busy" @change="refresh"><option v-for="item in years" :key="item" :value="item">{{ item }}</option></select></label><label class="mom-filter"><input v-model="departmentMom" type="checkbox" aria-label="部门回款上月环比">{{ text('上月环比', 'Month-over-month') }}</label></div></div>
         <div v-if="departmentMom" class="receipt-summary mom-summary"><span>{{ latestReceiptMonth }} · {{ text('营销中心较上月', 'Marketing center change') }}</span><ReceiptChangeValue :value="latestMarketingChange" /><small>{{ momHint }}</small></div>
-        <div v-else class="receipt-summary"><span>{{ appliedYear }} {{ text('年营销中心回款合计', 'marketing center total') }}</span><strong>{{ data?.receipts.departments.length ? money(receiptTotal) : '—' }}</strong><small>{{ marketingBreakdown }}{{ marketingBreakdown ? ' · ' : '' }}{{ text('默认展示最近 6 个月，可向左拖动查看历史；全年合计不重复累加。', 'Latest 6 months shown; drag left for earlier months. Annual totals are counted once.') }}</small></div>
-        <div class="receipts-chart"><p v-if="!data?.receipts.departments.length" class="empty-message">{{ text('暂无可查看的回款统计', 'No collections statistics available') }}</p><EChart v-else :option="receiptOption" :label="text('各部门月度回款对比柱状图', 'Monthly collections by department')" @select="event => selectReceipt(event, false)" /></div>
-        <details :open="departmentDetailsOpen" class="data-details" @toggle="departmentDetailsOpen = ($event.target as HTMLDetailsElement).open"><summary>{{ departmentMom ? text('部门环比明细 · 差额 / 比例', 'Department changes · Amount / Rate') : text('查看回款明细数据', 'View collections data') }}</summary><div class="table-scroll"><table class="receipt-table" :style="{ minWidth: `${160 + receiptSeries.length * 132}px` }"><colgroup><col class="receipt-month-column"><col v-for="item in receiptSeries" :key="item.id"></colgroup><thead><tr><th>{{ text('月份', 'Month') }}</th><th v-for="dept in receiptSeries" :key="dept.id" :class="{ 'aggregate-cell': dept.id === data?.receipts.marketingCenter?.id }">{{ dept.name || departments[dept.id] || dept.id }}</th></tr></thead><tbody><tr v-for="{ month, index } in receiptRows" :key="month"><td>{{ month }}</td><td v-for="dept in receiptSeries" :key="dept.id" :class="{ 'aggregate-cell': dept.id === data?.receipts.marketingCenter?.id }"><ReceiptChangeValue v-if="departmentMom" :value="changesFor(dept)[index]" /><button v-else class="receipt-amount receipt-link" :title="receiptBreakdown(dept, index)" @click="openReceipts(month, dept.id === data?.receipts.marketingCenter?.id ? undefined : dept.id)">{{ money(dept.amounts[index] ?? 0) }}</button></td></tr></tbody><TableTotals><th scope="row">{{ departmentMom ? text('差额合计（可比月份）', 'Total change (comparable months)') : text('合计（所选年份）', 'Total (selected year)') }}</th><td v-for="dept in receiptSeries" :key="dept.id"><ReceiptChangeValue v-if="departmentMom" :value="changeTotalFor(dept)" /><span v-else class="receipt-amount">{{ money(sumMoney(dept.amounts)) }}</span></td></TableTotals></table></div></details><p class="mom-note" :class="{ 'mom-note-hidden': !departmentMom }" :aria-hidden="!departmentMom">{{ text('合计比例 = 差额合计 ÷ 对应上月金额合计；缺少上月数据的月份不计入合计。上月为 0 时，非零差额不计算比例。', 'Total rate = total change ÷ total prior-month amounts; missing comparisons are excluded. Nonzero changes from zero have no percentage rate.') }}</p>
+        <div v-else class="receipt-summary"><span>{{ appliedYear }} {{ text('年获授权部门回款合计', 'authorized department total') }}</span><strong>{{ data?.departmentReceipts.departments.length ? money(receiptTotal) : '—' }}</strong><small>{{ marketingBreakdown }}{{ marketingBreakdown ? ' · ' : '' }}{{ text('默认展示最近 6 个月，可向左拖动查看历史；全年合计不重复累加。', 'Latest 6 months shown; drag left for earlier months. Annual totals are counted once.') }}</small></div>
+        <div class="receipts-chart"><p v-if="!data?.departmentReceipts.departments.length" class="empty-message">{{ text('暂无可查看的回款统计', 'No collections statistics available') }}</p><EChart v-else :option="receiptOption" :can-export="chart('department_receipts')?.canExport === true" :label="text('各部门月度回款对比柱状图', 'Monthly collections by department')" /></div>
+        <details :open="departmentDetailsOpen" class="data-details" @toggle="departmentDetailsOpen = ($event.target as HTMLDetailsElement).open"><summary>{{ departmentMom ? text('部门环比明细 · 差额 / 比例', 'Department changes · Amount / Rate') : text('查看回款明细数据', 'View collections data') }}</summary><div class="table-scroll"><table class="receipt-table" :style="{ minWidth: `${160 + receiptSeries.length * 132}px` }"><colgroup><col class="receipt-month-column"><col v-for="item in receiptSeries" :key="item.id"></colgroup><thead><tr><th>{{ text('月份', 'Month') }}</th><th v-for="dept in receiptSeries" :key="dept.id" :class="{ 'aggregate-cell': dept.id === data?.departmentReceipts.marketingCenter?.id }">{{ dept.name || departments[dept.id] || dept.id }}</th></tr></thead><tbody><tr v-for="{ month, index } in receiptRows" :key="month"><td>{{ month }}</td><td v-for="dept in receiptSeries" :key="dept.id" :class="{ 'aggregate-cell': dept.id === data?.departmentReceipts.marketingCenter?.id }"><ReceiptChangeValue v-if="departmentMom" :value="changesFor(dept)[index]" /><span v-else class="receipt-amount" :title="receiptBreakdown(dept, index)">{{ money(dept.amounts[index] ?? 0) }}</span></td></tr></tbody><TableTotals><th scope="row">{{ departmentMom ? text('差额合计（可比月份）', 'Total change (comparable months)') : text('合计（所选年份）', 'Total (selected year)') }}</th><td v-for="dept in receiptSeries" :key="dept.id"><ReceiptChangeValue v-if="departmentMom" :value="changeTotalFor(dept)" /><span v-else class="receipt-amount">{{ money(sumMoney(dept.amounts)) }}</span></td></TableTotals></table></div></details><p class="mom-note" :class="{ 'mom-note-hidden': !departmentMom }" :aria-hidden="!departmentMom">{{ text('合计比例 = 差额合计 ÷ 对应上月金额合计；缺少上月数据的月份不计入合计。上月为 0 时，非零差额不计算比例。', 'Total rate = total change ÷ total prior-month amounts; missing comparisons are excluded. Nonzero changes from zero have no percentage rate.') }}</p>
       </section>
-      <section class="dashboard-panel receipts-panel salesperson-panel">
+      <section v-if="visible('salesperson_receipts')" class="dashboard-panel receipts-panel salesperson-panel"><p class="chart-scope" data-chart-scope>{{ chart('salesperson_receipts')?.scopeLabel }}</p>
         <div class="panel-top receipts-heading statistics-heading">
-          <div><h2><Users :size="17" />{{ text('业务员月度回款分析', 'Monthly collections by salesperson') }}</h2><p>{{ appliedYear }} · UTC+8 · $ · {{ text('部门合计与业务员并列对比 · 与上方回款口径一致', 'Department total alongside salespeople · same collection basis as above') }}</p></div>
-          <div class="statistics-filters"><label class="year-filter">{{ text('部门', 'Department') }}<select v-model="selectedDepartmentId" :disabled="busy || !data?.receipts.departments.length" :aria-label="text('业务员回款部门', 'Salesperson collections department')"><option v-for="department in data?.receipts.departments" :key="department.id" :value="department.id">{{ department.name || departments[department.id] || department.id }}</option></select></label><label class="mom-filter"><input v-model="salespersonMom" type="checkbox" aria-label="业务员回款上月环比">{{ text('上月环比', 'Month-over-month') }}</label></div>
+          <div><h2><Users :size="17" />{{ text('业务员月度回款分析', 'Monthly collections by salesperson') }}</h2><p>{{ appliedYear }} · UTC+8 · $ · {{ text('授权人员合计与业务员并列对比', 'Authorized people total alongside salespeople') }}</p></div>
+          <div class="statistics-filters"><label v-if="!visible('department_receipts')" class="year-filter">{{ text('年份', 'Year') }}<select v-model.number="year" aria-label="回款年份" :disabled="busy" @change="refresh"><option v-for="item in years" :key="item" :value="item">{{ item }}</option></select></label><label class="year-filter">{{ text('部门', 'Department') }}<select v-model="selectedDepartmentId" :disabled="busy || !data?.receipts.departments.length" :aria-label="text('业务员回款部门', 'Salesperson collections department')"><option v-for="department in data?.receipts.departments" :key="department.id" :value="department.id">{{ department.name || departments[department.id] || department.id }}</option></select></label><label class="mom-filter"><input v-model="salespersonMom" type="checkbox" aria-label="业务员回款上月环比">{{ text('上月环比', 'Month-over-month') }}</label></div>
         </div>
         <div v-if="salespersonMom" class="receipt-summary mom-summary"><span>{{ latestReceiptMonth }} · {{ selectedDepartment?.name }} · {{ text('较上月', 'Change from prior month') }}</span><ReceiptChangeValue :value="latestDepartmentChange" /><small>{{ momHint }}</small></div>
-        <div v-else class="receipt-summary"><span>{{ selectedDepartment?.name || text('所选部门', 'Selected department') }} · {{ text('所选年份回款合计', 'selected year total') }}</span><strong>{{ selectedDepartment ? money(selectedDepartmentTotal) : '—' }}</strong><small>{{ receiptBreakdown(selectedDepartment) }}{{ selectedDepartment?.breakdown ? ' · ' : '' }}{{ text('蓝紫色为部门合计，不与个人数据重复累加；年份与上方同步。', 'Periwinkle indicates the department total, counted once; year follows the chart above.') }}</small></div>
-        <div class="receipts-chart"><EChart v-if="salespersonSeries.length" :option="salespersonOption" :label="text('业务员月度回款对比柱状图', 'Monthly collections comparison by salesperson')" @select="event => selectReceipt(event, true)" /><p v-else class="empty-message">{{ selectedDepartment ? text('该部门在所选年份暂无获授权的业务员回款数据', 'No authorized salesperson collections for this department and year') : text('暂无可查看的业务员回款统计', 'No salesperson collections statistics available') }}</p></div>
+        <div v-else class="receipt-summary"><span>{{ selectedDepartment?.name || text('所选部门', 'Selected department') }} · {{ text('所选年份回款合计', 'selected year total') }}</span><strong>{{ selectedDepartment ? money(selectedDepartmentTotal) : '—' }}</strong><small>{{ receiptBreakdown(selectedDepartment) }}{{ selectedDepartment?.breakdown ? ' · ' : '' }}{{ text('蓝紫色为授权人员合计，不与个人数据重复累加；年份与上方同步。', 'Periwinkle indicates the department total, counted once; year follows the chart above.') }}</small></div>
+        <div class="receipts-chart"><EChart v-if="salespersonSeries.length" :option="salespersonOption" :can-export="chart('salesperson_receipts')?.canExport === true" :label="text('业务员月度回款对比柱状图', 'Monthly collections comparison by salesperson')" @select="event => selectReceipt(event, true)" /><p v-else class="empty-message">{{ selectedDepartment ? text('该部门在所选年份暂无获授权的业务员回款数据', 'No authorized salesperson collections for this department and year') : text('暂无可查看的业务员回款统计', 'No salesperson collections statistics available') }}</p></div>
         <p v-if="selectedDepartment && !salespeople.length" class="detail-empty-note">{{ text('该部门在所选年份暂无获授权的业务员回款数据', 'No authorized salesperson collections for this department and year') }}</p>
-        <details v-if="salespersonSeries.length" :open="salespersonDetailsOpen" class="data-details" @toggle="salespersonDetailsOpen = ($event.target as HTMLDetailsElement).open"><summary>{{ salespersonMom ? text('部门与业务员环比明细 · 差额 / 比例', 'Department and salesperson changes · Amount / Rate') : text('部门与业务员回款明细', 'Department and salesperson collections data') }}</summary><div class="table-scroll"><table class="receipt-table" :style="{ minWidth: `${160 + salespersonSeries.length * 132}px` }"><colgroup><col class="receipt-month-column"><col v-for="item in salespersonSeries" :key="item.id"></colgroup><thead><tr><th>{{ text('月份', 'Month') }}</th><th v-for="(person, personIndex) in salespersonSeries" :key="person.id" :class="{ 'aggregate-cell': personIndex === 0 }">{{ person.name }}</th></tr></thead><tbody><tr v-for="{ month, index } in receiptRows" :key="month"><td>{{ month }}</td><td v-for="(person, personIndex) in salespersonSeries" :key="person.id" :class="{ 'aggregate-cell': personIndex === 0 }"><ReceiptChangeValue v-if="salespersonMom" :value="changesFor(person)[index]" /><button v-else class="receipt-amount receipt-link" :title="receiptBreakdown(person, index)" @click="openReceipts(month, selectedDepartmentId, personIndex === 0 ? undefined : person.id)">{{ money(person.amounts[index] ?? 0) }}</button></td></tr></tbody><TableTotals><th scope="row">{{ salespersonMom ? text('差额合计（可比月份）', 'Total change (comparable months)') : text('合计（所选年份）', 'Total (selected year)') }}</th><td v-for="person in salespersonSeries" :key="person.id"><ReceiptChangeValue v-if="salespersonMom" :value="changeTotalFor(person)" /><span v-else class="receipt-amount">{{ money(sumMoney(person.amounts)) }}</span></td></TableTotals></table></div></details><p class="mom-note" :class="{ 'mom-note-hidden': !salespersonMom }" :aria-hidden="!salespersonMom">{{ text('合计比例 = 差额合计 ÷ 对应上月金额合计；缺少上月数据的月份不计入合计。上月为 0 时，非零差额不计算比例。', 'Total rate = total change ÷ total prior-month amounts; missing comparisons are excluded. Nonzero changes from zero have no percentage rate.') }}</p>
+        <details v-if="salespersonSeries.length" :open="salespersonDetailsOpen" class="data-details" @toggle="salespersonDetailsOpen = ($event.target as HTMLDetailsElement).open"><summary>{{ salespersonMom ? text('部门与业务员环比明细 · 差额 / 比例', 'Department and salesperson changes · Amount / Rate') : text('部门与业务员回款明细', 'Department and salesperson collections data') }}</summary><div class="table-scroll"><table class="receipt-table" :style="{ minWidth: `${160 + salespersonSeries.length * 132}px` }"><colgroup><col class="receipt-month-column"><col v-for="item in salespersonSeries" :key="item.id"></colgroup><thead><tr><th>{{ text('月份', 'Month') }}</th><th v-for="(person, personIndex) in salespersonSeries" :key="person.id" :class="{ 'aggregate-cell': personIndex === 0 }">{{ person.name }}</th></tr></thead><tbody><tr v-for="{ month, index } in salespersonReceiptRows" :key="month"><td>{{ month }}</td><td v-for="(person, personIndex) in salespersonSeries" :key="person.id" :class="{ 'aggregate-cell': personIndex === 0 }"><ReceiptChangeValue v-if="salespersonMom" :value="changesFor(person)[index]" /><button v-else :disabled="!canDetails('salesperson_receipts')" class="receipt-amount receipt-link" :title="receiptBreakdown(person, index)" @click="openReceipts(month, selectedDepartmentId, personIndex === 0 ? undefined : person.id)">{{ money(person.amounts[index] ?? 0) }}</button></td></tr></tbody><TableTotals><th scope="row">{{ salespersonMom ? text('差额合计（可比月份）', 'Total change (comparable months)') : text('合计（所选年份）', 'Total (selected year)') }}</th><td v-for="person in salespersonSeries" :key="person.id"><ReceiptChangeValue v-if="salespersonMom" :value="changeTotalFor(person)" /><span v-else class="receipt-amount">{{ money(sumMoney(person.amounts)) }}</span></td></TableTotals></table></div></details><p class="mom-note" :class="{ 'mom-note-hidden': !salespersonMom }" :aria-hidden="!salespersonMom">{{ text('合计比例 = 差额合计 ÷ 对应上月金额合计；缺少上月数据的月份不计入合计。上月为 0 时，非零差额不计算比例。', 'Total rate = total change ÷ total prior-month amounts; missing comparisons are excluded. Nonzero changes from zero have no percentage rate.') }}</p>
       </section>
-      <OrderVolumeAnalysis :revision="orderVolumeRevision" />
-      <OrderVolumeAnalysis customer :revision="orderVolumeRevision" />
-      <FreightAnalysis :revision="orderVolumeRevision" />
+      <OrderVolumeAnalysis v-if="visible('order_volume')" :revision="orderVolumeRevision" />
+      <OrderVolumeAnalysis v-if="visible('customer_orders')" customer :revision="orderVolumeRevision" />
+      <FreightAnalysis v-if="visible('freight')" :revision="orderVolumeRevision" />
       <p v-if="data?.source === 'mock'" class="dashboard-footnote">{{ text('MOCK 演示数据 · 组织、员工与订单相互关联 · 日期筛选用于注册趋势，年份筛选用于回款分析。', 'MOCK demo data · Linked organization, employees and orders · Dates filter registrations; year filters collections.') }}</p>
       <p v-else class="dashboard-footnote">{{ text('履约数据按登录账号的 FOP 授权范围查询；未绑定或权限不可用时不展示数据。日期筛选用于注册趋势，年份筛选用于回款分析。', 'Fulfillment data follows your FOP user permissions. No data is shown without a valid binding and authorization. Dates filter registrations; year filters collections.') }}</p>
     </main>
@@ -311,6 +326,7 @@ const salespersonOption = computed(() => collectionsOption(salespersonSeries.val
 </template>
 
 <style scoped>
+.chart-scope{padding:12px 20px 0;font-size:11px;color:#6478b3}
 .receipt-link { cursor: pointer; text-decoration: underline; text-underline-offset: 3px; color: inherit; }
 .receipt-link:hover { color: #5873d4; }
 .mom-filter{display:flex;align-items:center;gap:7px;font-size:11px;color:#7b89a0;white-space:nowrap;cursor:pointer}.mom-filter input{width:14px;height:14px;accent-color:#94a5dd}.mom-summary :deep(.receipt-change){flex-direction:row;align-items:center;gap:10px}.mom-summary :deep(.change-amount){font-size:23px;font-weight:700}.mom-summary :deep(.change-percent){font-size:11px}.mom-summary small{max-width:550px;line-height:1.7}.mom-note{padding:0 20px 14px;font-size:10px;color:#8793a7;line-height:1.7}

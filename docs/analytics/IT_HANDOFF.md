@@ -1,13 +1,13 @@
 # HyperZone 分析与销售工作台 IT 交付入口
 
-更新日期：2026-10-23（UTC+8）。本次在原有全量需求上追加销售个人收款／净毛利月、周、天统计；注册、部门／业务员回款、订单量、客户分析、物流运费、权限和全部历史待办保留。
+更新日期：2026-10-23（UTC+8）。最新追加P0全局图表授权及员工数据隔离，完整需求第1.1–1.3节优先约束全部图表。本次在原有全量需求上追加销售个人收款／净毛利月、周、天统计；注册、部门／业务员回款、订单量、客户分析、物流运费、权限和全部历史待办保留。
 
 ## 阅读顺序
 
 1. [完整需求HTML](HYPERZONE_ECHARTS_API_REQUIREMENTS.html) 或 [完整需求Markdown](HYPERZONE_ECHARTS_API_REQUIREMENTS.md)：业务、页面、字段、审计与验收的全量交付。源正文为 [REQUIREMENTS_OVERVIEW.md](REQUIREMENTS_OVERVIEW.md)，个人收款／净毛利在第8节。
-2. [OpenAPI](../openapi/hyperzone-analytics.openapi.json)：可导入API工具的平台HTTP契约，servers为`/api`；不是FOP原生接口目录。新增 `/autoflow/integrations/fop/sales-performance` 与 `/sales-performance/details`。
+2. [OpenAPI](../openapi/hyperzone-analytics.openapi.json)：23项平台HTTP操作、111个模型，servers为`/api`；不是FOP原生接口目录。最新增加 `/autoflow/integrations/fop/chart-access` 与 `/users/{id}/chart-permissions`，包含内部FOP授权、客户当前归属和独立组织汇总字段契约。
 3. [FOP源码映射](HYPERZONE_FOP_SOURCE_MAPPING.md)：实体／字段／Java行号证据。第9节是物流成本，第10节是月结毛利、预计贡献和当前数据缺口。
-4. [后续待办与人工核对](FOLLOW_UP_CHECKLIST.md)：原T01–T20/H01–H22/D01–D15保留；本次新增T21–T26/H23–H28/D16–D22，按模板分配、回填和关闭。
+4. [后续待办与人工核对](FOLLOW_UP_CHECKLIST.md)：完整T01–T30、H01–H32、D01–D29；最新权限任务为T27–T30/H29–H32/D23–D29，按模板分配、回填和关闭。
 5. [验证记录](VERIFICATION.md)：仅此处记录实际执行的测试、HTTP、浏览器、生成物检查与限制；文档或Mock存在不能替代验证。详细消费检查见 [前端审计](ECHARTS_FRONTEND_AUDIT.md) 和 [后台契约审计](ECHARTS_BACKEND_CONTRACT_AUDIT.md)。
 
 ## 当前交付边界
@@ -54,4 +54,12 @@
 
 ## 同仓库最新客户开发功能
 
-交付代码已普通合并远程`8172a96`的1688寻源功能，保留远程实现与历史。客户开发／寻源专项设计与执行记录位于 `docs/superpowers/specs/` 和 `docs/superpowers/plans/` 的2026-08-03至2026-08-05文档；其外部供应商接口不是本21项FOP分析HTTP契约。最终集成验证756项及本地数据库迁移记录见VERIFICATION.md。IT应同时按合并后的package-lock安装依赖，并应用随工程附带的数据库迁移。
+交付代码已普通合并远程`8172a96`的1688寻源功能，保留远程实现与历史。客户开发／寻源专项设计与执行记录位于 `docs/superpowers/specs/` 和 `docs/superpowers/plans/` 的2026-08-03至2026-08-05文档；其外部供应商接口不在本23项FOP分析及权限HTTP契约内。最新权限集成验证843项及本地数据库迁移记录见VERIFICATION.md。IT应按package-lock安装依赖，并应用随工程附带的数据库迁移。
+
+## 图表权限本轮交接
+
+采用岗位模板＋账号例外；普通员工本人、经理部门成员，个人工作台默认本人。图表可见、业务记录、组织汇总、明细／导出分别校验。原有ECharts结构保留。IT先核对员工/FOP身份与客户归属，再接独立组织汇总许可，最后执行跨账号排名、趋势与明细对账；不能因个人看不到其他成员而将部门完整合计替换为个人小计。新增待办T27–T30、人工核对H29–H32、验收D23–D29见FOLLOW_UP_CHECKLIST。当前Mock及本工程权限实现不表示正式FOP汇总接口已发布。
+
+新FOP适配器继承 `FopDataProvider.customerOwnershipMode=current_required`，订单／收款候选必须携带 `currentCustomerOwner`；缺少时明确失败。仅显式选择 `legacy_historical` 的旧适配器可使用历史归属兼容，并返回归属来源提示。组织汇总必须实现 `getOrganizationSummary` 并取得 `organizationSummaries` 独立许可，不能用当前员工的订单明细拼成部门完整业绩。
+
+部署前先备份账户库，再应用 `1784733000000-AddChartPermissions`；默认空数组继承模板。非空逐图配置存在时，迁移拒绝回滚，避免静默丢失限制。配置入口：系统管理员侧栏“账号与权限”→“配置图表权限”；不需要给普通员工系统管理权限。部署后按D23–D29验证直接接口访问、跨账号缓存、客户移交及经理本人默认。

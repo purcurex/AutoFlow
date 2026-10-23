@@ -81,6 +81,8 @@ describe('FOP user isolation HTTP API (repository and provider boundaries stubbe
         listReceipts: (identity: any, grant: any) => provider.listReceipts(identity, grant),
         listFreight: (identity: any, grant: any) => provider.listFreight(identity, grant),
         listProfits: (identity: any, grant: any) => provider.listProfits(identity, grant),
+        getAnalytics: (identity: any, grant: any, range: any) => provider.getAnalytics(identity, grant, range),
+        getOrganizationSummary: (identity: any, grant: any, query: any) => provider.getOrganizationSummary(identity, grant, query),
       }).compile()
     app = module.createNestApplication()
     app.setGlobalPrefix('api')
@@ -105,9 +107,88 @@ describe('FOP user isolation HTTP API (repository and provider boundaries stubbe
       listReceipts: async () => structuredClone(receiptRecords),
       listFreight: async () => structuredClone(freightRecords),
       listProfits: async () => structuredClone(profitRecords),
+      getAnalytics: async (subject: any) => ({ subject, rates: [], registrations: [], registrationEntries: [] }),
+      getOrganizationSummary: async () => { throw new Error('Summary adapter is not configured') },
     }
   })
   afterAll(async () => { await app?.close() })
+
+  describe('per-chart effective permissions', () => {
+    const override = (chartId: string, values = {}) => ({ chartId, visibility: 'inherit', dataScope: 'inherit', summaryMode: 'inherit', summaryDepartments: [], details: 'inherit', export: 'inherit', ...values })
+    const volume = '/autoflow/integrations/fop/order-volume?category=customer&grain=month&year=2020&warehouse=ALL'
+    const chartAccess = () => get('/autoflow/integrations/fop/chart-access')
+    it('returns sanitized effective capabilities, requires authentication and rejects identity injection', async () => {
+      await request(app.getHttpServer()).get('/api/autoflow/integrations/fop/chart-access').expect(401)
+      const result = await chartAccess().expect(200)
+      expect(result.headers['cache-control']).toBe('private, no-store')
+      expect(result.body.charts).toHaveLength(7)
+      expect(result.body.charts.find((c: any) => c.chartId === 'customer_orders')).toMatchObject({ visible: true, dataScope: 'self' })
+      for (const secret of ['allowedOrderIds', 'alice-fop', 'alice-owner']) expect(JSON.stringify(result.body.charts)).not.toContain(secret)
+      for (const injected of ['userId=bob-fop', 'tenantId=tenant-2', 'chartId=customer_orders', 'dataScope=all']) await get('/autoflow/integrations/fop/chart-access?' + injected).expect(400)
+    })
+    it.each([
+      ['customer_orders', volume],
+      ['order_volume', volume.replace('category=customer', 'category=organization')],
+      ['freight', '/autoflow/integrations/fop/freight?grain=month&year=2020&warehouse=ALL'],
+      ['sales_performance', '/autoflow/integrations/fop/sales-performance?from=2020-01-01&to=2020-01-31&grain=month'],
+      ['salesperson_receipts', '/autoflow/integrations/fop/receipts?from=2020-01-01&to=2020-01-31&workbenchRole=sales'],
+    ])('denies %s at its direct endpoint despite upstream allowlists', async (chartId, path) => {
+      accounts.get(alice).chartPermissions = [override(chartId, { visibility: 'deny' })]
+      await get(path).expect(403)
+      expect((await chartAccess().expect(200)).body.charts.find((c: any) => c.chartId === chartId)).toMatchObject({ visible: false, canViewDetails: false, canExport: false })
+    })
+    it('keeps rejected registration and receipt money out of dashboard payloads', async () => {
+      accounts.get(alice).chartPermissions = ['registrations', 'department_receipts', 'salesperson_receipts'].map(chartId => override(chartId, { visibility: 'deny' }))
+      provider.resolvePermissions = async (subject: any) => ({ subject, allowedOrderIds: [], allowedReceiptIds: ['r'], analyticsScopes: ['receipts', 'registrations'], organizationSummaries: [{ chartId: 'department_receipts', departments: [{ code: 'sales1', departmentId: 'd1' }] }] })
+      provider.getAnalytics = async (subject: any) => ({ subject, rates: [], registrations: [{ date: '2020-01-01', count: 999999 }], registrationEntries: [] })
+      receiptRecords = [receipt('r', { amount: 999999 })]
+      const body = (await dashboard().expect(200)).body
+      expect(body.registrations).toEqual([]); expect(body.registrationDepartments).toEqual([])
+      expect(body.receipts.months).toEqual([]); expect(body.departmentReceipts.months).toEqual([])
+      expect(JSON.stringify(body)).not.toContain('999999')
+    })
+    it('ranks two sales accounts separately before Top10, other, search and paged details', async () => {
+      accounts.get(bob).businessRole = 'salesperson'; accounts.get(bob).businessEmployeeId = 'bob-owner'; accounts.get(bob).workbenchRoles = ['sales']
+      records = ['alice-owner', 'bob-owner'].flatMap(ownerId => Array.from({ length: 12 }, (_, i) => order(`${ownerId}-${i}`, {
+        reviewStatus: 'approved', customerId: `${ownerId}-customer-${i}`, customerCode: `${ownerId}-${i}`, customerName: `${ownerId} customer ${i}`, owner: { id: ownerId, name: ownerId }, department: { id: 'd1', name: '业务一部' }, departmentPathIds: ['d1'], salesDepartmentCode: 'sales1', currentCustomerOwner: { id: ownerId, departmentId: 'd1', departmentPathIds: ['d1'] },
+      })))
+      provider.resolvePermissions = async (subject: any) => ({ subject, allowedOrderIds: records.map(r => r.id) })
+      for (const [accountId, ownerId, forbiddenOwner] of [[alice, 'alice-owner', 'bob-owner'], [bob, 'bob-owner', 'alice-owner']]) {
+        const result = (await get(volume, accountId).expect(200)).body
+        expect(result.total).toBe(12); expect(result.customerCount).toBe(12)
+        expect(result.series.filter((r: any) => r.kind === 'detail')).toHaveLength(10)
+        expect(result.series.find((r: any) => r.id === 'other').total).toBe(2)
+        expect(result.series.filter((r: any) => r.kind === 'detail').every((r: any) => r.entityId.startsWith(ownerId))).toBe(true)
+        expect((await get('/autoflow/integrations/fop/order-volume/customers?keyword=' + forbiddenOwner, accountId).expect(200)).body.total).toBe(0)
+        const details = (await get(volume.replace('/order-volume?', '/order-volume/orders?') + '&workbenchRole=sales&seriesId=other', accountId).expect(200)).body
+        expect(details.total).toBe(2); expect(details.items.every((r: any) => r.owner.id === ownerId)).toBe(true)
+      }
+      accounts.get(alice).businessRole = 'department_manager'; accounts.get(alice).businessDepartmentId = 'd1'
+      expect((await get(volume).expect(200)).body.total).toBe(24)
+      accounts.get(alice).chartPermissions = [override('customer_orders', { dataScope: 'self' })]
+      expect((await get(volume).expect(200)).body.total).toBe(12)
+    })
+    it('permits only independently granted organization aggregates and blocks summary detail origin spoofing', async () => {
+      accounts.get(alice).chartPermissions = ['registrations', 'department_receipts', 'order_volume'].map(chartId => override(chartId, { visibility: 'allow', summaryMode: 'selected', summaryDepartments: ['sales2'] }))
+      provider.resolvePermissions = async (subject: any) => ({ subject, allowedOrderIds: [], organizationSummaries: ['registrations', 'department_receipts', 'order_volume'].map(chartId => ({ chartId, departments: [{ code: 'sales1', departmentId: 'd1' }, { code: 'sales2', departmentId: 'd2' }] })) })
+      provider.listOrders = async () => { throw new Error('No order enumeration') }; provider.listReceipts = async () => { throw new Error('No receipt enumeration') }
+      provider.getOrganizationSummary = async (subject: any, _grant: any, query: any) => ({ subject, chartId: query.chartId, rows: ['sales1', 'sales2'].map(salesDepartmentCode => ({ date: '2020-01-10', salesDepartmentCode, count: 24, ...(query.chartId === 'department_receipts' ? { amount: 192, currency: 'USD', sourceType: 'fulfillment' } : {}), ...(query.chartId === 'order_volume' ? { warehouseCode: 'HZ' } : {}), owner: { id: 'PRIVATE', name: 'PRIVATE' }, customerId: 'PRIVATE' })) })
+      const result = (await dashboard().expect(200)).body
+      expect(result.departmentReceipts.departments).toMatchObject([{ id: 'sales2', salespeople: [] }])
+      expect(result.registrationDepartments).toMatchObject([{ id: 'sales2', salespeople: [] }])
+      expect(result.chartAccess.find((c: any) => c.chartId === 'registrations')).toMatchObject({ summaryOnly: true, dataScope: 'none' })
+      expect(JSON.stringify(result)).not.toContain('PRIVATE')
+      const organization = volume.replace('category=customer', 'category=organization') + '&view=summary'
+      expect((await get(organization).expect(200)).body).toMatchObject({ total: 24, summaryOnly: true, customerCount: null, options: { objects: [] }, chartAccess: { canViewDetails: false } })
+      await get(organization.replace('/order-volume?', '/order-volume/orders?') + '&workbenchRole=sales').expect(403)
+      await get('/autoflow/integrations/fop/receipts?from=2020-01-01&to=2020-01-31&workbenchRole=sales&chartId=department_receipts').expect(403)
+      await get(volume + '&view=summary').expect(400)
+    })
+    it('discards a response if a chart override is changed while upstream data is loading', async () => {
+      provider.listOrders = async () => { accounts.get(alice).chartPermissions = [override('customer_orders', { visibility: 'deny' })]; return records }
+      expect((await get(volume).expect(403)).body.code).toBe('fop_binding_changed')
+    })
+  })
 
   describe('sales performance endpoints', () => {
     const root = '/autoflow/integrations/fop/sales-performance'

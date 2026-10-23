@@ -1,3 +1,4 @@
+import type { EffectiveChartAccess } from '../users/chart-permissions'
 import type { FopReceipt, SalesDepartmentCode } from './fop-data.types'
 export type PerformanceGrain = 'month' | 'week' | 'day'
 export interface PerformanceQuery { from: string; to: string; grain: PerformanceGrain; ownerId?: string }
@@ -26,12 +27,14 @@ export interface PerformanceMetrics {
 export interface PerformancePeriod extends PerformanceMetrics { id: string; label: string; from: string; to: string; profitStatus: 'none' | 'estimated' | 'settled' | 'mixed' | 'unallocated' }
 export interface PerformanceUnallocated { month: string; amount: number; count: number }
 export interface PerformanceData {
+  chartAccess?: EffectiveChartAccess
   source: 'mock' | 'fop'; query: PerformanceQuery; timeZone: 'UTC+8'; currency: 'USD'; asOf: string
   owners: PerformanceOwner[]; selectedOwner: PerformanceOwner | null; canSelectOwner: boolean
   periods: PerformancePeriod[]; totals: PerformanceMetrics; unallocatedSettlements: PerformanceUnallocated[]
 }
 export interface PerformanceDetailsQuery extends PerformanceQuery { kind: 'receipts' | 'profit'; periodId?: string; page: number; pageSize: number }
 export interface PerformancePage {
+  chartAccess?: EffectiveChartAccess
   source: 'mock' | 'fop'; timeZone: 'UTC+8'; currency: 'USD'; asOf: string
   kind: 'receipts' | 'profit'; total: number; page: number; pageSize: number
   receipts: FopReceipt[]; profits: FopProfit[]; totals: PerformanceMetrics

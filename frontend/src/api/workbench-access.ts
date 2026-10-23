@@ -1,3 +1,4 @@
+import type { ChartPermissionOverride } from './fop-chart-access'
 import type { WorkbenchRole } from '@/utils/workbench'
 import type { FopBinding } from './fop-access'
 
@@ -8,6 +9,7 @@ export interface WorkbenchAccount {
   role: 'admin' | 'user'; workbenchRoles: WorkbenchRole[]
   businessScope?: BusinessScope
   fopBinding: FopBinding | null
+  chartPermissions: ChartPermissionOverride[]
 }
 export async function getWorkbenchAccess(role?: WorkbenchRole): Promise<WorkbenchAccess> {
   const { default: api } = await import('./index')
@@ -34,4 +36,9 @@ export async function updateBusinessScope(id: string, scope: BusinessScope): Pro
 export async function updateManagementRole(id: string, role: WorkbenchAccount['role']): Promise<WorkbenchAccount> {
   const { default: api } = await import('./index')
   return api.put(`/users/${encodeURIComponent(id)}/management-role`, { role })
+}
+
+export async function updateChartPermissions(id: string, chartPermissions: ChartPermissionOverride[]): Promise<WorkbenchAccount> {
+  const { default: api } = await import('./index')
+  return api.put(`/users/${encodeURIComponent(id)}/chart-permissions`, { chartPermissions })
 }

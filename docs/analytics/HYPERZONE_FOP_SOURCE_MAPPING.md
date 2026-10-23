@@ -275,3 +275,15 @@ FOP收入使用收款 `hzkj_exrate`；没有收款汇率时回退当前 `bd_exra
 证据：[实时身份及范围，49–78、139–146行](</Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/ordercenter/service/OrderGrossProfitReportPermissionService.java:49>)；[月报筛选，52–68行](</Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/ordercenter/service/SalespersonMonthlyGrossProfitReportService.java:52>)；[月报表单调用](</Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/ordercenter/plugin/form/SalespersonMonthlyGrossProfitReportFormPlugin.java:103>)；[实时表单调用](</Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/ordercenter/plugin/form/OrderGrossProfitRealtimeReportFormPlugin.java:192>)。
 
 真实适配必须以当前可信用户／组织建立独立 `sales_profit` scope 与 `allowedProfitIds`，与本地本人／部门权限求交；冻结业绩归属与当前访问权分开。资料与完成标准见T21–T26、H23–H28、D16–D22；未经真实联调不得标为FOP ready。
+
+## 11. 图表与员工范围：当前客户及历史事实不可混同
+
+本轮只读复核以下已有证据，不推断已发布HTTP能力：
+
+- `ReceiptPerformanceReportFormPlugin.java:187–198`同时读取客户 `hzkj_pay_customer.hzkj_biz_user.name` 与收款 `hzkj_bizperson.name`；`:372–390`按客户主键聚合并单独显示当前客户owner。姓名字段只是展示，不是账号授权稳定ID，也不证明两种归属相同。
+- `OrderGrossProfitReportPermissionService.java:48–78`每次读取当前用户/组织；识别为业务员时强制本人，其他人可选owner。该旧报表“非业务员全部”分支不能直接用作新平台经理/员工权限，更不能把没有任职信息当作全公司授权。
+- 订单的 `hzkj_operator`、发运单的 `hzkj_bizoperator`、收款的 `hzkj_bizperson`与月结的冻结 `hzkj_gp_owner_e`仍按前述源映射使用。物流录入人不是销售业绩owner；客户当前转交不能重写已冻结毛利。
+
+本地逐图策略只是功能入口与范围上限，真实数据继续与绑定FOP用户的资源许可取交集。完整组织汇总新增独立provider契约，必须由FOP提供纯部门聚合和独立汇总部门授权；本轮未发现足够证据确认一个现有通用HTTP接口已经满足此能力。没有独立汇总实现时保持未配置，不读取域外成员或把登录用户临时提升为管理员。
+
+需要真实输入：H29账号图表矩阵、H30汇总授权及只读接口、H31客户转交/历史访问、H32多账号验收样本。既有FOP姓名查询不能替代这些稳定身份、数据权限和移交规则。

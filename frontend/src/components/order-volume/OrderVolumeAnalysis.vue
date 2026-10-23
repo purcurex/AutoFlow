@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import type { EffectiveChartAccess } from '@/api/fop-chart-access'
+import { useChartAccess } from '@/composables/useChartAccess'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
@@ -13,6 +15,7 @@ import CustomerTrendDialog from './CustomerTrendDialog.vue'
 import CustomerOrderResults from './CustomerOrderResults.vue'
 import './order-volume.css'
 const props = withDefaults(defineProps<{ customer?: boolean; revision?: number }>(), { customer: false, revision: 0 })
+const { access: chartAccess, refresh: refreshChartAccess, applyResponse: applyChartResponse, clear: clearChartAccess, visible: chartVisible, canViewDetails } = useChartAccess(() => props.customer ? 'customer_orders' : 'order_volume')
 const { locale } = useI18n(), router = useRouter(), route = useRoute()
 const zh = computed(() => String(locale.value).startsWith('zh'))
 const t = (cn: string, en: string) => zh.value ? cn : en
@@ -26,7 +29,7 @@ const appliedRange = ref({ from: from.value, to: to.value }), dateError = ref(''
 const department = ref(''), objectId = ref(''), warehouse = ref<'ALL' | VolumeWarehouse>('ALL'), split = ref(false)
 const data = ref<OrderVolumeData>(), selectedData = ref<OrderVolumeData>(), busy = ref(false), selectedBusy = ref(false), error = ref(''), selectedError = ref('')
 const keyword = ref(''), customers = ref<OrderCustomerPage>(), customerBusy = ref(false), customerError = ref(''), selected = ref<OrderCustomer>()
-// Options survive an in-session filter request; cleared on failure or session reset.
+// Clear selector metadata before each authorization refresh to avoid retaining an old scope.
 const options = ref<OrderVolumeData['options']>({ departments: [], objects: [] })
 const trendScope = computed(() => [
   `${appliedRange.value.from} — ${appliedRange.value.to}`,
@@ -55,22 +58,34 @@ function applyFilters() {
 }
 async function load() {
   const id = ++requestId
-  data.value = undefined; error.value = ''; busy.value = true
+  data.value = undefined; options.value = { departments: [], objects: [] }; error.value = ''; busy.value = true
+  customerRequestId++; customers.value = undefined; clearSelected()
   try {
-    const result = await getOrderVolume({ ...query.value })
+    const capability = await refreshChartAccess()
+    if (id !== requestId || !capability?.visible) return
+    const result = await getOrderVolume({ ...query.value, ...(category.value === 'organization' && capability.summaryDepartments.length ? { view: 'summary' } : {}) })
     if (id !== requestId) return
+    if (!applyChartResponse(result)) return
     data.value = result; options.value = result.options
   } catch (cause) { if (id === requestId) { reset(); error.value = fopAccessError(cause, zh.value) } }
   finally { if (id === requestId) busy.value = false }
 }
+function acceptRelatedResponse(result: { chartAccess?: EffectiveChartAccess }) {
+  if (JSON.stringify(chartAccess.value) !== JSON.stringify(result.chartAccess)) {
+    reset()
+    if (applyChartResponse(result)) void load()
+    return false
+  }
+  return applyChartResponse(result)
+}
 async function loadSelected() {
   const id = ++selectedRequestId
   selectedData.value = undefined; selectedError.value = ''; selectedBusy.value = false
-  if (!selected.value) return
+  if (!selected.value || !chartVisible.value || chartAccess.value?.summaryOnly) return
   selectedBusy.value = true
   try {
     const result = await getOrderVolume({ ...query.value, customerId: selected.value.id })
-    if (id === selectedRequestId) selectedData.value = result
+    if (id === selectedRequestId && acceptRelatedResponse(result)) selectedData.value = result
   } catch (cause) { if (id === selectedRequestId) { reset(); error.value = fopAccessError(cause, zh.value) } }
   finally { if (id === selectedRequestId) selectedBusy.value = false }
 }
@@ -81,6 +96,7 @@ watch([query, () => props.revision], () => { void load(); void loadSelected() },
 watch(keyword, () => { customerRequestId++; customers.value = undefined; customerError.value = ''; customerBusy.value = false; clearSelected() })
 watch(() => route.fullPath, clearSelected)
 async function search(page = 1) {
+  if (!chartVisible.value || chartAccess.value?.summaryOnly) return
   const value = keyword.value.trim()
   if (!value) { customerError.value = t('请输入客户名称或编码。', 'Enter a customer name or code.'); return }
   const id = ++customerRequestId
@@ -88,15 +104,17 @@ async function search(page = 1) {
   try {
     const result = await searchOrderCustomers({ keyword: value, department: department.value || undefined, page, pageSize: 10 })
     if (id !== customerRequestId) return
+    if (!acceptRelatedResponse(result)) return
     customers.value = result
     const exact = result.items.filter(c => c.code.toLowerCase() === value.toLowerCase())
     if (exact.length === 1 && result.total === 1) chooseCustomer(exact[0]!)
   } catch (cause) { if (id === customerRequestId) { reset(); error.value = fopAccessError(cause, zh.value) } }
   finally { if (id === customerRequestId) customerBusy.value = false }
 }
-function chooseCustomer(customer: OrderCustomer) { customerRequestId++; customerBusy.value = false; selected.value = customer; void loadSelected() }
+function chooseCustomer(customer: OrderCustomer) { if (!chartVisible.value || chartAccess.value?.summaryOnly) return; customerRequestId++; customerBusy.value = false; selected.value = customer; void loadSelected() }
 function selectRank(id: string, name: string, code: string) { chooseCustomer({ id, name, code, departments: [] }) }
 async function drill(result: OrderVolumeData, seriesId: string, periodId?: string, detailWarehouse?: VolumeWarehouse, receipts = false) {
+  if (!canViewDetails.value || (result.query.category === 'organization' && result.query.view === 'summary')) return
   const id = requestId, path = route.fullPath
   try {
     let role = isWorkbenchRole(route.params.role) ? route.params.role : undefined
@@ -109,17 +127,18 @@ async function drill(result: OrderVolumeData, seriesId: string, periodId?: strin
     await router.push({ name: receipts ? 'RoleWorkbenchReceipts' : 'RoleWorkbench', params: { role }, query: { ...result.query, ...(receipts ? { mode: 'customer' } : { queue: 'order-volume' }), seriesId, ...(periodId ? { periodId } : {}), ...(detailWarehouse ? { detailWarehouse } : {}) } })
   } catch (cause) { if (id === requestId) { reset(); error.value = fopAccessError(cause, zh.value) } }
 }
-function reset() { requestId++; customerRequestId++; data.value = undefined; customers.value = undefined; options.value = { departments: [], objects: [] }; busy.value = false; customerBusy.value = false; error.value = ''; clearSelected() }
+function reset() { clearChartAccess(); requestId++; customerRequestId++; data.value = undefined; customers.value = undefined; options.value = { departments: [], objects: [] }; busy.value = false; customerBusy.value = false; error.value = ''; clearSelected() }
 const off = onSessionReset(reset)
 onBeforeUnmount(() => { off(); reset() })
 </script>
 
 <template>
-  <section class="ov-panel" :data-module="customer ? 'customer-volume' : 'order-volume'">
+  <section v-if="chartVisible" class="ov-panel" :data-module="customer ? 'customer-volume' : 'order-volume'">
+    <p class="ov-scope" data-chart-scope>{{ chartAccess?.scopeLabel }}</p>
     <header class="ov-header"><div class="ov-heading"><h2><component :is="customer ? UsersRound : BarChart3" :size="18" />{{ customer ? t('客户订单分析', 'Customer fulfillment and collections') : t('业务订单量分析', 'Business order analysis') }}<span v-if="data?.source === 'mock'" class="ov-badge">MOCK</span></h2><p>{{ customer ? t('履约订单量 + 回款业绩金额 · 前十客户＋其他 · 支持分仓对比', 'Fulfillment orders + collections performance · Top 10 + Other · Compare warehouses') : t('从服务商、组织与业务员查看订单结构及变化', 'Explore order volume by carrier, organization and salesperson') }}</p></div>
       <form class="ov-filters" @submit.prevent="applyFilters">
         <label v-if="!customer && grain !== 'week'">{{ t('年份', 'Year') }}<select v-model.number="year" aria-label="订单量年份"><option v-for="y in years" :key="y">{{ y }}</option></select></label>
-        <label v-if="!customer">{{ t('查询类别', 'Category') }}<select v-model="category" aria-label="订单量查询类别"><option value="carrier">{{ t('物流服务商', 'Carrier') }}</option><option value="organization">{{ t('组织', 'Organization') }}</option><option value="salesperson">{{ t('业务员', 'Salesperson') }}</option></select></label>
+        <label v-if="!customer">{{ t('查询类别', 'Category') }}<select v-model="category" aria-label="订单量查询类别"><option v-if="chartAccess?.dataScope !== 'none'" value="carrier">{{ t('物流服务商', 'Carrier') }}</option><option value="organization">{{ t('组织', 'Organization') }}</option><option v-if="chartAccess?.dataScope !== 'none'" value="salesperson">{{ t('业务员', 'Salesperson') }}</option></select></label>
         <label v-if="customer">{{ t('开始日期', 'Start date') }}<input v-model="from" type="date" min="2020-01-01" :max="to || today" required aria-label="客户订单开始日期"></label>
         <label v-if="customer">{{ t('结束日期', 'End date') }}<input v-model="to" type="date" :min="from || '2020-01-01'" :max="today" required aria-label="客户订单结束日期"></label>
         <label v-if="category !== 'carrier'">{{ t('统计部门', 'Department') }}<select v-model="department" :aria-label="customer ? '客户订单部门' : '订单量统计部门'"><option value="">{{ t('营销中心', 'Marketing center') }}</option><option v-for="d in options.departments" :key="d.id" :value="d.id">{{ d.label }}</option></select></label>
@@ -133,12 +152,13 @@ onBeforeUnmount(() => { off(); reset() })
       </form>
     </header>
     <div class="ov-body">
+      <p v-if="customer && data?.customerOwnershipBasis && data.customerOwnershipBasis !== 'current_assignment'" class="ov-scope">{{ data.customerOwnershipBasis === 'historical_attribution' ? t('历史业务归属口径，当前客户分配待对接', 'Historical attribution; current customer assignment is pending integration') : t('部分客户当前归属待对接', 'Current assignment is pending integration for some customers') }}</p>
       <p v-if="dateError" class="ov-error" role="alert">{{ dateError }}</p>
       <p class="ov-scope">{{ t('统计当前账号获授权且有支付时间的已支付、已审核履约订单，排除已取消及全额退款订单。', 'Authorized paid and approved fulfillment orders with a payment timestamp; cancelled and fully refunded orders excluded.') }} {{ customer ? t('按订单支付日期统计，使用 UTC+8，包含开始及结束当天；回款另计全款备货，排除押金备货。', 'By order payment date in UTC+8, including both selected dates; collections also include full-payment stocking and exclude deposits.') : grain === 'week' ? t('展示所选周与前三周。', 'Selected week and three preceding weeks.') : grain === 'day' ? t('未来日期以「—」显示，滚动可查看全月。', 'Future days appear as —; scroll to view the full month.') : t('本年截至当前月，默认展示最近六个月。', 'Year to date; latest six months shown initially.') }}</p>
       <div v-if="busy" class="ov-empty" role="status">{{ t('正在统计订单数据…', 'Loading order statistics…') }}</div>
       <div v-else-if="error" class="ov-error" role="alert">{{ error }}<button class="ov-link" @click="load">{{ t('重试', 'Retry') }}</button></div>
-      <component :is="customer ? CustomerOrderResults : OrderVolumeResults" v-else-if="data" :data="data" :split="split && warehouse === 'ALL'" :ranking-only="customer" @drill="(s, p, w) => drill(data!, s, p, w)" @receipt="(s: string, p?: string, w?: VolumeWarehouse) => drill(data!, s, p, w, true)" @customer="selectRank" />
-      <template v-if="customer">
+      <component :is="customer ? CustomerOrderResults : OrderVolumeResults" v-else-if="data" :data="data" :split="split && warehouse === 'ALL'" :ranking-only="customer" :details-allowed="canViewDetails && data.query.view !== 'summary'" @drill="(s, p, w) => drill(data!, s, p, w)" @receipt="(s: string, p?: string, w?: VolumeWarehouse) => drill(data!, s, p, w, true)" @customer="selectRank" />
+      <template v-if="customer && !chartAccess?.summaryOnly">
         <div class="ov-customer-search"><div><h3>{{ t('单客户订单与回款趋势', 'Individual customer trend') }}</h3><p>{{ t('客户名称或编码搜索，同名客户请核对编码。排名保持上方查询范围。', 'Search by name or code. Verify codes for matching names; the ranking retains its full scope.') }}</p></div><form @submit.prevent="search()"><Search :size="16" /><input v-model="keyword" maxlength="100" aria-label="客户名称或编码" :placeholder="t('客户名称 / 编码，如 C001', 'Customer name / code, e.g. C001')"><button v-if="keyword || selected" type="button" class="ov-secondary" @click="() => { keyword = ''; clearSelected(); customers = undefined }">{{ t('清空', 'Clear') }}</button><button class="ov-primary" :disabled="customerBusy">{{ t('搜索', 'Search') }}</button></form></div>
         <p v-if="customerBusy" class="ov-empty" role="status">{{ t('正在搜索获授权客户…', 'Searching authorized customers…') }}</p>
         <p v-if="customerError" class="ov-error" role="alert">{{ customerError }}</p>
@@ -151,4 +171,5 @@ onBeforeUnmount(() => { off(); reset() })
       </template>
     </div>
   </section>
+  <p v-else-if="error" class="ov-error" role="alert">{{ error }}<button class="ov-link" @click="load">{{ t('重试', 'Retry') }}</button></p>
 </template>

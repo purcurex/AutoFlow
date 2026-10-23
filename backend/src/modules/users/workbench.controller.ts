@@ -49,6 +49,13 @@ export class FulfillmentOrdersController {
     return this.data.getDataAccess(req.user!.userId)
   }
 
+  @AllowWithoutBusinessData()
+  @Get('chart-access')
+  @Header('Cache-Control', 'private, no-store')
+  getChartAccess(@Request() req: ExpressRequest, @Query() _query: FopDataAccessQueryDto) {
+    return this.data.getChartAccess(req.user!.userId)
+  }
+
   @Get('order-volume')
   @Header('Cache-Control', 'private, no-store')
   getOrderVolume(@Request() req: ExpressRequest, @Query() query: OrderVolumeQueryDto) {

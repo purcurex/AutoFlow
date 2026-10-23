@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useChartAccess } from '@/composables/useChartAccess'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -26,12 +27,15 @@ const warehouse = computed(() => textQuery('warehouse') || 'ALL')
 const grain = computed(() => textQuery('grain') || 'month'), year = computed(() => Number(textQuery('year') || currentYear))
 const warehouseNames = computed<Record<string, string>>(() => ({ ALL: t('全部仓库', 'All warehouses'), HZ: t('杭州仓', 'Hangzhou'), SZ: t('深圳仓', 'Shenzhen') }))
 const summary = computed(() => [data.value ? `${data.value.range.from} — ${data.value.range.to}` : textQuery('periodId') || year.value, warehouseNames.value[warehouse.value], textQuery('carrierCode') && freightCarriers.includes(textQuery('carrierCode') as FreightCarrier) ? freightCarrierName(textQuery('carrierCode') as FreightCarrier, String(locale.value)) : t('全部服务商', 'All carriers'), textQuery('comparisonPeriod') === 'previous' ? t('完整上期', 'Full previous period') : t('本期', 'Current period')].join(' · '))
+const { requireDetails } = useChartAccess(() => 'freight')
 let requestId = 0
 function reset() { requestId++; data.value = undefined; error.value = ''; busy.value = false }
 async function load() {
   const id = ++requestId
   data.value = undefined; error.value = ''; busy.value = true
   try {
+    await requireDetails()
+    if (id !== requestId) return
     const role = route.params.role
     if (!isWorkbenchRole(role)) throw new Error('Invalid role')
     const query: FreightDetailsQuery = { grain: grain.value as FreightGrain, year: year.value, warehouse: warehouse.value as FreightDetailsQuery['warehouse'], workbenchRole: role, comparisonPeriod: textQuery('comparisonPeriod') as 'current' | 'previous' || 'current', page: page.value, pageSize: pageSize.value }

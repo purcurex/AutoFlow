@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useChartAccess } from '@/composables/useChartAccess'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import TableTotals from '@/components/ui/TableTotals.vue'
 import OrderAmountTotals from '@/components/ui/OrderAmountTotals.vue'
@@ -17,11 +18,15 @@ const data = ref<FopOrderPage>(), busy = ref(false), error = ref(''), failedImag
 const page = computed(() => Number(route.query.page ?? 1)), pageSize = computed(() => Number(route.query.pageSize ?? 20))
 const textQuery = (name: string) => typeof route.query[name] === 'string' ? route.query[name] as string : undefined
 const summary = computed(() => [textQuery('periodId') || (textQuery('from') && textQuery('to') ? `${textQuery('from')} — ${textQuery('to')}` : textQuery('grain') === 'day' ? `${textQuery('year')}-${textQuery('month')}` : textQuery('grain') === 'week' ? `${textQuery('weekOf')} ${t('所在周及前三周', 'and preceding three weeks')}` : `${textQuery('year')} ${t('年', '')}`), textQuery('department') ? ({ sales1: '业务一部', sales2: '业务二部', sales3: '业务三部', sales4: '业务四部' } as Record<string, string>)[textQuery('department')!] : t('获授权范围', 'Authorized scope'), ({ HZ: '杭州仓', SZ: '深圳仓', UNASSIGNED: '未分配仓库' } as Record<string, string>)[textQuery('detailWarehouse') || textQuery('warehouse') || ''] || t('全部仓库', 'All warehouses')].filter(Boolean).join(' · '))
+const { requireDetails } = useChartAccess(() => textQuery('category') === 'customer' ? 'customer_orders' : 'order_volume')
 let requestId = 0
 async function load() {
   const id = ++requestId
   data.value = undefined; error.value = ''; busy.value = true
   try {
+    if (textQuery('view') === 'summary') throw { code: 'chart_details_denied' }
+    await requireDetails()
+    if (id !== requestId) return
     const role = route.params.role
     if (!isWorkbenchRole(role)) throw new Error('Invalid role')
     const query = { category: textQuery('category'), ...(textQuery('grain') ? { grain: textQuery('grain') } : {}), ...(textQuery('year') ? { year: Number(textQuery('year')) } : {}), warehouse: textQuery('warehouse') || 'ALL', workbenchRole: role, page: page.value, pageSize: pageSize.value } as OrderVolumeDetailsQuery

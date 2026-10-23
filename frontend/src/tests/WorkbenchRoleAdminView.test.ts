@@ -3,14 +3,14 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import { describe, expect, it, vi } from 'vitest'
 import WorkbenchRoleAdminView from '@/views/WorkbenchRoleAdminView.vue'
-import { getWorkbenchAccounts, updateWorkbenchRoles, updateFopBinding, updateBusinessScope, updateManagementRole } from '@/api/workbench-access'
+import { getWorkbenchAccounts, updateWorkbenchRoles, updateFopBinding, updateBusinessScope, updateManagementRole, updateChartPermissions } from '@/api/workbench-access'
 
 vi.mock('@/components/layout', () => ({ AppLayout: { template: '<div><slot /></div>' } }))
-vi.mock('@/api/workbench-access', () => ({ getWorkbenchAccounts: vi.fn(), updateWorkbenchRoles: vi.fn(), updateFopBinding: vi.fn(), updateBusinessScope: vi.fn(), updateManagementRole: vi.fn() }))
+vi.mock('@/api/workbench-access', () => ({ getWorkbenchAccounts: vi.fn(), updateWorkbenchRoles: vi.fn(), updateFopBinding: vi.fn(), updateBusinessScope: vi.fn(), updateManagementRole: vi.fn(), updateChartPermissions: vi.fn() }))
 
 describe('workbench role administration', () => {
   it('saves selected roles and only marks them saved after server confirmation', async () => {
-    const account = { id: 'u1', displayId: '000001', email: 'sales@example.test', username: 'Alice', fopBinding: null, role: 'user' as const, workbenchRoles: ['sales' as const] }
+    const account = { chartPermissions: [], id: 'u1', displayId: '000001', email: 'sales@example.test', username: 'Alice', fopBinding: null, role: 'user' as const, workbenchRoles: ['sales' as const] }
     vi.mocked(getWorkbenchAccounts).mockResolvedValue({ items: [account], total: 1 })
     vi.mocked(updateWorkbenchRoles).mockRejectedValueOnce(new Error('Forbidden')).mockResolvedValueOnce({ ...account, workbenchRoles: ['sales', 'warehouse'] })
     const wrapper = mount(WorkbenchRoleAdminView, { global: { plugins: [createPinia(), createI18n({ legacy: false, locale: 'zh-CN', messages: {} })], stubs: { RouterLink: true } } })
@@ -31,7 +31,7 @@ describe('workbench role administration', () => {
 
  describe('FOP account bindings', () => {
   it('saves, reports duplicate identity errors, and unlinks only through the admin API', async () => {
-    const account = { id: 'u2', displayId: '000002', email: 'admin@example.test', username: 'Admin', role: 'admin' as const, workbenchRoles: [], fopBinding: null }
+    const account = { chartPermissions: [], id: 'u2', displayId: '000002', email: 'admin@example.test', username: 'Admin', role: 'admin' as const, workbenchRoles: [], fopBinding: null }
     vi.mocked(getWorkbenchAccounts).mockResolvedValue({ items: [account], total: 1 })
     vi.mocked(updateFopBinding).mockRejectedValueOnce({ statusCode: 409 }).mockResolvedValueOnce({ ...account, fopBinding: { tenantId: 'company', userId: 'employee-2' } }).mockResolvedValueOnce({ ...account, fopBinding: null })
     const wrapper = mount(WorkbenchRoleAdminView, { global: { plugins: [createPinia(), createI18n({ legacy: false, locale: 'zh-CN', messages: {} })], stubs: { RouterLink: true } } })
@@ -58,7 +58,7 @@ describe('workbench role administration', () => {
 
 describe('business data scope editor', () => {
   it('requires manager assignment, handles rejection, and persists the server-confirmed role', async () => {
-    const account = { id: 'scope-user', displayId: '000003', email: 'scope@example.test', username: 'Scope', fopBinding: null, role: 'user' as const, workbenchRoles: ['sales' as const], businessScope: { role: 'salesperson' as const, departmentId: null, employeeId: 'employee-1' } }
+    const account = { chartPermissions: [], id: 'scope-user', displayId: '000003', email: 'scope@example.test', username: 'Scope', fopBinding: null, role: 'user' as const, workbenchRoles: ['sales' as const], businessScope: { role: 'salesperson' as const, departmentId: null, employeeId: 'employee-1' } }
     vi.mocked(getWorkbenchAccounts).mockResolvedValue({ items: [account], total: 1 })
     const wrapper = mount(WorkbenchRoleAdminView, { global: { plugins: [createPinia(), createI18n({ legacy: false, locale: 'zh-CN', messages: {} })], stubs: { RouterLink: true } } })
     await flushPromises()
@@ -82,7 +82,7 @@ describe('business data scope editor', () => {
 
 describe('independent system administrator data access', () => {
   it('lets an administrator disable their business data without removing management rights', async () => {
-    const account = { id: 'admin-only', displayId: '000004', email: 'admin@example.test', username: 'Admin', fopBinding: null, role: 'admin' as const, workbenchRoles: [], businessScope: { role: 'admin' as const, departmentId: null, employeeId: null } }
+    const account = { chartPermissions: [], id: 'admin-only', displayId: '000004', email: 'admin@example.test', username: 'Admin', fopBinding: null, role: 'admin' as const, workbenchRoles: [], businessScope: { role: 'admin' as const, departmentId: null, employeeId: null } }
     vi.mocked(getWorkbenchAccounts).mockResolvedValue({ items: [account], total: 1 })
     const wrapper = mount(WorkbenchRoleAdminView, { global: { plugins: [createPinia(), createI18n({ legacy: false, locale: 'zh-CN', messages: {} })], stubs: { RouterLink: true } } })
     await flushPromises()
@@ -102,7 +102,7 @@ describe('independent system administrator data access', () => {
 
 
 it('saves management rights independently from the business scope', async () => {
-  const account = { id: 'manager', displayId: '000005', email: 'manager@example.test', username: 'Manager', fopBinding: null, role: 'user' as const, workbenchRoles: [], businessScope: { role: 'none' as const, departmentId: null, employeeId: null } }
+  const account = { chartPermissions: [], id: 'manager', displayId: '000005', email: 'manager@example.test', username: 'Manager', fopBinding: null, role: 'user' as const, workbenchRoles: [], businessScope: { role: 'none' as const, departmentId: null, employeeId: null } }
   vi.mocked(getWorkbenchAccounts).mockResolvedValue({ items: [account], total: 1 })
   vi.mocked(updateManagementRole).mockResolvedValue({ ...account, role: 'admin' })
   const wrapper = mount(WorkbenchRoleAdminView, { global: { plugins: [createPinia(), createI18n({ legacy: false, locale: 'zh-CN', messages: {} })], stubs: { RouterLink: true } } })
@@ -113,5 +113,29 @@ it('saves management rights independently from the business scope', async () => 
   expect(updateManagementRole).toHaveBeenLastCalledWith('manager', 'admin')
   expect(wrapper.get('select[aria-label="Manager · 业务数据角色"]').element).toHaveProperty('value', 'none')
   expect(wrapper.find('[role=status]').text()).toContain('业务数据范围保持不变')
+  wrapper.unmount()
+})
+
+
+it('configures chart visibility, scope, organization summaries and independent actions', async () => {
+  const account = { chartPermissions: [], id: 'charts', displayId: '000007', email: 'chart@example.test', username: 'Charts', fopBinding: null, role: 'user' as const, workbenchRoles: [] }
+  vi.mocked(getWorkbenchAccounts).mockResolvedValue({ items: [account], total: 1 })
+  vi.mocked(updateChartPermissions).mockImplementation(async (_id, chartPermissions) => ({ ...account, chartPermissions }))
+  const wrapper = mount(WorkbenchRoleAdminView, { attachTo: document.body, global: { plugins: [createPinia(), createI18n({ legacy: false, locale: 'zh-CN', messages: {} })], stubs: { RouterLink: true, teleport: true } } })
+  await flushPromises()
+  await wrapper.get('[data-chart-permissions]').trigger('click')
+  const row = wrapper.get('[data-chart-id="order_volume"]')
+  await row.get('[aria-label="图表可见性"]').setValue('allow')
+  await row.get('[aria-label="记录范围"]').setValue('self')
+  await row.get('[aria-label="组织汇总"]').setValue('selected')
+  await flushPromises()
+  expect((row.get('[aria-label="组织汇总"]').element as HTMLSelectElement).value).toBe('selected')
+  await wrapper.get('[data-chart-id="order_volume"] input[value="sales2"]').setValue(true)
+  await row.get('[aria-label="明细权限"]').setValue('deny')
+  await row.get('[aria-label="导出权限"]').setValue('allow')
+  expect(wrapper.get('[data-chart-id="customer_orders"]').find('option[value="marketing"]').exists()).toBe(false)
+  await wrapper.get('[data-save-chart-permissions]').trigger('click'); await flushPromises()
+  expect(updateChartPermissions).toHaveBeenCalledWith('charts', expect.arrayContaining([{ chartId: 'order_volume', visibility: 'allow', dataScope: 'self', summaryMode: 'selected', summaryDepartments: ['sales2'], details: 'deny', export: 'allow' }]))
+  expect(wrapper.text()).toContain('图表权限已保存')
   wrapper.unmount()
 })
