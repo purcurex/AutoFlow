@@ -22,7 +22,7 @@ export function summaryReceipts(rows: FopOrganizationSummaryRow[], departments: 
     const monthly = base.months.map(at), previous = at(base.previousMonth!)
     return { id, name, amounts: monthly.map(amount), previousAmount: amount(previous), breakdown: { fulfillment: monthly.map(rs => amount(rs.filter(r => r.sourceType === 'fulfillment'))), fullPaymentStock: monthly.map(rs => amount(rs.filter(r => r.sourceType === 'full_payment_stock'))) }, previousBreakdown: { fulfillment: amount(previous.filter(r => r.sourceType === 'fulfillment')), fullPaymentStock: amount(previous.filter(r => r.sourceType === 'full_payment_stock')) } }
   }
-  return { ...base, marketingCenter: departments.length ? series('marketing', '授权部门合计', rows) : null,
+  return { ...base, marketingCenter: departments.length ? series('marketing', '统计部门合计', rows) : null,
     departments: SALES_DEPARTMENTS.filter(d => departments.includes(d.id)).map(d => ({ ...series(d.id, d.name, rows.filter(r => r.salesDepartmentCode === d.id)), salespeople: [] })) }
 }
 
@@ -40,7 +40,7 @@ export function summaryOrderVolume(rows: FopOrganizationSummaryRow[], department
     if (!Number.isSafeInteger(total)) throw new Error('Order summary overflow')
     return { id, label, kind, ...(entityId ? { entityId } : {}), total, values: counts, warehouses: { HZ: values(list.filter(r => r.warehouseCode === 'HZ')), SZ: values(list.filter(r => r.warehouseCode === 'SZ')), UNASSIGNED: values(list.filter(r => r.warehouseCode === 'UNASSIGNED')) } }
   }
-  const total = series('total', '授权部门合计', 'total', selected)
+  const total = series('total', '统计部门合计', 'total', selected)
   return { query: { ...query }, timeZone: BUSINESS_TIME_ZONE, asOf: now.toISOString(), total: total.total, customerCount: null, periods,
     series: [total, ...SALES_DEPARTMENTS.filter(d => departments.includes(d.id) && (!query.department || query.department === d.id)).map(d => series(`department:${d.id}`, d.name, 'detail', selected.filter(r => r.salesDepartmentCode === d.id), d.id))],
     options: { departments: SALES_DEPARTMENTS.filter(d => departments.includes(d.id)).map(d => ({ id: d.id, label: d.name })), objects: [] as { id: string; label: string }[] }, summaryOnly: true }

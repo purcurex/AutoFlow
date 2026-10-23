@@ -57,7 +57,7 @@ describe('role workbench content', () => {
 
   it('does not mount the order list when the account has no access to the role', async () => {
     const { wrapper } = await setup('/workbench/warehouse?queue=shipping', ['sales'])
-    expect(wrapper.find('[role=alert]').text()).toContain('未获授权')
+    expect(wrapper.find('[role=alert]').text()).toContain('暂时无法访问')
     expect(wrapper.find('table').exists()).toBe(false)
     wrapper.unmount()
   })

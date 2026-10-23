@@ -64,7 +64,7 @@ describe('freight analysis', () => {
     get.mockRejectedValueOnce({ code: 'fop_permission_denied' })
     await wrapper.find('select[aria-label="运费仓库"]').setValue('SZ'); await flushPromises()
     resolve(freightData()); await flushPromises()
-    expect(wrapper.find('[role=alert]').text()).toContain('无权读取')
+    expect(wrapper.find('[role=alert]').text()).toContain('无法查看这些数据')
     expect(wrapper.find('table').exists()).toBe(false)
     expect(wrapper.text()).not.toContain('$60.00')
   })

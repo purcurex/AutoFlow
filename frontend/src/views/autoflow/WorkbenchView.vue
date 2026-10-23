@@ -54,7 +54,7 @@ function queueLink(value: string) { return { name: 'RoleWorkbench', params: { ro
         <FopOrdersView v-else-if="validChoice" :key="dataRevision" />
         <div v-else class="access-message" role="alert">{{ text('该清单不属于当前工作台，请选择上方功能。', 'This list does not belong to the selected workbench. Choose a function above.') }}</div>
       </template>
-      <div v-else class="access-message" role="alert">{{ text('未获授权访问此工作台，请联系管理员分配岗位。', 'You do not have access to this workbench. Contact an administrator.') }}</div>
+      <div v-else class="access-message" role="alert">{{ text('暂时无法访问此工作台，请联系管理员分配岗位。', 'You do not have access to this workbench. Contact an administrator.') }}</div>
     </div>
   </AppLayout>
 </template>

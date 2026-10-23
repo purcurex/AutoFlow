@@ -268,7 +268,7 @@ describe('customer order analysis', () => {
     const { wrapper } = await setup()
     vi.mocked(getOrderVolume).mockRejectedValueOnce({ code: 'fop_permission_denied' })
     await wrapper.setProps({ revision: 1 }); await flushPromises()
-    expect(wrapper.find('[role=alert]').text()).toContain('无权读取')
+    expect(wrapper.find('[role=alert]').text()).toContain('无法查看这些数据')
     expect(wrapper.text()).not.toContain('Northstar')
     wrapper.unmount()
   })

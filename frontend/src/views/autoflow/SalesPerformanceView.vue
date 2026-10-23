@@ -26,7 +26,7 @@ const query = computed<PerformanceQuery>(() => ({ ...appliedRange.value, grain: 
 const orderedPeriods = computed(() => [...(data.value?.periods ?? [])].sort((a, b) => a.from.localeCompare(b.from)))
 const tablePeriods = computed(() => [...orderedPeriods.value].reverse().slice((tablePage.value - 1) * 12, tablePage.value * 12))
 const tablePages = computed(() => Math.max(1, Math.ceil(orderedPeriods.value.length / 12)))
-const ownerLabel = computed(() => data.value?.selectedOwner ? `${data.value.selectedOwner.name} · ${data.value.selectedOwner.department.name}` : t('暂无可查看的业务员', 'No authorized salesperson'))
+const ownerLabel = computed(() => data.value?.selectedOwner ? `${data.value.selectedOwner.name} · ${data.value.selectedOwner.department.name}` : t('暂无可查看的业务员', 'No salesperson available'))
 const money = (value: number | null) => value === null ? '—' : formatChartCurrency(value, String(locale.value))
 const date = (value: string) => new Date(value).toLocaleString(String(locale.value), { timeZone: 'Asia/Shanghai', hour12: false })
 const status = (value: PerformancePeriod['profitStatus']) => ({ none: t('暂无毛利', 'No profit'), estimated: t('预估中', 'Estimated'), settled: t('已结算', 'Settled'), mixed: t('结算 / 预估', 'Settled / Estimated'), unallocated: t('待补充分期明细', 'Allocation pending') })[value]

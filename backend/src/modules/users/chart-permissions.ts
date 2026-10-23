@@ -92,7 +92,7 @@ export function resolveChartAccess(user: ChartPolicyUser): EffectiveChartAccess[
     const summaryOnly = visible && scope === 'none' && hasSummary
     return {
       chartId, visible, dataScope: visible ? scope : 'none',
-      scopeLabel: !visible ? '未授权' : summaryOnly ? '组织汇总' : scope === 'all' ? '本租户授权数据' : scope === 'department' ? '本部门及下级' : '本人数据',
+      scopeLabel: !visible ? '暂不可查看' : summaryOnly ? '部门汇总' : scope === 'all' ? '当前统计范围' : scope === 'department' ? '本部门及下级' : '我的业务',
       canViewDetails: visible && scope !== 'none' && chartId !== 'registrations' && override?.details !== 'deny',
       canExport: visible && override?.export !== 'deny', summaryOnly, summaryDepartments,
     }

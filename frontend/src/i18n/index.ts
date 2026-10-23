@@ -26,7 +26,7 @@ const zhCN = {
     description: '维护客户沟通话术模板，为不同渠道和报价场景设置合适的 AI 指引。',
   },
   auth: {
-    welcome: 'HyperZone 智能办公平台', signInTitle: '登录工作平台', platformIntro: '连接经营管理、客户业务与订单履约，支持跨岗位协作。', audience: '面向公司领导、业务员、采购、订单、发运、仓库与 IT 团队。', loginHint: '使用员工账号登录，查看获授权的业务数据与岗位待办。', email: '邮箱', password: '密码',
+    welcome: 'HyperZone 智能办公平台', signInTitle: '登录工作平台', platformIntro: '连接经营管理、客户业务与订单履约，支持跨岗位协作。', audience: '面向公司领导、业务员、采购、订单、发运、仓库与 IT 团队。', loginHint: '使用员工账号登录，查看业务数据与岗位待办。', email: '邮箱', password: '密码',
     emailPlaceholder: '请输入邮箱', passwordPlaceholder: '请输入密码', login: '登录', loggingIn: '登录中...',
     noAccount: '还没有账号？', registerNow: '立即注册', loginRequired: '请输入邮箱和密码', loginFailed: '登录失败，请检查邮箱和密码',
     createAccount: '创建账号', registerHint: '创建 HyperZone 员工账号，岗位与数据范围由管理员分配。', verificationCode: '验证码',

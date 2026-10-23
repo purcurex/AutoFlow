@@ -84,7 +84,7 @@ describe('fulfillment order list', () => {
     await wrapper.find('button.action-button').trigger('click')
     await flushPromises()
     expect(wrapper.find('tbody').exists()).toBe(false)
-    expect(wrapper.find('[role=alert]').text()).toContain('尚未绑定 FOP 用户')
+    expect(wrapper.find('[role=alert]').text()).toContain('员工账号尚未关联')
     wrapper.unmount()
     spy.mockRestore()
   })

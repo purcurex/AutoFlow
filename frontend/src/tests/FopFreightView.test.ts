@@ -57,7 +57,7 @@ describe('actual freight workbench details', () => {
     const { wrapper } = await setup()
     get.mockRejectedValueOnce({ code: 'fop_permission_denied' })
     await wrapper.findAll('button').find(button => button.text() === '刷新')!.trigger('click'); await flushPromises()
-    expect(wrapper.find('[role=alert]').text()).toContain('无权读取')
+    expect(wrapper.find('[role=alert]').text()).toContain('无法查看这些数据')
     expect(wrapper.find('tfoot').exists()).toBe(false)
     expect(wrapper.text()).not.toContain('DEL-001')
     let resolve!: (value: typeof freightPage) => void

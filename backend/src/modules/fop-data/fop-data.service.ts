@@ -126,7 +126,7 @@ export class FopDataService {
 
   private effectiveCharts(initial: Scope, permission: FopPermissionGrant): EffectiveChartAccess[] {
     return initial.charts.map(local => {
-      if (!initial.roles.length || local.chartId === 'sales_performance' && !initial.roles.includes('sales')) return { ...local, visible: false, dataScope: 'none', scopeLabel: '工作台岗位未授权', summaryDepartments: [], summaryOnly: false, canViewDetails: false, canExport: false }
+      if (!initial.roles.length || local.chartId === 'sales_performance' && !initial.roles.includes('sales')) return { ...local, visible: false, dataScope: 'none', scopeLabel: '尚未分配工作台岗位', summaryDepartments: [], summaryOnly: false, canViewDetails: false, canExport: false }
       const policy = initial.summaryPolicies[local.chartId]
       const granted = permission.organizationSummaries?.find(g => g.chartId === local.chartId)?.departments ?? []
       const summaryDepartments = !local.visible ? [] : granted.filter(d => policy.mode === 'marketing'
@@ -141,7 +141,7 @@ export class FopDataService {
       const visible = local.visible && (dataScope !== 'none' || summaryDepartments.length > 0)
       const summaryOnly = visible && dataScope === 'none'
       return { ...local, visible, dataScope, summaryDepartments, summaryOnly,
-        scopeLabel: !visible ? '未授权' : summaryOnly ? `${summaryDepartments.map(code => SALES_DEPARTMENTS.find(d => d.id === code)!.name).join('、')}汇总` : summaryDepartments.length ? `成员范围：${local.scopeLabel}；组织汇总：${summaryDepartments.map(code => SALES_DEPARTMENTS.find(d => d.id === code)!.name).join('、')}` : local.scopeLabel,
+        scopeLabel: !visible ? '暂不可查看' : summaryOnly ? `${summaryDepartments.map(code => SALES_DEPARTMENTS.find(d => d.id === code)!.name).join('、')}汇总` : summaryDepartments.length ? `业务范围：${local.scopeLabel}；汇总部门：${summaryDepartments.map(code => SALES_DEPARTMENTS.find(d => d.id === code)!.name).join('、')}` : local.scopeLabel,
         canViewDetails: visible && !summaryOnly && local.canViewDetails,
         canExport: visible && local.canExport }
     })
@@ -485,7 +485,7 @@ export class FopDataService {
     const scoped = await this.scopedOrders(userId, undefined, context)
     const receipts = query.category === 'customer' && scoped.permission.analyticsScopes?.includes('receipts') ? await this.scopedReceipts(userId, scoped, context) : undefined
     const result = aggregateOrderVolume(scoped.orders, query, now, receipts)
-    if (query.category === 'organization' && result.series[0]) result.series[0].label = context.access.dataScope === 'self' ? '本人订单合计' : '授权人员订单合计'
+    if (query.category === 'organization' && result.series[0]) result.series[0].label = context.access.dataScope === 'self' ? '本人订单合计' : '当前成员订单合计'
     await this.assertUnchanged(userId, scoped.initial)
     return { source: this.provider.source ?? 'fop', chartAccess: context.access, summaryOnly: false, ...(chartId === 'customer_orders' ? { customerOwnershipBasis: this.customerBasis(context) } : {}), ...result }
   }
@@ -563,7 +563,7 @@ export class FopDataService {
     }
     const receiptRecords = receiptContext.access.visible && receiptContext.access.dataScope !== 'none' ? await this.scopedReceipts(userId, scoped, receiptContext) : []
     const receipts = await this.providerCall(async () => monthlyReceipts(receiptRecords, query.year, receiptContext.access.visible, now))
-    if (receipts.marketingCenter) receipts.marketingCenter.name = receiptContext.access.dataScope === 'self' ? '本人回款合计' : '授权人员回款合计'
+    if (receipts.marketingCenter) receipts.marketingCenter.name = receiptContext.access.dataScope === 'self' ? '本人回款合计' : '当前成员回款合计'
     let departmentReceipts = monthlyReceipts([], query.year, false, now)
     if (departmentContext.access.visible) {
       const summaryRows = await this.organizationSummary(userId, departmentContext, { chartId: 'department_receipts', departments: departmentContext.access.summaryDepartments, from: `${query.year - 1}-12-01`, to: query.year === Number(businessDate(now).slice(0, 4)) ? businessDate(now) : `${query.year}-12-31` })
