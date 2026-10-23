@@ -1,14 +1,16 @@
+import { Decimal } from 'decimal.js'
+
 export interface SourcingScoreInput {
   query: string
   title: string
   providerRank?: number | null
   priceRanges?: Array<{
-    minimumQuantity?: number | null
-    price?: number | null
+    minimumQuantity?: string | null
+    price?: string | null
   }>
-  targetPriceMin?: number | null
-  targetPriceMax?: number | null
-  minimumOrderQuantity?: number | null
+  targetPriceMin?: string | null
+  targetPriceMax?: string | null
+  minimumOrderQuantity?: string | null
   sellerCompositeScore?: number | null
   sellerTradeScore?: number | null
   sellerYears?: number | null
@@ -83,29 +85,40 @@ function scoreRelevance(input: SourcingScoreInput): number {
 function scorePricing(input: SourcingScoreInput): number {
   const prices = (input.priceRanges || [])
     .map((range) => range.price)
-    .filter((price): price is number => typeof price === 'number' && Number.isFinite(price) && price >= 0)
+    .filter((price): price is string => typeof price === 'string')
+    .map((price) => {
+      try { return new Decimal(price) } catch { return null }
+    })
+    .filter((price): price is Decimal => Boolean(price?.isFinite() && !price.isNegative()))
   if (prices.length === 0) return 0
 
-  const minimumPrice = Math.min(...prices)
+  const minimumPrice = prices.reduce((current, price) => Decimal.min(current, price))
   const targetMin = input.targetPriceMin
   const targetMax = input.targetPriceMax
   if (targetMin === null || targetMin === undefined || targetMax === null || targetMax === undefined) {
     return prices.length > 1 ? 16 : 12
   }
-  if (minimumPrice >= targetMin && minimumPrice <= targetMax) return MAXIMUMS.pricing
+  const minimumTarget = new Decimal(targetMin)
+  const maximumTarget = new Decimal(targetMax)
+  if (minimumPrice.greaterThanOrEqualTo(minimumTarget) && minimumPrice.lessThanOrEqualTo(maximumTarget)) {
+    return MAXIMUMS.pricing
+  }
 
-  const distance = minimumPrice < targetMin
-    ? (targetMin - minimumPrice) / Math.max(targetMin, 1)
-    : (minimumPrice - targetMax) / Math.max(targetMax, 1)
-  return round(MAXIMUMS.pricing * clamp(1 - distance, 0, 0.75))
+  const distance = minimumPrice.lessThan(minimumTarget)
+    ? minimumTarget.minus(minimumPrice).dividedBy(Decimal.max(minimumTarget, 1))
+    : minimumPrice.minus(maximumTarget).dividedBy(Decimal.max(maximumTarget, 1))
+  return round(MAXIMUMS.pricing * clamp(1 - distance.toNumber(), 0, 0.75))
 }
 
-function scoreMinimumOrderQuantity(quantity: number | null | undefined): number {
-  if (quantity === null || quantity === undefined || quantity <= 0) return 0
-  if (quantity <= 1) return MAXIMUMS.minimumOrderQuantity
-  if (quantity <= 5) return 13
-  if (quantity <= 20) return 10
-  if (quantity <= 100) return 6
+function scoreMinimumOrderQuantity(quantity: string | null | undefined): number {
+  if (quantity === null || quantity === undefined) return 0
+  let decimal: Decimal
+  try { decimal = new Decimal(quantity) } catch { return 0 }
+  if (!decimal.isFinite() || decimal.lessThanOrEqualTo(0)) return 0
+  if (decimal.lessThanOrEqualTo(1)) return MAXIMUMS.minimumOrderQuantity
+  if (decimal.lessThanOrEqualTo(5)) return 13
+  if (decimal.lessThanOrEqualTo(20)) return 10
+  if (decimal.lessThanOrEqualTo(100)) return 6
   return 2
 }
 

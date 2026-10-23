@@ -20,6 +20,7 @@ import { AddAlibaba1688Sourcing1784724000000 } from '../migrations/1784724000000
 import { AddLeadPoolWorkflowOrdering1784725000000 } from '../migrations/1784725000000-AddLeadPoolWorkflowOrdering'
 import { AddOutreachOtherChannel1784726000000 } from '../migrations/1784726000000-AddOutreachOtherChannel'
 import { AddOwnerScopedWorkflowDisplayIds1784727000000 } from '../migrations/1784727000000-AddOwnerScopedWorkflowDisplayIds'
+import { AddAlibaba1688SourcingPagination1784728000000 } from '../migrations/1784728000000-AddAlibaba1688SourcingPagination'
 
 describe('AutoFlow core migration', () => {
   function createQueryRunner() {
@@ -260,6 +261,18 @@ describe('P1 contract and discovery-link migrations', () => {
     expect(sql).toContain('"sourcing_score" double precision')
     expect(sql).not.toContain('lead_contacts')
     expect(sql).not.toContain('lead_scores')
+  })
+
+  it('adds asynchronous 1688 sourcing pagination and controlled image metadata', async () => {
+    const queryRunner = createQueryRunner()
+    await new AddAlibaba1688SourcingPagination1784728000000().up(queryRunner)
+    const sql = (queryRunner.query as jest.Mock).mock.calls.map(([statement]) => statement).join('\n')
+
+    expect(sql).toContain('CREATE TABLE "sourcing_search_pages"')
+    expect(sql).toContain('"seed_asset_path" varchar(1000)')
+    expect(sql).toContain('"query_fingerprint" varchar(128)')
+    expect(sql).toContain('"idx_sourcing_searches_owner_workflow_fingerprint"')
+    expect(sql).toContain('"idx_sourcing_search_pages_status_available"')
   })
 
   it('adds score-first workflow lead pool ordering', async () => {

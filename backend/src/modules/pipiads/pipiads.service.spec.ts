@@ -1,4 +1,4 @@
-import { ServiceUnavailableException } from '@nestjs/common'
+import { BadRequestException, ServiceUnavailableException } from '@nestjs/common'
 import type { ConfigService } from '@nestjs/config'
 import axios from 'axios'
 import { PipiAdsService } from './pipiads.service'
@@ -223,6 +223,33 @@ describe('PipiAdsService', () => {
       value: 'pet brush',
       targetMarket: 'US',
     })).rejects.toThrow('PipiAds credits are insufficient (provider code 442)')
+  })
+
+  it('classifies an image URL rejected by PipiAds as a non-retryable unreachable image', async () => {
+    const post = jest.spyOn(axios, 'post').mockResolvedValue({
+      data: {
+        code: 4000083,
+        success: false,
+        fail: true,
+        message: '获取图片失败',
+        data: '',
+      },
+    })
+
+    const discovery = service({
+      NODE_ENV: 'development',
+      PIPIADS_API_KEY: 'test-key',
+    }).discover({
+      type: 'image',
+      value: 'http://localhost:3000/uploads/workflow-seeds/owner/product.jpg',
+      targetMarket: 'US',
+    })
+
+    await expect(discovery).rejects.toBeInstanceOf(BadRequestException)
+    await expect(discovery).rejects.toThrow(
+      'PipiAds product image fetch failed. Use a publicly reachable HTTPS image URL or configure PUBLIC_ASSET_BASE_URL.',
+    )
+    expect(post).toHaveBeenCalledTimes(1)
   })
 
   it('marks local fallback evidence as synthetic', async () => {

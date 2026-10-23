@@ -114,6 +114,10 @@ export class WorkflowExecutionService {
         { id: workflowRunId, ownerUserId },
         { status: 'running', completedAt: null },
       )
+
+      // 1688寻源是独立采购旁路，必须在客户发现前启动，避免本机图片缺少公网地址时被提前中断。
+      await this.sourcingService.runForWorkflow(ownerUserId, workflowRunId)
+
       const steps = await this.workflowStepRepository.find({ where: { workflowRunId } })
       const completedStages = new Set(
         steps.filter((step) => step.status === 'completed').map((step) => step.stage),
@@ -124,11 +128,20 @@ export class WorkflowExecutionService {
         evidence = await this.discoveryService.getPersistedEvidence(ownerUserId, workflowRunId)
       } else {
         await this.markSteps(workflowRunId, activeStages, 'running')
-        evidence = await this.discoveryService.discoverEvidence(ownerUserId, workflowRunId)
+        const discoveryResult = await this.discoveryService.discoverEvidence(ownerUserId, workflowRunId)
+        if (discoveryResult.status === 'skipped') {
+          await this.completeSkippedCustomerDiscovery(
+            ownerUserId,
+            workflowRunId,
+            discoveryResult.reasonCode,
+            discoveryResult.reason,
+          )
+          return
+        }
+        evidence = discoveryResult.evidence
         await this.completeStep(workflowRunId, 'ad_discovery', { count: evidence.ads.length })
         await this.completeStep(workflowRunId, 'store_detection', { count: evidence.stores.length })
       }
-      await this.sourcingService.runForWorkflow(ownerUserId, workflowRunId)
       await this.updateWorkflow(ownerUserId, workflowRunId, 'lead_cleaning', 55)
 
       activeStages = ['lead_cleaning']
@@ -431,6 +444,41 @@ export class WorkflowExecutionService {
         completedAt: new Date(),
         errorMessage: null,
       } as unknown as QueryDeepPartialEntity<WorkflowStepEntity>,
+    )
+  }
+
+  /**
+   * 本机图片没有公网地址时，客户发现的所有阶段均为“明确跳过”，不是成功返回零结果，也不是执行失败。
+   * 该状态写入现有步骤输出，供工作流列表与1688寻源页统一计算“客户发现待配置”。
+   */
+  private async completeSkippedCustomerDiscovery(
+    ownerUserId: string,
+    workflowRunId: string,
+    reasonCode: 'public_image_not_configured',
+    reason: string,
+  ): Promise<void> {
+    const completedAt = new Date()
+    await this.workflowStepRepository.update(
+      {
+        workflowRunId,
+        stage: In(['ad_discovery', 'store_detection', 'lead_cleaning', 'lead_scoring']),
+      },
+      {
+        status: 'skipped',
+        output: { reasonCode, reason },
+        errorMessage: null,
+        completedAt,
+      } as unknown as QueryDeepPartialEntity<WorkflowStepEntity>,
+    )
+    await this.workflowRepository.update(
+      { id: workflowRunId, ownerUserId },
+      {
+        status: 'completed',
+        currentStage: 'lead_scoring',
+        progress: 100,
+        leadCount: 0,
+        completedAt,
+      },
     )
   }
 

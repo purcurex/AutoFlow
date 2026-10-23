@@ -6,7 +6,12 @@ import { StorefrontEnrichmentService } from './storefront-enrichment.service'
 
 jest.mock('axios', () => ({
   __esModule: true,
-  default: { get: jest.fn() },
+  default: {
+    get: jest.fn(),
+    isAxiosError: (error: unknown) => Boolean(
+      error && typeof error === 'object' && (error as { isAxiosError?: boolean }).isAxiosError,
+    ),
+  },
 }))
 jest.mock('dns/promises', () => ({ lookup: jest.fn() }))
 
@@ -110,6 +115,27 @@ describe('StorefrontEnrichmentService', () => {
       ]),
     }))
   })
+
+  it.each<NormalizedShopifyStore['verificationStatus']>(['probable', 'unverified'])(
+    'preserves %s storefront evidence when verification is rate limited',
+    async (verificationStatus) => {
+      dnsLookup.mockResolvedValue([{ address: '93.184.216.34', family: 4 }])
+      axiosGet.mockRejectedValue(Object.assign(new Error('Request failed with status code 429'), {
+        isAxiosError: true,
+        response: { status: 429 },
+      }))
+
+      const [result] = await service(true).enrich([{ ...store, verificationStatus }])
+
+      expect(result.verificationStatus).toBe(verificationStatus)
+      expect(result.verificationEvidence).toEqual(expect.objectContaining({
+        verificationBlocked: true,
+        verificationHttpStatus: 429,
+        verificationError: 'Request failed with status code 429',
+      }))
+      expect(result.verifiedAt).not.toBeNull()
+    },
+  )
 
   it('rejects private storefront targets without making an HTTP request', async () => {
     const [result] = await service(true).enrich([{ ...store, url: 'https://localhost' }])

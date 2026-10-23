@@ -28,6 +28,11 @@ import { SourcingSearchEntity } from './sourcing-search.entity'
 @Index('idx_sourcing_suppliers_search', ['searchId'])
 @Index('idx_sourcing_suppliers_member', ['provider', 'memberId'])
 @Index('idx_sourcing_suppliers_open_id', ['provider', 'openId'])
+@Index(
+  'idx_sourcing_suppliers_owner_provider_open_recent',
+  ['ownerUserId', 'provider', 'openId', 'updatedAt'],
+  { where: '"open_id" IS NOT NULL' },
+)
 @Check('chk_sourcing_suppliers_provider', "provider = 'alibaba_1688'")
 @Check(
   'chk_sourcing_suppliers_rating',
@@ -71,8 +76,8 @@ export class SourcingSupplierEntity {
   @Column({ name: 'shop_url', type: 'varchar', length: 1000, nullable: true })
   shopUrl: string | null
 
-  @Column({ name: 'supplier_rating', type: 'double precision', nullable: true })
-  supplierRating: number | null
+  @Column({ name: 'supplier_rating', type: 'decimal', precision: 9, scale: 4, nullable: true })
+  supplierRating: string | null
 
   @Column({ name: 'years_in_business', type: 'integer', nullable: true })
   yearsInBusiness: number | null

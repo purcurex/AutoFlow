@@ -1,53 +1,50 @@
 import { readBusinessOwners } from '../users/business-data-access'
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common'
-import { InjectRepository } from '@nestjs/typeorm'
-import { randomUUID } from 'crypto'
-import { DataSource, Repository } from 'typeorm'
 import {
-  Alibaba1688Exception,
-  Alibaba1688Service,
-  type Alibaba1688StableProductDetail,
-  type Alibaba1688StableSearchResult,
-} from '../alibaba1688'
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+  ServiceUnavailableException,
+} from '@nestjs/common'
+import { InjectRepository } from '@nestjs/typeorm'
+import { createHash, randomUUID } from 'crypto'
+import { DataSource, In, Repository } from 'typeorm'
+import { Alibaba1688Service } from '../alibaba1688'
 import { WorkflowRunEntity } from '../autoflow/entities'
+import { deriveCustomerDiscoveryStatus } from '../autoflow/customer-discovery-status'
+import { ListSourcingDto } from './dto/list-sourcing.dto'
 import { StartSourcingDto } from './dto/start-sourcing.dto'
 import {
   SourcingOfferEntity,
   SourcingSearchEntity,
-  SourcingSupplierEntity,
+  SourcingSearchPageEntity,
 } from './entities'
-import {
-  calculateSourcingScore,
-  type SourcingScoreInput,
-} from './sourcing-scoring'
+import { decimalCompare } from './sourcing-decimal'
 import type {
   SourcingOfferResponse,
+  SourcingPageRequestResponse,
   SourcingSearchResponse,
+  SourcingStartResponse,
   SourcingSummaryResponse,
+  SourcingWindowResponse,
 } from './sourcing-response.types'
-import { SOURCING_PROVIDER, type SourcingScoreReason } from './sourcing.types'
+import { SOURCING_PROVIDER } from './sourcing.types'
+import { SourcingPageCacheService } from './sourcing-page-cache.service'
 
-interface PreparedSearch {
-  workflow: WorkflowRunEntity
-  search: SourcingSearchEntity | null
-  reuseExisting: boolean
+export const SOURCING_RESULT_WINDOW_STEP = 100
+
+interface SourcingResultWindow {
+  totalRecords: number | null
+  totalPages: number | null
+  providerTotalRecords: number | null
+  resultLimit: number
+  canExpand: boolean
 }
 
-interface OfferHydration {
-  detail: Alibaba1688StableProductDetail | null
-  providerOffer: Alibaba1688StableSearchResult['offers'][number]
-  rank: number
-}
-
-const SCORE_LABELS: Record<string, string> = {
-  high_product_relevance: 'High product relevance',
-  usable_price_range: 'Usable procurement price',
-  dropshipping_friendly_moq: 'Dropshipping-friendly MOQ',
-  reliable_supplier_signals: 'Reliable supplier signals',
-  fast_dispatch_signal: 'Fast dispatch signal',
-  customization_supported: 'Customization supported',
-}
-
+/**
+ * 寻源命令与查询服务。
+ * HTTP请求只创建/读取数据库分页任务，任何1688网络调用均由分页Worker在请求生命周期外执行。
+ */
 @Injectable()
 export class SourcingService {
   private readonly logger = new Logger(SourcingService.name)
@@ -57,90 +54,337 @@ export class SourcingService {
     private readonly workflowRepository: Repository<WorkflowRunEntity>,
     @InjectRepository(SourcingSearchEntity)
     private readonly searchRepository: Repository<SourcingSearchEntity>,
+    @InjectRepository(SourcingSearchPageEntity)
+    private readonly pageRepository: Repository<SourcingSearchPageEntity>,
     @InjectRepository(SourcingOfferEntity)
     private readonly offerRepository: Repository<SourcingOfferEntity>,
     private readonly alibaba1688Service: Alibaba1688Service,
     private readonly dataSource: DataSource,
+    private readonly pageCache: SourcingPageCacheService,
   ) {}
 
-  async getSummary(ownerUserId: string, workflowRunId: string): Promise<SourcingSummaryResponse> {
+  async getSummary(
+    ownerUserId: string,
+    workflowRunId: string,
+    query: ListSourcingDto = new ListSourcingDto(),
+  ): Promise<SourcingSummaryResponse> {
+    // 沿用主分支的数据可见范围，分页结果按工作流实际所属账号读取。
     const owners = await readBusinessOwners(this.dataSource, ownerUserId)
-    const workflow = await this.workflowRepository.findOne({ where: { id: workflowRunId, ownerUserId: owners.filter } })
+    const workflow = await this.workflowRepository.findOne({
+      where: { id: workflowRunId, ownerUserId: owners.filter },
+      relations: { steps: true },
+    })
     if (!workflow) throw new NotFoundException('Workflow not found')
-    return this.buildSummary(workflow.ownerUserId, workflowRunId)
+    const sourcingOwnerUserId = workflow.ownerUserId
+    const workflowInput = this.mapWorkflowInput(workflow)
+    const customerDiscoveryStatus = deriveCustomerDiscoveryStatus(
+      workflow.status,
+      workflow.steps || [],
+    )
+    const readiness = this.alibaba1688Service.getReadiness()
+    const pageNumber = query.page || 1
+    const requestedPageSize = query.pageSize
+    const search = await this.searchRepository.findOne({
+      where: query.searchId
+        ? { id: query.searchId, ownerUserId: sourcingOwnerUserId, workflowRunId }
+        : { ownerUserId: sourcingOwnerUserId, workflowRunId },
+      order: { createdAt: 'DESC' },
+    })
+    if (query.searchId && !search) throw new NotFoundException('Sourcing search not found')
+
+    if (!search) {
+      return {
+        workflowId: workflowRunId,
+        workflowInput,
+        customerDiscoveryStatus,
+        provider: SOURCING_PROVIDER,
+        providerConfigured: readiness.ready,
+        status: readiness.ready ? 'idle' : 'not_configured',
+        search: null,
+        latestSearch: null,
+        pagination: {
+          page: pageNumber,
+          pageSize: (requestedPageSize || 20) as 10 | 20 | 50,
+          totalRecords: null,
+          totalPages: null,
+          providerTotalRecords: null,
+          resultLimit: SOURCING_RESULT_WINDOW_STEP,
+          canExpand: false,
+          resultCount: 0,
+          loaded: false,
+          status: 'pending',
+          errorCode: null,
+          errorMessage: null,
+        },
+        items: [],
+        offers: [],
+      }
+    }
+
+    if (requestedPageSize !== undefined && requestedPageSize !== search.pageSize) {
+      throw new BadRequestException('pageSize must match the sourcing search page size')
+    }
+    const resultWindow = this.resultWindow(search)
+    if (resultWindow.totalPages !== null && pageNumber > resultWindow.totalPages) {
+      throw new BadRequestException('Requested sourcing page exceeds total pages')
+    }
+
+    const page = await this.pageRepository.findOne({
+      where: { ownerUserId: sourcingOwnerUserId, searchId: search.id, pageNumber },
+    })
+    const offerEntities = page?.status === 'succeeded'
+      ? await this.offerRepository.find({
+          where: { ownerUserId: sourcingOwnerUserId, workflowRunId, searchId: search.id, pageNumber },
+          relations: { supplier: true },
+          order: { rankInPage: 'ASC' },
+        })
+      : []
+    const items = offerEntities.map((offer) => this.mapOffer(offer))
+    const searchResponse = this.mapSearch(search, page)
+
+    return {
+      workflowId: workflowRunId,
+      workflowInput,
+      customerDiscoveryStatus,
+      provider: SOURCING_PROVIDER,
+      providerConfigured: readiness.ready,
+      status: this.apiStatus(search.status),
+      search: searchResponse,
+      latestSearch: searchResponse,
+      pagination: {
+        page: pageNumber,
+        pageSize: search.pageSize as 10 | 20 | 50,
+        ...resultWindow,
+        resultCount: page?.resultCount || 0,
+        loaded: page?.status === 'succeeded',
+        status: page?.status || 'pending',
+        errorCode: page?.errorCode || null,
+        errorMessage: page?.errorMessage || null,
+      },
+      items,
+      offers: items,
+    }
   }
 
   async startSearch(
     ownerUserId: string,
     workflowRunId: string,
     options: StartSourcingDto = {},
-  ): Promise<SourcingSummaryResponse> {
+  ): Promise<SourcingStartResponse> {
     if (
       options.priceMin !== undefined
       && options.priceMax !== undefined
-      && options.priceMin > options.priceMax
+      && decimalCompare(options.priceMin, options.priceMax) === 1
     ) {
       throw new BadRequestException('priceMin cannot be greater than priceMax')
     }
     const readiness = this.alibaba1688Service.getReadiness()
     if (!readiness.ready) {
       await this.requireWorkflow(ownerUserId, workflowRunId)
-      return this.buildSummary(ownerUserId, workflowRunId)
+      throw new ServiceUnavailableException({
+        code: 'NOT_CONFIGURED',
+        message: `Alibaba 1688 is not configured: ${readiness.missing.join(', ')}`,
+      })
     }
 
-    const prepared = await this.prepareSearch(ownerUserId, workflowRunId, options)
-    if (prepared.reuseExisting || !prepared.search) {
-      return this.buildSummary(ownerUserId, workflowRunId)
-    }
+    return this.dataSource.transaction(async (manager) => {
+      const workflowRepository = manager.getRepository(WorkflowRunEntity)
+      const searchRepository = manager.getRepository(SourcingSearchEntity)
+      const pageRepository = manager.getRepository(SourcingSearchPageEntity)
+      const workflow = await workflowRepository.findOne({
+        where: { id: workflowRunId, ownerUserId },
+        lock: { mode: 'pessimistic_write' },
+      })
+      if (!workflow) throw new NotFoundException('Workflow not found')
 
-    const search = prepared.search
-    try {
-      search.status = 'running'
-      search.startedAt = new Date()
-      await this.searchRepository.save(search)
-
-      const result = prepared.workflow.seedType === 'keyword'
-        ? await this.alibaba1688Service.searchByKeyword({
-            keyword: prepared.workflow.seedValue,
-            beginPage: 1,
-            pageSize: options.pageSize,
-            priceStart: this.optionalPrice(options.priceMin),
-            priceEnd: this.optionalPrice(options.priceMax),
-            country: 'en',
-            keywordTranslate: false,
-          })
-        : await this.alibaba1688Service.searchByImage({
-            imageAddress: prepared.workflow.seedValue,
-            beginPage: 1,
-            pageSize: options.pageSize,
-            priceStart: this.optionalPrice(options.priceMin),
-            priceEnd: this.optionalPrice(options.priceMax),
-            country: 'en',
-          })
-
-      search.providerRequestId = result.metadata.requestId
-      await this.persistResults(prepared.workflow, search, result.normalized, options)
-      search.status = 'succeeded'
-      search.completedAt = new Date()
-      await this.searchRepository.save(search)
-    } catch (error) {
-      const failure = error instanceof Alibaba1688Exception
-        ? error.normalized
-        : {
-            code: 'PROVIDER_REJECTED',
-            message: error instanceof Error ? error.message : 'Alibaba 1688 sourcing failed',
+      const pageSize = (options.pageSize || 20) as 10 | 20 | 50
+      const languageCode = 'en'
+      const queryFingerprint = this.queryFingerprint(ownerUserId, workflow, {
+        ...options,
+        pageSize,
+      }, languageCode)
+      const cacheFingerprint = this.buildCacheFingerprint(ownerUserId, workflow, {
+        ...options,
+        pageSize,
+      }, languageCode)
+      if (!options.force) {
+        const existing = await searchRepository.findOne({
+          where: {
+            ownerUserId,
+            workflowRunId,
+            queryFingerprint,
+            status: In(['pending', 'running', 'succeeded', 'partial']),
+          },
+          order: { createdAt: 'DESC' },
+        })
+        if (existing) {
+          return {
+            searchId: existing.id,
+            status: existing.status as 'pending' | 'running' | 'succeeded' | 'partial',
+            page: 1,
+            pageSize: existing.pageSize as 10 | 20 | 50,
           }
-      search.status = 'failed'
-      search.errorCode = failure.code
-      search.errorMessage = failure.message.slice(0, 2000)
-      search.completedAt = new Date()
-      await this.searchRepository.save(search)
-      this.logger.warn(
-        `1688 sourcing failed workflow=${workflowRunId} code=${failure.code}`,
-      )
+        }
+      }
+
+      const search = await searchRepository.save(searchRepository.create({
+        ownerUserId,
+        workflowRunId,
+        provider: SOURCING_PROVIDER,
+        searchMode: workflow.seedType,
+        status: 'pending',
+        requestId: randomUUID(),
+        providerRequestId: null,
+        providerMethod: workflow.seedType === 'keyword'
+          ? 'product.search.keywordQuery'
+          : 'product.search.imageQuery',
+        keyword: workflow.seedType === 'keyword' ? workflow.seedValue.trim() : null,
+        imageUrl: workflow.seedType === 'image' ? workflow.seedValue.trim() : null,
+        languageCode,
+        imageId: null,
+        imageUploadRequestId: null,
+        imageUploadTraceId: null,
+        totalRecords: null,
+        totalPages: null,
+        pageSize,
+        resultLimit: SOURCING_RESULT_WINDOW_STEP,
+        loadedPageCount: 0,
+        queryFingerprint,
+        cacheFingerprint,
+        requestPayload: {
+          // 业务上下文仅用于审计和前端回显；1688检索分支严格由seedType/seedValue决定。
+          workflowName: workflow.name,
+          targetMarket: workflow.targetMarket,
+          pageSize,
+          priceMin: options.priceMin || null,
+          priceMax: options.priceMax || null,
+          languageCode,
+          forceRefresh: options.force === true,
+        },
+        errorCode: null,
+        errorMessage: null,
+        requestedAt: new Date(),
+        startedAt: null,
+        completedAt: null,
+      }))
+      await pageRepository.save(pageRepository.create({
+        searchId: search.id,
+        ownerUserId,
+        pageNumber: 1,
+        pageSize,
+        status: 'pending',
+        attempts: 0,
+        maxAttempts: 3,
+        availableAt: new Date(),
+        leaseOwner: null,
+        leaseExpiresAt: null,
+        heartbeatAt: null,
+        providerRequestId: null,
+        providerTraceId: null,
+        resultCount: 0,
+        errorCode: null,
+        errorMessage: null,
+        startedAt: null,
+        completedAt: null,
+      }))
+      return { searchId: search.id, status: 'pending', page: 1, pageSize }
+    })
+  }
+
+  async requestPage(
+    ownerUserId: string,
+    workflowRunId: string,
+    searchId: string,
+    pageNumber: number,
+  ): Promise<SourcingPageRequestResponse> {
+    if (!Number.isInteger(pageNumber) || pageNumber < 1) {
+      throw new BadRequestException('Sourcing page must be a positive integer')
+    }
+    const search = await this.searchRepository.findOne({
+      where: { id: searchId, ownerUserId, workflowRunId },
+    })
+    if (!search) throw new NotFoundException('Sourcing search not found')
+    if (search.totalPages === null && pageNumber > 1) {
+      throw new BadRequestException('Load the first sourcing page before requesting later pages')
+    }
+    const resultWindow = this.resultWindow(search)
+    if (resultWindow.totalPages !== null && pageNumber > resultWindow.totalPages) {
+      throw new BadRequestException('Requested sourcing page exceeds total pages')
     }
 
-    return this.buildSummary(ownerUserId, workflowRunId)
+    const existing = await this.pageRepository.findOne({
+      where: { ownerUserId, searchId, pageNumber },
+    })
+    if (existing) {
+      if (existing.status === 'failed') {
+        existing.status = 'pending'
+        existing.attempts = 0
+        existing.availableAt = new Date()
+        existing.leaseOwner = null
+        existing.leaseExpiresAt = null
+        existing.heartbeatAt = null
+        existing.errorCode = null
+        existing.errorMessage = null
+        existing.startedAt = null
+        existing.completedAt = null
+        await this.pageRepository.save(existing)
+      }
+      return {
+        searchId,
+        status: existing.status as 'pending' | 'running' | 'succeeded',
+        page: pageNumber,
+        pageSize: search.pageSize as 10 | 20 | 50,
+      }
+    }
+
+    const cachedPage = await this.pageCache.restore(ownerUserId, search, pageNumber)
+    if (cachedPage) {
+      return {
+        searchId,
+        status: cachedPage.status as 'pending' | 'running' | 'succeeded',
+        page: pageNumber,
+        pageSize: search.pageSize as 10 | 20 | 50,
+      }
+    }
+
+    let created: SourcingSearchPageEntity
+    try {
+      created = await this.pageRepository.save(this.pageRepository.create({
+        searchId,
+        ownerUserId,
+        pageNumber,
+        pageSize: search.pageSize,
+        status: 'pending',
+        attempts: 0,
+        maxAttempts: 3,
+        availableAt: new Date(),
+        leaseOwner: null,
+        leaseExpiresAt: null,
+        heartbeatAt: null,
+        providerRequestId: null,
+        providerTraceId: null,
+        resultCount: 0,
+        cacheHit: false,
+        cacheSourcePageId: null,
+        errorCode: null,
+        errorMessage: null,
+        startedAt: null,
+        completedAt: null,
+      }))
+    } catch (error) {
+      // 唯一约束竞争发生时返回并发请求已经创建的分页；没有目标页则保留原异常。
+      const racedPage = await this.pageRepository.findOne({
+        where: { ownerUserId, searchId, pageNumber },
+      })
+      if (!racedPage) throw error
+      created = racedPage
+    }
+    return {
+      searchId,
+      status: created.status as 'pending' | 'running' | 'succeeded',
+      page: pageNumber,
+      pageSize: search.pageSize as 10 | 20 | 50,
+    }
   }
 
   async runForWorkflow(ownerUserId: string, workflowRunId: string): Promise<void> {
@@ -155,281 +399,162 @@ export class SourcingService {
     }
   }
 
-  private async prepareSearch(
-    ownerUserId: string,
-    workflowRunId: string,
-    options: StartSourcingDto,
-  ): Promise<PreparedSearch> {
-    return this.dataSource.transaction(async (manager) => {
-      const workflowRepository = manager.getRepository(WorkflowRunEntity)
-      const searchRepository = manager.getRepository(SourcingSearchEntity)
-      const workflow = await workflowRepository
-        .createQueryBuilder('workflow')
-        .setLock('pessimistic_write')
-        .where('workflow.id = :workflowRunId', { workflowRunId })
-        .andWhere('workflow.ownerUserId = :ownerUserId', { ownerUserId })
-        .getOne()
-      if (!workflow) throw new NotFoundException('Workflow not found')
-
-      const latest = await searchRepository.findOne({
-        where: { ownerUserId, workflowRunId },
-        order: { createdAt: 'DESC' },
-      })
-      if (latest?.status === 'running' || latest?.status === 'pending') {
-        return { workflow, search: latest, reuseExisting: true }
-      }
-      if (!options.force && latest?.status === 'succeeded') {
-        return { workflow, search: latest, reuseExisting: true }
-      }
-
-      const search = searchRepository.create({
-        ownerUserId,
-        workflowRunId,
-        provider: SOURCING_PROVIDER,
-        searchMode: workflow.seedType,
-        status: 'pending',
-        requestId: randomUUID(),
-        providerRequestId: null,
-        providerMethod: workflow.seedType === 'keyword'
-          ? 'product.search.keywordQuery'
-          : 'product.search.imageQuery',
-        keyword: workflow.seedType === 'keyword' ? workflow.seedValue : null,
-        imageUrl: workflow.seedType === 'image' ? workflow.seedValue : null,
-        requestPayload: {
-          seedType: workflow.seedType,
-          pageSize: options.pageSize ?? null,
-          priceMin: options.priceMin ?? null,
-          priceMax: options.priceMax ?? null,
-        },
-        errorCode: null,
-        errorMessage: null,
-        requestedAt: new Date(),
-        startedAt: null,
-        completedAt: null,
-      })
-      return {
-        workflow,
-        search: await searchRepository.save(search),
-        reuseExisting: false,
-      }
-    })
-  }
-
-  private async persistResults(
-    workflow: WorkflowRunEntity,
-    search: SourcingSearchEntity,
-    normalized: Alibaba1688StableSearchResult,
-    options: StartSourcingDto,
-  ): Promise<void> {
-    const maxResults = Math.min(normalized.offers.length, options.pageSize ?? 20, 20)
-    const offers = normalized.offers.slice(0, maxResults)
-    const hydrated: OfferHydration[] = []
-
-    const detailLimit = Math.min(offers.length, 5)
-    for (let offset = 0; offset < offers.length; offset += 5) {
-      const batch = offers.slice(offset, offset + 5)
-      const details = await Promise.allSettled(
-        batch.map((offer, index) =>
-          offset + index < detailLimit && offer.offerId
-            ? this.alibaba1688Service.getProductDetail({ offerId: offer.offerId, country: 'en' })
-            : Promise.resolve(null),
-        ),
-      )
-      batch.forEach((providerOffer, index) => {
-        const detailResult = details[index]
-        hydrated.push({
-          providerOffer,
-          rank: offset + index + 1,
-          detail: detailResult?.status === 'fulfilled' && detailResult.value
-            ? detailResult.value.normalized
-            : null,
-        })
-      })
-    }
-
-    await this.dataSource.transaction(async (manager) => {
-      const supplierRepository = manager.getRepository(SourcingSupplierEntity)
-      const offerRepository = manager.getRepository(SourcingOfferEntity)
-      const suppliers = new Map<string, SourcingSupplierEntity>()
-      const seenOfferIds = new Set<string>()
-
-      for (const item of hydrated) {
-        const source = item.providerOffer
-        if (!source.offerId || seenOfferIds.has(source.offerId)) continue
-        seenOfferIds.add(source.offerId)
-        const detail = item.detail
-        const seller = detail?.seller ?? source.seller
-        const supplierKey = seller.openId
-          || seller.companyName
-          || `offer:${source.offerId}`
-        const identities = Array.from(new Set([
-          ...seller.identities,
-          ...source.offerIdentities,
-        ]))
-        const capabilities = {
-          identities,
-          tradeMedalLevel: seller.tradeMedalLevel,
-          logisticsExperienceScore: seller.logisticsExperienceScore,
-          repeatPurchasePercent: seller.repeatPurchasePercent,
-          onePieceDropshipping: source.onePieceDropshipping,
-          selectedSupply: source.selectedSupply,
-          sellingPoints: detail?.sellingPoints ?? [],
-        }
-        const normalizedSupplierKey = supplierKey.slice(0, 255)
-        const supplierRating = this.ratingValue(seller.compositeServiceScore)
-          ?? this.ratingValue(source.tradeScore)
-        let supplier = suppliers.get(normalizedSupplierKey)
-        if (!supplier) {
-          supplier = await supplierRepository.save(supplierRepository.create({
-            searchId: search.id,
-            ownerUserId: workflow.ownerUserId,
-            workflowRunId: workflow.id,
-            provider: SOURCING_PROVIDER,
-            supplierKey: normalizedSupplierKey,
-            memberId: null,
-            openId: seller.openId,
-            companyName: seller.companyName,
-            shopName: seller.companyName,
-            shopUrl: seller.shopUrl,
-            supplierRating,
-            yearsInBusiness: null,
-            capabilities,
-          }))
-          suppliers.set(normalizedSupplierKey, supplier)
-        }
-
-        const prices = [
-          source.price.promotionAmount,
-          source.price.selectedSupplyAmount,
-          source.price.consignAmount,
-          source.price.amount,
-          ...(detail?.skus.flatMap((sku) => [sku.consignPrice, sku.price]) ?? []),
-        ]
-          .map((value) => this.decimalValue(value))
-          .filter((value): value is number => value !== null)
-        const priceMin = prices.length > 0 ? Math.min(...prices) : null
-        const priceMax = prices.length > 0 ? Math.max(...prices) : null
-        const supportsCustomization = this.supportsCustomization(identities, detail?.sellingPoints)
-        const scoreInput: SourcingScoreInput = {
-          query: workflow.seedType === 'keyword' ? workflow.seedValue : '',
-          title: [
-            detail?.title,
-            detail?.translatedTitle,
-            source.title,
-            source.translatedTitle,
-          ].filter(Boolean).join(' '),
-          providerRank: item.rank,
-          priceRanges: prices.map((price) => ({ price })),
-          targetPriceMin: options.priceMin,
-          targetPriceMax: options.priceMax,
-          minimumOrderQuantity: detail?.minOrderQuantity ?? source.minOrderQuantity,
-          sellerCompositeScore: supplierRating,
-          sellerTradeScore: this.ratingValue(source.tradeScore),
-          repeatPurchasePercent: this.percentValue(
-            seller.repeatPurchasePercent ?? source.repurchaseRate,
-          ),
-          deliveryReadinessPercent: this.ratingValue(
-            seller.logisticsExperienceScore,
-          ),
-          supportsCustomization,
-          isVerifiedSupplier: identities.length > 0,
-        }
-        const score = calculateSourcingScore(scoreInput)
-        const scoreReasons: SourcingScoreReason[] = score.reasons.map((code) => ({
-          code,
-          label: SCORE_LABELS[code] || code,
-          score: this.reasonScore(code, score.dimensions),
-        }))
-
-        await offerRepository.save(offerRepository.create({
-          searchId: search.id,
-          supplierId: supplier.id,
-          ownerUserId: workflow.ownerUserId,
-          workflowRunId: workflow.id,
-          provider: SOURCING_PROVIDER,
-          offerId: source.offerId,
-          offerUrl: detail?.offerUrl
-            || source.offerUrl
-            || `https://detail.1688.com/offer/${source.offerId}.html`,
-          imageUrl: detail?.imageUrls[0] || source.imageUrl,
-          title: detail?.title || source.title || source.translatedTitle || `1688 Offer ${source.offerId}`,
-          titleZh: detail?.title || source.title,
-          titleEn: detail?.translatedTitle || source.translatedTitle,
-          categoryId: detail?.categoryId ?? null,
-          categoryName: detail?.categoryName ?? null,
-          minimumOrderQuantity: this.optionalDecimal(
-            detail?.minOrderQuantity ?? source.minOrderQuantity,
-          ),
-          quantityUnit: null,
-          priceMin: this.optionalDecimal(priceMin),
-          priceMax: this.optionalDecimal(priceMax),
-          currency: 'CNY',
-          priceTiers: prices.map((price) => ({
-            minimumQuantity: detail?.minOrderQuantity ?? source.minOrderQuantity ?? 1,
-            unitPrice: String(price),
-            currency: 'CNY',
-          })),
-          salesVolume: source.monthSold === null ? null : String(source.monthSold),
-          repurchaseRate: this.percentValue(
-            source.repurchaseRate ?? seller.repeatPurchasePercent,
-          ),
-          tags: identities,
-          sourcingScore: score.score,
-          sourcingScoreReasons: scoreReasons,
-          rawSnapshot: {
-            sourceTag: normalized.sourceTag,
-            affectsContactConfidence: normalized.affectsContactConfidence,
-            offer: source,
-            detail,
-            scoreDimensions: score.dimensions,
-          },
-        }))
-      }
-    })
-  }
-
-  private async buildSummary(
-    ownerUserId: string,
-    workflowRunId: string,
-  ): Promise<SourcingSummaryResponse> {
-    const readiness = this.alibaba1688Service.getReadiness()
-    const latestSearch = await this.searchRepository.findOne({
-      where: { ownerUserId, workflowRunId },
-      order: { createdAt: 'DESC' },
-    })
-    const offers = latestSearch
-      ? await this.offerRepository.find({
-          where: { ownerUserId, workflowRunId, searchId: latestSearch.id },
-          relations: { supplier: true },
-          order: { sourcingScore: 'DESC' },
-        })
-      : []
-
-    const status = !readiness.ready
-      ? 'not_configured'
-      : latestSearch
-        ? this.apiStatus(latestSearch.status)
-        : 'idle'
+  /**
+   * 返回创建工作流时的原始匹配字段，让前端明确展示本次1688查询依据。
+   */
+  private mapWorkflowInput(workflow: WorkflowRunEntity) {
     return {
-      workflowId: workflowRunId,
-      provider: SOURCING_PROVIDER,
-      providerConfigured: readiness.ready,
-      status,
-      latestSearch: latestSearch ? this.mapSearch(latestSearch) : null,
-      offers: offers.map((offer) => this.mapOffer(offer)),
+      name: workflow.name,
+      seedType: workflow.seedType,
+      seedValue: workflow.seedValue,
+      targetMarket: workflow.targetMarket,
     }
   }
 
-  private mapSearch(search: SourcingSearchEntity): SourcingSearchResponse {
+  private queryFingerprint(
+    ownerUserId: string,
+    workflow: WorkflowRunEntity,
+    options: StartSourcingDto,
+    languageCode: string,
+  ): string {
+    return createHash('sha256').update(JSON.stringify({
+      ownerUserId,
+      workflowRunId: workflow.id,
+      searchMode: workflow.seedType,
+      seed: workflow.seedValue.trim().toLocaleLowerCase(),
+      languageCode,
+      pageSize: options.pageSize || 20,
+      priceMin: options.priceMin || null,
+      priceMax: options.priceMax || null,
+    })).digest('hex')
+  }
+
+  /**
+   * 生成跨工作流可复用的短期缓存指纹；不包含工作流ID，但始终包含用户ID，禁止跨租户复用。
+   */
+  private buildCacheFingerprint(
+    ownerUserId: string,
+    workflow: WorkflowRunEntity,
+    options: StartSourcingDto,
+    languageCode: string,
+  ): string {
+    return createHash('sha256').update(JSON.stringify({
+      ownerUserId,
+      provider: SOURCING_PROVIDER,
+      searchMode: workflow.seedType,
+      seed: workflow.seedValue.trim().toLocaleLowerCase(),
+      targetMarket: workflow.targetMarket,
+      languageCode,
+      pageSize: options.pageSize || 20,
+      priceMin: options.priceMin || null,
+      priceMax: options.priceMax || null,
+    })).digest('hex')
+  }
+
+  private async requireWorkflow(
+    ownerUserId: string,
+    workflowRunId: string,
+  ): Promise<WorkflowRunEntity> {
+    const workflow = await this.workflowRepository.findOne({
+      where: { id: workflowRunId, ownerUserId },
+      relations: { steps: true },
+    })
+    if (!workflow) throw new NotFoundException('Workflow not found')
+    return workflow
+  }
+
+  private mapSearch(
+    search: SourcingSearchEntity,
+    page: SourcingSearchPageEntity | null,
+  ): SourcingSearchResponse {
     return {
       id: search.id,
       status: this.apiStatus(search.status),
       searchMode: search.searchMode,
       query: search.keyword ?? search.imageUrl,
-      failureCode: search.errorCode,
-      failureMessage: search.errorMessage,
+      failureCode: page?.errorCode || search.errorCode,
+      failureMessage: page?.errorMessage || search.errorMessage,
+      requestedAt: search.requestedAt.toISOString(),
       startedAt: search.startedAt?.toISOString() ?? null,
       completedAt: search.completedAt?.toISOString() ?? null,
+    }
+  }
+
+  /**
+   * 只开放下一批100条结果，不预取商品。targetLimit采用目标值语义，同一请求重复到达时保持幂等。
+   * 行锁确保并发请求按数据库中的最新窗口判断，避免一次双击意外增加两个窗口。
+   */
+  async extendResultWindow(
+    ownerUserId: string,
+    workflowRunId: string,
+    searchId: string,
+    targetLimit: number,
+  ): Promise<SourcingWindowResponse> {
+    if (
+      !Number.isInteger(targetLimit)
+      || targetLimit < SOURCING_RESULT_WINDOW_STEP
+      || targetLimit % SOURCING_RESULT_WINDOW_STEP !== 0
+    ) {
+      throw new BadRequestException('Sourcing result limit must be a positive multiple of 100')
+    }
+
+    return this.dataSource.transaction(async (manager) => {
+      const searchRepository = manager.getRepository(SourcingSearchEntity)
+      const search = await searchRepository.findOne({
+        where: { id: searchId, ownerUserId, workflowRunId },
+        lock: { mode: 'pessimistic_write' },
+      })
+      if (!search) throw new NotFoundException('Sourcing search not found')
+      if (search.totalRecords === null) {
+        throw new BadRequestException('Load the first sourcing page before extending results')
+      }
+
+      const currentLimit = Number.isInteger(search.resultLimit) && search.resultLimit >= 100
+        ? search.resultLimit
+        : SOURCING_RESULT_WINDOW_STEP
+      search.resultLimit = currentLimit
+      if (targetLimit <= currentLimit || Number(search.totalRecords) <= currentLimit) {
+        return { searchId, ...this.resultWindow(search) }
+      }
+      if (targetLimit !== currentLimit + SOURCING_RESULT_WINDOW_STEP) {
+        throw new BadRequestException('Only the next 100 sourcing results can be opened')
+      }
+
+      search.resultLimit = targetLimit
+      await searchRepository.save(search)
+      return { searchId, ...this.resultWindow(search) }
+    })
+  }
+
+  /**
+   * 保留1688第一页返回的原始总量，只把当前获准浏览的结果窗口暴露给前端分页。
+   * 历史测试夹具或迁移前对象没有resultLimit时按100条兼容，数据库迁移后实体始终有值。
+   */
+  private resultWindow(search: SourcingSearchEntity): SourcingResultWindow {
+    const providerTotalRecords = search.totalRecords === null
+      ? null
+      : Number(search.totalRecords)
+    const resultLimit = Number.isInteger(search.resultLimit) && search.resultLimit >= 100
+      ? search.resultLimit
+      : SOURCING_RESULT_WINDOW_STEP
+    if (providerTotalRecords === null || !Number.isFinite(providerTotalRecords)) {
+      return {
+        totalRecords: null,
+        totalPages: null,
+        providerTotalRecords: null,
+        resultLimit,
+        canExpand: false,
+      }
+    }
+
+    const totalRecords = Math.min(Math.max(0, providerTotalRecords), resultLimit)
+    const totalPages = totalRecords === 0 ? 0 : Math.ceil(totalRecords / search.pageSize)
+    return {
+      totalRecords,
+      totalPages,
+      providerTotalRecords,
+      resultLimit,
+      canExpand: providerTotalRecords > resultLimit,
     }
   }
 
@@ -473,68 +598,5 @@ export class SourcingService {
     if (status === 'pending') return 'running'
     if (status === 'cancelled') return 'failed'
     return status
-  }
-
-  private async requireWorkflow(
-    ownerUserId: string,
-    workflowRunId: string,
-  ): Promise<WorkflowRunEntity> {
-    const workflow = await this.workflowRepository.findOne({
-      where: { id: workflowRunId, ownerUserId },
-    })
-    if (!workflow) throw new NotFoundException('Workflow not found')
-    return workflow
-  }
-
-  private optionalPrice(value: number | undefined): string | undefined {
-    return value === undefined ? undefined : String(value)
-  }
-
-  private decimalValue(value: string | number | null | undefined): number | null {
-    if (value === null || value === undefined || value === '') return null
-    const parsed = Number.parseFloat(String(value).replace('%', ''))
-    return Number.isFinite(parsed) && parsed >= 0 ? parsed : null
-  }
-
-  private percentValue(value: string | number | null | undefined): number | null {
-    const parsed = this.decimalValue(value)
-    if (parsed === null) return null
-    return Math.min(100, parsed <= 1 ? parsed * 100 : parsed)
-  }
-
-  private ratingValue(value: string | number | null | undefined): number | null {
-    const parsed = this.decimalValue(value)
-    if (parsed === null) return null
-    if (parsed <= 1) return parsed * 100
-    if (parsed <= 5) return parsed * 20
-    return Math.min(100, parsed)
-  }
-
-  private optionalDecimal(value: string | number | null | undefined): string | null {
-    const parsed = this.decimalValue(value)
-    return parsed === null ? null : String(parsed)
-  }
-
-  private supportsCustomization(
-    identities: string[],
-    sellingPoints: string[] | undefined,
-  ): boolean {
-    return [...identities, ...(sellingPoints ?? [])]
-      .some((value) => /custom|oem|odm|定制|贴牌/i.test(value))
-  }
-
-  private reasonScore(
-    code: string,
-    dimensions: ReturnType<typeof calculateSourcingScore>['dimensions'],
-  ): number {
-    const mapping: Record<string, number> = {
-      high_product_relevance: dimensions.relevance,
-      usable_price_range: dimensions.pricing,
-      dropshipping_friendly_moq: dimensions.minimumOrderQuantity,
-      reliable_supplier_signals: dimensions.supplierReliability,
-      fast_dispatch_signal: dimensions.delivery,
-      customization_supported: dimensions.capabilities,
-    }
-    return mapping[code] ?? 0
   }
 }

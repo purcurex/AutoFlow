@@ -8,6 +8,7 @@ import {
 } from './alibaba1688.constants'
 import type {
   Alibaba1688ImageSearchDto,
+  Alibaba1688ImageUploadDto,
   Alibaba1688KeywordSearchDto,
   Alibaba1688ProductDetailDto,
 } from './dto/alibaba1688.dto'
@@ -23,6 +24,7 @@ import type {
   Alibaba1688DetailProviderResponse,
   Alibaba1688Endpoint,
   Alibaba1688ImageProviderResponse,
+  Alibaba1688ImageUploadProviderResponse,
   Alibaba1688KeywordProviderResponse,
   Alibaba1688NormalizedError,
   Alibaba1688Operation,
@@ -34,6 +36,7 @@ import type {
   Alibaba1688ProviderSellerData,
   Alibaba1688Readiness,
   Alibaba1688StableOffer,
+  Alibaba1688StableImageUploadResult,
   Alibaba1688StableProductDetail,
   Alibaba1688StableSearchResult,
   Alibaba1688StableSeller,
@@ -103,14 +106,7 @@ export class Alibaba1688Service {
   async searchByImage(
     input: Alibaba1688ImageSearchDto,
   ): Promise<Alibaba1688CallResult<Alibaba1688ImageProviderResponse, Alibaba1688StableSearchResult>> {
-    const imageAddress = this.optionalText(input.imageAddress)
-    const imageId = this.optionalText(input.imageId)
-    if (!imageAddress && !imageId) {
-      throw this.invalidRequest('imageAddress or imageId is required')
-    }
-    if (imageAddress && !this.isHttpUrl(imageAddress)) {
-      throw this.invalidRequest('imageAddress must be an HTTP or HTTPS URL')
-    }
+    const imageId = this.requiredText(input.imageId, 'imageId')
 
     const pageSize = this.clampInteger(
       input.pageSize,
@@ -121,7 +117,6 @@ export class Alibaba1688Service {
     const beginPage = this.clampInteger(input.beginPage, 1, 1, 10000)
     const offerQueryParam = this.compactObject({
       ...input,
-      imageAddress,
       imageId,
       beginPage,
       pageSize,
@@ -137,6 +132,29 @@ export class Alibaba1688Service {
       provider,
       this.normalizeSearch('image', provider.result?.result, beginPage, pageSize),
     )
+  }
+
+  async uploadImage(
+    input: Alibaba1688ImageUploadDto,
+  ): Promise<Alibaba1688CallResult<Alibaba1688ImageUploadProviderResponse, Alibaba1688StableImageUploadResult>> {
+    const config = this.requireReady()
+    const imageBase64 = this.requiredText(input.imageBase64, 'imageBase64')
+    const provider = await this.invoke<string, Alibaba1688ImageUploadProviderResponse>(
+      'image_upload',
+      this.endpoint('upload'),
+      {
+        uploadImageParam: {
+          imageBase64,
+          appKey: Number(config.appKey),
+          outMemberId: input.outMemberId,
+        },
+      },
+      config,
+    )
+    return this.callResult('image_upload', provider, {
+      provider: ALIBABA_1688_PROVIDER,
+      imageId: this.requiredText(provider.result?.result, 'imageId'),
+    })
   }
 
   async getProductDetail(
@@ -215,7 +233,7 @@ export class Alibaba1688Service {
     }
   }
 
-  private endpoint(kind: 'keyword' | 'image' | 'detail'): Alibaba1688Endpoint {
+  private endpoint(kind: 'keyword' | 'image' | 'detail' | 'upload'): Alibaba1688Endpoint {
     const config = this.runtimeConfig()
     if (!config.appKey) throw this.notConfigured(['ALIBABA_1688_APP_KEY'])
     const prefix = `ALIBABA_1688_${kind.toUpperCase()}`
@@ -227,6 +245,7 @@ export class Alibaba1688Service {
       keyword: ALIBABA_1688_DEFAULTS.keywordMethod,
       image: ALIBABA_1688_DEFAULTS.imageMethod,
       detail: ALIBABA_1688_DEFAULTS.detailMethod,
+      upload: ALIBABA_1688_DEFAULTS.uploadMethod,
     }
     const method = this.safeApiPart(
       this.configService.get<string>(`${prefix}_METHOD`),
@@ -604,6 +623,11 @@ export class Alibaba1688Service {
             ? provider as Record<string, unknown>
             : {},
         ),
+        traceId: this.traceId(
+          provider && typeof provider === 'object'
+            ? provider as Record<string, unknown>
+            : {},
+        ),
         fetchedAt: new Date().toISOString(),
       },
     }
@@ -648,6 +672,15 @@ export class Alibaba1688Service {
 
   private requestId(value: Record<string, unknown>): string | null {
     const candidate = value._aop_response_id ?? value.requestId ?? value.request_id
+    return this.identifier(candidate)
+  }
+
+  private traceId(value: Record<string, unknown>): string | null {
+    const candidate = value.traceId ?? value.trace_id
+    return this.identifier(candidate)
+  }
+
+  private identifier(candidate: unknown): string | null {
     if (typeof candidate !== 'string') return null
     const sanitized = candidate.trim().replace(/[^A-Za-z0-9._:-]/g, '').slice(0, 100)
     return sanitized || null

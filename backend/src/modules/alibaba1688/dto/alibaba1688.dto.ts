@@ -23,21 +23,16 @@ export interface Alibaba1688KeywordSearchDto {
 }
 
 export interface Alibaba1688ImageSearchDto {
-  imageAddress?: string
-  imageId?: string
+  imageId: string
   beginPage?: number
   pageSize?: number
-  region?: string
-  filter?: string
-  sort?: string
   outMemberId?: string
-  priceStart?: string
-  priceEnd?: string
-  categoryId?: number
   country?: string
-  keyword?: string
-  auxiliaryText?: string
-  productCollectionId?: string
+}
+
+export interface Alibaba1688ImageUploadDto {
+  imageBase64: string
+  outMemberId?: string
 }
 
 export interface Alibaba1688ProductDetailDto {

@@ -9,6 +9,7 @@ export const ALIBABA_1688_DEFAULTS = {
   keywordMethod: 'product.search.keywordQuery',
   imageMethod: 'product.search.imageQuery',
   detailMethod: 'product.search.queryProductDetail',
+  uploadMethod: 'product.image.upload',
   pageSize: 20,
   requestTimeoutMs: 30000,
   datePattern: 'yyyy-MM-dd HH:mm:ss.SSS',

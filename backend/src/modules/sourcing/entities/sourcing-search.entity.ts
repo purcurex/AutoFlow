@@ -21,18 +21,25 @@ import {
 } from '../sourcing.types'
 import { SourcingOfferEntity } from './sourcing-offer.entity'
 import { SourcingSupplierEntity } from './sourcing-supplier.entity'
+import { SourcingSearchPageEntity } from './sourcing-search-page.entity'
 
 @Entity('sourcing_searches')
 @Unique('uq_sourcing_searches_owner_request', ['ownerUserId', 'requestId'])
 @Index('idx_sourcing_searches_owner_created', ['ownerUserId', 'createdAt'])
 @Index('idx_sourcing_searches_workflow_status', ['workflowRunId', 'status'])
 @Index('idx_sourcing_searches_provider_request', ['provider', 'providerRequestId'])
+@Index(
+  'idx_sourcing_searches_cache_lookup',
+  ['ownerUserId', 'provider', 'cacheFingerprint', 'createdAt'],
+  { where: '"cache_fingerprint" IS NOT NULL' },
+)
 @Check('chk_sourcing_searches_provider', "provider = 'alibaba_1688'")
 @Check('chk_sourcing_searches_mode', "search_mode IN ('keyword', 'image')")
 @Check(
   'chk_sourcing_searches_status',
-  "status IN ('pending', 'running', 'succeeded', 'failed', 'cancelled')",
+  "status IN ('pending', 'running', 'succeeded', 'partial', 'failed', 'cancelled')",
 )
+@Check('chk_sourcing_searches_result_limit', 'result_limit >= 100 AND result_limit % 100 = 0')
 export class SourcingSearchEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string
@@ -66,6 +73,39 @@ export class SourcingSearchEntity {
 
   @Column({ name: 'image_url', type: 'varchar', length: 1000, nullable: true })
   imageUrl: string | null
+
+  @Column({ name: 'language_code', type: 'varchar', length: 32, default: 'en' })
+  languageCode: string
+
+  @Column({ name: 'image_id', type: 'varchar', length: 255, nullable: true })
+  imageId: string | null
+
+  @Column({ name: 'image_upload_request_id', type: 'varchar', length: 128, nullable: true })
+  imageUploadRequestId: string | null
+
+  @Column({ name: 'image_upload_trace_id', type: 'varchar', length: 128, nullable: true })
+  imageUploadTraceId: string | null
+
+  @Column({ name: 'total_records', type: 'bigint', nullable: true })
+  totalRecords: string | null
+
+  @Column({ name: 'total_pages', type: 'integer', nullable: true })
+  totalPages: number | null
+
+  @Column({ name: 'page_size', type: 'integer', default: 20 })
+  pageSize: number
+
+  @Column({ name: 'result_limit', type: 'integer', default: 100 })
+  resultLimit: number
+
+  @Column({ name: 'loaded_page_count', type: 'integer', default: 0 })
+  loadedPageCount: number
+
+  @Column({ name: 'query_fingerprint', type: 'varchar', length: 128 })
+  queryFingerprint: string
+
+  @Column({ name: 'cache_fingerprint', type: 'varchar', length: 64, nullable: true })
+  cacheFingerprint: string | null
 
   @Column({ name: 'request_payload', type: 'jsonb', default: () => "'{}'::jsonb" })
   requestPayload: Record<string, unknown>
@@ -101,6 +141,9 @@ export class SourcingSearchEntity {
 
   @OneToMany(() => SourcingOfferEntity, (offer) => offer.search)
   offers: SourcingOfferEntity[]
+
+  @OneToMany(() => SourcingSearchPageEntity, (page) => page.search)
+  pages: SourcingSearchPageEntity[]
 
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date

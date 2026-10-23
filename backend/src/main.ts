@@ -45,8 +45,8 @@ async function bootstrap() {
     })
   }
 
-  // 配置静态文件服务 - 用于访问上传的头像
-  app.useStaticAssets(join(backendRoot, 'uploads'), {
+  // 上传服务按运行目录写入 uploads；静态读取必须使用同一根目录，避免开发编译目录导致资源 404。
+  app.useStaticAssets(join(process.cwd(), 'uploads'), {
     prefix: '/uploads/',
   })
 

@@ -13,6 +13,7 @@ import {
 import type { AiService } from '../ai/ai.service'
 import type { PromptTemplateService } from '../ai/prompt-template.service'
 import type { StorefrontEnrichmentService } from '../discovery/storefront-enrichment.service'
+import type { WorkflowSeedAssetService } from './workflow-seed-asset.service'
 
 describe('AutoflowService persistence boundaries', () => {
   function repository<T extends ObjectLiteral>() {
@@ -30,6 +31,7 @@ describe('AutoflowService persistence boundaries', () => {
   function createService() {
     const workflows = repository<WorkflowRunEntity>()
     const steps = repository<WorkflowStepEntity>()
+    steps.find.mockResolvedValue([])
     const jobs = repository<WorkflowJobEntity>()
     jobs.find.mockResolvedValue([])
     const leads = repository<LeadEntity>()
@@ -45,6 +47,9 @@ describe('AutoflowService persistence boundaries', () => {
     const storefrontEnrichmentService = {
       enrichStore: jest.fn(),
     } as unknown as jest.Mocked<StorefrontEnrichmentService>
+    const workflowSeedAssetService = {
+      assertOwnedAsset: jest.fn(),
+    } as unknown as jest.Mocked<WorkflowSeedAssetService>
     const service = new AutoflowService(
       workflows,
       steps,
@@ -56,6 +61,7 @@ describe('AutoflowService persistence boundaries', () => {
       aiService,
       promptTemplateService,
       storefrontEnrichmentService,
+      workflowSeedAssetService,
     )
     return {
       service,
@@ -69,11 +75,12 @@ describe('AutoflowService persistence boundaries', () => {
       aiService,
       promptTemplateService,
       storefrontEnrichmentService,
+      workflowSeedAssetService,
     }
   }
 
   it('scopes workflow lists to the authenticated owner', async () => {
-    const { service, workflows, jobs } = createService()
+    const { service, workflows, steps, jobs } = createService()
     const createdAt = new Date('2026-07-22T00:00:00.000Z')
     workflows.findAndCount.mockResolvedValue([
       [{
@@ -97,6 +104,12 @@ describe('AutoflowService persistence boundaries', () => {
       ownerUserId: 'owner-1',
       lastError: 'PipiAds credits are insufficient',
     } as WorkflowJobEntity])
+    steps.find.mockResolvedValue([{
+      workflowRunId: 'workflow-1',
+      stage: 'ad_discovery',
+      status: 'skipped',
+      output: { reasonCode: 'public_image_not_configured' },
+    } as unknown as WorkflowStepEntity])
 
     const result = await service.getWorkflows('owner-1', { page: 1, pageSize: 20 })
 
@@ -109,6 +122,76 @@ describe('AutoflowService persistence boundaries', () => {
     expect(result.items[0].failureCode).toBe('insufficient_credits')
     expect(result.items[0].failureProvider).toBe('pipiads')
     expect(result.items[0].failureRetryable).toBe(false)
+    expect(result.items[0].customerDiscoveryStatus).toBe('pending_public_image')
+    expect(steps.find).toHaveBeenCalledTimes(1)
+  })
+
+  it('exposes a PipiAds image fetch rejection as a non-retryable unreachable image', async () => {
+    const { service, workflows, jobs } = createService()
+    const createdAt = new Date('2026-08-05T00:00:00.000Z')
+    workflows.findAndCount.mockResolvedValue([[
+      {
+        id: 'workflow-image',
+        displayId: '10',
+        name: 'Pet product image sourcing',
+        seedType: 'image',
+        seedValue: 'http://localhost:3000/uploads/workflow-seeds/owner/product.jpg',
+        targetMarket: 'United States',
+        status: 'failed',
+        currentStage: 'ad_discovery',
+        progress: 10,
+        leadCount: 0,
+        createdAt,
+        updatedAt: createdAt,
+      } as WorkflowRunEntity,
+    ], 1])
+    jobs.find.mockResolvedValue([{
+      workflowRunId: 'workflow-image',
+      ownerUserId: 'owner-1',
+      lastError: 'PipiAds product image fetch failed. Use a publicly reachable HTTPS image URL or configure PUBLIC_ASSET_BASE_URL.',
+    } as WorkflowJobEntity])
+
+    const result = await service.getWorkflows('owner-1', { page: 1, pageSize: 20 })
+
+    expect(result.items[0]).toMatchObject({
+      failureCode: 'image_unreachable',
+      failureProvider: 'pipiads',
+      failureRetryable: false,
+    })
+  })
+
+  it('classifies a historical local-image configuration failure as customer discovery', async () => {
+    const { service, workflows, jobs } = createService()
+    const createdAt = new Date('2026-08-05T00:00:00.000Z')
+    workflows.findAndCount.mockResolvedValue([[
+      {
+        id: 'workflow-local-image',
+        displayId: '11',
+        name: 'Local image sourcing',
+        seedType: 'image',
+        seedValue: 'http://localhost:3000/uploads/workflow-seeds/owner/product.jpg',
+        targetMarket: 'United States',
+        status: 'failed',
+        currentStage: 'ad_discovery',
+        progress: 10,
+        leadCount: 0,
+        createdAt,
+        updatedAt: createdAt,
+      } as WorkflowRunEntity,
+    ], 1])
+    jobs.find.mockResolvedValue([{
+      workflowRunId: 'workflow-local-image',
+      ownerUserId: 'owner-1',
+      lastError: 'Workflow product image is only available locally. Configure a publicly reachable PUBLIC_ASSET_BASE_URL.',
+    } as WorkflowJobEntity])
+
+    const result = await service.getWorkflows('owner-1', { page: 1, pageSize: 20 })
+
+    expect(result.items[0]).toMatchObject({
+      failureCode: 'image_unreachable',
+      failureProvider: 'customer_discovery',
+      failureRetryable: false,
+    })
   })
 
   it('does not return a lead outside the owner scope', async () => {

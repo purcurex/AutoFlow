@@ -1,0 +1,223 @@
+import axios from 'axios'
+import { randomBytes } from 'crypto'
+import { promises as dns } from 'dns'
+import { mkdir, rm, writeFile } from 'fs/promises'
+import { join } from 'path'
+import * as sharpModule from 'sharp'
+import { WorkflowRunEntity } from '../autoflow/entities'
+import {
+  SourcingImageResolverService,
+} from './sourcing-image-resolver.service'
+
+type SharpFactory = (typeof import('sharp'))['sharp']
+const sharp = (sharpModule as unknown as { default?: SharpFactory }).default
+  ?? sharpModule as unknown as SharpFactory
+
+jest.mock('axios')
+
+describe('SourcingImageResolverService', () => {
+  const ownerUserId = '11111111-1111-4111-8111-111111111111'
+  const uploadRoot = join(process.cwd(), 'uploads', 'workflow-seeds', ownerUserId)
+  const axiosGet = axios.get as jest.Mock
+  const resolver = new SourcingImageResolverService()
+
+  afterEach(async () => {
+    jest.restoreAllMocks()
+    axiosGet.mockReset()
+    await rm(uploadRoot, { recursive: true, force: true })
+  })
+
+  function workflow(seedValue: string, fields: Partial<WorkflowRunEntity> = {}): WorkflowRunEntity {
+    return {
+      ownerUserId,
+      seedType: 'image',
+      seedValue,
+      seedAssetPath: null,
+      seedAssetMimeType: null,
+      seedAssetSize: null,
+      seedAssetSha256: null,
+      ...fields,
+    } as WorkflowRunEntity
+  }
+
+  it('reads an owned local PNG and returns a verified digest', async () => {
+    const bytes = await sharp({
+      create: { width: 2, height: 2, channels: 3, background: '#ffffff' },
+    }).png().toBuffer()
+    await mkdir(uploadRoot, { recursive: true })
+    await writeFile(join(uploadRoot, 'image.png'), bytes)
+
+    const result = await resolver.resolve(workflow('http://localhost/image.png', {
+      seedAssetPath: `/uploads/workflow-seeds/${ownerUserId}/image.png`,
+      seedAssetMimeType: 'image/png',
+      seedAssetSize: String(bytes.length),
+    }))
+
+    expect(result).toMatchObject({
+      bytes,
+      mimeType: 'image/png',
+      byteLength: bytes.length,
+      sourceType: 'local',
+      sourceHost: null,
+      sha256: expect.stringMatching(/^[a-f0-9]{64}$/),
+    })
+  })
+
+  it('accepts an uploaded source image up to 8 MB and compacts it for the provider', async () => {
+    const width = 2_000
+    const height = 1_100
+    const bytes = await sharp(randomBytes(width * height * 3), {
+      raw: { width, height, channels: 3 },
+    }).png({ compressionLevel: 0 }).toBuffer()
+    expect(bytes.length).toBeGreaterThan(5 * 1024 * 1024)
+    expect(bytes.length).toBeLessThanOrEqual(8 * 1024 * 1024)
+    await mkdir(uploadRoot, { recursive: true })
+    await writeFile(join(uploadRoot, 'large-image.png'), bytes)
+
+    const result = await resolver.resolve(workflow('http://localhost/large-image.png', {
+      seedAssetPath: `/uploads/workflow-seeds/${ownerUserId}/large-image.png`,
+      seedAssetMimeType: 'image/png',
+      seedAssetSize: String(bytes.length),
+    }))
+
+    expect(result.mimeType).toBe('image/jpeg')
+    expect(result.byteLength).toBeLessThanOrEqual(5 * 1024 * 1024)
+    expect(result.bytes.subarray(0, 3)).toEqual(Buffer.from([0xff, 0xd8, 0xff]))
+  })
+
+  it('rejects a compressed image whose declared pixel dimensions exceed the safe limit', async () => {
+    const png = await sharp({
+      create: { width: 1, height: 1, channels: 3, background: '#ffffff' },
+    }).png().toBuffer()
+    png.writeUInt32BE(10_000, 16)
+    png.writeUInt32BE(10_000, 20)
+    png.writeUInt32BE(crc32(png.subarray(12, 29)), 29)
+    await mkdir(uploadRoot, { recursive: true })
+    await writeFile(join(uploadRoot, 'pixel-bomb.png'), png)
+
+    await expect(resolver.resolve(workflow('http://localhost/pixel-bomb.png', {
+      seedAssetPath: `/uploads/workflow-seeds/${ownerUserId}/pixel-bomb.png`,
+      seedAssetMimeType: 'image/png',
+      seedAssetSize: String(png.length),
+    }))).rejects.toMatchObject({ code: 'INVALID_IMAGE', retryable: false })
+  })
+
+  it('rejects local directory escape and private remote addresses', async () => {
+    await expect(resolver.resolve(workflow('https://example.test/image.png', {
+      seedAssetPath: `/uploads/workflow-seeds/${ownerUserId}/../another-user/image.png`,
+    }))).rejects.toMatchObject({ code: 'INVALID_IMAGE', retryable: false })
+
+    await expect(resolver.resolve(workflow('https://127.0.0.1/image.png')))
+      .rejects.toMatchObject({ code: 'INVALID_REQUEST', retryable: false })
+  })
+
+  it('downloads a public HTTP image on the standard port', async () => {
+    const png = await sharp({
+      create: { width: 2, height: 2, channels: 3, background: '#ffffff' },
+    }).png().toBuffer()
+    jest.spyOn(dns, 'lookup').mockResolvedValue([
+      { address: '93.184.216.34', family: 4 },
+    ] as never)
+    axiosGet.mockResolvedValue({
+      status: 200,
+      headers: { 'content-type': 'image/png' },
+      data: png,
+    })
+
+    await expect(resolver.resolve(workflow('http://example.test/image.png')))
+      .resolves.toMatchObject({
+        mimeType: 'image/png',
+        sourceType: 'remote',
+        sourceHost: 'example.test',
+      })
+  })
+
+  it('rejects URL credentials and non-standard ports', async () => {
+    for (const url of [
+      'https://user:password@example.test/image.png',
+      'https://example.test:8443/image.png',
+      'http://example.test:8080/image.png',
+    ]) {
+      await expect(resolver.resolve(workflow(url))).rejects.toMatchObject({
+        code: 'INVALID_REQUEST',
+        retryable: false,
+      })
+    }
+  })
+
+  it('revalidates redirects and refuses a redirect to an internal address', async () => {
+    jest.spyOn(dns, 'lookup').mockResolvedValue([
+      { address: '93.184.216.34', family: 4 },
+    ] as never)
+    axiosGet.mockResolvedValue({
+      status: 302,
+      headers: { location: 'https://10.0.0.1/private.png' },
+      data: Buffer.alloc(0),
+    })
+
+    await expect(resolver.resolve(workflow('https://example.test/image.png')))
+      .rejects.toMatchObject({ code: 'INVALID_REQUEST', retryable: false })
+  })
+
+  it('converts a valid remote WebP image to JPEG', async () => {
+    const webp = await sharp({
+      create: { width: 2, height: 2, channels: 3, background: '#ffffff' },
+    }).webp().toBuffer()
+    jest.spyOn(dns, 'lookup').mockResolvedValue([
+      { address: '93.184.216.34', family: 4 },
+    ] as never)
+    axiosGet.mockResolvedValue({ status: 200, headers: {}, data: webp })
+
+    const result = await resolver.resolve(workflow('https://example.test/image.webp'))
+
+    expect(result.mimeType).toBe('image/jpeg')
+    expect(result.bytes.subarray(0, 3)).toEqual(Buffer.from([0xff, 0xd8, 0xff]))
+    expect(result.sourceType).toBe('remote')
+    expect(result.sourceHost).toBe('example.test')
+  })
+
+  it('returns an address array when the HTTPS client requests all DNS results', async () => {
+    const png = await sharp({
+      create: { width: 2, height: 2, channels: 3, background: '#ffffff' },
+    }).png().toBuffer()
+    const resolvedAddress = { address: '93.184.216.34', family: 4 }
+    jest.spyOn(dns, 'lookup').mockResolvedValue([resolvedAddress] as never)
+    axiosGet.mockImplementation(async (_url, config) => {
+      const lookup = config.httpsAgent.options.lookup
+      const callback = jest.fn()
+
+      lookup('example.test', { all: true }, callback)
+
+      expect(callback).toHaveBeenCalledWith(null, [resolvedAddress])
+      return { status: 200, headers: { 'content-type': 'image/png' }, data: png }
+    })
+
+    await expect(resolver.resolve(workflow('https://example.test/image.png')))
+      .resolves.toMatchObject({ mimeType: 'image/png' })
+  })
+
+  it('classifies timeout and temporary provider failures as retryable', async () => {
+    jest.spyOn(dns, 'lookup').mockResolvedValue([
+      { address: '93.184.216.34', family: 4 },
+    ] as never)
+    axiosGet.mockRejectedValueOnce(Object.assign(new Error('timeout'), { code: 'ECONNABORTED' }))
+    await expect(resolver.resolve(workflow('https://example.test/image.png')))
+      .rejects.toMatchObject({ code: 'PROVIDER_TIMEOUT', retryable: true })
+
+    axiosGet.mockResolvedValueOnce({ status: 503, headers: {}, data: Buffer.alloc(0) })
+    await expect(resolver.resolve(workflow('https://example.test/image.png')))
+      .rejects.toMatchObject({ code: 'PROVIDER_UNAVAILABLE', retryable: true })
+  })
+})
+
+/** 仅用于构造带合法 IHDR 校验和的极端尺寸 PNG 测试数据。 */
+function crc32(bytes: Buffer): number {
+  let crc = 0xffffffff
+  for (const byte of bytes) {
+    crc ^= byte
+    for (let bit = 0; bit < 8; bit += 1) {
+      crc = (crc >>> 1) ^ ((crc & 1) ? 0xedb88320 : 0)
+    }
+  }
+  return (crc ^ 0xffffffff) >>> 0
+}

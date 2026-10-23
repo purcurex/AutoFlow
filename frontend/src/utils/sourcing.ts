@@ -26,7 +26,12 @@ export function sourcingStatus(summary: SourcingSummary | null): SourcingSearchS
 }
 
 export function isSourcingRunning(summary: SourcingSummary | null): boolean {
-  return sourcingStatus(summary) === 'running'
+  const status = sourcingStatus(summary)
+  if (status === 'not_configured') return false
+  if (!currentSourcingSearch(summary)) return false
+  return status === 'running'
+    || summary?.pagination?.status === 'pending'
+    || summary?.pagination?.status === 'running'
 }
 
 export function sourcingStatusClass(status: SourcingSearchStatus): string {
@@ -35,6 +40,7 @@ export function sourcingStatusClass(status: SourcingSearchStatus): string {
     idle: 'status-neutral',
     running: 'status-info',
     failed: 'status-danger',
+    partial: 'status-warning',
     completed: 'status-success',
   }[status]
 }

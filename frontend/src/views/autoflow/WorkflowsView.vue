@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   Archive,
@@ -38,6 +38,8 @@ import {
 } from '@/utils/workflowLifecycle'
 import { withReturnTo } from '@/composables/useReturnNavigation'
 import { workflowCreatedDate } from '@/utils/workflowDisplay'
+import { workflowProgressDisplay } from '@/utils/workflowProgress'
+import { safeExternalUrl } from '@/utils/sourcing'
 import usFlag from 'flag-icons/flags/4x3/us.svg'
 import euFlag from 'flag-icons/flags/4x3/eu.svg'
 import caFlag from 'flag-icons/flags/4x3/ca.svg'
@@ -64,10 +66,19 @@ const lifecycleMode = ref<'delete' | 'archive' | null>(null)
 const deletionImpact = ref<WorkflowDeletionImpact | null>(null)
 const lifecycleBusy = ref(false)
 let disposed = false
+let revisionLoadSequence = 0
+let isSynchronizingForm = false
+let workflowRefreshTimer: ReturnType<typeof setTimeout> | null = null
+let workflowRefreshInFlight = false
+const WORKFLOW_REFRESH_INTERVAL_MS = 1_000
 const form = reactive({
   name: '',
   seedType: 'keyword' as SeedType,
   seedValue: '',
+  seedAssetPath: undefined as string | undefined,
+  seedAssetMimeType: undefined as WorkflowImageUpload['mimeType'] | undefined,
+  seedAssetSize: undefined as number | undefined,
+  seedAssetSha256: undefined as string | undefined,
   targetMarket: 'United States',
   searchOptions: {
     exactPhrase: true,
@@ -96,28 +107,104 @@ function resolveTargetMarket(value: string) {
     || { code: value.slice(0, 2).toUpperCase(), flagUrl: unFlag }
 }
 
-onMounted(async () => {
-  await store.fetchWorkflows()
-  if (!props.reviseId) return
+/**
+ * 将后端失败提供方转换为可读业务名称，避免历史图片配置错误显示为“未知”。
+ */
+function failureProviderLabel(workflow: WorkflowRun) {
+  return workflow.failureProvider
+    ? t(`workflows.failureProvider_${workflow.failureProvider}`)
+    : t('common.unknown')
+}
+
+/**
+ * 修订页只依赖指定工作流详情完成表单回显，避免列表接口失败阻断详情请求。
+ */
+/**
+ * 重置新建/修订共用表单，避免 Vue Router 复用组件时残留上一条工作流的数据。
+ */
+async function resetWorkflowForm() {
+  revisionLoadSequence += 1
+  isSynchronizingForm = true
+  revisionSource.value = null
+  actionMessage.value = ''
+  seedValues.keyword = ''
+  seedValues.image = ''
+  form.name = ''
+  form.seedType = 'keyword'
+  form.seedValue = ''
+  clearImageAssetMetadata()
+  form.targetMarket = 'United States'
+  Object.assign(form.searchOptions, {
+    exactPhrase: true,
+    titleMatch: false,
+    excludeMarketplaces: true,
+    findOwnerFacebook: true,
+  })
+  imageUpload.value = null
+  imageUploadError.value = ''
+  if (imagePreviewUrl.value) URL.revokeObjectURL(imagePreviewUrl.value)
+  imagePreviewUrl.value = ''
+  if (imageInput.value) imageInput.value.value = ''
+  await nextTick()
+  isSynchronizingForm = false
+}
+
+async function loadRevisionSource(reviseId: string) {
+  const requestSequence = ++revisionLoadSequence
   try {
-    const source = await store.getWorkflow(props.reviseId)
+    const source = await store.getWorkflow(reviseId)
+    if (disposed || requestSequence !== revisionLoadSequence) return
     if (!canReviseWorkflow(source.status)) {
       actionMessage.value = t('workflows.revisionUnavailable')
       return
     }
+    isSynchronizingForm = true
     revisionSource.value = source
+    seedValues.keyword = source.seedType === 'keyword' ? source.seedValue : ''
+    seedValues.image = source.seedType === 'image' ? source.seedValue : ''
     form.name = source.name
     form.seedType = source.seedType
     form.seedValue = source.seedValue
-    seedValues[source.seedType] = source.seedValue
+    form.seedAssetPath = source.seedAssetPath || undefined
+    form.seedAssetMimeType = source.seedAssetMimeType as WorkflowImageUpload['mimeType'] || undefined
+    form.seedAssetSize = source.seedAssetSize ? Number(source.seedAssetSize) : undefined
+    form.seedAssetSha256 = source.seedAssetSha256 || undefined
     form.targetMarket = source.targetMarket
     Object.assign(form.searchOptions, source.searchOptions)
+    await nextTick()
+    isSynchronizingForm = false
   } catch {
-    actionMessage.value = t('workflows.loadFailed')
+    if (!disposed && requestSequence === revisionLoadSequence) {
+      actionMessage.value = t('workflows.loadFailed')
+    }
   }
-})
+}
+
+const viewMode = computed(() => props.reviseId
+  ? `revise:${props.reviseId}`
+  : props.create ? 'create' : 'list')
+
+watch(viewMode, async (mode) => {
+  stopWorkflowRefresh()
+  // 同一个页面组件会被路由复用，因此必须按路由模式变化重新初始化，而不能只依赖 onMounted。
+  await resetWorkflowForm()
+  if (mode.startsWith('revise:') && props.reviseId) {
+    await loadRevisionSource(props.reviseId)
+    return
+  }
+  if (mode === 'list') {
+    try {
+      await store.fetchWorkflows()
+    } catch {
+      if (!disposed && viewMode.value === mode) actionMessage.value = t('workflows.loadFailed')
+    } finally {
+      scheduleWorkflowRefresh()
+    }
+  }
+}, { immediate: true })
 onBeforeUnmount(() => {
   disposed = true
+  stopWorkflowRefresh()
   if (imagePreviewUrl.value) URL.revokeObjectURL(imagePreviewUrl.value)
 })
 const title = computed(() => props.reviseId
@@ -133,17 +220,33 @@ const googleQueryPreview = computed(() => {
     : ''
   return `${term} inurl:/products/ "Powered by Shopify"${exclusions}`
 })
+const resolvedImagePreviewUrl = computed(() => imagePreviewUrl.value
+  // 历史上传图片优先走同源资产路径，避免持久化的 localhost 地址因访问端变化而失效。
+  || (form.seedType === 'image'
+    ? form.seedAssetPath || safeExternalUrl(form.seedValue) || ''
+    : ''))
+const imageReady = computed(() => Boolean(
+  imageUpload.value
+  || form.seedAssetPath
+  || (form.seedType === 'image' && safeExternalUrl(form.seedValue)),
+))
 
 watch(() => form.seedType, (nextType, previousType) => {
+  if (isSynchronizingForm) return
   seedValues[previousType] = form.seedValue
   form.seedValue = seedValues[nextType]
   imageUploadError.value = ''
+  if (nextType !== 'image') clearImageAssetMetadata()
 })
 
 watch(() => form.seedValue, (value) => {
+  if (isSynchronizingForm) return
   seedValues[form.seedType] = value
-  if (form.seedType === 'image' && imageUpload.value && value !== imageUpload.value.publicUrl) {
+  const assetBackedUrl = imageUpload.value?.publicUrl
+    || (form.seedAssetPath ? revisionSource.value?.seedValue : undefined)
+  if (form.seedType === 'image' && assetBackedUrl && value !== assetBackedUrl) {
     imageUpload.value = null
+    clearImageAssetMetadata()
     if (imagePreviewUrl.value) URL.revokeObjectURL(imagePreviewUrl.value)
     imagePreviewUrl.value = ''
   }
@@ -159,6 +262,7 @@ function removeImage() {
   imageUpload.value = null
   imageUploadError.value = ''
   form.seedValue = ''
+  clearImageAssetMetadata()
   if (imageInput.value) imageInput.value.value = ''
 }
 
@@ -179,11 +283,22 @@ async function uploadImage(file: File) {
     const result = await autoflowApi.uploadWorkflowImage(file)
     imageUpload.value = result
     form.seedValue = result.publicUrl
+    form.seedAssetPath = result.assetPath
+    form.seedAssetMimeType = result.mimeType
+    form.seedAssetSize = result.size
+    form.seedAssetSha256 = result.sha256
   } catch {
     imageUploadError.value = t('workflows.imageUploadFailed')
   } finally {
     isUploadingImage.value = false
   }
+}
+
+function clearImageAssetMetadata() {
+  form.seedAssetPath = undefined
+  form.seedAssetMimeType = undefined
+  form.seedAssetSize = undefined
+  form.seedAssetSha256 = undefined
 }
 
 function handleImageSelection(event: Event) {
@@ -222,20 +337,68 @@ async function startDiscovery(workflowId: string) {
   actionMessage.value = ''
   try {
     await store.startDiscovery(workflowId)
-    for (let attempt = 0; attempt < 60 && !disposed; attempt += 1) {
-      await new Promise((resolve) => setTimeout(resolve, 500))
-      await store.fetchWorkflows()
-      const workflow = store.workflows.find((item) => item.id === workflowId)
-      if (!workflow || workflow.status !== 'running') {
-        actionMessage.value = workflow?.status === 'completed'
-          ? t('workflows.completed')
-          : workflow?.failureReason || t('workflows.stopped')
-        break
-      }
-    }
+    scheduleWorkflowRefresh()
   } catch (error) {
+    activeWorkflowIds.delete(workflowId)
     actionMessage.value = error instanceof Error ? error.message : t('workflows.startFailed')
+  }
+}
+
+/**
+ * 只要列表中仍有运行任务，就持续安排下一次刷新；同一时刻只保留一个定时器。
+ */
+function scheduleWorkflowRefresh() {
+  stopWorkflowRefresh()
+  if (
+    disposed
+    || viewMode.value !== 'list'
+    || !store.workflows.some((workflow) => workflow.status === 'running')
+  ) return
+
+  workflowRefreshTimer = setTimeout(() => {
+    void refreshRunningWorkflows()
+  }, WORKFLOW_REFRESH_INTERVAL_MS)
+}
+
+function stopWorkflowRefresh() {
+  if (!workflowRefreshTimer) return
+  clearTimeout(workflowRefreshTimer)
+  workflowRefreshTimer = null
+}
+
+/**
+ * 串行刷新运行中工作流，接口短暂失败时保留现有数据并在下一周期重试。
+ */
+async function refreshRunningWorkflows() {
+  workflowRefreshTimer = null
+  if (disposed || viewMode.value !== 'list') return
+  if (workflowRefreshInFlight) {
+    scheduleWorkflowRefresh()
+    return
+  }
+
+  workflowRefreshInFlight = true
+  try {
+    await store.fetchWorkflows()
+    resolveStartedWorkflowMessages()
+  } catch {
+    // 后台刷新失败不覆盖当前页面数据；运行状态仍在时会继续安排下一次刷新。
   } finally {
+    workflowRefreshInFlight = false
+    scheduleWorkflowRefresh()
+  }
+}
+
+/**
+ * 用户从当前页面启动的工作流结束后，补充原有完成/失败提示并解除按钮占用状态。
+ */
+function resolveStartedWorkflowMessages() {
+  for (const workflowId of [...activeWorkflowIds]) {
+    const workflow = store.workflows.find((item) => item.id === workflowId)
+    if (workflow?.status === 'running') continue
+    actionMessage.value = workflow?.status === 'completed'
+      ? t('workflows.completed')
+      : workflow?.failureReason || t('workflows.stopped')
     activeWorkflowIds.delete(workflowId)
   }
 }
@@ -340,8 +503,8 @@ async function confirmLifecycleAction() {
               <span class="field-label">{{ t('workflows.productImage') }} <em class="font-normal not-italic text-red-500">*</em></span>
               <input ref="imageInput" type="file" accept="image/png,image/jpeg,image/webp" class="sr-only" @change="handleImageSelection" />
               <div
-                class="flex min-h-44 cursor-pointer items-center justify-center rounded-md border border-dashed p-4 text-center transition"
-                :class="imagePreviewUrl ? 'border-slate-300 bg-slate-50 dark:border-slate-700 dark:bg-[#11151a]' : 'border-slate-300 bg-white hover:border-orange-400 hover:bg-orange-50/40 dark:border-slate-700 dark:bg-[#171b21] dark:hover:border-orange-500'"
+                class="flex min-h-44 cursor-pointer items-center justify-center rounded-md border border-dashed p-4 text-center transition focus:outline-none focus:ring-2 focus:ring-orange-500/30"
+                :class="resolvedImagePreviewUrl ? 'border-slate-300 bg-slate-50 dark:border-slate-700 dark:bg-[#11151a]' : 'border-slate-300 bg-white hover:border-orange-400 hover:bg-orange-50/40 dark:border-slate-700 dark:bg-[#171b21] dark:hover:border-orange-500'"
                 role="button"
                 tabindex="0"
                 @click="openImagePicker"
@@ -351,11 +514,11 @@ async function confirmLifecycleAction() {
                 @dragover.prevent
                 @drop.prevent="handleImageDrop"
               >
-                <div v-if="imagePreviewUrl" class="flex w-full flex-col items-center gap-3 sm:flex-row sm:text-left">
-                  <img :src="imagePreviewUrl" :alt="t('workflows.imagePreview')" class="h-28 w-40 rounded-md border border-slate-200 bg-white object-contain dark:border-slate-700" />
+                <div v-if="resolvedImagePreviewUrl" class="flex w-full flex-col items-center gap-3 sm:flex-row sm:text-left">
+                  <img :src="resolvedImagePreviewUrl" :alt="t('workflows.imagePreview')" class="h-28 w-40 rounded-md border border-slate-200 bg-white object-contain dark:border-slate-700" />
                   <div class="min-w-0 flex-1">
                     <p class="truncate text-sm font-semibold text-slate-950 dark:text-white">{{ imageUpload?.originalName || t('workflows.localImage') }}</p>
-                    <p class="mt-1 text-xs text-slate-500">{{ isUploadingImage ? t('workflows.imageUploading') : imageUpload ? t('workflows.imageUploaded') : t('workflows.imageWaiting') }}</p>
+                    <p class="mt-1 text-xs text-slate-500">{{ isUploadingImage ? t('workflows.imageUploading') : imageReady ? t('workflows.imageUploaded') : t('workflows.imageWaiting') }}</p>
                     <button type="button" class="btn btn-secondary mt-3" :disabled="isUploadingImage" @click.stop="openImagePicker"><Upload class="h-4 w-4" />{{ t('workflows.replaceImage') }}</button>
                   </div>
                   <button type="button" class="icon-btn self-start" :title="t('workflows.removeImage')" :disabled="isUploadingImage" @click.stop="removeImage"><Trash2 class="h-4 w-4" /></button>
@@ -432,13 +595,17 @@ async function confirmLifecycleAction() {
                     <CircleAlert class="h-3.5 w-3.5 shrink-0" />
                     <span>{{ failureLabel(workflow) }}</span>
                   </button>
+                  <p v-else-if="workflow.customerDiscoveryStatus === 'pending_public_image'" data-test="workflow-customer-discovery-pending" class="mt-1 flex max-w-72 items-center gap-1 text-xs leading-5 text-amber-700 dark:text-amber-300">
+                    <CircleAlert class="h-3.5 w-3.5 shrink-0" />
+                    <span>{{ t('workflows.customerDiscoveryPendingPublicImage') }}</span>
+                  </p>
                 </td>
                 <td class="whitespace-nowrap font-medium tabular-nums text-slate-600 dark:text-slate-300">{{ workflowCreatedDate(workflow.createdAt) }}</td>
                 <td><span class="inline-flex items-center gap-1.5"><component :is="workflow.seedType === 'image' ? Image : KeyRound" class="h-3.5 w-3.5 text-slate-400" /><span class="max-w-52 truncate">{{ workflow.seedValue }}</span></span></td>
                 <td><span class="inline-flex items-center gap-2 font-semibold text-slate-800 dark:text-slate-100"><img :src="resolveTargetMarket(workflow.targetMarket).flagUrl" alt="" class="h-4 w-6 rounded-[2px] object-cover shadow-sm ring-1 ring-black/10" aria-hidden="true" />{{ resolveTargetMarket(workflow.targetMarket).code }}</span></td>
                 <td>{{ $te(`status.${workflow.currentStage}`) ? $t(`status.${workflow.currentStage}`) : workflow.currentStage }}</td>
                 <td class="font-semibold tabular-nums">{{ workflow.leadCount }}</td>
-                <td><div class="flex min-w-32 items-center gap-2"><div class="h-1.5 flex-1 rounded-full bg-slate-100 dark:bg-slate-800"><div class="h-full rounded-full bg-orange-500" :style="{ width: `${workflow.progress}%` }" /></div><span class="text-xs tabular-nums text-slate-500">{{ workflow.progress }}%</span></div></td>
+                <td><div class="flex min-w-32 items-center gap-2"><div class="h-1.5 flex-1 rounded-full bg-slate-100 dark:bg-slate-800"><div class="h-full rounded-full bg-orange-500" :style="{ width: `${workflowProgressDisplay(workflow).percent}%` }" /></div><span class="whitespace-nowrap text-xs tabular-nums text-slate-500">{{ t(workflowProgressDisplay(workflow).labelKey, workflowProgressDisplay(workflow).labelParams || {}) }}</span></div></td>
                 <td><StatusBadge :status="workflow.status" /></td>
                 <td class="min-w-72 text-right">
                   <div class="flex items-center justify-end gap-2">
@@ -455,7 +622,7 @@ async function confirmLifecycleAction() {
                       <RefreshCw v-if="workflow.status !== 'draft'" class="h-4 w-4" :class="{ 'animate-spin': workflow.status === 'running' }" />
                       <Play v-else class="h-4 w-4" />
                     </button>
-                    <button v-if="workflow.status === 'failed'" type="button" class="icon-btn" :title="t('workflows.failureDetails')" @click="openFailureDetails(workflow)"><Info class="h-4 w-4" /></button>
+                    <button v-if="workflow.status === 'failed'" type="button" class="icon-btn" data-test="workflow-failure-details" :title="t('workflows.failureDetails')" @click="openFailureDetails(workflow)"><Info class="h-4 w-4" /></button>
                     <button v-if="canDeleteWorkflow(workflow.status)" type="button" class="icon-btn hover:border-red-300 hover:text-red-600" :title="t('workflows.deleteWorkflow')" :disabled="lifecycleBusy" @click="prepareDelete(workflow)"><Trash2 class="h-4 w-4" /></button>
                     <button v-else-if="canArchiveWorkflow(workflow.status)" type="button" class="icon-btn" :title="t('workflows.archiveWorkflow')" @click="prepareArchive(workflow)"><Archive class="h-4 w-4" /></button>
                   </div>
@@ -473,7 +640,7 @@ async function confirmLifecycleAction() {
           <div class="space-y-4 p-5">
             <div class="notice border-red-300 bg-red-50 text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200"><CircleAlert class="h-5 w-5 shrink-0" /><div><p class="font-semibold">{{ failureLabel(detailWorkflow) }}</p><p class="mt-1 text-sm">{{ t('workflows.failureGuidance') }}</p></div></div>
             <dl class="grid gap-3 text-sm sm:grid-cols-2">
-              <div><dt class="field-label">{{ t('workflows.failureProvider') }}</dt><dd class="font-medium">{{ detailWorkflow.failureProvider || t('common.unknown') }}</dd></div>
+              <div><dt class="field-label">{{ t('workflows.failureProvider') }}</dt><dd class="font-medium" data-test="workflow-failure-provider">{{ failureProviderLabel(detailWorkflow) }}</dd></div>
               <div><dt class="field-label">{{ t('workflows.stage') }}</dt><dd class="font-medium">{{ $te(`status.${detailWorkflow.currentStage}`) ? $t(`status.${detailWorkflow.currentStage}`) : detailWorkflow.currentStage }}</dd></div>
             </dl>
             <div><p class="field-label">{{ t('workflows.technicalDetails') }}</p><pre class="max-h-36 overflow-auto whitespace-pre-wrap rounded-md bg-slate-100 p-3 text-xs leading-5 text-slate-700 dark:bg-[#0e1115] dark:text-slate-300">{{ detailWorkflow.failureReason }}</pre></div>

@@ -75,13 +75,31 @@ export class StorefrontEnrichmentService {
         contacts,
       }
     } catch (error: unknown) {
-      this.logger.warn(`Storefront verification failed for ${store.normalizedDomain}: ${this.errorMessage(error)}`)
+      const verificationError = this.errorMessage(error)
+      const verificationHttpStatus = this.httpStatus(error)
+
+      // 需求：目标店铺返回 429 仅表示自动验证受限，不能覆盖候选已有的可信状态。
+      if (verificationHttpStatus === 429) {
+        this.logger.warn(`Storefront verification rate limited for ${store.normalizedDomain}: ${verificationError}`)
+        return {
+          ...store,
+          verificationEvidence: {
+            ...store.verificationEvidence,
+            verificationBlocked: true,
+            verificationHttpStatus,
+            verificationError,
+          },
+          verifiedAt: new Date().toISOString(),
+        }
+      }
+
+      this.logger.warn(`Storefront verification failed for ${store.normalizedDomain}: ${verificationError}`)
       return {
         ...store,
         verificationStatus: 'failed',
         verificationEvidence: {
           ...store.verificationEvidence,
-          verificationError: this.errorMessage(error),
+          verificationError,
         },
         verifiedAt: new Date().toISOString(),
       }
@@ -395,6 +413,13 @@ export class StorefrontEnrichmentService {
     const normalized = address.toLowerCase()
     return normalized === '::1' || normalized.startsWith('fc') || normalized.startsWith('fd')
       || normalized.startsWith('fe80:') || normalized.startsWith('::ffff:127.')
+  }
+
+  /** 提取结构化 HTTP 状态，避免依赖可能变化的异常消息文本。 */
+  private httpStatus(error: unknown): number | null {
+    return axios.isAxiosError(error) && typeof error.response?.status === 'number'
+      ? error.response.status
+      : null
   }
 
   private errorMessage(error: unknown): string {

@@ -1,10 +1,12 @@
 import { createHash } from 'crypto'
-import { Inject, Injectable, NotFoundException } from '@nestjs/common'
+import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common'
+import { ConfigService } from '@nestjs/config'
 import { InjectRepository } from '@nestjs/typeorm'
 import { Repository } from 'typeorm'
 import type { QueryDeepPartialEntity } from 'typeorm/query-builder/QueryPartialEntity'
 import { WorkflowRunEntity } from '../autoflow/entities'
 import { DEFAULT_GOOGLE_SEARCH_OPTIONS } from '../autoflow/autoflow.types'
+import { isPublicProviderUrl } from '../autoflow/workflow-seed-asset.service'
 import { AdCreativeEntity, ShopifyStoreEntity } from './entities'
 import { trafficScore } from './discovery-normalizer'
 import { StorefrontEnrichmentService } from './storefront-enrichment.service'
@@ -12,6 +14,7 @@ import {
   AD_DISCOVERY_ADAPTER,
   STORE_DISCOVERY_ADAPTER,
   type AdDiscoveryAdapter,
+  type CustomerDiscoveryResult,
   type DiscoveryEvidenceResult,
   type LeadCandidate,
   type NormalizedAdCreative,
@@ -33,15 +36,26 @@ export class DiscoveryService {
     @Inject(STORE_DISCOVERY_ADAPTER)
     private readonly storeAdapter: StoreDiscoveryAdapter,
     private readonly storefrontEnrichmentService: StorefrontEnrichmentService,
+    private readonly configService: ConfigService,
   ) {}
 
-  async discoverEvidence(ownerUserId: string, workflowRunId: string): Promise<DiscoveryEvidenceResult> {
+  async discoverEvidence(ownerUserId: string, workflowRunId: string): Promise<CustomerDiscoveryResult> {
     const workflow = await this.workflowRepository.findOne({ where: { id: workflowRunId, ownerUserId } })
     if (!workflow) throw new NotFoundException('Workflow not found')
 
+    const providerSeedValue = this.resolveProviderSeedValue(workflow)
+    if (providerSeedValue === null) {
+      return {
+        status: 'skipped',
+        reasonCode: 'public_image_not_configured',
+        reason: 'Public image URL is not configured; customer discovery was skipped.',
+        evidence: { workflowRunId, ads: [], stores: [], candidates: [] },
+      }
+    }
+
     const seed = {
       type: workflow.seedType,
-      value: workflow.seedValue,
+      value: providerSeedValue,
       targetMarket: workflow.targetMarket,
       searchOptions: {
         ...DEFAULT_GOOGLE_SEARCH_OPTIONS,
@@ -65,11 +79,34 @@ export class DiscoveryService {
     ])
 
     return {
-      workflowRunId,
-      ads,
-      stores,
-      candidates: stores.map((store) => this.toLeadCandidate(store, ads)),
+      status: 'completed',
+      evidence: {
+        workflowRunId,
+        ads,
+        stores,
+        candidates: stores.map((store) => this.toLeadCandidate(store, ads)),
+      },
     }
+  }
+
+  /**
+   * 外部客户发现服务无法访问本机地址。本机资产路径先做用户归属校验，再决定是否可拼接公网地址。
+   * 返回 null 只表示公网图片尚未配置；非法资产路径仍抛出异常，避免把数据损坏降级为正常跳过。
+   */
+  private resolveProviderSeedValue(workflow: WorkflowRunEntity): string | null {
+    if (workflow.seedType !== 'image' || !workflow.seedAssetPath) return workflow.seedValue
+
+    // 资产路径必须仍归属当前工作流用户，阻断数据库异常值借助 URL 拼接切换到其他主机或用户目录。
+    const normalizedAssetPath = workflow.seedAssetPath.replace(/\\/g, '/')
+    const expectedPrefix = `/uploads/workflow-seeds/${workflow.ownerUserId}/`
+    if (!normalizedAssetPath.startsWith(expectedPrefix) || normalizedAssetPath.startsWith('//')) {
+      throw new BadRequestException('Workflow image asset path is invalid.')
+    }
+
+    const publicBaseUrl = this.configService.get<string>('PUBLIC_ASSET_BASE_URL')?.trim()
+    if (!publicBaseUrl || !isPublicProviderUrl(publicBaseUrl)) return null
+
+    return new URL(normalizedAssetPath, `${publicBaseUrl.replace(/\/$/, '')}/`).toString()
   }
 
   async getPersistedEvidence(

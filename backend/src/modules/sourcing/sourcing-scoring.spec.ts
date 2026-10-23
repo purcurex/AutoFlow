@@ -6,12 +6,12 @@ describe('calculateSourcingScore', () => {
       query: 'portable pet hair remover',
       title: 'Portable reusable pet hair remover roller',
       priceRanges: [
-        { minimumQuantity: 1, price: 2.8 },
-        { minimumQuantity: 100, price: 2.2 },
+        { minimumQuantity: '1', price: '2.8' },
+        { minimumQuantity: '100', price: '2.2' },
       ],
-      targetPriceMin: 2,
-      targetPriceMax: 4,
-      minimumOrderQuantity: 1,
+      targetPriceMin: '2',
+      targetPriceMax: '4',
+      minimumOrderQuantity: '1',
       sellerCompositeScore: 92,
       sellerTradeScore: 88,
       sellerYears: 6,
@@ -31,8 +31,8 @@ describe('calculateSourcingScore', () => {
       query: '',
       title: 'Unknown offer title',
       providerRank: 1,
-      priceRanges: [{ price: 10 }],
-      minimumOrderQuantity: 500,
+      priceRanges: [{ price: '10' }],
+      minimumOrderQuantity: '500',
     })
 
     expect(result.dimensions.relevance).toBe(35)

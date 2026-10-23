@@ -29,6 +29,15 @@ import { SourcingSupplierEntity } from './sourcing-supplier.entity'
 @Index('idx_sourcing_offers_search', ['searchId'])
 @Index('idx_sourcing_offers_supplier', ['supplierId'])
 @Index('idx_sourcing_offers_provider_offer', ['provider', 'offerId'])
+@Index(
+  'idx_sourcing_offers_owner_provider_offer_recent',
+  ['ownerUserId', 'provider', 'offerId', 'retrievedAt'],
+)
+@Index(
+  'uq_sourcing_offers_search_provider_fingerprint',
+  ['searchId', 'provider', 'productFingerprint'],
+  { unique: true, where: '"product_fingerprint" IS NOT NULL' },
+)
 @Check('chk_sourcing_offers_provider', "provider = 'alibaba_1688'")
 @Check('chk_sourcing_offers_score', 'sourcing_score >= 0 AND sourcing_score <= 100')
 @Check(
@@ -64,6 +73,9 @@ export class SourcingOfferEntity {
 
   @Column({ name: 'offer_id', type: 'varchar', length: 128 })
   offerId: string
+
+  @Column({ name: 'product_fingerprint', type: 'varchar', length: 64, nullable: true })
+  productFingerprint: string | null
 
   @Column({ name: 'offer_url', type: 'varchar', length: 1000 })
   offerUrl: string
@@ -113,8 +125,29 @@ export class SourcingOfferEntity {
   @Column({ name: 'sales_volume', type: 'bigint', nullable: true })
   salesVolume: string | null
 
-  @Column({ name: 'repurchase_rate', type: 'double precision', nullable: true })
-  repurchaseRate: number | null
+  @Column({ name: 'repurchase_rate', type: 'decimal', precision: 9, scale: 4, nullable: true })
+  repurchaseRate: string | null
+
+  @Column({ name: 'page_number', type: 'integer', default: 1 })
+  pageNumber: number
+
+  @Column({ name: 'rank_in_page', type: 'integer', default: 1 })
+  rankInPage: number
+
+  @Column({ name: 'absolute_rank', type: 'integer', default: 1 })
+  absoluteRank: number
+
+  @Column({ name: 'detail_status', type: 'varchar', length: 24, default: 'not_requested' })
+  detailStatus: 'not_requested' | 'succeeded' | 'failed'
+
+  @Column({ name: 'detail_retrieved_at', type: 'timestamptz', nullable: true })
+  detailRetrievedAt: Date | null
+
+  @Column({ name: 'score_version', type: 'varchar', length: 32, default: 'v1' })
+  scoreVersion: string
+
+  @Column({ name: 'score_dimensions', type: 'jsonb', default: () => "'{}'::jsonb" })
+  scoreDimensions: Record<string, unknown>
 
   @Column({ type: 'jsonb', default: () => "'[]'::jsonb" })
   tags: string[]
