@@ -69,15 +69,15 @@ onBeforeUnmount(() => {
 .beijing-clock small { font-size: 9px; }.beijing-clock time { font-size: 15px; font-weight: 650; color: #3c646c; }.beijing-date { font-size: 9px; }
 .calendar-regions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); padding: 13px 0 6px; }
 .calendar-region { min-width: 0; padding: 0 14px; }.calendar-region + .calendar-region { border-left: 1px solid var(--color-border); }
-.region-heading { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 7px; }.region-heading strong { color: var(--region-color); font-size: 12px; letter-spacing: .04em; }.region-heading > span { color: #8190a4; font-size: 10px; }
+.region-heading { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 7px; }.region-heading strong { color: var(--region-display-color, var(--region-color)); font-size: 12px; letter-spacing: .04em; }.region-heading > span { color: #8190a4; font-size: 10px; }
 .region-now { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 4px 8px; margin-top: 8px; }
 .local-clock { font-size: 20px; line-height: 1.3; letter-spacing: -.03em; font-weight: 650; font-variant-numeric: tabular-nums; }
 .work-state { display: inline-flex; align-items: center; gap: 4px; padding: 3px 5px; font-size: 9px; border-radius: 4px; line-height: 1.2; white-space: nowrap; }
 .working { color: #258b75; background: #e9f7f1; }.off { color: #71819c; background: #f0f3f8; }.weekend { color: #a17b48; background: #faf4e9; }
 .region-date { margin-top: 5px; color: #8a97a9; font-size: 9px; line-height: 1.5; font-variant-numeric: tabular-nums; }
 .work-hours { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 4px; margin-top: 11px; padding-top: 9px; border-top: 1px dashed var(--color-border); font-variant-numeric: tabular-nums; }
-.work-hours div { display: flex; flex-direction: column; gap: 3px; }.work-hours span { font-size: 9px; color: #8a97a9; }.work-hours strong { font-size: 11px; font-weight: 550; white-space: nowrap; }.work-hours strong small { font-size: 9px; font-weight: 400; }.beijing-hours strong { color: var(--region-color); }.conversion-arrow { color: #aebdce; flex-shrink: 0; }
-.hours-track { position: relative; height: 5px; margin-top: 12px; background: #eef2f7; border-radius: 3px; }.work-segment { position: absolute; top: 0; bottom: 0; background: var(--region-color); opacity: .55; border-radius: 3px; }.now-cursor { position: absolute; top: -3px; width: 2px; height: 11px; background: #48596e; border-radius: 1px; transform: translateX(-1px); }
+.work-hours div { display: flex; flex-direction: column; gap: 3px; }.work-hours span { font-size: 9px; color: #8a97a9; }.work-hours strong { font-size: 11px; font-weight: 550; white-space: nowrap; }.work-hours strong small { font-size: 9px; font-weight: 400; }.beijing-hours strong { color: var(--region-display-color, var(--region-color)); }.conversion-arrow { color: #aebdce; flex-shrink: 0; }
+.hours-track { position: relative; height: 5px; margin-top: 12px; background: #eef2f7; border-radius: 3px; }.work-segment { position: absolute; top: 0; bottom: 0; background: var(--region-display-color, var(--region-color)); opacity: .55; border-radius: 3px; }.now-cursor { position: absolute; top: -3px; width: 2px; height: 11px; background: #48596e; border-radius: 1px; transform: translateX(-1px); }
 .track-labels { display: flex; justify-content: space-between; margin-top: 4px; color: #a1acbb; font-size: 8px; font-variant-numeric: tabular-nums; }
 .calendar-note { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; padding: 9px 14px; font-size: 9px; line-height: 1.5; color: #8a97a9; }.clock-note { display: inline-flex; gap: 5px; align-items: center; }.clock-note i { width: 2px; height: 8px; background: #48596e; flex-shrink: 0; }
 @container (max-width: 600px) {
@@ -86,5 +86,14 @@ onBeforeUnmount(() => {
 @container (max-width: 400px) {
   .calendar-heading { align-items: flex-start; }.beijing-date { width: 100%; text-align: right; }.calendar-regions { grid-template-columns: 1fr; padding: 0; }.calendar-region { padding: 12px 15px; }.calendar-region + .calendar-region { border-left: 0; border-top: 1px solid var(--color-border); }.region-heading, .region-now { display: flex; flex-direction: row; }.region-heading > span { margin-top: 0; }.region-date span { display: inline; }.work-hours { display: flex; }.work-hours > div { flex-direction: column; }.work-hours .beijing-hours { margin: 0; }.conversion-arrow { display: block; }.calendar-note { padding: 10px 15px; }
 }
-:global(.dark) .calendar-heading { background: linear-gradient(110deg, #25334a, #243d3b); }:global(.dark) .calendar-heading h2 { color: #acc7e4; }:global(.dark) .beijing-clock time { color: #b7d6d1; }:global(.dark) .working { color: #7dd2b7; background: #26453b; }:global(.dark) .off { color: #afbed3; background: #2d394e; }:global(.dark) .weekend { color: #e5c289; background: #473e2e; }:global(.dark) .hours-track { background: #344054; }:global(.dark) .now-cursor, :global(.dark) .clock-note i { background: #c0cde0; }
+.dark .calendar-heading { background: linear-gradient(110deg, #1c2d45, #1b3539); }.dark .calendar-heading h2 { color: #bfceed; }.dark .beijing-clock time { color: #b7d6d1; }.dark .working { color: #7dd2b7; background: #26453b; }.dark .off { color: #afbed3; background: #2d394e; }.dark .weekend { color: #e5c289; background: #473e2e; }.dark .hours-track { background: #2d3d53; }.dark .now-cursor, .dark .clock-note i { background: #c0cde0; }
+
+.dark .calendar-region[data-region="US"] { --region-display-color: #a4b9e8; }
+.dark .calendar-region[data-region="EUR"] { --region-display-color: #7ccfbd; }
+.dark .calendar-region[data-region="AUD"] { --region-display-color: #e4bf83; }
+.dark .beijing-clock, .dark .region-heading > span, .dark .region-date, .dark .work-hours span, .dark .calendar-note { color: #a3b3ca; }
+.dark .track-labels { color: #8fa2bc; }
+.dark .local-clock { color: #ecf2fb; }
+.dark .work-segment { opacity: .85; }
+.dark .work-state { box-shadow: inset 0 0 0 1px #ffffff0a; }
 </style>

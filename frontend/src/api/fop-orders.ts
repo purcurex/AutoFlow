@@ -55,6 +55,7 @@ export interface FopOrderQuery {
   queue: FopOrderQueue
   search?: string
   orderNumber?: string
+  departmentId?: string
   page: number
   pageSize: number
 }
@@ -73,12 +74,20 @@ export interface FopOrderPage {
   pageSize: number
 }
 
+export interface FopQueuePage extends FopOrderPage {
+  /** BFF query completion time, not an upstream FOP synchronization watermark. */
+  refreshedAt: string
+  /** Departments from permitted orders, independent of queue/search/page filters. */
+  departments: { id: string; name: string }[]
+}
+
 export function isFopOrderQueue(value: unknown): value is FopOrderQueue {
   return typeof value === 'string' && (fopOrderQueues as readonly string[]).includes(value)
 }
 
 function validateQuery(query: FopOrderQuery) {
   if (!isFopOrderQueue(query.queue)) throw new Error('Invalid fulfillment queue')
+  if (query.departmentId !== undefined && (typeof query.departmentId !== 'string' || query.departmentId.length > 128)) throw new Error('Invalid department')
   if (!Number.isInteger(query.page) || query.page < 1 || !Number.isInteger(query.pageSize) || query.pageSize < 1 || query.pageSize > 100) {
     throw new Error('Invalid pagination')
   }
@@ -99,10 +108,10 @@ export function matchesFopQueue(order: FopOrder, queue: FopOrderQueue): boolean 
 }
 
 /** User identity and data scope are derived exclusively by the authenticated backend. */
-export async function getFopOrders(query: FopOrderQuery): Promise<FopOrderPage> {
+export async function getFopOrders(query: FopOrderQuery): Promise<FopQueuePage> {
   validateQuery(query)
   const { default: api } = await import('./index')
-  const { queue, search, orderNumber, page, pageSize } = query
-  return api.get('/autoflow/integrations/fop/fulfillment-orders', { params: { queue, search, orderNumber, page, pageSize } })
+  const { queue, search, orderNumber, departmentId, page, pageSize } = query
+  return api.get('/autoflow/integrations/fop/fulfillment-orders', { params: { queue, search, orderNumber, departmentId, page, pageSize } })
 }
 export const getFopOrdersFromApi = getFopOrders

@@ -45,6 +45,27 @@ function sameIdentity(left: FopIdentity | null | undefined, right: FopIdentity |
   return !!left && !!right && left.tenantId === right.tenantId && left.userId === right.userId
 }
 
+// Payment priority is independent of creation time. Unknown dates must not jump the queue.
+function paymentTime(order: FopOrder): number {
+  const timestamp = order.paidAt ? Date.parse(order.paidAt) : NaN
+  return Number.isFinite(timestamp) ? timestamp : Infinity
+}
+
+function oldestPaymentFirst(left: FopOrder, right: FopOrder): number {
+  return paymentTime(left) - paymentTime(right) || left.id.localeCompare(right.id)
+}
+
+function orderDepartments(orders: FopOrder[]): { id: string; name: string }[] {
+  const options = new Map<string, { id: string; name: string; rank: number }>()
+  for (const order of orders) {
+    if (!order.department?.id) continue
+    const rank = SALES_DEPARTMENTS.findIndex(d => d.id === order.salesDepartmentCode)
+    options.set(order.department.id, { ...order.department, rank: rank < 0 ? SALES_DEPARTMENTS.length : rank })
+  }
+  return [...options.values()].sort((a, b) => a.rank - b.rank || a.name.localeCompare(b.name, 'zh-CN') || a.id.localeCompare(b.id))
+    .map(({ id, name }) => ({ id, name }))
+}
+
 // Only the reviewed client contract is serialized, never arbitrary provider metadata.
 function publicOrder(order: FopOrderCandidate): FopOrder {
   if (order.reviewStatus === 'approved' && (!['HZ', 'SZ'].includes(order.warehouseCode ?? '') || !['YT', '4PX', 'WB', 'YW', 'JS', 'OTHER'].includes(order.carrierCode ?? ''))) {
@@ -75,7 +96,7 @@ function publicOrder(order: FopOrderCandidate): FopOrder {
     reviewStatus: order.reviewStatus, procurementStatus: order.procurementStatus,
     allocationStatus: order.allocationStatus, dispatchStatus: order.dispatchStatus, shippingStatus: order.shippingStatus,
     warehouse: order.warehouse, carrier: order.carrier, trackingNumber: order.trackingNumber,
-    salesperson: order.salesperson, createdAt: order.createdAt, paidAt: order.paidAt, cancelled: order.cancelled,
+    salesperson: order.salesperson, createdAt: order.createdAt, paidAt: order.paidAt && Number.isFinite(Date.parse(order.paidAt)) ? order.paidAt : null, cancelled: order.cancelled,
     exception: order.exception ? { reason: order.exception.reason, hours: order.exception.hours } : null,
   }
 }
@@ -275,14 +296,15 @@ export class FopDataService {
     }
   }
 
-  private async scopedOrders(userId: string, requiredRole?: WorkbenchRole, context?: ChartContext): Promise<{ orders: FopOrder[]; roles: WorkbenchRole[]; permission: FopPermissionGrant; initial: Scope }> {
+  private async scopedOrders(userId: string, requiredRole?: WorkbenchRole, context?: ChartContext): Promise<{ orders: FopOrder[]; departmentPaths: Map<string, readonly string[]>; roles: WorkbenchRole[]; permission: FopPermissionGrant; initial: Scope }> {
     const initial = context?.initial ?? await this.scope(userId)
     if (requiredRole ? !initial.roles.includes(requiredRole) : initial.roles.length === 0) {
       throw new ForbiddenException('Workbench access denied')
     }
     const permission = context?.permission ?? await this.permissions(userId, initial)
     const allowedIds = new Set(permission.allowedOrderIds)
-    if (!allowedIds.size) return { orders: [], roles: initial.roles, permission, initial }
+    const departmentPaths = new Map<string, readonly string[]>()
+    if (!allowedIds.size) return { orders: [], departmentPaths, roles: initial.roles, permission, initial }
     const identity = Object.freeze({ ...permission.subject })
     const grant = Object.freeze({ subject: identity, allowedOrderIds: Object.freeze([...permission.allowedOrderIds]) })
     const candidates = await this.providerCall(() => this.provider.listOrders(identity, grant))
@@ -295,9 +317,10 @@ export class FopDataService {
         this.validateAncestry(candidate.departmentPathIds)
         if (context && !this.matchesChart(context, candidate) || !this.matchesCustomer(context, candidate)) return false
         seen.add(candidate.id)
+        departmentPaths.set(candidate.id, [...(candidate.departmentPathIds ?? [])])
         return true
       }).map(publicOrder)
-      return { orders, roles: initial.roles, permission, initial }
+      return { orders, departmentPaths, roles: initial.roles, permission, initial }
     })
   }
 
@@ -472,15 +495,18 @@ export class FopDataService {
   async getOrders(userId: string, query: ListFulfillmentOrdersDto) {
     const role = FULFILLMENT_QUEUE_ROLES[query.queue]
     if (query.workbenchRole && query.workbenchRole !== role) throw new BadRequestException('workbenchRole does not match the requested queue')
-    const { orders } = await this.scopedOrders(userId, role)
+    const { orders, departmentPaths } = await this.scopedOrders(userId, role)
+    // Derive filter options from the same permitted records, never the administrator's organization directory.
+    const departments = orderDepartments(orders)
     const search = query.search?.trim().toLowerCase()
     const filtered = orders.filter((order) => matchesQueue(order, query.queue)
+      && (!query.departmentId || order.department?.id === query.departmentId || departmentPaths.get(order.id)?.includes(query.departmentId))
       && (!query.orderNumber || order.orderNumber === query.orderNumber)
       && (!search || [order.orderNumber, order.shopifyOrderNumber, order.customerName, order.storeName, ...order.items.map((item) => item.sku)]
         .some((value) => value.toLowerCase().includes(search))))
-      .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt) || left.id.localeCompare(right.id))
+      .sort(oldestPaymentFirst)
     const start = (query.page - 1) * query.pageSize
-    return { source: this.provider.source ?? 'fop', items: filtered.slice(start, start + query.pageSize), total: filtered.length, totals: summarizeFopOrders(filtered), page: query.page, pageSize: query.pageSize }
+    return { source: this.provider.source ?? 'fop', refreshedAt: new Date().toISOString(), departments, items: filtered.slice(start, start + query.pageSize), total: filtered.length, totals: summarizeFopOrders(filtered), page: query.page, pageSize: query.pageSize }
   }
 
   async getOrderVolume(userId: string, query: OrderVolumeQueryDto) {
@@ -542,7 +568,7 @@ export class FopDataService {
     const queues = { review: count('review'), dispatch: count('dispatch'), procurement: count('procurement'), allocation: count('allocation'), shipping: count('shipping') }
     const tasks = (['review', 'dispatch', 'procurement', 'allocation', 'shipping'] as const).filter((queue) => allowed(queue) && queues[queue] > 0)
       .map((queue) => {
-        const oldest = orders.filter(order => matchesQueue(order, queue)).map(order => Date.parse(order.createdAt)).filter(Number.isFinite).sort((a, b) => a - b)[0]
+        const oldest = orders.filter(order => matchesQueue(order, queue)).map(paymentTime).filter(Number.isFinite).sort((a, b) => a - b)[0]
         const time = oldest === undefined ? '' : new Date(oldest + 8 * 3_600_000).toISOString().slice(11, 16)
         return { id: queue, kind: queue, count: queues[queue], time, priority: queue === 'allocation' ? 'normal' : 'high' }
       })
@@ -587,6 +613,7 @@ export class FopDataService {
     return {
       businessScope: scoped.initial.business, source: this.provider.source ?? 'fop', updatedAt: now.toISOString(), queues, rates, ...registrationData, tasks,
       exceptions: allowed('exceptions') ? orders.filter((order) => matchesQueue(order, 'exceptions'))
+        .sort(oldestPaymentFirst)
         .map((order) => ({ id: order.orderNumber, customer: order.customerName, reason: order.exception!.reason, hours: order.exception!.hours })) : [],
       receipts, departmentReceipts, chartAccess,
     }

@@ -6,9 +6,14 @@ export interface OrganizationNode {
   name: string
   kind: 'organization' | 'department'
   sortOrder: number
+  archivedEmployeeCount?: number
 }
 
 export interface OrganizationEmployee {
+  accountId?: string | null
+  jobTitle?: string
+  phone?: string
+  archivedAt?: string | null
   id: string
   name: string
   code: string

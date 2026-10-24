@@ -33,7 +33,7 @@ function isActive(item: { match: string[] }) {
 
 <template>
   <aside
-    class="fixed inset-y-0 left-0 z-40 flex shrink-0 flex-col border-r bg-white transition-all duration-200 dark:bg-[#0d0f13] md:relative"
+    class="fixed inset-y-0 left-0 z-40 flex shrink-0 flex-col border-r bg-white transition-all duration-200 dark:bg-[var(--color-shell)] md:relative"
     :class="props.collapsed ? '-translate-x-full md:w-20 md:translate-x-0' : 'w-72 translate-x-0 md:w-64'"
     style="border-color: var(--color-border)"
   >
@@ -75,10 +75,11 @@ function isActive(item: { match: string[] }) {
     </div>
     <div v-if="canManage" data-management-nav class="shrink-0 space-y-1 border-t p-3" style="border-color: var(--color-border)">
       <p v-if="!props.collapsed" class="px-3 pb-1 text-[11px] font-semibold text-slate-400">{{ t('nav.systemManagement') }}</p>
-      <RouterLink to="/admin/workbenches" :title="t('nav.workbenchRoles')" class="flex h-10 items-center rounded-md text-sm font-semibold text-slate-600 hover:bg-slate-100 dark:text-slate-400" :class="props.collapsed ? 'justify-center' : 'px-3'" @click="emit('navigate')"><Shield class="h-[18px] w-[18px]" :class="props.collapsed ? '' : 'mr-3'" /><span v-if="!props.collapsed">{{ t('nav.workbenchRoles') }}</span></RouterLink>
+
       <RouterLink to="/organization" :title="t('nav.organization')" class="flex h-10 items-center rounded-md text-sm font-semibold transition" :class="[props.collapsed ? 'justify-center' : 'px-3', route.name === 'Organization' ? 'bg-orange-50 text-orange-700 dark:bg-orange-500/10 dark:text-orange-300' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-white/5 dark:hover:text-white']" @click="emit('navigate')">
         <GitBranch class="h-[18px] w-[18px]" :class="props.collapsed ? '' : 'mr-3'" /><span v-if="!props.collapsed">{{ t('nav.organization') }}</span>
       </RouterLink>
+      <RouterLink to="/admin/workbenches" :title="t('nav.workbenchRoles')" class="flex h-10 items-center rounded-md text-sm font-semibold text-slate-600 hover:bg-slate-100 dark:text-slate-400" :class="props.collapsed ? 'justify-center' : 'px-3'" @click="emit('navigate')"><Shield class="h-[18px] w-[18px]" :class="props.collapsed ? '' : 'mr-3'" /><span v-if="!props.collapsed">{{ t('nav.workbenchRoles') }}</span></RouterLink>
     </div>
   </aside>
 </template>

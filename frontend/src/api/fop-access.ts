@@ -19,8 +19,8 @@ export function fopAccessError(error: unknown, zh: boolean): string {
     chart_access_denied: ['暂时无法查看此图表，请联系管理员。', 'This chart is unavailable. Contact an administrator.'],
     chart_details_denied: ['当前仅可查看统计汇总，如需明细请联系管理员。', 'Only summaries are available. Contact an administrator for details.'],
     business_access_disabled: ['当前账号尚未开通业务数据，请联系管理员。', 'Business data is not enabled for your account. Contact an administrator.'],
-    business_scope_required: ['员工或部门信息尚未设置，请联系管理员。', 'Your employee or department information is missing. Contact an administrator.'],
-    fop_binding_required: ['员工账号尚未关联，请联系管理员完成设置。', 'Your employee account is not linked. Contact an administrator.'],
+    business_scope_required: ['业务数据暂不可查看，请联系管理员。', 'Business data is unavailable. Contact an administrator.'],
+    fop_binding_required: ['业务数据暂不可查看，请联系管理员。', 'Business data is unavailable. Contact an administrator.'],
     fop_not_configured: ['业务数据服务尚未接通，请联系管理员。', 'The business data service is not connected. Contact an administrator.'],
     fop_summary_not_configured: ['部门汇总暂不可用，请联系管理员。', 'Department summaries are unavailable. Contact an administrator.'],
     fop_permission_denied: ['暂时无法查看这些数据，请联系管理员。', 'This data is unavailable to your account. Contact an administrator.'],
@@ -28,5 +28,5 @@ export function fopAccessError(error: unknown, zh: boolean): string {
     fop_unavailable: ['业务数据暂时无法加载，请稍后重试。', 'Business data is temporarily unavailable. Please retry later.'],
   }
   const message = typeof code === 'string' ? messages[code] : undefined
-  return message ? message[zh ? 0 : 1] : zh ? '数据加载失败，请检查查询条件及账号权限后重试。' : 'Unable to load data. Check your filters and account access, then retry.'
+  return message ? message[zh ? 0 : 1] : zh ? '数据加载失败，请稍后重试。' : 'Unable to load data. Please retry later.'
 }

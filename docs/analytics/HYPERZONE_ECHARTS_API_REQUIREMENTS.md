@@ -53,6 +53,12 @@
 
 经理“包含本人”是指管理部门内自身业务；不自动并入其他部门的个人历史记录，跨部门历史访问仍需明确业务授权。经理Dashboard看部门管理数据，销售工作台默认看本人。单客户搜索是客户维度，不等于经理本人业绩。账号改权、解绑、调岗、禁用或会话切换后重新核验，迟到响应不得恢复撤销数据。权限缺失与合法无数据分开，禁止用0冒充无权限。
 
+### 1.4 先建组织与成员，再分配账号权限
+
+组织架构统一维护部门、员工与登录账号：左侧组织树、右上部门信息、右下成员工具栏和清单。选中部门后可添加成员、Excel／CSV批量导入、编辑姓名/编号/邮箱/职务/手机/部门及岗位档案、开通或编辑登录账号与FOP绑定、确认单个或批量删除。账号权限页默认列出未停用账号，独立分配管理、业务范围、工作台与图表授权，不再提供新增账号或账号资料编辑表单。菜单顺序为组织架构、账号权限；只拥有业务数据管理员角色不能管理成员。
+
+员工及可选账号原子创建，新账号默认普通员工／本人范围。导入每批1–100名、文件最大2MB，固定五列，预览给出原行号错误；确认时重复校验并整批保存，导入仅建档，之后开通账号和授权。密码仅存散列不返回；重置密码撤销旧会话。删除成员为归档并停用关联账号，保留历史业务身份；本人及系统管理员成员禁止删除，有历史成员的部门保留。成员岗位档案不覆盖账号权限，调部门不覆盖独立经理范围。当前FOP绑定为本地配置，真实身份/部门映射及FOP授权仍待接入，不把本地UUID当成FOP身份。完整操作、字段、源码依据及人工核对见 [员工与登录账号管理](../EMPLOYEE_ACCOUNTS.md)，新增维护接口进入OpenAPI。
+
 ## 2. 图表与业务模块总览
 
 | 编号 | 图表/功能 | 查询与展示 | API/字段依赖 | 明细与交互 |
@@ -540,13 +546,36 @@ Dashboard 依次显示 **待审核 → 待履约 → 待采购 → 待配货 →
 
 验收账号 `test@autoflow.local` 已按既有授权配置为业务数据管理员，看到全部演示订单符合其权限；验收员工隔离须使用绑定不同员工／部门的数据权限配置。本规则不改变五卡结构或已约定队列条件。
 
+### 9.2 协同岗位、部门筛选与收款先后顺序（2026-10-24）
+
+- **跨部门协同**：销售总监、订单管理、采购、配货、物流发运、仓库等人员可在“账号与权限 → 业务数据权限”独立选择“全部业务数据”（`businessRole=admin`），处理全公司各业务部门的订单；系统管理角色可继续为普通用户。仍需其绑定的 FOP 用户拥有对应公司数据权限。本地设置不能扩大 FOP 白名单。普通业务员默认本人、部门经理默认本部门及子部门；不根据岗位名称自动改写已有账号权限。
+- **筛选入口**：销售、采购、配货、发运、仓库工作台的待审核、待采购、待配货、待履约、待出库及异常清单统一提供右侧“所属部门”，默认“全部部门”。先显示业务一部、二部、三部、四部，再显示有可见订单的其他自定义部门。当前人员直接归属业务部门，不重新创建区域销售组。
+- **接口**：`GET /autoflow/integrations/fop/fulfillment-orders` 新增可选 `departmentId`（string，最长128），响应 `FulfillmentOrderPage.departments[]` 包含 `id/name`。选项从当前账号可见订单归属去重生成，独立于队列、关键词、部门条件和分页；不借用管理员组织目录。过滤按 `department.id` 或 `departmentPathIds` 匹配。没有可见订单的部门不会凭空补入；无权限或未知部门返回空结果，绝不回退成全部数据。
+- **排序与合计**：所有待办按收款时间 `paidAt ASC, id ASC` 稳定排序，再分页；空或无效时间排最后。排序按时间戳比较，展示 UTC+8。`total/totals` 覆盖当前账号、当前部门和其他查询条件的完整结果。Dashboard 异常清单同序；待办摘要时间改用最早收款时间，固定业务队列展示顺序不变。
+- **交互**：部门选择保存于 URL，查询、翻页及更改每页条数保留；切换部门回第一页；切换工作台及待办页签保留部门，重置分页与搜索。无匹配结果仍保留所选部门，可手动切回“全部部门”。
+- **FOP 对接**：已核对 `hzkj_orders.dym` 的 `hzkj_dept`（销售部门）与 `hzkj_receipt_date`（收款日期）。适配器提供稳定部门 ID、可信祖先路径以及带时区的订单收款时间；待办排序采用源订单收款日期，不改变回款业绩采用收款分录事件日期的口径。生产查询须在服务端应用权限与部门条件，并按相同顺序做数据库分页；不能只排序当前页。
+- **Demo**：订单和客户归属销售岗位员工，采购、配货、发运及仓库人员通过业务数据权限处理这些订单，不把协同岗位人员自动当成客户所属业务员。
+- **交付核对**：管理员逐一核对协同账号名单、业务范围及对应 FOP 授权；IT 核对 FOP 部门 ID 映射、祖先路径和多次付款时 `hzkj_receipt_date` 的实际语义。待办排序不擅自改用首笔收款分录，缺失日期不能用创建时间冒充。测试需覆盖跨部门协同、本人/经理隔离、伪造部门、无权部门、跨页排序、同时间、空时间、搜索后合计及切换页签。
+
 
 **当前落地**：前端、BFF、Mock、OpenAPI 已同步；真实 FOP 网络适配器仍未接通。本次不修改财务统计规则或 FOP 源代码。字段证据见源码映射第12节，后续联调见 T31/H33/D30。
 
 
+### 9.3 只读待办、多商品与状态刷新（2026-10-24）
+
+- 五工作台六清单共用只读履约列表，展示FOP各业务环节进度；审核、采购、配货、同步Shopify及出库等业务处理均在FOP完成。前端提供查询、筛选、复制和刷新，不提供这些业务写操作。
+- 列序统一：订单编号、商品图片/商品信息、Shopify单号、客户、收款日期、支付状态、当前环节状态、店铺、SKU/规格、数量、订单金额及后续仓库/物流/业务员/部门字段。商品列第二；收款仍按UTC+8升序，业务员后显示所属部门。
+- 点击订单号旁复制图标/订单号按钮，复制完整FOP订单编号，显示成功反馈；HTTPS使用Clipboard API，局域网HTTP提供兼容复制，失败明确提示手动复制。复制不写入业务数据。
+- 一单多品通过同一订单的items[]展示，图片/名称、SKU/规格、数量逐项对齐；每单仍计一笔，件数累加所有商品行。Demo所有队列包含2及3款商品订单，金额依据各商品单价×数量计算，不复制多笔订单模拟商品分录。
+- 每个待办清单提供“刷新”；在页面可见且联网时每30秒重新请求一次，返回页面/恢复网络立即请求。后台标签页和离线时暂停；卸载后停止。请求在途不重叠；条件变化时丢弃旧请求结果。后台刷新保留表格和未提交搜索输入，成功后替换最新进度；失败清除过期结果并提示。刷新后最后一页失效时自动回到有效页，保留部门与已提交搜索条件。
+- `FulfillmentOrderPage.refreshedAt`为本次BFF查询完成的ISO8601时间，页面显示最近刷新（UTC+8）。这是查询回执，不是FOP同步水位。所有刷新仍重新核验登录账号、业务范围及FOP白名单；列表数量/金额/件数合计同步更新，不从旧页面推算。
+- 真实FOP适配器仍未接通。生产优先每次GET读取FOP当前已提交状态；若采用缓存或增量同步，IT须补齐源提交时间/同步水位、状态变更事件、断点续传、失败重试与积压监控，不能以BFF refreshedAt冒充源状态已同步。页面30秒轮询只界定可见页面主动查询间隔，实际可见延迟还包括FOP事务提交、同步/查询处理及网络耗时；最终时效目标需用生产链路验收。
+- IT联调：在FOP逐一完成审核、供应商发货、齐套/配货审核、Shopify同步及出库，验证手动刷新立即反映已提交事实、自动查询在下一周期反映；原清单移出、新清单出现，同队列总数与金额同步；保留跨队列允许重叠规则。测试断网/恢复、隐藏/恢复、超时、在途换部门、撤权以及刷新导致最后一页消失。
+
+
 ## 10. OpenAPI 接口清单与请求/响应定义
 
-本规范覆盖 **23 个操作、112 个数据模型**。以下清单由同目录 OpenAPI JSON 生成。Base URL 为 `/api`，表中路径不重复此前缀。响应为实际裸 JSON，不额外包装成 `{code,data}`。时间序列数值数组必须与对应时间轴等长：counts 对应 registrations、amounts 对应 months、values 及 warehouses 内数组对应 periods；items/series/options 等集合不适用。该跨字段规则需联调测试，单纯 schema 校验不能证明。
+本规范覆盖 **31 个操作、123 个数据模型**。以下清单由同目录 OpenAPI JSON 生成。Base URL 为 `/api`，表中路径不重复此前缀。响应为实际裸 JSON，不额外包装成 `{code,data}`。时间序列数值数组必须与对应时间轴等长：counts 对应 registrations、amounts 对应 months、values 及 warehouses 内数组对应 periods；items/series/options 等集合不适用。该跨字段规则需联调测试，单纯 schema 校验不能证明。
 
 | 方法 | 路径 | operationId | 用途 |
 | --- | --- | --- | --- |
@@ -573,6 +602,14 @@ Dashboard 依次显示 **待审核 → 待履约 → 待采购 → 待配货 →
 | GET | `/autoflow/integrations/fop/sales-performance/details` | `getSalesPerformanceDetails` | 销售工作台个人收款与毛利明细 |
 | PUT | `/users/{id}/chart-permissions` | `updateChartPermissions` | 设置账号逐图授权 |
 | GET | `/autoflow/integrations/fop/chart-access` | `getChartAccess` | 读取当前账号有效图表能力 |
+| POST | `/organization/employees` | `createOrganizationEmployee` | 管理员新增员工并可开通登录账号 |
+| POST | `/organization/employees/{id}/account` | `createEmployeeLoginAccount` | 管理员为已有员工开通登录账号 |
+| PUT | `/organization/employees/{id}/details` | `updateOrganizationEmployee` | 编辑成员资料及归属 |
+| POST | `/organization/employees/remove` | `archiveOrganizationEmployees` | 删除成员并停用关联账号 |
+| POST | `/organization/employees/import` | `importOrganizationEmployees` | 批量导入部门成员 |
+| POST | `/organization/employees/import-preview` | `previewOrganizationEmployees` | 预览 Excel／CSV 成员导入 |
+| GET | `/organization/accounts/{id}` | `getOrganizationAccount` | 读取组织账号资料 |
+| PUT | `/organization/accounts/{id}` | `updateOrganizationAccount` | 编辑登录账号及FOP关联 |
 
 
 ### 10.1 公共鉴权与响应说明
@@ -1012,7 +1049,7 @@ Accept: application/json
 `GET /api/autoflow/integrations/fop/fulfillment-orders` · operationId: `getFulfillmentOrders`
 
 
-queue角色：review/exceptions=sales，dispatch=dispatch，procurement=procurement，allocation=allocation，shipping=warehouse。待审核：paid且reviewStatus=pending。待履约：paid、approved，shopifySync=pending/partial。待采购：paid、approved，supplierShipment=pending/partial。待配货：paid、approved，stockReadiness=incomplete，或ready且allocationReview=pending。待出库：paid、approved，stockReadiness=ready且allocationReview=approved，outbound=pending/partial。 五类均排除取消、未支付、退款。队列可重叠，每队列按订单ID去重；partial表示尚有未完成事项。unknown不推断；进度缺失或非法返回503。exceptions继续使用paid+未shipped+exception非null。按createdAt倒序/id排序，totals覆盖完整筛选集。保留dispatch/shipping键兼容旧URL，已不再使用旧发运/发货筛选逻辑。 五类待办强制按服务端登录账号取FOP租户/订单白名单与业务数据范围交集后统计和分页：salesperson仅owner.id等于绑定员工，department_manager仅管理部门及下级，business admin仅FOP明确授权的全部记录，none拒绝。系统管理员或全部岗位不扩大数据范围；搜索、精确订单查询、卡片/tasks数量、total和金额/数量合计均同范围。
+queue角色：review/exceptions=sales，dispatch=dispatch，procurement=procurement，allocation=allocation，shipping=warehouse。待审核：paid且reviewStatus=pending。待履约：paid、approved，shopifySync=pending/partial。待采购：paid、approved，supplierShipment=pending/partial。待配货：paid、approved，stockReadiness=incomplete，或ready且allocationReview=pending。待出库：paid、approved，stockReadiness=ready且allocationReview=approved，outbound=pending/partial。 五类均排除取消、未支付、退款。队列可重叠，每队列按订单ID去重；partial表示尚有未完成事项。unknown不推断；进度缺失或非法返回503。exceptions继续使用paid+未shipped+exception非null。按paidAt升序/id升序排序，空或无效收款日期排最后；排序在分页前完成，totals覆盖完整筛选集。保留dispatch/shipping键兼容旧URL，已不再使用旧发运/发货筛选逻辑。 五类待办强制按服务端登录账号取FOP租户/订单白名单与业务数据范围交集后统计和分页：salesperson仅owner.id等于绑定员工，department_manager仅管理部门及下级，business admin仅FOP明确授权的全部记录，none拒绝。系统管理员或全部岗位不扩大数据范围；搜索、精确订单查询、卡片/tasks数量、total和金额/数量合计均同范围。 departmentId按订单所属部门或departmentPathIds祖先匹配，只缩小已有权限；无匹配或无权部门返回空结果，绝不回退全部数据。departments从授权订单生成，独立于队列、搜索、部门筛选和分页；业务一至四部优先，其后自定义部门。协同岗位可独立配置businessRole=admin以处理全公司FOP允许的数据，无需系统管理员身份。 祖先路径仅在服务端处理，不加入公开订单明细；非法paidAt归一为null后排最后。 只读查询，无业务审核/配货/发运写接口；页面可见且联网时每30秒重取，恢复可见/网络及手动刷新立即重取。refreshedAt仅标识BFF查询完成时间。响应private,no-store；业务操作在FOP完成。
 
 
 实现状态：implemented
@@ -1024,7 +1061,7 @@ queue角色：review/exceptions=sales，dispatch=dispatch，procurement=procurem
 请求示例（日期和主体为脱敏样例，联调时替换）：
 
 ```http
-GET /api/autoflow/integrations/fop/fulfillment-orders?queue=allocation&workbenchRole=allocation&page=1&pageSize=20
+GET /api/autoflow/integrations/fop/fulfillment-orders?queue=allocation&workbenchRole=allocation&departmentId=department-sales-1&page=1&pageSize=20
 Authorization: Bearer <有效会话JWT>
 Accept: application/json
 ```
@@ -1036,13 +1073,14 @@ Accept: application/json
 | `workbenchRole` | query | WorkbenchRole | 否 | 可选，提供时必须匹配queue所需角色，否则400。 | enum=["sales", "procurement", "allocation", "dispatch", "warehouse"] |
 | `search` | query | string | 否 | trim/忽略大小写，匹配orderNumber/shopifyOrderNumber/customerName/storeName/items.sku。 | maxLength=200 |
 | `orderNumber` | query | string | 否 | FOP业务订单号精确匹配，不trim。 | maxLength=100 |
+| `departmentId` | query | string | 否 | 所属部门稳定ID，精确匹配department.id或departmentPathIds祖先。省略/空串表示当前账号全部可见部门；非身份或授权参数。 | maxLength=128 |
 | `page` | query | integer | 否 | — | default=1; minimum=1; maximum=1000000 |
 | `pageSize` | query | integer | 否 | — | default=20; minimum=1; maximum=100 |
 
 
 | 状态码 | 说明 | Content-Type / 响应模型 |
 | --- | --- | --- |
-| 200 | 成功，裸JSON响应。 | application/json: OrderPage |
+| 200 | 成功，裸JSON响应。 | application/json: FulfillmentOrderPage |
 | 400 | 400：DTO失败、未知DTO字段、日期或跨参数条件错误。 | application/json: HttpError |
 | 401 | 401：缺失/过期/无效JWT或账户不存在。 | application/json: HttpError |
 | 403 | 403：入口/系统管理权限不足、业务禁用、绑定/范围缺失、FOP拒绝或请求期间授权变更。 | application/json: ErrorResponse |
@@ -1064,7 +1102,9 @@ Accept: application/json
     "amountsByCurrency": []
   },
   "page": 1,
-  "pageSize": 20
+  "pageSize": 20,
+  "departments": [],
+  "refreshedAt": "2026-10-24T05:30:00Z"
 }
 ```
 
@@ -1269,7 +1309,7 @@ Accept: application/json
 `GET /api/users/workbench-accounts` · operationId: `listWorkbenchAccounts`
 
 
-仅系统role=admin；businessRole=none也可管理。按displayId/id排序；响应仅items/total。
+仅系统role=admin；businessRole=none也可管理。按displayId/id排序；响应仅items/total。 默认仅列出未停用账号，含组织员工与部门信息；账号建立/资料编辑移至组织架构，当前页面只负责分配权限。
 
 
 实现状态：implemented
@@ -1538,7 +1578,7 @@ Accept: application/json
 `GET /api/organization` · operationId: `getOrganizationWorkspace`
 
 
-仅系统管理员。每个本地账户独立mock组织，非FOP目录；首次GET可在事务内初始化种子，有本地写副作用。空Query DTO拒绝额外字段。组织写接口不在本规范。
+仅系统管理员。本地持久化组织，尚未同步 FOP；已关联员工账号使用其所属目录，其他旧账号保留独立目录。首次读取未初始化目录会创建种子。新增员工与开通账号端点见本规范；其他组织写接口见组织验收文档。
 
 
 实现状态：implemented
@@ -2577,6 +2617,388 @@ Accept: application/json
 实现证据：`backend/src/modules/users/chart-permissions.ts`, `backend/src/modules/fop-data/fop-data.service.ts`, `backend/src/modules/users/workbench.controller.ts`。
 
 
+### 10.25 管理员新增员工并可开通登录账号
+
+`POST /api/organization/employees` · operationId: `createOrganizationEmployee`
+
+
+仅系统管理员；管理权限在事务中复核，不接受客户端指定 ownerUserId 或系统/业务管理员角色。账号默认 role=user、businessRole=salesperson，员工与部门指向当前档案。创建账号与员工关联原子提交，重复或校验失败不留孤立记录。FOP 绑定复用已有唯一 tenantId/userId 约束；正式网络适配与身份映射仍待 IT 接入。
+
+
+实现状态：implemented
+
+
+鉴权：`[{"BearerAuth": []}, {"SessionCookie": []}]`。
+
+
+请求示例（日期和主体为脱敏样例，联调时替换）：
+
+```http
+POST /api/organization/employees
+Authorization: Bearer <有效会话JWT>
+Accept: application/json
+```
+
+
+无查询/路径参数。
+
+
+请求体：`application/json`；必需：True；模型：`CreateOrganizationEmployee`。
+
+
+| 状态码 | 说明 | Content-Type / 响应模型 |
+| --- | --- | --- |
+| 400 | 400：DTO失败、未知DTO字段、日期或跨参数条件错误。 | application/json: HttpError |
+| 401 | 401：缺失/过期/无效JWT或账户不存在。 | application/json: HttpError |
+| 403 | 403：入口/系统管理权限不足、业务禁用、绑定/范围缺失、FOP拒绝或请求期间授权变更。 | application/json: ErrorResponse |
+| 429 | 429：AppModule全局默认每60秒120次；实际计数受部署IP/代理策略影响。 | application/json: HttpError |
+| 500 | 500：未捕获服务/数据库异常。 | application/json: HttpError |
+| 201 | 成功，裸JSON响应。 | application/json: OrganizationWorkspace |
+| 409 | 409：FOP身份重复绑定或尝试撤销自身系统管理权限。 | application/json: HttpError |
+| 404 | 部门或员工不存在于当前管理目录。 | 无响应体 |
+
+
+201 响应示例（application/json）：
+
+```json
+{
+  "source": "mock",
+  "nodes": [],
+  "employees": [],
+  "canEdit": true
+}
+```
+
+
+实现证据：`backend/src/modules/organization/organization.controller.ts`, `backend/src/modules/organization/organization.service.ts`, `backend/src/modules/organization/organization.dto.ts`。
+
+
+### 10.26 管理员为已有员工开通登录账号
+
+`POST /api/organization/employees/{id}/account` · operationId: `createEmployeeLoginAccount`
+
+
+仅系统管理员；管理权限在事务中复核，不接受客户端指定 ownerUserId 或系统/业务管理员角色。账号默认 role=user、businessRole=salesperson，员工与部门指向当前档案。创建账号与员工关联原子提交，重复或校验失败不留孤立记录。FOP 绑定复用已有唯一 tenantId/userId 约束；正式网络适配与身份映射仍待 IT 接入。
+
+
+实现状态：implemented
+
+
+鉴权：`[{"BearerAuth": []}, {"SessionCookie": []}]`。
+
+
+请求示例（日期和主体为脱敏样例，联调时替换）：
+
+```http
+POST /api/organization/employees/00000000-0000-4000-8000-000000000001/account
+Authorization: Bearer <有效会话JWT>
+Accept: application/json
+```
+
+
+| 参数 | 位置 | 类型 | 必填 | 说明 | 约束/默认值 |
+| --- | --- | --- | --- | --- | --- |
+| `id` | path | string (uuid) | 是 | 当前目录员工 UUID；已开通账号返回409。 | — |
+
+
+请求体：`application/json`；必需：True；模型：`CreateEmployeeAccount`。
+
+
+| 状态码 | 说明 | Content-Type / 响应模型 |
+| --- | --- | --- |
+| 400 | 400：DTO失败、未知DTO字段、日期或跨参数条件错误。 | application/json: HttpError |
+| 401 | 401：缺失/过期/无效JWT或账户不存在。 | application/json: HttpError |
+| 403 | 403：入口/系统管理权限不足、业务禁用、绑定/范围缺失、FOP拒绝或请求期间授权变更。 | application/json: ErrorResponse |
+| 429 | 429：AppModule全局默认每60秒120次；实际计数受部署IP/代理策略影响。 | application/json: HttpError |
+| 500 | 500：未捕获服务/数据库异常。 | application/json: HttpError |
+| 201 | 成功，裸JSON响应。 | application/json: OrganizationWorkspace |
+| 409 | 409：FOP身份重复绑定或尝试撤销自身系统管理权限。 | application/json: HttpError |
+| 404 | 部门或员工不存在于当前管理目录。 | 无响应体 |
+
+
+201 响应示例（application/json）：
+
+```json
+{
+  "source": "mock",
+  "nodes": [],
+  "employees": [],
+  "canEdit": true
+}
+```
+
+
+实现证据：`backend/src/modules/organization/organization.controller.ts`, `backend/src/modules/organization/organization.service.ts`, `backend/src/modules/organization/organization.dto.ts`。
+
+
+### 10.27 编辑成员资料及归属
+
+`PUT /api/organization/employees/{id}/details` · operationId: `updateOrganizationEmployee`
+
+
+仅系统管理员及当前目录在职员工；同步关联登录邮箱。岗位档案不修改账号入口授权；调部门仅同步默认个人业务身份，不覆盖经理范围或FOP映射。
+
+
+实现状态：implemented
+
+
+鉴权：`[{"BearerAuth": []}, {"SessionCookie": []}]`。
+
+
+请求示例（日期和主体为脱敏样例，联调时替换）：
+
+```http
+PUT /api/organization/employees/00000000-0000-4000-8000-000000000001/details
+Authorization: Bearer <有效会话JWT>
+Accept: application/json
+```
+
+
+| 参数 | 位置 | 类型 | 必填 | 说明 | 约束/默认值 |
+| --- | --- | --- | --- | --- | --- |
+| `id` | path | string (uuid) | 是 | 员工或登录账号UUID。 | — |
+
+
+请求体：`application/json`；必需：True；模型：`UpdateOrganizationEmployee`。
+
+
+| 状态码 | 说明 | Content-Type / 响应模型 |
+| --- | --- | --- |
+| 400 | 400：DTO失败、未知DTO字段、日期或跨参数条件错误。 | application/json: HttpError |
+| 401 | 401：缺失/过期/无效JWT或账户不存在。 | application/json: HttpError |
+| 403 | 403：入口/系统管理权限不足、业务禁用、绑定/范围缺失、FOP拒绝或请求期间授权变更。 | application/json: ErrorResponse |
+| 429 | 429：AppModule全局默认每60秒120次；实际计数受部署IP/代理策略影响。 | application/json: HttpError |
+| 500 | 500：未捕获服务/数据库异常。 | application/json: HttpError |
+| 409 | 409：FOP身份重复绑定或尝试撤销自身系统管理权限。 | application/json: HttpError |
+| 404 | 部门或员工不存在于当前管理目录。 | 无响应体 |
+| 200 | 成功，裸JSON响应。 | application/json: OrganizationWorkspace |
+
+
+实现证据：`backend/src/modules/organization/organization.controller.ts`, `backend/src/modules/organization/organization.service.ts`, `backend/src/modules/organization/organization.dto.ts`。
+
+
+### 10.28 删除成员并停用关联账号
+
+`POST /api/organization/employees/remove` · operationId: `archiveOrganizationEmployees`
+
+
+整批归档，保留成员ID和历史业务外键，停用关联登录并递增sessionVersion；已有JWT下一次请求拒绝。本人或系统管理员成员返回409；不存在/跨目录/已删除成员404。含历史成员的部门不能物理删除。
+
+
+实现状态：implemented
+
+
+鉴权：`[{"BearerAuth": []}, {"SessionCookie": []}]`。
+
+
+请求示例（日期和主体为脱敏样例，联调时替换）：
+
+```http
+POST /api/organization/employees/remove
+Authorization: Bearer <有效会话JWT>
+Accept: application/json
+```
+
+
+无查询/路径参数。
+
+
+请求体：`application/json`；必需：True；模型：`RemoveOrganizationEmployees`。
+
+
+| 状态码 | 说明 | Content-Type / 响应模型 |
+| --- | --- | --- |
+| 400 | 400：DTO失败、未知DTO字段、日期或跨参数条件错误。 | application/json: HttpError |
+| 401 | 401：缺失/过期/无效JWT或账户不存在。 | application/json: HttpError |
+| 403 | 403：入口/系统管理权限不足、业务禁用、绑定/范围缺失、FOP拒绝或请求期间授权变更。 | application/json: ErrorResponse |
+| 429 | 429：AppModule全局默认每60秒120次；实际计数受部署IP/代理策略影响。 | application/json: HttpError |
+| 500 | 500：未捕获服务/数据库异常。 | application/json: HttpError |
+| 409 | 409：FOP身份重复绑定或尝试撤销自身系统管理权限。 | application/json: HttpError |
+| 404 | 部门或员工不存在于当前管理目录。 | 无响应体 |
+| 201 | 成功，裸JSON响应。 | application/json: OrganizationWorkspace |
+
+
+实现证据：`backend/src/modules/organization/organization.controller.ts`, `backend/src/modules/organization/organization.service.ts`, `backend/src/modules/organization/organization.dto.ts`。
+
+
+### 10.29 批量导入部门成员
+
+`POST /api/organization/employees/import` · operationId: `importOrganizationEmployees`
+
+
+每批1–100名，当前目录部门，整批事务提交；重复编号/邮箱（含历史归档身份）回滚。只建档，岗位数组初始为空，不自动开通账号。预览不替代提交时重新验证。
+
+
+实现状态：implemented
+
+
+鉴权：`[{"BearerAuth": []}, {"SessionCookie": []}]`。
+
+
+请求示例（日期和主体为脱敏样例，联调时替换）：
+
+```http
+POST /api/organization/employees/import
+Authorization: Bearer <有效会话JWT>
+Accept: application/json
+```
+
+
+无查询/路径参数。
+
+
+请求体：`application/json`；必需：True；模型：`ImportOrganizationEmployees`。
+
+
+| 状态码 | 说明 | Content-Type / 响应模型 |
+| --- | --- | --- |
+| 400 | 400：DTO失败、未知DTO字段、日期或跨参数条件错误。 | application/json: HttpError |
+| 401 | 401：缺失/过期/无效JWT或账户不存在。 | application/json: HttpError |
+| 403 | 403：入口/系统管理权限不足、业务禁用、绑定/范围缺失、FOP拒绝或请求期间授权变更。 | application/json: ErrorResponse |
+| 429 | 429：AppModule全局默认每60秒120次；实际计数受部署IP/代理策略影响。 | application/json: HttpError |
+| 500 | 500：未捕获服务/数据库异常。 | application/json: HttpError |
+| 409 | 409：FOP身份重复绑定或尝试撤销自身系统管理权限。 | application/json: HttpError |
+| 404 | 部门或员工不存在于当前管理目录。 | 无响应体 |
+| 201 | 成功，裸JSON响应。 | application/json: OrganizationWorkspace |
+
+
+实现证据：`backend/src/modules/organization/organization.controller.ts`, `backend/src/modules/organization/organization.service.ts`, `backend/src/modules/organization/organization.dto.ts`。
+
+
+### 10.30 预览 Excel／CSV 成员导入
+
+`POST /api/organization/employees/import-preview` · operationId: `previewOrganizationEmployees`
+
+
+仅系统管理员；单文件2MB以内、1–100行成员、五列固定中文表头：姓名、员工编号、邮箱、职务、手机。xlsx取首个工作表；CSV为UTF-8。拒绝公式/链接/复杂单元格；返回逐行错误与原始行号。纯预览不写成员。
+
+
+实现状态：implemented
+
+
+鉴权：`[{"BearerAuth": []}, {"SessionCookie": []}]`。
+
+
+请求示例（日期和主体为脱敏样例，联调时替换）：
+
+```http
+POST /api/organization/employees/import-preview
+Authorization: Bearer <有效会话JWT>
+Accept: application/json
+```
+
+
+无查询/路径参数。
+
+
+请求体：`multipart/form-data`；必需：True；模型：`object`。
+
+
+| 状态码 | 说明 | Content-Type / 响应模型 |
+| --- | --- | --- |
+| 400 | 400：DTO失败、未知DTO字段、日期或跨参数条件错误。 | application/json: HttpError |
+| 401 | 401：缺失/过期/无效JWT或账户不存在。 | application/json: HttpError |
+| 403 | 403：入口/系统管理权限不足、业务禁用、绑定/范围缺失、FOP拒绝或请求期间授权变更。 | application/json: ErrorResponse |
+| 429 | 429：AppModule全局默认每60秒120次；实际计数受部署IP/代理策略影响。 | application/json: HttpError |
+| 500 | 500：未捕获服务/数据库异常。 | application/json: HttpError |
+| 409 | 409：FOP身份重复绑定或尝试撤销自身系统管理权限。 | application/json: HttpError |
+| 404 | 部门或员工不存在于当前管理目录。 | 无响应体 |
+| 201 | 成功，裸JSON响应。 | application/json: EmployeeImportPreview |
+| 413 | 上传文件超过2MB限制。 | 无响应体 |
+
+
+实现证据：`backend/src/modules/organization/organization.controller.ts`, `backend/src/modules/organization/organization.service.ts`, `backend/src/modules/organization/organization.dto.ts`。
+
+
+### 10.31 读取组织账号资料
+
+`GET /api/organization/accounts/{id}` · operationId: `getOrganizationAccount`
+
+
+仅系统管理员；关联员工须属于当前目录且在职。历史未关联员工的已有账号可读取；停用账号拒绝。响应不含密码、散列或权限编辑字段。
+
+
+实现状态：implemented
+
+
+鉴权：`[{"BearerAuth": []}, {"SessionCookie": []}]`。
+
+
+请求示例（日期和主体为脱敏样例，联调时替换）：
+
+```http
+GET /api/organization/accounts/00000000-0000-4000-8000-000000000001
+Authorization: Bearer <有效会话JWT>
+Accept: application/json
+```
+
+
+| 参数 | 位置 | 类型 | 必填 | 说明 | 约束/默认值 |
+| --- | --- | --- | --- | --- | --- |
+| `id` | path | string (uuid) | 是 | 员工或登录账号UUID。 | — |
+
+
+| 状态码 | 说明 | Content-Type / 响应模型 |
+| --- | --- | --- |
+| 400 | 400：DTO失败、未知DTO字段、日期或跨参数条件错误。 | application/json: HttpError |
+| 401 | 401：缺失/过期/无效JWT或账户不存在。 | application/json: HttpError |
+| 403 | 403：入口/系统管理权限不足、业务禁用、绑定/范围缺失、FOP拒绝或请求期间授权变更。 | application/json: ErrorResponse |
+| 429 | 429：AppModule全局默认每60秒120次；实际计数受部署IP/代理策略影响。 | application/json: HttpError |
+| 500 | 500：未捕获服务/数据库异常。 | application/json: HttpError |
+| 409 | 409：FOP身份重复绑定或尝试撤销自身系统管理权限。 | application/json: HttpError |
+| 404 | 部门或员工不存在于当前管理目录。 | 无响应体 |
+| 200 | 成功，裸JSON响应。 | application/json: EmployeeLoginDetails |
+
+
+实现证据：`backend/src/modules/organization/organization.controller.ts`, `backend/src/modules/organization/organization.service.ts`, `backend/src/modules/organization/organization.dto.ts`。
+
+
+### 10.32 编辑登录账号及FOP关联
+
+`PUT /api/organization/accounts/{id}` · operationId: `updateOrganizationAccount`
+
+
+维护登录名、邮箱、可选密码和FOP绑定；密码重置撤销旧会话，关联邮箱同步员工。请求不能携带角色、业务范围等授权字段，权限页独立配置。
+
+
+实现状态：implemented
+
+
+鉴权：`[{"BearerAuth": []}, {"SessionCookie": []}]`。
+
+
+请求示例（日期和主体为脱敏样例，联调时替换）：
+
+```http
+PUT /api/organization/accounts/00000000-0000-4000-8000-000000000001
+Authorization: Bearer <有效会话JWT>
+Accept: application/json
+```
+
+
+| 参数 | 位置 | 类型 | 必填 | 说明 | 约束/默认值 |
+| --- | --- | --- | --- | --- | --- |
+| `id` | path | string (uuid) | 是 | 员工或登录账号UUID。 | — |
+
+
+请求体：`application/json`；必需：True；模型：`UpdateEmployeeLogin`。
+
+
+| 状态码 | 说明 | Content-Type / 响应模型 |
+| --- | --- | --- |
+| 400 | 400：DTO失败、未知DTO字段、日期或跨参数条件错误。 | application/json: HttpError |
+| 401 | 401：缺失/过期/无效JWT或账户不存在。 | application/json: HttpError |
+| 403 | 403：入口/系统管理权限不足、业务禁用、绑定/范围缺失、FOP拒绝或请求期间授权变更。 | application/json: ErrorResponse |
+| 429 | 429：AppModule全局默认每60秒120次；实际计数受部署IP/代理策略影响。 | application/json: HttpError |
+| 500 | 500：未捕获服务/数据库异常。 | application/json: HttpError |
+| 409 | 409：FOP身份重复绑定或尝试撤销自身系统管理权限。 | application/json: HttpError |
+| 404 | 部门或员工不存在于当前管理目录。 | 无响应体 |
+| 200 | 成功，裸JSON响应。 | application/json: EmployeeLoginDetails |
+
+
+实现证据：`backend/src/modules/organization/organization.controller.ts`, `backend/src/modules/organization/organization.service.ts`, `backend/src/modules/organization/organization.dto.ts`。
+
+
 ## 11. 字段级数据字典
 
 模型引用按名称交叉查阅。例如 `OrderVolumeData.series[] → VolumeSeries.amounts → VolumeAmounts`；每一层字段均在下表列出。必填是相对于当前父对象；父对象本身可选时不强制创建。可空只以类型中的 `null` 或 `anyOf/oneOf` null 分支为准。示例不是生产值。内部 FOP 提供器模型若标注为内部，则不能从浏览器直接传入。
@@ -3171,7 +3593,7 @@ publicOrder白名单输出，不含tenantId、departmentPathIds或任意provider
 | `id` | string | 是 | 任务卡稳定键，与kind相同。 | enum=["review", "dispatch", "procurement", "allocation", "shipping"] |
 | `kind` | string | 是 | review待审核、dispatch待履约、procurement待采购、allocation待配货、shipping待出库。 | enum=["review", "dispatch", "procurement", "allocation", "shipping"] |
 | `count` | integer | 是 | 对应队列当前待处理数，只输出大于0且有入口权限的队列。 | minimum=0 |
-| `time` | string | 是 | 最早待办创建时刻转换 UTC+8 后的 HH:mm；无可用时刻为空字符串。 | — |
+| `time` | string | 是 | 当前队列最早有效收款时间paidAt转换UTC+8后的HH:mm；无可用收款时间为空字符串，不回退createdAt。 | — |
 | `priority` | string | 是 | allocation为normal，其余high。 | enum=["high", "normal"] |
 
 
@@ -3984,6 +4406,7 @@ publicOrder白名单输出，不含tenantId、departmentPathIds或任意provider
 | `businessScope` | BusinessScope | 是 | 独立业务角色、部门和员工范围。 | — |
 | `fopBinding` | FopBinding anyOf null | 是 | 真实FOP租户/用户绑定，未绑定时null；不包含密码或JWT。 | — |
 | `chartPermissions` | ChartPermissionOverride[] | 是 | 已持久化账号图表例外，空数组继承模板。 | — |
+| `employee` | EmployeeAccountSummary anyOf null | 否 | 账号列表附带关联员工与所属部门，未关联为 null；其他账号写接口可省略。 | — |
 
 
 ### WorkbenchAccountPage
@@ -4058,6 +4481,7 @@ publicOrder白名单输出，不含tenantId、departmentPathIds或任意provider
 | `name` | string | 是 | 组织或部门显示名称。 | — |
 | `kind` | string | 是 | organization根组织或department部门节点。 | enum=["organization", "department"] |
 | `sortOrder` | integer | 是 | 同级显示排序数，越小越靠前。 | — |
+| `archivedEmployeeCount` | integer | 否 | 直属已归档历史成员数；大于0时保留部门，不能物理删除。 | minimum=0 |
 
 
 ### OrganizationEmployee
@@ -4069,11 +4493,15 @@ publicOrder白名单输出，不含tenantId、departmentPathIds或任意provider
 | 字段路径 | 类型/引用 | 必填 | 说明 | 约束/示例 |
 | --- | --- | --- | --- | --- |
 | `id` | string (uuid) | 是 | 本地员工UUID，不自动等于FOP用户ID。 | — |
-| `name` | string | 是 | 本地演示组织员工姓名。 | — |
+| `name` | string | 是 | 员工姓名，可含中英文名。 | — |
 | `code` | string | 是 | 本地员工编码，排序依据。 | — |
-| `email` | string | 是 | 本地员工邮箱，种子使用hyperzone.example。 | — |
+| `email` | string | 是 | 员工邮箱；开通账号时作为登录邮箱。 | — |
 | `departmentId` | string (uuid) | 是 | 所属本地部门节点UUID。 | — |
 | `workbenchRoles` | WorkbenchRole[] | 是 | 演示员工岗位角色，不等于当前登录账户实际入口授权。 | — |
+| `accountId` | string (uuid) anyOf null | 否 | 已关联的前端登录账号 UUID；未开通为 null，不是 FOP 用户 ID。 | — |
+| `jobTitle` | string | 否 | 职务，纯文本；不用于决定账号权限。 | maxLength=100 |
+| `phone` | string | 否 | 手机/联系电话，保留国家代码和文本前导零。 | maxLength=40 |
+| `archivedAt` | string / null | 否 | 归档时间。管理列表仅返回在职成员，值为null；历史身份在内部业务目录保留。 | — |
 
 
 ### OrganizationWorkspace
@@ -4085,8 +4513,8 @@ publicOrder白名单输出，不含tenantId、departmentPathIds或任意provider
 | 字段路径 | 类型/引用 | 必填 | 说明 | 约束/示例 |
 | --- | --- | --- | --- | --- |
 | `source` | "mock" | 是 | 当前始终mock，非FOP目录。 | — |
-| `nodes` | OrganizationNode[] | 是 | 当前管理员账户独立组织树节点。 | — |
-| `employees` | OrganizationEmployee[] | 是 | 当前管理员账户独立员工目录；尚未与FOP真实目录同步。 | — |
+| `nodes` | OrganizationNode[] | 是 | 当前管理员管理的本地目录；已关联员工账号使用其所属目录。 | — |
+| `employees` | OrganizationEmployee[] | 是 | 当前管理目录的在职成员，已归档成员不返回。关联账号、职务与手机属于管理员资料，不向普通员工提供此清单。 | — |
 | `canEdit` | boolean | 是 | GET要求系统管理员，正常true。 | — |
 
 
@@ -5888,6 +6316,171 @@ provider内部归一候选事实（有效字段口径同FopReceipt）；不直�
 ```
 
 
+### EmployeeAccountSummary
+
+
+
+
+
+| 字段路径 | 类型/引用 | 必填 | 说明 | 约束/示例 |
+| --- | --- | --- | --- | --- |
+| `id` | string (uuid) | 是 | 见引用模型/接口说明 | — |
+| `name` | string | 是 | 见引用模型/接口说明 | — |
+| `code` | string | 是 | 见引用模型/接口说明 | — |
+| `department` | object | 是 | 见引用模型/接口说明 | additionalProperties=false |
+| `department.id` | string (uuid) | 是 | 见引用模型/接口说明 | — |
+| `department.name` | string | 是 | 见引用模型/接口说明 | — |
+
+
+### CreateEmployeeAccount
+
+
+
+
+
+| 字段路径 | 类型/引用 | 必填 | 说明 | 约束/示例 |
+| --- | --- | --- | --- | --- |
+| `username` | string | 是 | 登录名称，trim；邮箱用于实际登录。 | minLength=2; maxLength=50 |
+| `password` | string | 是 | 初始密码，UTF-8 字节数同时不超过72；仅 bcrypt 存储，不返回，不写日志。 | minLength=10; maxLength=72 |
+| `fopBinding` | UpdateFopBinding anyOf null | 否 | 可选 FOP 租户及已有用户关联。保存不代表已验证上游身份或取得权限。 | — |
+
+
+### CreateOrganizationEmployee
+
+
+
+
+
+| 字段路径 | 类型/引用 | 必填 | 说明 | 约束/示例 |
+| --- | --- | --- | --- | --- |
+| `name` | string | 是 | 员工姓名，trim。 | minLength=1; maxLength=100 |
+| `code` | string | 是 | 当前目录唯一员工编号，trim。 | minLength=1; maxLength=40 |
+| `email` | string (email) | 是 | trim并转小写；开通账号使用此邮箱登录。 | maxLength=160 |
+| `departmentId` | string (uuid) | 是 | 当前管理员目录中的部门 UUID；根组织及其他目录节点拒绝。 | — |
+| `workbenchRoles` | WorkbenchRole[] | 是 | 员工岗位；新账号初始工作台岗位复制此配置，之后账号权限单独管理。 | maxItems=5; uniqueItems=true |
+| `account` | CreateEmployeeAccount anyOf null | 否 | 缺省/null只建员工档案；填写时同事务开通普通账号及本人数据范围。 | — |
+| `jobTitle` | string | 否 | 职务，纯文本；不用于决定账号权限。 | maxLength=100 |
+| `phone` | string | 否 | 手机/联系电话，保留国家代码和文本前导零。 | maxLength=40 |
+
+
+### UpdateOrganizationEmployee
+
+
+
+
+
+| 字段路径 | 类型/引用 | 必填 | 说明 | 约束/示例 |
+| --- | --- | --- | --- | --- |
+| `name` | string | 是 | 员工姓名，trim。 | minLength=1; maxLength=100 |
+| `code` | string | 是 | 当前目录唯一员工编号，trim。 | minLength=1; maxLength=40 |
+| `email` | string (email) | 是 | trim并转小写；开通账号使用此邮箱登录。 | maxLength=160 |
+| `departmentId` | string (uuid) | 是 | 当前管理员目录中的部门 UUID；根组织及其他目录节点拒绝。 | — |
+| `workbenchRoles` | WorkbenchRole[] | 是 | 员工岗位；新账号初始工作台岗位复制此配置，之后账号权限单独管理。 | maxItems=5; uniqueItems=true |
+| `jobTitle` | string | 否 | 职务，纯文本；不用于决定账号权限。 | maxLength=100 |
+| `phone` | string | 否 | 手机/联系电话，保留国家代码和文本前导零。 | maxLength=40 |
+
+
+### EmployeeImportRow
+
+
+
+
+
+| 字段路径 | 类型/引用 | 必填 | 说明 | 约束/示例 |
+| --- | --- | --- | --- | --- |
+| `name` | string | 是 | 员工姓名，trim。 | minLength=1; maxLength=100 |
+| `code` | string | 是 | 当前目录唯一员工编号，trim。 | minLength=1; maxLength=40 |
+| `email` | string (email) | 是 | trim并转小写；开通账号使用此邮箱登录。 | maxLength=160 |
+| `jobTitle` | string | 否 | 职务，纯文本；不用于决定账号权限。 | maxLength=100 |
+| `phone` | string | 否 | 手机/联系电话，保留国家代码和文本前导零。 | maxLength=40 |
+
+
+### ImportOrganizationEmployees
+
+
+
+
+
+| 字段路径 | 类型/引用 | 必填 | 说明 | 约束/示例 |
+| --- | --- | --- | --- | --- |
+| `departmentId` | string (uuid) | 是 | 当前管理员目录中的部门 UUID；根组织及其他目录节点拒绝。 | — |
+| `employees` | EmployeeImportRow[] | 是 | 员工档案；不能携带账号、密码或权限字段。整批事务提交。 | minItems=1; maxItems=100 |
+
+
+### RemoveOrganizationEmployees
+
+
+
+
+
+| 字段路径 | 类型/引用 | 必填 | 说明 | 约束/示例 |
+| --- | --- | --- | --- | --- |
+| `ids` | string (uuid)[] | 是 | 当前目录在职成员UUID。整批校验并归档；本人、系统管理员成员禁止删除。 | minItems=1; maxItems=100; uniqueItems=true |
+
+
+### EmployeeImportPreview
+
+
+
+
+
+| 字段路径 | 类型/引用 | 必填 | 说明 | 约束/示例 |
+| --- | --- | --- | --- | --- |
+| `employees` | EmployeeImportRow[] | 是 | 见引用模型/接口说明 | maxItems=100 |
+| `rowNumbers` | integer[] | 是 | 与employees逐项对齐的原文件行号，保留空行/错误行后的准确位置。 | — |
+| `errors` | object[] | 是 | 含格式、重复编号/邮箱（含已归档记录）等错误；有错误禁止确认导入。 | — |
+| `errors[].row` | integer | 是 | 见引用模型/接口说明 | minimum=1 |
+| `errors[].message` | string | 是 | 见引用模型/接口说明 | — |
+
+
+### EmployeeLoginDetails
+
+
+
+
+
+| 字段路径 | 类型/引用 | 必填 | 说明 | 约束/示例 |
+| --- | --- | --- | --- | --- |
+| `id` | string (uuid) | 是 | 见引用模型/接口说明 | — |
+| `username` | string | 是 | 登录名称，trim；邮箱用于实际登录。 | minLength=2; maxLength=50 |
+| `email` | string (email) | 是 | trim并转小写；开通账号使用此邮箱登录。 | maxLength=160 |
+| `fopBinding` | FopBinding anyOf null | 是 | 真实FOP租户/用户绑定，未绑定时null；不包含密码或JWT。 | — |
+
+
+### UpdateEmployeeLogin
+
+
+
+
+
+| 字段路径 | 类型/引用 | 必填 | 说明 | 约束/示例 |
+| --- | --- | --- | --- | --- |
+| `username` | string | 是 | 登录名称，trim；邮箱用于实际登录。 | minLength=2; maxLength=50 |
+| `email` | string (email) | 是 | trim并转小写；开通账号使用此邮箱登录。 | maxLength=160 |
+| `fopBinding` | UpdateFopBinding anyOf null | 否 | 省略保留，null或两字段均为null时解绑；不改变业务数据授权。 | — |
+| `password` | string | 否 | 可选新密码；省略不修改。重置后sessionVersion递增，所有旧会话拒绝；不允许null或空字符串。 | minLength=10; maxLength=72 |
+
+
+### FulfillmentOrderPage
+
+
+工作台六类履约待办分页与部门筛选选项。合计覆盖完整筛选集；未知部门或越界页为空，不回退全部数据。
+
+
+| 字段路径 | 类型/引用 | 必填 | 说明 | 约束/示例 |
+| --- | --- | --- | --- | --- |
+| `source` | DataSource | 是 | 本次返回数据的provider来源。 | — |
+| `items` | FopOrder[] | 是 | 当前页待办，先授权、部门/队列/关键词筛选，再按paidAt升序/id升序排列，最后分页。缺失或无效收款日期排最后。 | — |
+| `total` | integer | 是 | 授权筛选后的总订单数，与当前页items长度无关。 | minimum=0 |
+| `totals` | OrderTotals | 是 | 分页前完整筛选集订单数、商品件数及分币种金额合计。 | — |
+| `page` | integer | 是 | 本次页码，从1开始。 | minimum=1; maximum=1000000 |
+| `pageSize` | integer | 是 | 本次每页大小，最多100。 | minimum=1; maximum=100 |
+| `departments` | object[] | 是 | 授权订单所属部门去重选项，业务一至四部优先，其后自定义部门。独立于队列、搜索与分页；可有当前队列零笔待办的部门；空授权返回[]，不从组织管理员目录补全。 | — |
+| `departments[].id` | string | 是 | 当前账号可见订单的所属部门稳定ID；提交为departmentId。 | — |
+| `departments[].name` | string | 是 | 所属部门展示名称，来自订单归属。 | — |
+| `refreshedAt` | string (date-time) | 是 | 本次BFF成功查询完成时间，带明确时区；用于显示最近刷新。不是FOP事件提交时间或同步水位，不能单独证明上游数据的新鲜度。 | — |
+
+
 ## 12. 前端功能诊断与复现证据
 
 
@@ -6308,7 +6901,7 @@ describe('ECharts audit: assertions of current incorrect behavior', () => {
 | GET `/autoflow/integrations/fop/order-volume` | `getOrderVolume` | `category`与时间条件；`OrderVolume` | 至少一个入口角色，租户/allowlist/业务范围求交 |
 | GET `/autoflow/integrations/fop/order-volume/customers` | `searchOrderCustomers` | keyword、department、分页；`OrderCustomerPage` | keyword trim后1..100字符；pageSize默认10、最大50 |
 | GET `/autoflow/integrations/fop/order-volume/orders` | `getOrderVolumeDetails` | 图表同查询+workbenchRole+series/period/明细仓；`OrderPage` | 必须拥有所传入口角色；不是履约队列筛选 |
-| GET `/autoflow/integrations/fop/fulfillment-orders` | `getFulfillmentOrders` | queue、search、orderNumber、分页；`OrderPage` | queue对应角色强制校验；可选workbenchRole若不匹配则400 |
+| GET `/autoflow/integrations/fop/fulfillment-orders` | `getFulfillmentOrders` | queue、departmentId、search、orderNumber、分页；`FulfillmentOrderPage`（含部门选项，按收款升序） | queue对应角色强制校验；可选workbenchRole若不匹配则400 |
 | GET `/autoflow/integrations/fop/receipts` | `getReceipts` | from/to、部门/员工/客户/仓库/来源、workbenchRole、分页；`ReceiptPage` | 独立收款 scope 与分录 allowlist；UTC+8 有效 USD 分录，分页前合计 |
 | GET `/autoflow/integrations/fop/order-volume/receipts` | `getOrderVolumeReceipts` | customer 同图表查询及下钻参数；`ReceiptPage` | 先重建完整数量 Top10/other 集合，再收窄期间和仓库 |
 | GET `/autoflow/integrations/fop/freight` | `getFreight` | grain/year、可选weekOf/warehouse/carrierCode；`FreightData` | freight scope与独立成本allowlist；月/周/年、USD、完整上期环比、partial |
@@ -6465,9 +7058,68 @@ FOP累计收入已经包含调整，`adjustmentIncome`单列时必须先从基�
 ## 14. 本次验证记录与限制
 
 
-业务方案版本：2026-10-23（UTC+8）；最新追加逐图授权与员工数据隔离，以下保留各轮独立验证记录。环境：macOS、Node.js 22.23.3、npm 10.9.9、本地隔离 PostgreSQL 16。执行结果不等同于生产 FOP 验收。
+业务方案版本：2026-10-24（UTC+8）；最新追加逐图授权与员工数据隔离，以下保留各轮独立验证记录。环境：macOS、Node.js 22.23.3、npm 10.9.9、本地隔离 PostgreSQL 16。执行结果不等同于生产 FOP 验收。
 
-### 最新图表权限集成验证（2026-10-23 UTC+8）
+
+### 只读待办、多商品与状态刷新（2026-10-24）
+
+- 五工作台共用待办组件：商品图片／信息为第二列；订单号支持快捷复制；多商品仍按一笔订单分页，图片、SKU、数量逐行对齐。六类队列的 Demo 均覆盖两种及三种商品订单。
+- 最新完整回归：前端50文件262项、后端单元56套491项、HTTP接口5套146项，共899项通过；未重复计入定向测试。前后端ESLint、Vue类型检查、Vite／Nest构建和资源打包通过，保留既有Browserslist及大chunk提示。
+- HTTP数据库用例使用隔离的 `autoflow_test`，FOP接口边界使用测试替身；首次未配置隔离数据库端口导致连接失败，修正测试环境后一次出现 `socket hang up`，原样重跑5套146项全部通过。该连接中断未稳定复现，不作为已修复业务缺陷，也未通过跳过测试隐藏。
+- 新增回归覆盖30秒轮询、离线／隐藏暂停、恢复立即刷新、重复刷新合并、卸载清理、未提交搜索保留、旧请求丢弃、错误清除过期列表、末页订单移出后回退有效页。HTTP验证FOP状态变化后订单移出原队列、合计同步更新及 `Cache-Control: private, no-store`。
+- 独立复核发现真实路由权限复查会卸载清单，原组件局部状态无法保留末页回退时的搜索草稿。先用真实路由／工作台父组件复现草稿丢失，再将恢复期间的输入暂存于父组件，并暂停旧路径取数；会话切换清理，导航完成／失败按唯一标识清理。新增即时、延迟响应与取消导航后三组回归验证草稿、请求有界和恢复后继续刷新；导航及失败清理由存活的父组件执行。修复后重跑完整前端、lint和构建通过，独立定向复核无遗留问题。
+- 浏览器实测采购清单 Demo 订单 `AF-A352-00036` 展示三种商品／六件，商品列第二；复制后浏览器剪贴板仅含该完整订单编号。手动刷新后查询条件与单条结果保留，UTC+8最近刷新时间更新；页面停留期间自动刷新时间持续更新。截图保存在忽略目录 `.runtime/local-demo/workbench-readonly-multiple-products.png`。
+- Clipboard API不可用时的局域网HTTP兼容路径和复制失败提示已有单元测试；未声称逐一覆盖所有真实浏览器及网络设备。
+- `refreshedAt` 是BFF本次查询完成时间，不是FOP数据同步水位。前端不发起审核、采购、配货、出库等业务写操作。真实FOP适配器、生产数据同步链路及端到端时效仍待IT联调，详见需求9.3和交付清单。
+
+### 工作台部门筛选与收款顺序（2026-10-24）
+
+- 前端：48个测试文件，253项通过；覆盖部门参数传递、切换回第一页、关键词/部门保留、未知部门不回退全量、工作台/页签切换、权限撤销及慢请求丢弃。
+- 后端单元：56个测试文件，490项通过；包含Demo客户订单只归属销售员工、本人/部门/全公司业务范围及原有业务逻辑。
+- HTTP契约：`fop-data-access` 与 `workbench-access` 两组，共102项通过。六队列分别验证全公司协同账号无需系统管理权限、部门筛选前置于分页/合计、私有部门不可见、本人和部门经理不得越权；有效收款时间升序、UTC+8偏移、同时间ID排序、空/非法时间最后和摘要时间均通过。这些测试使用仓库/上游边界替身，不是生产FOP联调。
+- 构建：前端Vue类型检查及Vite、Nest后端、前端资源打包均通过。保留现有Browserslist数据过期与大chunk提示，非本次失败。
+- 浏览器：本地验收账号在五个工作台均验证“业务一部”筛选保留；六类待办显示正确结果。采购清单11笔，第一页10笔、第二页1笔，筛选合计不变；首屏收款日期由10月6日起顺排，第二页为10月21日。此处数字属于当前Demo快照，随演示时间/组织变化不作为固定生产指标。
+- OpenAPI/交付文档：使用统一HTML生成器校验契约、响应示例、目录锚点和内嵌Logo。最新接口为 `FulfillmentOrderPage`，部门祖先路径仅保留在服务端，公开订单不增加该权限元数据。
+- 权限配置：没有凭岗位名称批量改写员工账号；协同人员应明确分配“全部业务数据”，FOP对应用户也需具备该范围。普通业务员/经理原有隔离仍生效。
+
+
+### 部门成员统一维护验证（2026-10-23 迭代）
+
+组织架构统一维护部门、员工和登录账号；权限页面只分配权限。右上部门信息保留，右下增加成员添加、搜索、编辑、Excel/CSV导入、单个及批量删除。菜单按组织在前、权限在后排列。
+
+| 检查 | 实际结果与范围 |
+| --- | --- |
+| 全量前端 | 48文件、249用例通过；含部门带入、编辑、删除确认、错误保留、调动后清除勾选、100人上限、导入预览及账号编辑 |
+| 全量后端单测 | 56套、489用例通过；新增导入文件格式、公式、重复及前导零验证 |
+| 全量接口回归 | 5套、137用例通过；隔离autoflow_test真实数据库，含资料与登录邮箱同步、密码重置撤销旧会话、导入整批回滚、跨目录拒绝、归档与停用、管理员保护、归档身份重导入和真实行号 |
+| Lint／构建 | 前后端lint、Vue类型检查、生产构建及静态资产打包通过；仍有既有Browserslist／大chunk提示 |
+| 迁移 | 本地Demo及隔离测试库执行1784735000000；保留历史成员和业务关联，未修改FOP生产库 |
+| 浏览器 | 核对选中部门添加默认值、成员编辑字段、导入弹窗与模板说明、菜单顺序及权限页只读账号资料入口；未通过界面新增或删除当前演示成员 |
+| 独立复核 | 已修复调部门后残留选择、批量超过100人、预览忽略归档身份及行号偏移；复核无残留阻断问题 |
+| 契约与文档 | 31项操作、122个模型、352处schema示例校验通过；MD/HTML同源生成，使用共享HyperZone样式 |
+
+本轮共 **875用例通过**（249＋489＋137），不叠加针对性复跑及历史记录。最后仅补充前端预览行号类型与Mock后，再验证对应2条弹窗测试和Vue类型检查通过。
+
+删除采用归档并停用关联账号，不物理删除历史业务；本人和系统管理员成员受保护。导入仅建员工档案，账号随后开通；权限独立分配。真实FOP身份验证、生产组织同步、账号恢复及首次登录改密仍待IT接入，见 [员工与登录账号管理](../EMPLOYEE_ACCOUNTS.md)。本轮没有重复执行生产冒烟、外部服务调用或依赖审计。
+
+### 历史员工账号及组织操作验证（2026-10-23 迭代）
+
+新增系统管理员员工建档、所属部门、登录开通及可选FOP绑定；保留上轮空部门删除和销售人员直属业务部门的修订。验证使用本地演示环境及隔离 `autoflow_test`，未写FOP生产数据。
+
+| 检查 | 实际结果与范围 |
+| --- | --- |
+| 前端 | 47文件、245用例通过；含新建员工／已有员工开通、密码确认、错误保留、弹窗向下展开部门选项 |
+| 后端单元测试 | 55套、486用例通过 |
+| 接口回归 | 5套、134用例通过；新增7条真实数据库用例验证登录、系统管理员专属、跨空间拒绝、本人数据过滤、重复／并发回滚、FOP唯一性、调部门不改经理范围；嵌套数组请求400拒绝 |
+| Lint／构建 | 前后端lint、Vue类型检查、生产构建及静态资产打包通过；仍有既有Browserslist／大chunk提示 |
+| 迁移 | 本地Demo及隔离测试库执行 `1784734000000-LinkEmployeeAccounts`；未自动创建正式员工账号 |
+| 浏览器 | 管理员账号页新增入口、弹窗、部门下拉选择、FOP绑定字段检查通过；不通过界面创建额外真实员工 |
+| 代码复核 | 无未解决的重要问题；修复嵌套DTO接收数组的问题，并补拒绝测试 |
+| 契约与文档 | 25项操作、115个模型；292处schema示例校验通过，MD／HTML同源生成，页内锚点与共享透明Logo检查通过 |
+
+共865用例（245＋486＋134），不叠加目标复跑和历史统计。实际FOP身份校验、组织同步及生产权限映射仍待IT接入，详见 [员工与登录账号管理](../EMPLOYEE_ACCOUNTS.md)。
+
+### 历史图表权限集成验证（2026-10-23 UTC+8）
 
 保留原图表结构和金额口径，新增七类图表策略、独立组织汇总、服务端先授权后统计及客户当前归属校验。以下843项为本次完整回归，不叠加目标测试、审查复跑或历史用例数。
 
@@ -6944,15 +7596,25 @@ FOP收入使用收款 `hzkj_exrate`；没有收款汇率时回退当前 `bd_exra
 ## 16. IT 交付导航与实施顺序
 
 
-更新日期：2026-10-23（UTC+8）。最新修订五类履约待办：待审核、待履约、待采购、待配货、待出库；完整需求第9节（含9.1登录用户数据范围）、源码映射第12节及T31/H33/D30–D31为新增对接入口。最新追加P0全局图表授权及员工数据隔离，完整需求第1.1–1.3节优先约束全部图表。本次在原有全量需求上追加销售个人收款／净毛利月、周、天统计；注册、部门／业务员回款、订单量、客户分析、物流运费、权限和全部历史待办保留。
+更新日期：2026-10-24（UTC+8）。最新修订五类履约待办：待审核、待履约、待采购、待配货、待出库；完整需求第9节（含9.1登录用户数据范围）、源码映射第12节及T31/H33/D30–D31为新增对接入口。最新追加P0全局图表授权及员工数据隔离，完整需求第1.1–1.3节优先约束全部图表。本次在原有全量需求上追加销售个人收款／净毛利月、周、天统计；注册、部门／业务员回款、订单量、客户分析、物流运费、权限和全部历史待办保留。
+
+### 2026-10-24 工作台协同补充
+
+- 五个岗位工作台的六类待办共用部门筛选，按收款日期正序；完整规则见需求第9.2节。
+- `fulfillment-orders` 接受 `departmentId`，响应为 `FulfillmentOrderPage`，增加 `departments[].id/name`。Mock 与正式预留接口同结构；部门选项从已授权订单生成。生产查询须先授权和筛选，再按 `paidAt ASC, id ASC` 分页，缺失日期最后；合计覆盖完整筛选集。
+- 协同人员账号使用独立“全部业务数据”范围，无需系统管理员权限；业务员本人、经理部门规则保留。请核对具体协同账号名单及 FOP 权限，不按岗位名称自动批量扩大权限。
+- 已核对销售部门 `hzkj_orders.hzkj_dept`、收款日期 `hzkj_receipt_date`；IT 需确认稳定部门ID、祖先路径和分次收款语义。真实FOP接口仍待接通，本地验证基于Mock和隔离测试。
+
 
 ### 阅读顺序
 
 1. [完整需求HTML](HYPERZONE_ECHARTS_API_REQUIREMENTS.html) 或 [完整需求Markdown](HYPERZONE_ECHARTS_API_REQUIREMENTS.md)：业务、页面、字段、审计与验收的全量交付。源正文为 [REQUIREMENTS_OVERVIEW.md](REQUIREMENTS_OVERVIEW.md)，个人收款／净毛利在第8节。
-2. [OpenAPI](../openapi/hyperzone-analytics.openapi.json)：23项平台HTTP操作、112个模型，servers为`/api`；不是FOP原生接口目录。最新增加 `/autoflow/integrations/fop/chart-access` 与 `/users/{id}/chart-permissions`，包含内部FOP授权、客户当前归属和独立组织汇总字段契约。
+2. [OpenAPI](../openapi/hyperzone-analytics.openapi.json)：31项平台HTTP操作、122个模型，servers为`/api`；不是FOP原生接口目录。包含逐图授权、员工创建／编辑／导入／归档／账号维护、内部FOP授权、客户当前归属和独立组织汇总字段契约。
 3. [FOP源码映射](HYPERZONE_FOP_SOURCE_MAPPING.md)：实体／字段／Java行号证据。第9节是物流成本，第10节是月结毛利、预计贡献和当前数据缺口。
 4. [后续待办与人工核对](FOLLOW_UP_CHECKLIST.md)：完整T01–T31、H01–H33、D01–D31；最新权限任务为T27–T30/H29–H32/D23–D29，按模板分配、回填和关闭。
 5. [验证记录](VERIFICATION.md)：仅此处记录实际执行的测试、HTTP、浏览器、生成物检查与限制；文档或Mock存在不能替代验证。详细消费检查见 [前端审计](ECHARTS_FRONTEND_AUDIT.md) 和 [后台契约审计](ECHARTS_BACKEND_CONTRACT_AUDIT.md)。
+
+6. [员工与登录账号管理](../EMPLOYEE_ACCOUNTS.md)：管理员新增员工、所属部门、普通账号、FOP绑定及身份映射待办；完整需求第1.4节及OpenAPI同步更新。
 
 ### 当前交付边界
 
@@ -7007,6 +7669,11 @@ FOP收入使用收款 `hzkj_exrate`；没有收款汇率时回退当前 `bd_exra
 新FOP适配器继承 `FopDataProvider.customerOwnershipMode=current_required`，订单／收款候选必须携带 `currentCustomerOwner`；缺少时明确失败。仅显式选择 `legacy_historical` 的旧适配器可使用历史归属兼容，并返回归属来源提示。组织汇总必须实现 `getOrganizationSummary` 并取得 `organizationSummaries` 独立许可，不能用当前员工的订单明细拼成部门完整业绩。
 
 部署前先备份账户库，再应用 `1784733000000-AddChartPermissions`；默认空数组继承模板。非空逐图配置存在时，迁移拒绝回滚，避免静默丢失限制。配置入口：系统管理员侧栏“账号与权限”→“配置图表权限”；不需要给普通员工系统管理权限。部署后按D23–D29验证直接接口访问、跨账号缓存、客户移交及经理本人默认。
+
+
+### 只读待办与同步验收补充（2026-10-24）
+
+需求第9.3节规定全部待办只读、商品第二列、订单号复制和2–3商品Demo。`FulfillmentOrderPage`新增必填`refreshedAt`，仅代表BFF完成取数，不是FOP状态提交/同步水位。每个工作台手动刷新、可见且联网30秒轮询，返回页面或恢复网络即刷新。FOP适配仍需发布真实只读HTTP查询，检查权限后读取已提交进度；如采用缓存必须提供可验证的同步水位及滞后监控。联调须实际在FOP完成各环节后核对待办进出、筛选合计、末页回退与撤权，不以静态Demo验证替代生产时效验收。
 
 
 ## 17. 规范来源与文档再生成

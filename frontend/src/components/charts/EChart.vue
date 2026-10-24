@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useChartCapabilities } from '@/composables/useChartAccess'
+import { useTheme } from '@/composables/useTheme'
+import { applyChartTheme } from '@/utils/chartTheme'
 import { init, use, type EChartsCoreOption, type EChartsType } from 'echarts/core'
 import { BarChart, LineChart } from 'echarts/charts'
 import { AriaComponent, DataZoomComponent, GridComponent, LegendComponent, MarkLineComponent, TooltipComponent, ToolboxComponent } from 'echarts/components'
@@ -9,6 +11,7 @@ import { SVGRenderer } from 'echarts/renderers'
 use([BarChart, LineChart, AriaComponent, DataZoomComponent, GridComponent, LegendComponent, MarkLineComponent, TooltipComponent, ToolboxComponent, SVGRenderer])
 const props = withDefaults(defineProps<{ option: EChartsCoreOption; label: string; canExport?: boolean }>(), { canExport: undefined })
 const { canExport: inheritedExport } = useChartCapabilities()
+const { isDark } = useTheme()
 const allowExport = computed(() => props.canExport ?? inheritedExport.value)
 export interface ChartClick { seriesId?: string; dataIndex?: number; name?: string }
 export interface ChartZoom { start?: number; end?: number; startValue?: number; endValue?: number; batch?: ChartZoom[] }
@@ -29,19 +32,25 @@ function rememberRange() {
   const ranges = chart?.getOption().dataZoom as { start: number; end: number }[] | undefined
   acceptedRanges = (ranges ?? []).map(({ start, end }, dataZoomIndex) => ({ dataZoomIndex, start, end }))
 }
-function renderOption() {
+function renderOption(preserveRange = false) {
   if (!chart) return
   const raw = props.option.dataZoom
   const sliders = (Array.isArray(raw) ? raw : raw ? [raw] : [])
     .filter(item => item.type !== 'inside')
-    .map(item => ({ ...item, brushSelect: false, zoomLock: true }))
+    .map((item, index) => ({
+      ...item, brushSelect: false, zoomLock: true,
+      ...(preserveRange && acceptedRanges[index] ? {
+        start: acceptedRanges[index].start, end: acceptedRanges[index].end,
+        startValue: undefined, endValue: undefined,
+      } : {}),
+    }))
   const filterToolbox = (item: Record<string, any>) => {
     const feature = { ...item.feature }
     if (!allowExport.value) { delete feature.saveAsImage; delete feature.dataView }
     return { ...item, feature }
   }
   const toolbox = props.option.toolbox
-  chart.setOption({ ...props.option, ...(toolbox ? { toolbox: Array.isArray(toolbox) ? toolbox.map(filterToolbox) : filterToolbox(toolbox) } : {}), dataZoom: sliders }, { notMerge: true })
+  chart.setOption(applyChartTheme({ ...props.option, ...(toolbox ? { toolbox: Array.isArray(toolbox) ? toolbox.map(filterToolbox) : filterToolbox(toolbox) } : {}), dataZoom: sliders }, isDark.value), { notMerge: true })
   dragged = false
   rememberRange()
 }
@@ -79,7 +88,7 @@ onMounted(() => {
   })
   observer.observe(element.value)
 })
-watch([() => props.option, allowExport], renderOption)
+watch([() => props.option, allowExport, isDark], ([, , dark], [, , previousDark]) => renderOption(dark !== previousDark))
 onBeforeUnmount(() => {
   observer?.disconnect()
   if (frame !== undefined) cancelAnimationFrame(frame)

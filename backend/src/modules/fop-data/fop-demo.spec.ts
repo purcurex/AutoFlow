@@ -70,6 +70,17 @@ describe('isolated mock FOP dataset', () => {
     expect(dashboard.receipts.departments.map(dept => dept.name)).toEqual(['业务一部', '业务二部', '业务三部', '业务四部'])
     expect((dashboard.receipts.departments as {amounts:number[]}[])[0].amounts.some((amount: number) => amount > 0)).toBe(true)
   })
+  it('provides two and three product orders in every pending queue without duplicating orders', async () => {
+    const data = new FopDataService(users, new DemoFopDataProvider(organizations, env))
+    for (const queue of Object.keys(FULFILLMENT_QUEUE_ROLES) as (keyof typeof FULFILLMENT_QUEUE_ROLES)[]) {
+      const result = await data.getOrders('alice', { queue, page: 1, pageSize: 100 })
+      expect(result.items.some(row => row.items.length === 2)).toBe(true)
+      expect(result.items.some(row => row.items.length === 3)).toBe(true)
+      expect(new Set(result.items.map(row => row.id)).size).toBe(result.items.length)
+      expect(result.totals.orderCount).toBe(result.total)
+      expect(result.items.every(row => new Set(row.items.map(item => item.sku)).size === row.items.length)).toBe(true)
+    }
+  })
   it('uses independent fulfillment facts, excludes unpaid orders, and counts overlapping queues once per order', async () => {
     const provider = new DemoFopDataProvider(organizations, env)
     const identity = { tenantId: 'demo:alice', userId: 'alice' }
@@ -119,14 +130,23 @@ describe('isolated mock FOP dataset', () => {
     await expect(data.getDashboard('alice', query)).rejects.toMatchObject({ response: { code: 'fop_unavailable' } })
     await expect(data.getOrders('alice', { queue: 'allocation', page: 1, pageSize: 20 })).rejects.toMatchObject({ response: { code: 'fop_unavailable' } })
   })
-  it('displays the oldest task creation time in UTC+8 across timestamp offsets', async () => {
+  it('displays the oldest task payment time in UTC+8 across timestamp offsets', async () => {
     const provider = new DemoFopDataProvider(organizations, env)
     const listOrders = provider.listOrders.bind(provider)
     provider.listOrders = async (identity, grant) => (await listOrders(identity, grant)).map((row, index) => ({
-      ...row, createdAt: index === 0 ? '2026-10-01T23:30:00-04:00' : '2026-10-02T02:00:00Z',
+      ...row, paidAt: index === 0 ? '2026-10-01T23:30:00-04:00' : '2026-10-02T02:00:00Z',
     }))
     const dashboard = await new FopDataService(users, provider).getDashboard('alice', query)
     expect(dashboard.tasks.find(task => task.kind === 'review')?.time).toBe('10:00')
+  })
+  it('assigns demo customer orders to sales employees rather than operational collaborators', async () => {
+    const current = structuredClone(workspace)
+    current.nodes.push({ id: 'purchasing', name: '采购管理', kind: 'department', parentId: 'org-1', sortOrder: 9 })
+    current.employees.push({ id: 'buyer', name: 'Buyer', code: 'EMP003', email: 'buyer@example.test', departmentId: 'purchasing', workbenchRoles: ['procurement'] })
+    const provider = new DemoFopDataProvider({ getWorkspace: async () => current }, env)
+    const identity = provider.demoIdentity('alice')!
+    const rows = await provider.listOrders(identity, await provider.resolvePermissions(identity))
+    expect(new Set(rows.map(r => r.owner?.id))).toEqual(new Set(['employee-1', 'employee-2']))
   })
   it('isolates tenants and rejects forged identity or another tenant grant', async () => {
     const provider = new DemoFopDataProvider(organizations, env)
@@ -248,7 +268,7 @@ describe('isolated mock FOP dataset', () => {
       employees: ORGANIZATION_EMPLOYEE_SEEDS.map(employee => ({ id: employee.code, code: employee.code, name: employee.name, email: 'mock@example.test', departmentId: employee.department, workbenchRoles: employee.roles })),
     }
     // A warehouse employee in a sales department must not become a salesperson.
-    reference.employees.push({ id: 'warehouse', code: 'WAREHOUSE', name: 'Non-sales staff', email: 'mock@example.test', departmentId: 'europe', workbenchRoles: ['warehouse'] })
+    reference.employees.push({ id: 'warehouse', code: 'WAREHOUSE', name: 'Non-sales staff', email: 'mock@example.test', departmentId: 'sales1', workbenchRoles: ['warehouse'] })
     const dashboard = await new FopDataService(users, new DemoFopDataProvider({ getWorkspace: async () => reference }, env)).getDashboard('alice', query)
     expect(dashboard.registrationDepartments.map(dept => dept.salespeople.length)).toEqual([5, 4, 5, 1])
     const names = dashboard.registrationDepartments.flatMap(dept => dept.salespeople.map(person => person.name))

@@ -16,6 +16,7 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
     const req = context.switchToHttp().getRequest<Request>()
     const account = await this.modules.get(UsersService, { strict: false }).findById(req.user!.userId)
     if (!account) throw new UnauthorizedException('Account no longer exists')
+    if (account.accountDisabled || (account.sessionVersion ?? 0) !== (req.user!.sessionVersion ?? 0)) throw new UnauthorizedException('Account disabled or session expired')
     // Every authenticated request uses current grants, never stale JWT role claims.
     req.user!.role = account.role
     req.user!.businessRole = businessScope(account).role

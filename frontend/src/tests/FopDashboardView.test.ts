@@ -278,7 +278,7 @@ describe('FOP Dashboard interactions', () => {
     vi.mocked(getFopDashboard).mockRejectedValueOnce({ code: 'fop_binding_required' })
     await wrapper.find('button.refresh-button').trigger('click')
     await flushPromises()
-    expect(wrapper.find('[role=alert]').text()).toContain('员工账号尚未关联')
+    expect(wrapper.find('[role=alert]').text()).toContain('业务数据暂不可查看')
     expect(wrapper.text()).not.toContain('My customer')
     expect(wrapper.findAll('.summary-card strong').map(node => node.text())).toEqual(['—', '—', '—', '—', '—'])
     expect(wrapper.findAll('.task-row')).toHaveLength(0)

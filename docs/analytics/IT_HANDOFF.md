@@ -1,14 +1,24 @@
 # HyperZone 分析与销售工作台 IT 交付入口
 
-更新日期：2026-10-23（UTC+8）。最新修订五类履约待办：待审核、待履约、待采购、待配货、待出库；完整需求第9节（含9.1登录用户数据范围）、源码映射第12节及T31/H33/D30–D31为新增对接入口。最新追加P0全局图表授权及员工数据隔离，完整需求第1.1–1.3节优先约束全部图表。本次在原有全量需求上追加销售个人收款／净毛利月、周、天统计；注册、部门／业务员回款、订单量、客户分析、物流运费、权限和全部历史待办保留。
+更新日期：2026-10-24（UTC+8）。最新修订五类履约待办：待审核、待履约、待采购、待配货、待出库；完整需求第9节（含9.1登录用户数据范围）、源码映射第12节及T31/H33/D30–D31为新增对接入口。最新追加P0全局图表授权及员工数据隔离，完整需求第1.1–1.3节优先约束全部图表。本次在原有全量需求上追加销售个人收款／净毛利月、周、天统计；注册、部门／业务员回款、订单量、客户分析、物流运费、权限和全部历史待办保留。
+
+## 2026-10-24 工作台协同补充
+
+- 五个岗位工作台的六类待办共用部门筛选，按收款日期正序；完整规则见需求第9.2节。
+- `fulfillment-orders` 接受 `departmentId`，响应为 `FulfillmentOrderPage`，增加 `departments[].id/name`。Mock 与正式预留接口同结构；部门选项从已授权订单生成。生产查询须先授权和筛选，再按 `paidAt ASC, id ASC` 分页，缺失日期最后；合计覆盖完整筛选集。
+- 协同人员账号使用独立“全部业务数据”范围，无需系统管理员权限；业务员本人、经理部门规则保留。请核对具体协同账号名单及 FOP 权限，不按岗位名称自动批量扩大权限。
+- 已核对销售部门 `hzkj_orders.hzkj_dept`、收款日期 `hzkj_receipt_date`；IT 需确认稳定部门ID、祖先路径和分次收款语义。真实FOP接口仍待接通，本地验证基于Mock和隔离测试。
+
 
 ## 阅读顺序
 
 1. [完整需求HTML](HYPERZONE_ECHARTS_API_REQUIREMENTS.html) 或 [完整需求Markdown](HYPERZONE_ECHARTS_API_REQUIREMENTS.md)：业务、页面、字段、审计与验收的全量交付。源正文为 [REQUIREMENTS_OVERVIEW.md](REQUIREMENTS_OVERVIEW.md)，个人收款／净毛利在第8节。
-2. [OpenAPI](../openapi/hyperzone-analytics.openapi.json)：23项平台HTTP操作、112个模型，servers为`/api`；不是FOP原生接口目录。最新增加 `/autoflow/integrations/fop/chart-access` 与 `/users/{id}/chart-permissions`，包含内部FOP授权、客户当前归属和独立组织汇总字段契约。
+2. [OpenAPI](../openapi/hyperzone-analytics.openapi.json)：31项平台HTTP操作、122个模型，servers为`/api`；不是FOP原生接口目录。包含逐图授权、员工创建／编辑／导入／归档／账号维护、内部FOP授权、客户当前归属和独立组织汇总字段契约。
 3. [FOP源码映射](HYPERZONE_FOP_SOURCE_MAPPING.md)：实体／字段／Java行号证据。第9节是物流成本，第10节是月结毛利、预计贡献和当前数据缺口。
 4. [后续待办与人工核对](FOLLOW_UP_CHECKLIST.md)：完整T01–T31、H01–H33、D01–D31；最新权限任务为T27–T30/H29–H32/D23–D29，按模板分配、回填和关闭。
 5. [验证记录](VERIFICATION.md)：仅此处记录实际执行的测试、HTTP、浏览器、生成物检查与限制；文档或Mock存在不能替代验证。详细消费检查见 [前端审计](ECHARTS_FRONTEND_AUDIT.md) 和 [后台契约审计](ECHARTS_BACKEND_CONTRACT_AUDIT.md)。
+
+6. [员工与登录账号管理](../EMPLOYEE_ACCOUNTS.md)：管理员新增员工、所属部门、普通账号、FOP绑定及身份映射待办；完整需求第1.4节及OpenAPI同步更新。
 
 ## 当前交付边界
 
@@ -63,3 +73,8 @@
 新FOP适配器继承 `FopDataProvider.customerOwnershipMode=current_required`，订单／收款候选必须携带 `currentCustomerOwner`；缺少时明确失败。仅显式选择 `legacy_historical` 的旧适配器可使用历史归属兼容，并返回归属来源提示。组织汇总必须实现 `getOrganizationSummary` 并取得 `organizationSummaries` 独立许可，不能用当前员工的订单明细拼成部门完整业绩。
 
 部署前先备份账户库，再应用 `1784733000000-AddChartPermissions`；默认空数组继承模板。非空逐图配置存在时，迁移拒绝回滚，避免静默丢失限制。配置入口：系统管理员侧栏“账号与权限”→“配置图表权限”；不需要给普通员工系统管理权限。部署后按D23–D29验证直接接口访问、跨账号缓存、客户移交及经理本人默认。
+
+
+## 只读待办与同步验收补充（2026-10-24）
+
+需求第9.3节规定全部待办只读、商品第二列、订单号复制和2–3商品Demo。`FulfillmentOrderPage`新增必填`refreshedAt`，仅代表BFF完成取数，不是FOP状态提交/同步水位。每个工作台手动刷新、可见且联网30秒轮询，返回页面或恢复网络即刷新。FOP适配仍需发布真实只读HTTP查询，检查权限后读取已提交进度；如采用缓存必须提供可验证的同步水位及滞后监控。联调须实际在FOP完成各环节后核对待办进出、筛选合计、末页回退与撤权，不以静态Demo验证替代生产时效验收。

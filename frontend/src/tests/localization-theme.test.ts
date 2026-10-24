@@ -31,10 +31,14 @@ describe('localization and theme preferences', () => {
     expect(wrapper.findAll('img')).toHaveLength(2)
   })
 
-  it('switches to the black theme and persists the choice', async () => {
+  it('starts in dark mode and persists manual theme switching', async () => {
     const wrapper = mount(ThemeToggle, { global: { plugins: [i18n] } })
+    expect(document.documentElement.classList.contains('dark')).toBe(true)
     await wrapper.get('button').trigger('click')
+    expect(document.documentElement.classList.contains('dark')).toBe(false)
+    expect(localStorage.getItem('autoflow-theme')).toBe('light')
 
+    await wrapper.get('button').trigger('click')
     expect(document.documentElement.classList.contains('dark')).toBe(true)
     expect(localStorage.getItem('autoflow-theme')).toBe('dark')
   })

@@ -1,6 +1,6 @@
 import { computed, ref } from 'vue'
 
-const isDark = ref(false)
+const isDark = ref(true)
 let initialized = false
 
 function applyTheme(dark: boolean) {
@@ -11,7 +11,7 @@ function applyTheme(dark: boolean) {
 export function initializeTheme() {
   if (initialized) return
   initialized = true
-  applyTheme(localStorage.getItem('autoflow-theme') === 'dark')
+  applyTheme(localStorage.getItem('autoflow-theme') !== 'light')
 }
 
 export function useTheme() {

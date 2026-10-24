@@ -25,7 +25,7 @@ const selectedOwnerName = computed(() => {
 })
 const summary = computed(() => [
   textQuery('periodId') || `${textQuery('from') || '—'} — ${textQuery('to') || '—'}`,
-  textQuery('department') ? departmentNames.value[textQuery('department')!] || t('所选部门', 'Selected department') : t('当前统计范围', 'Current reporting scope'),
+  textQuery('department') ? departmentNames.value[textQuery('department')!] || t('所选部门', 'Selected department') : undefined,
   selectedOwnerName.value,
   warehouseNames.value[textQuery('detailWarehouse') || textQuery('warehouse') || 'ALL'] || t('所选仓库', 'Selected warehouse'),
 ].filter(Boolean).join(' · '))

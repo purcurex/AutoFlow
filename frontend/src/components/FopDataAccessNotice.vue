@@ -15,7 +15,7 @@ const status = computed(() => {
   if (access.value?.source === 'mock') return text('演示数据', 'Demo data')
   switch (access.value?.status) {
     case 'ready': return text('已连接', 'Connected')
-    case 'unbound': return text('员工账号尚未关联，请联系管理员', 'Employee account not linked · Contact an administrator')
+    case 'unbound': return text('业务数据暂不可查看，请联系管理员', 'Business data unavailable · Contact an administrator')
     case 'not_configured': return text('业务数据服务尚未接通', 'Business data service not connected')
     case 'denied': return text('暂时无法查看业务数据，请联系管理员', 'Business data unavailable · Contact an administrator')
     default: return text('暂时无法加载，请稍后重试', 'Unable to load · Please retry later')

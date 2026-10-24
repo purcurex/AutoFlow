@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
+import { nextTick } from 'vue'
+import { useTheme } from '@/composables/useTheme'
 import EChart from '@/components/charts/EChart.vue'
 
 const state = vi.hoisted(() => ({
@@ -9,13 +11,14 @@ const state = vi.hoisted(() => ({
 vi.mock('echarts/core', () => ({ init: () => state.chart, use: vi.fn() }))
 describe('chart horizontal navigation', () => {
   beforeEach(() => {
+    useTheme().setTheme(false)
     vi.clearAllMocks()
     vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} })
     state.chart.setOption.mockImplementation(option => { state.options = option })
     state.chart.getOption.mockImplementation(() => state.options)
     state.chart.on.mockImplementation((name, callback) => { state.handlers[name] = callback })
   })
-  afterEach(() => vi.unstubAllGlobals())
+  afterEach(() => { useTheme().setTheme(false); vi.unstubAllGlobals() })
   const option = () => ({ dataZoom: [{ type: 'inside', start: 50, end: 100 }, { type: 'slider', start: 50, end: 100 }] })
   it('keeps the slider window while disabling wheel, plot dragging and brush zoom on every render', async () => {
     const wrapper = mount(EChart, { props: { option: option(), label: 'Trend' } })
@@ -46,6 +49,40 @@ describe('chart horizontal navigation', () => {
     expect(state.options.toolbox.feature).not.toHaveProperty('saveAsImage')
     expect(state.options.toolbox.feature).not.toHaveProperty('dataView')
     expect(state.options.toolbox.feature).toHaveProperty('restore')
+    wrapper.unmount()
+  })
+
+  it('adapts chart chrome to dark mode without changing data, formatters or the dragged time window', async () => {
+    const formatter = (value: number) => `$${value}`
+    const source = {
+      ...option(),
+      xAxis: { type: 'category', axisLabel: { color: '#8793a7', formatter } },
+      yAxis: [{ type: 'value', splitLine: { lineStyle: { type: 'dashed' } } }],
+      legend: { textStyle: { color: '#8793a7' } },
+      tooltip: { backgroundColor: '#ffffff', formatter },
+      series: [{ type: 'bar', data: [10, 20], itemStyle: { color: '#78b5c7' } }],
+    }
+    const wrapper = mount(EChart, { props: { option: source, label: 'Trend' } })
+    wrapper.element.dispatchEvent(new MouseEvent('pointerdown', { button: 0, clientX: 100, clientY: 100 }))
+    window.dispatchEvent(new MouseEvent('pointermove', { buttons: 1, clientX: 140, clientY: 100 }))
+    state.options.dataZoom = [{ type: 'slider', start: 75, end: 100 }]
+    state.handlers.datazoom!({ start: 75, end: 100 })
+    useTheme().setTheme(true)
+    await nextTick()
+    expect(state.options.tooltip.backgroundColor).toBe('#1c2839')
+    expect(state.options.xAxis.axisLabel.color).toBe('#a9b9cf')
+    expect(state.options.yAxis[0].splitLine.lineStyle.type).toBe('dashed')
+    expect(state.options.xAxis.axisLabel.formatter).toBe(formatter)
+    expect(state.options.tooltip.formatter).toBe(formatter)
+    expect(state.options.series).toEqual(source.series)
+    expect(state.options.dataZoom[0]).toMatchObject({ start: 75, end: 100, zoomLock: true, brushSelect: false })
+    expect(source.tooltip.backgroundColor).toBe('#ffffff')
+    expect(source.xAxis.axisLabel.color).toBe('#8793a7')
+    useTheme().setTheme(false)
+    await nextTick()
+    expect(state.options.tooltip.backgroundColor).toBe('#ffffff')
+    expect(state.options.xAxis.axisLabel.color).toBe('#8793a7')
+    expect(state.options.dataZoom[0]).toMatchObject({ start: 75, end: 100 })
     wrapper.unmount()
   })
 

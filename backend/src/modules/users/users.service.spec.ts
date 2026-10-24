@@ -144,7 +144,7 @@ describe('UsersService chart permission persistence', () => {
   })
 
   it('returns persisted policy with account listings and defaults legacy accounts to inheritance', async () => {
-    const repository = { findAndCount: jest.fn().mockResolvedValue([[{ id: 'a', chartPermissions }, { id: 'b' }], 2]) } as unknown as Repository<User>
+    const repository = { findAndCount: jest.fn().mockResolvedValue([[{ id: 'a', chartPermissions }, { id: 'b' }], 2]), manager: { getRepository: () => ({ find: async () => [] }) } } as unknown as Repository<User>
     const result = await new UsersService(repository).listWorkbenchAccounts({ page: 1, pageSize: 20 })
     expect(result.items[0].chartPermissions).toEqual(chartPermissions)
     expect(result.items[1].chartPermissions).toEqual([])

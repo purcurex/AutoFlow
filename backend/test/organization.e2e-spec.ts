@@ -4,6 +4,7 @@ import { Test } from '@nestjs/testing'
 import { DataSource } from 'typeorm'
 import * as request from 'supertest'
 import { UsersService } from '../src/modules/users/users.service'
+import { flattenDemoSalesDepartments } from '../src/database/flatten-demo-sales-departments'
 
 jest.setTimeout(30000)
 
@@ -63,6 +64,12 @@ describe('Per-account organization sandbox persistence API', () => {
     expect(first.body.employees).toHaveLength(23)
     expect(first.body.employees.find((employee: any) => employee.code === 'EMP001').name).toBe('曹可滢（Ruth）')
     expect(first.body.employees.find((employee: any) => employee.code === 'EMP022').name).toBe('杨莹（Kiki）')
+    // Sales staff report directly to one of the four business departments.
+    for (const [name, count] of [['业务一部', 5], ['业务二部', 4], ['业务三部', 5], ['业务四部', 1]]) {
+      const department = first.body.nodes.find((node: any) => node.name === name)
+      expect(first.body.employees.filter((employee: any) => employee.departmentId === department.id)).toHaveLength(count as number)
+      expect(first.body.nodes.filter((node: any) => node.parentId === department.id)).toHaveLength(0)
+    }
     expect(first.body).toEqual(again.body)
     expect(other.body.nodes[0].id).not.toBe(first.body.nodes[0].id)
     expect(JSON.stringify(first.body)).not.toContain('password')
@@ -88,6 +95,35 @@ describe('Per-account organization sandbox persistence API', () => {
     await create({ parentId: root.id, name: 'cross-parent' }, otherId).expect(404)
     const deleted = await remove(node.id).expect(200)
     expect(deleted.body.nodes.some((item: any) => item.id === node.id)).toBe(false)
+  })
+
+  it('upgrades legacy demo groups without losing employees, custom groups or account data scopes', async () => {
+    const initial = (await get().expect(200)).body
+    const sales = initial.nodes.find((node: any) => node.name === '业务一部')
+    const sales2 = initial.nodes.find((node: any) => node.name === '业务二部')
+    const sales3 = initial.nodes.find((node: any) => node.name === '业务三部')
+    const employee = initial.employees.find((row: any) => row.code === 'EMP001')
+    const add = async (parentId: string, name: string) => (await create({ parentId, name }).expect(201)).body.nodes.find((node: any) => node.name === name)
+    const legacy = await add(sales.id, '欧洲销售组')
+    const custom = await add(sales.id, '自定义销售组')
+    const scoped = await add(sales2.id, '北美销售组')
+    const nested = await add(sales3.id, '亚太销售组')
+    const child = await add(nested.id, '自定义下级')
+    await assign(employee.id, legacy.id).expect(200)
+    await database.query('UPDATE users SET business_department_id = $1 WHERE id = $2', [scoped.id, otherId])
+    const result = await database.transaction(manager => flattenDemoSalesDepartments(manager, ownerId))
+    expect(result).toMatchObject({ moved: 1, removed: 1 })
+    expect(result.skipped).toHaveLength(2)
+    const after = (await get().expect(200)).body
+    expect(after.employees).toHaveLength(initial.employees.length)
+    expect(after.employees.find((row: any) => row.id === employee.id)).toEqual(employee)
+    expect(after.nodes.some((node: any) => node.id === legacy.id)).toBe(false)
+    for (const kept of [custom, scoped, nested, child]) expect(after.nodes).toContainEqual(kept)
+    expect((await app.get(UsersService).findById(otherId))?.businessDepartmentId).toBe(scoped.id)
+    const again = await database.transaction(manager => flattenDemoSalesDepartments(manager, ownerId))
+    expect(again).toMatchObject({ moved: 0, removed: 0 })
+    await database.query('UPDATE users SET business_department_id = NULL WHERE id = $1', [otherId])
+    for (const node of [custom, scoped, child, nested]) await remove(node.id).expect(200)
   })
 
   it('rejects root deletion, duplicate roots, cycles and nonempty subtree deletion', async () => {

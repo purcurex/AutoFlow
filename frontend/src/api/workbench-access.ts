@@ -10,6 +10,7 @@ export interface WorkbenchAccount {
   businessScope?: BusinessScope
   fopBinding: FopBinding | null
   chartPermissions: ChartPermissionOverride[]
+  employee?: { id: string; name: string; code: string; department: { id: string; name: string } } | null
 }
 export async function getWorkbenchAccess(role?: WorkbenchRole): Promise<WorkbenchAccess> {
   const { default: api } = await import('./index')

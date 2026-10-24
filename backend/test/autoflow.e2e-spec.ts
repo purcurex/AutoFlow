@@ -1203,8 +1203,8 @@ describe('AutoFlow persistence API', () => {
     const directory = await app.get(OrganizationService).getWorkspace(ownerUserId)
     const parent = directory.nodes.find(node => node.name === '业务一部')
     if (!parent) throw new Error('Missing sales department fixture')
-    const child = directory.nodes.find(node => node.parentId === parent.id)
-    if (!child) throw new Error('Missing child department fixture')
+    // A custom nested department exercises descendant scope without depending on demo regional groups.
+    const [child] = await dataSource.query('INSERT INTO organization_nodes (owner_user_id, parent_id, name, kind, sort_order) VALUES ($1, $2, $3, $4, 0) RETURNING id', [ownerUserId, parent.id, 'Scope test child', 'department'])
     await dataSource.query('UPDATE users SET business_department_id = $1 WHERE id = $2', [child.id, ownerUserId])
     const workflow = (await request(app.getHttpServer()).post('/api/autoflow/workflows').set('Cookie', ownerCookie).send({ name: 'Scope proof', seedType: 'keyword', seedValue: 'scope-proof', targetMarket: 'US' }).expect(201)).body
     const quote = (await request(app.getHttpServer()).post('/api/autoflow/quotes').set('Cookie', ownerCookie).send({

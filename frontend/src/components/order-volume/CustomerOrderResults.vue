@@ -30,6 +30,7 @@ const warehouseColor = { HZ: '#79B7D2', SZ: '#A996D1', UNASSIGNED: '#B5BFCE' }
 const warehouses = computed<VolumeWarehouse[]>(() => ['HZ', 'SZ', ...(total.value?.warehouses.UNASSIGNED.some(value => (value ?? 0) > 0) ? ['UNASSIGNED'] : [])] as VolumeWarehouse[])
 const axis = computed(() => isDark.value ? '#99A8BE' : '#8693A8')
 const grid = computed(() => isDark.value ? '#293241' : '#EDF0F7')
+const customerColor = (row: VolumeSeries) => row.kind === 'other' && isDark.value ? '#60758F' : volumeColor(row)
 const charts = ref<InstanceType<typeof EChart>[]>([])
 const datedRows = computed(() => props.data.periods.map((period, index) => ({ ...period, index })).reverse())
 
@@ -65,12 +66,12 @@ function rankingOption(metric: Metric) {
     tooltip: { trigger: 'axis', renderMode: 'richText', confine: true, axisPointer: { type: 'shadow' }, ...(metric === 'amount' ? { formatter: (raw: unknown) => { const points = (Array.isArray(raw) ? raw : [raw]) as { dataIndex: number; seriesName: string; value: number }[]; const row = ranking.value[points[0]?.dataIndex ?? 0]; return [row?.label ?? '', ...points.map(point => `${point.seriesName}: ${format(point.value, metric)}`), breakdown(row)].filter(Boolean).join('\n') } } : {}), valueFormatter: (v: unknown) => format(typeof v === 'number' ? v : null, metric) },
     legend: { show: props.split, top: 0, left: 0, icon: 'roundRect', itemWidth: 13, itemHeight: 6, textStyle: { fontSize: 10, color: axis.value } },
     grid: { left: 4, right: metric === 'amount' ? 85 : 40, top: props.split ? 34 : 12, bottom: 20, containLabel: true },
-    xAxis: { type: 'value', ...(metric === 'orders' ? { minInterval: 1 } : {}), axisLabel: { color: axis.value }, splitLine: { lineStyle: { color: grid.value, type: 'dashed' } } },
+    xAxis: { type: 'value', ...(metric === 'orders' ? { minInterval: 1 } : {}), axisLabel: { color: axis.value, hideOverlap: true }, splitLine: { lineStyle: { color: grid.value, type: 'dashed' } } },
     yAxis: { type: 'category', inverse: true, data: ranking.value.map(s => s.code ? `${s.label} · ${s.code}` : s.label), axisTick: { show: false }, axisLine: { show: false }, axisLabel: { color: axis.value, width: 170, overflow: 'truncate', fontSize: 10 } },
     series: chartGroups.value.map(group => ({ id: group.id, name: group.label, type: 'bar', barMaxWidth: props.split ? 10 : 15, barGap: '35%',
       label: { show: true, position: 'right', color: axis.value, fontSize: 10, formatter: ({ value: amount }: { value: number | null }) => format(amount, metric) },
       ...(props.split ? { itemStyle: { color: group.color, borderRadius: [0, 3, 3, 0] }, data: ranking.value.map(row => value(row, metric, group.warehouse)) }
-        : { data: ranking.value.map(row => ({ value: value(row, metric), itemStyle: { color: volumeColor(row), borderRadius: [0, 4, 4, 0] } })) }),
+        : { data: ranking.value.map(row => ({ value: value(row, metric), itemStyle: { color: customerColor(row), borderRadius: [0, 4, 4, 0] } })) }),
     })),
   }
 }
@@ -110,7 +111,7 @@ function syncZoom(event: ChartZoom) { for (const chart of charts.value) chart.zo
       <button :disabled="!canViewDetails" class="ov-link" @click="emit('drill', 'total')">{{ t('查看订单明细 ↗', 'View orders ↗') }}</button>
     </div>
     <p v-if="total?.amounts?.breakdown" class="ov-scope customer-amount-note">{{ breakdown(total) }} · {{ t('按支付当月计入，押金备货不计入；使用备货库存时不重复计款。', 'Counted in the payment month; deposits excluded and stocked inventory is not counted again.') }}</p>
-    <p v-if="!total?.amounts" class="ov-scope customer-amount-note">{{ t('当前无可查看的回款金额权限，履约订单量仍可查看。', 'Receipt amounts are unavailable with the current permissions; fulfillment counts remain available.') }}</p>
+    <p v-if="!total?.amounts" class="ov-scope customer-amount-note">{{ t('回款金额暂不可查看，仍可查看履约订单量。', 'Receipt amounts are unavailable; fulfillment counts remain available.') }}</p>
     <p v-if="total?.amounts?.excludedOrderCount" class="ov-scope customer-amount-note">{{ t(`回款仅汇总美元收款；${total.amounts.excludedOrderCount} 笔非美元收款未计入回款合计。`, `Amounts include USD receipts only; ${total.amounts.excludedOrderCount} non-USD receipts are excluded.`) }}</p>
     <p v-if="!hasResults" class="ov-empty">{{ t('当前条件下暂无履约订单或回款。', 'No fulfillment orders or receipts match these filters.') }}</p>
     <div v-else class="customer-metric-charts" :class="{ 'customer-ranking-charts': rankingOnly }">
@@ -123,7 +124,7 @@ function syncZoom(event: ChartZoom) { for (const chart of charts.value) chart.zo
     <div class="ov-table-scroll"><table class="ov-table customer-metrics-table">
       <thead><tr><th>{{ t('客户 / 编码', 'Customer / Code') }}</th><th>{{ t('指标', 'Metric') }}</th><th>{{ t('合计', 'Total') }}</th><th>{{ t('占比', 'Share') }}</th><th v-for="code in warehouses" :key="code"><span class="ov-dot" :style="{ background: warehouseColor[code] }" />{{ warehouseName(code) }}</th><th>{{ t('查看', 'View') }}</th></tr></thead>
       <tbody><template v-for="row in tableRows" :key="row.id"><tr v-for="(metric, index) in metrics" :key="metric" :data-row-id="row.id" :data-metric="metric" :class="{ 'customer-pair-first': index === 0, 'customer-money-row': index === 1, 'ov-total': row.kind === 'total' }">
-        <td v-if="index === 0" rowspan="2" class="customer-identity"><span class="ov-dot" :style="{ background: volumeColor(row) }" /><strong>{{ row.label }}</strong><small v-if="row.code">{{ row.code }}</small></td>
+        <td v-if="index === 0" rowspan="2" class="customer-identity"><span class="ov-dot" :style="{ background: customerColor(row) }" /><strong>{{ row.label }}</strong><small v-if="row.code">{{ row.code }}</small></td>
         <th scope="row" class="customer-metric-name">{{ metricLabel(metric) }}</th><td><button v-if="metric === 'amount'" class="customer-cell-link" :disabled="!canViewDetails || (!row.amounts)" :title="breakdown(row)" @click="drill(metric, row.id)">{{ format(value(row, metric), metric) }}</button><template v-else>{{ format(value(row, metric), metric) }}</template></td><td>{{ share(row, metric) }}</td>
         <td v-for="code in warehouses" :key="code"><button class="customer-cell-link" :data-warehouse="code" :disabled="!canViewDetails || (metric === 'amount' && !row.amounts)" :title="metric === 'amount' ? `${warehouseName(code)} · ${t('查看回款明细', 'View receipt details')}` : undefined" :aria-label="`${row.label} · ${warehouseName(code)} · ${metricLabel(metric)} · ${metric === 'amount' ? t('查看回款', 'View receipts') : t('查看订单', 'View orders')}`" @click="drill(metric, row.id, undefined, code)">{{ format(value(row, metric, code), metric) }}</button></td>
         <td v-if="index === 0" rowspan="2" class="customer-actions"><button v-if="rankingOnly && row.entityId && row.kind === 'detail'" class="ov-link" @click="emit('customer', row.entityId, row.label, row.code ?? '')">{{ t('趋势', 'Trend') }}</button><button :disabled="!canViewDetails" class="ov-link" @click="emit('drill', row.id)">{{ t('订单 ↗', 'Orders ↗') }}</button></td>
@@ -143,18 +144,16 @@ function syncZoom(event: ChartZoom) { for (const chart of charts.value) chart.zo
 .customer-metric-charts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; margin: 8px 0 22px; }
 .customer-metric-chart { min-width: 0; border: 1px solid var(--color-border); border-radius: 8px; padding: 16px 12px 4px; }
 .customer-metric-chart h3 { padding: 0 4px; }.customer-metric-charts h3 small { white-space: nowrap; }
-.customer-order-results .ov-kpis .customer-amount-kpi { font-size: 27px; font-weight: 700; letter-spacing: -.02em; color: #6478b3; line-height: 1; text-align: left; }
-.customer-table-caption, .customer-amount-note { font-size: 10px; color: #8793a7; line-height: 1.7; margin-bottom: 12px; }
+.customer-order-results .ov-kpis .customer-amount-kpi { font-size: 27px; font-weight: 700; letter-spacing: -.02em; color: var(--color-chart-link); line-height: 1; text-align: left; }
+.customer-table-caption, .customer-amount-note { font-size: 10px; color: var(--color-chart-muted); line-height: 1.7; margin-bottom: 12px; }
 .customer-metrics-table { min-width: 760px; font-variant-numeric: tabular-nums; }.customer-metrics-table :is(th, td) { height: 38px; padding: 9px 14px; }
 .customer-metrics-table .customer-metric-name { background: transparent; text-align: left; width: 110px; font-size: 10px; }
 .customer-metrics-table .customer-identity { vertical-align: middle; min-width: 205px; }.customer-identity strong { font-weight: 500; }.customer-identity small { display: block; padding-left: 16px; margin-top: 6px; }
 .customer-pair-first > :not([rowspan]) { border-bottom: 1px dashed var(--color-border); }
-.customer-money-row { background: #8793a704; }.customer-money-row td { color: #6687a3; }
-.customer-metrics-table .customer-actions { vertical-align: middle; }.customer-cell-link { color: inherit; font-variant-numeric: tabular-nums; }.customer-cell-link:hover { color: #6478b3; text-decoration: underline; }
-.customer-totals > tr > :is(th, td) { background: #edf1fb; color: #6478b3; font-weight: 650; border-top: 1px solid #d7dff2; }
-.customer-metrics-table .customer-totals .customer-metric-name { background: #edf1fb; }
+.customer-money-row { background: #8793a704; }.customer-money-row td { color: var(--color-chart-money); }
+.customer-metrics-table .customer-actions { vertical-align: middle; }.customer-cell-link { color: inherit; font-variant-numeric: tabular-nums; }.customer-cell-link:hover { color: var(--color-chart-link); text-decoration: underline; }
+.customer-totals > tr > :is(th, td) { background: var(--color-total-surface); color: var(--color-summary-text); font-weight: 650; border-top: 1px solid var(--color-total-border); }
+.customer-metrics-table .customer-totals .customer-metric-name { background: var(--color-total-surface); }
 .customer-daily-table { max-height: 280px; }.customer-daily-table th { white-space: nowrap; }
-:global(.dark) .customer-totals > tr > :is(th, td), :global(.dark) .customer-metrics-table .customer-totals .customer-metric-name { background: #252f46; color: #b4c2ef; border-color: #3b4969; }
-:global(.dark) .customer-money-row td { color: #a6c2d9; }
 @media (max-width: 1100px) { .customer-metric-charts { grid-template-columns: 1fr; } }
 </style>

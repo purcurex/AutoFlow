@@ -185,7 +185,9 @@ export class DemoFopDataProvider extends FopDataProvider {
   }
   private async orders(identity: Readonly<FopIdentity>): Promise<FopOrderCandidate[]> {
     const workspace = await this.organizations.getWorkspace(identity.userId)
-    const employees = [...workspace.employees].sort((a, b) => a.code.localeCompare(b.code) || a.id.localeCompare(b.id))
+    // Customers belong to salespeople. Collaboration roles process those orders through their business scope.
+    const employees = workspace.employees.filter(employee => employee.workbenchRoles.includes('sales'))
+      .sort((a, b) => a.code.localeCompare(b.code) || a.id.localeCompare(b.id))
     if (!employees.length) return []
     const nodes = new Map(workspace.nodes.map(node => [node.id, node]))
     const accountKey = createHash('sha256').update(identity.tenantId).digest('hex').slice(0, 12)
@@ -207,18 +209,16 @@ export class DemoFopDataProvider extends FopDataProvider {
       }
       if (organization.kind !== 'organization') return
       const customerIndex = Math.floor(index / employees.length) % CUSTOMERS.length
-      const product = PRODUCTS[index % PRODUCTS.length]
       const quantity = index % 3 + 1
       const paid = completed || stage !== 0 || index % 4 !== 0
       const shipping = completed || stage === 4
       const allocated = completed || stage === 3 || stage === 4
       const suffix = String(index + 1).padStart(5, '0')
-      const items = [{ productId: `${accountKey}:product:${index % PRODUCTS.length + 1}`, sku: product.sku, name: product.name, imageUrl: imageUrl(product), variant: product.variant, quantity }]
-      if (index % 4 === 0) {
-        const extra = PRODUCTS[(index + 3) % PRODUCTS.length]
-        items.push({ productId: `${accountKey}:product:${(index + 3) % PRODUCTS.length + 1}`, sku: extra.sku, name: extra.name, imageUrl: imageUrl(extra), variant: extra.variant, quantity: 1 })
-      }
-      const cents = product.cents * quantity + (index % 4 === 0 ? PRODUCTS[(index + 3) % PRODUCTS.length].cents : 0)
+      // Independent of payment/stage: every queue includes single-, two- and three-product orders.
+      const productCount = index % 5 === 0 ? 3 : index % 3 === 0 ? 2 : 1
+      const selectedProducts = [0, 3, 5].slice(0, productCount).map(offset => PRODUCTS[(index + offset) % PRODUCTS.length])
+      const items = selectedProducts.map((product, line) => ({ productId: `${accountKey}:product:${PRODUCTS.indexOf(product) + 1}`, sku: product.sku, name: product.name, imageUrl: imageUrl(product), variant: product.variant, quantity: line === 0 ? quantity : line }))
+      const cents = selectedProducts.reduce((sum, product, line) => sum + product.cents * items[line].quantity, 0)
       const carrierSeed = createHash('sha256').update(`${accountKey}:carrier:${index}:${createdAt}`).digest().readUInt32BE(0) % 100
       const carrier = FOP_CARRIERS[CARRIER_THRESHOLDS.findIndex(limit => carrierSeed < limit)]
       orders.push({

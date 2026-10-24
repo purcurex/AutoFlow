@@ -2,7 +2,8 @@ import { businessScope } from './business-scope'
 import type { UpdateBusinessScopeDto } from './dto/business-scope.dto'
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common'
 import { InjectRepository } from '@nestjs/typeorm'
-import { ILike, Repository } from 'typeorm'
+import { ILike, In, Repository } from 'typeorm'
+import { OrganizationEmployeeEntity } from '../organization/organization-employee.entity'
 import * as bcrypt from 'bcrypt'
 import { User, UserRole } from './user.entity'
 import type { UpdateProfileDto } from './dto/update-profile.dto'
@@ -55,12 +56,16 @@ export class UsersService {
     const pattern = search ? ILike(`%${search.replace(/[\\%_]/g, '\\$&')}%`) : undefined
     const [users, total] = await this.usersRepository.findAndCount({
       select: { id: true, displayId: true, email: true, username: true, role: true, workbenchRoles: true, chartPermissions: true, fopTenantId: true, fopUserId: true, businessRole: true, businessDepartmentId: true, businessEmployeeId: true },
-      where: pattern ? [{ username: pattern }, { email: pattern }, { displayId: pattern }] : {},
+      where: pattern ? [{ username: pattern, accountDisabled: false }, { email: pattern, accountDisabled: false }, { displayId: pattern, accountDisabled: false }] : { accountDisabled: false },
       order: { displayId: 'ASC', id: 'ASC' },
       skip: (query.page - 1) * query.pageSize,
       take: query.pageSize,
     })
-    return { items: users.map(workbenchAccount), total }
+    const employees = users.length ? await this.usersRepository.manager.getRepository(OrganizationEmployeeEntity).find({ where: { accountId: In(users.map(user => user.id)) }, relations: { department: true } }) : []
+    return { items: users.map(user => {
+      const employee = employees.find(row => row.accountId === user.id)
+      return { ...workbenchAccount(user), employee: employee ? { id: employee.id, name: employee.name, code: employee.code, department: { id: employee.departmentId, name: employee.department.name } } : null }
+    }), total }
   }
 
   async updateWorkbenchRoles(id: string, workbenchRoles: WorkbenchRole[]) {

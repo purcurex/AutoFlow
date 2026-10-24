@@ -11,5 +11,5 @@ const formatted = computed(() => formatReceiptChange(props.value, String(locale.
 .receipt-change{display:inline-flex;flex-direction:column;align-items:flex-end;gap:4px;font-variant-numeric:tabular-nums}
 .change-amount{font-weight:600}.change-percent{font-size:10px;font-weight:500;line-height:1.5;padding:1px 5px;border-radius:4px;white-space:nowrap}
 .up{color:#267e6f;background:#64bdb116}.down{color:#b65b6d;background:#e49aa51b}.flat{color:#8793a7;background:#8793a70d}
-:global(.dark) .up{color:#7ccdbb}:global(.dark) .down{color:#e8a1ae}
+.dark .up{color:#7ccdbb}.dark .down{color:#e8a1ae}
 </style>

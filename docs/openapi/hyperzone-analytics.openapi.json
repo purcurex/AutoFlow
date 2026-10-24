@@ -3,7 +3,7 @@
   "jsonSchemaDialect": "https://spec.openapis.org/oas/3.1/dialect/base",
   "info": {
     "title": "HyperZone AutoFlow Analytics 当前实现契约",
-    "version": "2026-10-23",
+    "version": "2026-10-24",
     "description": "字段级源码快照，仅记录已实现HTTP路由，不将计划FOP上游写为paths。响应裸JSON，无{code,data,message}包装。required=序列化必有；type:null=显式空值；可省略字段不在required中。参数跨字段依赖及已知口径差距见操作描述和配套审计。示例为脱敏契约样例，不是生产数据。 FOP为金蝶云苍穹上的HyperZone自研应用，源码只读核实；本工程方案2收款聚合和Mock已实现，真实生产网络适配器仍未配置。订单与收款各自授权，回款采用实际结算分录，统一UTC+8。 物流运费使用独立freight scope及allowedFreightIds，已实现Mock成本快照；必须保留原币与明确USD折算，按确认时间归期。最终结算、补收退款、调价及真实成本查询/授权仍待核对。 销售工作台增加个人收款与毛利：独立sales_profit授权、已审核净毛利差额优先、无日分配返回null；预估期间事件账本和严格asOf成本链仍是FOP对接前置条件。 全局P0：逐图许可和数据范围独立；普通员工本人，经理部门及下级，所有统计/排名/合计/搜索/趋势/明细先过滤再计算。组织整体汇总另行授权，只返聚合；客户当前分配不重写历史业绩。 五类履约待办按独立Shopify／供应商／库存／配货审核／出库事实统计，旧队列键保持兼容，新增采购卡片与fulfillmentProgress必填模型。"
   },
   "servers": [
@@ -862,7 +862,7 @@
         "tags": [
           "履约"
         ],
-        "description": "queue角色：review/exceptions=sales，dispatch=dispatch，procurement=procurement，allocation=allocation，shipping=warehouse。待审核：paid且reviewStatus=pending。待履约：paid、approved，shopifySync=pending/partial。待采购：paid、approved，supplierShipment=pending/partial。待配货：paid、approved，stockReadiness=incomplete，或ready且allocationReview=pending。待出库：paid、approved，stockReadiness=ready且allocationReview=approved，outbound=pending/partial。 五类均排除取消、未支付、退款。队列可重叠，每队列按订单ID去重；partial表示尚有未完成事项。unknown不推断；进度缺失或非法返回503。exceptions继续使用paid+未shipped+exception非null。按createdAt倒序/id排序，totals覆盖完整筛选集。保留dispatch/shipping键兼容旧URL，已不再使用旧发运/发货筛选逻辑。 五类待办强制按服务端登录账号取FOP租户/订单白名单与业务数据范围交集后统计和分页：salesperson仅owner.id等于绑定员工，department_manager仅管理部门及下级，business admin仅FOP明确授权的全部记录，none拒绝。系统管理员或全部岗位不扩大数据范围；搜索、精确订单查询、卡片/tasks数量、total和金额/数量合计均同范围。",
+        "description": "queue角色：review/exceptions=sales，dispatch=dispatch，procurement=procurement，allocation=allocation，shipping=warehouse。待审核：paid且reviewStatus=pending。待履约：paid、approved，shopifySync=pending/partial。待采购：paid、approved，supplierShipment=pending/partial。待配货：paid、approved，stockReadiness=incomplete，或ready且allocationReview=pending。待出库：paid、approved，stockReadiness=ready且allocationReview=approved，outbound=pending/partial。 五类均排除取消、未支付、退款。队列可重叠，每队列按订单ID去重；partial表示尚有未完成事项。unknown不推断；进度缺失或非法返回503。exceptions继续使用paid+未shipped+exception非null。按paidAt升序/id升序排序，空或无效收款日期排最后；排序在分页前完成，totals覆盖完整筛选集。保留dispatch/shipping键兼容旧URL，已不再使用旧发运/发货筛选逻辑。 五类待办强制按服务端登录账号取FOP租户/订单白名单与业务数据范围交集后统计和分页：salesperson仅owner.id等于绑定员工，department_manager仅管理部门及下级，business admin仅FOP明确授权的全部记录，none拒绝。系统管理员或全部岗位不扩大数据范围；搜索、精确订单查询、卡片/tasks数量、total和金额/数量合计均同范围。 departmentId按订单所属部门或departmentPathIds祖先匹配，只缩小已有权限；无匹配或无权部门返回空结果，绝不回退全部数据。departments从授权订单生成，独立于队列、搜索、部门筛选和分页；业务一至四部优先，其后自定义部门。协同岗位可独立配置businessRole=admin以处理全公司FOP允许的数据，无需系统管理员身份。 祖先路径仅在服务端处理，不加入公开订单明细；非法paidAt归一为null后排最后。 只读查询，无业务审核/配货/发运写接口；页面可见且联网时每30秒重取，恢复可见/网络及手动刷新立即重取。refreshedAt仅标识BFF查询完成时间。响应private,no-store；业务操作在FOP完成。",
         "responses": {
           "200": {
             "description": "成功，裸JSON响应。",
@@ -878,7 +878,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/OrderPage"
+                  "$ref": "#/components/schemas/FulfillmentOrderPage"
                 },
                 "example": {
                   "source": "mock",
@@ -890,7 +890,9 @@
                     "amountsByCurrency": []
                   },
                   "page": 1,
-                  "pageSize": 20
+                  "pageSize": 20,
+                  "departments": [],
+                  "refreshedAt": "2026-10-24T05:30:00Z"
                 }
               }
             }
@@ -967,6 +969,16 @@
               "maxLength": 100
             },
             "description": "FOP业务订单号精确匹配，不trim。"
+          },
+          {
+            "name": "departmentId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 128
+            },
+            "description": "所属部门稳定ID，精确匹配department.id或departmentPathIds祖先。省略/空串表示当前账号全部可见部门；非身份或授权参数。"
           },
           {
             "name": "page",
@@ -1250,7 +1262,7 @@
         "tags": [
           "权限管理"
         ],
-        "description": "仅系统role=admin；businessRole=none也可管理。按displayId/id排序；响应仅items/total。",
+        "description": "仅系统role=admin；businessRole=none也可管理。按displayId/id排序；响应仅items/total。 默认仅列出未停用账号，含组织员工与部门信息；账号建立/资料编辑移至组织架构，当前页面只负责分配权限。",
         "responses": {
           "200": {
             "description": "成功，裸JSON响应。",
@@ -1672,7 +1684,7 @@
         "tags": [
           "访问上下文"
         ],
-        "description": "仅系统管理员。每个本地账户独立mock组织，非FOP目录；首次GET可在事务内初始化种子，有本地写副作用。空Query DTO拒绝额外字段。组织写接口不在本规范。",
+        "description": "仅系统管理员。本地持久化组织，尚未同步 FOP；已关联员工账号使用其所属目录，其他旧账号保留独立目录。首次读取未初始化目录会创建种子。新增员工与开通账号端点见本规范；其他组织写接口见组织验收文档。",
         "responses": {
           "200": {
             "description": "成功，裸JSON响应。",
@@ -3396,6 +3408,618 @@
         ],
         "parameters": []
       }
+    },
+    "/organization/employees": {
+      "post": {
+        "tags": [
+          "访问上下文"
+        ],
+        "x-implementation-status": "implemented",
+        "x-source-files": [
+          "backend/src/modules/organization/organization.controller.ts",
+          "backend/src/modules/organization/organization.service.ts",
+          "backend/src/modules/organization/organization.dto.ts"
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "201": {
+            "description": "成功，裸JSON响应。",
+            "headers": {
+              "Cache-Control": {
+                "description": "JWT guard设置private, no-store；全局429可先于guard返回，不保证此头。",
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrganizationWorkspace"
+                },
+                "example": {
+                  "source": "mock",
+                  "nodes": [],
+                  "employees": [],
+                  "canEdit": true
+                }
+              }
+            }
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "404": {
+            "description": "部门或员工不存在于当前管理目录。"
+          }
+        },
+        "operationId": "createOrganizationEmployee",
+        "summary": "管理员新增员工并可开通登录账号",
+        "description": "仅系统管理员；管理权限在事务中复核，不接受客户端指定 ownerUserId 或系统/业务管理员角色。账号默认 role=user、businessRole=salesperson，员工与部门指向当前档案。创建账号与员工关联原子提交，重复或校验失败不留孤立记录。FOP 绑定复用已有唯一 tenantId/userId 约束；正式网络适配与身份映射仍待 IT 接入。",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateOrganizationEmployee"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/organization/employees/{id}/account": {
+      "post": {
+        "tags": [
+          "访问上下文"
+        ],
+        "x-implementation-status": "implemented",
+        "x-source-files": [
+          "backend/src/modules/organization/organization.controller.ts",
+          "backend/src/modules/organization/organization.service.ts",
+          "backend/src/modules/organization/organization.dto.ts"
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "201": {
+            "description": "成功，裸JSON响应。",
+            "headers": {
+              "Cache-Control": {
+                "description": "JWT guard设置private, no-store；全局429可先于guard返回，不保证此头。",
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrganizationWorkspace"
+                },
+                "example": {
+                  "source": "mock",
+                  "nodes": [],
+                  "employees": [],
+                  "canEdit": true
+                }
+              }
+            }
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "404": {
+            "description": "部门或员工不存在于当前管理目录。"
+          }
+        },
+        "operationId": "createEmployeeLoginAccount",
+        "summary": "管理员为已有员工开通登录账号",
+        "description": "仅系统管理员；管理权限在事务中复核，不接受客户端指定 ownerUserId 或系统/业务管理员角色。账号默认 role=user、businessRole=salesperson，员工与部门指向当前档案。创建账号与员工关联原子提交，重复或校验失败不留孤立记录。FOP 绑定复用已有唯一 tenantId/userId 约束；正式网络适配与身份映射仍待 IT 接入。",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateEmployeeAccount"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "当前目录员工 UUID；已开通账号返回409。"
+          }
+        ]
+      }
+    },
+    "/organization/employees/{id}/details": {
+      "put": {
+        "tags": [
+          "访问上下文"
+        ],
+        "x-implementation-status": "implemented",
+        "x-source-files": [
+          "backend/src/modules/organization/organization.controller.ts",
+          "backend/src/modules/organization/organization.service.ts",
+          "backend/src/modules/organization/organization.dto.ts"
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "404": {
+            "description": "部门或员工不存在于当前管理目录。"
+          },
+          "200": {
+            "description": "成功，裸JSON响应。",
+            "headers": {
+              "Cache-Control": {
+                "description": "JWT guard设置private, no-store；全局429可先于guard返回，不保证此头。",
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrganizationWorkspace"
+                }
+              }
+            }
+          }
+        },
+        "operationId": "updateOrganizationEmployee",
+        "summary": "编辑成员资料及归属",
+        "description": "仅系统管理员及当前目录在职员工；同步关联登录邮箱。岗位档案不修改账号入口授权；调部门仅同步默认个人业务身份，不覆盖经理范围或FOP映射。",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateOrganizationEmployee"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "员工或登录账号UUID。"
+          }
+        ]
+      }
+    },
+    "/organization/employees/remove": {
+      "post": {
+        "tags": [
+          "访问上下文"
+        ],
+        "x-implementation-status": "implemented",
+        "x-source-files": [
+          "backend/src/modules/organization/organization.controller.ts",
+          "backend/src/modules/organization/organization.service.ts",
+          "backend/src/modules/organization/organization.dto.ts"
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "404": {
+            "description": "部门或员工不存在于当前管理目录。"
+          },
+          "201": {
+            "description": "成功，裸JSON响应。",
+            "headers": {
+              "Cache-Control": {
+                "description": "JWT guard设置private, no-store；全局429可先于guard返回，不保证此头。",
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrganizationWorkspace"
+                }
+              }
+            }
+          }
+        },
+        "operationId": "archiveOrganizationEmployees",
+        "summary": "删除成员并停用关联账号",
+        "description": "整批归档，保留成员ID和历史业务外键，停用关联登录并递增sessionVersion；已有JWT下一次请求拒绝。本人或系统管理员成员返回409；不存在/跨目录/已删除成员404。含历史成员的部门不能物理删除。",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RemoveOrganizationEmployees"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/organization/employees/import": {
+      "post": {
+        "tags": [
+          "访问上下文"
+        ],
+        "x-implementation-status": "implemented",
+        "x-source-files": [
+          "backend/src/modules/organization/organization.controller.ts",
+          "backend/src/modules/organization/organization.service.ts",
+          "backend/src/modules/organization/organization.dto.ts"
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "404": {
+            "description": "部门或员工不存在于当前管理目录。"
+          },
+          "201": {
+            "description": "成功，裸JSON响应。",
+            "headers": {
+              "Cache-Control": {
+                "description": "JWT guard设置private, no-store；全局429可先于guard返回，不保证此头。",
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrganizationWorkspace"
+                }
+              }
+            }
+          }
+        },
+        "operationId": "importOrganizationEmployees",
+        "summary": "批量导入部门成员",
+        "description": "每批1–100名，当前目录部门，整批事务提交；重复编号/邮箱（含历史归档身份）回滚。只建档，岗位数组初始为空，不自动开通账号。预览不替代提交时重新验证。",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImportOrganizationEmployees"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/organization/employees/import-preview": {
+      "post": {
+        "tags": [
+          "访问上下文"
+        ],
+        "x-implementation-status": "implemented",
+        "x-source-files": [
+          "backend/src/modules/organization/organization.controller.ts",
+          "backend/src/modules/organization/organization.service.ts",
+          "backend/src/modules/organization/organization.dto.ts"
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "404": {
+            "description": "部门或员工不存在于当前管理目录。"
+          },
+          "201": {
+            "description": "成功，裸JSON响应。",
+            "headers": {
+              "Cache-Control": {
+                "description": "JWT guard设置private, no-store；全局429可先于guard返回，不保证此头。",
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmployeeImportPreview"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "上传文件超过2MB限制。"
+          }
+        },
+        "operationId": "previewOrganizationEmployees",
+        "summary": "预览 Excel／CSV 成员导入",
+        "description": "仅系统管理员；单文件2MB以内、1–100行成员、五列固定中文表头：姓名、员工编号、邮箱、职务、手机。xlsx取首个工作表；CSV为UTF-8。拒绝公式/链接/复杂单元格；返回逐行错误与原始行号。纯预览不写成员。",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "departmentId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "description": "当前管理员目录中的部门 UUID；根组织及其他目录节点拒绝。"
+                  },
+                  "file": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": ".xlsx或.csv，最大2097152字节。"
+                  }
+                },
+                "required": [
+                  "departmentId",
+                  "file"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      }
+    },
+    "/organization/accounts/{id}": {
+      "get": {
+        "tags": [
+          "访问上下文"
+        ],
+        "x-implementation-status": "implemented",
+        "x-source-files": [
+          "backend/src/modules/organization/organization.controller.ts",
+          "backend/src/modules/organization/organization.service.ts",
+          "backend/src/modules/organization/organization.dto.ts"
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "404": {
+            "description": "部门或员工不存在于当前管理目录。"
+          },
+          "200": {
+            "description": "成功，裸JSON响应。",
+            "headers": {
+              "Cache-Control": {
+                "description": "JWT guard设置private, no-store；全局429可先于guard返回，不保证此头。",
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmployeeLoginDetails"
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getOrganizationAccount",
+        "summary": "读取组织账号资料",
+        "description": "仅系统管理员；关联员工须属于当前目录且在职。历史未关联员工的已有账号可读取；停用账号拒绝。响应不含密码、散列或权限编辑字段。",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "员工或登录账号UUID。"
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "访问上下文"
+        ],
+        "x-implementation-status": "implemented",
+        "x-source-files": [
+          "backend/src/modules/organization/organization.controller.ts",
+          "backend/src/modules/organization/organization.service.ts",
+          "backend/src/modules/organization/organization.dto.ts"
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "404": {
+            "description": "部门或员工不存在于当前管理目录。"
+          },
+          "200": {
+            "description": "成功，裸JSON响应。",
+            "headers": {
+              "Cache-Control": {
+                "description": "JWT guard设置private, no-store；全局429可先于guard返回，不保证此头。",
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmployeeLoginDetails"
+                }
+              }
+            }
+          }
+        },
+        "operationId": "updateOrganizationAccount",
+        "summary": "编辑登录账号及FOP关联",
+        "description": "维护登录名、邮箱、可选密码和FOP绑定；密码重置撤销旧会话，关联邮箱同步员工。请求不能携带角色、业务范围等授权字段，权限页独立配置。",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateEmployeeLogin"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "员工或登录账号UUID。"
+          }
+        ]
+      }
     }
   },
   "components": {
@@ -4957,7 +5581,7 @@
           },
           "time": {
             "type": "string",
-            "description": "最早待办创建时刻转换 UTC+8 后的 HH:mm；无可用时刻为空字符串。"
+            "description": "当前队列最早有效收款时间paidAt转换UTC+8后的HH:mm；无可用收款时间为空字符串，不回退createdAt。"
           },
           "priority": {
             "type": "string",
@@ -5984,6 +6608,17 @@
               "$ref": "#/components/schemas/ChartPermissionOverride"
             },
             "description": "已持久化账号图表例外，空数组继承模板。"
+          },
+          "employee": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EmployeeAccountSummary"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "账号列表附带关联员工与所属部门，未关联为 null；其他账号写接口可省略。"
           }
         },
         "required": [
@@ -6203,6 +6838,11 @@
           "sortOrder": {
             "type": "integer",
             "description": "同级显示排序数，越小越靠前。"
+          },
+          "archivedEmployeeCount": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "直属已归档历史成员数；大于0时保留部门，不能物理删除。"
           }
         },
         "required": [
@@ -6224,7 +6864,7 @@
           },
           "name": {
             "type": "string",
-            "description": "本地演示组织员工姓名。"
+            "description": "员工姓名，可含中英文名。"
           },
           "code": {
             "type": "string",
@@ -6232,7 +6872,7 @@
           },
           "email": {
             "type": "string",
-            "description": "本地员工邮箱，种子使用hyperzone.example。"
+            "description": "员工邮箱；开通账号时作为登录邮箱。"
           },
           "departmentId": {
             "type": "string",
@@ -6245,6 +6885,36 @@
               "$ref": "#/components/schemas/WorkbenchRole"
             },
             "description": "演示员工岗位角色，不等于当前登录账户实际入口授权。"
+          },
+          "accountId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "已关联的前端登录账号 UUID；未开通为 null，不是 FOP 用户 ID。"
+          },
+          "jobTitle": {
+            "type": "string",
+            "maxLength": 100,
+            "description": "职务，纯文本；不用于决定账号权限。"
+          },
+          "phone": {
+            "type": "string",
+            "maxLength": 40,
+            "description": "手机/联系电话，保留国家代码和文本前导零。"
+          },
+          "archivedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "归档时间。管理列表仅返回在职成员，值为null；历史身份在内部业务目录保留。"
           }
         },
         "required": [
@@ -6270,14 +6940,14 @@
             "items": {
               "$ref": "#/components/schemas/OrganizationNode"
             },
-            "description": "当前管理员账户独立组织树节点。"
+            "description": "当前管理员管理的本地目录；已关联员工账号使用其所属目录。"
           },
           "employees": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/OrganizationEmployee"
             },
-            "description": "当前管理员账户独立员工目录；尚未与FOP真实目录同步。"
+            "description": "当前管理目录的在职成员，已归档成员不返回。关联账号、职务与手机属于管理员资料，不向普通员工提供此清单。"
           },
           "canEdit": {
             "type": "boolean",
@@ -11470,6 +12140,485 @@
             "outbound": "pending"
           }
         ]
+      },
+      "EmployeeAccountSummary": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          },
+          "department": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "name"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "code",
+          "department"
+        ],
+        "additionalProperties": false
+      },
+      "CreateEmployeeAccount": {
+        "type": "object",
+        "properties": {
+          "username": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 50,
+            "description": "登录名称，trim；邮箱用于实际登录。"
+          },
+          "password": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 72,
+            "writeOnly": true,
+            "description": "初始密码，UTF-8 字节数同时不超过72；仅 bcrypt 存储，不返回，不写日志。"
+          },
+          "fopBinding": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UpdateFopBinding"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "可选 FOP 租户及已有用户关联。保存不代表已验证上游身份或取得权限。"
+          }
+        },
+        "required": [
+          "username",
+          "password"
+        ],
+        "additionalProperties": false
+      },
+      "CreateOrganizationEmployee": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "description": "员工姓名，trim。"
+          },
+          "code": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40,
+            "description": "当前目录唯一员工编号，trim。"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "maxLength": 160,
+            "description": "trim并转小写；开通账号使用此邮箱登录。"
+          },
+          "departmentId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "当前管理员目录中的部门 UUID；根组织及其他目录节点拒绝。"
+          },
+          "workbenchRoles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkbenchRole"
+            },
+            "uniqueItems": true,
+            "maxItems": 5,
+            "description": "员工岗位；新账号初始工作台岗位复制此配置，之后账号权限单独管理。"
+          },
+          "account": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CreateEmployeeAccount"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "缺省/null只建员工档案；填写时同事务开通普通账号及本人数据范围。"
+          },
+          "jobTitle": {
+            "type": "string",
+            "maxLength": 100,
+            "description": "职务，纯文本；不用于决定账号权限。"
+          },
+          "phone": {
+            "type": "string",
+            "maxLength": 40,
+            "description": "手机/联系电话，保留国家代码和文本前导零。"
+          }
+        },
+        "required": [
+          "name",
+          "code",
+          "email",
+          "departmentId",
+          "workbenchRoles"
+        ],
+        "additionalProperties": false
+      },
+      "UpdateOrganizationEmployee": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "description": "员工姓名，trim。"
+          },
+          "code": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40,
+            "description": "当前目录唯一员工编号，trim。"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "maxLength": 160,
+            "description": "trim并转小写；开通账号使用此邮箱登录。"
+          },
+          "departmentId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "当前管理员目录中的部门 UUID；根组织及其他目录节点拒绝。"
+          },
+          "workbenchRoles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkbenchRole"
+            },
+            "uniqueItems": true,
+            "maxItems": 5,
+            "description": "员工岗位；新账号初始工作台岗位复制此配置，之后账号权限单独管理。"
+          },
+          "jobTitle": {
+            "type": "string",
+            "maxLength": 100,
+            "description": "职务，纯文本；不用于决定账号权限。"
+          },
+          "phone": {
+            "type": "string",
+            "maxLength": 40,
+            "description": "手机/联系电话，保留国家代码和文本前导零。"
+          }
+        },
+        "required": [
+          "name",
+          "code",
+          "email",
+          "departmentId",
+          "workbenchRoles"
+        ],
+        "additionalProperties": false
+      },
+      "EmployeeImportRow": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "description": "员工姓名，trim。"
+          },
+          "code": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40,
+            "description": "当前目录唯一员工编号，trim。"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "maxLength": 160,
+            "description": "trim并转小写；开通账号使用此邮箱登录。"
+          },
+          "jobTitle": {
+            "type": "string",
+            "maxLength": 100,
+            "description": "职务，纯文本；不用于决定账号权限。"
+          },
+          "phone": {
+            "type": "string",
+            "maxLength": 40,
+            "description": "手机/联系电话，保留国家代码和文本前导零。"
+          }
+        },
+        "required": [
+          "name",
+          "code",
+          "email"
+        ],
+        "additionalProperties": false
+      },
+      "ImportOrganizationEmployees": {
+        "type": "object",
+        "properties": {
+          "departmentId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "当前管理员目录中的部门 UUID；根组织及其他目录节点拒绝。"
+          },
+          "employees": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 100,
+            "items": {
+              "$ref": "#/components/schemas/EmployeeImportRow"
+            },
+            "description": "员工档案；不能携带账号、密码或权限字段。整批事务提交。"
+          }
+        },
+        "required": [
+          "departmentId",
+          "employees"
+        ],
+        "additionalProperties": false
+      },
+      "RemoveOrganizationEmployees": {
+        "type": "object",
+        "properties": {
+          "ids": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 100,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "当前目录在职成员UUID。整批校验并归档；本人、系统管理员成员禁止删除。"
+          }
+        },
+        "required": [
+          "ids"
+        ],
+        "additionalProperties": false
+      },
+      "EmployeeImportPreview": {
+        "type": "object",
+        "properties": {
+          "employees": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "$ref": "#/components/schemas/EmployeeImportRow"
+            }
+          },
+          "rowNumbers": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 2
+            },
+            "description": "与employees逐项对齐的原文件行号，保留空行/错误行后的准确位置。"
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "row": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "message": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "row",
+                "message"
+              ],
+              "additionalProperties": false
+            },
+            "description": "含格式、重复编号/邮箱（含已归档记录）等错误；有错误禁止确认导入。"
+          }
+        },
+        "required": [
+          "employees",
+          "rowNumbers",
+          "errors"
+        ],
+        "additionalProperties": false
+      },
+      "EmployeeLoginDetails": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "username": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 50,
+            "description": "登录名称，trim；邮箱用于实际登录。"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "maxLength": 160,
+            "description": "trim并转小写；开通账号使用此邮箱登录。"
+          },
+          "fopBinding": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FopBinding"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "真实FOP租户/用户绑定，未绑定时null；不包含密码或JWT。"
+          }
+        },
+        "required": [
+          "id",
+          "username",
+          "email",
+          "fopBinding"
+        ],
+        "additionalProperties": false
+      },
+      "UpdateEmployeeLogin": {
+        "type": "object",
+        "properties": {
+          "username": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 50,
+            "description": "登录名称，trim；邮箱用于实际登录。"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "maxLength": 160,
+            "description": "trim并转小写；开通账号使用此邮箱登录。"
+          },
+          "fopBinding": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UpdateFopBinding"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "省略保留，null或两字段均为null时解绑；不改变业务数据授权。"
+          },
+          "password": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 72,
+            "writeOnly": true,
+            "description": "可选新密码；省略不修改。重置后sessionVersion递增，所有旧会话拒绝；不允许null或空字符串。"
+          }
+        },
+        "required": [
+          "username",
+          "email"
+        ],
+        "additionalProperties": false
+      },
+      "FulfillmentOrderPage": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "$ref": "#/components/schemas/DataSource",
+            "description": "本次返回数据的provider来源。"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FopOrder"
+            },
+            "description": "当前页待办，先授权、部门/队列/关键词筛选，再按paidAt升序/id升序排列，最后分页。缺失或无效收款日期排最后。"
+          },
+          "total": {
+            "type": "integer",
+            "description": "授权筛选后的总订单数，与当前页items长度无关。",
+            "minimum": 0
+          },
+          "totals": {
+            "$ref": "#/components/schemas/OrderTotals",
+            "description": "分页前完整筛选集订单数、商品件数及分币种金额合计。"
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000000,
+            "description": "本次页码，从1开始。"
+          },
+          "pageSize": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "description": "本次每页大小，最多100。"
+          },
+          "departments": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "description": "当前账号可见订单的所属部门稳定ID；提交为departmentId。"
+                },
+                "name": {
+                  "type": "string",
+                  "description": "所属部门展示名称，来自订单归属。"
+                }
+              },
+              "required": [
+                "id",
+                "name"
+              ],
+              "additionalProperties": false
+            },
+            "description": "授权订单所属部门去重选项，业务一至四部优先，其后自定义部门。独立于队列、搜索与分页；可有当前队列零笔待办的部门；空授权返回[]，不从组织管理员目录补全。"
+          },
+          "refreshedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "本次BFF成功查询完成时间，带明确时区；用于显示最近刷新。不是FOP事件提交时间或同步水位，不能单独证明上游数据的新鲜度。"
+          }
+        },
+        "required": [
+          "source",
+          "items",
+          "total",
+          "totals",
+          "page",
+          "pageSize",
+          "departments",
+          "refreshedAt"
+        ],
+        "additionalProperties": false,
+        "description": "工作台六类履约待办分页与部门筛选选项。合计覆盖完整筛选集；未知部门或越界页为空，不回退全部数据。"
       }
     },
     "responses": {

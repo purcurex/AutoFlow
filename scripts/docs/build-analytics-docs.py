@@ -27,7 +27,7 @@ REQUEST_QUERIES = {
     '/autoflow/integrations/fop/order-volume': 'category=organization&grain=month&year=2026&warehouse=ALL',
     '/autoflow/integrations/fop/order-volume/orders': 'category=customer&from=2026-01-01&to=2026-10-22&warehouse=ALL&workbenchRole=sales&seriesId=total&page=1&pageSize=20',
     '/autoflow/integrations/fop/order-volume/customers': 'keyword=C001&page=1&pageSize=10',
-    '/autoflow/integrations/fop/fulfillment-orders': 'queue=allocation&workbenchRole=allocation&page=1&pageSize=20',
+    '/autoflow/integrations/fop/fulfillment-orders': 'queue=allocation&workbenchRole=allocation&departmentId=department-sales-1&page=1&pageSize=20',
     '/autoflow/integrations/fop/dashboard': 'from=2026-10-16&to=2026-10-22&year=2026',
     '/users/workbench-accounts': 'page=1&pageSize=20',
 }

@@ -66,7 +66,7 @@ export class AuthService {
 
   async login(email: string, password: string) {
     const user = await this.usersService.findByEmail(email)
-    if (!user) {
+    if (!user || user.accountDisabled) {
       throw new UnauthorizedException('邮箱或密码错误')
     }
 
@@ -75,7 +75,7 @@ export class AuthService {
       throw new UnauthorizedException('邮箱或密码错误')
     }
 
-    const token = this.generateToken(user.id, user.email, user.role)
+    const token = this.generateToken(user.id, user.email, user.role, user.sessionVersion)
 
     return {
       token,
@@ -101,8 +101,8 @@ export class AuthService {
     return { ...profile, userId: user.id }
   }
 
-  private generateToken(userId: string, email: string, role: UserRole): string {
-    const payload = { userId, email, role }
+  private generateToken(userId: string, email: string, role: UserRole, sessionVersion = 0): string {
+    const payload = { userId, email, role, sessionVersion }
     return this.jwtService.sign(payload)
   }
 }

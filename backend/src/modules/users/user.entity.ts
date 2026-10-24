@@ -74,6 +74,9 @@ export class User {
   @Column()
   password: string
 
+  @Column({ name: 'account_disabled', default: false }) accountDisabled: boolean
+  @Column({ name: 'session_version', type: 'integer', default: 0 }) sessionVersion: number
+
   @Column({ unique: true })
   username: string
 

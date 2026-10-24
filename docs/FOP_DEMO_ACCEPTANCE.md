@@ -27,15 +27,19 @@
 
 ## 组织与员工
 
-初始31个组织节点（含根组织）和23名演示员工。根为HyperZone，包含总经办、营销中心、运营中心、供应链中心、信息管理部、财务行政部和合作伙伴。营销中心有业务一至四部及欧洲／北美／亚太销售组、大客户组；供应链覆盖商品、采购、订单、物流、售后和杭州／深圳仓，并提供下级作业组。
+初始27个组织节点（含根组织）和23名演示员工。根为HyperZone，包含总经办、营销中心、运营中心、供应链中心、信息管理部、财务行政部和合作伙伴。营销中心下设业务一至四部，销售人员直接归属业务部门（依次5／4／5／1人），不预设区域销售组或大客户组；供应链覆盖商品、采购、订单、物流、售后和杭州／深圳仓，并提供下级作业组。
 
-每个登录账号拥有独立、持久化的设计空间。模拟员工不是实际登录账号，不会创建密码或提升权限。可：
+历史未关联账号保留独立、持久化的设计空间；管理员为员工开通的账号关联该员工所属目录。初始模拟员工不自动开通登录账号，新增操作详见 [员工与登录账号管理](EMPLOYEE_ACCOUNTS.md)。可：
 
 1. 选择节点，新增子部门。
 2. 修改名称、上级部门和同级排序；不能移动到自身或其后代。
 3. 为模拟员工重新选择所属部门。
-4. 删除空部门；根节点、含子部门或直属成员的部门不能删除。
+4. 系统管理员在部门标题右侧点击“删除部门”，确认后删除空部门，也可取消。根节点不可删除；含下级部门或直属成员的部门显示具体数量及处理提示，服务端再次校验。删除失败保留原节点，不显示成功。
 5. 刷新页面验证保存。组织名称、部门和成员调动会在后续订单／图表刷新时同步。
+6. 在选中部门下方的成员区添加员工，设置编号、邮箱、职务、手机、部门和岗位；可同时开通普通登录账号，也可之后开通。新账号默认本人业务范围，FOP绑定可以稍后完成。
+7. 成员区支持搜索、编辑信息／账号、单个或批量删除。删除归档员工并停用关联账号，旧会话立即失效；本人及系统管理员成员不可删除。历史业务记录保留，含历史归档成员的部门暂不能物理删除。
+8. 下载模板并批量导入.xlsx或UTF-8 CSV，每次最多100人、2MB；预览检查字段、重复身份及原始行号，确认时再次校验并整批保存。导入只创建员工档案，随后开通账号。
+9. 账号与权限页面默认查询未停用账号，独立分配系统管理、业务数据、工作台和图表权限。新增员工、账号资料及FOP关联统一在组织架构维护，导航顺序为组织架构在前、账号与权限在后。
 
 这是本地账号范围内的可编辑模拟组织。正式公司的共享组织及金蝶组织同步，后续需按实际租户和组织管理授权接入；不会把个人演示设计自动写入FOP。
 
@@ -82,10 +86,26 @@ Mock 适配器沿员工所属部门向上查找业务一至四部（包括其二
 | `PUT /api/organization/nodes/:id` | `{name?,parentId?,sortOrder?}` | 更新后的组织空间 |
 | `DELETE /api/organization/nodes/:id` | 无 | 更新后的组织空间 |
 | `PUT /api/organization/employees/:id` | `{departmentId}` | 更新后的组织空间 |
+| `POST /api/organization/employees` | `{name,code,email,departmentId,workbenchRoles,account?}` | 201 更新后的组织空间 |
+| `POST /api/organization/employees/:id/account` | `{username,password,fopBinding?}` | 201 更新后的组织空间 |
+| `PUT /api/organization/employees/:id/details` | `{name,code,email,jobTitle?,phone?,departmentId,workbenchRoles}` | 200 更新后的组织空间 |
+| `POST /api/organization/employees/import-preview` | multipart：`departmentId,file` | 201 `{employees,rowNumbers,errors}`，不落库 |
+| `POST /api/organization/employees/import` | `{departmentId,employees}`，1–100行 | 201 更新后的组织空间，原子保存 |
+| `POST /api/organization/employees/remove` | `{ids}`，1–100个唯一UUID | 201 更新后的组织空间，归档并停用关联账号 |
+| `GET /api/organization/accounts/:id` | 无 | 200 `{id,username,email,fopBinding}` |
+| `PUT /api/organization/accounts/:id` | `{username,email,password?,fopBinding?}` | 200 安全账号资料；重置密码撤销旧会话 |
 
-空间结构：`{source,nodes,employees,canEdit}`。节点为 `{id,parentId,name,kind,sortOrder}`；员工为 `{id,name,code,email,departmentId,workbenchRoles}`。后端从会话取得所有者，客户端不可指定其他账号。变更事务使用每账号锁，数据库复合外键禁止跨账号父节点和成员归属。
+空间结构：`{source,nodes,employees,canEdit}`。节点为 `{id,parentId,name,kind,sortOrder,archivedEmployeeCount?}`；员工为 `{id,name,code,email,jobTitle?,phone?,departmentId,workbenchRoles,accountId,archivedAt?}`。管理清单只返回未归档员工。后端从会话与员工关联取得目录所有者，客户端不可指定其他账号。变更事务使用管理角色锁和目录锁，数据库复合外键禁止跨空间父节点和成员归属。新员工及可选账号原子创建，密码不返回。
 
-迁移：`1784730000000-AddOrganizationSandbox.ts`。账号首次读取组织时建立初始树，之后读取保留其自定义修改。
+迁移：`1784730000000-AddOrganizationSandbox.ts`、`1784734000000-LinkEmployeeAccounts.ts`、`1784735000000-ManageOrganizationMembers.ts`。目录首次读取时建立初始树，之后保留其自定义修改；员工账号关联为空表示尚未开通。成员维护迁移增加职务、手机、归档及账号停用／会话版本字段，存在归档或会话撤销记录时拒绝直接回滚。
+
+### 销售部门结构调整（2026-10-23）
+
+新空间不再创建欧洲销售组、北美销售组、亚太销售组、大客户组。保留其他中心的二三级结构及管理员自定义子部门能力。
+
+已有本地 Demo 使用 `backend/src/database/sync-demo-sales-departments.ts` 显式升级：仅允许 `FOP_DATA_MODE=demo`、`NODE_ENV=local/development`、localhost 的 `autoflow_local_demo` 数据库；遍历已有演示目录，每个空间在事务和组织锁下先备份到 `.runtime/local-demo/sales-departments-backup-*.json`，再将四个默认组的直属员工调入所属业务部门，删除空组。保留员工 ID、姓名、代码、岗位、账号权限和 FOP 绑定；不在读取组织时反复重建节点。重复运行不再迁移。
+
+只匹配 HyperZone／营销中心／业务一至四部的默认路径；含自定义下级、同名歧义或已被账号数据权限引用的组跳过并输出原因，不自动扩大部门经理范围。其他自定义组织不改动。本次本机升级已对照迁移前后员工 ID、待办计数及部门／业务员回款确认一致。
 
 ## 验证要点
 

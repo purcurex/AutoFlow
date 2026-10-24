@@ -280,7 +280,7 @@ describe('sales performance workbench', () => {
     const { wrapper } = await setup()
     const select = wrapper.get('select[aria-label="业务员"]')
     expect(select.element).toHaveProperty('value', '')
-    expect(select.find('option[value=""]').text()).toContain('绑定员工后默认本人')
+    expect(select.find('option[value=""]').text()).toBe('请选择业务员')
     expect(wrapper.find('.performance-charts').exists()).toBe(false)
     expect(get.mock.calls[0]![1].params).not.toHaveProperty('ownerId')
   })

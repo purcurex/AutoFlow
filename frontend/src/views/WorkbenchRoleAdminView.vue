@@ -4,10 +4,9 @@ import { onSessionReset } from '@/utils/session'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { AppLayout } from '@/components/layout'
-import { getWorkbenchAccounts, updateWorkbenchRoles, updateFopBinding, updateBusinessScope, updateManagementRole, type BusinessScope, type WorkbenchAccount } from '@/api/workbench-access'
+import { getWorkbenchAccounts, updateWorkbenchRoles, updateBusinessScope, updateManagementRole, type BusinessScope, type WorkbenchAccount } from '@/api/workbench-access'
 import { useUserStore } from '@/stores/user'
 import { refreshWorkbenchAccess } from '@/composables/useWorkbenchAccess'
-import type { FopBinding } from '@/api/fop-access'
 import { workbenchNames, workbenchRoles, type WorkbenchRole } from '@/utils/workbench'
 
 const { locale } = useI18n()
@@ -25,9 +24,8 @@ function chartsSaved(saved: WorkbenchAccount) {
 }
 const offSession = onSessionReset(() => { requestId++; accounts.value = []; chartAccount.value = undefined })
 const drafts = ref<Record<string, WorkbenchRole[]>>({})
-const bindings = ref<Record<string, FopBinding>>({})
 const scopes = ref<Record<string, BusinessScope>>({})
-const search = ref('')
+const search = ref(new URLSearchParams(window.location.search).get('search') ?? '')
 const page = ref(1)
 const total = ref(0)
 const busy = ref(false)
@@ -51,7 +49,6 @@ async function load(reset = false) {
     managementRoles.value = Object.fromEntries(result.items.map(item => [item.id, item.role]))
     scopes.value = Object.fromEntries(result.items.map(item => [item.id, { ...(item.businessScope ?? { role: 'salesperson', departmentId: null, employeeId: null }) }]))
     drafts.value = Object.fromEntries(result.items.map(item => [item.id, [...item.workbenchRoles]]))
-    bindings.value = Object.fromEntries(result.items.map(item => [item.id, { tenantId: item.fopBinding?.tenantId ?? '', userId: item.fopBinding?.userId ?? '' }]))
   } catch {
     if (request === requestId) error.value = text('账号加载失败，请确认管理员权限后重试。', 'Could not load accounts. Check administrator access and retry.')
   } finally { if (request === requestId) busy.value = false }
@@ -72,32 +69,6 @@ async function save(account: WorkbenchAccount) {
     success.value = text(`${account.username} 的工作台权限已保存。`, `Workbench access saved for ${account.username}.`)
   } catch {
     error.value = text('保存失败，权限未更新。请检查管理员权限后重试。', 'Save failed. Access was not changed. Check administrator access and retry.')
-  } finally { saving.value = '' }
-}
-function bindingChanged(account: WorkbenchAccount) {
-  const draft = bindings.value[account.id]
-  return !!draft && (draft.tenantId.trim() !== (account.fopBinding?.tenantId ?? '') || draft.userId.trim() !== (account.fopBinding?.userId ?? ''))
-}
-async function saveBinding(account: WorkbenchAccount, remove = false) {
-  if (saving.value) return
-  const draft = bindings.value[account.id]
-  if (!draft) return
-  const binding = remove ? null : { tenantId: draft.tenantId.trim(), userId: draft.userId.trim() }
-  error.value = ''
-  success.value = ''
-  if (binding && (!binding.tenantId || !binding.userId)) {
-    error.value = text('请同时填写 FOP 租户 ID 和用户 ID；如需解绑，请使用“解除绑定”。', 'Provide both FOP tenant and user IDs. Use Unlink to remove a binding.')
-    return
-  }
-  saving.value = account.id
-  try {
-    const saved = await updateFopBinding(account.id, binding)
-    account.fopBinding = saved.fopBinding
-    bindings.value[account.id] = { tenantId: saved.fopBinding?.tenantId ?? '', userId: saved.fopBinding?.userId ?? '' }
-    success.value = text(`${account.username} 的 FOP 绑定已${remove ? '解除' : '保存'}。数据访问还需 FOP 后台授权。`, `FOP binding ${remove ? 'removed' : 'saved'} for ${account.username}. Data access still requires FOP authorization.`)
-  } catch (cause) {
-    const conflict = typeof cause === 'object' && cause !== null && 'statusCode' in cause && cause.statusCode === 409
-    error.value = conflict ? text('该 FOP 用户已绑定其他账号，请核对后重试。', 'This FOP user is already linked to another account.') : text('FOP 绑定保存失败，请检查管理员权限后重试。', 'Could not save the FOP binding. Check administrator access and retry.')
   } finally { saving.value = '' }
 }
 function scopeChanged(account: WorkbenchAccount) {
@@ -141,14 +112,14 @@ onBeforeUnmount(() => { requestId++; offSession() })
 
 <template>
   <AppLayout><div class="app-page">
-    <header class="mb-6 flex items-start justify-between gap-4"><div><p class="mb-2 text-xs font-bold tracking-widest text-slate-400">HYPERZONE · ACCOUNTS & ACCESS</p><h1 class="text-2xl font-bold">{{ text('账号与权限管理', 'Account & Access Management') }}</h1><p class="mt-2 text-sm text-slate-500">{{ text('系统管理权限与业务数据权限独立分配；可将管理员设为“无业务数据权限”，仅保留组织、账号与角色管理能力。', 'Assign system management and business data access independently. An administrator with no business data access can still manage organizations, accounts and roles.') }}</p></div><RouterLink to="/" class="btn btn-secondary">{{ text('返回工作台', 'Back to workbench') }}</RouterLink></header>
+    <header class="mb-6 flex items-start justify-between gap-4"><div><p class="mb-2 text-xs font-bold tracking-widest text-slate-400">HYPERZONE · ACCOUNTS & ACCESS</p><h1 class="text-2xl font-bold">{{ text('账号与权限管理', 'Account & Access Management') }}</h1><p class="mt-2 text-sm text-slate-500">{{ text('先在组织架构维护部门、员工与账号，再在此分配管理权限、工作台及业务数据范围。', 'Assign system management and business data access independently. An administrator with no business data access can still manage organizations, accounts and roles.') }}</p></div><div class="flex shrink-0 flex-wrap gap-2"><RouterLink to="/organization" class="btn btn-secondary">{{ text('维护组织与成员', 'Manage organization and members') }}</RouterLink><RouterLink to="/" class="btn btn-secondary">{{ text('返回工作台', 'Back to workbench') }}</RouterLink></div></header>
     <p class="mb-5 rounded-lg border border-indigo-100 bg-indigo-50 p-4 text-sm leading-6 text-indigo-800 dark:border-indigo-900 dark:bg-indigo-950 dark:text-indigo-200">{{ text('系统管理角色控制组织架构及账号授权；业务数据范围控制可见记录；岗位控制工作台入口。FOP 绑定用于核验后台用户权限。一个 FOP 租户内的用户仅可绑定一个前端账号。绑定不等于授权，管理员也需要绑定并取得 FOP 数据权限。', 'Management roles control organization and account administration. Business scope controls visible records; operational roles control workbench access. FOP bindings identify the backend user. Each FOP tenant/user pair can link to one frontend account. Linking does not grant data access; administrators also require FOP authorization.') }}</p>
     <p v-if="error" role="alert" class="mb-4 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700">{{ error }}</p>
     <p v-if="success" role="status" class="mb-4 rounded border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">{{ success }}</p>
     <section class="panel overflow-hidden" :aria-busy="busy">
       <form class="flex gap-3 border-b p-4" @submit.prevent="load(true)"><input v-model="search" type="search" class="input max-w-lg" :placeholder="text('搜索账号、邮箱或用户编号', 'Search username, email or user ID')" :aria-label="text('搜索账号', 'Search accounts')" /><button class="btn btn-secondary" :disabled="busy || !!saving">{{ text('查询', 'Search') }}</button></form>
       <p v-if="busy" class="p-10 text-center text-sm text-slate-500">{{ text('正在加载…', 'Loading…') }}</p>
-      <div v-else class="overflow-x-auto"><table class="data-table min-w-[950px]"><thead><tr><th>{{ text('账号', 'Account') }}</th><th>{{ text('系统管理权限', 'System management') }}</th><th>{{ text('业务数据权限', 'Business data scope') }}</th><th>{{ text('工作台岗位', 'Workbench roles') }}</th><th>{{ text('图表权限', 'Chart permissions') }}</th><th>{{ text('FOP 用户数据绑定', 'FOP user data binding') }}</th></tr></thead><tbody><tr v-for="account in accounts" :key="account.id"><td class="min-w-[180px]"><strong>{{ account.username }}</strong><p class="mt-1 text-xs text-slate-500">{{ account.email }}</p><p class="text-xs text-slate-400">ID {{ account.displayId }}</p></td><td class="min-w-[230px]">
+      <div v-else class="overflow-x-auto"><table class="data-table min-w-[950px]"><thead><tr><th>{{ text('账号', 'Account') }}</th><th>{{ text('系统管理权限', 'System management') }}</th><th>{{ text('业务数据权限', 'Business data scope') }}</th><th>{{ text('工作台岗位', 'Workbench roles') }}</th><th>{{ text('图表权限', 'Chart permissions') }}</th><th>{{ text('FOP 用户数据绑定', 'FOP user data binding') }}</th></tr></thead><tbody><tr v-for="account in accounts" :key="account.id"><td class="min-w-[180px]"><strong>{{ account.username }}</strong><p class="mt-1 text-xs text-slate-500">{{ account.email }}</p><p class="text-xs text-slate-400">ID {{ account.displayId }}</p><p v-if="account.employee" class="mt-2 text-xs text-slate-500">{{ account.employee.name }} · {{ account.employee.code }}<br />{{ account.employee.department.name }}</p></td><td class="min-w-[230px]">
         <form class="space-y-2 py-2" @submit.prevent="saveManagement(account)">
           <select v-model="managementRoles[account.id]" class="input" :disabled="!!saving" :aria-label="`${account.username} · ${text('系统管理角色', 'Management role')}`">
             <option value="user">{{ text('普通账号 · 无管理权限', 'Standard account · No management') }}</option>
@@ -168,6 +139,7 @@ onBeforeUnmount(() => { requestId++; offSession() })
           <label v-if="['department_manager', 'salesperson'].includes(scopes[account.id]!.role)" class="block text-xs">{{ text('所属部门 ID', 'Department ID') }}<input v-model="scopes[account.id]!.departmentId" class="input mt-1" maxlength="128" :disabled="!!saving" :aria-label="`${account.username} · ${text('所属部门 ID', 'Department ID')}`" /></label>
           <label v-if="['department_manager', 'salesperson'].includes(scopes[account.id]!.role)" class="block text-xs">{{ text('绑定员工 ID', 'Employee ID') }}<input v-model="scopes[account.id]!.employeeId" class="input mt-1" maxlength="128" :disabled="!!saving" :aria-label="`${account.username} · ${text('绑定员工 ID', 'Employee ID')}`" /></label>
           <p class="text-xs text-slate-500">{{ text('数据范围独立生效；部门和员工使用组织目录／FOP 的稳定 ID。', 'Data scope is independent. Use stable directory / FOP department and employee IDs.') }}</p>
+          <p class="text-xs text-slate-500">{{ text('销售总监、订单管理、采购、配货、发运、仓库等协同岗位选择“全部业务数据”，可按业务部门筛选待办，无需系统管理员身份。FOP 后台需同步授予相应数据范围。', 'Company-wide collaborators can use All business data and filter queues by department, without system management access. The linked FOP user must have the corresponding data access.') }}</p>
           <button data-save-scope class="btn btn-secondary" :disabled="!!saving || !scopeChanged(account)">{{ text('保存数据权限', 'Save data access') }}</button>
         </form>
       </td><td class="min-w-[200px]">
@@ -179,14 +151,7 @@ onBeforeUnmount(() => { requestId++; offSession() })
           <p v-if="account.businessScope?.role === 'none'" class="text-xs text-slate-500">{{ text('岗位配置保留；业务数据关闭期间不开放工作台。', 'Assignments retained; workbenches remain closed while business access is disabled.') }}</p>
           <button v-if="account.businessScope?.role !== 'admin'" data-save class="btn btn-secondary" :disabled="!!saving || !changed(account)" @click="save(account)">{{ text('保存岗位权限', 'Save workbench access') }}</button>
         </div>
-      </td><td class="min-w-[180px]"><button data-chart-permissions class="btn btn-secondary" :disabled="!!saving" @click="chartAccount = account">{{ text('配置图表权限', 'Configure charts') }}</button><p class="mt-2 text-xs text-slate-500">{{ text('逐图配置可见性、范围、汇总、明细与导出。', 'Visibility, scope, summaries, details and exports per chart.') }}</p></td><td class="min-w-[320px]">
-        <form class="space-y-2 py-2" @submit.prevent="saveBinding(account)">
-          <p class="text-xs" :class="account.fopBinding ? 'text-emerald-600' : 'text-amber-600'">{{ account.fopBinding ? text('已绑定 · 后台授权后可访问数据', 'Linked · FOP authorization required') : text('未绑定 · 不可访问 FOP 数据', 'Unlinked · No FOP data access') }}</p>
-          <label class="flex items-center gap-2 text-xs"><span class="w-16 shrink-0">{{ text('租户 ID', 'Tenant ID') }}</span><input v-model="bindings[account.id]!.tenantId" class="input" maxlength="128" autocomplete="off" :disabled="!!saving" :aria-label="`${account.username} · FOP ${text('租户 ID', 'tenant ID')}`" /></label>
-          <label class="flex items-center gap-2 text-xs"><span class="w-16 shrink-0">{{ text('用户 ID', 'User ID') }}</span><input v-model="bindings[account.id]!.userId" class="input" maxlength="128" autocomplete="off" :disabled="!!saving" :aria-label="`${account.username} · FOP ${text('用户 ID', 'user ID')}`" /></label>
-          <div class="flex items-center gap-3"><button data-save-binding type="submit" class="btn btn-secondary" :disabled="!!saving || !bindingChanged(account)">{{ text('保存绑定', 'Save binding') }}</button><button v-if="account.fopBinding" data-unlink type="button" class="text-xs text-red-600" :disabled="!!saving" @click="saveBinding(account, true)">{{ text('解除绑定', 'Unlink') }}</button></div>
-        </form>
-      </td></tr></tbody></table><p v-if="!accounts.length" class="p-10 text-center text-sm text-slate-500">{{ text('暂无账号', 'No accounts found') }}</p></div>
+      </td><td class="min-w-[180px]"><button data-chart-permissions class="btn btn-secondary" :disabled="!!saving" @click="chartAccount = account">{{ text('配置图表权限', 'Configure charts') }}</button><p class="mt-2 text-xs text-slate-500">{{ text('逐图配置可见性、范围、汇总、明细与导出。', 'Visibility, scope, summaries, details and exports per chart.') }}</p></td><td class="min-w-[200px]"><p class="text-xs text-slate-500">{{ account.fopBinding ? text('已绑定 FOP 用户', 'FOP user linked') : text('未绑定 FOP 用户', 'FOP user not linked') }}</p><RouterLink :to="{ path: '/organization', query: { accountId: account.id } }" class="mt-2 inline-block text-xs text-indigo-600">{{ text('在组织架构中编辑账号', 'Edit account in organization') }}</RouterLink></td></tr></tbody></table><p v-if="!accounts.length" class="p-10 text-center text-sm text-slate-500">{{ text('暂无账号', 'No accounts found') }}</p></div>
       <footer class="flex items-center justify-between border-t p-4 text-xs text-slate-500"><span>{{ text(`共 ${total} 个账号`, `${total} accounts`) }}</span><div class="flex items-center gap-4"><button :disabled="busy || !!saving || page <= 1" @click="page--; load()">{{ text('上一页', 'Previous') }}</button><span>{{ page }} / {{ Math.max(1, Math.ceil(total / 20)) }}</span><button :disabled="busy || !!saving || page * 20 >= total" @click="page++; load()">{{ text('下一页', 'Next') }}</button></div></footer>
     </section>
   </div><ChartPermissionsDialog v-if="chartAccount" :account="chartAccount" @close="chartAccount = undefined" @saved="chartsSaved" /></AppLayout>

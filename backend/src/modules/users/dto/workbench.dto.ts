@@ -52,4 +52,9 @@ export class ListFulfillmentOrdersDto extends ListWorkbenchAccountsDto {
   @IsString()
   @MaxLength(100)
   orderNumber?: string
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(128)
+  departmentId?: string
 }

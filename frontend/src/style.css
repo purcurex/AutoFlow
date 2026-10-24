@@ -14,6 +14,15 @@
     --color-text-secondary: #657083;
     --color-border: #dde3eb;
     --color-border-strong: #c8d1de;
+    --color-shell: #ffffff;
+    --color-chart-heading: #6478b3;
+    --color-chart-link: #6478b3;
+    --color-chart-muted: #8793a7;
+    --color-chart-money: #6687a3;
+    --color-summary-text: #6478b3;
+    --color-summary-surface: #f1f4fc;
+    --color-total-surface: #edf1fb;
+    --color-total-border: #d7dff2;
     --shadow-panel: 0 1px 2px rgb(15 23 42 / 0.04), 0 8px 24px rgb(15 23 42 / 0.04);
   }
 
@@ -21,13 +30,22 @@
     --color-primary: #ff812f;
     --color-primary-strong: #ff9b55;
     --color-accent: #21c9ad;
-    --color-background: #090b0f;
-    --color-surface: #111419;
-    --color-surface-muted: #171b21;
-    --color-text: #f3f5f7;
-    --color-text-secondary: #99a3b1;
-    --color-border: #282d35;
-    --color-border-strong: #3a414c;
+    --color-background: #0d131d;
+    --color-surface: #141d2a;
+    --color-surface-muted: #1a2535;
+    --color-text: #e7edf6;
+    --color-text-secondary: #a3b1c5;
+    --color-border: #2a374a;
+    --color-border-strong: #3b4c63;
+    --color-shell: #101722;
+    --color-chart-heading: #b9c9ed;
+    --color-chart-link: #afc2f3;
+    --color-chart-muted: #a3b1c5;
+    --color-chart-money: #adcde2;
+    --color-summary-text: #c2cff4;
+    --color-summary-surface: #202d44;
+    --color-total-surface: #263652;
+    --color-total-border: #425779;
     --shadow-panel: 0 1px 2px rgb(0 0 0 / 0.3), 0 12px 32px rgb(0 0 0 / 0.18);
   }
 
@@ -87,6 +105,7 @@
   .empty-state { @apply flex min-h-48 flex-col items-center justify-center gap-3 px-6 py-10 text-center text-sm text-slate-500 dark:text-slate-400; }
   .empty-state-icon { @apply flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400; }
   .brand-mark { @apply flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-md border border-slate-200 bg-white p-1 shadow-sm; }
+  .dark .brand-mark { background: transparent; border-color: transparent; box-shadow: none; }
   .brand-mark img { @apply h-full w-full object-contain; }
   .notice { @apply flex items-start gap-3 rounded-md border-l-4 px-4 py-3 text-sm leading-6; }
 
@@ -112,15 +131,17 @@
 * { scrollbar-width: thin; scrollbar-color: #cbd5e1 transparent; }
 .dark * { scrollbar-color: #3f4651 transparent; }
 
-/* Shared focus treatment: no colored outer ring or border-color change.
-   An inset neutral indicator keeps keyboard navigation visible in both themes. */
+/* Search fields retain their resting appearance on focus. Other controls keep
+   an inset neutral indicator for keyboard navigation in both themes. */
 :where(button, a, input, select, textarea, summary, [tabindex], [contenteditable="true"]):focus {
   outline: none;
 }
-:where(button, a, input, select, textarea, summary, [tabindex], [contenteditable="true"]):focus-visible {
+:where(button, a, input:not([type="search"]), select, textarea, summary, [tabindex], [contenteditable="true"]):focus-visible {
   outline: 2px solid var(--color-text-secondary);
   outline-offset: -3px;
 }
+input[type="search"]:focus,
 input[type="search"]:focus-visible {
-  background-color: var(--color-surface-muted);
+  outline: none;
+  box-shadow: none;
 }

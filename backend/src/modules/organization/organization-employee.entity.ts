@@ -11,9 +11,13 @@ export class OrganizationEmployeeEntity {
   @PrimaryGeneratedColumn('uuid') id: string
   @Column({ name: 'owner_user_id', type: 'uuid' }) ownerUserId: string
   @Column({ name: 'department_id', type: 'uuid' }) departmentId: string
+  @Column({ name: 'account_id', type: 'uuid', nullable: true }) accountId: string | null
   @Column({ type: 'varchar', length: 100 }) name: string
   @Column({ type: 'varchar', length: 40 }) code: string
   @Column({ type: 'varchar', length: 160 }) email: string
+  @Column({ name: 'job_title', type: 'varchar', length: 100, default: '' }) jobTitle: string
+  @Column({ type: 'varchar', length: 40, default: '' }) phone: string
+  @Column({ name: 'archived_at', type: 'timestamptz', nullable: true }) archivedAt: Date | null
   @Column({ name: 'workbench_roles', type: 'text', array: true }) workbenchRoles: WorkbenchRole[]
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' }) createdAt: Date
   @UpdateDateColumn({ name: 'updated_at', type: 'timestamptz' }) updatedAt: Date

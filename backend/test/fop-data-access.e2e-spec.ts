@@ -53,6 +53,7 @@ describe('FOP user isolation HTTP API (repository and provider boundaries stubbe
 
   beforeAll(async () => {
     const repository = {
+      manager: { getRepository: () => ({ find: async () => [] }) },
       findOne: async ({ where }: any) => {
         const found = [...accounts.values()].find((account) => Object.entries(where).every(([key, value]) => account[key] === value))
         return found ? structuredClone(found) : null
@@ -666,15 +667,83 @@ describe('FOP user isolation HTTP API (repository and provider boundaries stubbe
     expect(summary.tasks).toEqual([])
   })
 
-  it('sorts authorized orders deterministically before paging regardless of provider order', async () => {
-    records = [order('older', { createdAt: '2019-01-01T00:00:00Z' }), order('new-b'), order('new-a')]
-    provider.resolvePermissions = async (identity: any) => ({ subject: identity, allowedOrderIds: ['older', 'new-b', 'new-a'] })
+  it('prioritizes oldest payment before paging, with stable ties and missing dates last', async () => {
+    records = [order('missing', { paidAt: null }), order('invalid', { paidAt: 'bad-date' }),
+      order('older', { createdAt: '2020-01-20T00:00:00Z', paidAt: '2020-01-01T09:00:00+08:00' }),
+      order('new-b', { createdAt: '2019-01-01T00:00:00Z' }), order('new-a')]
+    provider.resolvePermissions = async (identity: any) => ({ subject: identity, allowedOrderIds: records.map(r => r.id) })
     const first = await list('queue=review&pageSize=1&page=1').expect(200)
-    expect(first.body.items.map((item: any) => item.id)).toEqual(['new-a'])
+    expect(first.body.items.map((item: any) => item.id)).toEqual(['older'])
     records.reverse()
     const second = await list('queue=review&pageSize=1&page=2').expect(200)
-    expect(second.body.items.map((item: any) => item.id)).toEqual(['new-b'])
-    expect(second.body.total).toBe(3)
+    expect(second.body.items.map((item: any) => item.id)).toEqual(['new-a'])
+    expect(second.body.total).toBe(5)
+    expect((await list().expect(200)).body.items.map((item: any) => item.id)).toEqual(['older', 'new-a', 'new-b', 'invalid', 'missing'])
+    expect((await list().expect(200)).body.items.find((item: any) => item.id === 'invalid').paidAt).toBeNull()
+  })
+  it('reads current queue progress on refresh and returns a no-store query completion timestamp', async () => {
+    const first = await list().expect(200)
+    expect(first.headers['cache-control']).toBe('private, no-store')
+    expect(Number.isFinite(Date.parse(first.body.refreshedAt))).toBe(true)
+    records = records.map(row => row.id === 'a' ? { ...row, reviewStatus: 'approved' } : row)
+    const next = await list().expect(200)
+    expect(next.body.items).toEqual([])
+    expect(next.body.total).toBe(0)
+    expect(next.body.totals.orderCount).toBe(0)
+    expect(Date.parse(next.body.refreshedAt)).toBeGreaterThanOrEqual(Date.parse(first.body.refreshedAt))
+  })
+
+  it.each(['review', 'procurement', 'allocation', 'dispatch', 'shipping', 'exceptions'])('filters %s by department before totals and pagination for company collaborators without management rights', async queue => {
+    accounts.get(bob).role = UserRole.USER
+    const pending = { reviewStatus: queue === 'review' ? 'pending' : 'approved', exception: { reason: 'stock', hours: 1 },
+      ...(queue === 'shipping' ? { fulfillmentProgress: { shopifySync: 'pending', supplierShipment: 'shipped', stockReadiness: 'ready', allocationReview: 'approved', outbound: 'pending' } } : {}) }
+    records = [order('b', { ...pending, department: { id: 'd2', name: '业务二部' }, salesDepartmentCode: 'sales2', amount: 999 }),
+      order('a2', { ...pending, department: { id: 'd1', name: '业务一部' }, salesDepartmentCode: 'sales1', amount: 20 }),
+      order('a1', { ...pending, department: { id: 'd1', name: '业务一部' }, salesDepartmentCode: 'sales1', amount: 10, paidAt: '2020-01-01T00:00:00Z' }),
+      order('secret', { ...pending, department: { id: 'secret-dept', name: 'SECRET' } })]
+    provider.resolvePermissions = async (identity: any) => ({ subject: identity, allowedOrderIds: ['a1', 'a2', 'b'] })
+    const all = (await list(`queue=${queue}`, bob).expect(200)).body
+    expect(all.total).toBe(3)
+    expect(all.departments).toEqual([{ id: 'd1', name: '业务一部' }, { id: 'd2', name: '业务二部' }])
+    const filtered = (await list(`queue=${queue}&departmentId=d1&pageSize=1&page=1`, bob).expect(200)).body
+    expect(filtered.items.map((r: any) => r.id)).toEqual(['a1'])
+    expect(filtered.total).toBe(2)
+    expect(filtered.totals).toEqual({ orderCount: 2, itemQuantity: 2, amountsByCurrency: [{ currency: 'USD', amount: 30 }] })
+    expect(filtered.departments).toEqual(all.departments)
+    const searched = (await list(`queue=${queue}&departmentId=d1&search=absent`, bob).expect(200)).body
+    expect(searched.total).toBe(0)
+    expect(searched.departments).toEqual(all.departments)
+    expect((await list(`queue=${queue}&departmentId=secret-dept`, bob).expect(200)).body.total).toBe(0)
+    expect((await list(`queue=${queue}&departmentId=unknown`, bob).expect(200)).body.total).toBe(0)
+  })
+
+  it('keeps department options and forged filters inside the employee or manager scope', async () => {
+    records = [order('mine', { department: { id: 'd1', name: '业务一部' }, salesDepartmentCode: 'sales1', departmentPathIds: ['company', 'd1'] }),
+      order('colleague', { owner: { id: 'colleague', name: 'Colleague' }, department: { id: 'team', name: '自定义小组' }, departmentPathIds: ['company', 'd1', 'team'] }),
+      order('outside', { owner: { id: 'other', name: 'Other' }, department: { id: 'd2', name: '业务二部' }, salesDepartmentCode: 'sales2', departmentPathIds: ['company', 'd2'] })]
+    provider.resolvePermissions = async (identity: any) => ({ subject: identity, allowedOrderIds: records.map(r => r.id) })
+    expect((await list().expect(200)).body.departments).toEqual([{ id: 'd1', name: '业务一部' }])
+    expect((await list('queue=review&departmentId=d2').expect(200)).body.total).toBe(0)
+    accounts.get(alice).businessRole = 'department_manager'
+    accounts.get(alice).businessDepartmentId = 'd1'
+    const manager = (await list('queue=review&departmentId=d1').expect(200)).body
+    expect(manager.total).toBe(2)
+    expect(manager.items.every((item: any) => !('departmentPathIds' in item) && !('tenantId' in item))).toBe(true)
+    expect(manager.departments.map((d: any) => d.id).sort()).toEqual(['d1', 'team'])
+    expect((await list('queue=review&departmentId=d2').expect(200)).body.total).toBe(0)
+    provider.resolvePermissions = async (identity: any) => ({ subject: identity, allowedOrderIds: [] })
+    expect((await list().expect(200)).body.departments).toEqual([])
+    await list(`queue=review&departmentId=${'x'.repeat(129)}`).expect(400)
+    await list('queue=review&departmentId=d1&departmentId=d2').expect(400)
+  })
+
+  it('shows dashboard exceptions in payment order and uses the oldest payment for task time', async () => {
+    records = [order('recent', { createdAt: '2019-01-01T01:00:00Z', exception: { reason: 'stock', hours: 200 } }),
+      order('oldest', { paidAt: '2020-01-01T09:30:00+08:00', exception: { reason: 'stock', hours: 1 } })]
+    provider.resolvePermissions = async (identity: any) => ({ subject: identity, allowedOrderIds: records.map(r => r.id) })
+    const result = (await dashboard().expect(200)).body
+    expect(result.exceptions.map((r: any) => r.id)).toEqual(['OLDEST', 'RECENT'])
+    expect(result.tasks.find((t: any) => t.kind === 'review').time).toBe('09:30')
   })
 
   it('fails closed for missing configuration, permission failures and provider failures', async () => {

@@ -43,7 +43,7 @@ describe('Workbench authorization HTTP API (repository boundary stub)', () => {
         [...accounts.values()].slice(skip, skip + take), accounts.size,
       ],
     }
-    Object.assign(repository, { manager: { transaction: async (callback: (manager: any) => Promise<unknown>) => callback({
+    Object.assign(repository, { manager: { getRepository: () => ({ find: async () => [] }), transaction: async (callback: (manager: any) => Promise<unknown>) => callback({
       query: async () => undefined, getRepository: () => repository,
     }) } })
     const module = await Test.createTestingModule({

@@ -61,4 +61,15 @@ describe('role workbench content', () => {
     expect(wrapper.find('table').exists()).toBe(false)
     wrapper.unmount()
   })
+
+  it('retains the department when moving between workbenches and queues, but resets the page', async () => {
+    const { wrapper, router } = await setup('/workbench/sales?queue=review&departmentId=d1&page=2&search=old')
+    const exceptions = wrapper.findAll('.workbench-queues a').find(a => a.text().includes('异常订单'))!
+    await exceptions.trigger('click'); await flushPromises()
+    expect(router.currentRoute.value.query).toEqual({ queue: 'exceptions', departmentId: 'd1' })
+    await wrapper.findAll('.role-tabs a').find(a => a.text().includes('采购'))!.trigger('click'); await flushPromises()
+    expect(router.currentRoute.value.params.role).toBe('procurement')
+    expect(router.currentRoute.value.query).toEqual({ departmentId: 'd1' })
+    wrapper.unmount()
+  })
 })

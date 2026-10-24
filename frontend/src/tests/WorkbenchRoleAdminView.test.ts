@@ -1,19 +1,19 @@
 import { createPinia } from 'pinia'
-import { flushPromises, mount } from '@vue/test-utils'
+import { flushPromises, mount, RouterLinkStub } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import { describe, expect, it, vi } from 'vitest'
 import WorkbenchRoleAdminView from '@/views/WorkbenchRoleAdminView.vue'
-import { getWorkbenchAccounts, updateWorkbenchRoles, updateFopBinding, updateBusinessScope, updateManagementRole, updateChartPermissions } from '@/api/workbench-access'
+import { getWorkbenchAccounts, updateWorkbenchRoles, updateBusinessScope, updateManagementRole, updateChartPermissions } from '@/api/workbench-access'
 
 vi.mock('@/components/layout', () => ({ AppLayout: { template: '<div><slot /></div>' } }))
-vi.mock('@/api/workbench-access', () => ({ getWorkbenchAccounts: vi.fn(), updateWorkbenchRoles: vi.fn(), updateFopBinding: vi.fn(), updateBusinessScope: vi.fn(), updateManagementRole: vi.fn(), updateChartPermissions: vi.fn() }))
+vi.mock('@/api/workbench-access', () => ({ getWorkbenchAccounts: vi.fn(), updateWorkbenchRoles: vi.fn(), updateBusinessScope: vi.fn(), updateManagementRole: vi.fn(), updateChartPermissions: vi.fn() }))
 
 describe('workbench role administration', () => {
   it('saves selected roles and only marks them saved after server confirmation', async () => {
     const account = { chartPermissions: [], id: 'u1', displayId: '000001', email: 'sales@example.test', username: 'Alice', fopBinding: null, role: 'user' as const, workbenchRoles: ['sales' as const] }
     vi.mocked(getWorkbenchAccounts).mockResolvedValue({ items: [account], total: 1 })
     vi.mocked(updateWorkbenchRoles).mockRejectedValueOnce(new Error('Forbidden')).mockResolvedValueOnce({ ...account, workbenchRoles: ['sales', 'warehouse'] })
-    const wrapper = mount(WorkbenchRoleAdminView, { global: { plugins: [createPinia(), createI18n({ legacy: false, locale: 'zh-CN', messages: {} })], stubs: { RouterLink: true } } })
+    const wrapper = mount(WorkbenchRoleAdminView, { global: { plugins: [createPinia(), createI18n({ legacy: false, locale: 'zh-CN', messages: {} })], stubs: { RouterLink: RouterLinkStub } } })
     await flushPromises()
     await wrapper.find('input[value=warehouse]').setValue(true)
     await wrapper.find('button[data-save]').trigger('click')
@@ -29,38 +29,26 @@ describe('workbench role administration', () => {
   })
 })
 
- describe('FOP account bindings', () => {
-  it('saves, reports duplicate identity errors, and unlinks only through the admin API', async () => {
-    const account = { chartPermissions: [], id: 'u2', displayId: '000002', email: 'admin@example.test', username: 'Admin', role: 'admin' as const, workbenchRoles: [], fopBinding: null }
+describe('permissions-only account listing', () => {
+  it('lists organization accounts and routes account editing back to organization without creation or binding forms', async () => {
+    const account = { chartPermissions: [], id: 'u2', displayId: '000002', email: 'member@example.test', username: 'Member', role: 'user' as const, workbenchRoles: [], fopBinding: { tenantId: 'company', userId: 'fop-member' } }
     vi.mocked(getWorkbenchAccounts).mockResolvedValue({ items: [account], total: 1 })
-    vi.mocked(updateFopBinding).mockRejectedValueOnce({ statusCode: 409 }).mockResolvedValueOnce({ ...account, fopBinding: { tenantId: 'company', userId: 'employee-2' } }).mockResolvedValueOnce({ ...account, fopBinding: null })
-    const wrapper = mount(WorkbenchRoleAdminView, { global: { plugins: [createPinia(), createI18n({ legacy: false, locale: 'zh-CN', messages: {} })], stubs: { RouterLink: true } } })
+    const wrapper = mount(WorkbenchRoleAdminView, { global: { plugins: [createPinia(), createI18n({ legacy: false, locale: 'zh-CN', messages: {} })], stubs: { RouterLink: RouterLinkStub } } })
     await flushPromises()
-    await wrapper.find('input[aria-label="Admin · FOP 租户 ID"]').setValue(' company ')
-    await wrapper.find('input[aria-label="Admin · FOP 用户 ID"]').setValue('employee-2')
-    const form = wrapper.find('button[data-save-binding]').element.closest('form')!
-    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
-    await flushPromises()
-    expect(wrapper.find('[role=alert]').text()).toContain('已绑定其他账号')
-    expect(wrapper.text()).toContain('未绑定 · 不可访问')
-    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
-    await flushPromises()
-    expect(updateFopBinding).toHaveBeenLastCalledWith('u2', { tenantId: 'company', userId: 'employee-2' })
-    expect(wrapper.text()).toContain('已绑定 · 后台授权后可访问')
-    await wrapper.find('button[data-unlink]').trigger('click')
-    await flushPromises()
-    expect(updateFopBinding).toHaveBeenLastCalledWith('u2', null)
-    expect(wrapper.text()).toContain('未绑定 · 不可访问')
+    expect(wrapper.find('[data-create-employee]').exists()).toBe(false)
+    expect(wrapper.find('[data-save-binding]').exists()).toBe(false)
+    expect(wrapper.find('input[aria-label*="FOP"]').exists()).toBe(false)
+    expect(wrapper.text()).toContain('已绑定 FOP 用户')
+    expect(wrapper.findAllComponents(RouterLinkStub).some(link => JSON.stringify(link.props('to')).includes('accountId'))).toBe(true)
     wrapper.unmount()
   })
 })
-
 
 describe('business data scope editor', () => {
   it('requires manager assignment, handles rejection, and persists the server-confirmed role', async () => {
     const account = { chartPermissions: [], id: 'scope-user', displayId: '000003', email: 'scope@example.test', username: 'Scope', fopBinding: null, role: 'user' as const, workbenchRoles: ['sales' as const], businessScope: { role: 'salesperson' as const, departmentId: null, employeeId: 'employee-1' } }
     vi.mocked(getWorkbenchAccounts).mockResolvedValue({ items: [account], total: 1 })
-    const wrapper = mount(WorkbenchRoleAdminView, { global: { plugins: [createPinia(), createI18n({ legacy: false, locale: 'zh-CN', messages: {} })], stubs: { RouterLink: true } } })
+    const wrapper = mount(WorkbenchRoleAdminView, { global: { plugins: [createPinia(), createI18n({ legacy: false, locale: 'zh-CN', messages: {} })], stubs: { RouterLink: RouterLinkStub } } })
     await flushPromises()
     await wrapper.find('select[aria-label="Scope · 业务数据角色"]').setValue('department_manager')
     const submit = () => wrapper.find('button[data-save-scope]').element.closest('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
@@ -84,7 +72,7 @@ describe('independent system administrator data access', () => {
   it('lets an administrator disable their business data without removing management rights', async () => {
     const account = { chartPermissions: [], id: 'admin-only', displayId: '000004', email: 'admin@example.test', username: 'Admin', fopBinding: null, role: 'admin' as const, workbenchRoles: [], businessScope: { role: 'admin' as const, departmentId: null, employeeId: null } }
     vi.mocked(getWorkbenchAccounts).mockResolvedValue({ items: [account], total: 1 })
-    const wrapper = mount(WorkbenchRoleAdminView, { global: { plugins: [createPinia(), createI18n({ legacy: false, locale: 'zh-CN', messages: {} })], stubs: { RouterLink: true } } })
+    const wrapper = mount(WorkbenchRoleAdminView, { global: { plugins: [createPinia(), createI18n({ legacy: false, locale: 'zh-CN', messages: {} })], stubs: { RouterLink: RouterLinkStub } } })
     await flushPromises()
     const select = wrapper.get('select[aria-label="Admin · 业务数据角色"]')
     expect(select.attributes('disabled')).toBeUndefined()
@@ -105,7 +93,7 @@ it('saves management rights independently from the business scope', async () => 
   const account = { chartPermissions: [], id: 'manager', displayId: '000005', email: 'manager@example.test', username: 'Manager', fopBinding: null, role: 'user' as const, workbenchRoles: [], businessScope: { role: 'none' as const, departmentId: null, employeeId: null } }
   vi.mocked(getWorkbenchAccounts).mockResolvedValue({ items: [account], total: 1 })
   vi.mocked(updateManagementRole).mockResolvedValue({ ...account, role: 'admin' })
-  const wrapper = mount(WorkbenchRoleAdminView, { global: { plugins: [createPinia(), createI18n({ legacy: false, locale: 'zh-CN', messages: {} })], stubs: { RouterLink: true } } })
+  const wrapper = mount(WorkbenchRoleAdminView, { global: { plugins: [createPinia(), createI18n({ legacy: false, locale: 'zh-CN', messages: {} })], stubs: { RouterLink: RouterLinkStub } } })
   await flushPromises()
   await wrapper.get('select[aria-label="Manager · 系统管理角色"]').setValue('admin')
   await wrapper.get('button[data-save-management]').element.closest('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
@@ -121,7 +109,7 @@ it('configures chart visibility, scope, organization summaries and independent a
   const account = { chartPermissions: [], id: 'charts', displayId: '000007', email: 'chart@example.test', username: 'Charts', fopBinding: null, role: 'user' as const, workbenchRoles: [] }
   vi.mocked(getWorkbenchAccounts).mockResolvedValue({ items: [account], total: 1 })
   vi.mocked(updateChartPermissions).mockImplementation(async (_id, chartPermissions) => ({ ...account, chartPermissions }))
-  const wrapper = mount(WorkbenchRoleAdminView, { attachTo: document.body, global: { plugins: [createPinia(), createI18n({ legacy: false, locale: 'zh-CN', messages: {} })], stubs: { RouterLink: true, teleport: true } } })
+  const wrapper = mount(WorkbenchRoleAdminView, { attachTo: document.body, global: { plugins: [createPinia(), createI18n({ legacy: false, locale: 'zh-CN', messages: {} })], stubs: { RouterLink: RouterLinkStub, teleport: true } } })
   await flushPromises()
   await wrapper.get('[data-chart-permissions]').trigger('click')
   const row = wrapper.get('[data-chart-id="order_volume"]')
