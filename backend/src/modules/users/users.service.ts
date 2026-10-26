@@ -2,12 +2,13 @@ import { businessScope } from './business-scope'
 import type { UpdateBusinessScopeDto } from './dto/business-scope.dto'
 import { ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common'
 import { InjectRepository } from '@nestjs/typeorm'
-import { ILike, Repository } from 'typeorm'
+import { ILike, IsNull, Repository } from 'typeorm'
 import * as bcrypt from 'bcrypt'
 import { User, UserRole } from './user.entity'
 import type { UpdateProfileDto } from './dto/update-profile.dto'
 import type { ListWorkbenchAccountsDto } from './dto/workbench.dto'
 import type { WorkbenchRole } from './workbench-role'
+import type { FopIdentity } from '../fop-data/fop-data.types'
 
 function workbenchAccount(user: User) {
   return {
@@ -110,6 +111,22 @@ export class UsersService {
     const updated = await this.findById(id)
     if (!updated) throw new NotFoundException('用户不存在')
     return workbenchAccount(updated)
+  }
+
+  /** 管理员自助接入采用条件更新，角色撤销或原绑定并发变化时不覆盖；沿用身份唯一约束。 */
+  async connectCurrentAdminFop(id: string, previous: FopIdentity | null, subject: FopIdentity) {
+    try {
+      const result = await this.usersRepository.update({ id, role: UserRole.ADMIN, businessRole: 'admin',
+        fopTenantId: previous?.tenantId ?? IsNull(), fopUserId: previous?.userId ?? IsNull() },
+      { fopTenantId: subject.tenantId, fopUserId: subject.userId })
+      if (result.affected !== 1) throw new ForbiddenException({ code: 'fop_binding_changed', message: 'Account access or binding changed; reload before continuing' })
+    } catch (error) {
+      if ((error as { driverError?: { code?: string } }).driverError?.code === '23505') throw new ConflictException('This FOP identity is already bound to another account')
+      throw error
+    }
+    const user = await this.findById(id)
+    if (!user) throw new NotFoundException('用户不存在')
+    return workbenchAccount(user)
   }
 
   async findByEmail(email: string): Promise<User | null> {

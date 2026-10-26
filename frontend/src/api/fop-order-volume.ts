@@ -26,8 +26,8 @@ export interface OrderCustomer { id: string; code: string; name: string; departm
 export interface OrderCustomerPage { source: 'mock' | 'fop'; items: OrderCustomer[]; total: number; page: number; pageSize: number }
 export interface OrderVolumeDetailsQuery extends OrderVolumeQuery { workbenchRole: WorkbenchRole; detailWarehouse?: VolumeWarehouse; seriesId?: string; periodId?: string; page: number; pageSize: number }
 const root = '/autoflow/integrations/fop/order-volume'
-export const getOrderVolume = (query: OrderVolumeQuery): Promise<OrderVolumeData> => api.get(root, { params: query })
-export const searchOrderCustomers = (query: { keyword: string; department?: string; page: number; pageSize: number }): Promise<OrderCustomerPage> => api.get(`${root}/customers`, { params: query })
-export const getOrderVolumeDetails = (query: OrderVolumeDetailsQuery): Promise<FopOrderPage> => api.get(`${root}/orders`, { params: query })
+export const getOrderVolume = (query: OrderVolumeQuery): Promise<OrderVolumeData> => api.get(root, { params: query, timeout: 180000 })
+export const searchOrderCustomers = (query: { keyword: string; department?: string; page: number; pageSize: number }): Promise<OrderCustomerPage> => api.get(`${root}/customers`, { params: query, timeout: 180000 })
+export const getOrderVolumeDetails = (query: OrderVolumeDetailsQuery): Promise<FopOrderPage> => api.get(`${root}/orders`, { params: query, timeout: 180000 })
 
-export const getOrderVolumeReceipts = (query: OrderVolumeDetailsQuery): Promise<FopReceiptPage> => api.get(`${root}/receipts`, { params: query })
+export const getOrderVolumeReceipts = (query: OrderVolumeDetailsQuery): Promise<FopReceiptPage> => api.get(`${root}/receipts`, { params: query, timeout: 180000 })

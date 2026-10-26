@@ -4,7 +4,9 @@ export interface ReceiptSeries { id: string; name?: string; amounts: number[]; p
 export interface FopDashboardData {
   source: 'mock' | 'fop'
   updatedAt: string
-  queues: { review: number; allocation: number; dispatch: number; shipping: number }
+  queues: { review: number | null; allocation: number | null; dispatch: number | null; shipping: number | null }
+  integratedQueues?: string[]
+  analyticsConfigured?: boolean
   rates: { currency: string; cnyPerUnit: number }[]
   registrations: { date: string; count: number }[]
   registrationDepartments?: { id: string; name: string; counts: number[]; salespeople: { id: string; name: string; counts: number[] }[] }[]
@@ -33,5 +35,6 @@ export async function getFopDashboard(query: FopDashboardQuery, now = new Date()
   if (!Number.isInteger(query.year) || query.year < 2020 || query.year > Number(localDate(now).slice(0, 4))) throw new Error('Invalid year')
   const { default: api } = await import('./index')
   const { from, to, year } = query
-  return api.get('/autoflow/integrations/fop/dashboard', { params: { from, to, year } })
+  // 真实统计包含权限核对及多页事实汇总，使用独立超时，不改变其他业务接口。
+  return api.get('/autoflow/integrations/fop/dashboard', { params: { from, to, year }, timeout: 180000 })
 }

@@ -240,12 +240,13 @@ const salespersonOption = computed(() => collectionsOption(salespersonSeries.val
         <button class="refresh-button" :disabled="busy" @click="refresh"><RefreshCw :class="{ 'animate-spin': busy }" :size="15" />{{ busy ? text('刷新中', 'Refreshing') : text('刷新数据', 'Refresh') }}</button>
       </header>
       <FopDataAccessNotice @recheck="refresh" />
+      <p v-if="data?.analyticsConfigured === false" class="dashboard-footnote">{{ text('本期仅接入待审核履约订单，其他统计尚未接入。', 'Only pending review orders are connected in this phase.') }}</p>
       <p v-if="error" class="error-message" role="alert">{{ error }}</p>
 
       <section class="summary-grid" :aria-label="text('履约概览', 'Fulfillment overview')">
         <RouterLink v-for="card in cards" :key="card.id" :to="workbenchOrderLocation(card.id as FopOrderQueue)" class="summary-card" :class="card.color" :aria-label="text(`查看${card.label}清单`, `View ${card.label} orders`)">
           <div class="card-top"><span>{{ card.label }}</span><component :is="card.icon" :size="21" :stroke-width="1.6" /></div>
-          <strong>{{ card.value === undefined ? '—' : number(card.value) }}</strong><p>{{ card.hint }}</p><span class="card-decoration" />
+          <strong>{{ card.value === null ? text('未接入', 'Not connected') : card.value === undefined ? '—' : number(card.value) }}</strong><p>{{ card.hint }}</p><span class="card-decoration" />
         </RouterLink>
         <WorkCalendar />
       </section>
@@ -301,9 +302,12 @@ const salespersonOption = computed(() => collectionsOption(salespersonSeries.val
         <p v-if="selectedDepartment && !salespeople.length" class="detail-empty-note">{{ text('该部门在所选年份暂无获授权的业务员回款数据', 'No authorized salesperson collections for this department and year') }}</p>
         <details v-if="salespersonSeries.length" :open="salespersonDetailsOpen" class="data-details" @toggle="salespersonDetailsOpen = ($event.target as HTMLDetailsElement).open"><summary>{{ salespersonMom ? text('部门与业务员环比明细 · 差额 / 比例', 'Department and salesperson changes · Amount / Rate') : text('部门与业务员回款明细', 'Department and salesperson collections data') }}</summary><div class="table-scroll"><table class="receipt-table" :style="{ minWidth: `${160 + salespersonSeries.length * 132}px` }"><colgroup><col class="receipt-month-column"><col v-for="item in salespersonSeries" :key="item.id"></colgroup><thead><tr><th>{{ text('月份', 'Month') }}</th><th v-for="(person, personIndex) in salespersonSeries" :key="person.id" :class="{ 'aggregate-cell': personIndex === 0 }">{{ person.name }}</th></tr></thead><tbody><tr v-for="{ month, index } in receiptRows" :key="month"><td>{{ month }}</td><td v-for="(person, personIndex) in salespersonSeries" :key="person.id" :class="{ 'aggregate-cell': personIndex === 0 }"><ReceiptChangeValue v-if="salespersonMom" :value="changesFor(person)[index]" /><button v-else class="receipt-amount receipt-link" :title="receiptBreakdown(person, index)" @click="openReceipts(month, selectedDepartmentId, personIndex === 0 ? undefined : person.id)">{{ money(person.amounts[index] ?? 0) }}</button></td></tr></tbody><TableTotals><th scope="row">{{ salespersonMom ? text('差额合计（可比月份）', 'Total change (comparable months)') : text('合计（所选年份）', 'Total (selected year)') }}</th><td v-for="person in salespersonSeries" :key="person.id"><ReceiptChangeValue v-if="salespersonMom" :value="changeTotalFor(person)" /><span v-else class="receipt-amount">{{ money(sumMoney(person.amounts)) }}</span></td></TableTotals></table></div></details><p class="mom-note" :class="{ 'mom-note-hidden': !salespersonMom }" :aria-hidden="!salespersonMom">{{ text('合计比例 = 差额合计 ÷ 对应上月金额合计；缺少上月数据的月份不计入合计。上月为 0 时，非零差额不计算比例。', 'Total rate = total change ÷ total prior-month amounts; missing comparisons are excluded. Nonzero changes from zero have no percentage rate.') }}</p>
       </section>
-      <OrderVolumeAnalysis :revision="orderVolumeRevision" />
-      <OrderVolumeAnalysis customer :revision="orderVolumeRevision" />
-      <FreightAnalysis :revision="orderVolumeRevision" />
+      <template v-if="data?.analyticsConfigured !== false">
+        <OrderVolumeAnalysis :revision="orderVolumeRevision" />
+        <OrderVolumeAnalysis customer :revision="orderVolumeRevision" />
+        <FreightAnalysis :revision="orderVolumeRevision" />
+      </template>
+      <p v-else class="dashboard-footnote">{{ text('本期已接入待审核履约订单；注册、回款、订单分析及运费统计尚未接入。', 'Pending review orders are connected. Registrations, collections, order analytics and freight are not connected yet.') }}</p>
       <p v-if="data?.source === 'mock'" class="dashboard-footnote">{{ text('MOCK 演示数据 · 组织、员工与订单相互关联 · 日期筛选用于注册趋势，年份筛选用于回款分析。', 'MOCK demo data · Linked organization, employees and orders · Dates filter registrations; year filters collections.') }}</p>
       <p v-else class="dashboard-footnote">{{ text('履约数据按登录账号的 FOP 授权范围查询；未绑定或权限不可用时不展示数据。日期筛选用于注册趋势，年份筛选用于回款分析。', 'Fulfillment data follows your FOP user permissions. No data is shown without a valid binding and authorization. Dates filter registrations; year filters collections.') }}</p>
     </main>

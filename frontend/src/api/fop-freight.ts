@@ -42,5 +42,5 @@ export interface FreightPage {
   totals: { billCount: number; amount: number; originalAmounts: { currency: string; amount: number }[] }
   range: { from: string; to: string }
 }
-export const getFopFreight = (query: FreightQuery): Promise<FreightData> => api.get('/autoflow/integrations/fop/freight', { params: query })
-export const getFopFreightDetails = (query: FreightDetailsQuery): Promise<FreightPage> => api.get('/autoflow/integrations/fop/freight/details', { params: query })
+export const getFopFreight = (query: FreightQuery): Promise<FreightData> => api.get('/autoflow/integrations/fop/freight', { params: query, timeout: 180000 })
+export const getFopFreightDetails = (query: FreightDetailsQuery): Promise<FreightPage> => api.get('/autoflow/integrations/fop/freight/details', { params: query, timeout: 180000 })

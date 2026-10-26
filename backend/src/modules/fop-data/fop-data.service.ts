@@ -5,17 +5,19 @@ import { UsersService } from '../users/users.service'
 import { isWorkbenchRole, WORKBENCH_ROLES, WorkbenchRole } from '../users/workbench-role'
 import { FULFILLMENT_QUEUE_ROLES, ListFulfillmentOrdersDto } from '../users/dto/workbench.dto'
 import { FopDashboardQueryDto } from './fop-data.dto'
-import { FOP_DATA_PROVIDER, FopDataProvider, FopIdentity, FopOrder, FopOrderCandidate, FopPermissionDeniedError, FopPermissionGrant, FopReceipt } from './fop-data.types'
+import { FOP_DATA_PROVIDER, FopDataProvider, FopIdentity, FopIntegrationUnavailableError, FopOrder, FopOrderCandidate, FopPermissionDeniedError, FopPermissionGrant, FopReceipt, FopAnalyticsRange, FopAnalyticsResource } from './fop-data.types'
 
 import { businessScope, matchesBusinessScope, BusinessScope } from '../users/business-scope'
 import { OrderVolumeQueryDto, OrderVolumeDetailsDto, OrderCustomerSearchDto } from './order-volume.dto'
-import { aggregateOrderVolume, orderVolumeDetails, orderVolumeReceiptDetails, searchOrderCustomers } from './order-volume'
+import { aggregateOrderVolume, orderVolumeDetails, orderVolumeReceiptDetails, searchOrderCustomers, orderVolumePeriods } from './order-volume'
 import { aggregateRegistrations } from './fop-registration'
 import { summarizeFopOrders } from './fop-order-totals'
 
 import { eligibleReceipts, monthlyReceipts, publicReceipt, summarizeReceipts } from './fop-receipts'
 import { businessDate, BUSINESS_TIME_ZONE, validBusinessDay } from './fop-business-time'
 import { ReceiptQueryDto } from './fop-receipts.dto'
+import { emptyAnalyticsData } from './fop-kingdee.analytics'
+import { ConfirmFopConnectionDto } from './fop-connection.dto'
 
 type Queue = keyof typeof FULFILLMENT_QUEUE_ROLES
 type Scope = { binding: FopIdentity | null; roles: WorkbenchRole[]; business: BusinessScope }
@@ -66,6 +68,37 @@ export class FopDataService {
     @Inject(FOP_DATA_PROVIDER) private readonly provider: FopDataProvider,
   ) {}
 
+  /** 仅当前系统管理员且具有全部业务数据角色时提供连接入口，不让其他账号继承代理用户身份。 */
+  private async requireConnectionAdmin(userId: string) {
+    const user = await this.users.findById(userId)
+    if (!user) throw new UnauthorizedException()
+    if (user.role !== 'admin' || user.businessRole !== 'admin') throw new ForbiddenException('Company administrator access required')
+    return user
+  }
+
+  /** 测试连接不写账号数据；返回平台认证身份和当前公司，确认期间继续复核管理员身份及原绑定。 */
+  async testConnection(userId: string) {
+    await this.requireConnectionAdmin(userId)
+    const initial = await this.scope(userId)
+    if (!await this.providerCall(async () => this.provider.isConfigured())) throw new ServiceUnavailableException({ code: 'fop_not_configured', message: 'FOP data integration is not configured' })
+    const connection = await this.providerCall(() => this.provider.getConnectionContext())
+    await this.requireConnectionAdmin(userId)
+    await this.assertUnchanged(userId, initial)
+    if (initial.binding && !sameIdentity(initial.binding, connection.subject)) throw new ForbiddenException({ code: 'fop_binding_changed', message: 'Existing binding differs from the authenticated Kingdee user' })
+    return connection
+  }
+
+  /** 确认时重读平台身份，不接受前端指定目标账号；复用现有绑定字段及唯一约束，不扩大业务权限。 */
+  async connectCurrentAdmin(userId: string, expected: ConfirmFopConnectionDto) {
+    const initial = await this.requireConnectionAdmin(userId)
+    const connection = await this.testConnection(userId)
+    if (!sameIdentity(connection.subject, expected) || connection.currentOrganization.id !== expected.organizationId) {
+      throw new ForbiddenException({ code: 'fop_binding_changed', message: 'Kingdee identity or company changed; test the connection again' })
+    }
+    const binding = initial.fopTenantId && initial.fopUserId ? { tenantId: initial.fopTenantId, userId: initial.fopUserId } : null
+    return this.users.connectCurrentAdminFop(userId, binding, connection.subject)
+  }
+
   private async scope(userId: string): Promise<Scope> {
     const user = await this.users.findById(userId)
     if (!user) throw new UnauthorizedException('Account no longer exists')
@@ -79,7 +112,7 @@ export class FopDataService {
   private async assertUnchanged(userId: string, initial: Scope): Promise<void> {
     const current = await this.scope(userId)
     if (JSON.stringify(current.business) !== JSON.stringify(initial.business)
-      || !sameIdentity(current.binding, initial.binding)
+      || ((current.binding !== null || initial.binding !== null) && !sameIdentity(current.binding, initial.binding))
       || [...current.roles].sort().join(',') !== [...initial.roles].sort().join(',')) {
       throw new ForbiddenException({ code: 'fop_binding_changed', message: 'FOP binding or workbench access changed; reload before continuing' })
     }
@@ -91,7 +124,7 @@ export class FopDataService {
     if (!await this.providerCall(async () => this.provider.isConfigured())) throw new ServiceUnavailableException({ code: 'fop_not_configured', message: 'FOP data integration is not configured' })
     if ((initial.business.role === 'department_manager' && !initial.business.departmentId) || (initial.business.role === 'salesperson' && !initial.business.employeeId)) throw new ForbiddenException({ code: 'business_scope_required', message: 'Configure this account department or employee data scope first' })
     const identity = Object.freeze({ ...initial.binding })
-    const grant = await this.providerCall(() => this.provider.resolvePermissions(identity))
+    const grant = await this.providerCall(() => this.provider.resolvePermissions(identity, initial.business))
     await this.assertUnchanged(userId, initial)
     if (!sameIdentity(grant?.subject, identity) || !Array.isArray(grant?.allowedOrderIds)
       || grant.allowedOrderIds.some((id) => typeof id !== 'string' || !id.trim())) {
@@ -106,12 +139,25 @@ export class FopDataService {
     if (grant.analyticsScopes !== undefined && (!Array.isArray(grant.analyticsScopes) || grant.analyticsScopes.some(scope => !['rates', 'registrations', 'receipts', 'freight'].includes(scope)))) {
       throw new ForbiddenException({ code: 'fop_permission_denied', message: 'Invalid FOP analytics permissions' })
     }
-    return { subject: { ...identity }, allowedOrderIds: [...new Set(grant.allowedOrderIds)], allowedReceiptIds: [...new Set(grant.allowedReceiptIds ?? [])], allowedFreightIds: [...new Set(grant.allowedFreightIds ?? [])], analyticsScopes: [...new Set(grant.analyticsScopes ?? [])] }
+    if (grant.orderQuery && (grant.orderQuery.queues?.length !== 1 || grant.orderQuery.queues[0] !== 'review'
+      || !Array.isArray(grant.orderQuery.organizationIds) || !grant.orderQuery.organizationIds.length
+      || grant.orderQuery.organizationIds.some(id => typeof id !== 'string' || !/^[1-9]\d{0,18}$/.test(id)))) {
+      throw new ForbiddenException({ code: 'fop_permission_denied', message: 'Invalid FOP query grant' })
+    }
+    if (grant.analyticsQuery && (typeof grant.analyticsQuery !== 'object' || Array.isArray(grant.analyticsQuery)
+      || Object.entries(grant.analyticsQuery).some(([resource, ids]) => !['orders', 'receipts', 'registrations', 'freight'].includes(resource)
+        || !Array.isArray(ids) || ids.length > 200 || ids.some(id => typeof id !== 'string' || !/^[1-9]\d{0,18}$/.test(id))))) {
+      throw new ForbiddenException({ code: 'fop_permission_denied', message: 'Invalid FOP analytics query grant' })
+    }
+    return { subject: { ...identity }, allowedOrderIds: [...new Set(grant.allowedOrderIds)], allowedReceiptIds: [...new Set(grant.allowedReceiptIds ?? [])], allowedFreightIds: [...new Set(grant.allowedFreightIds ?? [])], analyticsScopes: [...new Set(grant.analyticsScopes ?? [])],
+      ...(grant.analyticsQuery ? { analyticsQuery: Object.fromEntries(Object.entries(grant.analyticsQuery).map(([resource, ids]) => [resource, [...ids]])) } : {}),
+      ...(grant.orderQuery ? { orderQuery: { queues: ['review'] as const, organizationIds: [...grant.orderQuery.organizationIds] } } : {}) }
   }
 
   private async providerCall<T>(operation: () => Promise<T>): Promise<T> {
     try { return await operation() } catch (error) {
-      if (error instanceof FopPermissionDeniedError) throw new ForbiddenException({ code: 'fop_permission_denied', message: 'FOP denied access to this employee account' })
+      if (error instanceof FopPermissionDeniedError) throw new ForbiddenException({ code: error.code, message: 'FOP denied access to this employee account' })
+      if (error instanceof FopIntegrationUnavailableError) throw new ServiceUnavailableException({ code: error.code, message: 'FOP query endpoint is not available' })
       // Even framework exceptions from adapters may contain private upstream diagnostics.
       throw new ServiceUnavailableException({ code: 'fop_unavailable', message: 'FOP data access is unavailable' })
     }
@@ -146,12 +192,34 @@ export class FopDataService {
     }
   }
 
-  private async scopedOrders(userId: string, requiredRole?: WorkbenchRole): Promise<{ orders: FopOrder[]; roles: WorkbenchRole[]; permission: FopPermissionGrant; initial: Scope }> {
+  /** 请求范围覆盖图表及环比基期，详情继续用相同范围计算TopN，避免点开后人群变化。 */
+  private reportRange(periods: { from: string; to: string; previousFrom?: string; previousTo?: string }[]): FopAnalyticsRange {
+    const from = periods.flatMap(period => [period.from, ...(period.previousFrom ? [period.previousFrom] : [])]).sort()[0]
+    const ends = periods.flatMap(period => [period.to, ...(period.previousTo ? [period.previousTo] : [])]).sort()
+    const to = ends[ends.length - 1]
+    return { from, to: to > businessDate(new Date()) ? businessDate(new Date()) : to }
+  }
+
+  private async analytics(userId: string, scoped: { permission: FopPermissionGrant; initial: Scope }, resource: FopAnalyticsResource, range: FopAnalyticsRange) {
+    if (!scoped.permission.analyticsQuery?.[resource]?.length) throw new ForbiddenException({ code: 'fop_permission_denied', message: 'Analytics resource access denied' })
+    if (range.from > businessDate(new Date())) return emptyAnalyticsData()
+    const result = await this.providerCall(() => this.provider.readAnalytics(scoped.permission.subject, scoped.permission, scoped.initial.business, resource, range))
+    await this.assertUnchanged(userId, scoped.initial)
+    return result
+  }
+
+  private async scopedOrders(userId: string, requiredRole?: WorkbenchRole, range?: FopAnalyticsRange): Promise<{ orders: FopOrder[]; roles: WorkbenchRole[]; permission: FopPermissionGrant; initial: Scope; range?: FopAnalyticsRange }> {
     const initial = await this.scope(userId)
     if (requiredRole ? !initial.roles.includes(requiredRole) : initial.roles.length === 0) {
       throw new ForbiddenException('Workbench access denied')
     }
     const permission = await this.permissions(userId, initial)
+    if (this.provider.pagedOrders) {
+      if (!range || !permission.analyticsQuery) throw new ServiceUnavailableException({ code: 'fop_feature_not_configured', message: 'This report is not integrated' })
+      const data = await this.analytics(userId, { permission, initial }, 'orders', range)
+      const orders = await this.providerCall(async () => data.orders.map(publicOrder))
+      return { orders, roles: initial.roles, permission, initial, range }
+    }
     const allowedIds = new Set(permission.allowedOrderIds)
     if (!allowedIds.size) return { orders: [], roles: initial.roles, permission, initial }
     const identity = Object.freeze({ ...permission.subject })
@@ -170,8 +238,12 @@ export class FopDataService {
     })
   }
 
-  private async scopedReceipts(userId: string, scoped: { permission: FopPermissionGrant; initial: Scope }): Promise<FopReceipt[]> {
+  private async scopedReceipts(userId: string, scoped: { permission: FopPermissionGrant; initial: Scope; range?: FopAnalyticsRange }): Promise<FopReceipt[]> {
     if (!scoped.permission.analyticsScopes?.includes('receipts')) return []
+    if (this.provider.pagedOrders && scoped.range) {
+      const data = await this.analytics(userId, scoped, 'receipts', scoped.range)
+      return this.providerCall(async () => data.receipts.map(publicReceipt))
+    }
     const allowed = new Set(scoped.permission.allowedReceiptIds ?? [])
     if (!allowed.size) return []
     const identity = Object.freeze({ ...scoped.permission.subject })
@@ -190,11 +262,15 @@ export class FopDataService {
     })
   }
 
-  private async scopedFreight(userId: string, requiredRole?: WorkbenchRole): Promise<{ records: FopFreight[]; initial: Scope }> {
+  private async scopedFreight(userId: string, requiredRole?: WorkbenchRole, range?: FopAnalyticsRange): Promise<{ records: FopFreight[]; initial: Scope }> {
     const initial = await this.scope(userId)
     if (requiredRole ? !initial.roles.includes(requiredRole) : !initial.roles.length) throw new ForbiddenException('Workbench access denied')
     const permission = await this.permissions(userId, initial)
     if (!permission.analyticsScopes?.includes('freight')) throw new ForbiddenException({ code: 'fop_permission_denied', message: 'Freight cost access denied' })
+    if (this.provider.pagedOrders && range) {
+      const data = await this.analytics(userId, { permission, initial }, 'freight', range)
+      return { records: await this.providerCall(async () => data.freight.map(publicFreight)), initial }
+    }
     const allowed = new Set(permission.allowedFreightIds ?? [])
     if (!allowed.size) return { records: [], initial }
     const identity = Object.freeze({ ...permission.subject })
@@ -218,8 +294,8 @@ export class FopDataService {
 
   async getFreight(userId: string, query: FreightQuery) {
     const now = new Date()
-    freightPeriods(query, now)
-    const { records, initial } = await this.scopedFreight(userId)
+    const { periods } = freightPeriods(query, now)
+    const { records, initial } = await this.scopedFreight(userId, undefined, this.reportRange(periods))
     const result = await this.providerCall(async () => aggregateFreight(records, query, now))
     await this.assertUnchanged(userId, initial)
     return { source: this.provider.source ?? 'fop', ...result }
@@ -229,7 +305,7 @@ export class FopDataService {
     const now = new Date()
     // Validate period IDs before data fetch; malformed user filters are HTTP 400.
     freightDetails([], query, now)
-    const { records, initial } = await this.scopedFreight(userId, query.workbenchRole)
+    const { records, initial } = await this.scopedFreight(userId, query.workbenchRole, this.reportRange(freightPeriods(query, now).periods))
     const result = await this.providerCall(async () => freightDetails(records, query, now))
     await this.assertUnchanged(userId, initial)
     return { source: this.provider.source ?? 'fop', ...result }
@@ -242,7 +318,9 @@ export class FopDataService {
 
   async getReceipts(userId: string, query: ReceiptQueryDto) {
     if (!validBusinessDay(query.from) || !validBusinessDay(query.to) || query.from < '2020-01-01' || query.from > query.to || query.to > businessDate(new Date())) throw new BadRequestException('Invalid receipt date range')
-    const scoped = await this.scopedOrders(userId, query.workbenchRole)
+    const initial = await this.scope(userId)
+    if (query.workbenchRole ? !initial.roles.includes(query.workbenchRole) : !initial.roles.length) throw new ForbiddenException('Workbench access denied')
+    const scoped = { initial, permission: await this.permissions(userId, initial), range: { from: query.from, to: query.to } }
     if (!scoped.permission.analyticsScopes?.includes('receipts')) throw new ForbiddenException('Receipt access denied')
     const records = await this.scopedReceipts(userId, scoped)
     const rows = eligibleReceipts(records).filter(r => businessDate(r.paidAt!) >= query.from && businessDate(r.paidAt!) <= query.to
@@ -255,7 +333,7 @@ export class FopDataService {
 
   async getOrderVolumeReceipts(userId: string, query: OrderVolumeDetailsDto) {
     if (query.category !== 'customer') throw new BadRequestException('Receipt cohort requires customer category')
-    const scoped = await this.scopedOrders(userId, query.workbenchRole)
+    const scoped = await this.scopedOrders(userId, query.workbenchRole, this.reportRange(orderVolumePeriods(query)))
     if (!scoped.permission.analyticsScopes?.includes('receipts')) throw new ForbiddenException('Receipt access denied')
     const receipts = await this.scopedReceipts(userId, scoped)
     const rows = orderVolumeReceiptDetails(scoped.orders, receipts, query)
@@ -266,6 +344,14 @@ export class FopDataService {
   async getOrders(userId: string, query: ListFulfillmentOrdersDto) {
     const role = FULFILLMENT_QUEUE_ROLES[query.queue]
     if (query.workbenchRole && query.workbenchRole !== role) throw new BadRequestException('workbenchRole does not match the requested queue')
+    if (this.provider.pagedOrders) {
+      const initial = await this.scope(userId)
+      if (!initial.roles.includes(role)) throw new ForbiddenException('Workbench access denied')
+      const permission = await this.permissions(userId, initial)
+      const result = await this.providerCall(() => this.provider.queryOrders(permission.subject, permission, initial.business, query))
+      await this.assertUnchanged(userId, initial)
+      return result
+    }
     const { orders } = await this.scopedOrders(userId, role)
     const search = query.search?.trim().toLowerCase()
     const filtered = orders.filter((order) => matchesQueue(order, query.queue)
@@ -278,7 +364,7 @@ export class FopDataService {
   }
 
   async getOrderVolume(userId: string, query: OrderVolumeQueryDto) {
-    const scoped = await this.scopedOrders(userId)
+    const scoped = await this.scopedOrders(userId, undefined, this.reportRange(orderVolumePeriods(query)))
     const receipts = query.category === 'customer' && scoped.permission.analyticsScopes?.includes('receipts') ? await this.scopedReceipts(userId, scoped) : undefined
     const result = aggregateOrderVolume(scoped.orders, query, new Date(), receipts)
     await this.assertUnchanged(userId, scoped.initial)
@@ -286,7 +372,7 @@ export class FopDataService {
   }
 
   async searchOrderCustomers(userId: string, query: OrderCustomerSearchDto) {
-    const scoped = await this.scopedOrders(userId)
+    const scoped = await this.scopedOrders(userId, undefined, { from: '2020-01-01', to: businessDate(new Date()), keyword: query.keyword })
     const receipts = await this.scopedReceipts(userId, scoped)
     const result = searchOrderCustomers(scoped.orders, query, receipts)
     await this.assertUnchanged(userId, scoped.initial)
@@ -294,7 +380,7 @@ export class FopDataService {
   }
 
   async getOrderVolumeDetails(userId: string, query: OrderVolumeDetailsDto) {
-    const scoped = await this.scopedOrders(userId, query.workbenchRole)
+    const scoped = await this.scopedOrders(userId, query.workbenchRole, this.reportRange(orderVolumePeriods(query)))
     const receipts = query.category === 'customer' ? await this.scopedReceipts(userId, scoped) : []
     const rows = orderVolumeDetails(scoped.orders, query, new Date(), receipts)
     await this.assertUnchanged(userId, scoped.initial)
@@ -310,6 +396,39 @@ export class FopDataService {
       || new Date(start).toISOString().slice(0, 10) !== query.from || new Date(end).toISOString().slice(0, 10) !== query.to
       || start > end || end - start > 365 * day || query.to > businessDate(now) || query.year > Number(businessDate(now).slice(0, 4))) {
       throw new BadRequestException('Invalid dashboard date range or year')
+    }
+    if (this.provider.pagedOrders) {
+      const initial = await this.scope(userId)
+      if (!initial.roles.includes('sales')) throw new ForbiddenException('Workbench access denied')
+      const permission = await this.permissions(userId, initial)
+      const summary = permission.orderQuery ? await this.providerCall(() => this.provider.queryOrders(permission.subject, permission, initial.business, { queue: 'review', page: 1, pageSize: 1 }, true)) : null
+      await this.assertUnchanged(userId, initial)
+      let registration: ReturnType<typeof aggregateRegistrations> = { registrations: [], registrationDepartments: [] }
+      const receiptsEnabled = !!permission.analyticsQuery?.receipts?.length && !!permission.analyticsScopes?.includes('receipts')
+      let receiptRecords: FopReceipt[] = []
+      if (permission.analyticsQuery?.registrations?.length && permission.analyticsScopes?.includes('registrations')) {
+        const facts = await this.analytics(userId, { permission, initial }, 'registrations', { from: query.from, to: query.to })
+        // 先按日期、部门、业务员合并注册事件，再复用既有图表聚合契约。
+        const entries = new Map<string, { date: string; salesDepartmentCode: typeof facts.registrations[number]['salesDepartmentCode']; owner: { id: string; name: string }; count: number }>()
+        for (const fact of facts.registrations) {
+          const date = businessDate(fact.registeredAt), key = JSON.stringify([date, fact.salesDepartmentCode, fact.owner.id])
+          const entry = entries.get(key)
+          if (entry) entry.count++
+          else entries.set(key, { date, salesDepartmentCode: fact.salesDepartmentCode, owner: fact.owner, count: 1 })
+        }
+        registration = await this.providerCall(async () => aggregateRegistrations([...entries.values()], query.from, query.to))
+      }
+      if (receiptsEnabled) {
+        receiptRecords = await this.scopedReceipts(userId, { permission, initial, range: { from: `${query.year - 1}-12-01`, to: query.year === Number(businessDate(now).slice(0, 4)) ? businessDate(now) : `${query.year}-12-31` } })
+      }
+      const receipts = await this.providerCall(async () => monthlyReceipts(receiptRecords, query.year, receiptsEnabled, now))
+      await this.assertUnchanged(userId, initial)
+      return { businessScope: initial.business, source: 'fop' as const, updatedAt: now.toISOString(),
+        integratedQueues: summary ? ['review'] : [], analyticsConfigured: !!permission.analyticsQuery,
+        queues: { review: summary?.total ?? null, allocation: null, dispatch: null, shipping: null },
+        tasks: summary?.total ? [{ id: 'review', kind: 'review', count: summary.total, time: '', priority: 'high' }] : [],
+        rates: [], ...registration, exceptions: [],
+        receipts }
     }
     const scoped = await this.scopedOrders(userId)
     // Date controls belong to registrations/receipts, not the current pending queues.

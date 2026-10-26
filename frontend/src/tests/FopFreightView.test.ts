@@ -33,7 +33,7 @@ describe('actual freight workbench details', () => {
     expect(wrapper.find('tfoot').text()).toContain('$600.00')
     expect(wrapper.find('tfoot').text()).toContain('CNY 1,400.00')
     expect(wrapper.find('tfoot').text()).toContain('USD 400.00')
-    expect(get).toHaveBeenLastCalledWith('/autoflow/integrations/fop/freight/details', { params: { grain: 'month', year: 2026, warehouse: 'HZ', carrierCode: 'YT', periodId: '2026-10', comparisonPeriod: 'current', workbenchRole: 'dispatch', page: 1, pageSize: 20 } })
+    expect(get).toHaveBeenLastCalledWith('/autoflow/integrations/fop/freight/details', { params: { grain: 'month', year: 2026, warehouse: 'HZ', carrierCode: 'YT', periodId: '2026-10', comparisonPeriod: 'current', workbenchRole: 'dispatch', page: 1, pageSize: 20 }, timeout: 180000 })
   })
   it('preserves comparison and week scope during pagination, and resets page when changing carrier', async () => {
     const { wrapper, router } = await setup('grain=week&year=2026&weekOf=2026-10-22&warehouse=SZ&carrierCode=YT&periodId=2026-10-19&comparisonPeriod=previous')

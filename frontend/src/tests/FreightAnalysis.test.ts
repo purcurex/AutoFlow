@@ -78,9 +78,9 @@ describe('freight analysis', () => {
     const { wrapper } = await setup()
     await wrapper.find('select[aria-label="运费年份"]').setValue('2025')
     await wrapper.find('select[aria-label="运费时间轴"]').setValue('week'); await flushPromises()
-    expect(get).toHaveBeenLastCalledWith('/autoflow/integrations/fop/freight', { params: { grain: 'week', year: 2025, weekOf: '2025-12-31', warehouse: 'ALL' } })
+    expect(get).toHaveBeenLastCalledWith('/autoflow/integrations/fop/freight', { params: { grain: 'week', year: 2025, weekOf: '2025-12-31', warehouse: 'ALL' }, timeout: 180000 })
     await wrapper.find('select[aria-label="运费时间轴"]').setValue('month'); await flushPromises()
-    expect(get).toHaveBeenLastCalledWith('/autoflow/integrations/fop/freight', { params: { grain: 'month', year: 2025, warehouse: 'ALL' } })
+    expect(get).toHaveBeenLastCalledWith('/autoflow/integrations/fop/freight', { params: { grain: 'month', year: 2025, warehouse: 'ALL' }, timeout: 180000 })
   })
   it('drills the full previous period into the available role when dispatch is unavailable', async () => {
     access.mockResolvedValueOnce({ roles: ['allocation'], isAdmin: false })

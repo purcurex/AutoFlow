@@ -6,7 +6,7 @@ import WorkbenchRoleAdminView from '@/views/WorkbenchRoleAdminView.vue'
 import { getWorkbenchAccounts, updateWorkbenchRoles, updateFopBinding, updateBusinessScope, updateManagementRole } from '@/api/workbench-access'
 
 vi.mock('@/components/layout', () => ({ AppLayout: { template: '<div><slot /></div>' } }))
-vi.mock('@/api/workbench-access', () => ({ getWorkbenchAccounts: vi.fn(), updateWorkbenchRoles: vi.fn(), updateFopBinding: vi.fn(), updateBusinessScope: vi.fn(), updateManagementRole: vi.fn() }))
+vi.mock('@/api/workbench-access', () => ({ getWorkbenchAccounts: vi.fn(), updateWorkbenchRoles: vi.fn(), updateFopBinding: vi.fn(), updateBusinessScope: vi.fn(), updateManagementRole: vi.fn(), testFopConnection: vi.fn(), bindCurrentFopConnection: vi.fn() }))
 
 describe('workbench role administration', () => {
   it('saves selected roles and only marks them saved after server confirmation', async () => {

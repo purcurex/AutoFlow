@@ -1,5 +1,5 @@
 import type { WorkbenchRole } from '@/utils/workbench'
-import type { FopBinding } from './fop-access'
+import type { FopBinding, FopConnectionContext } from './fop-access'
 
 export interface BusinessScope { role: 'none' | 'admin' | 'department_manager' | 'salesperson'; departmentId: string | null; employeeId: string | null }
 export interface WorkbenchAccess { roles: WorkbenchRole[]; isAdmin: boolean; businessRole?: BusinessScope['role'] }
@@ -24,6 +24,18 @@ export async function updateWorkbenchRoles(id: string, workbenchRoles: Workbench
 export async function updateFopBinding(id: string, binding: FopBinding | null): Promise<WorkbenchAccount> {
   const { default: api } = await import('./index')
   return api.put(`/users/${encodeURIComponent(id)}/fop-binding`, binding ?? { tenantId: null, userId: null })
+}
+
+export async function testFopConnection(): Promise<FopConnectionContext> {
+  const { default: api } = await import('./index')
+  return api.post('/autoflow/integrations/fop/connection/test')
+}
+
+export async function bindCurrentFopConnection(connection: FopConnectionContext): Promise<WorkbenchAccount> {
+  const { default: api } = await import('./index')
+  return api.post('/autoflow/integrations/fop/connection/bind', {
+    ...connection.subject, organizationId: connection.currentOrganization.id,
+  })
 }
 
 export async function updateBusinessScope(id: string, scope: BusinessScope): Promise<WorkbenchAccount> {

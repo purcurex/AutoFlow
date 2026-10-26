@@ -1,6 +1,9 @@
 export const fopOrderQueues = ['review', 'procurement', 'allocation', 'dispatch', 'shipping', 'exceptions'] as const
 export type FopOrderQueue = typeof fopOrderQueues[number]
 export interface FopOrderItem {
+  id?: string
+  parentId?: string
+  rowType?: number
   productId?: string
   sku: string
   name: string
@@ -28,10 +31,10 @@ export interface FopOrder {
   currency: string
   paymentStatus: 'paid' | 'unpaid' | 'refunded'
   reviewStatus: 'pending' | 'approved'
-  procurementStatus: 'pending' | 'purchased' | 'not_required'
-  allocationStatus: 'pending' | 'allocated' | 'not_ready'
-  dispatchStatus: 'pending' | 'dispatched' | 'not_ready'
-  shippingStatus: 'pending' | 'shipped' | 'not_ready'
+  procurementStatus: 'pending' | 'purchased' | 'not_required' | 'unknown'
+  allocationStatus: 'pending' | 'allocated' | 'not_ready' | 'unknown'
+  dispatchStatus: 'pending' | 'dispatched' | 'not_ready' | 'unknown'
+  shippingStatus: 'pending' | 'shipped' | 'not_ready' | 'unknown'
   warehouse: string
   carrier: string | null
   trackingNumber: string | null

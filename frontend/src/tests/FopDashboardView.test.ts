@@ -25,6 +25,16 @@ function mountView() {
 }
 describe('FOP Dashboard interactions', () => {
   beforeEach(() => { vi.mocked(getFopDashboard).mockReset().mockResolvedValue(structuredClone(sample)) })
+  it('shows unintegrated queues explicitly while retaining the live pending review count', async () => {
+    vi.mocked(getFopDashboard).mockResolvedValue({ ...sample, analyticsConfigured: false, integratedQueues: ['review'],
+      queues: { review: 32, allocation: null, dispatch: null, shipping: null }, tasks: [], exceptions: [] })
+    const wrapper = mountView(); await flushPromises()
+    const cards = wrapper.findAll('.summary-card')
+    expect(cards[0]!.find('strong').text()).toBe('32')
+    expect(cards.slice(1).every(card => card.find('strong').text() === '未接入')).toBe(true)
+    expect(wrapper.text()).toContain('本期已接入待审核履约订单')
+    wrapper.unmount()
+  })
   it('independently switches department and salesperson charts to signed monthly changes, including December baselines', async () => {
     vi.mocked(getFopDashboard).mockResolvedValue({ ...sample, receipts: { currency: 'USD', previousMonth: '2025-12', months: ['2026-01', '2026-02', '2026-03'],
       marketingCenter: { id: 'marketing', name: '营销中心', previousAmount: 80, amounts: [100, 50, 0] },

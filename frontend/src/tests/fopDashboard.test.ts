@@ -10,7 +10,7 @@ describe('user-scoped dashboard provider', () => {
     const response = { source: 'fop', queues: { review: 1 } }
     get.mockResolvedValue(response)
     expect(await getFopDashboard({ from: '2026-10-15', to: '2026-10-21', year: 2026, userId: 'forged' } as Parameters<typeof getFopDashboard>[0], now)).toEqual(response)
-    expect(get).toHaveBeenCalledWith('/autoflow/integrations/fop/dashboard', { params: { from: '2026-10-15', to: '2026-10-21', year: 2026 } })
+    expect(get).toHaveBeenCalledWith('/autoflow/integrations/fop/dashboard', { params: { from: '2026-10-15', to: '2026-10-21', year: 2026 }, timeout: 180000 })
   })
   it('uses UTC+8 for the day and year boundary even when the browser is in another timezone', async () => {
     const boundary = new Date('2026-12-31T16:01:00Z')

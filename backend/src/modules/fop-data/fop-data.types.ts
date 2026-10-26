@@ -1,4 +1,5 @@
 import type { FopFreightCandidate } from './fop-freight.types'
+import type { BusinessScope } from '../users/business-scope'
 export const SALES_DEPARTMENTS = [
   { id: 'sales1', name: '业务一部' }, { id: 'sales2', name: '业务二部' },
   { id: 'sales3', name: '业务三部' }, { id: 'sales4', name: '业务四部' },
@@ -6,6 +7,14 @@ export const SALES_DEPARTMENTS = [
 export type SalesDepartmentCode = typeof SALES_DEPARTMENTS[number]['id']
 
 export interface FopIdentity { tenantId: string; userId: string }
+
+/** 管理员连接预览只返回已认证身份、当前公司和资源类别，不返回任何认证凭据。 */
+export interface FopConnectionContext {
+  subject: FopIdentity
+  username: string | null
+  currentOrganization: { id: string; name: string }
+  resources: FopAnalyticsResource[]
+}
 
 export interface FopPermissionGrant {
   subject: FopIdentity
@@ -16,6 +25,10 @@ export interface FopPermissionGrant {
   /** Independent actual freight-cost resource grant; never inferred from orders. */
   allowedFreightIds?: readonly string[]
   analyticsScopes?: readonly FopAnalyticsScope[]
+  /** 真实分页模式只授权声明的队列；不把空 allowlist 解释成全部数据。 */
+  orderQuery?: { queues: readonly ['review']; organizationIds: readonly string[] }
+  /** 各统计资源的独立组织授权；仅真实查询适配器使用，不扩大订单/收款/成本权限。 */
+  analyticsQuery?: Partial<Record<FopAnalyticsResource, readonly string[]>>
 }
 
 export type FopAnalyticsScope = 'rates' | 'registrations' | 'receipts' | 'freight'
@@ -34,7 +47,21 @@ export interface FopAnalytics {
   registrationEntries?: FopRegistrationEntry[]
 }
 
+export type FopAnalyticsResource = 'orders' | 'receipts' | 'registrations' | 'freight'
+export interface FopAnalyticsRange { from: string; to: string; keyword?: string }
+export interface FopRegistrationFact {
+  id: string; registeredAt: string; organization: { id: string; name: string }
+  department: { id: string; name: string }; owner: { id: string; name: string }
+  salesDepartmentCode: SalesDepartmentCode
+}
+export interface FopAnalyticsData {
+  orders: FopOrderCandidate[]; receipts: FopReceiptCandidate[]; freight: FopFreightCandidate[]; registrations: FopRegistrationFact[]
+}
+
 export interface FopOrderItem {
+  id?: string
+  parentId?: string
+  rowType?: number
   productId?: string
   sku: string
   name: string
@@ -64,10 +91,10 @@ export interface FopOrder {
   currency: string
   paymentStatus: 'paid' | 'unpaid' | 'refunded'
   reviewStatus: 'pending' | 'approved'
-  procurementStatus: 'pending' | 'purchased' | 'not_required'
-  allocationStatus: 'pending' | 'allocated' | 'not_ready'
-  dispatchStatus: 'pending' | 'dispatched' | 'not_ready'
-  shippingStatus: 'pending' | 'shipped' | 'not_ready'
+  procurementStatus: 'pending' | 'purchased' | 'not_required' | 'unknown'
+  allocationStatus: 'pending' | 'allocated' | 'not_ready' | 'unknown'
+  dispatchStatus: 'pending' | 'dispatched' | 'not_ready' | 'unknown'
+  shippingStatus: 'pending' | 'shipped' | 'not_ready' | 'unknown'
   warehouse: string
   carrier: string | null
   trackingNumber: string | null
@@ -114,15 +141,37 @@ export interface FopReceiptCandidate extends FopReceipt { tenantId: string; depa
 
 export const FOP_DATA_PROVIDER = 'FOP_DATA_PROVIDER'
 
+export interface FopOrderPageQuery { queue: string; search?: string; orderNumber?: string; page: number; pageSize: number }
+export interface FopOrderPage {
+  source: 'fop'
+  items: FopOrder[]
+  total: number
+  page: number
+  pageSize: number
+  totals: { orderCount: number; itemQuantity: number; amountsByCurrency: { currency: string; amount: number }[] }
+}
+
 /** No employee identity, permission grant or scope is ever accepted from an HTTP client. */
 export abstract class FopDataProvider {
   readonly source: 'mock' | 'fop' = 'fop'
+  readonly pagedOrders: boolean = false
+  async getConnectionContext(): Promise<FopConnectionContext> {
+    throw new FopIntegrationUnavailableError('fop_feature_not_configured')
+  }
+  /** 真实统计按资源/日期分页读取，仅在Nest服务端汇总，不向浏览器暴露全量事实。 */
+  async readAnalytics(_identity: Readonly<FopIdentity>, _permission: Readonly<FopPermissionGrant>, _scope: Readonly<BusinessScope>, _resource: FopAnalyticsResource, _range: FopAnalyticsRange): Promise<FopAnalyticsData> {
+    throw new FopIntegrationUnavailableError('fop_feature_not_configured')
+  }
   demoIdentity(_localUserId: string): FopIdentity | null { return null }
   async getAnalytics(identity: Readonly<FopIdentity>, _permission: Readonly<FopPermissionGrant>, _range: { from: string; to: string }): Promise<FopAnalytics> {
     return { subject: { ...identity }, rates: [], registrations: [] }
   }
   abstract isConfigured(): boolean
-  abstract resolvePermissions(identity: Readonly<FopIdentity>): Promise<FopPermissionGrant>
+  abstract resolvePermissions(identity: Readonly<FopIdentity>, scope?: Readonly<BusinessScope>): Promise<FopPermissionGrant>
+  /** 默认适配器继续走完整数组契约；真实查询明确使用有权限的服务端分页能力。 */
+  async queryOrders(_identity: Readonly<FopIdentity>, _permission: Readonly<FopPermissionGrant>, _scope: Readonly<BusinessScope>, _query: FopOrderPageQuery, _summaryOnly = false): Promise<FopOrderPage> {
+    throw new FopIntegrationUnavailableError('fop_feature_not_configured')
+  }
   abstract listOrders(identity: Readonly<FopIdentity>, permission: Readonly<FopPermissionGrant>): Promise<FopOrderCandidate[]>
   async listFreight(_identity: Readonly<FopIdentity>, _permission: Readonly<FopPermissionGrant>): Promise<FopFreightCandidate[]> {
     throw new Error('Freight data provider is not configured')
@@ -133,7 +182,12 @@ export abstract class FopDataProvider {
   }
 }
 
-export class FopPermissionDeniedError extends Error {}
+export class FopPermissionDeniedError extends Error {
+  constructor(message = 'FOP access denied', readonly code: 'fop_permission_denied' | 'fop_authentication_expired' = 'fop_permission_denied') { super(message) }
+}
+export class FopIntegrationUnavailableError extends Error {
+  constructor(readonly code: 'fop_feature_not_configured' | 'fop_endpoint_not_published' | 'fop_mapping_required' | 'fop_fx_missing' | 'fop_result_too_large') { super(code) }
+}
 
 export class UnconfiguredFopDataProvider extends FopDataProvider {
   isConfigured() { return false }

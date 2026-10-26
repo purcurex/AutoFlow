@@ -24,4 +24,4 @@ export interface FopReceiptQuery {
   warehouse: 'ALL' | 'HZ' | 'SZ'; sourceType?: 'fulfillment' | 'full_payment_stock'
   workbenchRole: WorkbenchRole; page: number; pageSize: number
 }
-export const getFopReceipts = (query: FopReceiptQuery): Promise<FopReceiptPage> => api.get('/autoflow/integrations/fop/receipts', { params: query })
+export const getFopReceipts = (query: FopReceiptQuery): Promise<FopReceiptPage> => api.get('/autoflow/integrations/fop/receipts', { params: query, timeout: 180000 })

@@ -23,7 +23,7 @@ import { OrganizationModule } from './modules/organization/organization.module'
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: ['.env.alibaba1688.local', '.env.providers.local', '.env'],
+      envFilePath: ['.env.fop.local', '.env.alibaba1688.local', '.env.providers.local', '.env'],
       validate: validateEnvironment,
     }),
 

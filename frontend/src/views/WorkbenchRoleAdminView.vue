@@ -2,10 +2,10 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { AppLayout } from '@/components/layout'
-import { getWorkbenchAccounts, updateWorkbenchRoles, updateFopBinding, updateBusinessScope, updateManagementRole, type BusinessScope, type WorkbenchAccount } from '@/api/workbench-access'
+import { getWorkbenchAccounts, updateWorkbenchRoles, updateFopBinding, updateBusinessScope, updateManagementRole, testFopConnection, bindCurrentFopConnection, type BusinessScope, type WorkbenchAccount } from '@/api/workbench-access'
 import { useUserStore } from '@/stores/user'
 import { refreshWorkbenchAccess } from '@/composables/useWorkbenchAccess'
-import type { FopBinding } from '@/api/fop-access'
+import { fopAccessError, type FopBinding, type FopConnectionContext } from '@/api/fop-access'
 import { workbenchNames, workbenchRoles, type WorkbenchRole } from '@/utils/workbench'
 
 const { locale } = useI18n()
@@ -24,11 +24,15 @@ const busy = ref(false)
 const saving = ref('')
 const error = ref('')
 const success = ref('')
+const connection = ref<FopConnectionContext | null>(null)
+let connectionRequestId = 0
 let requestId = 0
 async function load(reset = false) {
   if (saving.value) return
   if (reset) page.value = 1
   const request = ++requestId
+  connectionRequestId++
+  connection.value = null
   busy.value = true
   error.value = ''
   success.value = ''
@@ -45,6 +49,51 @@ async function load(reset = false) {
   } catch {
     if (request === requestId) error.value = text('账号加载失败，请确认管理员权限后重试。', 'Could not load accounts. Check administrator access and retry.')
   } finally { if (request === requestId) busy.value = false }
+}
+
+function isCurrentCompanyAdmin(account: WorkbenchAccount) {
+  return account.id === userStore.user?.id && account.role === 'admin' && account.businessScope?.role === 'admin'
+}
+
+/** 连接预览不写绑定；账号切换、重载或页面卸载后，丢弃旧账号的响应。 */
+async function testKingdeeConnection(account: WorkbenchAccount) {
+  if (saving.value || !isCurrentCompanyAdmin(account)) return
+  const request = ++connectionRequestId
+  saving.value = account.id
+  connection.value = null
+  error.value = ''
+  success.value = ''
+  try {
+    const result = await testFopConnection()
+    if (request !== connectionRequestId || !isCurrentCompanyAdmin(account)) return
+    connection.value = result
+    success.value = text('金蝶连接成功，请核对公司后确认绑定当前账号。', 'Connected to Kingdee. Check the company before linking this account.')
+  } catch (cause) {
+    if (request === connectionRequestId && isCurrentCompanyAdmin(account)) error.value = fopAccessError(cause, zh.value)
+  } finally { if (request === connectionRequestId) saving.value = '' }
+}
+
+/** 确认只提交预览的核对值；服务端重新认证并只绑定当前账号，前端不提交目标账号ID。 */
+async function bindKingdeeConnection(account: WorkbenchAccount) {
+  if (saving.value || !connection.value || !isCurrentCompanyAdmin(account)) return
+  const preview = connection.value, request = ++connectionRequestId
+  saving.value = account.id
+  error.value = ''
+  success.value = ''
+  try {
+    const saved = await bindCurrentFopConnection(preview)
+    if (request !== connectionRequestId || !isCurrentCompanyAdmin(account)) return
+    account.fopBinding = saved.fopBinding
+    bindings.value[account.id] = { tenantId: saved.fopBinding?.tenantId ?? '', userId: saved.fopBinding?.userId ?? '' }
+    connection.value = null
+    success.value = text('当前账号已绑定金蝶，可返回 Dashboard 查询公司数据。', 'This account is linked to Kingdee. Return to Dashboard to query company data.')
+    await refreshWorkbenchAccess()
+  } catch (cause) {
+    if (request !== connectionRequestId || !isCurrentCompanyAdmin(account)) return
+    connection.value = null
+    const conflict = typeof cause === 'object' && cause !== null && 'statusCode' in cause && cause.statusCode === 409
+    error.value = conflict ? text('该金蝶用户已绑定其他账号，请核对现有绑定。', 'This Kingdee user is already linked to another account.') : fopAccessError(cause, zh.value)
+  } finally { if (request === connectionRequestId) saving.value = '' }
 }
 function changed(account: WorkbenchAccount) {
   const draft = drafts.value[account.id] || []
@@ -126,7 +175,7 @@ async function saveManagement(account: WorkbenchAccount) {
   } finally { saving.value = '' }
 }
 onMounted(() => load())
-onBeforeUnmount(() => { requestId++ })
+onBeforeUnmount(() => { requestId++; connectionRequestId++ })
 </script>
 
 <template>
@@ -170,7 +219,18 @@ onBeforeUnmount(() => { requestId++ })
           <button v-if="account.businessScope?.role !== 'admin'" data-save class="btn btn-secondary" :disabled="!!saving || !changed(account)" @click="save(account)">{{ text('保存岗位权限', 'Save workbench access') }}</button>
         </div>
       </td><td class="min-w-[320px]">
-        <form class="space-y-2 py-2" @submit.prevent="saveBinding(account)">
+        <div v-if="isCurrentCompanyAdmin(account)" class="space-y-3 py-2" data-kingdee-connection>
+          <p class="text-xs" :class="account.fopBinding ? 'text-emerald-600' : 'text-amber-600'">{{ account.fopBinding ? text('已绑定金蝶', 'Linked to Kingdee') : text('尚未连接金蝶', 'Not linked to Kingdee') }}</p>
+          <p class="text-xs text-slate-500">{{ text('身份和当前公司由金蝶自动识别，查询仍受金蝶数据权限限制。', 'Kingdee identifies the user and current company. Kingdee data permissions still apply.') }}</p>
+          <button type="button" class="btn btn-secondary" data-test-connection :disabled="!!saving" @click="testKingdeeConnection(account)">{{ text('测试金蝶连接', 'Test Kingdee connection') }}</button>
+          <div v-if="connection" class="space-y-2 rounded-lg border p-3 text-xs" data-connection-preview>
+            <p>{{ text('当前公司：', 'Current company: ') }}<strong>{{ connection.currentOrganization.name }}</strong></p>
+            <p v-if="connection.username">{{ text('金蝶账号：', 'Kingdee user: ') }}{{ connection.username }}</p>
+            <button type="button" class="btn btn-primary" data-bind-connection :disabled="!!saving" @click="bindKingdeeConnection(account)">{{ text('确认绑定当前账号', 'Link this account') }}</button>
+          </div>
+          <button v-if="account.fopBinding" type="button" data-unlink class="text-xs text-red-600" :disabled="!!saving" @click="connection = null; saveBinding(account, true)">{{ text('解除绑定', 'Unlink') }}</button>
+        </div>
+        <form v-else class="space-y-2 py-2" @submit.prevent="saveBinding(account)">
           <p class="text-xs" :class="account.fopBinding ? 'text-emerald-600' : 'text-amber-600'">{{ account.fopBinding ? text('已绑定 · 后台授权后可访问数据', 'Linked · FOP authorization required') : text('未绑定 · 不可访问 FOP 数据', 'Unlinked · No FOP data access') }}</p>
           <label class="flex items-center gap-2 text-xs"><span class="w-16 shrink-0">{{ text('租户 ID', 'Tenant ID') }}</span><input v-model="bindings[account.id]!.tenantId" class="input" maxlength="128" autocomplete="off" :disabled="!!saving" :aria-label="`${account.username} · FOP ${text('租户 ID', 'tenant ID')}`" /></label>
           <label class="flex items-center gap-2 text-xs"><span class="w-16 shrink-0">{{ text('用户 ID', 'User ID') }}</span><input v-model="bindings[account.id]!.userId" class="input" maxlength="128" autocomplete="off" :disabled="!!saving" :aria-label="`${account.username} · FOP ${text('用户 ID', 'user ID')}`" /></label>

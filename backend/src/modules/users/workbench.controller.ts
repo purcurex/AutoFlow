@@ -1,6 +1,6 @@
 import { FreightQueryDto, FreightDetailsDto } from '../fop-data/fop-freight.dto'
 import { AllowWithoutBusinessData } from '../auth/management-access.decorator'
-import { Controller, Get, Header, Param, Query, Request, UseGuards } from '@nestjs/common'
+import { Body, Controller, Get, Header, Param, Post, Query, Request, UseGuards } from '@nestjs/common'
 import { Request as ExpressRequest } from 'express'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
 import { WorkbenchAccessService } from './workbench-access.service'
@@ -9,6 +9,7 @@ import { FopDataService } from '../fop-data/fop-data.service'
 import { OrderVolumeQueryDto, OrderVolumeDetailsDto, OrderCustomerSearchDto } from '../fop-data/order-volume.dto'
 import { ReceiptQueryDto } from '../fop-data/fop-receipts.dto'
 import { FopDashboardQueryDto, FopDataAccessQueryDto } from '../fop-data/fop-data.dto'
+import { ConfirmFopConnectionDto } from '../fop-data/fop-connection.dto'
 
 @AllowWithoutBusinessData()
 @Controller('workbench')
@@ -34,6 +35,21 @@ export class WorkbenchController {
 @UseGuards(JwtAuthGuard)
 export class FulfillmentOrdersController {
   constructor(private readonly data: FopDataService) {}
+
+  /** 无业务账号绑定时也可测试，但服务层仍要求当前账号同时具备系统及业务管理员角色。 */
+  @AllowWithoutBusinessData()
+  @Post('connection/test')
+  @Header('Cache-Control', 'private, no-store')
+  testConnection(@Request() req: ExpressRequest) {
+    return this.data.testConnection(req.user!.userId)
+  }
+
+  @AllowWithoutBusinessData()
+  @Post('connection/bind')
+  @Header('Cache-Control', 'private, no-store')
+  connectCurrentAdmin(@Request() req: ExpressRequest, @Body() body: ConfirmFopConnectionDto) {
+    return this.data.connectCurrentAdmin(req.user!.userId, body)
+  }
 
   @Get('fulfillment-orders')
   @Header('Cache-Control', 'private, no-store')
