@@ -24,9 +24,31 @@
 - 组织整体汇总独立授权，只返回可信部门聚合；不能以个人小计冒充完整部门合计，也不能借汇总许可获取成员／客户／单据。保留原ECharts结构及金额口径。客户当前归属、历史收款／订单归属与冻结毛利分开，移交不能自动转移历史业绩或放开历史访问。
 - 员工业务页面使用自然业务文案；下拉选项只显示业务名称或简短选择提示（如“请选择业务员”），不附加绑定步骤、默认身份或授权机制说明。业务页面不展示“本租户授权数据”“获授权范围”等技术性权限描述或后台身份编号。各ECharts面板标题上方不再展示“当前统计范围”“我的业务”等范围提示，保留简洁标题及筛选；聚合用“统计部门合计”“当前成员合计”，不能将部分成员小计改称完整部门合计；必要的授权配置和身份字段保留在管理员设置页。
 
-- 五类履约待办顺序：待审核(review)、待履约(dispatch，Shopify待同步)、待采购(procurement，供应商未全部发货)、待配货(allocation，未齐套或齐套未审)、待出库(shipping，配货齐套已审尚未全部出库)。统一已付款且有效；后四类需履约已审核。独立fulfillmentProgress驱动，不能从旧粗粒度发运字段推导。队列可重叠，同队列按订单去重；细则见需求第9节、源码映射第12节。
+- 五类履约待办顺序：待审核(review)、待履约(dispatch，Shopify待同步)、待采购(procurement，供应商未全部发货且采购下单/付款未完成)、待配货(allocation，仅未齐套)、待出库(shipping，齐套未审或已审尚未全部出库)。统一已付款且有效；后四类需履约已审核。独立fulfillmentProgress驱动，不能从旧粗粒度发运字段推导。队列可重叠，同队列按订单去重；细则见需求第9节、源码映射第12节。
 
 - 五类待办卡片、tasks、明细、搜索、分页与金额／数量合计统一先按服务端登录账号的业务范围和FOP白名单过滤。本人／部门／业务管理员分级不因系统管理员身份或全部岗位授权扩大；空白名单为零，未绑定或授权失败明确拒绝。专项验收D31，需求第9.1节。
-- 协同岗位（销售总监、订单管理、采购、配货、发运、仓库）可独立配置“全部业务数据”（businessRole=admin），无需系统管理角色；FOP绑定用户仍需公司业务授权。五个工作台全部待办（含异常）支持departmentId筛选，先授权再部门筛选、合计和分页；固定按paidAt升序/id升序，缺失日期最后，不以createdAt替代。部门选择跨搜索/翻页/工作台待办保留；Demo订单归属销售员工，协同人员不模拟为客户归属业务员。
+- 协同岗位（销售总监、订单管理、采购、配货、发运、仓库）可独立配置“全部业务数据”（businessRole=admin），无需系统管理角色；FOP绑定用户仍需公司业务授权。五个工作台全部待办（含异常）支持departmentId筛选，先授权再部门筛选、合计和分页；默认按paidAt升序/id升序，表头可切换paidAtOrder=asc/desc，排序前置于分页、同时间id升序且缺失日期始终最后，不以createdAt替代。部门选择跨搜索/翻页/工作台待办保留；Demo订单归属销售员工，协同人员不模拟为客户归属业务员。
 
-- 待办工作台只读：仅查询履约进度，业务审核/采购/配货/发运/出库在FOP执行。商品列第二、订单号可复制、一单多品合并展示。可见且联网每30秒刷新，返回页面或恢复网络立即刷新；refreshedAt只是BFF查询完成时间，生产同步延迟必须由FOP真实链路/水位验证，不可把Demo轮询宣称生产实时同步。
+- 待办工作台默认只读；新增9.11例外：销售review与配货allocation_review支持勾选后委托FOP执行原生audit，独立操作授权/版本/幂等/逐单结果必须校验；其他采购/配货调整/发运/出库仍在FOP执行。商品列第二、订单号及客户名称可复制、一单多品合并展示。可见且联网每30秒刷新，返回页面或恢复网络立即刷新；refreshedAt只是BFF查询完成时间，生产同步延迟必须由FOP真实链路/水位验证，不可把Demo轮询宣称生产实时同步。
+
+- 工作台导航：岗位顺序与Dashboard卡片一致：销售（待审核）→发运（待履约）→采购（待采购）→配货（待配货）→仓库（待出库）；只展示已授权岗位，授权返回顺序不影响显示。各岗位待办清单在分析页之前；销售页签顺序unpaid待支付、review待审核、exceptions异常，再个人业绩及分析，但默认首页明确为review，不按第一个页签推导；采购procurement、配货allocation_review（已齐套待审核）、发运dispatch、仓库shipping。显式queue链接保留原目标。
+
+- 采购待办用procurementProgress独立下单/采购付款事实替换履约支付状态展示；客户已付不代表采购已付，采购申请审核/表头采购中不代表已正式下单。一单多采购按有效需求归一、部分下单/部分付款并列保留，unknown不推断。供应商未全部发货为共同门槛；ordered+paid进入procurement_shipping，其余进入procurement，两个页签互斥；真实1688/线下、取消重采、退款与付款分摊见需求9.4、源码映射12.1、T32/H34/D32。
+
+- 配货工作台不显示客户支付状态，两个页签互斥：allocation为“未齐套，未配货”（stockReadiness=incomplete）；allocation_review为“已齐套待审核”（ready且allocationReview=pending、outbound!=completed），两页均显示dispatchDocuments发运单状态。现有已付/履约已审门槛保留；ready应由有效配货单齐套完成事实证明，available可配货不等于completed已齐套。
+
+- 发运工作台以dispatchDocuments逐张显示发运单状态（暂存/已提交/已审核），替换客户支付状态，保留独立Shopify履约状态。读取hzkj_deliver_bill而非发货通知单；A/B/C归一，订单/发运权限及组织客户来源同时校验；null/缺失是待确认，[]仅确认无有效单据；多张单据不重复计订单，不按最高审核状态冒充整单。真实适配见9.6/12.3、T33/H35/D33。
+
+- 仓库待出库清单分两组：已齐套未审核（ready、allocationReview=pending，排除outbound=completed）；已审核未出库（ready、allocationReview=approved、outbound=pending/partial）。配货单状态替换支付状态，出库进度独立；仍需客户已付、履约已审、有效且有权。第一组与配货工作台可重叠，Dashboard shipping卡片/tasks/清单合计统一按两组去重，部分出库保留、全部出库退出。
+
+- 清单拆分最新规则见需求9.7：采购procurement_shipping为全部下单且采购款付清、供应商未全部发货（含partial）；仓库warehouseStage=all/pending_review/pending_outbound，仅shipping可用，先授权筛选再合计分页。新页签继承采购/配货岗位权限；配货默认页为allocation_review，Dashboard procurement/allocation分别对应procurement和allocation清单，shipping仍统计两组。
+
+- 销售待支付清单queue=unpaid继承sales角色及订单数据权限，未取消且paymentStatus=unpaid；退款/未知不得当未付，FOP明确待支付状态为hzkj_orderstatus=1。收款日期为空显示—，金额为订单应付金额而非已收款，不计入Dashboard原五张已付待办或回款。付款后退出本页、未审核进入review，依赖只读刷新。
+
+- 工作台状态排序（需求9.9）：sortBy=paidAt/dispatchDocumentStatus/allocationDocumentStatus/outboundStatus，sortOrder=asc/desc；默认paidAt兼容paidAtOrder。先授权/筛选后全量排序再分页；多发运单取最早明确阶段，任一未知则该订单待确认置后，[]明确未生成最前；状态同值按paidAt升序/id升序，未知和空日期始终最后。单排序不改变逐张单据展示、权限、合计或Dashboard默认顺序。
+
+- 采购旺旺催办（9.10）：仅procurement_shipping行入口，按履约源单/分录→有效采购单→实际卖家hzkj_sellers_ww关联，禁止SKU默认供应商猜测。独立allowedPurchaseOrderIds与订单/本人部门范围同时满足；单对象自动尝试，多采购单逐单选择。打开前查最新事实与contactVersion，变更/撤权停止；只打开聊天不自动发消息/改业务状态。Mock mode=demo,url=null。FOP现成HTTP端点与客户端协议尚需H36确认，真实provider接入T34、验收D37。
+
+- 工作台审核9.11：hzkj_orders与hzkj_alloc_bill/audit，A不自动提交，B且有权可审，C跳过。配货要求齐套及有效已审发运；后置通知失败为已审核警告。approvalActions缺失拒绝，不由系统管理员/业务全量读权推导。当前HTTP网关合同待T35/H37/D38发布联调，Demo为进程内模拟状态，未修改FOP源库。
+
+- 交付补充（2026-10-26）：全部待办每页20/50/100，前端默认显式50、切换回第一页，纵向平铺；接口兼容1–100且省略默认20。审核当前页最多100笔，超时/部分成功逐项处理。仓库筛选最左出库阶段、最右所属部门。汇率显示USD/原币四位（CNY为USD/CNY），取fxRateToUsd倒数；API和金额计算保留原精度，日期与来源保留。

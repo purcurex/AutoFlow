@@ -497,7 +497,7 @@ async function confirmLifecycleAction() {
           <div v-if="actionMessage" class="notice mb-5 border-red-400 bg-red-50 text-red-800 dark:bg-red-950/50 dark:text-red-200">{{ actionMessage }}</div>
           <div class="grid gap-5 md:grid-cols-2">
             <label><span class="field-label">{{ t('workflows.name') }}</span><input v-model="form.name" class="input" :placeholder="t('workflows.namePlaceholder')" /></label>
-            <fieldset><legend class="field-label">{{ t('workflows.seedType') }}</legend><div class="grid grid-cols-2 gap-2"><label class="flex cursor-pointer items-center gap-2 rounded-md border p-3 text-sm font-semibold transition" :class="form.seedType === 'keyword' ? 'border-orange-500 bg-orange-50 text-orange-700 dark:bg-orange-500/10 dark:text-orange-300' : 'border-slate-200 text-slate-600 dark:border-slate-700 dark:text-slate-300'"><input v-model="form.seedType" type="radio" value="keyword" class="sr-only" /><KeyRound class="h-4 w-4" />{{ t('workflows.keyword') }}</label><label class="flex cursor-pointer items-center gap-2 rounded-md border p-3 text-sm font-semibold transition" :class="form.seedType === 'image' ? 'border-orange-500 bg-orange-50 text-orange-700 dark:bg-orange-500/10 dark:text-orange-300' : 'border-slate-200 text-slate-600 dark:border-slate-700 dark:text-slate-300'"><input v-model="form.seedType" type="radio" value="image" class="sr-only" /><Image class="h-4 w-4" />{{ t('workflows.image') }}</label></div></fieldset>
+            <fieldset><legend class="field-label">{{ t('workflows.seedType') }}</legend><div class="grid grid-cols-2 gap-2"><label class="flex cursor-pointer items-center gap-2 rounded-md border p-3 text-sm font-semibold transition" :class="form.seedType === 'keyword' ? 'selection-active' : 'border-slate-200 text-slate-600 dark:border-slate-700 dark:text-slate-300'"><input v-model="form.seedType" type="radio" value="keyword" class="sr-only" /><KeyRound class="h-4 w-4" />{{ t('workflows.keyword') }}</label><label class="flex cursor-pointer items-center gap-2 rounded-md border p-3 text-sm font-semibold transition" :class="form.seedType === 'image' ? 'selection-active' : 'border-slate-200 text-slate-600 dark:border-slate-700 dark:text-slate-300'"><input v-model="form.seedType" type="radio" value="image" class="sr-only" /><Image class="h-4 w-4" />{{ t('workflows.image') }}</label></div></fieldset>
             <label v-if="form.seedType === 'keyword'" class="md:col-span-2"><span class="field-label">{{ t('workflows.seedValue') }} <em class="font-normal not-italic text-red-500">*</em></span><input v-model="form.seedValue" class="input" :placeholder="t('workflows.seedPlaceholder')" required /><span class="field-help">{{ t('workflows.helperKeyword') }}</span></label>
             <div v-else class="md:col-span-2">
               <span class="field-label">{{ t('workflows.productImage') }} <em class="font-normal not-italic text-red-500">*</em></span>
@@ -531,7 +531,7 @@ async function confirmLifecycleAction() {
               </div>
               <div v-if="isUploadingImage" class="mt-2 flex items-center gap-2 text-xs font-medium text-orange-700 dark:text-orange-300"><LoaderCircle class="h-4 w-4 animate-spin" />{{ t('workflows.imageUploading') }}</div>
               <p v-if="imageUploadError" class="mt-2 text-xs font-medium text-red-600 dark:text-red-400">{{ imageUploadError }}</p>
-              <p v-else-if="imageUpload && !imageUpload.providerReady" class="notice mt-3 border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">{{ t('workflows.imageProviderWarning') }}</p>
+              <p v-else-if="imageUpload && !imageUpload.providerReady" class="notice mt-3 tone-warning">{{ t('workflows.imageProviderWarning') }}</p>
               <label class="mt-3 block"><span class="field-label">{{ t('workflows.imageUrlAlternative') }}</span><input v-model="form.seedValue" class="input" :placeholder="t('workflows.imagePastePlaceholder')" required @paste="handleImagePaste" /></label>
               <span class="field-help">{{ t('workflows.helperImage') }}</span>
             </div>
@@ -552,7 +552,7 @@ async function confirmLifecycleAction() {
                   v-for="market in targetMarkets"
                   :key="market.code"
                   class="relative flex min-h-24 cursor-pointer flex-col items-center justify-center gap-1 rounded-md border px-3 py-3 text-center transition"
-                  :class="form.targetMarket === market.value ? 'border-orange-500 bg-orange-50 text-orange-800 shadow-sm dark:bg-orange-500/10 dark:text-orange-200' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:bg-[#171b21] dark:text-slate-300 dark:hover:bg-[#20252d]'"
+                  :class="form.targetMarket === market.value ? 'selection-active shadow-sm' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:bg-[#171b21] dark:text-slate-300 dark:hover:bg-[#20252d]'"
                 >
                   <input v-model="form.targetMarket" type="radio" name="target-market" :value="market.value" class="sr-only" required />
                   <img :src="market.flagUrl" alt="" class="h-5 w-7 rounded-sm object-cover shadow-sm ring-1 ring-slate-200" aria-hidden="true" />

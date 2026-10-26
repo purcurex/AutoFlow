@@ -1,6 +1,19 @@
 # HyperZone ECharts 全面诊断与 API 对接需求
 
-更新日期：2026-10-23（UTC+8）；保留2026-10-22既有诊断和需求。适用对象：前端、平台后端、FOP（金蝶云苍穹上的 HyperZone 自研应用）开发、测试与实施人员。
+更新日期：2026-10-26（UTC+8）；当前交付以本版为准，保留历史诊断与验证证据。适用对象：前端、平台后端、FOP（金蝶云苍穹上的 HyperZone 自研应用）开发、测试与实施人员。
+
+## 0. 最新交付增量（2026-10-26）
+
+本版包含35项平台HTTP操作、144个数据模型；OpenAPI版本为`2026-10-26`。平台路由使用`/api`前缀，FOP员工网关为待IT发布的上游合同。已有生产接入待办不因Mock验证通过而关闭。
+
+| 变更 | 当前行为与接口约定 |
+| --- | --- |
+| 待办与默认首页 | 九类queue保留原岗位及用户数据范围；销售默认review，配货默认allocation_review（已齐套待审核），采购默认procurement，发运默认dispatch，仓库默认shipping。显式queue始终优先；Dashboard待配货卡片仍指向allocation，不随默认首页改变 |
+| 分页与展示 | 所有待办每页选项20、50、100，前端默认显式请求50；切换条数回第1页并保留其他筛选。一单多品按订单分页，每页纵向平铺，只使用页面最外层纵向滚动。GET接口兼容1–100，省略pageSize仍为20，不与前端默认值混淆 |
+| 仓库筛选顺序 | 最左出库阶段warehouseStage → 搜索/查询 → 订单数 → 最右所属部门departmentId；all/pending_review/pending_outbound口径不变，先授权再筛选、排序、全量合计及分页 |
+| 单笔与批量审核 | review/allocation_review先预览、再委托FOP原生audit；当前页最多100笔，独立approvalActions、版本校验及幂等，逐订单/逐单据返回结果。时间预算或上游故障保留未提交/待核对，不保证100笔在真实环境一次全部完成；生产见T35/H37/D38 |
+| 供应商旺旺催办 | 仅已采购待发货，按真实采购来源关联和独立采购权限查询；打开前再次核对contactVersion。多供应商逐单选择，只唤醒会话，不自动发消息；Mock不打开虚构供应商账号；生产见T34/H36/D37 |
+| 汇率显示 | 运费及毛利明细统一USD为基准、四位小数。CNY显示USD/CNY 7.1200，表示1 USD兑换7.1200 CNY；来源为fxRateToUsd倒数，日期/来源保留。其他原币保持真实币种；API与财务计算仍使用原始完整精度，不使用显示四舍五入值参与金额计算 |
 
 ## 1. 交付结论与阅读方式
 
@@ -227,7 +240,7 @@
 
 
 
-更新日期：2026-10-23（UTC+8）。适用基线：方案2代码提交 `d60fd5d`、物流运费成本快照及销售个人收款／净毛利扩展、最新OpenAPI与HyperZone FOP源码映射。物流阶段19个操作／82个模型属于历史规模，当前数量以规范文件为准。本文作为完整需求第7章的补充，区分“已经实现”“待开发”“待提供资料”，便于业务、财务、FOP研发与实施人员逐项回填。历史测试数量保留作证据，本次实际验证以 VERIFICATION.md 为准。
+更新日期：2026-10-26（UTC+8）。适用基线：方案2代码提交 `d60fd5d`、物流运费成本快照及销售个人收款／净毛利扩展、最新OpenAPI与HyperZone FOP源码映射。物流阶段19个操作／82个模型属于历史规模，当前数量以规范文件为准。本文作为完整需求第7章的补充，区分“已经实现”“待开发”“待提供资料”，便于业务、财务、FOP研发与实施人员逐项回填。历史测试数量保留作证据，本次实际验证以 VERIFICATION.md 为准。
 
 建议负责人仅表示职责，不代表已指定人员或承诺工期。P0表示开始真实接入前必须具备的输入或能力，P1表示正式上线前必须完成，P2表示确认存在需求后安排；它们不是漏洞等级。未完成项不因 Mock 验收通过而关闭。
 
@@ -442,12 +455,65 @@
 | --- | --- | --- | --- |
 | T31 | IT对接 | 实现订单级`fulfillmentProgress`真实适配器；读取平台同步、有效采购商品供应商发货、配货齐套/审核、审核出库事实；保留用户授权交集 | 五卡与工作台逐单对账，分页全量合计一致，无重复SKU/包裹计数，无跨部门泄露 |
 | H33 | 人工核对 | 提供多包裹、部分供应商发货、虚拟SKU、使用备货、已齐套未审核、配货撤审、部分出库/反审核、Shopify部分履约、历史缺配货单样本；确认来源字段枚举、有效数量、更新时间与关联键 | 逐例填写五队列应入/应出及证据；缺事实不得以0或pending兜底 |
-| D30 | 验收数据 | 一单同时待履约+待采购+待配货；一单齐套待审核；一单配货已审待出库；一单部分出库；一单完成；未付款、已取消、退款、未知状态反例 | 同队列订单ID只计一次，队列可交叠；角色不可越权，未知不推断；金额统计规则不变 |
+| D30 | 验收数据 | 一单同时待履约+待采购+待配货；一单齐套待审核（配货/仓库同时显示）；一单配货已审待出库；一单部分出库；一单完成；未付款、已取消、退款、未知状态反例 | 同队列订单ID只计一次，队列可交叠；仓库两组与Dashboard卡片/tasks/合计一致，审核后组别切换、全部出库后退出；角色不可越权，未知不推断；金额统计规则不变 |
 
 
 | 编号 | 类型 | 待办／需提供信息 | 验收结果 |
 | --- | --- | --- | --- |
 | D31 | 五待办权限验收 | 使用业务员A、同部门业务员B、下级部门成员、外部门成员、业务管理员及仅系统管理员账号，回放同一批订单；FOP授权包含与不包含样本均保留 | 待审核／待履约／待采购／待配货／待出库逐项核对卡片、tasks、清单、搜索和全量合计。全部岗位或系统管理员不能扩大业务范围；空白名单不泄露任何待办数据 |
+
+
+### 采购订单环节追加交付（2026-10-24）
+
+| 编号 | 类型 | 待办／需提供信息 | 验收结果 |
+| --- | --- | --- | --- |
+| T32 | P0 · 真实适配待完成 | 实现采购单下达、采购付款及有效需求覆盖归一化；前端/BFF/Mock与契约已提供procurementProgress | 与供应商发货三项独立，不能从履约支付或采购申请推导；仅有权订单输出，异常/未知明确 |
+| H34 | 人工核对 | 提供1688及线下采购的未下单/草稿/正式下达/取消重采、同履约多采购单、同采购多履约行、单单部分付款、多单部分付款、退款后重采及部分发货脱敏样本；提供真实下达字段、来源行ID、付款核销关联、有效数量、更新时间 | FOP研发＋采购负责人确认来源/枚举/数量归一与权限，区分已关闭历史退款与当前需跟进退款；不要求聊天中提供凭证 |
+| D32 | 实际联调验收 | 同一笔履约客户已付，采购依次未下单→部分下单→已下单未付→部分支付→已付待发→部分发货→全部发货；混单/退款/取消/未知及撤权反例 | 所有未全部发货阶段可查看；主标签和两个子事实正确；全部发货退出；刷新、页码恢复、日期排序和权限/合计一致；销售支付状态不变，配货/发运/仓库沿用各自业务状态 |
+
+
+### 发运单状态追加交付（2026-10-24）
+
+| 编号 | 类型 | 待办／需提供信息 | 验收结果 |
+| --- | --- | --- | --- |
+| T33 | P0 · 真实适配待完成 | 按授权履约订单与发运单权限读取有效`hzkj_deliver_bill`，归一id/billno/billstatus到dispatchDocuments；校验组织/客户/来源关系、去重和完整性 | A/B/C分别为暂存/已提交/已审核；订单仅一行；未知null与确认无单[]区分；不得只查C或推导自履约支付 |
+| H35 | 人工核对 | FOP/发运负责人提供三态、未生成、拆包多单混合、撤回/反审核、取消重建/作废、审核后Shopify未同步及单据权限不足的脱敏样本；确认有效标志、稳定关联键和更新时间 | 复核部署billstatus枚举、订单/发运资源权限、有效单据排除与刷新延迟 |
+| D33 | 实际联调验收 | 暂存→提交→审核→Shopify同步；同订单多单分别处于不同状态；手动及自动刷新、撤权和非法字段 | 各状态真实且互不替代；审核后尚未同步仍在队列，同步完成退出；多单不重复金额/数量；不泄露无权单据；状态变化后筛选/排序/合计一致 |
+
+
+### 清单拆分与仓库筛选验收（2026-10-24）
+
+| 编号 | 类型 | 待办／需提供信息 | 验收结果 |
+| --- | --- | --- | --- |
+| D34 | 实际联调验收 | 用T31–T33/H33–H35来源样本覆盖采购部分下单且已付、全部下单且付清、部分发货/全部发货、退款重采；配货未齐套→齐套未审→已审→部分/全部出库及撤审；含多张发运单不同审核状态 | 采购两页互斥、配货两页互斥，默认页及Dashboard计数同口径；仓库三项筛选items/total/totals一致；分页/部门/排序/刷新不丢条件，账号越权与无权参数不可扩大范围；多商品/多单只计一次 |
+
+无需新增FOP业务字段；需人工核对的真实来源、付款核销、有效单据、撤审与刷新时效沿用H33–H35。Demo与本地测试完成不等于生产链路验收完成。
+
+
+| 编号 | 类型 | 待办／需提供信息 | 验收结果 |
+| --- | --- | --- | --- |
+| D35 | 待支付联调验收 | 在H33样本中增加hzkj_orderstatus=1、0、no及退款、未知、支付后未审/已审；用本人/部门/全部业务范围账号验证 | 仅明确待支付且有权订单显示；取消/退款/未知不混入；付款后退出并按真实审核状态流转；页签第一但默认待审核；收款日期不伪造、应付金额不计入回款、分页和合计同范围 |
+
+
+| 编号 | 类型 | 待办／需提供信息 | 验收结果 |
+| --- | --- | --- | --- |
+| D36 | 状态排序联调 | 沿用H33/H35多单、混合三态、null/空数组/unknown、配货未审及部分出库样本，检查真实数据库分页与BFF排序等价 | 升降序跨页一致，未知始终最后、同状态最早收款优先；部门/搜索/仓库筛选/刷新保留排序；totals不变，无越权；收款日期旧URL仍可用 |
+
+#### 采购旺旺催办补充（2026-10-25）
+
+| 编号 | 工作项 | 需完成或提供的内容 | 验收 |
+| --- | --- | --- | --- |
+| T34 | FOP采购联系人适配 | 发布按当前FOP身份查询履约单关联采购明细的只读接口；独立采购单/供应商联系信息权限；源单ID/分录ID、多次重采、退款/取消/部分发货归一；接入listSupplierFollowUps | 禁止SKU默认供应商匹配；合并采购只回当前履约的未发明细；真实异常不回退Mock |
+| H36 | 人工提供部署与样本 | FOP已实现旺旺催办的插件文件/版本/按钮入口或现有HTTP地址；实际客户端及操作系统；1688买家账号授权与sellerLoginId/openUid对应；单供应商、多供应商、采购合并、重采、部分发货、线下采购无旺旺的脱敏样本；供应商资料可见权限规则 | 确认实际跳转格式是否为当前允许的aliim；其他格式先适配再放行；确认哪个实际卖家负责该采购单 |
+| D37 | 旺旺端到端联调 | 普通采购/协同/本人/部门/无采购权限账号；取消及发货变更、供应商账号变化、撤权、弹窗关闭、网络失败；浏览器协议提示及未安装客户端 | 单供应商准确尝试、多供应商不误选；无越权/误联系；不自动发送消息，不把尝试打开计为已送达；Mock不打开虚构账号 |
+
+#### 工作台审核（9.11 / 12.8）
+
+| 编号 | 工作项 | 需完成或提供的内容 | 验收 |
+| --- | --- | --- | --- |
+| T35 | FOP员工审核网关 | 发布permissions/fulfillment-orders/approvals/targets/approvals/audit；受控委托员工、实体与单据操作权、版本校验、原生audit插件、事务锁、持久化幂等与审计；提供请求结果查询 | 禁止直接更新billstatus；后置通知失败保留审核成功警告；未配置不写真实业务 |
+| H37 | 人工核对审核配置 | 提供正式/测试网关地址鉴权；履约和配货审核权限对应苍穹功能项；多包裹来源字段、版本字段、委托身份方式；审批人实际账号；失败、草稿、齐套但发运未审、重复发运、部分已审样本 | 密钥只配服务端；核实是否存在工作流审批导致audit不同于直接终审；确认审计留存和查询方式 |
+| D38 | 审核联调验收 | 单选/当前页全选、20/50/100笔、部分成功、重复点击/多标签页、撤权、改绑、跨部门/租户、版本变化、发运阻断、后置通知失败、网络超时后结果查询 | 未授权零写入；成功退出待审清单；C状态不重审；跨进程重启幂等有效；核对FOP真实最终状态；不能仅凭HTTP201验收 |
 
 
 ## 8. 销售个人收款与净毛利（月／周／天）
@@ -513,15 +579,15 @@ FOP快照的 `hzkj_gp_income_usd/rmb` 已经包含收款调整。适配器若另
 
 ## 9. 五类履约待办队列（2026-10-23 修订）
 
-Dashboard 依次显示 **待审核 → 待履约 → 待采购 → 待配货 → 待出库**。原“待发运”改“待履约”，原“待发货”改“待出库”；新增采购卡片。点击卡片直接进入对应岗位工作台清单，订单号、Shopify 单号、客户、商品图片、SKU、数量、金额、支付状态、业务员等字段继续保留。状态列只展示当前队列相关事实，分页及金额／数量合计沿用全筛选结果。
+Dashboard 依次显示 **待审核 → 待履约 → 待采购 → 待配货 → 待出库**。原“待发运”改“待履约”，原“待发货”改“待出库”；新增采购卡片。点击卡片直接进入对应岗位工作台清单，订单号、Shopify 单号、客户、商品图片、SKU、数量、金额、业务员等字段继续保留；采购清单以采购订单状态替换客户支付状态；配货两清单隐藏支付状态，显示配货单状态及发运单状态；发运清单以发运单状态替换支付状态，保留Shopify履约状态；仓库清单以配货单状态替换支付状态，保留独立出库状态；销售清单仍显示支付状态。状态列只展示当前队列相关事实，分页及金额／数量合计沿用全筛选结果。
 
 | 顺序／名称 | API 队列键／岗位 | 入选条件（共通：已付款、未取消、未退款） | 清单状态显示 |
 | --- | --- | --- | --- |
 | 1 待审核 | `review`／sales | `reviewStatus=pending` | 待审核 |
 | 2 待履约 | `dispatch`／dispatch | 已审核，`shopifySync=pending/partial` | 待同步 Shopify 发货／部分同步·待完成 |
-| 3 待采购 | `procurement`／procurement | 已审核，`supplierShipment=pending/partial` | 供应商未发货／供应商部分发货 |
-| 4 待配货 | `allocation`／allocation | 已审核，`stockReadiness=incomplete`，或 `ready` 且 `allocationReview=pending` | 库存未齐套／已齐套·待审核 |
-| 5 待出库 | `shipping`／warehouse | 已审核，`stockReadiness=ready`、`allocationReview=approved`、`outbound=pending/partial` | 配货已完成·待出库／部分出库·待完成 |
+| 3 待采购 | `procurement`／procurement | 已审核，`supplierShipment=pending/partial`，尚未同时满足全部下单且采购款付清 | 采购下单、付款及供应商发货进度 |
+| 4 待配货 | `allocation`／allocation | 已审核，`stockReadiness=incomplete` | 未齐套，未配货；并列显示发运单状态 |
+| 5 待出库 | `shipping`／warehouse | 履约已审核，`stockReadiness=ready`；配货未审核，或配货已审核且`outbound=pending/partial`；排除已全部出库 | 已齐套未审核／已审核未出库（含部分出库） |
 
 - Shopify 同步、供应商发货、库存齐套、配货审核、仓库出库是独立事实，不能用单一顺序状态推导。采购下单不等于供应商已发货；已齐套不等于配货已审核；Shopify 已同步不等于仓库已出库。
 - **统计粒度为履约订单**。上游先汇总有效 SKU、来源分录及包裹，再提供订单级进度；同队列订单 ID 去重。不同队列允许重叠，五卡数量不得相加称作订单总量。
@@ -549,9 +615,9 @@ Dashboard 依次显示 **待审核 → 待履约 → 待采购 → 待配货 →
 ### 9.2 协同岗位、部门筛选与收款先后顺序（2026-10-24）
 
 - **跨部门协同**：销售总监、订单管理、采购、配货、物流发运、仓库等人员可在“账号与权限 → 业务数据权限”独立选择“全部业务数据”（`businessRole=admin`），处理全公司各业务部门的订单；系统管理角色可继续为普通用户。仍需其绑定的 FOP 用户拥有对应公司数据权限。本地设置不能扩大 FOP 白名单。普通业务员默认本人、部门经理默认本部门及子部门；不根据岗位名称自动改写已有账号权限。
-- **筛选入口**：销售、采购、配货、发运、仓库工作台的待审核、待采购、待配货、待履约、待出库及异常清单统一提供右侧“所属部门”，默认“全部部门”。先显示业务一部、二部、三部、四部，再显示有可见订单的其他自定义部门。当前人员直接归属业务部门，不重新创建区域销售组。
+- **筛选入口**：销售、采购、配货、发运、仓库工作台的待审核、待采购、待配货、待履约、待出库及异常清单统一提供右侧“所属部门”，默认“全部部门”。仓库“出库阶段”放在最左侧搜索框之前。先显示业务一部、二部、三部、四部，再显示有可见订单的其他自定义部门。当前人员直接归属业务部门，不重新创建区域销售组。
 - **接口**：`GET /autoflow/integrations/fop/fulfillment-orders` 新增可选 `departmentId`（string，最长128），响应 `FulfillmentOrderPage.departments[]` 包含 `id/name`。选项从当前账号可见订单归属去重生成，独立于队列、关键词、部门条件和分页；不借用管理员组织目录。过滤按 `department.id` 或 `departmentPathIds` 匹配。没有可见订单的部门不会凭空补入；无权限或未知部门返回空结果，绝不回退成全部数据。
-- **排序与合计**：所有待办按收款时间 `paidAt ASC, id ASC` 稳定排序，再分页；空或无效时间排最后。排序按时间戳比较，展示 UTC+8。`total/totals` 覆盖当前账号、当前部门和其他查询条件的完整结果。Dashboard 异常清单同序；待办摘要时间改用最早收款时间，固定业务队列展示顺序不变。
+- **排序与合计**：所有待办默认按收款时间 `paidAt ASC, id ASC` 稳定排序；点击收款日期表头可切换升序／降序（`paidAtOrder=asc/desc`），切换回第一页并保留部门和已提交搜索。两种方向均在完整筛选集上排序后分页，同时间按id升序，空或无效时间始终排最后。排序条件保留于URL，刷新、查询和翻页保持；非法或重复排序参数返回400。排序按时间戳比较，展示 UTC+8。`total/totals` 覆盖当前账号、当前部门和其他查询条件的完整结果。Dashboard 异常清单同序；待办摘要时间改用最早收款时间，固定业务队列展示顺序不变。
 - **交互**：部门选择保存于 URL，查询、翻页及更改每页条数保留；切换部门回第一页；切换工作台及待办页签保留部门，重置分页与搜索。无匹配结果仍保留所选部门，可手动切回“全部部门”。
 - **FOP 对接**：已核对 `hzkj_orders.dym` 的 `hzkj_dept`（销售部门）与 `hzkj_receipt_date`（收款日期）。适配器提供稳定部门 ID、可信祖先路径以及带时区的订单收款时间；待办排序采用源订单收款日期，不改变回款业绩采用收款分录事件日期的口径。生产查询须在服务端应用权限与部门条件，并按相同顺序做数据库分页；不能只排序当前页。
 - **Demo**：订单和客户归属销售岗位员工，采购、配货、发运及仓库人员通过业务数据权限处理这些订单，不把协同岗位人员自动当成客户所属业务员。
@@ -563,9 +629,10 @@ Dashboard 依次显示 **待审核 → 待履约 → 待采购 → 待配货 →
 
 ### 9.3 只读待办、多商品与状态刷新（2026-10-24）
 
-- 五工作台六清单共用只读履约列表，展示FOP各业务环节进度；审核、采购、配货、同步Shopify及出库等业务处理均在FOP完成。前端提供查询、筛选、复制和刷新，不提供这些业务写操作。
-- 列序统一：订单编号、商品图片/商品信息、Shopify单号、客户、收款日期、支付状态、当前环节状态、店铺、SKU/规格、数量、订单金额及后续仓库/物流/业务员/部门字段。商品列第二；收款仍按UTC+8升序，业务员后显示所属部门。
-- 点击订单号旁复制图标/订单号按钮，复制完整FOP订单编号，显示成功反馈；HTTPS使用Clipboard API，局域网HTTP提供兼容复制，失败明确提示手动复制。复制不写入业务数据。
+- 五工作台岗位导航顺序固定为销售→发运→采购→配货→仓库，与Dashboard待办卡片一致；仅显示账号已授权的工作台。待办页签排在分析功能之前；销售顺序为待支付→待审核→异常订单，默认首页仍为待审核；其他岗位默认首页：采购→待采购、配货→已齐套待审核、发运→待履约、仓库→待出库；其他分析功能随后排列，已有明确指定页签的链接仍打开相应功能。
+- 五工作台的全部待办清单共用只读履约列表，展示FOP各业务环节进度；审核、采购、配货、同步Shopify及出库等业务处理均在FOP完成。前端提供查询、筛选、复制和刷新；2026-10-25新增9.11例外，仅销售review与配货allocation_review可委托FOP审核，其他业务写操作仍不提供。
+- 列序统一：订单编号、商品图片/商品信息、Shopify单号、客户、收款日期、支付状态、当前环节状态、店铺、SKU/规格、数量、订单金额及后续仓库/物流/业务员/部门字段。商品列第二；收款仍以UTC+8显示，默认升序并支持表头切换降序，业务员后显示所属部门。
+- 点击订单号旁复制图标/订单号按钮，复制完整FOP订单编号；点击客户名称旁复制图标/客户名称按钮，复制完整customerName，两者分别显示成功反馈；HTTPS使用Clipboard API，局域网HTTP提供兼容复制，失败明确提示手动复制。复制不写入业务数据。
 - 一单多品通过同一订单的items[]展示，图片/名称、SKU/规格、数量逐项对齐；每单仍计一笔，件数累加所有商品行。Demo所有队列包含2及3款商品订单，金额依据各商品单价×数量计算，不复制多笔订单模拟商品分录。
 - 每个待办清单提供“刷新”；在页面可见且联网时每30秒重新请求一次，返回页面/恢复网络立即请求。后台标签页和离线时暂停；卸载后停止。请求在途不重叠；条件变化时丢弃旧请求结果。后台刷新保留表格和未提交搜索输入，成功后替换最新进度；失败清除过期结果并提示。刷新后最后一页失效时自动回到有效页，保留部门与已提交搜索条件。
 - `FulfillmentOrderPage.refreshedAt`为本次BFF查询完成的ISO8601时间，页面显示最近刷新（UTC+8）。这是查询回执，不是FOP同步水位。所有刷新仍重新核验登录账号、业务范围及FOP白名单；列表数量/金额/件数合计同步更新，不从旧页面推算。
@@ -573,9 +640,175 @@ Dashboard 依次显示 **待审核 → 待履约 → 待采购 → 待配货 →
 - IT联调：在FOP逐一完成审核、供应商发货、齐套/配货审核、Shopify同步及出库，验证手动刷新立即反映已提交事实、自动查询在下一周期反映；原清单移出、新清单出现，同队列总数与金额同步；保留跨队列允许重叠规则。测试断网/恢复、隐藏/恢复、超时、在途换部门、撤权以及刷新导致最后一页消失。
 
 
+### 9.4 采购订单状态与业务环节（2026-10-24）
+
+采购工作台只显示已支付、已审核且供应商尚未全部发货的履约订单。“支付状态”列改为“采购订单状态”，不再重复显示客户支付状态。收款日期、金额仍是履约订单口径，不能改成供应商付款日期或采购金额。供应商发货状态列继续保留，三项进度均只读，业务处理在FOP完成。
+
+| 当前事实 | 主标签 | 辅助事实 |
+| --- | --- | --- |
+| 确认未正式下达采购单 | 待下采购单 | 下单：未下单；采购款：暂无应付 |
+| 仅部分有效采购需求已下单 | 部分下单 | 展示已下达部分的实际付款状态；允许部分单据已发货 |
+| 已全部下单，采购款未付 | 待付采购款 | 下单：已下单；采购款：未支付 |
+| 已全部下单，采购款部分支付 | 采购款部分支付 | 已下单；部分支付，可能与部分发货同时发生 |
+| 已全部下单、采购款已付，供应商未发货 | 供应商待发货 | 已下单；采购款已支付 |
+| 已全部下单、采购款已付，供应商部分发货 | 供应商部分发货 | 已下单；采购款已支付；留在已采购待发货页签 |
+| 当前采购义务存在退款待跟进／采购单已取消 | 采购退款待跟进／采购单已取消 | 保留两项实际事实，不冒充正常已支付待发货 |
+| 下单或付款事实未知 | 采购下单待确认／采购付款待确认 | 未知字段显示“待确认”，不得从客户已付款猜测采购已付 |
+
+- 接口新增 `FopOrder.procurementProgress`：`purchaseOrder`、`supplierPayment`；枚举及兼容规则见OpenAPI `ProcurementProgress`。BFF始终白名单序列化两个字段，旧provider缺对象转`unknown/unknown`；有对象但非法/缺子字段拒绝为503，不能默认为待下单。前端兼容旧响应无对象。
+- 主标签按退款异常、取消、下单是否齐全、采购付款、供应商发货的优先级展示；每行同时展示下单和采购付款两项事实，不能用单一阶段覆盖多采购单并行环节。`partial+paid`只代表已下单部分已付款。
+- 采购两队列共享`supplierShipment=pending/partial`门槛，再按全部下单及采购付款事实互斥拆分，详见9.7；采购事实未知保留在待采购清单，显示待确认。两页不改变用户权限、部门筛选、排序、分页或合计口径。
+- 真实适配需按有效履约来源行、SKU及数量关联采购单，排除虚拟商品、组合父件重复、已覆盖的取消单/退款单、使用备货无需另采数量；相同SKU不能仅按SKU跨客户串单。采购申请审核不等于供应商下单，线下采购正式下达和部分付款依据需H34样本确认。完整有效需求查全后才可判`not_ordered/ordered/paid`。
+- 演示数据覆盖未下单、部分下单、待付款、部分付款、待发货、部分发货、退款及未知；实际FOP网络适配仍待T32/H34/D32联调。
+
+
+### 9.5 配货工作台的两类待办（2026-10-24）
+
+配货两个页签不显示履约订单支付状态，均保留“配货单状态”并新增“发运单状态”；配货状态与页签对应：
+
+| 状态文案 | 归一事实 | 展示 |
+| --- | --- | --- |
+| 未齐套，未配货 | `fulfillmentProgress.stockReadiness=incomplete` | 柔和暖色；有效配货需求尚未全部完成，包含未配货／未全部齐套，不把部分配货误认为整单已完成 |
+| 已齐套未审核 | `stockReadiness=ready` 且 `allocationReview=pending` | 柔和蓝色；已齐套且配货审核未全部完成 |
+
+仍以履约订单为列表粒度、只读查看，已支付且履约已审核是入选门槛；隐藏支付列不放宽条件。配货已齐套未审核的订单进入独立“已齐套待审核”页签及仓库工作台，不再进入“待配货清单”；审核后退出待审核页签，尚未全部出库时继续留在仓库工作台；未知事实不能直接当作已齐套。保留用户权限、部门筛选、收款排序、复制、多商品、刷新及全量合计；两页均增加“发运单状态”，数量/金额合计和空态跨列同步对齐。
+
+沿用现有`stockReadiness/allocationReview`接口字段，不新增前端业务写操作。FOP适配需要以有效配货单`hzkj_alloc_status=completed`和`billstatus=C`分别证明齐套与审核；`available`（可配货）不等于已经齐套完成，不能仅凭仓库库存充足标记第二类。多包裹按整单有效需求聚合，真实来源仍按T31/H33/D30联调。
+
+
+仓库工作台的待出库清单以“配货单状态”替换“支付状态”，包含下列两组数据，在同一清单用柔和暖色/绿色标签区分，默认按收款日期排序，也可点击配货单状态/出库状态排序（见9.9）：
+
+| 分组 | 入选事实（前置：已付款、履约已审核、有效且有权） | 出库状态列 |
+| --- | --- | --- |
+| 已齐套未审核 | `stockReadiness=ready`、`allocationReview=pending`，且`outbound!=completed` | 待配货审核；不能把配货未审核标为可出库 |
+| 已审核未出库 | `stockReadiness=ready`、`allocationReview=approved`、`outbound=pending/partial` | 配货已完成·待出库／部分出库·待完成；“未出库”分组包含尚未全部出库 |
+
+第一组由已知的齐套与未审核事实确定，即使出库状态尚未提供（unknown）也可显示待审核；不把unknown推断为未出库。第二组必须明确尚有出库事项，出库unknown不入选。任一组明确已全部出库均排除，未齐套、配货审核未知、已取消、未付款、退款或履约未审核均不进入仓库清单。
+
+待审核组与配货工作台“已齐套待审核”页签可重叠，同队列按订单ID去重、金额/数量只计一次；审核后在仓库清单转入第二组，全部出库后退出。Dashboard的shipping卡片、今日待办、仓库清单及全量合计统一计算两组数据。复用现有字段和只读刷新，无新增业务操作；用户数据范围、部门筛选、搜索、收款排序及分页仍由服务端统一处理。真实FOP的齐套与审核事实、撤审/作废及部分出库仍按T31/H33/D30联调。
+
+
+### 9.6 发运工作台的发运单状态（2026-10-24）
+
+发运工作台“支付状态”改为“发运单状态”，展示 **暂存、已提交、已审核**。相邻的Shopify履约状态继续独立展示；发运单已审核不等于Shopify已同步。沿用已付款、履约已审核及`shopifySync=pending/partial`的待履约入选条件，不因新展示列改变待办范围或数量。
+
+| 接口字段 | 内容与展示 | FOP来源 |
+| --- | --- | --- |
+| `FopOrder.dispatchDocuments` | 同一履约订单的有效关联发运单数组，按稳定主键去重；多张单据各自显示状态和单号，仍只占一个订单行、只计一次订单数量/金额 | 按组织、客户及准确的履约来源关联`hzkj_deliver_bill`，不能只按商品或外部订单号跨客户匹配 |
+| `dispatchDocuments[].id` | 发运单稳定ID | `id` |
+| `dispatchDocuments[].number` | 发运单号，作为状态下方的简短辅助信息 | `billno` |
+| `dispatchDocuments[].status` | `draft`暂存、`submitted`已提交、`approved`已审核；`unknown`待确认 | `billstatus`：A/B/C；其他枚举待真实样本确认，不猜测 |
+
+- `null`或旧响应缺字段显示“待确认”；只有完整查询已确认无有效发运单才返回`[]`并显示“未生成发运单”。不能把未接API、无单据读取权限或查询失败当成无单据。缺少单据读取权限/结果不完整返回null，服务不可用仍报错。
+- BFF只序列化单号、ID和标准状态；字段非法/重复ID拒绝为503，不透出provider额外字段。生产适配先校验订单与发运资源权限及来源关系，只返回本订单有权单据；不得借嵌套列表扩大访问。
+- Demo包含三种状态、多张发运单混合状态和未生成情形；每张状态独立于客户支付、履约审核及旧`dispatchStatus`粗粒度字段。继续只读查看、部门筛选、收款日期排序、复制、多品、分页与全量合计，复用手动/可见在线30秒刷新。
+- 真实FOP适配仍待T33/H35/D33：需确认撤回/反审核、作废、取消重建、拆包多单的有效性及更新时间；不得过滤为仅C状态，否则暂存和已提交会丢失。
+
+
+### 9.7 工作台清单拆分及仓库阶段筛选（2026-10-24 最新）
+
+本节采购/配货/仓库只读待办以履约订单为行粒度，统一客户已付、履约已审、未取消、用户业务范围与FOP白名单门槛；同一订单的多商品/多采购单/多发运单不重复计数。
+
+| 工作台／顺序 | 页签或筛选 | API 参数 | 入选事实 |
+| --- | --- | --- | --- |
+| 采购 1（默认） | 待采购清单 | `queue=procurement` | 供应商pending/partial，且不同时满足`purchaseOrder=ordered`和`supplierPayment=paid`。部分下单即使已下单部分付清，仍留本页；退款、取消重采、未知采购进度保留跟进 |
+| 采购 2 | 已采购待发货 | `queue=procurement_shipping` | 供应商pending/partial，并且有效采购需求已全部下单、采购款付清。部分发货保留，全部发货退出 |
+| 配货 1 | 待配货清单 | `queue=allocation` | `stockReadiness=incomplete`，不再混入已齐套未审核 |
+| 配货 2（默认） | 已齐套待审核 | `queue=allocation_review` | `stockReadiness=ready && allocationReview=pending && outbound!=completed` |
+| 仓库（默认） | 全部待出库 | `queue=shipping&warehouseStage=all`或省略stage | 9.5定义的两组并集，订单ID去重 |
+| 仓库筛选 | 已齐套未审核 | `warehouseStage=pending_review` | 仓库范围内`allocationReview=pending` |
+| 仓库筛选 | 已审核未出库 | `warehouseStage=pending_outbound` | 仓库范围内`allocationReview=approved`，且出库pending/partial |
+
+- 新队列沿用原岗位权限：`procurement_shipping → procurement`、`allocation_review → allocation`；仓库权限不自动授予配货待审核页签。系统管理员身份不扩大业务数据权限。
+- 采购两个页签互斥，配货两个页签互斥；仓库待审核组与配货“已齐套待审核”重叠是跨岗位查看同一进度，不是两个配货待办重复。各工作台仅查看，业务动作仍在FOP。
+- 配货两个页签均显示“发运单状态”，复用`dispatchDocuments[].id/number/status`，逐张显示暂存/已提交/已审核，unknown与未生成语义沿用9.6。发运未审核的已齐套订单仍可查看，不代表已允许配货审核或出库；FOP放行校验不变。
+- `warehouseStage`仅适用于shipping；其他队列携带该参数、非法值或重复参数均400。前端路由非法时不查询/不展示旧数据。切换筛选重置第1页；搜索、部门、收款排序、分页、手动/自动刷新保留筛选。
+- 服务端先授权，再队列/阶段/部门/搜索筛选，再排序、全量合计和分页；`items/total/totals`保持同范围，零结果返回零合计，不回退全部。`departments`仍来自有权订单。
+- Dashboard维持五张卡片：待采购卡片/tasks与`procurement`默认清单同口径；待配货卡片/tasks仅统计`allocation`。已采购待发货、已齐套待审核不再计入这两张卡片；仓库shipping仍为两组并集，不受工作台临时筛选影响。卡片不能相加当公司订单总数。
+- 采购付款完成后在下次查询移至已采购待发货；付款撤回/当前有效退款则重新归入待采购。配货齐套后移至已齐套待审核；审核完成且出库未完成则只保留仓库对应组；全部出库退出仓库。沿用30秒轮询、手动刷新及页码恢复。FOP真实网络适配和同步时效仍待T31–T33，不以Demo代表生产已接通。
+
+
+### 9.8 销售待支付清单与默认首页（2026-10-24）
+
+- 销售页签排列为“待支付清单 → 待审核清单 → 异常订单清单 → 个人收款与毛利及其他分析”。无queue的销售工作台始终打开待审核，待支付虽位于第一位也不自动选中；显式`queue=unpaid`打开待支付，返回无queue地址重新进入待审核。
+- 新增`GET /autoflow/integrations/fop/fulfillment-orders?queue=unpaid`，岗位为sales。入选为未取消且明确`paymentStatus=unpaid`的履约订单；排除已付款、退款和未确认状态。不把“没有找到收款凭据”直接当成未支付。
+- FOP适配应依据`hzkj_orders.hzkj_orderstatus=1`的待支付事实；取消0和未关联本地SKU的no不因未收款而混入。查询异常仍明确报错，不能返回伪造的待支付清单。
+- 沿用登录用户本人/部门/业务管理员范围与FOP订单白名单，先过滤权限再部门/搜索/排序/分页/合计；新页签不增加授权范围。隐藏或无sales岗位时直连接口亦拒绝。
+- 订单行保留支付状态、真实审核状态、商品、数量、订单金额与复制等字段。尚未收款的paidAt为空，显示“—”，不以创建日期代替收款日期；沿用空日期排后、同值按ID稳定排序。订单金额表示应付金额，不能计为已收款业绩；数量与金额全筛选合计照常显示。
+- 付款成功后刷新退出待支付，若履约仍未审核则进入待审核；已审核则按其他各队列进度判断。待支付清单提供手动/自动刷新，旧数据撤权后清除。Dashboard保持原五张已付待办卡片，不增待支付卡片，不改变回款口径。
+- 配货工作台两个页签将“发运单审核状态”统一更名为“发运单状态”，数据字段`dispatchDocuments`、三态映射与权限不变。
+
+
+### 9.9 发运单、配货单与出库状态排序（2026-10-25）
+
+三个状态列支持表头点击排序：未选中显示双向箭头，首次点击升序，再次点击降序；同一时间只激活一个主排序列，使用`aria-sort`标识方向。点击收款日期表头恢复日期排序。切换排序回第一页，保留所属部门、搜索、指定订单和仓库阶段；查询、分页、刷新保留URL排序条件。
+
+| 表头 / sortBy | 可用清单 | 升序的业务顺序 |
+| --- | --- | --- |
+| 发运单状态 / `dispatchDocumentStatus` | dispatch、allocation、allocation_review | 确认未生成 → 暂存 → 已提交 → 已审核；依据dispatchDocuments，不使用旧dispatchStatus |
+| 配货单状态 / `allocationDocumentStatus` | allocation、allocation_review、shipping | 未齐套，未配货 → 已齐套未审核 → 已审核未出库；依据stockReadiness/allocationReview，不使用旧allocationStatus |
+| 出库状态 / `outboundStatus` | shipping | 待配货审核 → 配货已完成·待出库 → 部分出库·待完成；已完成不属于当前仓库待办，不因排序重新进入 |
+| 收款日期 / `paidAt`（默认） | 全部待办 | 时间升序；兼容原paidAtOrder参数 |
+
+- 新增可选`sortBy`与`sortOrder=asc/desc`。未指定sortBy默认paidAt；显式sortOrder优先，缺省时paidAt使用原paidAtOrder（默认asc），状态排序默认asc。旧收藏链接继续有效。
+- 多发运单按有效列表中最靠前的业务阶段排序，例如暂存+已审核按暂存排序；不把最高审核状态当整单状态。数组为空是明确未生成，null/缺字段或任一单据unknown代表整单排序进度待确认，升/降序都排最后。原逐张状态展示不合并。
+- 状态相同时固定按paidAt升序、同时间id升序；空/无效paidAt始终最后。状态降序只反转明确阶段顺序，不能把未知状态翻至最前，也不反转同状态的收款优先级。
+- 仓库“待配货审核”是已知前置阶段，即使outbound=unknown也按其展示文案排序；不能将其显示成可出库。其余无法确认的状态置后。
+- 先按登录账号权限过滤，再队列/部门/搜索/阶段过滤，再对完整结果排序后分页；total/totals保持全筛选结果且不受排序影响。非法/重复sortBy或sortOrder、在不显示该列的队列传状态排序，返回400；前端同样拒绝非法路由并清除旧结果。
+- Dashboard卡片和摘要保持原默认规则；此功能仅调整工作台明细行顺序，不改变流程状态、数据权限或金额。真实FOP若采用数据库分页，应在分页前实现相同的归一阶段与未知值顺序，不能先拉一页再在浏览器排序。
+
+### 9.10 采购待发货旺旺催办（2026-10-25）
+
+**入口与体验。** 仅采购工作台`procurement_shipping`订单行末尾显示“催办”，操作列固定在右侧，订单/商品字段顺序及合计不变。点击读取本单最新供应商资料；只有一张可联系采购单时自动尝试打开其旺旺会话，多张采购单时逐单展示并由用户选择，不默认选第一个供应商。弹窗显示采购单号、1688订单号、供应商名称、旺旺账号、尚未发货的SKU及数量；采购单号/1688单号/旺旺账号可复制。缺少账号或可信联系地址时禁用打开按钮，提示在FOP补充/核对；无有效可见采购单显示空态。
+
+**准确关联。** 先定位有权履约订单，再从有效源单关系定位采购分录及所属采购单、实际卖家。关联键为源履约订单ID+源履约分录ID+采购单ID+采购分录ID；禁止按SKU编码、商品默认供应商或供应商名称猜测。采购单合并多履约订单时，只返回本履约订单对应的待发明细/数量。每个采购单单独展示，即使供应商相同也保留采购单上下文；不把取消、退款、未付、已全部发货采购计入催办。部分发货只展示待发数量>0的有效分录，不能用收货/入库数量替代供应商发货数量。
+
+**权限与新鲜度。** 必须有采购岗位、业务数据范围内的履约订单、FOP订单白名单和独立`allowedPurchaseOrderIds`采购单/供应商联系信息权限；缺少采购授权返回空。供应商信息不添加到普通订单列表、Dashboard或其他图表。查询和每次打开前均复核登录账号、订单是否仍在已采购待发货队列及采购权限；取数期间撤权不返回旧联系人。前端只能传订单ID、采购单ID及`contactVersion`，不能提交供应商ID、旺旺账号或数据范围。账号/关联/待发明细变化导致版本不一致返回409，清空旧联系人后刷新重新选择。关闭弹窗、切页或会话失效后忽略未完成请求，不延迟唤醒旧联系人。
+
+**接口。** API前缀`/api`，JWT来源为当前登录账号，均`Cache-Control: private, no-store`：
+
+| 方法与路径 | 输入 | 输出与说明 |
+| --- | --- | --- |
+| GET `/autoflow/integrations/fop/fulfillment-orders/{orderId}/supplier-follow-ups` | 路径orderId；不接受查询参数 | SupplierFollowUpPage：source/orderId/orderNumber/refreshedAt/items；items字段见OpenAPI，含供应商、采购单、分录、availability、contactVersion；不返回跳转地址 |
+| GET `/autoflow/integrations/fop/fulfillment-orders/{orderId}/supplier-follow-ups/{purchaseOrderId}/launch` | 路径两ID；query.contactVersion（64位SHA256版本） | SupplierChatLaunch：source/mode/orderId/purchaseOrderId/wangwangAccount/url；重新授权和查当前关联；不存在/不可见404，流程变化/资料变化/地址不可用409，上游未接入/异常503 |
+
+**唤醒边界。** 此操作只打开外部旺旺聊天，不发送任何消息、不更改FOP业务状态。真实地址由FOP可信适配器提供并与采购单实际旺旺账号核对，BFF目前仅接受`aliim:sendmsg`、`touid=cnalichn{账号}`及可选`siteid=cnalichn`，规范化后只保留touid；拒绝其他域名/协议/重复参数/任意消息参数，前端再次校验接收人。浏览器只能尝试打开，不能证明桌面程序已登录、会话已显示或催办已送达，页面不得显示“催办成功”。若浏览器拦截异步唤醒，用户可再次点击“打开旺旺”或复制账号；是否支持所部署客户端需人工联调。当前Mock返回`mode=demo,url=null`，展示关联核验结果，不把虚构账号交给真实旺旺。
+
+**生产接入。** FopDataProvider新增`listSupplierFollowUps(identity, permission, orderId)`，真实实现必须完成源单关联、有效采购/发货明细归一、独立采购授权及当前旺旺地址解析。默认真实适配未配置时明确503，不回退演示数据。已核实FOP存储字段，不代表生产HTTP接口已发布；本轮不修改FOP生产代码。见源码映射12.7及T34/H36/D37。
+
+### 9.11 工作台单笔与批量审核（2026-10-25）
+
+**新增范围覆盖9.3的审核只读限制。** 销售工作台`review`支持审核履约订单；配货工作台`allocation_review`支持审核已齐套待审核配货单。其他采购、配货调整、发运及出库业务仍在FOP处理。审核必须调用FOP原生业务操作与插件事务，禁止直接改状态字段。
+
+**界面。** 所有待办清单每页条数为20、50、100，默认50条；切换条数回到第一页并保留其他筛选，订单纵向平铺由页面外层滚动。表头工具栏增加“审核”；订单编号旁支持复选，表头全选仅限当前页（最多100笔），商品信息保持第二列。切换筛选、排序、页码或账号清空选择。确认弹窗逐订单列出实际审核单号、可审核条件及阻断原因；一个履约订单可能关联多张包裹配货单。仅提交可审核单据，其他单据保留原因。提交中禁用重复点击及页面内导航，结果逐订单、逐单据显示，包含不满足条件而未提交的已选订单；关闭结果后刷新清单及合计并处理空末页。
+
+**授权。** 登录账号绑定FOP用户；现有本地岗位、本人/部门/全公司业务范围、FOP订单白名单均须满足，再要求独立`approvalActions`操作授权（`review`/`allocation_review`）。缺失即拒绝，系统管理权和业务数据管理员均不隐含审核权。FOP必须在委托用户上下文中核查实体/单据级审核权；不得以服务凭据的超级管理员权限替代员工权限。审批单据只能从后台按履约来源解析，前端不得指定实体、租户、用户或任意配货单ID。
+
+**状态与一致性。** 预览返回订单对应单据集合摘要`version`，内容包括实体、ID、数据版本、单据状态和资格；提交重新查询集合并校验版本。履约审核调用`hzkj_orders/audit`；配货审核调用`hzkj_alloc_bill/audit`，只审核已提交B状态的目标，不自动提交草稿A。已审核C跳过；配货齐套及有效已审核发运单由FOP插件在事务中再次校验。每张实际审核单据都复核账号是否停用、原请求会话版本、账号范围与操作权限；FOP负责版本乐观锁/单据锁、最终状态校验和持久化幂等。失败不能回滚已成功的其他单据。
+
+**结果。** `approved`已审核、`already_approved`已审核无需重复、`blocked`未提交、`failed`FOP明确失败、`unknown`网络/响应异常待核对；订单还可为`partial`。配货审核已提交而生成发货通知失败，保持`approved`并返回`warning`，严禁当审核失败重做。超时不自动重试，不推断成功；UI提供请求编号，需在FOP核对。批次执行设置时间预算，预算耗尽的剩余单据不提交并保留提示；大量慢请求可减少每批数。正式网关须提供按幂等键/请求编号查询历史执行结果能力，后续可扩展异步任务模式。
+
+**实现边界。** 本工程前端→BFF预览/审核接口及可配置HTTP适配器已实现，Demo按相同合同模拟审核、更新队列，状态仅保存在当前服务进程，重启重置。生产不启用Demo。FOP源码已存在审核插件，但尚未确认部署的员工委托审核HTTP接口；不能以本次Mock验收宣称生产审核已接通。
+
+#### 9.11.1 BFF与FOP员工网关接口
+
+| 调用方 | 方法与路径 | 请求 | 响应/责任 |
+| --- | --- | --- | --- |
+| 浏览器→BFF | POST `/api/autoflow/integrations/fop/fulfillment-orders/approvals/preview` | `queue`, `orderIds[1..100]` | `source,queue,items`；每项`orderId,orderNumber,version,eligible,documents[{id,number,status,eligible,reason}]` |
+| 浏览器→BFF | POST `/api/autoflow/integrations/fop/fulfillment-orders/approvals` | `queue`, UUIDv4 `requestId`, `items[{orderId,version}]` | `source,requestId,completedAt,items[{orderId,orderNumber,status,message,documents[{id,number,status,message,warning}]}]`；201只表示请求已处理，须检查逐项状态 |
+| BFF→待发布网关 | POST `{FOP_EMPLOYEE_API_URL}/permissions` | 服务端派生`subject:{tenantId,userId}` | `FopPermissionGrant`，含明确`approvalActions`；读取授权与审核授权独立 |
+| BFF→待发布网关 | POST `{base}/fulfillment-orders` | `subject` | 当前用户有权的`FopOrderCandidate[]`，必须包含`tenantId,owner,department`等现有清单合同；BFF继续过滤 |
+| BFF→待发布网关 | POST `{base}/approvals/targets` | `subject,queue,orderId` | `ApprovalTarget[]`，仅真实关联且有权单据；字段见OpenAPI内部模型；每单据数据版本不可使用常量 |
+| BFF→待发布网关 | POST `{base}/approvals/audit` | `subject,command:{tenantId,orderId,id,number,entity,version,status,eligible,reason,operation:audit,idempotencyKey,requestId,actorAccountId}` | `ApprovalOutcome:{status,message,warning}`；仅`entity,id,version`等校验后的操作目标参与原生审核，其余资格字段不可信且须重算；持久记录操作者、委托身份、源订单、目标单、请求、前后状态与业务结果 |
+
+上述FOP路径是本工程提出的员工网关合同，**不是已发现或已上线的金蝶标准URL**。BFF环境`FOP_EMPLOYEE_API_URL`必须为HTTPS，`FOP_EMPLOYEE_API_TOKEN`仅放服务端；不填时保持未配置。每次HTTP请求15秒超时、不跟随重定向、不自动重试。审核目标解析必须排除取消/作废/替代历史单据，按包裹精确关联；不能只按SKU或订单号字符串碰撞关联。网关必须将`subject`作为服务端授权委托，校验服务调用方有权委托该用户；事务内重查支付、来源、审核权限和版本，记录幂等响应。同一幂等键不同载荷拒绝，重复请求重放原结果；不同请求对同一单据也须锁定避免重复副作用。请求编号用于排查，不能当作权限凭证。
+
+适配器当前覆盖订单授权/清单与审核；回款、毛利、物流成本及联系人等接口仍沿用原有待接入计划，不因配置本接口而冒充全部业务已接通。
+
+
 ## 10. OpenAPI 接口清单与请求/响应定义
 
-本规范覆盖 **31 个操作、123 个数据模型**。以下清单由同目录 OpenAPI JSON 生成。Base URL 为 `/api`，表中路径不重复此前缀。响应为实际裸 JSON，不额外包装成 `{code,data}`。时间序列数值数组必须与对应时间轴等长：counts 对应 registrations、amounts 对应 months、values 及 warehouses 内数组对应 periods；items/series/options 等集合不适用。该跨字段规则需联调测试，单纯 schema 校验不能证明。
+本规范覆盖 **35 个操作、144 个数据模型**。以下清单由同目录 OpenAPI JSON 生成。Base URL 为 `/api`，表中路径不重复此前缀。响应为实际裸 JSON，不额外包装成 `{code,data}`。时间序列数值数组必须与对应时间轴等长：counts 对应 registrations、amounts 对应 months、values 及 warehouses 内数组对应 periods；items/series/options 等集合不适用。该跨字段规则需联调测试，单纯 schema 校验不能证明。
 
 | 方法 | 路径 | operationId | 用途 |
 | --- | --- | --- | --- |
@@ -610,12 +843,16 @@ Dashboard 依次显示 **待审核 → 待履约 → 待采购 → 待配货 →
 | POST | `/organization/employees/import-preview` | `previewOrganizationEmployees` | 预览 Excel／CSV 成员导入 |
 | GET | `/organization/accounts/{id}` | `getOrganizationAccount` | 读取组织账号资料 |
 | PUT | `/organization/accounts/{id}` | `updateOrganizationAccount` | 编辑登录账号及FOP关联 |
+| GET | `/autoflow/integrations/fop/fulfillment-orders/{orderId}/supplier-follow-ups` | `getSupplierFollowUps` | 读取订单待发货采购供应商 |
+| GET | `/autoflow/integrations/fop/fulfillment-orders/{orderId}/supplier-follow-ups/{purchaseOrderId}/launch` | `getSupplierChat` | 重新核验并读取旺旺唤醒地址 |
+| POST | `/autoflow/integrations/fop/fulfillment-orders/approvals/preview` | `previewWorkbenchApproval` | 预览工作台审核单据 |
+| POST | `/autoflow/integrations/fop/fulfillment-orders/approvals` | `submitWorkbenchApproval` | 执行工作台单笔或批量审核 |
 
 
 ### 10.1 公共鉴权与响应说明
 
 
-字段级源码快照，仅记录已实现HTTP路由，不将计划FOP上游写为paths。响应裸JSON，无{code,data,message}包装。required=序列化必有；type:null=显式空值；可省略字段不在required中。参数跨字段依赖及已知口径差距见操作描述和配套审计。示例为脱敏契约样例，不是生产数据。 FOP为金蝶云苍穹上的HyperZone自研应用，源码只读核实；本工程方案2收款聚合和Mock已实现，真实生产网络适配器仍未配置。订单与收款各自授权，回款采用实际结算分录，统一UTC+8。 物流运费使用独立freight scope及allowedFreightIds，已实现Mock成本快照；必须保留原币与明确USD折算，按确认时间归期。最终结算、补收退款、调价及真实成本查询/授权仍待核对。 销售工作台增加个人收款与毛利：独立sales_profit授权、已审核净毛利差额优先、无日分配返回null；预估期间事件账本和严格asOf成本链仍是FOP对接前置条件。 全局P0：逐图许可和数据范围独立；普通员工本人，经理部门及下级，所有统计/排名/合计/搜索/趋势/明细先过滤再计算。组织整体汇总另行授权，只返聚合；客户当前分配不重写历史业绩。 五类履约待办按独立Shopify／供应商／库存／配货审核／出库事实统计，旧队列键保持兼容，新增采购卡片与fulfillmentProgress必填模型。
+字段级源码快照，仅记录已实现HTTP路由，不将计划FOP上游写为paths。响应裸JSON，无{code,data,message}包装。required=序列化必有；type:null=显式空值；可省略字段不在required中。参数跨字段依赖及已知口径差距见操作描述和配套审计。示例为脱敏契约样例，不是生产数据。 FOP为金蝶云苍穹上的HyperZone自研应用，源码只读核实；本工程方案2收款聚合和Mock已实现，真实生产网络适配器仍未配置。订单与收款各自授权，回款采用实际结算分录，统一UTC+8。 物流运费使用独立freight scope及allowedFreightIds，已实现Mock成本快照；必须保留原币与明确USD折算，按确认时间归期。最终结算、补收退款、调价及真实成本查询/授权仍待核对。 销售工作台增加个人收款与毛利：独立sales_profit授权、已审核净毛利差额优先、无日分配返回null；预估期间事件账本和严格asOf成本链仍是FOP对接前置条件。 全局P0：逐图许可和数据范围独立；普通员工本人，经理部门及下级，所有统计/排名/合计/搜索/趋势/明细先过滤再计算。组织整体汇总另行授权，只返聚合；客户当前分配不重写历史业绩。 五类履约待办按独立Shopify／供应商／库存／配货审核／出库事实统计，旧队列键保持兼容，新增采购卡片与fulfillmentProgress必填模型。 2026-10-26基线：九类待办查询、供应商旺旺只读催办、销售/配货委托审核；当前页最多100笔审核。前端分页20/50/100、默认50；配货默认已齐套待审核。汇率展示以USD为基准保留四位小数，API fxRateToUsd仍为原币折USD的完整精度。
 
 - `BearerAuth`：Authorization: Bearer <JWT>；角色每次查当前数据库。；type=http，in=Authorization，name=bearer。
 
@@ -1049,7 +1286,15 @@ Accept: application/json
 `GET /api/autoflow/integrations/fop/fulfillment-orders` · operationId: `getFulfillmentOrders`
 
 
-queue角色：review/exceptions=sales，dispatch=dispatch，procurement=procurement，allocation=allocation，shipping=warehouse。待审核：paid且reviewStatus=pending。待履约：paid、approved，shopifySync=pending/partial。待采购：paid、approved，supplierShipment=pending/partial。待配货：paid、approved，stockReadiness=incomplete，或ready且allocationReview=pending。待出库：paid、approved，stockReadiness=ready且allocationReview=approved，outbound=pending/partial。 五类均排除取消、未支付、退款。队列可重叠，每队列按订单ID去重；partial表示尚有未完成事项。unknown不推断；进度缺失或非法返回503。exceptions继续使用paid+未shipped+exception非null。按paidAt升序/id升序排序，空或无效收款日期排最后；排序在分页前完成，totals覆盖完整筛选集。保留dispatch/shipping键兼容旧URL，已不再使用旧发运/发货筛选逻辑。 五类待办强制按服务端登录账号取FOP租户/订单白名单与业务数据范围交集后统计和分页：salesperson仅owner.id等于绑定员工，department_manager仅管理部门及下级，business admin仅FOP明确授权的全部记录，none拒绝。系统管理员或全部岗位不扩大数据范围；搜索、精确订单查询、卡片/tasks数量、total和金额/数量合计均同范围。 departmentId按订单所属部门或departmentPathIds祖先匹配，只缩小已有权限；无匹配或无权部门返回空结果，绝不回退全部数据。departments从授权订单生成，独立于队列、搜索、部门筛选和分页；业务一至四部优先，其后自定义部门。协同岗位可独立配置businessRole=admin以处理全公司FOP允许的数据，无需系统管理员身份。 祖先路径仅在服务端处理，不加入公开订单明细；非法paidAt归一为null后排最后。 只读查询，无业务审核/配货/发运写接口；页面可见且联网时每30秒重取，恢复可见/网络及手动刷新立即重取。refreshedAt仅标识BFF查询完成时间。响应private,no-store；业务操作在FOP完成。
+只读履约待办查询。queue角色：unpaid/review/exceptions=sales；dispatch=dispatch；procurement/procurement_shipping=procurement；allocation/allocation_review=allocation；shipping=warehouse。所有队列排除取消和退款。unpaid只包含paymentStatus=unpaid的明确未支付订单；其他队列仍要求已付款。review为履约待审核，exceptions沿用paid且未shipped且exception非null；其余均要求履约已审核。
+procurement：supplierShipment=pending/partial，且不同时满足purchaseOrder=ordered及supplierPayment=paid；procurement_shipping：相同发货门槛且ordered+paid。采购两页互斥，部分下单即使已下单部分付清仍在procurement，未知采购事实保留待确认，全部发货退出两页。
+allocation仅stockReadiness=incomplete；allocation_review为ready且allocationReview=pending且outbound!=completed。配货两页互斥，均显示dispatchDocuments逐张发运单状态与配货单状态，不显示客户支付状态。
+shipping两组：ready且outbound!=completed；第一组allocationReview=pending，第二组approved且outbound=pending/partial。第一组可容许出库unknown，不推断可出库。warehouseStage省略/all取并集，pending_review取第一组，pending_outbound取第二组；只允许shipping携带此参数，跨队列/非法/重复参数400。
+先按服务端登录身份取FOP租户/订单白名单与本人/管理部门/业务管理员范围交集，再队列/warehouseStage/部门/搜索/精确订单过滤，再paidAtOrder排序、全量totals及分页；同队列按订单ID去重。系统管理员或全部岗位不得扩大业务范围，空白名单返回零；未知进度不得猜测，缺失或非法必需事实503。
+departmentId匹配订单department.id或仅服务端可用的祖先departmentPathIds，无权/无匹配返回空，departments来自授权订单且独立于队列和筛选。默认paidAt升序、同时间id升序，空或无效日期两种方向均最后。total/totals不受分页影响。
+Dashboard仍五卡：procurement/allocation分别按同名queue计数，配货默认首页allocation_review不改变Dashboard allocation卡片范围，shipping按两组并集，与工作台临时筛选独立。队列跨岗位可重叠，不可将卡片相加作公司订单总数。
+前端切换筛选回第1页，搜索/部门/排序/分页/手动或30秒自动刷新保留筛选；恢复可见或联网立即刷新。refreshedAt仅BFF完成时间，不是FOP同步水位。响应private,no-store，业务操作均在FOP。采购显示下单/采购款/供应商发货独立事实；发运显示dispatchDocuments及Shopify同步状态；仓库显示配货单状态及出库状态。 销售页签unpaid在review之前，但无queue页面默认review；显式unpaid才打开待支付。待支付paidAt=null显示—，不以createdAt替代。金额为订单应付金额，不进入回款或原五张已付待办；付款后刷新退出unpaid并按审核/履约进度进入其他队列。生产unpaid应取hzkj_orderstatus=1，不可由支付查询失败或未知取反推断。 支持sortBy=paidAt/dispatchDocumentStatus/allocationDocumentStatus/outboundStatus和sortOrder=asc/desc。先权限和完整条件过滤再排序后分页；旧paidAtOrder保留。sortBy省略默认paidAt；sortOrder显式值优先，省略时paidAt使用paidAtOrder（默认asc），状态默认asc。发运单排序为[]确认未生成→draft→submitted→approved，多单取最早阶段，null/缺失或任一unknown整单置后；配货排序为未齐套→齐套未审→已审；出库排序为待配货审核→待出库→部分出库，已完成仍不入队列。未知在两个方向均最后；同状态固定按paidAt升序/id升序，缺日期最后，不受paidAtOrder影响。三个sortBy来自归一字段/dispatchDocuments而非旧粗粒度字段。仅dispatch/allocation/allocation_review允许dispatchDocumentStatus；仅allocation/allocation_review/shipping允许allocationDocumentStatus；仅shipping允许outboundStatus。非法/重复/与队列不匹配的排序参数400。
+页面交互：全部待办清单每页选项20/50/100，默认显式发送pageSize=50；按订单平铺、仅外层纵向滚动。切换条数回第1页，保留部门/搜索/排序/出库阶段。配货无queue页面默认allocation_review，明确queue=allocation仍查待配货；仓库筛选从左到右为warehouseStage、搜索/查询、订单数、departmentId。审核写入使用独立preview/approvals接口及approvalActions，不改变本GET只读属性。
 
 
 实现状态：implemented
@@ -1061,7 +1306,7 @@ queue角色：review/exceptions=sales，dispatch=dispatch，procurement=procurem
 请求示例（日期和主体为脱敏样例，联调时替换）：
 
 ```http
-GET /api/autoflow/integrations/fop/fulfillment-orders?queue=allocation&workbenchRole=allocation&departmentId=department-sales-1&page=1&pageSize=20
+GET /api/autoflow/integrations/fop/fulfillment-orders?queue=allocation_review&workbenchRole=allocation&departmentId=department-sales-1&page=1&pageSize=50
 Authorization: Bearer <有效会话JWT>
 Accept: application/json
 ```
@@ -1069,13 +1314,17 @@ Accept: application/json
 
 | 参数 | 位置 | 类型 | 必填 | 说明 | 约束/默认值 |
 | --- | --- | --- | --- | --- | --- |
-| `queue` | query | string | 是 | 按卡片顺序 review待审核、dispatch待履约、procurement待采购、allocation待配货、shipping待出库；另有exceptions异常订单。 | enum=["review", "exceptions", "procurement", "allocation", "dispatch", "shipping"] |
+| `queue` | query | string | 是 | 必传工作台队列。前端默认首页：sales=review、dispatch=dispatch、procurement=procurement、allocation=allocation_review、warehouse=shipping；页面显式queue优先。unpaid在销售页签第一但不是默认页；procurement_shipping为已采购待发货。此GET不能省略queue。 | enum=["unpaid", "review", "dispatch", "procurement", "procurement_shipping", "allocation", "allocation_review", "shipping", "exceptions"] |
 | `workbenchRole` | query | WorkbenchRole | 否 | 可选，提供时必须匹配queue所需角色，否则400。 | enum=["sales", "procurement", "allocation", "dispatch", "warehouse"] |
 | `search` | query | string | 否 | trim/忽略大小写，匹配orderNumber/shopifyOrderNumber/customerName/storeName/items.sku。 | maxLength=200 |
 | `orderNumber` | query | string | 否 | FOP业务订单号精确匹配，不trim。 | maxLength=100 |
 | `departmentId` | query | string | 否 | 所属部门稳定ID，精确匹配department.id或departmentPathIds祖先。省略/空串表示当前账号全部可见部门；非身份或授权参数。 | maxLength=128 |
+| `warehouseStage` | query | string | 否 | 仅shipping：all全部待出库，pending_review已齐套未审核，pending_outbound已审核未出库。省略同all；其他队列携带/非法/重复参数400。先授权并阶段过滤，再合计和分页。 前端仓库筛选栏置于最左侧、搜索框之前；所属部门置于最右侧。 | enum=["all", "pending_review", "pending_outbound"]; default="all" |
+| `sortBy` | query | string | 否 | 主排序字段；状态字段只允许在对应显示列的队列使用，其他组合400。详见接口描述。 | enum=["paidAt", "dispatchDocumentStatus", "allocationDocumentStatus", "outboundStatus"]; default="paidAt" |
+| `sortOrder` | query | string | 否 | 升序asc/降序desc。显式值优先；省略时日期沿用paidAtOrder，状态默认asc。未知始终最后；同状态按收款升序/id升序。非法或重复参数400。 | enum=["asc", "desc"] |
+| `paidAtOrder` | query | string | 否 | 收款日期排序：asc最早在前，desc最新在前。先授权和筛选，再对完整结果排序后分页；同时间id升序，空/非法日期始终最后。非法值或重复参数返回400。 仅sortBy省略或paidAt且sortOrder未指定时决定日期排序方向；状态排序的同值顺序固定收款升序。 | enum=["asc", "desc"]; default="asc" |
 | `page` | query | integer | 否 | — | default=1; minimum=1; maximum=1000000 |
-| `pageSize` | query | integer | 否 | — | default=20; minimum=1; maximum=100 |
+| `pageSize` | query | integer | 否 | 接口兼容1–100，省略时DTO默认20；前端待办清单提供20/50/100并默认显式发送50。按订单分页，多商品不拆订单；切换条数回第1页。 | default=20; minimum=1; maximum=100 |
 
 
 | 状态码 | 说明 | Content-Type / 响应模型 |
@@ -2999,6 +3248,309 @@ Accept: application/json
 实现证据：`backend/src/modules/organization/organization.controller.ts`, `backend/src/modules/organization/organization.service.ts`, `backend/src/modules/organization/organization.dto.ts`。
 
 
+### 10.33 读取订单待发货采购供应商
+
+`GET /api/autoflow/integrations/fop/fulfillment-orders/{orderId}/supplier-follow-ups` · operationId: `getSupplierFollowUps`
+
+
+采购岗位+当前本地数据范围+FOP订单白名单+独立allowedPurchaseOrderIds共同限制；需有效已支付已审核履约单处于procurement_shipping。按真实源单/分录关联实际采购卖家，不从SKU默认供应商猜测。仅有效已付且pending/partial采购，数量>0的本订单分录。不得传userId/tenantId/supplierId/旺旺账号；未知或重复query返回400。不存在或不可见订单/采购404，流程退出或contactVersion变化409，provider未配置/响应异常503，无演示回退。查询前后核对权限，打开每次重新取数；缺采购授权返回空联系人。详见需求9.10。 单可联系采购自动尝试，多采购先选择；联系人不混入常规订单/图表响应；本接口不返回URL。
+
+
+实现状态：implemented
+
+
+鉴权：`[{"BearerAuth": []}, {"SessionCookie": []}]`。
+
+
+请求示例（日期和主体为脱敏样例，联调时替换）：
+
+```http
+GET /api/autoflow/integrations/fop/fulfillment-orders/{orderId}/supplier-follow-ups
+Authorization: Bearer <有效会话JWT>
+Accept: application/json
+```
+
+
+| 参数 | 位置 | 类型 | 必填 | 说明 | 约束/默认值 |
+| --- | --- | --- | --- | --- | --- |
+| `orderId` | path | string | 是 | — | minLength=1 |
+
+
+| 状态码 | 说明 | Content-Type / 响应模型 |
+| --- | --- | --- |
+| 400 | 400：DTO失败、未知DTO字段、日期或跨参数条件错误。 | application/json: HttpError |
+| 401 | 401：缺失/过期/无效JWT或账户不存在。 | application/json: HttpError |
+| 403 | 403：入口/系统管理权限不足、业务禁用、绑定/范围缺失、FOP拒绝或请求期间授权变更。 | application/json: ErrorResponse |
+| 404 | 404：目标本地用户不存在。 | application/json: HttpError |
+| 409 | 409：FOP身份重复绑定或尝试撤销自身系统管理权限。 | application/json: HttpError |
+| 429 | 429：AppModule全局默认每60秒120次；实际计数受部署IP/代理策略影响。 | application/json: HttpError |
+| 500 | 500：未捕获服务/数据库异常。 | application/json: HttpError |
+| 503 | 503：FOP provider未配置或调用异常；不会降级mock。 | application/json: FopError |
+| 200 | 成功，裸JSON；本接口不发送消息或修改订单。 | application/json: SupplierFollowUpPage |
+
+
+200 响应示例（application/json）：
+
+```json
+{
+  "source": "mock",
+  "orderId": "order-1",
+  "orderNumber": "AF-00021",
+  "refreshedAt": "2026-10-25T16:00:00+08:00",
+  "items": [
+    {
+      "purchaseOrderId": "purchase-1",
+      "purchaseOrderNumber": "CG-00021-1",
+      "platformOrderNumber": "DEMO1688-21-1",
+      "supplier": {
+        "id": "supplier-1",
+        "name": "杭州云帆箱包（演示）",
+        "wangwangAccount": "HyperZone演示供应商1"
+      },
+      "shipmentStatus": "pending",
+      "lines": [
+        {
+          "fulfillmentLineId": "line-1",
+          "purchaseLineId": "purchase-line-1",
+          "sku": "HZ-BAG-001",
+          "name": "Everyday commuter backpack",
+          "pendingQuantity": 2
+        }
+      ],
+      "availability": "ready",
+      "contactVersion": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  ]
+}
+```
+
+
+实现证据：`backend/src/modules/users/workbench.controller.ts`, `backend/src/modules/fop-data/fop-data.service.ts`, `backend/src/modules/fop-data/supplier-follow-up.ts`, `frontend/src/components/autoflow/SupplierFollowUpDialog.vue`。
+
+
+### 10.34 重新核验并读取旺旺唤醒地址
+
+`GET /api/autoflow/integrations/fop/fulfillment-orders/{orderId}/supplier-follow-ups/{purchaseOrderId}/launch` · operationId: `getSupplierChat`
+
+
+采购岗位+当前本地数据范围+FOP订单白名单+独立allowedPurchaseOrderIds共同限制；需有效已支付已审核履约单处于procurement_shipping。按真实源单/分录关联实际采购卖家，不从SKU默认供应商猜测。仅有效已付且pending/partial采购，数量>0的本订单分录。不得传userId/tenantId/supplierId/旺旺账号；未知或重复query返回400。不存在或不可见订单/采购404，流程退出或contactVersion变化409，provider未配置/响应异常503，无演示回退。查询前后核对权限，打开每次重新取数；缺采购授权返回空联系人。详见需求9.10。 同步比较供应商账号及contactVersion；Mock强制demo+null，不唤醒虚构用户。真实响应需通过前端协议/接收人二次校验；只尝试打开，不代表消息送达。
+
+
+实现状态：implemented
+
+
+鉴权：`[{"BearerAuth": []}, {"SessionCookie": []}]`。
+
+
+请求示例（日期和主体为脱敏样例，联调时替换）：
+
+```http
+GET /api/autoflow/integrations/fop/fulfillment-orders/{orderId}/supplier-follow-ups/{purchaseOrderId}/launch
+Authorization: Bearer <有效会话JWT>
+Accept: application/json
+```
+
+
+| 参数 | 位置 | 类型 | 必填 | 说明 | 约束/默认值 |
+| --- | --- | --- | --- | --- | --- |
+| `orderId` | path | string | 是 | — | minLength=1 |
+| `purchaseOrderId` | path | string | 是 | — | minLength=1 |
+| `contactVersion` | query | string | 是 | — | pattern="^[a-f0-9]{64}$" |
+
+
+| 状态码 | 说明 | Content-Type / 响应模型 |
+| --- | --- | --- |
+| 400 | 400：DTO失败、未知DTO字段、日期或跨参数条件错误。 | application/json: HttpError |
+| 401 | 401：缺失/过期/无效JWT或账户不存在。 | application/json: HttpError |
+| 403 | 403：入口/系统管理权限不足、业务禁用、绑定/范围缺失、FOP拒绝或请求期间授权变更。 | application/json: ErrorResponse |
+| 404 | 404：目标本地用户不存在。 | application/json: HttpError |
+| 409 | 409：FOP身份重复绑定或尝试撤销自身系统管理权限。 | application/json: HttpError |
+| 429 | 429：AppModule全局默认每60秒120次；实际计数受部署IP/代理策略影响。 | application/json: HttpError |
+| 500 | 500：未捕获服务/数据库异常。 | application/json: HttpError |
+| 503 | 503：FOP provider未配置或调用异常；不会降级mock。 | application/json: FopError |
+| 200 | 成功，裸JSON；本接口不发送消息或修改订单。 | application/json: SupplierChatLaunch |
+
+
+200 响应示例（application/json）：
+
+```json
+{
+  "source": "mock",
+  "mode": "demo",
+  "orderId": "order-1",
+  "purchaseOrderId": "purchase-1",
+  "wangwangAccount": "HyperZone演示供应商1",
+  "url": null
+}
+```
+
+
+实现证据：`backend/src/modules/users/workbench.controller.ts`, `backend/src/modules/fop-data/fop-data.service.ts`, `backend/src/modules/fop-data/supplier-follow-up.ts`, `frontend/src/components/autoflow/SupplierFollowUpDialog.vue`。
+
+
+### 10.35 预览工作台审核单据
+
+`POST /api/autoflow/integrations/fop/fulfillment-orders/approvals/preview` · operationId: `previewWorkbenchApproval`
+
+
+需要登录JWT、岗位、用户数据范围和独立FOP approvalActions。配货关联由后台解析；版本变化阻断；审核委托给FOP原生audit。未配置真实网关不写生产业务。Mock仅更新进程内演示状态。
+
+
+实现状态：BFF、前端、Mock和可配置HTTP适配已实现；FOP网关发布与真实审核联调待T35/H37/D38。
+
+
+鉴权：`[{"BearerAuth": []}, {"SessionCookie": []}]`。
+
+
+请求示例（日期和主体为脱敏样例，联调时替换）：
+
+```http
+POST /api/autoflow/integrations/fop/fulfillment-orders/approvals/preview
+Authorization: Bearer <有效会话JWT>
+Accept: application/json
+```
+
+
+无查询/路径参数。
+
+
+请求体：`application/json`；必需：True；模型：`ApprovalPreviewRequest`。
+
+
+```json
+{
+  "queue": "allocation_review",
+  "orderIds": [
+    "o1"
+  ]
+}
+```
+
+
+| 状态码 | 说明 | Content-Type / 响应模型 |
+| --- | --- | --- |
+| 201 | 已处理；必须检查逐项业务状态，非全成功保证 | application/json: ApprovalPreviewResponse |
+| 400 | 非法参数/重复或超量订单/客户端身份注入 | 无响应体 |
+| 401 | 未登录、账号停用或会话失效 | 无响应体 |
+| 403 | 岗位、业务范围或FOP操作未授权 | 无响应体 |
+| 404 | 订单不存在或不可见 | 无响应体 |
+| 503 | FOP未配置、不可用或目标响应无效 | 无响应体 |
+
+
+201 响应示例（application/json）：
+
+```json
+{
+  "source": "mock",
+  "queue": "allocation_review",
+  "items": [
+    {
+      "orderId": "o1",
+      "orderNumber": "AF-001",
+      "version": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "eligible": true,
+      "documents": [
+        {
+          "id": "alloc1",
+          "number": "PH-001",
+          "status": "B",
+          "eligible": true,
+          "reason": null
+        }
+      ]
+    }
+  ]
+}
+```
+
+
+实现证据：`backend/src/modules/fop-data/fop-approval.service.ts`, `frontend/src/components/autoflow/OrderApprovalDialog.vue`。
+
+
+### 10.36 执行工作台单笔或批量审核
+
+`POST /api/autoflow/integrations/fop/fulfillment-orders/approvals` · operationId: `submitWorkbenchApproval`
+
+
+需要登录JWT、岗位、用户数据范围和独立FOP approvalActions。配货关联由后台解析；版本变化阻断；审核委托给FOP原生audit。未配置真实网关不写生产业务。Mock仅更新进程内演示状态。
+
+
+实现状态：BFF、前端、Mock和可配置HTTP适配已实现；FOP网关发布与真实审核联调待T35/H37/D38。
+
+
+鉴权：`[{"BearerAuth": []}, {"SessionCookie": []}]`。
+
+
+请求示例（日期和主体为脱敏样例，联调时替换）：
+
+```http
+POST /api/autoflow/integrations/fop/fulfillment-orders/approvals
+Authorization: Bearer <有效会话JWT>
+Accept: application/json
+```
+
+
+无查询/路径参数。
+
+
+请求体：`application/json`；必需：True；模型：`ApprovalSubmitRequest`。
+
+
+```json
+{
+  "queue": "allocation_review",
+  "requestId": "12345678-1234-4234-8234-123456789abc",
+  "items": [
+    {
+      "orderId": "o1",
+      "version": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  ]
+}
+```
+
+
+| 状态码 | 说明 | Content-Type / 响应模型 |
+| --- | --- | --- |
+| 201 | 已处理；必须检查逐项业务状态，非全成功保证 | application/json: ApprovalResponse |
+| 400 | 非法参数/重复或超量订单/客户端身份注入 | 无响应体 |
+| 401 | 未登录、账号停用或会话失效 | 无响应体 |
+| 403 | 岗位、业务范围或FOP操作未授权 | 无响应体 |
+| 404 | 订单不存在或不可见 | 无响应体 |
+| 503 | FOP未配置、不可用或目标响应无效 | 无响应体 |
+
+
+201 响应示例（application/json）：
+
+```json
+{
+  "source": "mock",
+  "requestId": "12345678-1234-4234-8234-123456789abc",
+  "completedAt": "2026-10-25T08:00:00Z",
+  "items": [
+    {
+      "orderId": "o1",
+      "orderNumber": "AF-001",
+      "status": "approved",
+      "message": "审核完成",
+      "documents": [
+        {
+          "id": "alloc1",
+          "number": "PH-001",
+          "status": "approved",
+          "message": "已审核",
+          "warning": "发货通知尚未生成，请核对后置处理"
+        }
+      ]
+    }
+  ]
+}
+```
+
+
+实现证据：`backend/src/modules/fop-data/fop-approval.service.ts`, `frontend/src/components/autoflow/OrderApprovalDialog.vue`。
+
+
 ## 11. 字段级数据字典
 
 模型引用按名称交叉查阅。例如 `OrderVolumeData.series[] → VolumeSeries.amounts → VolumeAmounts`；每一层字段均在下表列出。必填是相对于当前父对象；父对象本身可选时不强制创建。可空只以类型中的 `null` 或 `anyOf/oneOf` null 分支为准。示例不是生产值。内部 FOP 提供器模型若标注为内部，则不能从浏览器直接传入。
@@ -3197,6 +3749,8 @@ publicOrder白名单输出，不含tenantId、departmentPathIds或任意provider
 | `cancelled` | boolean | 是 | true表示订单取消，从订单量/收款/履约队列排除。 | — |
 | `exception` | OrderException anyOf null | 是 | 订单异常详情；无异常明确为null。 | — |
 | `fulfillmentProgress` | FulfillmentProgress | 是 | 五类队列权威状态，缺失／非法字段时BFF返回503 fop_unavailable；旧状态字段仅保留兼容，不能驱动新队列。 | — |
+| `procurementProgress` | ProcurementProgress | 否 | 兼容旧版本为可选；当前BFF始终输出对象。provider未返回时归一化unknown/unknown；对象存在但缺字段或枚举非法返回503。采购清单用此对象替换客户支付状态列，供应商发货仍取fulfillmentProgress.supplierShipment。 | — |
+| `dispatchDocuments` | array / null | 否 | 发运工作台以发运单状态替换客户支付状态。数组完整列出当前有效且有权查看的关联发运单；[]仅用于已确认无有效单据，null/省略表示事实不可用，显示待确认。不能将权限过滤或请求失败的空结果冒充未生成；缺权限/不完整结果应返回null。BFF输出null或数组，兼容旧provider省略；非法结构/枚举或重复id拒绝为503。与Shopify同步状态独立，不改变队列与合计。 | example=null |
 
 组合规则 `allOf`：`见 schema`。完整约束见 OpenAPI JSON。
 
@@ -3257,7 +3811,18 @@ publicOrder白名单输出，不含tenantId、departmentPathIds或任意provider
     "stockReadiness": "ready",
     "allocationReview": "approved",
     "outbound": "completed"
-  }
+  },
+  "procurementProgress": {
+    "purchaseOrder": "unknown",
+    "supplierPayment": "unknown"
+  },
+  "dispatchDocuments": [
+    {
+      "id": "dispatch-3",
+      "number": "FY-EXAMPLE-003",
+      "status": "approved"
+    }
+  ]
 }
 ```
 
@@ -3563,9 +4128,9 @@ publicOrder白名单输出，不含tenantId、departmentPathIds或任意provider
 | --- | --- | --- | --- | --- |
 | `review` | integer | 是 | 待审核：paid且reviewStatus=pending。 排除取消，按订单ID去重；无对应岗位权限为0，不受日期筛选。 | minimum=0 |
 | `dispatch` | integer | 是 | 待履约：paid、approved，shopifySync=pending/partial。 排除取消，按订单ID去重；无对应岗位权限为0，不受日期筛选。 | minimum=0 |
-| `procurement` | integer | 是 | 待采购：paid、approved，supplierShipment=pending/partial。 排除取消，按订单ID去重；无对应岗位权限为0，不受日期筛选。 | minimum=0 |
-| `allocation` | integer | 是 | 待配货：paid、approved，stockReadiness=incomplete，或ready且allocationReview=pending。 排除取消，按订单ID去重；无对应岗位权限为0，不受日期筛选。 | minimum=0 |
-| `shipping` | integer | 是 | 待出库：paid、approved，stockReadiness=ready且allocationReview=approved，outbound=pending/partial。 排除取消，按订单ID去重；无对应岗位权限为0，不受日期筛选。 | minimum=0 |
+| `procurement` | integer | 是 | 待采购：paid、履约approved，supplierShipment=pending/partial，且不同时满足全部下单(purchaseOrder=ordered)与采购款付清(supplierPayment=paid)。已采购待发货不计入此卡片；排除取消、按订单ID去重、先数据权限过滤，无岗位权限为0，不受日期筛选。 | minimum=0 |
+| `allocation` | integer | 是 | 待配货：paid、履约approved且stockReadiness=incomplete。已齐套待审核不计入此卡片；排除取消、按订单ID去重、先数据权限过滤，无岗位权限为0，不受日期筛选。 | minimum=0 |
+| `shipping` | integer | 是 | 待出库（仓库两组）：paid、履约approved、stockReadiness=ready，且outbound!=completed；第一组allocationReview=pending，第二组allocationReview=approved且outbound=pending/partial。第一组出库unknown不影响已知待审核事实；配货审核unknown、第二组出库unknown均不入选。 排除取消，按订单ID去重；无对应岗位权限为0，不受日期筛选。 | minimum=0 |
 
 
 ### DashboardException
@@ -5005,7 +5570,7 @@ month=所选年年初到当前月（历史年12月）；week=锚点所在周及�
 | `salesDepartmentCode` | SalesDepartment | 否 | 见引用模型/接口说明 | — |
 | `originalAmount` | number | 是 | hzkj_actual_freight原币实际成本，至多两位小数的安全分币；非客户收费或预估价。公开有效明细为正数。 | minimum=0; maximum=90071992547409.9 |
 | `originalCurrency` | string | 是 | hzkj_textfield1明确原币种，标准大写三字母代码；不得统一假定CNY。 | pattern="^[A-Z]{3}$" |
-| `fxRateToUsd` | number | 是 | 每1单位原币折合USD；必须显式、有限且>0，USD原币必须1。 | exclusiveMinimum=0 |
+| `fxRateToUsd` | number | 是 | 每1单位原币折合USD；必须显式、有限且>0，USD原币必须1。 传输和金额计算保留源精度，不按显示位数截断；界面取倒数显示USD/原币并固定4位小数。CNY例：fxRateToUsd=0.1404494382022472显示USD/CNY 7.1200（1 USD=7.1200 CNY）；其他币种保留真实币种，不冒充CNY。显示四舍五入值不得回写为金额计算汇率。 | exclusiveMinimum=0 |
 | `fxRateDate` | string (date) | 是 | 该条成本采用的汇率业务日期；不是响应生成日期的隐式替代。 | pattern="^\\d{4}-\\d{2}-\\d{2}$" |
 | `fxRateSource` | string | 是 | 可追溯的汇率来源；Mock来源不能用于生产。 | minLength=1 |
 | `amount` | number | 是 | USD成本=originalAmount×fxRateToUsd，按十进制精确乘法HALF_UP到分（1.50×0.15=0.23），不先做二进制浮点乘法再round。后端验证一致性、安全分币和累计安全性；缺汇率、不一致或超过两位小数的原额/结果拒收。 | minimum=0; maximum=90071992547409.9 |
@@ -5084,7 +5649,7 @@ month=所选年年初到当前月（历史年12月）；week=锚点所在周及�
 | `salesDepartmentCode` | SalesDepartment | 否 | 见引用模型/接口说明 | — |
 | `originalAmount` | number | 是 | hzkj_actual_freight原币实际成本，至多两位小数的安全分币；非客户收费或预估价。公开有效明细为正数。 | minimum=0; maximum=90071992547409.9 |
 | `originalCurrency` | string | 是 | hzkj_textfield1明确原币种，标准大写三字母代码；不得统一假定CNY。 | pattern="^[A-Z]{3}$" |
-| `fxRateToUsd` | number | 是 | 每1单位原币折合USD；必须显式、有限且>0，USD原币必须1。 | exclusiveMinimum=0 |
+| `fxRateToUsd` | number | 是 | 每1单位原币折合USD；必须显式、有限且>0，USD原币必须1。 传输和金额计算保留源精度，不按显示位数截断；界面取倒数显示USD/原币并固定4位小数。CNY例：fxRateToUsd=0.1404494382022472显示USD/CNY 7.1200（1 USD=7.1200 CNY）；其他币种保留真实币种，不冒充CNY。显示四舍五入值不得回写为金额计算汇率。 | exclusiveMinimum=0 |
 | `fxRateDate` | string (date) | 是 | 该条成本采用的汇率业务日期；不是响应生成日期的隐式替代。 | pattern="^\\d{4}-\\d{2}-\\d{2}$" |
 | `fxRateSource` | string | 是 | 可追溯的汇率来源；Mock来源不能用于生产。 | minLength=1 |
 | `amount` | number | 是 | USD成本=originalAmount×fxRateToUsd，按十进制精确乘法HALF_UP到分（1.50×0.15=0.23），不先做二进制浮点乘法再round。后端验证一致性、安全分币和累计安全性；缺汇率、不一致或超过两位小数的原额/结果拒收。 | minimum=0; maximum=90071992547409.9 |
@@ -5631,7 +6196,7 @@ UTC+8自然周期。响应升序，统计表可倒序；previous范围不是截�
 | `currency` | "USD" | 是 | 统一展示币种。 | — |
 | `originalAmount` | number | 是 | 原币期间净毛利差额。已审核FOP月结通常CNY net_delta_rmb，不能冒充USD。 | — |
 | `originalCurrency` | string | 是 | 明确原币代码。 | pattern="^[A-Z]{3}$" |
-| `fxRateToUsd` | number | 是 | 每单位原币折USD，有限且正；USD必须1。 | exclusiveMinimum=0 |
+| `fxRateToUsd` | number | 是 | 每单位原币折USD，有限且正；USD必须1。 传输和金额计算保留源精度，不按显示位数截断；界面取倒数显示USD/原币并固定4位小数。CNY例：fxRateToUsd=0.1404494382022472显示USD/CNY 7.1200（1 USD=7.1200 CNY）；其他币种保留真实币种，不冒充CNY。显示四舍五入值不得回写为金额计算汇率。 | exclusiveMinimum=0 |
 | `fxRateDate` | string (date) | 是 | 冻结/指定的审计汇率日期。 晚于当前UTC+8日期的汇率事实不参与统计或业务员选项。 | pattern="^\\d{4}-\\d{2}-\\d{2}$" |
 | `fxRateSource` | string | 是 | 可信汇率来源，禁止用今天汇率隐式改写历史。 | minLength=1 |
 
@@ -6193,6 +6758,8 @@ provider专用：客户当前分配与事实历史owner分开；仅缩小客户�
 | `allowedFreightIds` | string[] | 否 | 独立成本白名单，缺失或空为无运费记录；不能从allowedOrderIds/allowedReceiptIds推导。 | uniqueItems=true |
 | `analyticsScopes` | string[] | 否 | 独立资源能力；registrations/receipts/freight/sales_profit分别校验，不从其他资源推导。 | uniqueItems=true |
 | `organizationSummaries` | FopOrganizationSummaryGrant[] | 否 | 独立组织聚合授权，缺失/空不授组织整体统计。 | — |
+| `allowedPurchaseOrderIds` | string[] | 否 | 独立采购单及供应商联系信息可见白名单；缺失/空不授权，不从订单权限推导。provider内部使用，不接受浏览器传入。 | uniqueItems=true |
+| `approvalActions` | string[] | 否 | 独立审核操作权限，缺失/空数组拒绝审核，不从订单读权或系统管理员身份推导。仍需实体与单据级FOP权限。 | uniqueItems=true |
 
 
 ### FopProviderCapabilities
@@ -6247,6 +6814,9 @@ provider内部归一候选事实（有效字段口径同FopOrder）；不直接�
 | `tenantId` | string | 是 | 必须与绑定租户及授权subject一致。 | minLength=1 |
 | `currentCustomerOwner` | FopCurrentCustomerOwner | 否 | 见引用模型/接口说明 | — |
 | `departmentPathIds` | string[] | 否 | 事实所属部门的可信祖先ID；与当前客户归属的部门路径分开。 | — |
+| `procurementProgress` | ProcurementProgress | 否 | 兼容旧版本为可选；当前BFF始终输出对象。provider未返回时归一化unknown/unknown；对象存在但缺字段或枚举非法返回503。采购清单用此对象替换客户支付状态列，供应商发货仍取fulfillmentProgress.supplierShipment。 | — |
+| `fulfillmentProgress` | FulfillmentProgress | 是 | 见引用模型/接口说明 | — |
+| `dispatchDocuments` | array / null | 否 | 发运工作台以发运单状态替换客户支付状态。数组完整列出当前有效且有权查看的关联发运单；[]仅用于已确认无有效单据，null/省略表示事实不可用，显示待确认。不能将权限过滤或请求失败的空结果冒充未生成；缺权限/不完整结果应返回null。BFF输出null或数组，兼容旧provider省略；非法结构/枚举或重复id拒绝为503。与Shopify同步状态独立，不改变队列与合计。 | example=null |
 
 组合规则 `allOf`：`见 schema`。完整约束见 OpenAPI JSON。
 
@@ -6300,8 +6870,8 @@ provider内部归一候选事实（有效字段口径同FopReceipt）；不直�
 | --- | --- | --- | --- | --- |
 | `shopifySync` | string | 是 | Shopify 发货同步：待同步／部分同步／已同步／不适用／未知。由平台回执事实归一化，不从配货或出库推导。 | enum=["pending", "partial", "synced", "not_required", "unknown"] |
 | `supplierShipment` | string | 是 | 供应商发货：未发货／部分发货／全部发货或入库／无需采购／未知。采购已下单不等于已发货。 | enum=["pending", "partial", "shipped", "not_required", "unknown"] |
-| `stockReadiness` | string | 是 | 有效库存与配货需求是否齐套。已齐套不代表配货已审核。 | enum=["incomplete", "ready", "unknown"] |
-| `allocationReview` | string | 是 | 有效配货单是否全部审核放行；撤审重新进入待审核。无相关事实返回unknown，不得猜测。 | enum=["pending", "approved", "unknown"] |
+| `stockReadiness` | string | 是 | 有效库存与配货需求是否齐套。已齐套不代表配货已审核。 配货工作台映射incomplete为“未齐套，未配货”；ready需有效配货需求全部齐套完成事实，不可仅凭库存充足/可配货available代替配货单completed。 | enum=["incomplete", "ready", "unknown"] |
+| `allocationReview` | string | 是 | 有效配货单是否全部审核放行；撤审重新进入待审核。无相关事实返回unknown，不得猜测。 ready且pending显示“已齐套未审核”；不能用履约订单已审核替代配货单审核。 | enum=["pending", "approved", "unknown"] |
 | `outbound` | string | 是 | 仓库实物出库进度，按有效来源商品需求及审核出库数量归一化，不能用Shopify履约状态替代。 | enum=["pending", "partial", "completed", "unknown"] |
 
 
@@ -6479,6 +7049,492 @@ provider内部归一候选事实（有效字段口径同FopReceipt）；不直�
 | `departments[].id` | string | 是 | 当前账号可见订单的所属部门稳定ID；提交为departmentId。 | — |
 | `departments[].name` | string | 是 | 所属部门展示名称，来自订单归属。 | — |
 | `refreshedAt` | string (date-time) | 是 | 本次BFF成功查询完成时间，带明确时区；用于显示最近刷新。不是FOP事件提交时间或同步水位，不能单独证明上游数据的新鲜度。 | — |
+
+
+### ProcurementProgress
+
+
+履约订单关联有效采购需求的独立下单、供应商付款事实。不能由履约paymentStatus、采购申请审核或旧procurementStatus推导；多采购单/多SKU先按来源行与有效数量归一化。仅展示进度，不提供业务写操作。
+
+
+| 字段路径 | 类型/引用 | 必填 | 说明 | 约束/示例 |
+| --- | --- | --- | --- | --- |
+| `purchaseOrder` | string | 是 | not_ordered=确认尚无有效下达采购单；partial=仅部分有效采购需求已下单；ordered=全部采购需求已下单；cancelled=原采购单取消且仍待重新采购；not_required=无需采购；unknown=未取得完整事实。采购申请不等于采购订单，草稿不等于正式下达；缺数据不等于未下单。 | enum=["not_ordered", "partial", "ordered", "cancelled", "not_required", "unknown"] |
+| `supplierPayment` | string | 是 | 独立于客户付款。按有效已下达采购单应付义务汇总：unpaid=未付；partial=部分付款（单单部分付或多单部分付）；paid=所有相关采购应付款已付；refunded=存在影响当前采购义务的退款待跟进，不表示全部已退；not_required=当前无采购应付（尚未下单或无需采购，不等于已支付）；unknown=来源未明。partial下单且paid只表示已下达部分款已付，不代表全部采购完成。历史已关闭/已重建覆盖退款单不得重复干扰当前进度。 | enum=["unpaid", "partial", "paid", "refunded", "not_required", "unknown"] |
+
+
+```json
+{
+  "purchaseOrder": "not_ordered",
+  "supplierPayment": "not_required"
+}
+```
+
+
+### DispatchDocument
+
+
+当前履约订单关联的有效发运单，只返回登录用户有权查看的单据；多单按id去重，不能用审核最靠后的单据代表整单。
+
+
+| 字段路径 | 类型/引用 | 必填 | 说明 | 约束/示例 |
+| --- | --- | --- | --- | --- |
+| `id` | string | 是 | FOP发运单稳定主键，当前数组内唯一。 | minLength=1 |
+| `number` | string | 是 | FOP发运单billno，用于区分同一履约订单的多张发运单。 | minLength=1 |
+| `status` | string | 是 | draft暂存(A)、submitted已提交(B)、approved已审核(C)；未映射/未知用unknown，不从客户支付、履约审核或Shopify同步推断。 | enum=["draft", "submitted", "approved", "unknown"] |
+
+
+```json
+{
+  "id": "dispatch-1",
+  "number": "FY-EXAMPLE-001",
+  "status": "draft"
+}
+```
+
+
+### SupplierFollowUpLine
+
+
+已排除取消/已发明细的源单关联，不按SKU默认供应商猜测。
+
+
+| 字段路径 | 类型/引用 | 必填 | 说明 | 约束/示例 |
+| --- | --- | --- | --- | --- |
+| `fulfillmentLineId` | string | 是 | 源履约订单有效分录ID | — |
+| `purchaseLineId` | string | 是 | 实际采购单分录ID | — |
+| `sku` | string | 是 | 本地SKU | — |
+| `name` | string | 是 | 商品名称 | — |
+| `pendingQuantity` | number | 是 | 当前履约源分录分摊的未发数量；不得返回整张合并采购单其他订单数量。 | exclusiveMinimum=0 |
+
+
+### SupplierFollowUpSupplier
+
+
+
+
+
+| 字段路径 | 类型/引用 | 必填 | 说明 | 约束/示例 |
+| --- | --- | --- | --- | --- |
+| `id` | string | 是 | 实际采购供应商ID | — |
+| `name` | string | 是 | 供应商名称 | — |
+| `wangwangAccount` | string / null | 是 | 采购单实际卖家旺旺账号；缺失null。 | — |
+
+
+### SupplierFollowUp
+
+
+一张有效已付且仍有未发数量的采购单；同供应商多采购仍逐单保留。
+
+
+| 字段路径 | 类型/引用 | 必填 | 说明 | 约束/示例 |
+| --- | --- | --- | --- | --- |
+| `purchaseOrderId` | string | 是 | 采购单稳定ID | — |
+| `purchaseOrderNumber` | string | 是 | 采购单号 | — |
+| `platformOrderNumber` | string / null | 是 | 1688订单号；线下采购可空。 | — |
+| `supplier` | SupplierFollowUpSupplier | 是 | 见引用模型/接口说明 | — |
+| `shipmentStatus` | string | 是 | 见引用模型/接口说明 | enum=["pending", "partial"] |
+| `lines` | SupplierFollowUpLine[] | 是 | 见引用模型/接口说明 | — |
+| `availability` | string | 是 | 见引用模型/接口说明 | enum=["ready", "missing_account", "chat_unavailable"] |
+| `contactVersion` | string | 是 | 非授权凭据；联系人/采购关联/待发明细/地址内容版本，每次打开与新鲜查询对比。 | pattern="^[a-f0-9]{64}$" |
+
+
+```json
+{
+  "purchaseOrderId": "purchase-1",
+  "purchaseOrderNumber": "CG-00021-1",
+  "platformOrderNumber": "DEMO1688-21-1",
+  "supplier": {
+    "id": "supplier-1",
+    "name": "杭州云帆箱包（演示）",
+    "wangwangAccount": "HyperZone演示供应商1"
+  },
+  "shipmentStatus": "pending",
+  "lines": [
+    {
+      "fulfillmentLineId": "line-1",
+      "purchaseLineId": "purchase-line-1",
+      "sku": "HZ-BAG-001",
+      "name": "Everyday commuter backpack",
+      "pendingQuantity": 2
+    }
+  ],
+  "availability": "ready",
+  "contactVersion": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+}
+```
+
+
+### SupplierFollowUpPage
+
+
+
+
+
+| 字段路径 | 类型/引用 | 必填 | 说明 | 约束/示例 |
+| --- | --- | --- | --- | --- |
+| `source` | string | 是 | 见引用模型/接口说明 | enum=["mock", "fop"] |
+| `orderId` | string | 是 |  | — |
+| `orderNumber` | string | 是 |  | — |
+| `refreshedAt` | string (date-time) | 是 | BFF完成查询时间，不承诺FOP同步水位。 | — |
+| `items` | SupplierFollowUp[] | 是 | 见引用模型/接口说明 | — |
+
+
+```json
+{
+  "source": "mock",
+  "orderId": "order-1",
+  "orderNumber": "AF-00021",
+  "refreshedAt": "2026-10-25T16:00:00+08:00",
+  "items": [
+    {
+      "purchaseOrderId": "purchase-1",
+      "purchaseOrderNumber": "CG-00021-1",
+      "platformOrderNumber": "DEMO1688-21-1",
+      "supplier": {
+        "id": "supplier-1",
+        "name": "杭州云帆箱包（演示）",
+        "wangwangAccount": "HyperZone演示供应商1"
+      },
+      "shipmentStatus": "pending",
+      "lines": [
+        {
+          "fulfillmentLineId": "line-1",
+          "purchaseLineId": "purchase-line-1",
+          "sku": "HZ-BAG-001",
+          "name": "Everyday commuter backpack",
+          "pendingQuantity": 2
+        }
+      ],
+      "availability": "ready",
+      "contactVersion": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  ]
+}
+```
+
+
+### SupplierChatLaunch
+
+
+仅尝试唤醒，不代表已打开/已发送/已送达。关闭页面或会话变化后不得执行过期返回。
+
+
+| 字段路径 | 类型/引用 | 必填 | 说明 | 约束/示例 |
+| --- | --- | --- | --- | --- |
+| `source` | string | 是 | 见引用模型/接口说明 | enum=["mock", "fop"] |
+| `mode` | string | 是 | 见引用模型/接口说明 | enum=["demo", "live"] |
+| `orderId` | string | 是 |  | — |
+| `purchaseOrderId` | string | 是 |  | — |
+| `wangwangAccount` | string | 是 | 核验后收件人，必须与当前选择对象一致。 | — |
+| `url` | string / null | 是 | demo必须null；live为经账号核验并规范化的aliim:sendmsg?touid=cnalichn{账号}，不带消息内容。 | — |
+
+组合规则 `allOf`：`见 schema`。完整约束见 OpenAPI JSON。
+
+
+```json
+{
+  "source": "mock",
+  "mode": "demo",
+  "orderId": "order-1",
+  "purchaseOrderId": "purchase-1",
+  "wangwangAccount": "HyperZone演示供应商1",
+  "url": null
+}
+```
+
+
+### SupplierFollowUpCandidate
+
+
+provider内部契约，不是HTTP响应；BFF过滤后剥离tenantId/chatUrl等内部字段。
+
+
+| 字段路径 | 类型/引用 | 必填 | 说明 | 约束/示例 |
+| --- | --- | --- | --- | --- |
+| `purchaseOrderId` | string | 是 | 采购单稳定ID | — |
+| `purchaseOrderNumber` | string | 是 | 采购单号 | — |
+| `platformOrderNumber` | string / null | 是 | 1688订单号；线下采购可空。 | — |
+| `supplier` | SupplierFollowUpSupplier | 是 | 见引用模型/接口说明 | — |
+| `shipmentStatus` | string | 是 | 见引用模型/接口说明 | enum=["pending", "partial", "shipped", "unknown"] |
+| `tenantId` | string | 是 | 来源租户；必须匹配subject | — |
+| `fulfillmentOrderId` | string | 是 | 本次查询订单ID | — |
+| `chatUrl` | string / null | 是 | 从FOP现有可信旺旺解析能力获得；不能接收浏览器任意URL。当前仅放行账号匹配的aliim:sendmsg，其他格式需适配。 | — |
+| `paid` | boolean | 是 | 见引用模型/接口说明 | — |
+| `cancelled` | boolean | 是 | 见引用模型/接口说明 | — |
+| `lines` | object[] | 是 | 见引用模型/接口说明 | — |
+| `lines[].fulfillmentLineId` | string | 是 | 源履约订单有效分录ID | — |
+| `lines[].purchaseLineId` | string | 是 | 实际采购单分录ID | — |
+| `lines[].sku` | string | 是 | 本地SKU | — |
+| `lines[].name` | string | 是 | 商品名称 | — |
+| `lines[].pendingQuantity` | number | 是 | 见引用模型/接口说明 | minimum=0 |
+
+
+### SupplierFollowUpProviderResult
+
+
+
+
+
+| 字段路径 | 类型/引用 | 必填 | 说明 | 约束/示例 |
+| --- | --- | --- | --- | --- |
+| `subject` | FopIdentity | 是 | 见引用模型/接口说明 | — |
+| `orderId` | string | 是 |  | — |
+| `items` | SupplierFollowUpCandidate[] | 是 | 见引用模型/接口说明 | — |
+
+
+### ApprovalPreviewRequest
+
+
+最多当前页100笔；不能注入租户、用户、实体或配货单ID。
+
+
+| 字段路径 | 类型/引用 | 必填 | 说明 | 约束/示例 |
+| --- | --- | --- | --- | --- |
+| `queue` | string | 是 | 见引用模型/接口说明 | enum=["review", "allocation_review"] |
+| `orderIds` | string[] | 是 | 见引用模型/接口说明 | minItems=1; maxItems=100; uniqueItems=true |
+
+
+```json
+{
+  "queue": "allocation_review",
+  "orderIds": [
+    "o1"
+  ]
+}
+```
+
+
+### ApprovalSelection
+
+
+
+
+
+| 字段路径 | 类型/引用 | 必填 | 说明 | 约束/示例 |
+| --- | --- | --- | --- | --- |
+| `orderId` | string | 是 |  | minLength=1; maxLength=128 |
+| `version` | string | 是 | 预览得到的目标集合版本SHA256摘要 | pattern="^[a-f0-9]{64}$" |
+
+
+### ApprovalSubmitRequest
+
+
+items.orderId必须唯一。业务审核调用方需检查逐项结果；不自动重试未知结果。 每批1–100笔，完整保留选中项的逐单结果；执行时间预算耗尽时剩余项未提交，不能将HTTP201视为全部成功。
+
+
+| 字段路径 | 类型/引用 | 必填 | 说明 | 约束/示例 |
+| --- | --- | --- | --- | --- |
+| `queue` | string | 是 | 见引用模型/接口说明 | enum=["review", "allocation_review"] |
+| `requestId` | string (uuid) | 是 | 调用方UUIDv4，用于跟踪批次；不是授权凭证 | — |
+| `items` | ApprovalSelection[] | 是 | 见引用模型/接口说明 | minItems=1; maxItems=100 |
+
+
+```json
+{
+  "queue": "allocation_review",
+  "requestId": "12345678-1234-4234-8234-123456789abc",
+  "items": [
+    {
+      "orderId": "o1",
+      "version": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  ]
+}
+```
+
+
+### ApprovalPreviewDocument
+
+
+
+
+
+| 字段路径 | 类型/引用 | 必填 | 说明 | 约束/示例 |
+| --- | --- | --- | --- | --- |
+| `id` | string | 是 | 关联目标单内码 | — |
+| `number` | string | 是 | 关联目标单号 | — |
+| `status` | string | 是 | 见引用模型/接口说明 | enum=["A", "B", "C"] |
+| `eligible` | boolean | 是 | 见引用模型/接口说明 | — |
+| `reason` | string / null | 是 | 见引用模型/接口说明 | — |
+
+
+### ApprovalPreviewItem
+
+
+
+
+
+| 字段路径 | 类型/引用 | 必填 | 说明 | 约束/示例 |
+| --- | --- | --- | --- | --- |
+| `orderId` | string | 是 |  | — |
+| `orderNumber` | string | 是 |  | — |
+| `version` | string | 是 |  | pattern="^[a-f0-9]{64}$" |
+| `eligible` | boolean | 是 | 见引用模型/接口说明 | — |
+| `documents` | ApprovalPreviewDocument[] | 是 | 见引用模型/接口说明 | — |
+
+
+### ApprovalPreviewResponse
+
+
+
+
+
+| 字段路径 | 类型/引用 | 必填 | 说明 | 约束/示例 |
+| --- | --- | --- | --- | --- |
+| `source` | string | 是 | 见引用模型/接口说明 | enum=["mock", "fop"] |
+| `queue` | string | 是 | 见引用模型/接口说明 | enum=["review", "allocation_review"] |
+| `items` | ApprovalPreviewItem[] | 是 | 见引用模型/接口说明 | — |
+
+
+```json
+{
+  "source": "mock",
+  "queue": "allocation_review",
+  "items": [
+    {
+      "orderId": "o1",
+      "orderNumber": "AF-001",
+      "version": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "eligible": true,
+      "documents": [
+        {
+          "id": "alloc1",
+          "number": "PH-001",
+          "status": "B",
+          "eligible": true,
+          "reason": null
+        }
+      ]
+    }
+  ]
+}
+```
+
+
+### ApprovalOutcome
+
+
+后台内部操作结果。配货审核提交成功后，发货通知生成失败须status=approved且warning非空。
+
+
+| 字段路径 | 类型/引用 | 必填 | 说明 | 约束/示例 |
+| --- | --- | --- | --- | --- |
+| `status` | string | 是 | 见引用模型/接口说明 | enum=["approved", "already_approved", "blocked", "failed", "unknown"] |
+| `message` | string | 是 | 明确业务结果，不可把超时推断为失败或成功 | — |
+| `warning` | string / null | 是 | 见引用模型/接口说明 | — |
+
+
+### ApprovalDocumentResult
+
+
+
+
+
+| 字段路径 | 类型/引用 | 必填 | 说明 | 约束/示例 |
+| --- | --- | --- | --- | --- |
+| `id` | string | 是 |  | — |
+| `number` | string | 是 |  | — |
+| `status` | string | 是 | 见引用模型/接口说明 | enum=["approved", "already_approved", "blocked", "failed", "unknown"] |
+| `message` | string | 是 |  | — |
+| `warning` | string / null | 是 | 见引用模型/接口说明 | — |
+
+
+### ApprovalRowResult
+
+
+
+
+
+| 字段路径 | 类型/引用 | 必填 | 说明 | 约束/示例 |
+| --- | --- | --- | --- | --- |
+| `orderId` | string | 是 |  | — |
+| `orderNumber` | string | 是 | 无权或未能确认时为空字符串，不泄露单号 | — |
+| `status` | string | 是 | 见引用模型/接口说明 | enum=["approved", "already_approved", "blocked", "failed", "unknown", "partial"] |
+| `message` | string | 是 |  | — |
+| `documents` | ApprovalDocumentResult[] | 是 | 见引用模型/接口说明 | — |
+
+
+### ApprovalResponse
+
+
+HTTP201仅说明处理完成。检查每行与每单据status；失败不回滚之前成功的单据。unknown需FOP核对，不重做原已审单据。
+
+
+| 字段路径 | 类型/引用 | 必填 | 说明 | 约束/示例 |
+| --- | --- | --- | --- | --- |
+| `source` | string | 是 | 见引用模型/接口说明 | enum=["mock", "fop"] |
+| `requestId` | string (uuid) | 是 |  | — |
+| `completedAt` | string (date-time) | 是 |  | — |
+| `items` | ApprovalRowResult[] | 是 | 见引用模型/接口说明 | — |
+
+
+```json
+{
+  "source": "mock",
+  "requestId": "12345678-1234-4234-8234-123456789abc",
+  "completedAt": "2026-10-25T08:00:00Z",
+  "items": [
+    {
+      "orderId": "o1",
+      "orderNumber": "AF-001",
+      "status": "approved",
+      "message": "审核完成",
+      "documents": [
+        {
+          "id": "alloc1",
+          "number": "PH-001",
+          "status": "approved",
+          "message": "已审核",
+          "warning": "发货通知尚未生成，请核对后置处理"
+        }
+      ]
+    }
+  ]
+}
+```
+
+
+### ApprovalTarget
+
+
+内部网关 /approvals/targets 返回数组项。来源由FOP解析，发运齐套及委托用户操作权必须校验。生产版version不得使用Demo常量。
+
+
+| 字段路径 | 类型/引用 | 必填 | 说明 | 约束/示例 |
+| --- | --- | --- | --- | --- |
+| `tenantId` | string | 是 | 隔离域，由服务器校验 | — |
+| `orderId` | string | 是 | 履约来源内码 | — |
+| `id` | string | 是 | 目标单内码 | — |
+| `number` | string | 是 | 目标单号 | — |
+| `entity` | string | 是 | 见引用模型/接口说明 | enum=["hzkj_orders", "hzkj_alloc_bill"] |
+| `version` | string | 是 | FOP实际单据修改版本，审核时原子比较 | — |
+| `status` | string | 是 | 见引用模型/接口说明 | enum=["A", "B", "C"] |
+| `eligible` | boolean | 是 | 见引用模型/接口说明 | — |
+| `reason` | string / null | 是 | 见引用模型/接口说明 | — |
+
+
+### ApprovalCommand
+
+
+内部网关 /approvals/audit 输入command；另传服务端派生subject。FOP必须重查资格和权限，不信任eligible/status/number等快照。调用原生audit及插件，不直接改状态。请求编号/幂等键用于查询、审计，不可作为权限。
+
+
+| 字段路径 | 类型/引用 | 必填 | 说明 | 约束/示例 |
+| --- | --- | --- | --- | --- |
+| `tenantId` | string | 是 | 隔离域，由服务器校验 | — |
+| `orderId` | string | 是 | 履约来源内码 | — |
+| `id` | string | 是 | 目标单内码 | — |
+| `number` | string | 是 | 目标单号 | — |
+| `entity` | string | 是 | 见引用模型/接口说明 | enum=["hzkj_orders", "hzkj_alloc_bill"] |
+| `version` | string | 是 | FOP实际单据修改版本，审核时原子比较 | — |
+| `status` | string | 是 | 见引用模型/接口说明 | enum=["A", "B", "C"] |
+| `eligible` | boolean | 是 | 见引用模型/接口说明 | — |
+| `reason` | string / null | 是 | 见引用模型/接口说明 | — |
+| `operation` | "audit" | 是 | 见引用模型/接口说明 | — |
+| `idempotencyKey` | string | 是 | 同委托身份、请求、实体、单号的SHA256；FOP必须持久化幂等并防并发 | pattern="^[a-f0-9]{64}$" |
+| `requestId` | string (uuid) | 是 |  | — |
+| `actorAccountId` | string | 是 | 服务器从已验证登录会话取前端账号ID | — |
 
 
 ## 12. 前端功能诊断与复现证据
@@ -7058,8 +8114,47 @@ FOP累计收入已经包含调整，`adjustmentIncome`单列时必须先从基�
 ## 14. 本次验证记录与限制
 
 
-业务方案版本：2026-10-24（UTC+8）；最新追加逐图授权与员工数据隔离，以下保留各轮独立验证记录。环境：macOS、Node.js 22.23.3、npm 10.9.9、本地隔离 PostgreSQL 16。执行结果不等同于生产 FOP 验收。
+业务方案版本：2026-10-26（UTC+8）；最新为工作台、接口需求及Git交付全量复核，以下保留各轮独立验证记录。环境：macOS、Node.js 22.23.3、npm 10.9.9、本地隔离 PostgreSQL 16。执行结果不等同于生产 FOP 验收。
 
+
+### 最新版本全量交付复核（2026-10-26，UTC+8）
+
+- 当前契约版本2026-10-26：35项平台HTTP操作、144个模型。文档补齐九类待办、单笔/批量审核与旺旺催办、页大小20/50/100（默认50）、仓库筛选位置、配货默认allocation_review、USD基准四位汇率。API未改变fxRateToUsd方向/精度；待办GET省略pageSize仍兼容20，前端明确发送50。
+- 全量`npm test`：前端53文件309项、后端58套件515项通过；`npm run test:e2e`：5套件164项通过，数据库类测试显式使用独立127.0.0.1:55432/autoflow_test，不使用演示或生产业务库。
+- `npm run lint`、`npm run build`及前端资源打包通过；既有Browserslist和前端大chunk提示保留，不影响编译。此轮代码未修改生产FOP源库。
+- 近期浏览器实测：129笔待履约选择100条后第1页100、第2页29；改20回第1页，表格内部纵向滚动范围为0。100笔预览/审核通过隔离HTTP用例验证，不能作为生产耗时或成功率承诺。
+- 运费明细显示USD/CNY 7.1200（原币折USD率取倒数，仅显示四位），毛利明细复用同一格式；其他原币不改称CNY。相关28项前端测试通过。仓库筛选左为出库阶段，中间搜索，右为所属部门；配货无queue时默认已齐套待审核，明确queue=allocation仍保留原清单。
+- 本机局域网入口`http://192.168.100.5:5173/login`、同源`/api/health`均返回HTTP200；浏览器已显示登录表单。Vite监听0.0.0.0:5173、后端监听3000；IP为本次检测值，未从另一台设备测试，网络变化需重新确认。
+- 生产接入边界不变：真实FOP授权/数据与员工网关部署、供应商旺旺协议及联系人权限、审核原生操作/事务锁/持久幂等/日志仍按T31–T35、H33–H37、D30–D38联调；本地Mock不能代替业务验收。
+
+### 配货工作台状态精简（2026-10-24）
+
+- 删除配货清单支付状态列，将原配货状态列命名“配货单状态”，两类为“未齐套，未配货”与“已齐套未审核”，暖色/蓝色标签区分。收款日期、商品、订单金额、权限与只读刷新保持原有逻辑。
+- 更新既有清单回归：验证两类状态、采购/销售列不串用、搜索和切换队列、移除列后数量/金额合计列与表头以及空态跨列对齐。前端全量51文件275项通过；前端lint、Vue类型检查、Vite构建和资源打包通过。
+- 后端既有“独立履约事实”专项用例通过，包含未齐套、已齐套未审核、已审核出库及unknown反例；本次未修改后端筛选代码，未重跑全部后端套件。
+- 实际浏览器默认配货清单14列，无支付状态列，包含两类状态；合计列与表头数量位置一致。截图`.runtime/local-demo/allocation-document-status.png`。需求9.5、源码映射12.2及OpenAPI说明同步，358个schema示例和生成文档验证通过；真实FOP未接入。
+
+### 采购订单状态与独立采购进度（2026-10-24）
+
+- 待采购清单替换“支付状态”为“采购订单状态”，主标签提示未下单／部分下单／待付款／部分付款／供应商待发货／部分发货等环节；同时展示下单与采购款两项事实。其他队列保留客户支付状态。采购退款、取消及未知不伪装成正常已付待发货。
+- `procurementProgress` 与客户`paymentStatus`独立；旧provider缺对象归一为unknown，非法对象拒绝、额外元数据剥离。待采购资格仍为paid＋approved＋supplierShipment pending/partial，用户权限与订单合计未变。
+- 前端先记录缺失新列／组件的失败，再实现；新增阶段、部分下单但已付、部分付款但已发、未知、取消／退款以及跨工作台列切换测试。后端验证多阶段Demo、缺字段兼容、非法枚举与序列化白名单。
+- 最新回归：前端51文件275项、后端单元56套493项、FOP HTTP专项73项通过；前后端lint、Vue类型检查、Vite／Nest构建及资源打包通过。独立代码复核无可执行问题。保留既有Browserslist数据、大chunk与文档工具LibreSSL警告；未连接生产FOP。
+- 浏览器实际采购清单验证新表头、不再出现客户支付状态列；10条Demo同时出现待下单、部分下单、待付款、部分付款、待发货、部分发货、退款、待确认，手动刷新后正常显示。截图位于忽略目录`.runtime/local-demo/procurement-status.png`。
+- OpenAPI增补ProcurementProgress，并补齐内部FopOrderCandidate原本遗漏的必填fulfillmentProgress（与既有TypeScript契约一致）；31项操作、124个模型、358个schema示例校验通过，MD/HTML同源生成，锚点与内嵌Logo校验通过。真实采购字段聚合与线下场景仍待T32/H34/D32。
+
+### 工作台待办首页与页签顺序（2026-10-24）
+
+- 五岗位统一先展示待办页签；销售默认待审核、采购默认待采购、配货默认待配货、发运默认待履约、仓库默认待出库；销售异常订单紧随待审核，个人业绩及分析排后。
+- 前端全量50文件263项通过，Vue类型检查与Vite构建通过；更新原有工作台测试，验证销售默认待审核、主动打开客户开发概览仍可用，以及采购首项即激活清单。首次回归发现个人业绩测试仍断言旧默认概览，已改为显式选择概览后重跑全量通过。前端lint及资源打包通过；本次纯导航调整未重复后端测试。
+- 实际浏览器逐一切换五工作台，首个页签、激活页签和清单标题均对应上述默认值；“我的工作台”入口默认待审核。无业务接口或权限规则变更。
+
+### 收款排序与客户名称复制（2026-10-24）
+
+- 收款日期表头切换asc/desc，默认最早收款在前；后端完整结果排序后分页，同日期ID稳定排序，缺失／非法日期始终排最后。切换回第一页，部门、已提交搜索和合计口径保留，刷新保留所选方向。客户名称与订单号分别提供复制反馈。
+- 新增前端排序交互回归，并扩展客户名称复制、HTTP跨页降序／合计一致／异常参数验证；先观察缺少按钮及新参数400的失败，再完成实现。
+- 前端50文件263项、后端单元56套491项及FOP HTTP专项73项通过；前后端lint、Vue类型检查、Vite／Nest构建与资源打包通过。既有Browserslist及大chunk提示保留。本轮未重复跑其他数据库HTTP套件，未连接生产FOP。
+- 浏览器验证默认首条收款日期2026/10/04，点击后首条2026/10/24且表头降序；点击客户名称后粘贴得到完整 `Prepaid Demo Customer`。这些数值来自当前Demo快照，不是生产数据。
 
 ### 只读待办、多商品与状态刷新（2026-10-24）
 
@@ -7283,6 +8378,63 @@ MD/HTML从同一需求源及OpenAPI生成，包含FOP源码字段映射和后续
 - 同时验证卡片及tasks数量、订单ID、金额/数量合计、分页后全量合计、模糊搜索、精确订单号查询；伪造userId返回400，无业务数据权限返回403。
 - 将账号系统角色设为admin并授予全部五岗位，仍须遵守本人／部门范围。FOP空订单白名单下，包括业务管理员的五卡及清单合计全部为0。
 - 未修改实际员工或验收账号权限。`test@autoflow.local`此前已授予全部演示业务数据，看到全部数据属于预期行为。
+
+
+### 发运工作台发运单状态回归（2026-10-24）
+
+- 发运清单支付状态替换为发运单状态：暂存、已提交、已审核；保留独立Shopify履约状态。多张发运单逐张显示单号/状态，订单仍一行，字段缺失显示待确认、确认空数组显示未生成。
+- 前端51文件276测试、后端56套500测试通过；最后完善Mock中“部分Shopify同步至少存在已审核发运单”的一致性后，定向fop-demo的42项重新通过。前后端ESLint、Vue/Vite、Nest及打包通过。
+- 实际浏览器（本地Mock）验证表头无支付状态、三态及同订单混合状态可见；手动刷新保留搜索条件，返回10个订单及13张发运单，不重复订单行。截图：`.runtime/local-demo/dispatch-document-status.png`。
+- OpenAPI 3.1.1校验及362个schema样例通过，MD/HTML重新生成，目录锚点与嵌入品牌Logo检查通过。FOP源码只读核对，真实生产适配继续T33/H35/D33，未宣称已接入生产。
+
+
+### 仓库工作台两组待办（2026-10-24，覆盖此前仅齐套已审规则）
+
+- 仓库shipping队列扩展为已齐套未审核、已审核未出库两组；保留未付款/取消/退款/履约未审核排除、授权范围和部门过滤。未齐套不入仓库，已全部出库退出，配货审核unknown不能猜测；已知齐套待审核允许出库unknown，已审核组须明确pending/partial。
+- 前端51文件276项、后端56套500项、FOP数据HTTP 74项测试通过，ESLint和前后端构建/打包通过。新增HTTP回归验证两组与Dashboard卡片/tasks及跨页合计一致、重复订单去重、本人范围、撤权、审核后保留/转组及完成后退出。
+- 浏览器Mock验证：仓库清单84单，同页显示两类不同色标签，无支付状态列；截图`.runtime/local-demo/warehouse-two-groups.png`。84为本地当前演示数据，不是生产数量。
+- MD/HTML、OpenAPI口径同步修订，沿用既有字段，不修改FOP生产放行逻辑；生产状态/权限及同步链路仍按T31/H33/D30验证。
+
+### 工作台清单拆分与仓库阶段筛选（2026-10-24）
+
+- 采购拆分`procurement`/`procurement_shipping`；配货拆分`allocation`/`allocation_review`，两页显示发运单审核状态；仓库新增`warehouseStage`三值筛选。Dashboard待采购/待配货计数跟随各默认清单，待出库仍为仓库两组并集。
+- 前端：51个文件281项通过；后端：56个测试套件500项通过；FOP隔离HTTP：76项通过。新增覆盖两组互斥、采购付款流转、岗位权限、本人/FOP白名单、仓库阶段过滤前置合计/分页、非法及跨队列参数、新页签路由、排序和刷新保留筛选。原后端两项旧期望失败已修正：齐套待审核不再属于待配货；Demo齐套分组按完整员工轮次交错，避免两名员工样本按奇偶造成某部门全空，随后完整后端重跑通过。
+- `npm run lint`、`npm run build`、`git diff --check`通过。构建仍有现有资源包体积与Browserslist数据提示；无新增编译错误。OpenAPI及362个schema/响应示例验证通过，HTML目录锚点和内嵌Logo验证通过。
+- 实际本地页面检查：采购待采购30笔、已采购待发货11笔（含部分发货）；配货待配货58笔、已齐套待审核19笔，两页均有发运单审核列；仓库全部85笔，待审核19笔/金额$2,312.40，已审待出库66笔/金额$8,083.30，筛选后行状态与合计一致。数量为该次Demo账号/时间数据快照，不是固定验收常数。
+- 可视证据位于忽略目录`.runtime/local-demo/procurement-split.png`、`allocation-split.png`、`warehouse-stage-filter.png`。独立代码审查未发现本次拆分的阻断问题；未将尚待FOP部署的真实字段提取、单据权限及同步延迟视为已验证。
+- 无FOP生产代码改动；真实适配、线下采购付款归一、多包裹审核/出库与撤审回退仍按T31–T33/H33–H35/D34完成联调。
+
+### 销售待支付清单与默认首页（2026-10-24）
+
+- 配货两个页签字段名统一“发运单状态”；销售新增queue=unpaid，页签第一，无queue默认仍review。新增明确的默认页映射，避免页签排序改变首页。
+- 前端51文件282项、后端56套件500项、FOP隔离HTTP77项通过；lint/build与git diff --check通过。测试覆盖未付/已付/退款/取消、本人权限与白名单、部门筛选、全量合计/分页、付款后进入待审核、没有sales岗位直连拒绝、页签顺序及默认页回归。独立只读代码审查未发现阻断问题。
+- 浏览器实际核对：销售首个页签为待支付、默认选中待审核（13笔）；点击待支付显示29笔，已显示订单付款状态均未支付，收款日期均为“—”，筛选合计29笔/$3,402.10。此为当前Demo账号样本，不是固定期望值。默认页截图`.runtime/local-demo/sales-review-default.png`。
+- 订单金额为应付额，不计入回款或Dashboard五张已付卡片；FOP真实待支付来源状态1和付款转换仍待D35联调，本次未改FOP生产源码。
+
+### 工作台状态列排序（2026-10-25）
+
+- 发运单状态、配货单状态、出库状态表头增加升降序操作；按业务流程阶段排序，同状态按收款日期升序、订单ID升序，未知状态和空日期始终置后。新增可选sortBy/sortOrder，兼容paidAtOrder；默认收款日期顺序不变，筛选、分页和刷新保留排序。
+- 前端51个文件288项、后端56套件500项、FOP数据HTTP79项通过；lint、前后端构建及打包通过。新增覆盖跨页全量排序、多发运单最早阶段/混合未知、同状态收款日期顺序、仓库阶段过滤、状态刷新、本人及FOP白名单、非法/重复/跨队列参数和表头交互。独立只读审查未发现阻断问题。
+- 本地浏览器验证三个字段双向排序：发运单升序从未生成开始；仓库配货单升序为已齐套未审核、降序为已审核未出库；出库降序为部分出库优先，同组最早收款在前。表头方向与URL参数一致，筛选订单总数未随排序变化。截图：`.runtime/local-demo/workbench-status-sort.png`。
+- 需求9.9、接口契约和交付清单同步更新；生产FOP数据库分页与状态归一仍需D36样本联调。本次验证为本地Mock/BFF，不代表已接通生产FOP，未修改FOP生产源码。
+
+### 采购待发货旺旺催办（2026-10-25）
+
+- 已采购待发货订单行新增固定右侧“催办”。单可联系采购单自动尝试，多采购单逐单选择；弹窗包含实际卖家账号、采购/1688单号及未发明细，支持复制。供应商查询与打开前校验为两个独立只读接口，普通订单列表不携带联系人。
+- 前端52文件300项、后端56套件501项、FOP隔离HTTP83项通过；ESLint、Vue/Vite、Nest及打包通过。测试覆盖两种供应商选择、Mock不打开外部应用、账号缺失、危险/不匹配URI、跨租户/跨订单/未授采购权限、取消/未付/已发采购过滤、部分发货零剩余行过滤、打开前供应商版本变化、取数期间撤权、关窗/会话重置后异步返回忽略。新增测试分别经历功能缺失红测后实现转绿；初次lint控制字符正则告警改为字符码检查后通过。
+- 浏览器本地Mock实测：AF-A352-00021展开三张采购单，对应三个供应商及本单SKU，选择第二张正确指向CG-00021-2/演示供应商3；AF-A352-00158单供应商自动显示核验结果；AF-A352-00045账号缺失禁用打开。未唤醒真实会话或发送消息。状态提示固定弹窗底部，截图`.runtime/local-demo/supplier-follow-up.png`。
+- 独立只读审查未发现阻断问题。OpenAPI 3.1.1及393个schema/响应样例验证通过，需求MD/HTML生成并检查锚点和内嵌Logo。既有Browserslist、构建大包及文档Python LibreSSL提示不影响本次通过结果。
+- 验证边界：当前真实FOP provider没有上线，本轮仅核对源码字段与预留网络接口；生产源单链路、采购资源权限、已有FOP旺旺插件/HTTP位置及各OS/浏览器客户端协议按T34/H36/D37联调。不把浏览器尝试打开等同会话已打开或信息已送达。
+
+### 工作台单笔与批量审核（2026-10-25）
+
+- 已实现销售review和配货allocation_review复选、当前页全选、确认预览、逐单据结果及刷新；支持一单多张配货单，商品列仍为第二列。最终批次请求包含全部选中订单，因此不满足条件的已选订单也显示“未提交”及原因。
+- 最终全量：前端53文件306项、后端58套件515项、FOP HTTP90项通过；ESLint、Vue类型检查/Vite、Nest构建和打包通过，git diff --check无空白错误。类型构建曾发现新增路由测试fixture缺refreshedAt，已补全后重跑通过。
+- 新增用例覆盖独立审核权、管理员无操作权拒绝、用户范围、身份/实体注入、重复及超量ID、取数或提交期间撤权/改绑、账号停用/会话版本撤销、版本变化、关联租户/来源/实体错误、多单据部分成功、后置警告、网络超时不重试、已审C单据状态保留、HTTPS网关调用与未配置拒绝、真实Vue路由权限刷新前的导航锁、页面选择清理和Mock队列退出。
+- 浏览器本地Mock：销售两笔审核成功；配货当前页10笔预览，7笔订单对应9张配货单可审，3笔发运未审核被阻断；审核成功后清单19→12笔。测试使用模拟数据，不调用真实FOP审核。构建/服务热重载可重置Demo进程状态，属于已记录的Demo边界。
+- 最终混合批次浏览器验证：AF-A352-00081的两张配货单审核成功，AF-A352-00074因发运未审核明确显示“未提交”；结果1/2，关闭后清单19→18，仅阻断订单保留。截图`.runtime/local-demo/workbench-approval-final.png`。
+- 独立审查发现并修复：全局权限刷新先卸载页面导致导航锁失效；批次期间账号停用/撤销会话未及时阻断；中止后已审C单据被误标为未提交。均补充回归验证。生产FOP端点、委托鉴权、原生插件、事务版本/锁、持久化幂等及日志按T35/H37/D38联调；本次不声称生产审核已可用。
+- OpenAPI新增两个POST及内部目标/命令/结果模型；401个schema和请求/响应例通过验证，需求MD/HTML按共享HyperZone模板生成，锚点与内嵌Logo自动检查通过。浏览器不支持file协议，本轮未用浏览器打开本地HTML。既有Browserslist/构建大包及文档Python LibreSSL提示保留。
 
 
 ## 15. HyperZone FOP 源码字段映射
@@ -7593,15 +8745,91 @@ FOP收入使用收款 `hzkj_exrate`；没有收款汇率时回退当前 `bd_exra
 订单级多包裹、组合商品、虚拟SKU、使用备货、部分取消/退款、撤审/反审核和历史无配货单的样本需要IT回填H33。当前平台按归一化事实过滤，不在浏览器直接解析金蝶枚举。生产适配器必须保证每个订单进度来源一致、同队列去重，不能把部分齐套包裹冒充整单配货完成。
 
 
+#### 12.1 采购下单与付款独立事实补充（2026-10-24只读核对）
+
+| 标准字段 | 后台证据（相对上述Java根目录；元数据在datamodel） | 适配约束 |
+| --- | --- | --- |
+| `procurementProgress.purchaseOrder` | `ordercenter/plugin/util/OrderPurchaseStatusUtil.java` 的 `markPurchased` 在采购申请审核后把分录设为采购中；`einkauf/service/Purchase1688OrderService.java` 的 `writeBack` 才写外部 `hzkj_1688_order_n`／行 `hzkj_1688_order_no` | 订单表头“采购中”不证明已正式下达采购单；需查有效 `hzkj_purorderbill`，1688取成功下单事实，线下取审核/下达凭证（H34确认），按有效采购需求数量区分未下单/部分/全部 |
+| `procurementProgress.supplierPayment` | `hzkj_einkauf/metadata/hzkj_purorderbill.dym`：`hzkj_pay_status` 名称为“1688订单状态”，0未支付、1已支付、2未支付已取消、3已退款；`Purchase1688OrderService.writeBack` 写0，`einkauf/webapi/Einkauf1688CallbackController.java` 支付回调写1；`PurchasePaidOrderSyncService` 禁止覆盖取消/退款态 | 这是采购方给供应商的款，不是客户履约支付；枚举仅直接证明1688链路，不能套用于所有线下采购。部分付款为跨有效采购单及实际付款分录聚合，不能伪造源枚举“部分支付” |
+| 履约→采购关联 | `einkauf/service/OrderPurchaseCostQueryService.java` 按 `hzkj_billentry.hzkj_salbillnumber` 查采购单，并逐行匹配履约单号；付款条件 `hzkj_pay_status=1`，采购头去重 | 一单可有多采购单、一采购单可有多履约来源，按稳定来源行及数量归属，不把整张混单采购付款金额重复分摊。用户仅接收自己有权履约订单的归一进度，不暴露其他订单或供应商金额 |
+| 供应商部分发货 | `einkauf/service/Purchase1688ShipmentReceiptService.java` 的 `filterReceiptEntries` 按物流包裹规格数量裁剪收货通知明细；`OrderPurchaseStatusUtil` 区分发货/入库/备货 | 一包裹回调不表示整单发完；对有效应采购数量核算，保持已有 `supplierShipment` 口径；不能从采购已付推导供应商已发货 |
+
+上述为字段证据及建议，未修改FOP生产库。真实下达判定（特别是线下单）、订单分录稳定关联、取消重采覆盖、退款恢复、付款分摊与部分付款以及更新时间需T32/H34联调；未知返回unknown，不以当前前端Demo推断生产事实。
+
+
+#### 12.2 配货清单状态展示补充（2026-10-24）
+
+再次核对`ordercenter/allocation/AllocationConstants.java`：pending待配货、available可配货、completed已齐套、error配货异常、voided作废；`AllocationReleaseGateService.requireReleased`同时验证`hzkj_alloc_status=completed`与`billstatus=C`并校验有效分录数量。前端沿用stockReadiness与allocationReview两个归一字段，在待配货清单将未完成齐套统一展示“未齐套，未配货”，完成齐套但未审核在独立“已齐套待审核”页签展示；两页同时显示dispatchDocuments发运单状态，不增加客户支付状态，不把库存可用或履约审核代替配货完成/审核事实。真实适配对多单/多包裹、异常/作废以及缺配货单仍按T31/H33核验，生产接口未在本次接入。
+
+
+仓库工作台追加两组展示：`completed`且未审核的配货事实也进入仓库待办，但不代表已通过`requireReleased`、不允许在本平台执行出库。齐套已审核且出库未完成为第二组。两组继续按履约订单归一，已全部出库排除；FOP生产放行校验不作任何改动。
+
+
+#### 12.3 发运单状态展示补充（2026-10-24只读核对）
+
+- 实体：`datamodel/hzkj_CRM/1.5/main/hzkj_logistics/metadata/hzkj_deliver_bill.dym`为发运单；不要误取发货通知单`hzkj_deliver_order`。
+- 枚举依据：`ordercenter/allocation/AllocationConstants.java`定义BILL_STATUS_DRAFT=A、SUBMITTED=B、AUDITED=C；`logistics/plugin/op/DeliverBillShipmentSyncService.java`按`hzkj_deliver_bill.billstatus=C`检查发运审核后才允许同步。因此前端映射暂存/已提交/已审核，已审核并不证明Shopify已成功同步。真实部署及其他枚举由H35复核。
+- 关联证据：`logistics/service/OrderLogisticsCostQueryService.java`按`hzkj_order_no`加载多张发运单；`DeliverBillShipmentSyncService`包含`org`、`hzkj_customer.id`、`hzkj_order_no`、`hzkj_src_package`和`hzkj_platform_orderid`，并按组织/客户确认唯一平台订单。适配应使用可信来源关系并校验组织、客户及资源权限，不能只按外部同号匹配。费用查询仅取已审核单的C过滤不可直接用于状态清单。
+- 对应新增`FopOrder.dispatchDocuments[]`的id/number/status，缺失与确认无单分开；多包裹逐单展示，不选择最高审核状态冒充整单。未修改FOP生产源码；有效单据过滤、撤销重建、权限与更新时间继续T33/H35联调。
+
+
+#### 12.4 清单拆分与查询过滤（2026-10-24）
+
+- `procurement_shipping`以12.1归一的有效全部下单与供应商付款完成事实入选，供应商仍pending/partial；`procurement`为相同发货门槛下的补集。`PurchasePaidOrderSyncService`对取消/退款态保护说明付款不可仅凭一次历史已支付回调永久锁定；需有效采购义务的当前事实。线下单和部分付款继续H34人工确认。
+- `allocation_review`来自有效配货单已齐套且未审核、未全部出库事实；与待配货（incomplete）分开。`AllocationDeliveryNoticeService`审核前校验有效关联发运单已审核，解释了配货页需要并列显示发运审核状态；展示未审核记录不改变FOP审核放行条件。
+- 仓库`warehouseStage`是BFF查询条件，不是新增FOP字段。两组仍由stockReadiness/allocationReview/outbound组合归一，多包裹各事实按有效需求核验，不能仅取某一张单最高审核状态。
+- 本次不修改FOP生产实现；发布真实接口后验证付款/齐套/审核/出库跨阶段流转、回退、重复回调、更新时间与数据权限。具体契约见需求9.7和OpenAPI。
+
+
+#### 12.5 待支付来源确认（2026-10-24）
+
+`datamodel/hzkj_CRM/1.5/main/hzkj_ordercenter/metadata/hzkj_orders.dym`的订单状态枚举：0取消、no未关联本地SKU、1待支付、2已支付、3处理中、4已发货；`ordercenter/plugin/billplugin/OrderBillPlugin.java`关联本地SKU后写状态1；`OrderController.java`支付前按客户及状态1读取待支付订单。`ShopifyPaidFulfillmentService.hasSuccessfulPayment`仅在有本地支付状态与成功收款凭据时认定支付，false还可能是缺数据/取消/异常，不能取反当作unpaid。
+
+因此`queue=unpaid`消费明确归一的未支付事实；源状态1→paymentStatus=unpaid、paidAt=null。未知、取消、未关联SKU等来源不得混入。真实API仍待T31适配，H33需补充待支付→付款→审核、取消/退款及未关联SKU的脱敏样本；现有订单权限范围同样适用于未支付记录。
+
+
+#### 12.6 工作台状态排序适配（2026-10-25）
+
+沿用12.2/12.3已核对的配货事实与发运单A暂存/B已提交/C已审核；新增的是查询顺序，不新增FOP字段。`dispatchDocumentStatus`和`allocationDocumentStatus`是sortBy参数，不是FopOrder旧粗粒度dispatchStatus/allocationStatus字段。多发运单只在服务端排序时取最早有效阶段，任何未知单据置后，前端仍逐单展示；null与[]不可混同。仓库先待配货审核，再待出库，再部分出库，已完成仍按队列规则排除。生产数据库分页必须先处理资源权限和有效单据范围，再归一/排序/分页；同状态按收款时间升序稳定排序。
+
+#### 12.7 采购旺旺催办映射（2026-10-25）
+
+- **实际卖家账号**：`einkauf/service/Purchase1688OrderService.java:185`的`writeSellerInfo`从1688实际订单`baseInfo.getSellerLoginId()`写入采购单`hzkj_sellers_ww`；电话号码是独立`hzkj_sellers_phone`，不能作为旺旺账号。元数据`hzkj_einkauf/metadata/hzkj_purorderbill.dym:5690`/`:17778`定义“卖家旺旺”；采购转收货通知的转换规则也透传该字段。
+- **关联而非SKU匹配**：`hzkj_ordercenter/metadata/hzkj_orders_hzkj_purorderbill_2362056279968503808.cr:1434`附近定义`hzkj_srcbillentity/hzkj_srcbillid/hzkj_srcbillnumber/hzkj_srcbillentryid/hzkj_srcbillentryseq`；同文件`:1266`附近还包含srcsystem字段。适配须核对直采和采购申请中转两种链路，沿有效源单关系回溯到原履约分录；不能直接把中间申请ID误认为履约ID。
+- **客户端地址解析**：本地1688 SDK有`com.alibaba.account/AccountWangwangUrlGetParam.java`（`account.wangwangUrl.get`，输入`toOpenUid`）和`WangwangnickOpenuidDecryptResult.java`（旺旺昵称）。openUid不能当sellerLoginId；实际返回地址格式、采购所属1688买家账号授权及FOP现有点击插件/部署版本需H36确认。本次检索未定位可直接供该前端调用的已发布催办HTTP端点，不能把SDK参数类当作已有FOP API。
+- **新适配契约**：provider方法`listSupplierFollowUps(identity, permission, orderId)`返回`{subject,orderId,items}`；候选必填tenantId/fulfillmentOrderId/purchaseOrderId/purchaseOrderNumber/platformOrderNumber(nullable)、supplier.id/name/wangwangAccount(nullable)、chatUrl(nullable)、paid/cancelled/shipmentStatus、lines。line含fulfillmentLineId/purchaseLineId/sku/name/pendingQuantity，必须按本订单源分录归属计算，不能返回整张合并采购单的其他客户数量。独立allowedPurchaseOrderIds权限由FOP当前用户计算，不能从allowedOrderIds扩大。
+- **本地实现**：BFF只输出最小联系人字段，按采购权限、租户、订单、paid/cancelled及pending/partial过滤；去掉零待发数量；未知/非法关联失败关闭。重复采购单或重复来源行拒绝，防止重复催办/展示歧义。联系版本绑定订单、采购单、供应商、账号、待发明细及地址；打开时重新查验。当前只接受并规范化指定`aliim:sendmsg`协议，其他已部署协议须经收件人可核验的适配后明确加入，不能直接放开任意URL。
+
+#### 12.8 工作台审核委托入口
+
+源码根`/Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/ordercenter/`。
+
+- `allocation/AllocationConstants.java`：履约`hzkj_orders`，配货`hzkj_alloc_bill`，发运`hzkj_deliver_bill`，发货通知`hzkj_deliver_order`；B已提交/C已审核，配货completed为已齐套。
+- `allocation/plugin/AllocationAuditOpPlugin.java:43`：`audit`执行前调用`AllocationService.validateForAudit(ids,false)`、`AllocationDeliveryNoticeService.validateDeliverBills(ids)`；后置发货通知异常仅提示，不能回滚已经提交的配货审核。
+- `allocation/AllocationDeliveryNoticeService.java`：检查有效且已审核发运单；缺失、未审或重复发运均不能绕过校验；提交审核后复用BOTP创建通知单。
+- `allocation/plugin/OrderAllocationAuditOpPlugin.java:34`：履约`audit`后置触发配货生成；异步构建失败不得当作主订单审核失败。
+- `allocation/plugin/AllocationListPlugin.java`：审核主动作成功即清理旧选择，下游通知失败也不重新审核原单。
+- `plugin/webapi/OrderController.java`已有订单业务API，但本轮未找到满足“员工委托权限+版本+逐单结果+持久幂等”的已部署审核端点。新增HTTP合同见9.11.1，由IT确认发布地址和鉴权。禁止把BFF路径直接充当苍穹原生API，禁止替代原生审核插件直接更新`billstatus`。
+
+字段映射：`ApprovalTarget.id/number`←目标单内码/单号，`entity`固定上述实体；`orderId`←真实履约来源内码；`tenantId`←隔离域，`version`←实际最后修改时间/数据版本（需后台确认并参与并发比较）；`status`←billstatus；`eligible/reason`←委托用户操作权与实时审核前置条件。每个配货包裹分别返回，失败时禁止泄露无权其他来源单信息。`ApprovalOutcome`必须区分审核提交状态与后置副作用状态。
+
+
 ## 16. IT 交付导航与实施顺序
 
 
-更新日期：2026-10-24（UTC+8）。最新修订五类履约待办：待审核、待履约、待采购、待配货、待出库；完整需求第9节（含9.1登录用户数据范围）、源码映射第12节及T31/H33/D30–D31为新增对接入口。最新追加P0全局图表授权及员工数据隔离，完整需求第1.1–1.3节优先约束全部图表。本次在原有全量需求上追加销售个人收款／净毛利月、周、天统计；注册、部门／业务员回款、订单量、客户分析、物流运费、权限和全部历史待办保留。
+更新日期：2026-10-26（UTC+8）。最新修订五类履约待办：待审核、待履约、待采购、待配货、待出库；完整需求第9节（含9.1登录用户数据范围）、源码映射第12节及T31/H33/D30–D31为新增对接入口。最新追加P0全局图表授权及员工数据隔离，完整需求第1.1–1.3节优先约束全部图表。本次在原有全量需求上追加销售个人收款／净毛利月、周、天统计；注册、部门／业务员回款、订单量、客户分析、物流运费、权限和全部历史待办保留。
+
+### 最新版本：2026-10-26
+
+- 本版统一交付Markdown、HTML、OpenAPI；完整新增与兼容约定见需求第0节。前端与BFF已实现的接口和待发布FOP网关须分别验收。
+- 近期交付：九类待办及状态排序、采购旺旺催办、销售/配货单笔与批量审核、每页20/50/100（默认50）及100笔审核、USD/CNY四位显示、仓库筛选顺序、配货默认已齐套待审核。GET分页API省略仍默认20，前端明确发送50。
+- 联调优先顺序：先T31–T33确认队列事实/来源映射，再T34供应商联系人与客户端协议，最后T35审核网关的委托身份、原生插件、版本、持久幂等和日志。人工资料H33–H37，验收D30–D38。
+- 审核批次的100笔是请求数量上限，不能作为耗时或成功率承诺。需实测1/20/50/100笔、多配货单、超时/部分成功及撤权；无成功证据时不自动重试。
 
 ### 2026-10-24 工作台协同补充
 
-- 五个岗位工作台的六类待办共用部门筛选，按收款日期正序；完整规则见需求第9.2节。
-- `fulfillment-orders` 接受 `departmentId`，响应为 `FulfillmentOrderPage`，增加 `departments[].id/name`。Mock 与正式预留接口同结构；部门选项从已授权订单生成。生产查询须先授权和筛选，再按 `paidAt ASC, id ASC` 分页，缺失日期最后；合计覆盖完整筛选集。
+- 五个岗位工作台的九类待办共用部门筛选，收款日期默认正序、表头可切换倒序；完整规则见需求第9.2节。
+- `fulfillment-orders` 接受 `departmentId` 和 `paidAtOrder=asc/desc`（默认asc），响应为 `FulfillmentOrderPage`，增加 `departments[].id/name`。Mock 与正式预留接口同结构；部门选项从已授权订单生成。生产查询须先授权和筛选，再按 `paidAt ASC, id ASC` 分页，缺失日期最后；合计覆盖完整筛选集。
 - 协同人员账号使用独立“全部业务数据”范围，无需系统管理员权限；业务员本人、经理部门规则保留。请核对具体协同账号名单及 FOP 权限，不按岗位名称自动批量扩大权限。
 - 已核对销售部门 `hzkj_orders.hzkj_dept`、收款日期 `hzkj_receipt_date`；IT 需确认稳定部门ID、祖先路径和分次收款语义。真实FOP接口仍待接通，本地验证基于Mock和隔离测试。
 
@@ -7609,9 +8837,9 @@ FOP收入使用收款 `hzkj_exrate`；没有收款汇率时回退当前 `bd_exra
 ### 阅读顺序
 
 1. [完整需求HTML](HYPERZONE_ECHARTS_API_REQUIREMENTS.html) 或 [完整需求Markdown](HYPERZONE_ECHARTS_API_REQUIREMENTS.md)：业务、页面、字段、审计与验收的全量交付。源正文为 [REQUIREMENTS_OVERVIEW.md](REQUIREMENTS_OVERVIEW.md)，个人收款／净毛利在第8节。
-2. [OpenAPI](../openapi/hyperzone-analytics.openapi.json)：31项平台HTTP操作、122个模型，servers为`/api`；不是FOP原生接口目录。包含逐图授权、员工创建／编辑／导入／归档／账号维护、内部FOP授权、客户当前归属和独立组织汇总字段契约。
+2. [OpenAPI](../openapi/hyperzone-analytics.openapi.json)：35项平台HTTP操作、144个模型，servers为`/api`；不是FOP原生接口目录。包含逐图授权、员工创建／编辑／导入／归档／账号维护、内部FOP授权、客户当前归属和独立组织汇总字段契约。
 3. [FOP源码映射](HYPERZONE_FOP_SOURCE_MAPPING.md)：实体／字段／Java行号证据。第9节是物流成本，第10节是月结毛利、预计贡献和当前数据缺口。
-4. [后续待办与人工核对](FOLLOW_UP_CHECKLIST.md)：完整T01–T31、H01–H33、D01–D31；最新权限任务为T27–T30/H29–H32/D23–D29，按模板分配、回填和关闭。
+4. [后续待办与人工核对](FOLLOW_UP_CHECKLIST.md)：完整T01–T35、H01–H37、D01–D38；最新权限任务为T27–T30/H29–H32/D23–D29，按模板分配、回填和关闭。
 5. [验证记录](VERIFICATION.md)：仅此处记录实际执行的测试、HTTP、浏览器、生成物检查与限制；文档或Mock存在不能替代验证。详细消费检查见 [前端审计](ECHARTS_FRONTEND_AUDIT.md) 和 [后台契约审计](ECHARTS_BACKEND_CONTRACT_AUDIT.md)。
 
 6. [员工与登录账号管理](../EMPLOYEE_ACCOUNTS.md)：管理员新增员工、所属部门、普通账号、FOP绑定及身份映射待办；完整需求第1.4节及OpenAPI同步更新。
@@ -7674,6 +8902,28 @@ FOP收入使用收款 `hzkj_exrate`；没有收款汇率时回退当前 `bd_exra
 ### 只读待办与同步验收补充（2026-10-24）
 
 需求第9.3节规定全部待办只读、商品第二列、订单号复制和2–3商品Demo。`FulfillmentOrderPage`新增必填`refreshedAt`，仅代表BFF完成取数，不是FOP状态提交/同步水位。每个工作台手动刷新、可见且联网30秒轮询，返回页面或恢复网络即刷新。FOP适配仍需发布真实只读HTTP查询，检查权限后读取已提交进度；如采用缓存必须提供可验证的同步水位及滞后监控。联调须实际在FOP完成各环节后核对待办进出、筛选合计、末页回退与撤权，不以静态Demo验证替代生产时效验收。
+
+
+### 采购进程交接补充（2026-10-24）
+
+待采购清单已改为采购订单状态＋供应商发货状态。新增`procurementProgress.purchaseOrder/supplierPayment`，展示下单与采购付款独立事实，客户付款不作为供应商付款依据。完整需求9.4、源码映射12.1、OpenAPI `ProcurementProgress`、后续T32/H34/D32为本次入口。未接真实FOP，线下采购下达证据、部分付款/混单/取消重采及退款归一化仍需样本确认；旧provider缺字段显示待确认，不能作为生产接入已完成。
+
+配货清单补充见需求9.5／源码映射12.2：拆分“待配货清单”和“已齐套待审核”两个页签，均显示配货单状态与发运单状态，隐藏客户支付状态。沿用stockReadiness/allocationReview，FOP available可配货不得冒充completed已齐套；真实归一继续T31/H33联调。
+
+
+发运清单补充见需求9.6／源码映射12.3／OpenAPI `DispatchDocument`：发运单状态（暂存/已提交/已审核）替换支付状态，多张发运单逐单展示；保留独立Shopify履约状态。BFF与Mock已支持`dispatchDocuments`，真实FOP状态/来源/权限及同步延迟按T33/H35/D33继续验证。
+
+仓库工作台补充（以本条为准）：配货单状态替换支付状态，包含已齐套未审核、已审核未出库两组；后者保留部分出库，已全部出库均排除。待审核组与配货工作台重叠，Dashboard shipping卡片/tasks、清单及合计统一两组范围；沿用stockReadiness/allocationReview/outbound，不新增字段或业务写操作。具体未知状态规则与权限见需求9.5，真实适配继续T31/H33/D30。
+
+工作台拆分最新交付见需求9.7：新增queue=procurement_shipping/allocation_review及warehouseStage三值筛选，权限继承原岗位。待采购仅未全部下单或未付清，已采购待发货包含已付部分发货；待配货仅未齐套。Dashboard待采购/待配货卡片分别对应procurement/allocation，独立于配货默认首页allocation_review，仓库仍两组并集。OpenAPI已更新；重点联调D34，真实采购与发运归一沿用T31–T33/H33–H35。
+
+销售待支付入口见需求9.8/源码映射12.5：queue=unpaid复用sales岗位，页签第一但默认仍review；FOP需明确状态1，不能把未查到付款凭据直接归为未付。前端/BFF/Mock及OpenAPI已提供，真实状态/支付转换见D35。配货两页字段名统一为发运单状态。
+
+状态排序追加（2026-10-25）：需求9.9/OpenAPI提供sortBy与sortOrder，兼容paidAtOrder；发运单依dispatchDocuments最早阶段归一，含未知则置后。配货/出库按实际展示阶段排序，状态同值收款日期升序。已落地BFF全量排序后分页；真实FOP数据库分页需同等规则，联调D36。
+
+采购旺旺催办追加（2026-10-25）：需求9.10/源码映射12.7及OpenAPI新增两条GET接口（查询联系人、校验后取唤醒地址）。BFF/前端/Mock已实现，真实FOP适配仍需T34；采购资源独立授权、多供应商关联及桌面旺旺实机验证见H36/D37。Mock只显示演示联系结果，不唤醒虚构账号，不自动发送消息。
+
+工作台审核新增（2026-10-25）：需求9.11/源码12.8，销售待审核与配货已齐套待审核可单选/多选预览后审核。已实现BFF逐单委托、独立操作授权、版本校验、幂等键、部分结果与Mock状态刷新；可配置HTTPS员工网关适配器。环境为`FOP_EMPLOYEE_API_URL`、`FOP_EMPLOYEE_API_TOKEN`，无配置拒绝，生产禁用Demo。FOP真实端点、员工委托鉴权、持久化幂等、单据锁及最终状态验证由T35/H37/D38完成；本地Mock通过不等于生产已接通。仅这两项审批新增写操作，其他履约业务流程继续只读。
 
 
 ## 17. 规范来源与文档再生成

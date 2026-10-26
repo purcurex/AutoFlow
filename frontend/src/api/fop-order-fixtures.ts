@@ -32,6 +32,11 @@ export const mockFopOrders: FopOrder[] = stages.flatMap((stage, stageIndex) => A
     storeName: ['Everyday', 'Northstar', 'Studio', 'Harbor'][stageIndex]!,
     items: [{ sku: `DEMO-SKU-${String(index % 3 + 1).padStart(3, '0')}`, name: product.name, imageUrl: productImage(product.image, product.color), variant: product.variant, quantity: index % 3 + 1 }],
     amount: Math.round((11.88 + index * 2.5) * 100) / 100, currency: 'USD', paymentStatus: paid ? 'paid' : 'unpaid',
+    dispatchDocuments: stage === 'dispatch'
+      ? [{ id: `${orderNumber}:dispatch:1`, number: `FY-${stageIndex}-${index}-1`, status: (['draft', 'submitted', 'approved'] as const)[index % 3]! },
+        ...(index % 4 === 0 ? [{ id: `${orderNumber}:dispatch:2`, number: `FY-${stageIndex}-${index}-2`, status: 'approved' as const }] : [])]
+      : stage === 'shipping' ? [{ id: `${orderNumber}:dispatch:1`, number: `FY-${stageIndex}-${index}-1`, status: 'approved' }] : [],
+    procurementProgress: { purchaseOrder: stage === 'review' ? 'unknown' : 'ordered', supplierPayment: stage === 'review' ? 'unknown' : 'paid' },
     fulfillmentProgress: {
       shopifySync: stage === 'dispatch' ? 'pending' : 'synced',
       supplierShipment: 'shipped',
@@ -55,7 +60,17 @@ export const mockFopOrders: FopOrder[] = stages.flatMap((stage, stageIndex) => A
 
 mockFopOrders.push(...Array.from({ length: 8 }, (_, index): FopOrder => ({
   ...mockFopOrders[6 + index]!, id: `DEMO-PO-${40001 + index}`, orderNumber: `DEMO-PO-${40001 + index}`,
-  fulfillmentProgress: { shopifySync: 'synced', supplierShipment: 'pending', stockReadiness: 'incomplete', allocationReview: 'pending', outbound: 'pending' },
+  procurementProgress: ([
+    { purchaseOrder: 'not_ordered', supplierPayment: 'not_required' },
+    { purchaseOrder: 'partial', supplierPayment: 'paid' },
+    { purchaseOrder: 'ordered', supplierPayment: 'unpaid' },
+    { purchaseOrder: 'ordered', supplierPayment: 'partial' },
+    { purchaseOrder: 'ordered', supplierPayment: 'paid' },
+    { purchaseOrder: 'ordered', supplierPayment: 'paid' },
+    { purchaseOrder: 'ordered', supplierPayment: 'refunded' },
+    { purchaseOrder: 'unknown', supplierPayment: 'unknown' },
+  ] as const)[index]!,
+  fulfillmentProgress: { shopifySync: 'synced', supplierShipment: index === 5 ? 'partial' : 'pending', stockReadiness: 'incomplete', allocationReview: 'pending', outbound: 'pending' },
   shopifyOrderNumber: `#${1401 + index}`, procurementStatus: 'pending', allocationStatus: 'not_ready', exception: null,
 })))
 

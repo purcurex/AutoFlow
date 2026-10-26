@@ -82,7 +82,7 @@ function handleLogout() {
 
         <div ref="userMenu" class="relative">
           <button class="flex h-10 items-center gap-2 rounded-md border border-slate-200 bg-white px-1.5 pr-2 text-sm transition hover:bg-slate-50 dark:border-slate-700 dark:bg-[#15181d] dark:hover:bg-[#20242b]" :aria-expanded="showUserMenu" aria-haspopup="menu" @click="showUserMenu = !showUserMenu">
-            <span class="flex h-7 w-7 items-center justify-center overflow-hidden rounded bg-orange-600 text-xs font-bold text-white">
+            <span class="flex h-7 w-7 items-center justify-center overflow-hidden rounded brand-avatar bg-orange-600 text-xs font-bold text-white">
               <img v-if="userStore.avatarUrl" :src="userStore.avatarUrl" alt="Avatar" class="h-full w-full object-cover" /><span v-else>{{ (userStore.username || 'U').charAt(0).toUpperCase() }}</span>
             </span>
             <span class="hidden max-w-28 truncate font-semibold text-slate-700 dark:text-slate-200 xl:block">{{ userStore.username }}</span>
@@ -91,7 +91,7 @@ function handleLogout() {
 
           <div v-if="showUserMenu" class="absolute right-0 top-full z-50 mt-2 w-72 rounded-lg border bg-white py-2 shadow-xl dark:bg-[#15181d]" style="border-color: var(--color-border)" role="menu">
             <div class="flex items-center gap-3 border-b px-4 py-3.5" style="border-color: var(--color-border)">
-              <span class="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-orange-600 text-base font-bold text-white">
+              <span class="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full brand-avatar bg-orange-600 text-base font-bold text-white">
                 <img v-if="userStore.avatarUrl" :src="userStore.avatarUrl" alt="Avatar" class="h-full w-full object-cover" /><span v-else>{{ (userStore.username || 'U').charAt(0).toUpperCase() }}</span>
               </span>
               <div class="min-w-0 flex-1">

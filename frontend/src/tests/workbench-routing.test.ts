@@ -11,8 +11,8 @@ describe('role workbench navigation', () => {
   })
 
   it.each([
-    ['review', 'sales'], ['exceptions', 'sales'], ['procurement', 'procurement'],
-    ['allocation', 'allocation'], ['dispatch', 'dispatch'], ['shipping', 'warehouse'],
+    ['unpaid', 'sales'], ['review', 'sales'], ['exceptions', 'sales'], ['procurement', 'procurement'],
+    ['allocation', 'allocation'], ['allocation_review', 'allocation'], ['procurement_shipping', 'procurement'], ['dispatch', 'dispatch'], ['shipping', 'warehouse'],
   ])('moves the old %s detail link into the %s workbench, preserving filters', async (queue, role) => {
     await router.push(`/dashboard/orders?queue=${queue}&orderNumber=DEMO-SO-10241&search=Northstar&page=2`)
     expect(router.currentRoute.value.name).toBe('RoleWorkbench')

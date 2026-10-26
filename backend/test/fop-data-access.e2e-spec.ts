@@ -51,6 +51,79 @@ describe('FOP user isolation HTTP API (repository and provider boundaries stubbe
     items: [{ sku: 'sku-1', name: 'Product', imageUrl: null, variant: '', quantity: 1 }], ...extra,
   })
 
+  describe('supplier follow-up', () => {
+    const base = '/autoflow/integrations/fop/fulfillment-orders/o1/supplier-follow-ups'
+    const purchase = (id: string, extra: any = {}) => ({
+      tenantId: 'tenant-1', fulfillmentOrderId: 'o1', purchaseOrderId: id, purchaseOrderNumber: `PO-${id}`, platformOrderNumber: '1688-001',
+      supplier: { id: `s-${id}`, name: `Supplier ${id}`, wangwangAccount: `卖家${id}` },
+      chatUrl: `aliim:sendmsg?touid=${encodeURIComponent(`cnalichn卖家${id}`)}`,
+      paid: true, cancelled: false, shipmentStatus: 'pending',
+      lines: [{ fulfillmentLineId: 'line-o1', purchaseLineId: `line-${id}`, sku: 'o1', name: 'Product', pendingQuantity: 2 }], ...extra,
+    })
+    function prepare(items: any[]) {
+      accounts.get(alice).workbenchRoles = ['procurement']
+      records = [order('o1', { reviewStatus: 'approved', procurementProgress: { purchaseOrder: 'ordered', supplierPayment: 'paid' } })]
+      provider.resolvePermissions = async (subject: any) => ({ subject, allowedOrderIds: ['o1'], allowedPurchaseOrderIds: ['p1', 'p2', 'p3', 'p4', 'p5', 'p6'] })
+      provider.listSupplierFollowUps = async (subject: any) => ({ subject, orderId: 'o1', items })
+    }
+    it('returns only authorized effective purchases linked to this order and launches the exact seller', async () => {
+      prepare([purchase('p1'), purchase('p2'), purchase('p3', { cancelled: true }), purchase('p4', { paid: false }), purchase('p5', { shipmentStatus: 'shipped' }), purchase('p6', { fulfillmentOrderId: 'another' }), purchase('private')])
+      const result = await get(base).expect(200)
+      expect(result.headers['cache-control']).toBe('private, no-store')
+      expect(result.body.items.map((p: any) => p.purchaseOrderId)).toEqual(['p1', 'p2'])
+      expect(result.body.items[0]).toMatchObject({ supplier: { wangwangAccount: '卖家p1' }, availability: 'ready', lines: [{ pendingQuantity: 2 }] })
+      expect(JSON.stringify(result.body)).not.toContain('chatUrl')
+      expect(JSON.stringify(result.body)).not.toContain('tenant-1')
+      const launch = await get(`${base}/p2/launch?contactVersion=${result.body.items[1].contactVersion}`).expect(200)
+      expect(launch.body).toMatchObject({ mode: 'live', purchaseOrderId: 'p2', wangwangAccount: '卖家p2', url: 'aliim:sendmsg?touid=cnalichn%E5%8D%96%E5%AE%B6p2' })
+      await get(`${base}/private/launch?contactVersion=${result.body.items[0].contactVersion}`).expect(404)
+      await get(base + '?userId=bob').expect(400)
+      accounts.get(alice).workbenchRoles = ['sales']
+      await get(base).expect(403)
+      accounts.get(alice).workbenchRoles = ['procurement']
+      records[0].owner.id = 'another-owner'
+      await get(base).expect(404)
+    })
+    it('rejects changed sellers, completed orders and unsafe or missing chat destinations', async () => {
+      const items = [purchase('p1'), purchase('p2', { supplier: { id: 's2', name: 'No account', wangwangAccount: null } }), purchase('p3', { chatUrl: 'javascript:alert(1)' }), purchase('p4', { chatUrl: 'aliim:sendmsg?touid=cnalichnWRONG' })]
+      prepare(items)
+      const first = (await get(base).expect(200)).body
+      expect(first.items.map((p: any) => p.availability)).toEqual(['ready', 'missing_account', 'chat_unavailable', 'chat_unavailable'])
+      for (const p of first.items.slice(1)) await get(`${base}/${p.purchaseOrderId}/launch?contactVersion=${p.contactVersion}`).expect(409)
+      items[0].supplier.wangwangAccount = 'changed'
+      await get(`${base}/p1/launch?contactVersion=${first.items[0].contactVersion}`).expect(409)
+      records[0].fulfillmentProgress.supplierShipment = 'shipped'
+      await get(base).expect(409)
+    })
+    it('rechecks revoked permissions while contacts are loading and hides completed source lines', async () => {
+      prepare([purchase('p1')])
+      const original = provider.listSupplierFollowUps
+      provider.listSupplierFollowUps = async (identity: any) => {
+        const result = await original(identity)
+        provider.resolvePermissions = async (subject: any) => ({ subject, allowedOrderIds: ['o1'], allowedPurchaseOrderIds: [] })
+        return result
+      }
+      expect((await get(base).expect(200)).body.items).toEqual([])
+      prepare([purchase('p1', { shipmentStatus: 'partial', lines: [
+        { fulfillmentLineId: 'a', purchaseLineId: 'pa', sku: 'A', name: 'Pending', pendingQuantity: 1 },
+        { fulfillmentLineId: 'b', purchaseLineId: 'pb', sku: 'B', name: 'Shipped', pendingQuantity: 0 },
+      ] }), purchase('p2', { tenantId: 'other' })])
+      const page = (await get(base).expect(200)).body
+      expect(page.items).toHaveLength(1)
+      expect(page.items[0].lines.map((line: any) => line.sku)).toEqual(['A'])
+      await get(`${base}/p1/launch?contactVersion=x`).expect(400)
+      await get(`${base}/p1/launch?contactVersion=${page.items[0].contactVersion}&supplierId=wrong`).expect(400)
+    })
+    it('does not derive purchase permission from order access and rejects wrong-subject provider responses', async () => {
+      prepare([purchase('p1')])
+      provider.resolvePermissions = async (subject: any) => ({ subject, allowedOrderIds: ['o1'] })
+      expect((await get(base).expect(200)).body.items).toEqual([])
+      prepare([purchase('p1')])
+      provider.listSupplierFollowUps = async () => ({ subject: { tenantId: 'other', userId: 'other' }, orderId: 'o1', items: [purchase('p1')] })
+      await get(base).expect(503)
+    })
+  })
+
   beforeAll(async () => {
     const repository = {
       manager: { getRepository: () => ({ find: async () => [] }) },
@@ -77,9 +150,13 @@ describe('FOP user isolation HTTP API (repository and provider boundaries stubbe
       ],
     }).overrideProvider(getRepositoryToken(User)).useValue(repository)
       .overrideProvider('FOP_DATA_PROVIDER').useValue({
+        source: 'fop',
+        approvalTargets: (identity: any, queue: any, orderId: string) => provider.approvalTargets(identity, queue, orderId),
+        approveDocument: (identity: any, command: any) => provider.approveDocument(identity, command),
         isConfigured: () => provider.isConfigured(),
         resolvePermissions: (identity: any) => provider.resolvePermissions(identity),
         listOrders: (identity: any, grant: any) => provider.listOrders(identity, grant),
+        listSupplierFollowUps: (identity: any, grant: any, orderId: string) => provider.listSupplierFollowUps(identity, grant, orderId),
         listReceipts: (identity: any, grant: any) => provider.listReceipts(identity, grant),
         listFreight: (identity: any, grant: any) => provider.listFreight(identity, grant),
         listProfits: (identity: any, grant: any) => provider.listProfits(identity, grant),
@@ -114,6 +191,75 @@ describe('FOP user isolation HTTP API (repository and provider boundaries stubbe
     }
   })
   afterAll(async () => { await app?.close() })
+
+  describe('approval HTTP boundary', () => {
+    const endpoint = '/api/autoflow/integrations/fop/fulfillment-orders/approvals'
+    const post = (path: string, body: unknown, id = alice) => request(app.getHttpServer()).post(endpoint + path).auth(token(id), { type: 'bearer' }).send(body as any)
+    beforeEach(() => {
+      provider.approvalTargets = jest.fn(async (identity: any, queue: string, orderId: string) => [{ tenantId: identity.tenantId, orderId, id: orderId, number: 'ORDER-A', entity: 'hzkj_orders', version: '1', status: 'B', eligible: true, reason: null }])
+      provider.approveDocument = jest.fn(async () => ({ status: 'approved', message: '审核成功', warning: null }))
+    })
+    function grant() { provider.resolvePermissions = async (subject: any) => ({ subject, allowedOrderIds: ['a', 'b'], approvalActions: ['review', 'allocation_review'] }) }
+    it('does not infer write grants from order read access or administrator status', async () => {
+      expect((await post('/preview', { queue: 'review', orderIds: ['a'] })).status).toBe(403)
+      expect((await post('/preview', { queue: 'review', orderIds: ['b'] }, bob)).status).toBe(403)
+      expect(provider.approvalTargets).not.toHaveBeenCalled()
+    })
+    it('requires an authenticated account and rejects client identity or target-entity injection', async () => {
+      expect((await request(app.getHttpServer()).post(endpoint + '/preview').send({ queue: 'review', orderIds: ['a'] })).status).toBe(401)
+      grant()
+      for (const injected of [{ subject: { userId: 'admin' } }, { entity: 'anything' }, { documentIds: ['other'] }]) expect((await post('/preview', { queue: 'review', orderIds: ['a'], ...injected })).status).toBe(400)
+    })
+    it('enforces employee scope even when FOP grant includes another owner order', async () => {
+      grant(); records.find(row => row.id === 'b').owner.id = 'bob-owner'; expect((await post('/preview', { queue: 'review', orderIds: ['b'] })).status).toBe(404)
+      expect(provider.approvalTargets).not.toHaveBeenCalled()
+    })
+    it('rejects unsupported queues, duplicate IDs and oversized batches', async () => {
+      grant()
+      for (const body of [{ queue: 'shipping', orderIds: ['a'] }, { queue: 'review', orderIds: ['a','a'] }, { queue: 'review', orderIds: [] }, { queue: 'review', orderIds: Array.from({ length: 101 }, (_, i) => String(i)) }]) expect((await post('/preview', body)).status).toBe(400)
+      expect((await post('', { queue: 'review', requestId: '12345678-1234-4234-8234-123456789abc', items: Array.from({ length: 101 }, (_, i) => ({ orderId: String(i), version: 'a'.repeat(64) })) })).status).toBe(400)
+    })
+    it('previews and approves a full 100-order page without truncating the selection', async () => {
+      records = Array.from({ length: 100 }, (_, i) => order(`page-${i}`))
+      const orderIds = records.map(row => row.id)
+      provider.resolvePermissions = async (subject: any) => ({ subject, allowedOrderIds: orderIds, approvalActions: ['review'] })
+      const preview = await post('/preview', { queue: 'review', orderIds })
+      expect(preview.status).toBe(201)
+      expect(preview.body.items).toHaveLength(100)
+      const result = await post('', { queue: 'review', requestId: '12345678-1234-4234-8234-123456789abc', items: preview.body.items.map((row: any) => ({ orderId: row.orderId, version: row.version })) })
+      expect(result.status).toBe(201)
+      expect(result.body.items).toHaveLength(100)
+      expect(result.body.items.every((row: any) => row.status === 'approved')).toBe(true)
+      expect(provider.approveDocument).toHaveBeenCalledTimes(100)
+    })
+    it('submits only previewed, authorized records using server-derived FOP identity', async () => {
+      grant()
+      const preview = await post('/preview', { queue: 'review', orderIds: ['a'] })
+      expect(preview.status).toBe(201)
+      const result = await post('', { queue: 'review', requestId: '12345678-1234-4234-8234-123456789abc', items: [{ orderId: 'a', version: preview.body.items[0].version }] })
+      expect(result.status).toBe(201)
+      expect(result.body.items[0].status).toBe('approved')
+      expect(provider.approveDocument.mock.calls[0][0]).toEqual({ tenantId: 'tenant-1', userId: 'alice-fop' })
+    })
+    it('stops all later writes after account disable or session revocation mid-batch', async () => {
+      for (const revoke of [{ accountDisabled: true }, { sessionVersion: 1 }]) {
+        Object.assign(accounts.get(alice), { accountDisabled: false, sessionVersion: 0 })
+        grant()
+        const preview = await post('/preview', { queue: 'review', orderIds: ['a','b'] })
+        provider.approveDocument.mockReset().mockImplementation(async () => { Object.assign(accounts.get(alice), revoke); return { status: 'approved', message: '已审核', warning: null } })
+        const result = await post('', { queue: 'review', requestId: '12345678-1234-4234-8234-123456789abc', items: preview.body.items.map((row: any) => ({ orderId: row.orderId, version: row.version })) })
+        expect(result.body.items.map((row: any) => row.status)).toEqual(['approved','blocked'])
+        expect(provider.approveDocument).toHaveBeenCalledTimes(1)
+      }
+    })
+    it('rechecks revoked action grants when submitting a previously valid preview', async () => {
+      grant(); const preview = await post('/preview', { queue: 'review', orderIds: ['a'] })
+      provider.resolvePermissions = async (subject: any) => ({ subject, allowedOrderIds: ['a'] })
+      const result = await post('', { queue: 'review', requestId: '12345678-1234-4234-8234-123456789abc', items: [{ orderId: 'a', version: preview.body.items[0].version }] })
+      expect(result.body.items[0].status).toBe('blocked'); expect(provider.approveDocument).not.toHaveBeenCalled()
+    })
+  })
+
 
   describe('per-chart effective permissions', () => {
     const override = (chartId: string, values = {}) => ({ chartId, visibility: 'inherit', dataScope: 'inherit', summaryMode: 'inherit', summaryDepartments: [], details: 'inherit', export: 'inherit', ...values })
@@ -680,6 +826,12 @@ describe('FOP user isolation HTTP API (repository and provider boundaries stubbe
     expect(second.body.total).toBe(5)
     expect((await list().expect(200)).body.items.map((item: any) => item.id)).toEqual(['older', 'new-a', 'new-b', 'invalid', 'missing'])
     expect((await list().expect(200)).body.items.find((item: any) => item.id === 'invalid').paidAt).toBeNull()
+    const descending = (await list('queue=review&paidAtOrder=desc').expect(200)).body
+    expect(descending.items.map((item: any) => item.id)).toEqual(['new-a', 'new-b', 'older', 'invalid', 'missing'])
+    expect(descending.totals).toEqual(first.body.totals)
+    expect((await list('queue=review&paidAtOrder=desc&pageSize=1&page=2').expect(200)).body.items.map((item: any) => item.id)).toEqual(['new-b'])
+    await list('queue=review&paidAtOrder=invalid').expect(400)
+    await list('queue=review&paidAtOrder=asc&paidAtOrder=desc').expect(400)
   })
   it('reads current queue progress on refresh and returns a no-store query completion timestamp', async () => {
     const first = await list().expect(200)
@@ -715,6 +867,174 @@ describe('FOP user isolation HTTP API (repository and provider boundaries stubbe
     expect(searched.departments).toEqual(all.departments)
     expect((await list(`queue=${queue}&departmentId=secret-dept`, bob).expect(200)).body.total).toBe(0)
     expect((await list(`queue=${queue}&departmentId=unknown`, bob).expect(200)).body.total).toBe(0)
+  })
+
+  it('sorts dispatch documents across the authorized result before paging with unknowns last', async () => {
+    accounts.get(alice).workbenchRoles.push('dispatch')
+    const row = (id: string, states: string[] | null, extra = {}) => order(id, { reviewStatus: 'approved', department: { id: 'd1', name: '业务一部' },
+      dispatchDocuments: states?.map((status, i) => ({ id: `${id}-${i}`, number: `FY-${id}-${i}`, status })) ?? null, ...extra })
+    records = [row('z-none', []), row('b-draft', ['draft']), row('a-mixed', ['approved', 'draft']),
+      row('c-submitted', ['submitted']), row('d-approved', ['approved']), row('y-unknown', ['approved', 'unknown']), row('x-missing', null),
+      row('private', ['draft']), row('foreign', [], { owner: { id: 'bob-owner', name: 'Bob' } }),
+      row('other-dept', [], { department: { id: 'd2', name: '业务二部' } })]
+    provider.resolvePermissions = async (subject: any) => ({ subject, allowedOrderIds: records.filter(r => r.id !== 'private').map(r => r.id) })
+    const query = 'queue=dispatch&departmentId=d1&sortBy=dispatchDocumentStatus'
+    const asc = (await list(query + '&sortOrder=asc').expect(200)).body
+    expect(asc.items.map((r: any) => r.id)).toEqual(['z-none', 'a-mixed', 'b-draft', 'c-submitted', 'd-approved', 'x-missing', 'y-unknown'])
+    const desc = (await list(query + '&sortOrder=desc').expect(200)).body
+    expect(desc.items.map((r: any) => r.id)).toEqual(['d-approved', 'c-submitted', 'a-mixed', 'b-draft', 'z-none', 'x-missing', 'y-unknown'])
+    expect(desc.totals).toEqual(asc.totals)
+    expect(asc.totals.orderCount).toBe(7)
+    expect((await list(query + '&sortOrder=desc&pageSize=1&page=3').expect(200)).body.items[0].id).toBe('a-mixed')
+    records.find(r => r.id === 'b-draft').paidAt = '2020-01-01T00:00:00Z'
+    expect((await list(query + '&search=draft').expect(200)).body.items[0].id).toBe('b-draft')
+    expect((await list(query).expect(200)).body.items.slice(1, 3).map((r: any) => r.id)).toEqual(['b-draft', 'a-mixed'])
+    records.find(r => r.id === 'b-draft').dispatchDocuments[0].status = 'approved'
+    expect((await list(query + '&sortOrder=desc&pageSize=1').expect(200)).body.items[0].id).toBe('b-draft')
+    accounts.get(alice).workbenchRoles = ['sales']
+    await list(query).expect(403)
+  })
+
+  it('sorts allocation and outbound stages by visible workflow state and retains warehouse filters', async () => {
+    accounts.get(alice).workbenchRoles.push('warehouse')
+    const row = (id: string, allocationReview: string, outbound: string, paidAt: string | null) => order(id, { reviewStatus: 'approved', paidAt,
+      fulfillmentProgress: { ...order(id).fulfillmentProgress, stockReadiness: 'ready', allocationReview, outbound } })
+    records = [row('review', 'pending', 'unknown', '2020-01-01T00:00:00Z'), row('outbound', 'approved', 'pending', '2020-01-03T00:00:00Z'),
+      row('partial', 'approved', 'partial', '2020-01-02T00:00:00Z'), row('null-date', 'approved', 'pending', null)]
+    provider.resolvePermissions = async (subject: any) => ({ subject, allowedOrderIds: records.map(r => r.id) })
+    for (const [sortBy, asc, desc] of [
+      ['allocationDocumentStatus', ['review', 'partial', 'outbound', 'null-date'], ['partial', 'outbound', 'null-date', 'review']],
+      ['outboundStatus', ['review', 'outbound', 'null-date', 'partial'], ['partial', 'outbound', 'null-date', 'review']],
+    ] as const) {
+      expect((await list(`queue=shipping&sortBy=${sortBy}&sortOrder=asc`).expect(200)).body.items.map((r: any) => r.id)).toEqual(asc)
+      expect((await list(`queue=shipping&sortBy=${sortBy}&sortOrder=desc`).expect(200)).body.items.map((r: any) => r.id)).toEqual(desc)
+    }
+    expect((await list('queue=shipping&sortBy=outboundStatus&sortOrder=desc&warehouseStage=pending_review').expect(200)).body.items.map((r: any) => r.id)).toEqual(['review'])
+    expect((await list('queue=shipping&sortBy=paidAt&sortOrder=desc').expect(200)).body.items.map((r: any) => r.id)).toEqual(['outbound', 'partial', 'review', 'null-date'])
+    for (const invalid of ['queue=shipping&sortBy=dispatchDocumentStatus', 'queue=allocation&sortBy=outboundStatus', 'queue=review&sortBy=allocationDocumentStatus', 'queue=shipping&sortBy=bad', 'queue=shipping&sortOrder=bad', 'queue=shipping&sortBy=paidAt&sortBy=outboundStatus', 'queue=shipping&sortOrder=asc&sortOrder=desc']) await list(invalid).expect(400)
+  })
+
+  it('returns only authorized unpaid orders and moves a paid order into review on refresh', async () => {
+    const unpaid = (id: string, amount: number, extra = {}) => order(id, { paymentStatus: 'unpaid', paidAt: null, amount, department: { id: 'd1', name: '业务一部' }, ...extra })
+    records = [unpaid('a', 10), unpaid('b', 20), unpaid('cancelled', 999, { cancelled: true }),
+      unpaid('refunded', 999, { paymentStatus: 'refunded' }), unpaid('paid', 999, { paymentStatus: 'paid', paidAt: '2020-01-10T00:00:00Z' }),
+      unpaid('other-owner', 999, { owner: { id: 'bob-owner', name: 'Bob' } }), unpaid('private', 999),
+      unpaid('other-department', 30, { department: { id: 'd2', name: '业务二部' } })]
+    provider.resolvePermissions = async (subject: any) => ({ subject, allowedOrderIds: records.filter(r => r.id !== 'private').map(r => r.id) })
+    const query = 'queue=unpaid&departmentId=d1&pageSize=1'
+    const page = (await list(query).expect(200)).body
+    expect(page.items.map((row: any) => row.id)).toEqual(['a'])
+    expect(page.items[0].paidAt).toBeNull()
+    expect(page.total).toBe(2)
+    expect(page.totals).toEqual({ orderCount: 2, itemQuantity: 2, amountsByCurrency: [{ currency: 'USD', amount: 30 }] })
+    expect((await list(query + '&page=2').expect(200)).body.items[0].id).toBe('b')
+    expect((await list(query + '&search=private').expect(200)).body.total).toBe(0)
+    records[0].paymentStatus = 'paid'; records[0].paidAt = '2020-01-11T00:00:00Z'
+    expect((await list(query).expect(200)).body.items.map((r: any) => r.id)).toEqual(['b'])
+    expect((await list('queue=review&orderNumber=A').expect(200)).body.total).toBe(1)
+    const summary = (await dashboard().expect(200)).body
+    expect(summary.queues.review).toBe(2)
+    expect(summary.queues).not.toHaveProperty('unpaid')
+    accounts.get(alice).workbenchRoles = ['allocation']
+    await list(query).expect(403)
+  })
+
+  it('partitions procurement and allocation queues using independent facts and keeps role/data gates', async () => {
+    accounts.get(alice).workbenchRoles.push('procurement')
+    const candidate = (id: string, purchaseOrder: string, supplierPayment: string, extra = {}) => order(id, {
+      reviewStatus: 'approved', procurementProgress: { purchaseOrder, supplierPayment }, ...extra,
+    })
+    records = [candidate('unpaid', 'ordered', 'unpaid'), candidate('part-paid', 'ordered', 'partial'),
+      candidate('part-ordered', 'partial', 'paid'), candidate('unknown', 'unknown', 'unknown'),
+      candidate('paid', 'ordered', 'paid'), candidate('part-shipped', 'ordered', 'paid', {
+        fulfillmentProgress: { ...order('base').fulfillmentProgress, supplierShipment: 'partial' }, amount: 20 }),
+      candidate('shipped', 'ordered', 'paid', { fulfillmentProgress: { ...order('base').fulfillmentProgress, supplierShipment: 'shipped' } }),
+      candidate('refunded', 'ordered', 'refunded'), candidate('private', 'ordered', 'paid'),
+      candidate('other-owner', 'ordered', 'paid', { owner: { id: 'bob-owner', name: 'Bob' } }),
+      candidate('customer-unpaid', 'ordered', 'paid', { paymentStatus: 'unpaid' }),
+      candidate('cancelled', 'ordered', 'paid', { cancelled: true })]
+    provider.resolvePermissions = async (subject: any) => ({ subject, allowedOrderIds: records.filter(row => row.id !== 'private').map(row => row.id) })
+    const pending = (await list('queue=procurement').expect(200)).body
+    expect(pending.items.map((row: any) => row.id).sort()).toEqual(['part-ordered', 'part-paid', 'refunded', 'unknown', 'unpaid'])
+    const purchased = (await list('queue=procurement_shipping&pageSize=1').expect(200)).body
+    expect(purchased.total).toBe(2)
+    expect(purchased.totals.amountsByCurrency).toEqual([{ currency: 'USD', amount: 30 }])
+    expect((await list('queue=procurement_shipping&pageSize=1&page=2').expect(200)).body.items).toHaveLength(1)
+    expect((await dashboard().expect(200)).body.queues.procurement).toBe(pending.total)
+    records.find(row => row.id === 'unpaid').procurementProgress.supplierPayment = 'paid'
+    expect((await list('queue=procurement_shipping').expect(200)).body.total).toBe(3)
+    accounts.get(alice).workbenchRoles = ['allocation']
+    await list('queue=procurement_shipping').expect(403)
+    records = [candidate('incomplete', 'ordered', 'paid'), candidate('ready', 'ordered', 'paid', {
+      fulfillmentProgress: { ...order('base').fulfillmentProgress, stockReadiness: 'ready' },
+      dispatchDocuments: [{ id: 'dispatch-1', number: 'FY-1', status: 'submitted' }],
+    }), candidate('complete', 'ordered', 'paid', { fulfillmentProgress: { ...order('base').fulfillmentProgress, stockReadiness: 'ready', outbound: 'completed' } })]
+    expect((await list('queue=allocation').expect(200)).body.items.map((row: any) => row.id)).toEqual(['incomplete'])
+    const ready = (await list('queue=allocation_review').expect(200)).body
+    expect(ready.items.map((row: any) => row.id)).toEqual(['ready'])
+    expect(ready.items[0].dispatchDocuments[0].status).toBe('submitted')
+    expect((await dashboard().expect(200)).body.queues.allocation).toBe(1)
+    accounts.get(alice).workbenchRoles = ['warehouse']
+    await list('queue=allocation_review').expect(403)
+  })
+
+  it('filters warehouse stages before totals and pagination without widening scope', async () => {
+    accounts.get(alice).workbenchRoles.push('warehouse')
+    const row = (id: string, allocationReview: string, amount: number, extra = {}) => order(id, {
+      reviewStatus: 'approved', amount, department: { id: 'd1', name: '业务一部' },
+      fulfillmentProgress: { ...order(id).fulfillmentProgress, stockReadiness: 'ready', allocationReview }, ...extra,
+    })
+    records = [row('ready', 'pending', 10), row('approved-a', 'approved', 20), row('approved-b', 'approved', 30),
+      row('private', 'pending', 999), row('other-owner', 'pending', 999, { owner: { id: 'bob-owner', name: 'Bob' } })]
+    provider.resolvePermissions = async (subject: any) => ({ subject, allowedOrderIds: records.filter(r => r.id !== 'private').map(r => r.id) })
+    const query = 'queue=shipping&departmentId=d1&warehouseStage='
+    expect((await list(query + 'all').expect(200)).body.total).toBe(3)
+    const pending = (await list(query + 'pending_review').expect(200)).body
+    expect(pending.items.map((r: any) => r.id)).toEqual(['ready'])
+    expect(pending.totals.amountsByCurrency).toEqual([{ currency: 'USD', amount: 10 }])
+    const approved = (await list(query + 'pending_outbound&pageSize=1').expect(200)).body
+    expect(approved.total).toBe(2)
+    expect(approved.totals.amountsByCurrency).toEqual([{ currency: 'USD', amount: 50 }])
+    expect((await list(query + 'pending_outbound&pageSize=1&page=2').expect(200)).body.items[0].id).toBe('approved-b')
+    expect((await list(query + 'pending_outbound&search=ready').expect(200)).body.total).toBe(0)
+    records[0].fulfillmentProgress.allocationReview = 'approved'
+    expect((await list(query + 'pending_review').expect(200)).body.total).toBe(0)
+    expect((await list(query + 'pending_outbound').expect(200)).body.total).toBe(3)
+    for (const invalid of ['queue=shipping&warehouseStage=bad', 'queue=shipping&warehouseStage=all&warehouseStage=pending_review', 'queue=allocation&warehouseStage=all']) await list(invalid).expect(400)
+  })
+
+  it('returns both warehouse groups with shared totals, authorization and refresh transitions', async () => {
+    accounts.get(alice).workbenchRoles.push('warehouse')
+    const warehouseOrder = (id: string, allocationReview: string, outbound: string, extra = {}) => order(id, {
+      reviewStatus: 'approved', department: { id: 'd1', name: '业务一部' },
+      fulfillmentProgress: { shopifySync: 'synced', supplierShipment: 'shipped', stockReadiness: 'ready', allocationReview, outbound }, ...extra,
+    })
+    records = [warehouseOrder('ready', 'pending', 'pending'),
+      warehouseOrder('approved', 'approved', 'pending', { owner: { id: 'bob-owner', name: 'Bob' }, amount: 20 }),
+      warehouseOrder('partial', 'approved', 'partial', { amount: 30 }),
+      warehouseOrder('complete', 'approved', 'completed'), warehouseOrder('complete-unreviewed', 'pending', 'completed'),
+      warehouseOrder('unknown-review', 'unknown', 'pending'), warehouseOrder('unknown-outbound', 'approved', 'unknown'),
+      warehouseOrder('unpaid', 'pending', 'pending', { paymentStatus: 'unpaid' }),
+      warehouseOrder('cancelled', 'pending', 'pending', { cancelled: true }),
+      warehouseOrder('not-reviewed', 'pending', 'pending', { reviewStatus: 'pending' }),
+      warehouseOrder('private', 'pending', 'pending')]
+    records.push({ ...records[0] })
+    provider.resolvePermissions = async (subject: any) => ({ subject, allowedOrderIds: records.filter(row => row.id !== 'private').map(row => row.id) })
+    const result = (await list('queue=shipping&departmentId=d1&pageSize=1', bob).expect(200)).body
+    expect(result.total).toBe(3)
+    expect(result.totals).toEqual({ orderCount: 3, itemQuantity: 3, amountsByCurrency: [{ currency: 'USD', amount: 60 }] })
+    const summary = (await dashboard(bob).expect(200)).body
+    expect(summary.queues.shipping).toBe(3)
+    expect(summary.tasks.find((task: any) => task.kind === 'shipping').count).toBe(3)
+    expect((await list('queue=shipping', alice).expect(200)).body.items.map((row: any) => row.id)).toEqual(['partial', 'ready'])
+    records = records.map(row => row.id === 'ready' ? { ...row, fulfillmentProgress: { ...row.fulfillmentProgress, allocationReview: 'approved' } } : row)
+    const reviewed = (await list('queue=shipping', bob).expect(200)).body
+    expect(reviewed.total).toBe(3)
+    expect(reviewed.items.find((row: any) => row.id === 'ready').fulfillmentProgress.allocationReview).toBe('approved')
+    records = records.map(row => row.id === 'ready' ? { ...row, fulfillmentProgress: { ...row.fulfillmentProgress, outbound: 'completed' } } : row)
+    expect((await list('queue=shipping', bob).expect(200)).body.total).toBe(2)
+    provider.resolvePermissions = async (subject: any) => ({ subject, allowedOrderIds: [] })
+    expect((await list('queue=shipping', bob).expect(200)).body.total).toBe(0)
   })
 
   it('keeps department options and forged filters inside the employee or manager scope', async () => {

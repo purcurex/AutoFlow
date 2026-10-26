@@ -5,7 +5,7 @@ import { useI18n } from 'vue-i18n'
 import { X } from 'lucide-vue-next'
 import { getSalesPerformanceDetails, type FopProfit, type PerformanceDetailsQuery, type PerformancePage } from '@/api/fop-sales-performance'
 import { fopAccessError } from '@/api/fop-access'
-import { formatChartCurrency } from '@/utils/currency'
+import { formatChartCurrency, formatUsdExchangeRate } from '@/utils/currency'
 import { onSessionReset } from '@/utils/session'
 import { scrollOuterPage } from '@/utils/pageWheel'
 import TableTotals from '@/components/ui/TableTotals.vue'
@@ -93,7 +93,7 @@ onBeforeUnmount(() => {
                       <div><dt>{{ t('收入', 'Income') }}</dt><dd>{{ money(profit.incomeAmount) }}</dd></div><div><dt>{{ t('收入调整', 'Income adjustment') }}</dt><dd>{{ money(profit.adjustmentIncome) }}</dd></div><div><dt>{{ t('产品成本', 'Product cost') }}</dt><dd>{{ money(profit.productCost) }}</dd></div>
                       <div><dt>{{ profit.freightBasis === 'frozen' ? t('已冻结运费', 'Frozen freight') : t('预估运费', 'Estimated freight') }}</dt><dd>{{ money(profit.freightCost) }}</dd></div><div><dt>{{ t('退款', 'Refunds') }}</dt><dd>{{ money(profit.refundCost) }}</dd></div><div><dt>{{ t('退件成本', 'Return cost') }}</dt><dd>{{ money(profit.returnCost) }}</dd></div><div><dt>{{ t('其他成本', 'Other cost') }}</dt><dd>{{ money(profit.otherCost) }}</dd></div>
                       <div><dt>{{ t('前期已确认', 'Previously recognized') }}</dt><dd>{{ money(profit.previousRecognizedProfit) }}</dd></div><div><dt>{{ t('换汇尾差', 'FX rounding') }}</dt><dd>{{ money(profit.roundingAdjustment) }}</dd></div><div><dt>{{ isMonthlyReference(profit) ? t('原币整月参考净毛利', 'Original full-month reference profit') : t('原币本期净毛利', 'Original net profit') }}</dt><dd>{{ profit.originalCurrency }} {{ profit.originalAmount.toLocaleString(String(locale), { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }}</dd></div>
-                      <div><dt>{{ t('汇率 / 日期', 'FX rate / Date') }}</dt><dd>{{ profit.fxRateToUsd }} · {{ profit.fxRateDate }}<small>{{ profit.fxRateSource }}</small></dd></div><div><dt>{{ t('已知于', 'Known at') }}</dt><dd>{{ date(profit.knownAt) }}</dd></div><div><dt>{{ t('审核时间', 'Approved at') }}</dt><dd>{{ date(profit.approvedAt) }}</dd></div>
+                      <div><dt>{{ t('汇率 / 日期', 'FX rate / Date') }}</dt><dd>{{ formatUsdExchangeRate(profit.fxRateToUsd, profit.originalCurrency) }} · {{ profit.fxRateDate }}<small>{{ profit.fxRateSource }}</small></dd></div><div><dt>{{ t('已知于', 'Known at') }}</dt><dd>{{ date(profit.knownAt) }}</dd></div><div><dt>{{ t('审核时间', 'Approved at') }}</dt><dd>{{ date(profit.approvedAt) }}</dd></div>
                     </dl>
                   </td></tr>
                 </template>

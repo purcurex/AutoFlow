@@ -1,3 +1,5 @@
+import { ApprovalCommand, ApprovalOutcome, ApprovalQueue, ApprovalTarget, approvalEntity } from './fop-approval.types'
+import { demoSupplierFollowUps } from './supplier-follow-up-demo'
 import { eligibleReceipts } from './fop-receipts'
 import { FopOrganizationSummary, FopOrganizationSummaryQuery, FopOrganizationSummaryRow } from './fop-data.types'
 import { demoProfits } from './sales-performance-demo'
@@ -7,7 +9,7 @@ import type { FopFreightCandidate } from './fop-freight.types'
 import { businessDate } from './fop-business-time'
 import { FOP_CARRIERS } from './fop-carriers'
 import { createHash } from 'crypto'
-import { FopAnalytics, FopDataProvider, FopIdentity, FopOrderCandidate, FopReceiptCandidate, FopPermissionDeniedError, FopPermissionGrant, SALES_DEPARTMENTS, SalesDepartmentCode } from './fop-data.types'
+import { FopAnalytics, FopDataProvider, FopIdentity, FopOrderCandidate, DispatchDocument, ProcurementProgress, FopReceiptCandidate, FopPermissionDeniedError, FopPermissionGrant, SALES_DEPARTMENTS, SalesDepartmentCode } from './fop-data.types'
 
 interface DemoWorkspace {
   nodes: { id: string; parentId: string | null; name: string; kind: 'organization' | 'department'; sortOrder: number }[]
@@ -59,6 +61,45 @@ function imageUrl(product: typeof PRODUCTS[number]) {
 
 /** Local demo only. This adapter never writes bindings or attempts an upstream fallback. */
 export class DemoFopDataProvider extends FopDataProvider {
+  private readonly approved = new Set<string>()
+  private readonly approvalRequests = new Map<string, { fingerprint: string; outcome: ApprovalOutcome }>()
+  private documentKey(tenantId: string, entity: string, id: string) { return JSON.stringify([tenantId, entity, id]) }
+  private allocationIds(order: FopOrderCandidate) { return Array.from({ length: order.items.length > 1 ? 2 : 1 }, (_, i) => `${order.id}:alloc:${i + 1}`) }
+  async approvalTargets(identity: Readonly<FopIdentity>, queue: ApprovalQueue, orderId: string): Promise<ApprovalTarget[]> {
+    const permission = await this.resolvePermissions(identity)
+    if (!permission.approvalActions?.includes(queue) || !permission.allowedOrderIds.includes(orderId)) throw new FopPermissionDeniedError('Approval denied')
+    const order = (await this.orders(identity)).find(o => o.id === orderId)
+    if (!order) return []
+    const entity = approvalEntity(queue)
+    const ids = queue === 'review' ? [order.id] : this.allocationIds(order)
+    const paid = order.paymentStatus === 'paid' && !order.cancelled
+    const dispatchReady = !!order.dispatchDocuments?.length && order.dispatchDocuments.every(d => d.status === 'approved')
+    return ids.map((id, index) => {
+      const approved = this.approved.has(this.documentKey(identity.tenantId, entity, id)) || (queue === 'review' ? order.reviewStatus === 'approved' : order.fulfillmentProgress.allocationReview === 'approved')
+      const eligible = paid && !approved && (queue === 'review' || order.reviewStatus === 'approved' && order.fulfillmentProgress.stockReadiness === 'ready' && dispatchReady && order.fulfillmentProgress.outbound !== 'completed')
+      return { tenantId: identity.tenantId, orderId, id, number: queue === 'review' ? order.orderNumber : `PH-${order.orderNumber}-${index + 1}`, entity, version: approved ? '2' : '1', status: approved ? 'C' : 'B', eligible, reason: approved ? '已审核' : !paid ? '订单未支付或已取消' : queue === 'allocation_review' && !dispatchReady ? '关联发运单尚未全部审核，请先在 FOP 完成发运审核' : !eligible ? '配货尚未齐套或单据状态不符' : null }
+    })
+  }
+  async approveDocument(identity: Readonly<FopIdentity>, command: ApprovalCommand): Promise<ApprovalOutcome> {
+    const queue = command.entity === 'hzkj_orders' ? 'review' : 'allocation_review'
+    const targets = await this.approvalTargets(identity, queue, command.orderId)
+    const target = targets.find(d => d.id === command.id && d.entity === command.entity)
+    if (!target) throw new FopPermissionDeniedError('Document denied')
+    const key = JSON.stringify([identity, command.idempotencyKey])
+    const fingerprint = JSON.stringify([command.orderId, command.entity, command.id, command.version, command.operation])
+    const existing = this.approvalRequests.get(key)
+    if (existing) {
+      if (existing.fingerprint !== fingerprint) return { status: 'blocked', message: '重复请求内容不一致', warning: null }
+      return existing.outcome
+    }
+    const outcome: ApprovalOutcome = target.status === 'C' ? { status: 'already_approved', message: '已审核，无需重复操作', warning: null }
+      : !target.eligible || target.version !== command.version || command.operation !== 'audit' ? { status: 'blocked', message: target.reason || '单据已变化，请重新核对', warning: null }
+      : { status: 'approved', message: '模拟审核成功', warning: null }
+    if (outcome.status === 'approved') this.approved.add(this.documentKey(identity.tenantId, target.entity, target.id))
+    this.approvalRequests.set(key, { fingerprint, outcome })
+    return outcome
+  }
+
   readonly source = 'mock' as const
   constructor(private readonly organizations: WorkspaceReader, private readonly environment: Record<string, string | undefined> = process.env) { super() }
   isConfigured() { return this.environment.FOP_DATA_MODE === 'demo' && ['development', 'test', 'local'].includes(this.environment.NODE_ENV ?? '') }
@@ -75,7 +116,13 @@ export class DemoFopDataProvider extends FopDataProvider {
       return node ? [{ code: d.id, departmentId: node.id, departmentPathIds: departmentPath(workspace, node.id) }] : []
     })
     const organizationSummaries = (['registrations', 'department_receipts', 'order_volume'] as const).map(chartId => ({ chartId, departments }))
-    return { organizationSummaries, subject: { ...identity }, allowedOrderIds: (await this.orders(identity)).map(order => order.id), allowedReceiptIds: (await this.receipts(identity)).map(receipt => receipt.id), allowedFreightIds: demoFreight(identity, await this.orders(identity)).map(row => row.id), allowedProfitIds: demoProfits(identity, await this.orders(identity)).map(row => row.id), analyticsScopes: ['rates', 'registrations', 'receipts', 'freight', 'sales_profit'] }
+    return { approvalActions: ['review', 'allocation_review'], organizationSummaries, subject: { ...identity }, allowedOrderIds: (await this.orders(identity)).map(order => order.id), allowedPurchaseOrderIds: (await this.orders(identity)).flatMap(order => demoSupplierFollowUps(order).map(row => row.purchaseOrderId)), allowedReceiptIds: (await this.receipts(identity)).map(receipt => receipt.id), allowedFreightIds: demoFreight(identity, await this.orders(identity)).map(row => row.id), allowedProfitIds: demoProfits(identity, await this.orders(identity)).map(row => row.id), analyticsScopes: ['rates', 'registrations', 'receipts', 'freight', 'sales_profit'] }
+  }
+  async listSupplierFollowUps(identity: Readonly<FopIdentity>, permission: Readonly<FopPermissionGrant>, orderId: string) {
+    this.assertIdentity(identity, permission)
+    const order = permission.allowedOrderIds.includes(orderId) ? (await this.orders(identity)).find(row => row.id === orderId) : undefined
+    const allowed = new Set(permission.allowedPurchaseOrderIds ?? [])
+    return { subject: { ...identity }, orderId, items: order ? demoSupplierFollowUps(order).filter(row => allowed.has(row.purchaseOrderId)) : [] }
   }
   async listOrders(identity: Readonly<FopIdentity>, permission: Readonly<FopPermissionGrant>): Promise<FopOrderCandidate[]> {
     this.assertIdentity(identity, permission)
@@ -194,7 +241,7 @@ export class DemoFopDataProvider extends FopDataProvider {
     const today = Date.parse(businessDate(new Date()) + 'T00:00:00Z')
     const year = new Date(today).getUTCFullYear()
     const orders: FopOrderCandidate[] = []
-    const make = (index: number, createdAt: number, completed: boolean, stage = index % 6) => {
+    const make = (index: number, createdAt: number, completed: boolean, stage = index % 6, awaitingPayment = false) => {
       const owner = employees[index % employees.length]
       const department = nodes.get(owner.departmentId)
       if (!department) return
@@ -210,7 +257,7 @@ export class DemoFopDataProvider extends FopDataProvider {
       if (organization.kind !== 'organization') return
       const customerIndex = Math.floor(index / employees.length) % CUSTOMERS.length
       const quantity = index % 3 + 1
-      const paid = completed || stage !== 0 || index % 4 !== 0
+      const paid = !awaitingPayment && (completed || stage !== 0 || index % 4 !== 0)
       const shipping = completed || stage === 4
       const allocated = completed || stage === 3 || stage === 4
       const suffix = String(index + 1).padStart(5, '0')
@@ -221,16 +268,43 @@ export class DemoFopDataProvider extends FopDataProvider {
       const cents = selectedProducts.reduce((sum, product, line) => sum + product.cents * items[line].quantity, 0)
       const carrierSeed = createHash('sha256').update(`${accountKey}:carrier:${index}:${createdAt}`).digest().readUInt32BE(0) % 100
       const carrier = FOP_CARRIERS[CARRIER_THRESHOLDS.findIndex(limit => carrierSeed < limit)]
+      const purchaseExamples: ProcurementProgress[] = [
+        { purchaseOrder: 'not_ordered', supplierPayment: 'not_required' },
+        { purchaseOrder: 'partial', supplierPayment: 'paid' },
+        { purchaseOrder: 'ordered', supplierPayment: 'unpaid' },
+        { purchaseOrder: 'ordered', supplierPayment: 'partial' },
+        { purchaseOrder: 'ordered', supplierPayment: 'paid' },
+        { purchaseOrder: 'ordered', supplierPayment: 'paid' },
+        { purchaseOrder: 'ordered', supplierPayment: 'refunded' },
+        { purchaseOrder: 'unknown', supplierPayment: 'unknown' },
+      ]
+      const procurementProgress: ProcurementProgress = completed || stage >= 2 && stage <= 4
+        ? { purchaseOrder: 'ordered', supplierPayment: 'paid' }
+        : stage === 0 ? { purchaseOrder: 'unknown', supplierPayment: 'unknown' } : purchaseExamples[index % purchaseExamples.length]
+      // Separate document lifecycle; an approved dispatch may still await Shopify synchronization.
+      const dispatchDocuments: DispatchDocument[] = completed || stage === 4
+        ? [{ id: `${accountKey}:dispatch:${suffix}:1`, number: `FY-${suffix}-1`, status: 'approved' }]
+        : stage === 2 || stage === 3 ? [{ id: `${accountKey}:dispatch:${suffix}:1`, number: `FY-${suffix}-1`, status: (['draft', 'submitted', 'approved'] as const)[index % 3] }]
+          : []
+      if (stage === 3 && index % 4 === 0) dispatchDocuments.push({ id: `${accountKey}:dispatch:${suffix}:2`, number: `FY-${suffix}-2`, status: 'approved' })
+      const shopifySync = completed ? 'synced' : stage === 0 ? 'unknown' : stage === 4 && index % 3 === 0 ? 'synced' : index % 5 === 0 ? 'partial' : 'pending'
+      // A partially synchronized order must already have an approved dispatched package.
+      if (shopifySync === 'partial' && !dispatchDocuments.some(document => document.status === 'approved')) {
+        const documentIndex = dispatchDocuments.length + 1
+        dispatchDocuments.push({ id: `${accountKey}:dispatch:${suffix}:${documentIndex}`, number: `FY-${suffix}-${documentIndex}`, status: 'approved' })
+      }
       orders.push({
+        dispatchDocuments,
+        procurementProgress,
         tenantId: identity.tenantId, id: `${accountKey}:order:${suffix}`, orderNumber: `AF-${accountKey.slice(0, 4).toUpperCase()}-${suffix}`,
         shopifyOrderNumber: `#${10400 + index}`, customerId: `${accountKey}:customer:${owner.id}:${customerIndex + 1}`, customerCode: `${owner.code}-C${String(customerIndex + 1).padStart(3, '0')}`, customerName: `${CUSTOMERS[customerIndex]} (${owner.name})`, storeName: STORES[index % STORES.length], items,
         ...(salesDepartmentCode ? { salesDepartmentCode } : {}),
         currentCustomerOwner: { id: owner.id, departmentId: owner.departmentId, departmentPathIds: departmentPath(workspace, owner.departmentId) }, departmentPathIds: departmentPath(workspace, owner.departmentId), organization: { id: organization.id, name: organization.name }, department: { id: department.id, name: department.name }, owner: { id: owner.id, name: owner.name },
         amount: cents / 100, currency: 'USD', paymentStatus: paid ? 'paid' : 'unpaid', reviewStatus: completed || stage !== 0 ? 'approved' : 'pending',
         fulfillmentProgress: {
-          shopifySync: completed ? 'synced' : stage === 0 ? 'unknown' : stage === 4 && index % 3 === 0 ? 'synced' : index % 5 === 0 ? 'partial' : 'pending',
-          supplierShipment: completed || stage >= 2 && stage <= 4 ? 'shipped' : stage === 0 ? 'unknown' : index % 3 === 0 ? 'partial' : 'pending',
-          stockReadiness: completed || allocated || stage === 2 && index % 2 === 0 ? 'ready' : stage === 0 ? 'unknown' : 'incomplete',
+          shopifySync,
+          supplierShipment: completed || stage >= 2 && stage <= 4 ? 'shipped' : stage === 0 ? 'unknown' : index % 8 === 5 ? 'partial' : 'pending',
+          stockReadiness: completed || allocated || stage === 2 && Math.floor(index / employees.length) % 2 === 0 ? 'ready' : stage === 0 ? 'unknown' : 'incomplete',
           allocationReview: completed || allocated ? 'approved' : 'pending',
           outbound: completed ? 'completed' : stage === 4 && index % 4 === 0 ? 'partial' : 'pending',
         },
@@ -247,6 +321,8 @@ export class DemoFopDataProvider extends FopDataProvider {
     for (const [stage, count] of [18, 27, 36, 24, 42, 13].entries()) {
       for (let n = 0; n < count; n++, index++) make(index, today - (1 + (index * 7 + Math.floor(index / 12)) % 21) * DAY + (8 + index % 8) * 3_600_000, false, stage)
     }
+    // Unpaid examples cover every employee rotation; never enter paid fulfillment queues.
+    for (let n = 0; n < 24; n++, index++) make(index, today - (1 + n % 14) * DAY + 8 * 3_600_000, false, 0, true)
     // Completed, paid orders populate monthly collections for this and the two prior years.
     for (let y = year - 2; y <= year; y++) for (let month = 0; month < 12; month++) for (let n = 0; n < 18; n++) {
       const at = Date.UTC(y, month, 2 + n, 9)
@@ -257,6 +333,10 @@ export class DemoFopDataProvider extends FopDataProvider {
     if (source) orders.push({ ...source, id: `${source.id}:prepaid-fulfillment`, orderNumber: 'AF-PREPAID-0060', amount: 60,
       createdAt: new Date(today - DAY).toISOString(), paidAt: new Date(today - DAY + 3_600_000).toISOString(),
       customerId: `${accountKey}:prepaid-customer`, customerCode: 'PRE001', customerName: 'Prepaid Demo Customer', exception: null })
+    for (const order of orders) {
+      if (this.approved.has(this.documentKey(identity.tenantId, 'hzkj_orders', order.id))) order.reviewStatus = 'approved'
+      if (this.allocationIds(order).every(id => this.approved.has(this.documentKey(identity.tenantId, 'hzkj_alloc_bill', id)))) order.fulfillmentProgress.allocationReview = 'approved'
+    }
     return orders
   }
 }

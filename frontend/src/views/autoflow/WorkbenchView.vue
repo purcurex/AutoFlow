@@ -65,16 +65,11 @@ function queueLink(value: string) { return { name: 'RoleWorkbench', params: { ro
       <template v-if="allowed && role">
         <FopDataAccessNotice @recheck="dataRevision++" />
         <nav class="workbench-queues" :aria-label="text('工作台功能', 'Workbench functions')">
-          <template v-if="role === 'sales'">
-            <RouterLink :to="queueLink('performance')" :class="{ active: choice === 'performance' }">{{ text('个人收款与毛利', 'Personal receipts and profit') }}</RouterLink>
-            <RouterLink v-for="item in workbenchQueues.sales" :key="item" :to="queueLink(item)" :class="{ active: choice === item }">{{ queueNames[item][zh ? 0 : 1] }}{{ text('清单', item === 'exceptions' ? '' : ' orders') }}</RouterLink>
-          </template>
+          <RouterLink v-for="item in workbenchQueues[role]" :key="item" :to="queueLink(item)" :class="{ active: choice === item }">{{ queueNames[item][zh ? 0 : 1] }}{{ ['procurement_shipping', 'allocation_review'].includes(item) ? '' : text('清单', item === 'exceptions' ? '' : ' orders') }}</RouterLink>
+          <RouterLink v-if="role === 'sales'" :to="queueLink('performance')" :class="{ active: choice === 'performance' }">{{ text('个人收款与毛利', 'Personal receipts and profit') }}</RouterLink>
           <RouterLink :to="queueLink('order-analysis')" :class="{ active: choice === 'order-analysis' || choice === 'order-volume' || choice === 'receipts' }">{{ text('订单分析', 'Order analysis') }}</RouterLink>
           <RouterLink :to="queueLink('freight')" :class="{ active: choice === 'freight' }">{{ text('物流运费', 'Actual freight') }}</RouterLink>
           <RouterLink v-if="role === 'sales'" :to="queueLink('overview')" :class="{ active: choice === 'overview' }">{{ text('客户开发概览', 'Prospecting overview') }}</RouterLink>
-          <template v-else>
-            <RouterLink v-for="item in workbenchQueues[role]" :key="item" :to="queueLink(item)" :class="{ active: choice === item }">{{ queueNames[item][zh ? 0 : 1] }}{{ text('清单', item === 'exceptions' ? '' : ' orders') }}</RouterLink>
-          </template>
         </nav>
         <SalesOverview v-if="choice === 'overview' && role === 'sales'" />
         <SalesPerformanceView v-else-if="choice === 'performance' && role === 'sales'" :key="dataRevision" />

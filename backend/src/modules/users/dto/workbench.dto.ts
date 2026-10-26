@@ -32,15 +32,37 @@ export class UpdateWorkbenchRolesDto {
 }
 
 export const FULFILLMENT_QUEUE_ROLES = {
+  unpaid: 'sales',
   review: 'sales',
   exceptions: 'sales',
   procurement: 'procurement',
+  procurement_shipping: 'procurement',
   allocation: 'allocation',
+  allocation_review: 'allocation',
   dispatch: 'dispatch',
   shipping: 'warehouse',
 } as const
 
+export const FULFILLMENT_SORT_FIELDS = ['paidAt', 'dispatchDocumentStatus', 'allocationDocumentStatus', 'outboundStatus'] as const
+export type FulfillmentSortBy = typeof FULFILLMENT_SORT_FIELDS[number]
+
 export class ListFulfillmentOrdersDto extends ListWorkbenchAccountsDto {
+  @IsOptional()
+  @IsIn(FULFILLMENT_SORT_FIELDS)
+  sortBy?: FulfillmentSortBy
+
+  @IsOptional()
+  @IsIn(['asc', 'desc'])
+  sortOrder?: 'asc' | 'desc'
+
+  @IsOptional()
+  @IsIn(['asc', 'desc'])
+  paidAtOrder?: 'asc' | 'desc' = 'asc'
+
+  @IsOptional()
+  @IsIn(['all', 'pending_review', 'pending_outbound'])
+  warehouseStage?: 'all' | 'pending_review' | 'pending_outbound'
+
   @IsIn(Object.keys(FULFILLMENT_QUEUE_ROLES))
   queue: keyof typeof FULFILLMENT_QUEUE_ROLES
 

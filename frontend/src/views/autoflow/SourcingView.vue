@@ -329,7 +329,7 @@ function offerLink(offer: SourcingOffer) {
         </div>
       </section>
 
-      <section v-if="!loading && customerDiscoveryPending" data-test="customer-discovery-pending" class="notice mb-5 border-amber-400 bg-amber-50 text-amber-900 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-200">
+      <section v-if="!loading && customerDiscoveryPending" data-test="customer-discovery-pending" class="notice mb-5 tone-warning">
         <AlertTriangle class="mt-0.5 h-5 w-5 shrink-0" />
         <div>
           <p class="font-bold">{{ t('sourcing.customerDiscoveryPendingTitle') }}</p>

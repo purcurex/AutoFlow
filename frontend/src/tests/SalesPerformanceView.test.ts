@@ -64,8 +64,8 @@ describe('sales performance workbench', () => {
     vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-10-22T16:30:00Z'))
     get.mockReset().mockImplementation(async (path: string) => structuredClone(path.endsWith('/details') ? details : sample))
   })
-  it('shows personal performance only in sales, retaining the existing default overview', async () => {
-    const { wrapper, router } = await setup('/workbench/sales')
+  it('shows personal performance only in sales and retains the explicitly selected overview', async () => {
+    const { wrapper, router } = await setup('/workbench/sales?queue=overview')
     expect(wrapper.text()).toContain('Sales activities')
     expect(wrapper.find('.workbench-queues').text()).toContain('个人收款与毛利')
     await router.push('/workbench/procurement?queue=performance'); await flushPromises()

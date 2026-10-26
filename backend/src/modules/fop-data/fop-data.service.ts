@@ -1,3 +1,5 @@
+import type { ApprovalQueue } from './fop-approval.types'
+import { supplierFollowUps } from './supplier-follow-up'
 import { CHART_IDS, ChartId, ChartSummaryPolicy, EffectiveChartAccess, resolveChartAccess, resolveChartSummaryPolicy } from '../users/chart-permissions'
 import { summaryOrderVolume, summaryReceipts, summaryRegistrations } from './fop-organization-summary'
 import { FopCurrentCustomerOwner, FopOrganizationSummaryGrant, FopOrganizationSummaryNotConfiguredError, FopOrganizationSummaryQuery, FopOrganizationSummaryRow, SALES_DEPARTMENTS } from './fop-data.types'
@@ -6,7 +8,7 @@ import { aggregateSalesPerformance, performanceDetails, performancePeriods, effe
 import type { FopProfit, PerformanceData, PerformanceDetailsQuery, PerformanceOwner, PerformancePage, PerformanceQuery } from './sales-performance.types'
 import { aggregateFreight, freightDetails, freightPeriods, publicFreight } from './fop-freight'
 import type { FopFreight, FreightQuery, FreightDetailsQuery } from './fop-freight.types'
-import { BadRequestException, ForbiddenException, Inject, Injectable, ServiceUnavailableException, UnauthorizedException } from '@nestjs/common'
+import { BadRequestException, ConflictException, NotFoundException, ForbiddenException, Inject, Injectable, ServiceUnavailableException, UnauthorizedException } from '@nestjs/common'
 import { UsersService } from '../users/users.service'
 import { isWorkbenchRole, WORKBENCH_ROLES, WorkbenchRole } from '../users/workbench-role'
 import { FULFILLMENT_QUEUE_ROLES, ListFulfillmentOrdersDto } from '../users/dto/workbench.dto'
@@ -18,6 +20,7 @@ import { OrderVolumeQueryDto, OrderVolumeDetailsDto, OrderCustomerSearchDto } fr
 import { aggregateOrderVolume, orderVolumeDetails, orderVolumeReceiptDetails, searchOrderCustomers } from './order-volume'
 import { aggregateRegistrations } from './fop-registration'
 import { summarizeFopOrders } from './fop-order-totals'
+import { canSortFulfillmentQueue, compareFulfillmentOrders, comparePaymentTime, paymentTime } from './fop-order-sort'
 
 import { eligibleReceipts, monthlyReceipts, publicReceipt, summarizeReceipts } from './fop-receipts'
 import { businessDate, BUSINESS_TIME_ZONE, validBusinessDay } from './fop-business-time'
@@ -27,32 +30,33 @@ type Queue = keyof typeof FULFILLMENT_QUEUE_ROLES
 type Scope = { binding: FopIdentity | null; roles: WorkbenchRole[]; business: BusinessScope; charts: EffectiveChartAccess[]; summaryPolicies: Record<ChartId, ChartSummaryPolicy>; customerAttribution?: { current: number; historical: number; assignments: Map<string, string> } }
 type ChartContext = { initial: Scope; permission: FopPermissionGrant; access: EffectiveChartAccess; chartId: ChartId }
 
-function matchesQueue(order: FopOrder, queue: Queue): boolean {
-  if (order.cancelled || order.paymentStatus !== 'paid') return false
+function matchesQueue(order: FopOrder, queue: Queue, warehouseStage?: ListFulfillmentOrdersDto['warehouseStage']): boolean {
+  if (order.cancelled) return false
+  if (queue === 'unpaid') return order.paymentStatus === 'unpaid'
+  if (order.paymentStatus !== 'paid') return false
   if (queue === 'review') return order.reviewStatus === 'pending'
   if (queue === 'exceptions') return order.shippingStatus !== 'shipped' && order.exception !== null
   if (order.reviewStatus !== 'approved' || !order.fulfillmentProgress) return false
   const progress = order.fulfillmentProgress
   switch (queue) {
     case 'dispatch': return progress.shopifySync === 'pending' || progress.shopifySync === 'partial'
-    case 'procurement': return progress.supplierShipment === 'pending' || progress.supplierShipment === 'partial'
-    case 'allocation': return progress.stockReadiness === 'incomplete' || progress.stockReadiness === 'ready' && progress.allocationReview === 'pending'
-    case 'shipping': return progress.stockReadiness === 'ready' && progress.allocationReview === 'approved' && (progress.outbound === 'pending' || progress.outbound === 'partial')
+    case 'procurement':
+    case 'procurement_shipping': {
+      const paidPurchase = order.procurementProgress?.purchaseOrder === 'ordered' && order.procurementProgress?.supplierPayment === 'paid'
+      return (progress.supplierShipment === 'pending' || progress.supplierShipment === 'partial')
+        && (queue === 'procurement_shipping' ? paidPurchase : !paidPurchase)
+    }
+    case 'allocation': return progress.stockReadiness === 'incomplete'
+    case 'allocation_review': return progress.stockReadiness === 'ready' && progress.allocationReview === 'pending' && progress.outbound !== 'completed'
+    case 'shipping': return progress.stockReadiness === 'ready' && progress.outbound !== 'completed'
+      && (warehouseStage !== 'pending_review' || progress.allocationReview === 'pending')
+      && (warehouseStage !== 'pending_outbound' || progress.allocationReview === 'approved')
+      && (progress.allocationReview === 'pending' || progress.allocationReview === 'approved' && (progress.outbound === 'pending' || progress.outbound === 'partial'))
   }
 }
 
 function sameIdentity(left: FopIdentity | null | undefined, right: FopIdentity | null | undefined): boolean {
   return !!left && !!right && left.tenantId === right.tenantId && left.userId === right.userId
-}
-
-// Payment priority is independent of creation time. Unknown dates must not jump the queue.
-function paymentTime(order: FopOrder): number {
-  const timestamp = order.paidAt ? Date.parse(order.paidAt) : NaN
-  return Number.isFinite(timestamp) ? timestamp : Infinity
-}
-
-function oldestPaymentFirst(left: FopOrder, right: FopOrder): number {
-  return paymentTime(left) - paymentTime(right) || left.id.localeCompare(right.id)
 }
 
 function orderDepartments(orders: FopOrder[]): { id: string; name: string }[] {
@@ -82,7 +86,23 @@ function publicOrder(order: FopOrderCandidate): FopOrder {
   if (!progress || Object.entries(values).some(([key, allowed]) => !allowed.includes(progress[key as keyof typeof progress]))) {
     throw new Error('Missing or invalid fulfillment progress')
   }
+  const procurement = order.procurementProgress
+  if (procurement !== undefined && (!procurement
+    || !['not_ordered', 'partial', 'ordered', 'cancelled', 'not_required', 'unknown'].includes(procurement.purchaseOrder)
+    || !['unpaid', 'partial', 'paid', 'refunded', 'not_required', 'unknown'].includes(procurement.supplierPayment))) {
+    throw new Error('Invalid procurement progress')
+  }
+  const documents = order.dispatchDocuments
+  if (documents != null && (!Array.isArray(documents) || documents.some(document => !document
+    || typeof document.id !== 'string' || !document.id.trim()
+    || typeof document.number !== 'string' || !document.number.trim()
+    || !['draft', 'submitted', 'approved', 'unknown'].includes(document.status))
+    || new Set(documents.map(document => document.id)).size !== documents.length)) {
+    throw new Error('Invalid dispatch documents')
+  }
   return {
+    dispatchDocuments: documents?.map(({ id, number, status }) => ({ id, number, status })) ?? null,
+    procurementProgress: { purchaseOrder: procurement?.purchaseOrder ?? 'unknown', supplierPayment: procurement?.supplierPayment ?? 'unknown' },
     ...(order.salesDepartmentCode ? { salesDepartmentCode: order.salesDepartmentCode } : {}),
     fulfillmentProgress: { shopifySync: progress.shopifySync, supplierShipment: progress.supplierShipment, stockReadiness: progress.stockReadiness, allocationReview: progress.allocationReview, outbound: progress.outbound },
     id: order.id, orderNumber: order.orderNumber, shopifyOrderNumber: order.shopifyOrderNumber,
@@ -142,6 +162,9 @@ export class FopDataService {
       || grant.allowedOrderIds.some((id) => typeof id !== 'string' || !id.trim())) {
       throw new ForbiddenException({ code: 'fop_permission_denied', message: 'FOP permissions do not authorize this account identity' })
     }
+    if (grant.allowedPurchaseOrderIds !== undefined && (!Array.isArray(grant.allowedPurchaseOrderIds) || grant.allowedPurchaseOrderIds.some(id => typeof id !== 'string' || !id.trim()))) {
+      throw new ForbiddenException('Invalid FOP purchase permissions')
+    }
     if (grant.allowedReceiptIds !== undefined && (!Array.isArray(grant.allowedReceiptIds) || grant.allowedReceiptIds.some(id => typeof id !== 'string' || !id.trim()))) {
       throw new ForbiddenException({ code: 'fop_permission_denied', message: 'Invalid FOP receipt permissions' })
     }
@@ -154,9 +177,10 @@ export class FopDataService {
     if (grant.analyticsScopes !== undefined && (!Array.isArray(grant.analyticsScopes) || grant.analyticsScopes.some(scope => !['rates', 'registrations', 'receipts', 'freight', 'sales_profit'].includes(scope)))) {
       throw new ForbiddenException({ code: 'fop_permission_denied', message: 'Invalid FOP analytics permissions' })
     }
+    if (grant.approvalActions !== undefined && (!Array.isArray(grant.approvalActions) || grant.approvalActions.some(action => !['review', 'allocation_review'].includes(action)))) throw new ForbiddenException('Invalid FOP operation permissions')
     const summaries = grant.organizationSummaries ?? []
     if (!Array.isArray(summaries) || new Set(summaries.map((s: FopOrganizationSummaryGrant) => s?.chartId)).size !== summaries.length || summaries.some((s: FopOrganizationSummaryGrant) => !s || !['registrations', 'department_receipts', 'order_volume'].includes(s.chartId) || !Array.isArray(s.departments) || new Set(s.departments.map((d: FopOrganizationSummaryGrant['departments'][number]) => d?.code)).size !== s.departments.length || s.departments.some((d: FopOrganizationSummaryGrant['departments'][number]) => !d || !SALES_DEPARTMENTS.some(item => item.id === d.code) || typeof d.departmentId !== 'string' || !d.departmentId.trim() || d.departmentPathIds !== undefined && (!Array.isArray(d.departmentPathIds) || d.departmentPathIds.some((id: unknown) => typeof id !== 'string' || !id.trim()) || new Set(d.departmentPathIds).size !== d.departmentPathIds.length)))) throw new ForbiddenException({ code: 'fop_permission_denied', message: 'Invalid organization summary grant' })
-    return { organizationSummaries: summaries.map((s: FopOrganizationSummaryGrant) => ({ chartId: s.chartId, departments: s.departments.map((d: FopOrganizationSummaryGrant['departments'][number]) => ({ code: d.code, departmentId: d.departmentId, ...(d.departmentPathIds ? { departmentPathIds: [...d.departmentPathIds] } : {}) })) })), subject: { ...identity }, allowedOrderIds: [...new Set(grant.allowedOrderIds)], allowedReceiptIds: [...new Set(grant.allowedReceiptIds ?? [])], allowedFreightIds: [...new Set(grant.allowedFreightIds ?? [])], allowedProfitIds: [...new Set(grant.allowedProfitIds ?? [])], analyticsScopes: [...new Set(grant.analyticsScopes ?? [])] }
+    return { approvalActions: [...new Set(grant.approvalActions ?? [])], organizationSummaries: summaries.map((s: FopOrganizationSummaryGrant) => ({ chartId: s.chartId, departments: s.departments.map((d: FopOrganizationSummaryGrant['departments'][number]) => ({ code: d.code, departmentId: d.departmentId, ...(d.departmentPathIds ? { departmentPathIds: [...d.departmentPathIds] } : {}) })) })), subject: { ...identity }, allowedOrderIds: [...new Set(grant.allowedOrderIds)], allowedPurchaseOrderIds: [...new Set(grant.allowedPurchaseOrderIds ?? [])], allowedReceiptIds: [...new Set(grant.allowedReceiptIds ?? [])], allowedFreightIds: [...new Set(grant.allowedFreightIds ?? [])], allowedProfitIds: [...new Set(grant.allowedProfitIds ?? [])], analyticsScopes: [...new Set(grant.analyticsScopes ?? [])] }
   }
 
   private effectiveCharts(initial: Scope, permission: FopPermissionGrant): EffectiveChartAccess[] {
@@ -322,6 +346,16 @@ export class FopDataService {
       }).map(publicOrder)
       return { orders, departmentPaths, roles: initial.roles, permission, initial }
     })
+  }
+
+  async approvalContext(userId: string, queue: ApprovalQueue, orderId: string, sessionVersion = 0) {
+    const scoped = await this.scopedOrders(userId, queue === 'review' ? 'sales' : 'allocation')
+    const account = await this.users.findById(userId)
+    if (!account || account.accountDisabled || (account.sessionVersion ?? 0) !== sessionVersion) throw new UnauthorizedException('Account disabled or session expired')
+    if (!scoped.permission.approvalActions?.includes(queue)) throw new ForbiddenException('当前 FOP 账号无此审核操作权限')
+    const order = scoped.orders.find(row => row.id === orderId)
+    if (!order) throw new NotFoundException('订单不存在或无权访问')
+    return { identity: { ...scoped.permission.subject }, order, inQueue: matchesQueue(order, queue) }
   }
 
   private async scopedReceipts(userId: string, scoped: { permission: FopPermissionGrant; initial: Scope }, context?: ChartContext): Promise<FopReceipt[]> {
@@ -492,19 +526,54 @@ export class FopDataService {
     return { ...this.receiptPage(rows, query), chartAccess: context.access, customerOwnershipBasis: this.customerBasis(context) }
   }
 
+  private async supplierContacts(userId: string, orderId: string) {
+    const scoped = await this.scopedOrders(userId, 'procurement')
+    const order = scoped.orders.find(row => row.id === orderId)
+    if (!order) throw new NotFoundException('Order not found')
+    if (!matchesQueue(order, 'procurement_shipping')) throw new ConflictException({ code: 'purchase_queue_changed', message: '该订单已不在已采购待发货清单，请刷新列表。' })
+    const identity = Object.freeze({ ...scoped.permission.subject })
+    const permission = Object.freeze({ subject: identity, allowedOrderIds: Object.freeze([orderId]), allowedPurchaseOrderIds: Object.freeze([...(scoped.permission.allowedPurchaseOrderIds ?? [])]) })
+    const result = permission.allowedPurchaseOrderIds.length
+      ? await this.providerCall(() => this.provider.listSupplierFollowUps(identity, permission, orderId))
+      : { subject: identity, orderId, items: [] }
+    const contacts = await this.providerCall(async () => supplierFollowUps(result, identity, permission, orderId))
+    // Re-read scope and grants after the upstream request: revocation must not leak contacts.
+    const current = await this.scopedOrders(userId, 'procurement')
+    await this.assertUnchanged(userId, scoped.initial)
+    if (!current.orders.some(row => row.id === orderId && matchesQueue(row, 'procurement_shipping'))) throw new ConflictException({ code: 'purchase_queue_changed', message: '订单状态或可见范围已变化，请刷新列表。' })
+    const permitted = new Set(current.permission.allowedPurchaseOrderIds ?? [])
+    return { order, contacts: contacts.filter(row => permitted.has(row.purchaseOrderId)) }
+  }
+
+  async getSupplierFollowUps(userId: string, orderId: string) {
+    const { order, contacts } = await this.supplierContacts(userId, orderId)
+    return { source: this.provider.source ?? 'fop', orderId, orderNumber: order.orderNumber, refreshedAt: new Date().toISOString(), items: contacts.map(({ url: _url, ...item }) => item) }
+  }
+
+  async getSupplierChat(userId: string, orderId: string, purchaseOrderId: string, contactVersion: string) {
+    const { contacts } = await this.supplierContacts(userId, orderId)
+    const contact = contacts.find(row => row.purchaseOrderId === purchaseOrderId)
+    if (!contact) throw new NotFoundException('Purchase not found')
+    if (contact.contactVersion !== contactVersion) throw new ConflictException({ code: 'supplier_contact_changed', message: '采购单或供应商信息已变化，请刷新后重新选择。' })
+    if (!contact.url || contact.availability !== 'ready') throw new ConflictException({ code: 'supplier_chat_unavailable', message: '供应商旺旺信息不完整，请在 FOP 核对。' })
+    return { source: this.provider.source ?? 'fop', mode: this.provider.source === 'mock' ? 'demo' : 'live', orderId, purchaseOrderId, wangwangAccount: contact.supplier.wangwangAccount, url: this.provider.source === 'mock' ? null : contact.url }
+  }
+
   async getOrders(userId: string, query: ListFulfillmentOrdersDto) {
+    if (query.sortBy && !canSortFulfillmentQueue(query.queue, query.sortBy)) throw new BadRequestException('sortBy does not match the requested queue')
+    if (query.warehouseStage !== undefined && query.queue !== 'shipping') throw new BadRequestException('warehouseStage requires the shipping queue')
     const role = FULFILLMENT_QUEUE_ROLES[query.queue]
     if (query.workbenchRole && query.workbenchRole !== role) throw new BadRequestException('workbenchRole does not match the requested queue')
     const { orders, departmentPaths } = await this.scopedOrders(userId, role)
     // Derive filter options from the same permitted records, never the administrator's organization directory.
     const departments = orderDepartments(orders)
     const search = query.search?.trim().toLowerCase()
-    const filtered = orders.filter((order) => matchesQueue(order, query.queue)
+    const filtered = orders.filter((order) => matchesQueue(order, query.queue, query.warehouseStage)
       && (!query.departmentId || order.department?.id === query.departmentId || departmentPaths.get(order.id)?.includes(query.departmentId))
       && (!query.orderNumber || order.orderNumber === query.orderNumber)
       && (!search || [order.orderNumber, order.shopifyOrderNumber, order.customerName, order.storeName, ...order.items.map((item) => item.sku)]
         .some((value) => value.toLowerCase().includes(search))))
-      .sort(oldestPaymentFirst)
+      .sort((left, right) => compareFulfillmentOrders(left, right, query))
     const start = (query.page - 1) * query.pageSize
     return { source: this.provider.source ?? 'fop', refreshedAt: new Date().toISOString(), departments, items: filtered.slice(start, start + query.pageSize), total: filtered.length, totals: summarizeFopOrders(filtered), page: query.page, pageSize: query.pageSize }
   }
@@ -613,7 +682,7 @@ export class FopDataService {
     return {
       businessScope: scoped.initial.business, source: this.provider.source ?? 'fop', updatedAt: now.toISOString(), queues, rates, ...registrationData, tasks,
       exceptions: allowed('exceptions') ? orders.filter((order) => matchesQueue(order, 'exceptions'))
-        .sort(oldestPaymentFirst)
+        .sort(comparePaymentTime)
         .map((order) => ({ id: order.orderNumber, customer: order.customerName, reason: order.exception!.reason, hours: order.exception!.hours })) : [],
       receipts, departmentReceipts, chartAccess,
     }

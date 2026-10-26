@@ -338,7 +338,7 @@ function getErrorMessage(error: unknown) {
             <strong>{{ t('leads.factsUsed') }}</strong>
             <p class="mt-1 leading-5">{{ currentDraft.factsUsed.join('；') }}</p>
           </div>
-          <div v-if="currentDraft.missingFacts.length || currentDraft.warnings.length" class="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+          <div v-if="currentDraft.missingFacts.length || currentDraft.warnings.length" class="rounded-md border tone-warning p-3 text-xs">
             <strong class="inline-flex items-center gap-1"><AlertTriangle class="h-3.5 w-3.5" />{{ t('leads.reviewWarnings') }}</strong>
             <p class="mt-1 leading-5">{{ [...currentDraft.missingFacts, ...currentDraft.warnings].join('；') }}</p>
           </div>

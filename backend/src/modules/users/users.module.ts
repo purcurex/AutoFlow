@@ -1,3 +1,5 @@
+import { HttpFopDataProvider } from '../fop-data/fop-http.provider'
+import { FopApprovalService } from '../fop-data/fop-approval.service'
 import { Module } from '@nestjs/common'
 import { ModuleRef } from '@nestjs/core'
 import { TypeOrmModule } from '@nestjs/typeorm'
@@ -14,13 +16,14 @@ import { OrganizationService } from '../organization/organization.service'
 @Module({
   imports: [TypeOrmModule.forFeature([User])],
   controllers: [UsersController, WorkbenchController, FulfillmentOrdersController],
-  providers: [UsersService, WorkbenchAccessService, FopDataService, {
+  providers: [FopApprovalService, UsersService, WorkbenchAccessService, FopDataService, {
     provide: FOP_DATA_PROVIDER,
     inject: [ModuleRef],
     useFactory: (modules: ModuleRef) => {
       // Resolve the demo workspace lazily; default live mode needs no fixture dependency.
       const demo = new DemoFopDataProvider({ getWorkspace: ownerUserId => modules.get(OrganizationService, { strict: false }).getWorkspace(ownerUserId) })
-      return demo.isConfigured() ? demo : new UnconfiguredFopDataProvider()
+      const http = new HttpFopDataProvider()
+      return demo.isConfigured() ? demo : http.isConfigured() ? http : new UnconfiguredFopDataProvider()
     },
   }],
   exports: [UsersService, WorkbenchAccessService, FopDataService],

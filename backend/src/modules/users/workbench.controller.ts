@@ -1,7 +1,9 @@
+import { FopApprovalService } from '../fop-data/fop-approval.service'
+import { ApprovalPreviewDto, ApprovalSubmitDto } from '../fop-data/fop-approval.dto'
 import { SalesPerformanceQueryDto, SalesPerformanceDetailsDto } from '../fop-data/sales-performance.dto'
 import { FreightQueryDto, FreightDetailsDto } from '../fop-data/fop-freight.dto'
 import { AllowWithoutBusinessData } from '../auth/management-access.decorator'
-import { Controller, Get, Header, Param, Query, Request, UseGuards } from '@nestjs/common'
+import { Body, Post, Controller, Get, Header, Param, Query, Request, UseGuards } from '@nestjs/common'
 import { Request as ExpressRequest } from 'express'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
 import { WorkbenchAccessService } from './workbench-access.service'
@@ -9,7 +11,7 @@ import { ListFulfillmentOrdersDto } from './dto/workbench.dto'
 import { FopDataService } from '../fop-data/fop-data.service'
 import { OrderVolumeQueryDto, OrderVolumeDetailsDto, OrderCustomerSearchDto } from '../fop-data/order-volume.dto'
 import { ReceiptQueryDto } from '../fop-data/fop-receipts.dto'
-import { FopDashboardQueryDto, FopDataAccessQueryDto } from '../fop-data/fop-data.dto'
+import { FopDashboardQueryDto, FopDataAccessQueryDto, SupplierChatQueryDto } from '../fop-data/fop-data.dto'
 
 @AllowWithoutBusinessData()
 @Controller('workbench')
@@ -34,12 +36,32 @@ export class WorkbenchController {
 @Controller('autoflow/integrations/fop')
 @UseGuards(JwtAuthGuard)
 export class FulfillmentOrdersController {
-  constructor(private readonly data: FopDataService) {}
+  constructor(private readonly data: FopDataService, private readonly approvals: FopApprovalService) {}
+
+  @Post('fulfillment-orders/approvals/preview')
+  @Header('Cache-Control', 'private, no-store')
+  previewApproval(@Request() req: ExpressRequest, @Body() body: ApprovalPreviewDto) { return this.approvals.preview(req.user!.userId, body, req.user!.sessionVersion ?? 0) }
+
+  @Post('fulfillment-orders/approvals')
+  @Header('Cache-Control', 'private, no-store')
+  submitApproval(@Request() req: ExpressRequest, @Body() body: ApprovalSubmitDto) { return this.approvals.submit(req.user!.userId, body, req.user!.sessionVersion ?? 0) }
 
   @Get('fulfillment-orders')
   @Header('Cache-Control', 'private, no-store')
   async getOrders(@Request() req: ExpressRequest, @Query() query: ListFulfillmentOrdersDto) {
     return this.data.getOrders(req.user!.userId, query)
+  }
+
+  @Get('fulfillment-orders/:orderId/supplier-follow-ups')
+  @Header('Cache-Control', 'private, no-store')
+  getSupplierFollowUps(@Request() req: ExpressRequest, @Param('orderId') orderId: string, @Query() _query: FopDataAccessQueryDto) {
+    return this.data.getSupplierFollowUps(req.user!.userId, orderId)
+  }
+
+  @Get('fulfillment-orders/:orderId/supplier-follow-ups/:purchaseOrderId/launch')
+  @Header('Cache-Control', 'private, no-store')
+  getSupplierChat(@Request() req: ExpressRequest, @Param('orderId') orderId: string, @Param('purchaseOrderId') purchaseOrderId: string, @Query() query: SupplierChatQueryDto) {
+    return this.data.getSupplierChat(req.user!.userId, orderId, purchaseOrderId, query.contactVersion)
   }
 
   @AllowWithoutBusinessData()

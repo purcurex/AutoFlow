@@ -408,8 +408,8 @@ onMounted(loadCapabilities)
       <div
         class="notice mb-5"
         :class="quoteAvailable
-          ? 'border-emerald-500 bg-emerald-50 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200'
-          : 'border-amber-500 bg-amber-50 text-amber-800 dark:bg-amber-950 dark:text-amber-200'"
+          ? 'tone-success'
+          : 'tone-warning'"
       >
         <CheckCircle2 v-if="quoteAvailable" class="mt-0.5 h-4 w-4 shrink-0" />
         <Info v-else class="mt-0.5 h-4 w-4 shrink-0" />
@@ -518,7 +518,7 @@ onMounted(loadCapabilities)
           <div class="flex flex-wrap gap-2">
             <label v-for="country in countries" :key="country.code" class="cursor-pointer">
               <input type="checkbox" class="peer sr-only" :checked="selectedCountries.includes(country.code)" @change="toggleCountry(country.code)" />
-              <span class="inline-flex h-10 min-w-16 items-center justify-center gap-2 rounded-md border border-slate-200 px-3 text-sm font-semibold text-slate-500 transition peer-checked:border-orange-500 peer-checked:bg-orange-50 peer-checked:text-orange-700 dark:border-slate-700 dark:peer-checked:bg-orange-500/10 dark:peer-checked:text-orange-300">
+              <span class="selection-control inline-flex h-10 min-w-16 items-center justify-center gap-2 rounded-md border border-slate-200 px-3 text-sm font-semibold text-slate-500 transition dark:border-slate-700 dark:text-slate-400">
                 <img :src="country.flagUrl" alt="" class="h-4 w-5 rounded-[2px] object-cover shadow-sm ring-1 ring-black/10" />{{ country.code }}
               </span>
             </label>
@@ -536,7 +536,7 @@ onMounted(loadCapabilities)
 
         <div class="border-t p-5" style="border-color: var(--color-border)">
           <div class="mb-4 flex items-center gap-2">
-            <Truck class="h-5 w-5 text-orange-600" />
+            <Truck class="h-5 w-5 text-orange-600 dark:text-[var(--color-primary)]" />
             <div>
               <h3 class="text-sm font-bold text-slate-950 dark:text-white">{{ t('quotes.logisticsChannels') }}</h3>
               <p class="text-xs text-slate-500">{{ t('quotes.logisticsChannelHint') }}</p>
@@ -571,10 +571,10 @@ onMounted(loadCapabilities)
                 :key="`${channel.customChannelCode}:${channel.code}`"
                 class="flex cursor-pointer items-start gap-3 rounded-md border p-3 transition"
                 :class="isChannelSelected(channel)
-                  ? 'border-orange-500 bg-orange-50 dark:bg-orange-500/10'
+                  ? 'selection-active'
                   : 'border-slate-200 hover:border-slate-300 dark:border-slate-700'"
               >
-                <input type="checkbox" class="mt-1 h-4 w-4 accent-orange-600" :checked="isChannelSelected(channel)" @change="toggleActualChannel(channel)" />
+                <input type="checkbox" class="mt-1 h-4 w-4 accent-orange-600 dark:accent-[#a38a72]" :checked="isChannelSelected(channel)" @change="toggleActualChannel(channel)" />
                 <span class="min-w-0">
                   <strong class="block text-sm text-slate-950 dark:text-white">{{ channel.name }}</strong>
                   <span class="mt-0.5 block text-xs text-slate-500">{{ channel.code }}<template v-if="channel.carrierName"> · {{ channel.carrierName }}</template></span>
@@ -632,7 +632,7 @@ onMounted(loadCapabilities)
         <div v-if="savedVersion || saveError || actionMessage" class="border-b px-5 py-3 text-sm" :class="saveError ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300' : 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-300'">
           {{ saveError || actionMessage || t('quotes.draftSaved', { version: savedVersion }) }}
         </div>
-        <div v-if="validationMessages.length" class="border-b border-amber-200 bg-amber-50 px-5 py-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
+        <div v-if="validationMessages.length" class="border-b tone-warning px-5 py-3 text-sm">
           {{ validationMessages[0] }}<span v-if="validationMessages.length > 1"> · {{ t('quotes.moreErrors', { count: validationMessages.length - 1 }) }}</span>
         </div>
         <div class="overflow-x-auto">

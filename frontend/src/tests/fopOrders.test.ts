@@ -37,6 +37,18 @@ describe('fulfillment queue response validation', () => {
     const ready = { ...waiting, fulfillmentProgress: { ...waiting.fulfillmentProgress, stockReadiness: 'ready' as const, allocationReview: 'approved' as const } }
     expect(matchesFopQueue(ready, 'allocation')).toBe(false)
     expect(matchesFopQueue(ready, 'shipping')).toBe(true)
+    const awaitingApproval = { ...ready, fulfillmentProgress: { ...ready.fulfillmentProgress, allocationReview: 'pending' as const } }
+    expect(matchesFopQueue(awaitingApproval, 'shipping')).toBe(true)
+    expect(matchesFopQueue(awaitingApproval, 'allocation')).toBe(false)
+    expect(matchesFopQueue(awaitingApproval, 'allocation_review')).toBe(true)
+    expect(matchesFopQueue({ ...awaitingApproval, fulfillmentProgress: { ...awaitingApproval.fulfillmentProgress, outbound: 'unknown' } }, 'shipping')).toBe(true)
+    for (const allocationReview of ['pending', 'approved'] as const) {
+      expect(matchesFopQueue({ ...ready, fulfillmentProgress: { ...ready.fulfillmentProgress, allocationReview, outbound: 'completed' } }, 'shipping')).toBe(false)
+    }
+    expect(matchesFopQueue({ ...ready, fulfillmentProgress: { ...ready.fulfillmentProgress, allocationReview: 'unknown' } }, 'shipping')).toBe(false)
+    expect(matchesFopQueue({ ...ready, fulfillmentProgress: { ...ready.fulfillmentProgress, outbound: 'unknown' } }, 'shipping')).toBe(false)
+    expect(matchesFopQueue({ ...awaitingApproval, paymentStatus: 'unpaid' }, 'shipping')).toBe(false)
+    expect(matchesFopQueue({ ...awaitingApproval, reviewStatus: 'pending' }, 'shipping')).toBe(false)
     expect(matchesFopQueue({ ...ready, cancelled: true }, 'shipping')).toBe(false)
     expect(matchesFopQueue({ ...ready, paymentStatus: 'refunded' }, 'shipping')).toBe(false)
   })

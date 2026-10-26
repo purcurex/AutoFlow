@@ -1,3 +1,5 @@
+import type { ApprovalCommand, ApprovalOutcome, ApprovalQueue, ApprovalTarget } from './fop-approval.types'
+import type { SupplierFollowUpResult } from './supplier-follow-up'
 import type { FopFreightCandidate } from './fop-freight.types'
 import type { FopProfitCandidate } from './sales-performance.types'
 export const SALES_DEPARTMENTS = [
@@ -32,6 +34,10 @@ export interface FopPermissionGrant {
   subject: FopIdentity
   /** Explicit per-subject order allowlist; an empty array grants no order access. */
   allowedOrderIds: readonly string[]
+  /** Explicit operation grants; read or system-admin access never implies approval. */
+  approvalActions?: readonly ApprovalQueue[]
+  /** Independent purchase document/contact visibility; absent means no access. */
+  allowedPurchaseOrderIds?: readonly string[]
   /** Independent receipt-line authorization; missing/empty grants no collections. */
   allowedReceiptIds?: readonly string[]
   /** Independent actual freight-cost resource grant; never inferred from orders. */
@@ -77,7 +83,24 @@ export interface FulfillmentProgress {
   outbound: 'pending' | 'partial' | 'completed' | 'unknown'
 }
 
+/** Aggregated over effective linked purchases; independent of customer payment. */
+export interface ProcurementProgress {
+  purchaseOrder: 'not_ordered' | 'partial' | 'ordered' | 'cancelled' | 'not_required' | 'unknown'
+  supplierPayment: 'unpaid' | 'partial' | 'paid' | 'refunded' | 'not_required' | 'unknown'
+}
+
+/** Effective linked dispatch documents; never inferred from customer payment or Shopify sync. */
+export interface DispatchDocument {
+  id: string
+  number: string
+  status: 'draft' | 'submitted' | 'approved' | 'unknown'
+}
+
 export interface FopOrder {
+  /** null/omitted = unavailable; [] = confirmed no effective dispatch document. */
+  dispatchDocuments?: DispatchDocument[] | null
+  /** Older adapters may omit this; BFF emits explicit unknown facts, never guesses. */
+  procurementProgress?: ProcurementProgress
   fulfillmentProgress: FulfillmentProgress
   departmentPathIds?: string[]
   /** Normalized reporting department supplied by the trusted FOP adapter. */
@@ -161,7 +184,12 @@ export abstract class FopDataProvider {
   async getOrganizationSummary(_identity: Readonly<FopIdentity>, _permission: Readonly<FopPermissionGrant>, _query: Readonly<FopOrganizationSummaryQuery>): Promise<FopOrganizationSummary> {
     throw new FopOrganizationSummaryNotConfiguredError('Organization summary provider is not configured')
   }
+  async listSupplierFollowUps(_identity: Readonly<FopIdentity>, _permission: Readonly<FopPermissionGrant>, _orderId: string): Promise<SupplierFollowUpResult> {
+    throw new Error('Supplier follow-up provider is not configured')
+  }
   abstract isConfigured(): boolean
+  async approvalTargets(_identity: Readonly<FopIdentity>, _queue: ApprovalQueue, _orderId: string): Promise<ApprovalTarget[]> { throw new Error('FOP approval adapter is not configured') }
+  async approveDocument(_identity: Readonly<FopIdentity>, _command: ApprovalCommand): Promise<ApprovalOutcome> { throw new Error('FOP approval adapter is not configured') }
   abstract resolvePermissions(identity: Readonly<FopIdentity>): Promise<FopPermissionGrant>
   abstract listOrders(identity: Readonly<FopIdentity>, permission: Readonly<FopPermissionGrant>): Promise<FopOrderCandidate[]>
   async listProfits(_identity: Readonly<FopIdentity>, _permission: Readonly<FopPermissionGrant>): Promise<FopProfitCandidate[]> {

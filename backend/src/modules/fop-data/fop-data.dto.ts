@@ -18,3 +18,9 @@ export class FopDashboardQueryDto {
   @Max(9999)
   year: number
 }
+
+export class SupplierChatQueryDto {
+  @IsString()
+  @Matches(/^[a-f0-9]{64}$/)
+  contactVersion: string
+}

@@ -7,6 +7,12 @@
     --color-primary: #f26a21;
     --color-primary-strong: #d94d0b;
     --color-accent: #079b83;
+    --color-selection-surface: #fff7ed;
+    --color-selection-text: #c2410c;
+    --color-selection-border: #f97316;
+    --color-warning-surface: #fffbeb;
+    --color-warning-text: #92400e;
+    --color-warning-border: #f59e0b;
     --color-background: #f5f7fa;
     --color-surface: #ffffff;
     --color-surface-muted: #f8fafc;
@@ -27,9 +33,15 @@
   }
 
   .dark {
-    --color-primary: #ff812f;
-    --color-primary-strong: #ff9b55;
-    --color-accent: #21c9ad;
+    --color-primary: #c2a58e;
+    --color-primary-strong: #d0b9a5;
+    --color-accent: #8eb9ad;
+    --color-selection-surface: #29272a;
+    --color-selection-text: #cbb5a3;
+    --color-selection-border: #83725e;
+    --color-warning-surface: #292720;
+    --color-warning-text: #c9b896;
+    --color-warning-border: #665a43;
     --color-background: #0d131d;
     --color-surface: #141d2a;
     --color-surface-muted: #1a2535;
@@ -42,10 +54,10 @@
     --color-chart-link: #afc2f3;
     --color-chart-muted: #a3b1c5;
     --color-chart-money: #adcde2;
-    --color-summary-text: #c2cff4;
+    --color-summary-text: #b6c4e3;
     --color-summary-surface: #202d44;
-    --color-total-surface: #263652;
-    --color-total-border: #425779;
+    --color-total-surface: #202d42;
+    --color-total-border: #35465f;
     --shadow-panel: 0 1px 2px rgb(0 0 0 / 0.3), 0 12px 32px rgb(0 0 0 / 0.18);
   }
 
@@ -61,8 +73,9 @@
 @layer components {
   .app-page { @apply min-h-full px-4 py-5 sm:px-6 lg:px-8 lg:py-7; }
   .page-header { @apply mb-6 flex flex-col gap-4 border-b pb-5 sm:flex-row sm:items-end sm:justify-between; border-color: var(--color-border); }
-  .page-eyebrow { @apply text-xs font-bold uppercase text-orange-600 dark:text-orange-400; letter-spacing: 0; }
-  .page-title { @apply mt-1 text-2xl font-bold tracking-normal text-slate-950 dark:text-white; }
+  .page-eyebrow { @apply text-xs font-bold uppercase text-orange-600; letter-spacing: 0; }
+  .dark .page-eyebrow { color: var(--color-primary); }
+  .page-title { @apply mt-1 text-2xl font-bold tracking-normal text-slate-950 dark:text-[var(--color-text)]; }
   .page-description { @apply mt-1 max-w-3xl text-sm leading-6 text-slate-500 dark:text-slate-400; }
 
   .panel { @apply rounded-lg border; border-color: var(--color-border); background: var(--color-surface); box-shadow: var(--shadow-panel); }
@@ -71,7 +84,9 @@
   .panel-description { @apply mt-1 text-xs text-slate-500 dark:text-slate-400; }
 
   .btn { @apply inline-flex min-h-10 items-center justify-center gap-2 rounded-md border px-4 py-2 text-sm font-semibold transition duration-150 disabled:cursor-not-allowed disabled:opacity-45; letter-spacing: 0; }
-  .btn-primary { @apply border-orange-600 bg-orange-600 text-white shadow-sm hover:border-orange-700 hover:bg-orange-700 active:translate-y-px dark:border-orange-500 dark:bg-orange-500 dark:text-black dark:hover:bg-orange-400; }
+  .btn-primary { @apply border-orange-600 bg-orange-600 text-white shadow-sm hover:border-orange-700 hover:bg-orange-700 active:translate-y-px; }
+  .dark .btn-primary { background: #80583f; border-color: #987258; color: #f1e5db; box-shadow: none; }
+  .dark .btn-primary:hover { background: #855c43; border-color: #a17b62; }
   .btn-secondary { @apply border-slate-300 bg-white text-slate-700 hover:border-slate-400 hover:bg-slate-50 dark:border-slate-700 dark:bg-[#171b21] dark:text-slate-200 dark:hover:border-slate-600 dark:hover:bg-[#20252d]; }
   .btn-danger { @apply border-red-600 bg-red-600 text-white hover:bg-red-700; }
   .btn-ghost { @apply border-transparent bg-transparent text-slate-600 hover:bg-slate-100 hover:text-slate-950 dark:text-slate-300 dark:hover:bg-white/5 dark:hover:text-white; }
@@ -102,6 +117,21 @@
   .status-danger { @apply border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300; }
   .status-neutral { @apply border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300; }
 
+  /* Muted semantic colors keep status meaning without luminous dark surfaces. */
+  .tone-warning { background: var(--color-warning-surface); border-color: var(--color-warning-border); color: var(--color-warning-text); }
+  .tone-success { @apply border-emerald-500 bg-emerald-50 text-emerald-800; }
+  .dark .tone-success, .dark .status-success { background: #1e302b; border-color: #3b5e52; color: #a0c3b2; }
+  .dark .status-info { background: #1d2b3a; border-color: #405870; color: #a9bdd2; }
+  .dark .status-warning { background: var(--color-warning-surface); border-color: var(--color-warning-border); color: var(--color-warning-text); }
+  .dark .status-danger { background: #34272e; border-color: #6a4650; color: #d5a7af; }
+  .selection-active, .peer:checked ~ .selection-control { background: var(--color-selection-surface); border-color: var(--color-selection-border); color: var(--color-selection-text); }
+  .peer:focus-visible ~ .selection-control { outline: 2px solid var(--color-text-secondary); outline-offset: -3px; }
+  .selection-marker { background: #f97316; }
+  .dark .selection-marker { background: #b3947b; }
+  .dark .brand-avatar { background: #655047; color: #e4cfc1; }
+  .dark .metric-icon { background: var(--color-selection-surface); color: var(--color-primary); }
+  .dark .notice { border-left-width: 2px; }
+
   .empty-state { @apply flex min-h-48 flex-col items-center justify-center gap-3 px-6 py-10 text-center text-sm text-slate-500 dark:text-slate-400; }
   .empty-state-icon { @apply flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400; }
   .brand-mark { @apply flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-md border border-slate-200 bg-white p-1 shadow-sm; }
@@ -119,7 +149,8 @@
   .editor-container { @apply min-h-[500px] p-4 focus:outline-none; }
   .editor-toolbar { @apply flex items-center gap-1 border-b p-2; border-color: var(--color-border); background: var(--color-surface-muted); }
   .editor-toolbar-btn { @apply rounded p-2 transition-colors hover:bg-slate-100 dark:hover:bg-slate-700; }
-  .editor-toolbar-btn.active { @apply bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300; }
+  .editor-toolbar-btn.active { @apply bg-orange-100 text-orange-700; }
+  .dark .editor-toolbar-btn.active { background: var(--color-selection-surface); color: var(--color-selection-text); }
 }
 
 ::-webkit-scrollbar { width: 8px; height: 8px; }
