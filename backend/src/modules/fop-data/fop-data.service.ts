@@ -11,7 +11,8 @@ import type { FopFreight, FreightQuery, FreightDetailsQuery } from './fop-freigh
 import { BadRequestException, ConflictException, NotFoundException, ForbiddenException, Inject, Injectable, ServiceUnavailableException, UnauthorizedException } from '@nestjs/common'
 import { UsersService } from '../users/users.service'
 import { isWorkbenchRole, WORKBENCH_ROLES, WorkbenchRole } from '../users/workbench-role'
-import { FULFILLMENT_QUEUE_ROLES, ListFulfillmentOrdersDto } from '../users/dto/workbench.dto'
+import { FULFILLMENT_QUEUE_ROLES, ExportFulfillmentOrdersDto, FulfillmentOrderFiltersDto, ListFulfillmentOrdersDto } from '../users/dto/workbench.dto'
+import { buildFulfillmentWorkbook } from './fop-order-export'
 import { FopDashboardQueryDto } from './fop-data.dto'
 import { FOP_DATA_PROVIDER, FopDataProvider, FopIdentity, FopOrder, FopOrderCandidate, FopPermissionDeniedError, FopPermissionGrant, FopReceipt } from './fop-data.types'
 
@@ -559,12 +560,14 @@ export class FopDataService {
     return { source: this.provider.source ?? 'fop', mode: this.provider.source === 'mock' ? 'demo' : 'live', orderId, purchaseOrderId, wangwangAccount: contact.supplier.wangwangAccount, url: this.provider.source === 'mock' ? null : contact.url }
   }
 
-  async getOrders(userId: string, query: ListFulfillmentOrdersDto) {
+  private async filteredOrders(userId: string, query: FulfillmentOrderFiltersDto) {
+    if (!Object.prototype.hasOwnProperty.call(FULFILLMENT_QUEUE_ROLES, query.queue)) throw new BadRequestException('Invalid fulfillment queue')
     if (query.sortBy && !canSortFulfillmentQueue(query.queue, query.sortBy)) throw new BadRequestException('sortBy does not match the requested queue')
     if (query.warehouseStage !== undefined && query.queue !== 'shipping') throw new BadRequestException('warehouseStage requires the shipping queue')
     const role = FULFILLMENT_QUEUE_ROLES[query.queue]
     if (query.workbenchRole && query.workbenchRole !== role) throw new BadRequestException('workbenchRole does not match the requested queue')
-    const { orders, departmentPaths } = await this.scopedOrders(userId, role)
+    const scoped = await this.scopedOrders(userId, role)
+    const { orders, departmentPaths } = scoped
     // Derive filter options from the same permitted records, never the administrator's organization directory.
     const departments = orderDepartments(orders)
     const search = query.search?.trim().toLowerCase()
@@ -574,8 +577,38 @@ export class FopDataService {
       && (!search || [order.orderNumber, order.shopifyOrderNumber, order.customerName, order.storeName, ...order.items.map((item) => item.sku)]
         .some((value) => value.toLowerCase().includes(search))))
       .sort((left, right) => compareFulfillmentOrders(left, right, query))
+    return { filtered, departments, authorizedOrderIds: new Set(orders.map(order => order.id)), initial: scoped.initial }
+  }
+
+  async getOrders(userId: string, query: ListFulfillmentOrdersDto) {
+    const { filtered, departments } = await this.filteredOrders(userId, query)
     const start = (query.page - 1) * query.pageSize
     return { source: this.provider.source ?? 'fop', refreshedAt: new Date().toISOString(), departments, items: filtered.slice(start, start + query.pageSize), total: filtered.length, totals: summarizeFopOrders(filtered), page: query.page, pageSize: query.pageSize }
+  }
+
+  async exportOrders(userId: string, query: ExportFulfillmentOrdersDto, sessionVersion = 0): Promise<Buffer> {
+    if (query.mode === 'selected' ? !query.orderIds?.length || query.orderIds.length > 100 || new Set(query.orderIds).size !== query.orderIds.length : query.mode !== 'filtered' || query.orderIds !== undefined) throw new BadRequestException('Invalid export selection')
+    const assertSession = async () => {
+      const account = await this.users.findById(userId)
+      if (!account || account.accountDisabled || (account.sessionVersion ?? 0) !== sessionVersion) throw new UnauthorizedException('Account disabled or session expired')
+    }
+    await assertSession()
+    const { filtered, initial } = await this.filteredOrders(userId, query)
+    const ids = new Set(query.orderIds)
+    const orders = query.mode === 'selected' ? filtered.filter(order => ids.has(order.id)) : filtered
+    if (query.mode === 'selected' && orders.length !== ids.size) throw new ConflictException({ code: 'export_selection_changed', message: '所选订单状态或查看范围已变化，请刷新后重新选择。' })
+    if (!orders.length) throw new ConflictException({ code: 'export_empty', message: '当前筛选下没有可导出的订单，请刷新或调整筛选。' })
+    const buffer = await buildFulfillmentWorkbook(orders, query, this.provider.source ?? 'fop')
+    await this.assertUnchanged(userId, initial)
+    // Upstream grants may be broader than local employee/department scope. Re-read
+    // ownership as well as permissions before releasing the earlier data snapshot.
+    const current = await this.filteredOrders(userId, query)
+    await this.assertUnchanged(userId, initial)
+    if (orders.some(order => !current.authorizedOrderIds.has(order.id))) throw new ForbiddenException({ code: 'export_access_changed', message: '订单查看范围已变化，请刷新后重试。' })
+    const matchingIds = new Set(current.filtered.map(order => order.id))
+    if (orders.some(order => !matchingIds.has(order.id))) throw new ConflictException({ code: 'export_selection_changed', message: '订单状态或筛选结果已变化，请刷新后重新导出。' })
+    await assertSession()
+    return buffer
   }
 
   async getOrderVolume(userId: string, query: OrderVolumeQueryDto) {

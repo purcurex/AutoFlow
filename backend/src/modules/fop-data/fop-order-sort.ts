@@ -1,13 +1,13 @@
-import type { ListFulfillmentOrdersDto, FulfillmentSortBy } from '../users/dto/workbench.dto'
+import type { FulfillmentOrderFiltersDto, FulfillmentSortBy } from '../users/dto/workbench.dto'
 import type { FopOrder } from './fop-data.types'
 
-const statusQueues: Record<Exclude<FulfillmentSortBy, 'paidAt'>, readonly ListFulfillmentOrdersDto['queue'][]> = {
+const statusQueues: Record<Exclude<FulfillmentSortBy, 'paidAt'>, readonly FulfillmentOrderFiltersDto['queue'][]> = {
   dispatchDocumentStatus: ['dispatch', 'allocation', 'allocation_review'],
   allocationDocumentStatus: ['allocation', 'allocation_review', 'shipping'],
   outboundStatus: ['shipping'],
 }
 
-export function canSortFulfillmentQueue(queue: ListFulfillmentOrdersDto['queue'], field: FulfillmentSortBy): boolean {
+export function canSortFulfillmentQueue(queue: FulfillmentOrderFiltersDto['queue'], field: FulfillmentSortBy): boolean {
   return field === 'paidAt' || !!statusQueues[field]?.includes(queue)
 }
 
@@ -51,7 +51,7 @@ function statusRank(order: FopOrder, field: Exclude<FulfillmentSortBy, 'paidAt'>
   return ({ pending: 1, partial: 2, completed: 3, unknown: Infinity })[progress.outbound]
 }
 
-export function compareFulfillmentOrders(left: FopOrder, right: FopOrder, query: ListFulfillmentOrdersDto): number {
+export function compareFulfillmentOrders(left: FopOrder, right: FopOrder, query: FulfillmentOrderFiltersDto): number {
   const field = query.sortBy ?? 'paidAt'
   if (field === 'paidAt') return comparePaymentTime(left, right, query.sortOrder ?? query.paidAtOrder ?? 'asc')
   return compareKnown(statusRank(left, field), statusRank(right, field), query.sortOrder ?? 'asc')

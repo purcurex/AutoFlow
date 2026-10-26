@@ -3,11 +3,12 @@ import { ApprovalPreviewDto, ApprovalSubmitDto } from '../fop-data/fop-approval.
 import { SalesPerformanceQueryDto, SalesPerformanceDetailsDto } from '../fop-data/sales-performance.dto'
 import { FreightQueryDto, FreightDetailsDto } from '../fop-data/fop-freight.dto'
 import { AllowWithoutBusinessData } from '../auth/management-access.decorator'
-import { Body, Post, Controller, Get, Header, Param, Query, Request, UseGuards } from '@nestjs/common'
+import { Body, Post, Controller, Get, Header, HttpCode, Param, Query, Request, StreamableFile, UseGuards } from '@nestjs/common'
 import { Request as ExpressRequest } from 'express'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
 import { WorkbenchAccessService } from './workbench-access.service'
-import { ListFulfillmentOrdersDto } from './dto/workbench.dto'
+import { ExportFulfillmentOrdersDto, ListFulfillmentOrdersDto } from './dto/workbench.dto'
+import { exportQueueLabels, FULFILLMENT_EXPORT_MIME } from '../fop-data/fop-order-export'
 import { FopDataService } from '../fop-data/fop-data.service'
 import { OrderVolumeQueryDto, OrderVolumeDetailsDto, OrderCustomerSearchDto } from '../fop-data/order-volume.dto'
 import { ReceiptQueryDto } from '../fop-data/fop-receipts.dto'
@@ -37,6 +38,16 @@ export class WorkbenchController {
 @UseGuards(JwtAuthGuard)
 export class FulfillmentOrdersController {
   constructor(private readonly data: FopDataService, private readonly approvals: FopApprovalService) {}
+
+  @Post('fulfillment-orders/export')
+  @HttpCode(200)
+  @Header('Cache-Control', 'private, no-store')
+  async exportOrders(@Request() req: ExpressRequest, @Body() body: ExportFulfillmentOrdersDto) {
+    const buffer = await this.data.exportOrders(req.user!.userId, body, req.user!.sessionVersion ?? 0)
+    const date = new Date(Date.now() + 8 * 3600_000).toISOString().slice(0, 10)
+    const filename = `${exportQueueLabels[body.queue]}_${date}.xlsx`
+    return new StreamableFile(buffer, { type: FULFILLMENT_EXPORT_MIME, disposition: `attachment; filename="workbench-orders-${date}.xlsx"; filename*=UTF-8''${encodeURIComponent(filename)}` })
+  }
 
   @Post('fulfillment-orders/approvals/preview')
   @Header('Cache-Control', 'private, no-store')

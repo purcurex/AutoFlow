@@ -110,7 +110,7 @@ def build(spec):
     parts = [before_sales, appendix((DOCS / 'FOLLOW_UP_CHECKLIST.md').read_text()), '\n## 8. ' + sales]
     operations = [(path, method, operation) for path, entry in spec['paths'].items() for method, operation in entry.items() if method in ('get', 'post', 'put', 'patch', 'delete')]
     parts += ['## 10. OpenAPI 接口清单与请求/响应定义',
-              f"本规范覆盖 **{len(operations)} 个操作、{len(spec['components']['schemas'])} 个数据模型**。以下清单由同目录 OpenAPI JSON 生成。Base URL 为 `/api`，表中路径不重复此前缀。响应为实际裸 JSON，不额外包装成 `{{code,data}}`。时间序列数值数组必须与对应时间轴等长：counts 对应 registrations、amounts 对应 months、values 及 warehouses 内数组对应 periods；items/series/options 等集合不适用。该跨字段规则需联调测试，单纯 schema 校验不能证明。",
+              f"本规范覆盖 **{len(operations)} 个操作、{len(spec['components']['schemas'])} 个数据模型**。以下清单由同目录 OpenAPI JSON 生成。Base URL 为 `/api`，表中路径不重复此前缀。除Excel导出返回XLSX二进制外，响应为实际裸 JSON，不额外包装成 `{{code,data}}`。时间序列数值数组必须与对应时间轴等长：counts 对应 registrations、amounts 对应 months、values 及 warehouses 内数组对应 periods；items/series/options 等集合不适用。该跨字段规则需联调测试，单纯 schema 校验不能证明。",
               '| 方法 | 路径 | operationId | 用途 |', '| --- | --- | --- | --- |']
     for path, method, operation in operations:
         parts.append(f"| {method.upper()} | `{path}` | `{operation['operationId']}` | {cell(operation.get('summary', ''))} |")
@@ -127,7 +127,8 @@ def build(spec):
         request_path = path.replace('{role}', 'sales').replace('{id}', '00000000-0000-4000-8000-000000000001')
         if path in REQUEST_QUERIES:
             request_path += '?' + REQUEST_QUERIES[path]
-        parts.append(f'\n请求示例（日期和主体为脱敏样例，联调时替换）：\n\n```http\n{method.upper()} /api{request_path}\nAuthorization: Bearer <有效会话JWT>\nAccept: application/json\n```')
+        accept = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' if path.endswith('/fulfillment-orders/export') else 'application/json'
+        parts.append(f'\n请求示例（日期和主体为脱敏样例，联调时替换）：\n\n```http\n{method.upper()} /api{request_path}\nAuthorization: Bearer <有效会话JWT>\nAccept: {accept}\n```')
         if operation.get('x-cross-parameter-rules'):
             parts.append('\n交叉参数规则：\n\n```json\n' + json.dumps(operation['x-cross-parameter-rules'], ensure_ascii=False, indent=2) + '\n```')
         parameters = [ref(spec, parameter) for parameter in spec['paths'][path].get('parameters', []) + operation.get('parameters', [])]

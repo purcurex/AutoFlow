@@ -2,7 +2,9 @@
 import { lockApprovalNavigation } from '@/utils/approvalNavigation'
 import OrderApprovalDialog from '@/components/autoflow/OrderApprovalDialog.vue'
 import { onBeforeRouteLeave, onBeforeRouteUpdate } from 'vue-router'
-import { onSessionReset } from '@/utils/session'
+import { captureSession, isCurrentSession, onSessionReset } from '@/utils/session'
+import { exportFopOrders, fopExportError } from '@/api/fop-order-export'
+import { downloadBlob } from '@/utils/export'
 import type { ApprovalQueue } from '@/api/fop-approvals'
 import { formatCurrency } from '@/utils/currency'
 import SupplierFollowUpDialog from '@/components/autoflow/SupplierFollowUpDialog.vue'
@@ -14,9 +16,9 @@ import OrderAmountTotals from '@/components/ui/OrderAmountTotals.vue'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { ArrowUp, ArrowDown, ArrowUpDown, Check, Copy, ChevronLeft, ChevronRight, PackageSearch, RefreshCw, Search, MessageCircle } from 'lucide-vue-next'
+import { ArrowUp, ArrowDown, ArrowUpDown, Check, Copy, ChevronLeft, ChevronRight, PackageSearch, RefreshCw, Search, MessageCircle, Download } from 'lucide-vue-next'
 import { copyText } from '@/utils/copyText'
-import { getFopOrders, canSortFopQueue, isFopOrderSortBy, type FopOrderSortBy, isFopOrderQueue, isWarehouseStage, matchesFopQueue, type FopOrder, type FopQueuePage } from '@/api/fop-orders'
+import { getFopOrders, canSortFopQueue, isFopOrderSortBy, type FopOrderSortBy, isFopOrderQueue, isWarehouseStage, matchesFopQueue, type FopOrder, type FopOrderQuery, type FopQueuePage } from '@/api/fop-orders'
 import { fopAccessError } from '@/api/fop-access'
 
 import { defaultWorkbenchQueue, isWorkbenchRole, workbenchOrderLocation, workbenchQueues } from '@/utils/workbench'
@@ -36,11 +38,46 @@ const queue = computed(() => {
 })
 const approvalQueue = computed<ApprovalQueue | undefined>(() => queue.value === 'review' || queue.value === 'allocation_review' ? queue.value : undefined)
 const selectedOrders = ref<string[]>([])
+const exporting = ref<'selected' | 'filtered'>()
+const exportFeedback = ref('')
+const exportFailed = ref(false)
+let exportController: AbortController | undefined
+function cancelExport() { exportController?.abort(); exportController = undefined; exporting.value = undefined; exportFeedback.value = '' }
+function currentFilters(): Omit<FopOrderQuery, 'page' | 'pageSize'> {
+  return { queue: queue.value!, warehouseStage: queue.value === 'shipping' ? warehouseStage.value : undefined, departmentId: departmentId.value || undefined,
+    search: typeof route.query.search === 'string' ? route.query.search : '', orderNumber: typeof route.query.orderNumber === 'string' ? route.query.orderNumber : undefined,
+    paidAtOrder: paidAtOrder.value, sortBy: isFopOrderSortBy(route.query.sortBy) ? route.query.sortBy : undefined,
+    sortOrder: route.query.sortOrder === 'asc' || route.query.sortOrder === 'desc' ? route.query.sortOrder : undefined }
+}
+async function exportOrders(mode: 'selected' | 'filtered') {
+  if (exporting.value || busy.value || !online.value || !queue.value || !data.value?.total || (mode === 'selected' && !selectedOrders.value.length)) return
+  const controller = new AbortController()
+  exportController = controller
+  const session = captureSession()
+  const label = labels.value[queue.value]
+  exporting.value = mode
+  exportFeedback.value = ''
+  exportFailed.value = false
+  try {
+    const filters = currentFilters()
+    const blob = await exportFopOrders(mode === 'selected' ? { ...filters, mode, orderIds: [...selectedOrders.value] } : { ...filters, mode }, controller.signal)
+    if (controller.signal.aborted || !isCurrentSession(session)) return
+    const timestamp = new Date(Date.now() + 8 * 3600_000).toISOString().slice(0, 19).replace(/[:T]/g, '-')
+    downloadBlob(blob, `${label}_${mode === 'selected' ? '所选订单' : '筛选结果'}_${timestamp}.xlsx`)
+    exportFeedback.value = text('Excel 已生成，下载已开始。', 'Excel is ready. Download started.')
+  } catch (cause) {
+    if (controller.signal.aborted || !isCurrentSession(session)) return
+    exportFailed.value = true
+    exportFeedback.value = fopExportError(cause, zh.value)
+  } finally {
+    if (exportController === controller) { exporting.value = undefined; exportController = undefined }
+  }
+}
 const approvalOrders = ref<string[]>()
 const approvalFinished = ref(false)
 let releaseApprovalNavigation: (() => void) | undefined
 watch(approvalOrders, value => { releaseApprovalNavigation?.(); releaseApprovalNavigation = value ? lockApprovalNavigation() : undefined }, { flush: 'sync' })
-const offApprovalSession = onSessionReset(() => { selectedOrders.value = []; approvalOrders.value = undefined })
+const offApprovalSession = onSessionReset(() => { cancelExport(); selectedOrders.value = []; approvalOrders.value = undefined })
 onBeforeRouteLeave(() => !approvalOrders.value)
 onBeforeRouteUpdate(() => !approvalOrders.value)
 const pageSelected = computed(() => !!data.value?.items.length && data.value.items.every(row => selectedOrders.value.includes(row.id)))
@@ -176,7 +213,7 @@ async function load(reset = false) {
   busy.value = true
   const selectedQueue = queue.value
   try {
-    const result = await getFopOrders({ queue: selectedQueue, warehouseStage: selectedQueue === 'shipping' ? warehouseStage.value : undefined, departmentId: departmentId.value || undefined, search: typeof route.query.search === 'string' ? route.query.search : '', orderNumber: typeof route.query.orderNumber === 'string' ? route.query.orderNumber : undefined, paidAtOrder: paidAtOrder.value, sortBy: isFopOrderSortBy(route.query.sortBy) ? route.query.sortBy : undefined, sortOrder: route.query.sortOrder === 'asc' || route.query.sortOrder === 'desc' ? route.query.sortOrder : undefined, page: page.value, pageSize: pageSize.value })
+    const result = await getFopOrders({ ...currentFilters(), page: page.value, pageSize: pageSize.value })
     if (currentRequest !== requestId) return
     if (!result.items.every(order => matchesFopQueue(order, selectedQueue, warehouseStage.value))) throw new Error('Unexpected queue data')
     const lastPage = Math.max(1, Math.ceil(result.total / pageSize.value))
@@ -202,9 +239,9 @@ async function load(reset = false) {
 function refreshIfActive() {
   online.value = navigator.onLine
   visible.value = document.visibilityState === 'visible'
-  if (!approvalOrders.value && online.value && visible.value && queue.value) void load()
+  if (!approvalOrders.value && !exporting.value && online.value && visible.value && queue.value) void load()
 }
-watch(() => route.fullPath, () => load(true), { immediate: true })
+watch(() => route.fullPath, () => { cancelExport(); void load(true) }, { immediate: true })
 watch(() => props.searchRecovery, (next, previous) => {
   if (!next && previous?.from === route.fullPath) {
     busy.value = false
@@ -220,6 +257,7 @@ onMounted(() => {
   window.addEventListener('offline', refreshIfActive)
 })
 onBeforeUnmount(() => {
+  cancelExport()
   releaseApprovalNavigation?.()
   offApprovalSession()
   requestId++
@@ -262,11 +300,16 @@ const formatMoney = (amount: number, currency: string) => formatCurrency(amount,
       <p v-if="!approvalQueue" class="read-only-note">{{ text('仅查看履约进度，业务处理请在 FOP 完成。', 'View fulfillment progress here. Complete business actions in FOP.') }}</p>
       <p v-if="copyMessage" class="copy-feedback" role="status">{{ copyMessage }}</p>
       <section class="list-panel">
-        <div v-if="approvalQueue" class="approval-toolbar">
-          <button class="action-button primary" data-testid="open-approval" :disabled="busy || !online || !selectedOrders.length" @click="approvalOrders = [...selectedOrders]">{{ text('审核', 'Approve') }}<template v-if="selectedOrders.length"> · {{ selectedOrders.length }}</template></button>
+        <div class="approval-toolbar">
+          <button v-if="approvalQueue" class="action-button primary" data-testid="open-approval" :disabled="busy || !!exporting || !online || !selectedOrders.length" @click="approvalOrders = [...selectedOrders]">{{ text('审核', 'Approve') }}<template v-if="selectedOrders.length"> · {{ selectedOrders.length }}</template></button>
           <span>{{ text(`已选 ${selectedOrders.length} 笔 · 全选仅选当前页`, `${selectedOrders.length} selected · Select all applies to this page`) }}</span>
           <button v-if="selectedOrders.length" class="clear-selection" @click="selectedOrders = []">{{ text('清空', 'Clear') }}</button>
+          <div class="export-actions">
+            <button class="action-button" data-testid="export-selected" :disabled="busy || !!exporting || !online || !selectedOrders.length || !data" @click="exportOrders('selected')"><Download :size="15" />{{ exporting === 'selected' ? text('导出中…', 'Exporting…') : text('导出所选', 'Export selected') }}</button>
+            <button class="action-button" data-testid="export-filtered" :disabled="busy || !!exporting || !online || !data?.total" :title="text('导出当前筛选下的全部订单，包含其他分页', 'Export all matching orders across every page')" @click="exportOrders('filtered')"><Download :size="15" />{{ exporting === 'filtered' ? text('导出中…', 'Exporting…') : text('导出筛选结果', 'Export filtered results') }}</button>
+          </div>
         </div>
+        <p v-if="exportFeedback" class="export-feedback" :class="{ 'export-error': exportFailed }" :role="exportFailed ? 'alert' : 'status'">{{ exportFeedback }}</p>
         <div class="list-toolbar">
           <label v-if="queue === 'shipping'" class="department-filter outbound-stage-filter"><span>{{ text('出库阶段', 'Outbound stage') }}</span><select :value="warehouseStage" :disabled="busy" :aria-label="text('出库阶段', 'Outbound stage')" @change="navigate({ warehouseStage: ($event.target as HTMLSelectElement).value, page: 1 })"><option value="all">{{ text('全部待出库', 'All pending outbound') }}</option><option value="pending_review">{{ text('已齐套未审核', 'Fully allocated · approval pending') }}</option><option value="pending_outbound">{{ text('已审核未出库', 'Approved · outbound pending') }}</option></select></label>
           <form class="search-form" @submit.prevent="submitSearch"><label class="search-field"><Search :size="16" /><input v-model="search" type="search" :aria-label="text('搜索履约订单', 'Search fulfillment orders')" :placeholder="text('订单编号 / Shopify 单号 / 客户 / 店铺 / SKU', 'Order / Shopify order / customer / store / SKU')" /></label><button class="action-button primary" :disabled="busy || !queue">{{ text('查询', 'Search') }}</button></form>
@@ -279,9 +322,9 @@ const formatMoney = (amount: number, currency: string) => formatCurrency(amount,
         <template v-else-if="data && queue">
           <div class="table-scroll" tabindex="0" :aria-label="text('履约订单明细表，可横向滚动', 'Fulfillment orders, scroll horizontally for more fields')">
             <table>
-              <thead><tr><th class="order-cell"><input v-if="approvalQueue" type="checkbox" class="order-checkbox" :checked="pageSelected" :indeterminate="!!selectedOrders.length && !pageSelected" :disabled="busy || !data.items.length" :aria-label="text('全选当前页订单', 'Select all orders on this page')" @change="togglePage(($event.target as HTMLInputElement).checked)" />{{ text('订单编号', 'Order number') }}</th><th class="product-cell">{{ text('商品图片 / 商品信息', 'Product image / details') }}</th><th>{{ text('Shopify 单号', 'Shopify order') }}</th><th>{{ text('客户名称', 'Customer') }}</th><th :aria-sort="sortBy !== 'paidAt' ? 'none' : paidAtOrder === 'asc' ? 'ascending' : 'descending'"><button type="button" class="sort-payment" :disabled="busy" :title="`${sortHint}（UTC+8）`" :aria-label="`${text('收款日期', 'Payment date')}：${sortHint}`" @click="sortPayment()">{{ text('收款日期', 'Payment date') }}<component :is="sortBy !== 'paidAt' ? ArrowUpDown : paidAtOrder === 'asc' ? ArrowUp : ArrowDown" :size="13" aria-hidden="true" /></button></th><OrderSortHeader v-if="leadingSortField" :label="leadingSortField === 'dispatchDocumentStatus' ? text('发运单状态', 'Dispatch document status') : text('配货单状态', 'Allocation document status')" :direction="sortDirection(leadingSortField)" :disabled="busy" :hint="leadingSortField === 'dispatchDocumentStatus' ? dispatchSortHint : undefined" @sort="sortStatus(leadingSortField)" /><th v-else>{{ isProcurement ? text('采购订单状态', 'Purchase order status') : text('支付状态', 'Payment status') }}</th><OrderSortHeader v-if="mainSortField" :label="columns[queue]" :direction="sortDirection(mainSortField)" :disabled="busy" @sort="sortStatus(mainSortField)" /><th v-else>{{ columns[queue] }}</th><th>{{ text('店铺', 'Store') }}</th><th>{{ text('本地 SKU / 规格', 'Local SKU / variant') }}</th><th>{{ text('数量', 'Quantity') }}</th><th>{{ text('订单金额', 'Order amount') }}</th><th v-if="queue === 'exceptions'">{{ text('异常时长', 'Exception age') }}</th><th>{{ text('发货仓库', 'Warehouse') }}</th><th v-if="queue === 'dispatch' || queue === 'shipping'">{{ text('物流商', 'Carrier') }}</th><th v-if="queue === 'dispatch' || queue === 'shipping'">{{ text('跟踪号', 'Tracking number') }}</th><th>{{ text('业务员', 'Salesperson') }}</th><th>{{ text('所属部门', 'Department') }}</th><th>{{ text('创建时间', 'Created at') }}</th><th v-if="queue === 'procurement_shipping'" class="follow-up-cell">{{ text('操作', 'Action') }}</th></tr></thead>
+              <thead><tr><th class="order-cell"><input type="checkbox" class="order-checkbox" :checked="pageSelected" :indeterminate="!!selectedOrders.length && !pageSelected" :disabled="busy || !data.items.length" :aria-label="text('全选当前页订单', 'Select all orders on this page')" @change="togglePage(($event.target as HTMLInputElement).checked)" />{{ text('订单编号', 'Order number') }}</th><th class="product-cell">{{ text('商品图片 / 商品信息', 'Product image / details') }}</th><th>{{ text('Shopify 单号', 'Shopify order') }}</th><th>{{ text('客户名称', 'Customer') }}</th><th :aria-sort="sortBy !== 'paidAt' ? 'none' : paidAtOrder === 'asc' ? 'ascending' : 'descending'"><button type="button" class="sort-payment" :disabled="busy" :title="`${sortHint}（UTC+8）`" :aria-label="`${text('收款日期', 'Payment date')}：${sortHint}`" @click="sortPayment()">{{ text('收款日期', 'Payment date') }}<component :is="sortBy !== 'paidAt' ? ArrowUpDown : paidAtOrder === 'asc' ? ArrowUp : ArrowDown" :size="13" aria-hidden="true" /></button></th><OrderSortHeader v-if="leadingSortField" :label="leadingSortField === 'dispatchDocumentStatus' ? text('发运单状态', 'Dispatch document status') : text('配货单状态', 'Allocation document status')" :direction="sortDirection(leadingSortField)" :disabled="busy" :hint="leadingSortField === 'dispatchDocumentStatus' ? dispatchSortHint : undefined" @sort="sortStatus(leadingSortField)" /><th v-else>{{ isProcurement ? text('采购订单状态', 'Purchase order status') : text('支付状态', 'Payment status') }}</th><OrderSortHeader v-if="mainSortField" :label="columns[queue]" :direction="sortDirection(mainSortField)" :disabled="busy" @sort="sortStatus(mainSortField)" /><th v-else>{{ columns[queue] }}</th><th>{{ text('店铺', 'Store') }}</th><th>{{ text('本地 SKU / 规格', 'Local SKU / variant') }}</th><th>{{ text('数量', 'Quantity') }}</th><th>{{ text('订单金额', 'Order amount') }}</th><th v-if="queue === 'exceptions'">{{ text('异常时长', 'Exception age') }}</th><th>{{ text('发货仓库', 'Warehouse') }}</th><th v-if="queue === 'dispatch' || queue === 'shipping'">{{ text('物流商', 'Carrier') }}</th><th v-if="queue === 'dispatch' || queue === 'shipping'">{{ text('跟踪号', 'Tracking number') }}</th><th>{{ text('业务员', 'Salesperson') }}</th><th>{{ text('所属部门', 'Department') }}</th><th>{{ text('创建时间', 'Created at') }}</th><th v-if="queue === 'procurement_shipping'" class="follow-up-cell">{{ text('操作', 'Action') }}</th></tr></thead>
               <tbody><tr v-for="order in data.items" :key="order.id">
-                <td class="order-cell"><input v-if="approvalQueue" v-model="selectedOrders" type="checkbox" class="order-checkbox" :value="order.id" :disabled="busy" :aria-label="`${text('选择订单', 'Select order')} ${order.orderNumber}`" /><button type="button" class="copy-order" :aria-label="`${text('复制订单编号', 'Copy order number')} ${order.orderNumber}`" :title="text('复制订单编号', 'Copy order number')" @click="copyOrderValue(order, 'orderNumber')"><strong>{{ order.orderNumber }}</strong><Check v-if="copiedValue === `orderNumber:${order.id}`" :size="14" /><Copy v-else :size="14" /></button><span v-if="order.items.length > 1" class="multi-item-badge">{{ text(`${order.items.length} 款商品 · ${order.items.reduce((sum, item) => sum + item.quantity, 0)} 件`, `${order.items.length} products · ${order.items.reduce((sum, item) => sum + item.quantity, 0)} units`) }}</span></td><td class="product-cell"><div v-for="(item, index) in order.items" :key="index" class="product"><img v-if="item.imageUrl && !failedImages.has(item.imageUrl)" :src="item.imageUrl" :alt="item.name" loading="lazy" @error="failedImages.add(item.imageUrl!)" /><span v-else class="image-fallback"><PackageSearch :size="20" /></span><span :title="item.name">{{ item.name }}</span></div></td><td class="mono">{{ order.shopifyOrderNumber }}</td><td><button type="button" class="copy-customer" :aria-label="`${text('复制客户名称', 'Copy customer name')} ${order.customerName}`" :title="text('复制客户名称', 'Copy customer name')" @click="copyOrderValue(order, 'customerName')"><span>{{ order.customerName }}</span><Check v-if="copiedValue === `customerName:${order.id}`" :size="14" /><Copy v-else :size="14" /></button></td><td>{{ formatDate(order.paidAt) }}</td>
+                <td class="order-cell"><input v-model="selectedOrders" type="checkbox" class="order-checkbox" :value="order.id" :disabled="busy" :aria-label="`${text('选择订单', 'Select order')} ${order.orderNumber}`" /><button type="button" class="copy-order" :aria-label="`${text('复制订单编号', 'Copy order number')} ${order.orderNumber}`" :title="text('复制订单编号', 'Copy order number')" @click="copyOrderValue(order, 'orderNumber')"><strong>{{ order.orderNumber }}</strong><Check v-if="copiedValue === `orderNumber:${order.id}`" :size="14" /><Copy v-else :size="14" /></button><span v-if="order.items.length > 1" class="multi-item-badge">{{ text(`${order.items.length} 款商品 · ${order.items.reduce((sum, item) => sum + item.quantity, 0)} 件`, `${order.items.length} products · ${order.items.reduce((sum, item) => sum + item.quantity, 0)} units`) }}</span></td><td class="product-cell"><div v-for="(item, index) in order.items" :key="index" class="product"><img v-if="item.imageUrl && !failedImages.has(item.imageUrl)" :src="item.imageUrl" :alt="item.name" loading="lazy" @error="failedImages.add(item.imageUrl!)" /><span v-else class="image-fallback"><PackageSearch :size="20" /></span><span :title="item.name">{{ item.name }}</span></div></td><td class="mono">{{ order.shopifyOrderNumber }}</td><td><button type="button" class="copy-customer" :aria-label="`${text('复制客户名称', 'Copy customer name')} ${order.customerName}`" :title="text('复制客户名称', 'Copy customer name')" @click="copyOrderValue(order, 'customerName')"><span>{{ order.customerName }}</span><Check v-if="copiedValue === `customerName:${order.id}`" :size="14" /><Copy v-else :size="14" /></button></td><td>{{ formatDate(order.paidAt) }}</td>
 
                 <td v-if="isProcurement"><ProcurementStatus :progress="order.procurementProgress" :shipment="order.fulfillmentProgress.supplierShipment" /></td>
                 <td v-else-if="queue === 'dispatch' || isAllocation"><DispatchStatus :documents="order.dispatchDocuments" /></td>
@@ -312,7 +355,7 @@ const formatMoney = (amount: number, currency: string) => formatCurrency(amount,
 </template>
 
 <style scoped>
-.approval-toolbar{display:flex;gap:14px;align-items:center;padding:14px 20px;border-bottom:1px solid var(--color-border);background:color-mix(in srgb,var(--color-chart-link) 4%,var(--color-surface));font-size:12px;color:var(--color-text-secondary)}.clear-selection{color:var(--color-chart-link)}input.order-checkbox{width:15px;height:15px;min-width:15px;margin-right:10px;padding:0;vertical-align:middle;accent-color:#8398c9}.action-button:disabled{opacity:.45;cursor:not-allowed}
+.approval-toolbar{display:flex;flex-wrap:wrap;gap:14px;align-items:center;padding:14px 20px;border-bottom:1px solid var(--color-border);background:color-mix(in srgb,var(--color-chart-link) 4%,var(--color-surface));font-size:12px;color:var(--color-text-secondary)}.export-actions{display:flex;flex-wrap:wrap;gap:8px;margin-left:auto}.export-feedback{margin:0;padding:10px 20px;color:var(--color-text-secondary);font-size:12px;border-bottom:1px solid var(--color-border)}.export-error{color:var(--color-warning,#c69568)}.clear-selection{color:var(--color-chart-link)}input.order-checkbox{width:15px;height:15px;min-width:15px;margin-right:10px;padding:0;vertical-align:middle;accent-color:#8398c9}.action-button:disabled{opacity:.45;cursor:not-allowed}
 
 .follow-up-cell{position:sticky;right:0;z-index:2;background:var(--color-surface);min-width:90px;box-shadow:-1px 0 0 var(--color-border)}
 .follow-up-order{display:inline-flex;align-items:center;gap:5px;color:var(--color-chart-link);padding:6px 9px;border-radius:6px;background:color-mix(in srgb,var(--color-chart-link) 9%,transparent);white-space:nowrap}

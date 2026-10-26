@@ -6,6 +6,7 @@ import { JwtModule, JwtService } from '@nestjs/jwt'
 import { Test } from '@nestjs/testing'
 import { getRepositoryToken } from '@nestjs/typeorm'
 import * as request from 'supertest'
+import * as ExcelJS from 'exceljs'
 import { UsersModule } from '../src/modules/users/users.module'
 import { User, UserRole } from '../src/modules/users/user.entity'
 import { JwtStrategy } from '../src/modules/auth/jwt.strategy'
@@ -191,6 +192,100 @@ describe('FOP user isolation HTTP API (repository and provider boundaries stubbe
     }
   })
   afterAll(async () => { await app?.close() })
+
+  describe('workbench Excel export', () => {
+    const exportOrders = (body: object, actor = alice) => request(app.getHttpServer())
+      .post('/api/autoflow/integrations/fop/fulfillment-orders/export').auth(token(actor), { type: 'bearer' }).send(body).buffer(true)
+      .parse((response, callback) => {
+        const chunks: Buffer[] = []
+        response.on('data', chunk => chunks.push(Buffer.from(chunk)))
+        response.on('end', () => callback(null, Buffer.concat(chunks)))
+        response.on('error', callback)
+      })
+    async function workbook(response: request.Response) {
+      const result = new ExcelJS.Workbook()
+      await result.xlsx.load(response.body)
+      return result.getWorksheet('订单清单')!
+    }
+    it('exports all filtered pages in list order, retaining only authorized tenant and employee records', async () => {
+      records = Array.from({ length: 121 }, (_, i) => order(`all-${String(i).padStart(3, '0')}`, { department: { id: 'd1', name: '业务一部' }, paidAt: new Date(Date.UTC(2026, 9, 1, i)).toISOString() }))
+      records.push(order('all-foreign', { tenantId: 'foreign', department: { id: 'd1', name: '业务一部' } }), order('all-other-owner', { owner: { id: 'other', name: 'Other' }, department: { id: 'd1', name: '业务一部' } }), order('all-other-dept', { department: { id: 'd2', name: '业务二部' } }))
+      provider.resolvePermissions = async (subject: any) => ({ subject, allowedOrderIds: records.map(row => row.id) })
+      const response = await exportOrders({ queue: 'review', mode: 'filtered', departmentId: 'd1', search: 'ALL-', paidAtOrder: 'desc' }).expect(200)
+      expect(response.headers['content-type']).toContain('spreadsheetml.sheet')
+      expect(response.headers['content-disposition']).toContain("filename*=UTF-8''")
+      expect(response.headers['cache-control']).toBe('private, no-store')
+      const sheet = await workbook(response)
+      expect(sheet.getCell('A2').value).toBe('ALL-120')
+      expect(sheet.getCell('A122').value).toBe('ALL-000')
+      expect(sheet.getCell('A123').value).toBe('合计 · 121 笔订单')
+      expect(JSON.stringify(sheet.getSheetValues())).not.toMatch(/foreign|other-owner|other-dept|tenant-1/)
+    })
+    it('exports selected records only, and rejects stale, out-of-filter or unauthorized selections atomically', async () => {
+      expect((await workbook(await exportOrders({ queue: 'review', mode: 'selected', orderIds: ['a'] }).expect(200))).getCell('A2').value).toBe('A')
+      for (const body of [
+        { orderIds: ['a', 'b'] }, { orderIds: ['shared'] }, { orderIds: ['missing'] }, { orderIds: ['a'], search: 'no-match' }, { orderIds: ['a'], departmentId: 'other' },
+      ]) await exportOrders({ queue: 'review', mode: 'selected', ...body }).expect(409)
+      await exportOrders({ queue: 'review', mode: 'filtered', search: 'no-match' }).expect(409)
+    })
+    it.each([
+      { queue: 'review', mode: 'selected' }, { queue: 'review', mode: 'selected', orderIds: [] },
+      { queue: 'review', mode: 'selected', orderIds: ['a', 'a'] }, { queue: 'review', mode: 'selected', orderIds: Array.from({ length: 101 }, (_, i) => String(i)) },
+      { queue: 'review', mode: 'filtered', orderIds: ['a'] }, { queue: 'review', mode: 'filtered', page: 2 },
+      { queue: 'review', mode: 'filtered', userId: 'bob' }, { queue: 'review', mode: 'filtered', workbenchRole: 'warehouse' },
+      { queue: 'review', mode: 'filtered', warehouseStage: 'all' }, { queue: 'review', mode: 'filtered', sortBy: 'outboundStatus' },
+    ])('rejects malformed or identity-injecting export %j', async body => { await exportOrders(body).expect(400) })
+    it('requires workbench access and rechecks FOP grants and session before releasing a file', async () => {
+      await exportOrders({ queue: 'shipping', mode: 'filtered' }).expect(403)
+      let calls = 0
+      provider.resolvePermissions = async (subject: any) => ({ subject, allowedOrderIds: ++calls === 1 ? ['a'] : [] })
+      await exportOrders({ queue: 'review', mode: 'filtered' }).expect(403)
+      provider.resolvePermissions = async (subject: any) => ({ subject, allowedOrderIds: ['a'] })
+      provider.listOrders = async () => { accounts.get(alice).sessionVersion = 1; return structuredClone(records) }
+      await exportOrders({ queue: 'review', mode: 'filtered' }).expect(401)
+    })
+    it('restricts manager exports to department descendants even with broader upstream authorization', async () => {
+      Object.assign(accounts.get(alice), { businessRole: 'department_manager', businessDepartmentId: 'd1' })
+      records = [order('member', { owner: { id: 'member', name: 'Member' }, department: { id: 'd1', name: '业务一部' }, departmentPathIds: ['d1'] }),
+        order('child', { owner: { id: 'child', name: 'Child' }, department: { id: 'child-dept', name: '子部门' }, departmentPathIds: ['d1', 'child-dept'] }),
+        order('private', { department: { id: 'd2', name: '业务二部' }, departmentPathIds: ['d2'] })]
+      provider.resolvePermissions = async (subject: any) => ({ subject, allowedOrderIds: records.map(row => row.id) })
+      const sheet = await workbook(await exportOrders({ queue: 'review', mode: 'filtered' }).expect(200))
+      expect(sheet.getCell('A4').value).toBe('合计 · 2 笔订单')
+      expect(JSON.stringify(sheet.getSheetValues())).not.toContain('PRIVATE')
+      await exportOrders({ queue: 'review', mode: 'selected', orderIds: ['private'] }).expect(409)
+    })
+    it.each(['owner', 'queue'])('withholds the generated workbook when %s changes during export', async change => {
+      let reads = 0
+      provider.listOrders = async () => {
+        if (++reads === 2) {
+          if (change === 'owner') records[0].owner = { id: 'another-owner', name: 'Another' }
+          else records[0].reviewStatus = 'approved'
+        }
+        return structuredClone(records)
+      }
+      await exportOrders({ queue: 'review', mode: 'selected', orderIds: ['a'] }).expect(change === 'owner' ? 403 : 409)
+    })
+    it.each(['unpaid', 'review', 'exceptions', 'procurement', 'procurement_shipping', 'allocation', 'allocation_review', 'dispatch', 'shipping'])('exports the %s queue with the same inclusion rules as its list', async queue => {
+      const p = { shopifySync: 'pending', supplierShipment: 'pending', stockReadiness: 'ready', allocationReview: 'pending', outbound: 'pending' }
+      records = [order('a', { reviewStatus: queue === 'review' ? 'pending' : 'approved', paymentStatus: queue === 'unpaid' ? 'unpaid' : 'paid',
+        procurementProgress: { purchaseOrder: 'ordered', supplierPayment: queue === 'procurement_shipping' ? 'paid' : 'unpaid' },
+        fulfillmentProgress: { ...p, stockReadiness: queue === 'allocation' ? 'incomplete' : 'ready' }, exception: { reason: 'stock', hours: 1 } })]
+      accounts.get(alice).businessRole = 'admin'
+      const page = await list(`queue=${queue}`).expect(200)
+      expect(page.body.total).toBe(1)
+      const sheet = await workbook(await exportOrders({ queue, mode: 'filtered' }).expect(200))
+      expect(sheet.getCell('A2').value).toBe('A')
+    })
+    it('applies warehouse stage and document-status sorting in exports', async () => {
+      accounts.get(alice).businessRole = 'admin'
+      records = ['pending', 'approved'].map((review, i) => order(`s${i}`, { reviewStatus: 'approved', fulfillmentProgress: { shopifySync: 'pending', supplierShipment: 'pending', stockReadiness: 'ready', allocationReview: review, outbound: 'pending' } }))
+      provider.resolvePermissions = async (subject: any) => ({ subject, allowedOrderIds: records.map(row => row.id) })
+      const sheet = await workbook(await exportOrders({ queue: 'shipping', mode: 'filtered', warehouseStage: 'pending_outbound', sortBy: 'allocationDocumentStatus', sortOrder: 'desc' }).expect(200))
+      expect(sheet.getCell('A2').value).toBe('S1')
+      expect(sheet.getCell('A3').value).toBe('合计 · 1 笔订单')
+    })
+  })
 
   describe('approval HTTP boundary', () => {
     const endpoint = '/api/autoflow/integrations/fop/fulfillment-orders/approvals'

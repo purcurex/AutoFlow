@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer'
-import { ArrayMaxSize, ArrayUnique, IsArray, IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator'
+import { ArrayMaxSize, ArrayMinSize, ArrayUnique, IsArray, IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min, MinLength } from 'class-validator'
 import { WORKBENCH_ROLES, WorkbenchRole } from '../workbench-role'
 
 export class ListWorkbenchAccountsDto {
@@ -46,7 +46,12 @@ export const FULFILLMENT_QUEUE_ROLES = {
 export const FULFILLMENT_SORT_FIELDS = ['paidAt', 'dispatchDocumentStatus', 'allocationDocumentStatus', 'outboundStatus'] as const
 export type FulfillmentSortBy = typeof FULFILLMENT_SORT_FIELDS[number]
 
-export class ListFulfillmentOrdersDto extends ListWorkbenchAccountsDto {
+export class FulfillmentOrderFiltersDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  search?: string
+
   @IsOptional()
   @IsIn(FULFILLMENT_SORT_FIELDS)
   sortBy?: FulfillmentSortBy
@@ -79,4 +84,35 @@ export class ListFulfillmentOrdersDto extends ListWorkbenchAccountsDto {
   @IsString()
   @MaxLength(128)
   departmentId?: string
+}
+
+export class ListFulfillmentOrdersDto extends FulfillmentOrderFiltersDto {
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(1000000)
+  page = 1
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  pageSize = 20
+}
+
+export class ExportFulfillmentOrdersDto extends FulfillmentOrderFiltersDto {
+  @IsIn(['selected', 'filtered'])
+  mode: 'selected' | 'filtered'
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(100)
+  @ArrayUnique()
+  @IsString({ each: true })
+  @MinLength(1, { each: true })
+  @MaxLength(128, { each: true })
+  orderIds?: string[]
 }

@@ -4461,6 +4461,154 @@
           "frontend/src/components/autoflow/OrderApprovalDialog.vue"
         ]
       }
+    },
+    "/autoflow/integrations/fop/fulfillment-orders/export": {
+      "post": {
+        "tags": [
+          "履约"
+        ],
+        "operationId": "exportFulfillmentOrders",
+        "summary": "所有工作台待办清单批量导出Excel",
+        "description": "九类待办清单统一导出所选或全部筛选结果。先校验登录会话、工作台角色，再取FOP身份与订单白名单和本人/部门/全量业务范围交集，复用清单队列/部门/搜索/仓库阶段/排序过滤。selected要求全部ID仍在结果内；filtered不接受分页或ID数组。输出前再次校验会话、绑定、业务范围及FOP授权。只继承该清单查看权限，不依赖审核操作权，也不以图表导出授权替代待办权限。图片仅文本链接，编号和外部文本为字符串，金额数量为数值，UTC+8；金额按币种合计且一单多品只计一次。固定上限10000单/50000商品行，无静默截断，无FOP写操作。生产依赖现有员工订单读取协议完整返回授权数据，无额外上游导出端点。 Re-read authorized orders after workbook generation; reject changed owner/department scope with 403 and changed queue/filter membership with 409. Ordinary business values remain the initial read snapshot, not a database transaction snapshot.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FulfillmentOrderExportRequest"
+              },
+              "examples": {
+                "selected": {
+                  "value": {
+                    "queue": "review",
+                    "mode": "selected",
+                    "orderIds": [
+                      "FO-DEMO-001",
+                      "FO-DEMO-002"
+                    ],
+                    "paidAtOrder": "asc"
+                  }
+                },
+                "filtered": {
+                  "value": {
+                    "queue": "shipping",
+                    "mode": "filtered",
+                    "warehouseStage": "pending_outbound",
+                    "departmentId": "department-sales-1",
+                    "sortBy": "outboundStatus",
+                    "sortOrder": "asc"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "200": {
+            "description": "完整XLSX二进制，订单清单、商品明细、导出说明三个工作表。不是JSON、Base64或CSV。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              },
+              "Content-Disposition": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "attachment，包含ASCII filename及UTF-8 filename*；文件扩展名.xlsx。"
+              }
+            },
+            "content": {
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "export_selection_changed：所选订单已离开队列、筛选或授权范围；整笔请求失败，不静默漏行。export_empty：没有可导出记录。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "code",
+                    "message"
+                  ],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "code": "export_selection_changed",
+                  "message": "所选订单状态或查看范围已变化，请刷新后重新选择。"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "export_limit_exceeded：超过10000笔订单或50000商品行，缩小筛选范围，不截断导出。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "code",
+                    "message"
+                  ],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "code": "export_limit_exceeded",
+                  "message": "单次最多导出 10,000 笔订单、50,000 行商品，请缩小筛选范围。"
+                }
+              }
+            }
+          }
+        },
+        "x-implementation-status": "前端与BFF已实现，Demo可下载真实XLSX；生产沿用待接入FOP员工网关，数据量与时效仍需联调。",
+        "x-source-files": [
+          "frontend/src/views/autoflow/FopOrdersView.vue",
+          "frontend/src/api/fop-order-export.ts",
+          "backend/src/modules/users/workbench.controller.ts",
+          "backend/src/modules/fop-data/fop-data.service.ts",
+          "backend/src/modules/fop-data/fop-order-export.ts"
+        ]
+      }
     }
   },
   "components": {
@@ -14277,6 +14425,152 @@
           }
         },
         "description": "内部网关 /approvals/audit 输入command；另传服务端派生subject。FOP必须重查资格和权限，不信任eligible/status/number等快照。调用原生audit及插件，不直接改状态。请求编号/幂等键用于查询、审计，不可作为权限。"
+      },
+      "FulfillmentOrderExportRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "queue",
+          "mode"
+        ],
+        "properties": {
+          "queue": {
+            "type": "string",
+            "enum": [
+              "unpaid",
+              "review",
+              "dispatch",
+              "procurement",
+              "procurement_shipping",
+              "allocation",
+              "allocation_review",
+              "shipping",
+              "exceptions"
+            ],
+            "description": "必传工作台队列。前端默认首页：sales=review、dispatch=dispatch、procurement=procurement、allocation=allocation_review、warehouse=shipping；页面显式queue优先。unpaid在销售页签第一但不是默认页；procurement_shipping为已采购待发货。此GET不能省略queue。"
+          },
+          "workbenchRole": {
+            "$ref": "#/components/schemas/WorkbenchRole",
+            "description": "可选，提供时必须匹配queue所需角色，否则400。"
+          },
+          "search": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "trim/忽略大小写，匹配orderNumber/shopifyOrderNumber/customerName/storeName/items.sku。"
+          },
+          "orderNumber": {
+            "type": "string",
+            "maxLength": 100,
+            "description": "FOP业务订单号精确匹配，不trim。"
+          },
+          "departmentId": {
+            "type": "string",
+            "maxLength": 128,
+            "description": "所属部门稳定ID，精确匹配department.id或departmentPathIds祖先。省略/空串表示当前账号全部可见部门；非身份或授权参数。"
+          },
+          "warehouseStage": {
+            "type": "string",
+            "enum": [
+              "all",
+              "pending_review",
+              "pending_outbound"
+            ],
+            "default": "all",
+            "description": "仅shipping：all全部待出库，pending_review已齐套未审核，pending_outbound已审核未出库。省略同all；其他队列携带/非法/重复参数400。先授权并阶段过滤，再合计和分页。 前端仓库筛选栏置于最左侧、搜索框之前；所属部门置于最右侧。"
+          },
+          "sortBy": {
+            "type": "string",
+            "enum": [
+              "paidAt",
+              "dispatchDocumentStatus",
+              "allocationDocumentStatus",
+              "outboundStatus"
+            ],
+            "default": "paidAt",
+            "description": "主排序字段；状态字段只允许在对应显示列的队列使用，其他组合400。详见接口描述。"
+          },
+          "sortOrder": {
+            "type": "string",
+            "enum": [
+              "asc",
+              "desc"
+            ],
+            "description": "升序asc/降序desc。显式值优先；省略时日期沿用paidAtOrder，状态默认asc。未知始终最后；同状态按收款升序/id升序。非法或重复参数400。"
+          },
+          "paidAtOrder": {
+            "type": "string",
+            "enum": [
+              "asc",
+              "desc"
+            ],
+            "default": "asc",
+            "description": "收款日期排序：asc最早在前，desc最新在前。先授权和筛选，再对完整结果排序后分页；同时间id升序，空/非法日期始终最后。非法值或重复参数返回400。 仅sortBy省略或paidAt且sortOrder未指定时决定日期排序方向；状态排序的同值顺序固定收款升序。"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "selected",
+              "filtered"
+            ],
+            "description": "selected导出当前页勾选订单（最多100笔）；filtered导出全部已应用筛选结果，跨分页。"
+          },
+          "orderIds": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 100,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "description": "selected必填，filtered禁止；只是从授权筛选结果中进一步选择，不能扩大权限。按当前排序导出，不按ID提交顺序。"
+          }
+        },
+        "oneOf": [
+          {
+            "properties": {
+              "mode": {
+                "const": "selected"
+              }
+            },
+            "required": [
+              "orderIds"
+            ]
+          },
+          {
+            "properties": {
+              "mode": {
+                "const": "filtered"
+              }
+            },
+            "not": {
+              "required": [
+                "orderIds"
+              ]
+            }
+          }
+        ],
+        "description": "工作台Excel导出请求；身份由JWT/cookie确定，禁止userId/tenantId/ownerId/page/pageSize等额外参数。其他筛选、排序及岗位约束与履约清单GET一致。",
+        "examples": [
+          {
+            "queue": "review",
+            "mode": "selected",
+            "orderIds": [
+              "FO-DEMO-001",
+              "FO-DEMO-002"
+            ],
+            "paidAtOrder": "asc"
+          },
+          {
+            "queue": "shipping",
+            "mode": "filtered",
+            "warehouseStage": "pending_outbound",
+            "departmentId": "department-sales-1",
+            "sortBy": "outboundStatus",
+            "sortOrder": "asc"
+          }
+        ]
       }
     },
     "responses": {

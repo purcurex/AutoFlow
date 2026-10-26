@@ -57,7 +57,7 @@ article h2:target{color:#087f8c} .hero h1{font-size:32px} .table-wrap td{overflo
   <article id="report" style="margin-top:28px">
 <p>更新日期：2026-10-26（UTC+8）；当前交付以本版为准，保留历史诊断与验证证据。适用对象：前端、平台后端、FOP（金蝶云苍穹上的 HyperZone 自研应用）开发、测试与实施人员。</p>
 <h2 id="hz-section-1">0. 最新交付增量（2026-10-26）</h2>
-<p>本版包含35项平台HTTP操作、144个数据模型；OpenAPI版本为<code>2026-10-26</code>。平台路由使用<code>/api</code>前缀，FOP员工网关为待IT发布的上游合同。已有生产接入待办不因Mock验证通过而关闭。</p>
+<p>本版包含36项平台HTTP操作、145个数据模型；OpenAPI版本为<code>2026-10-26</code>。平台路由使用<code>/api</code>前缀，FOP员工网关为待IT发布的上游合同。已有生产接入待办不因Mock验证通过而关闭。</p>
 <div class="table-wrap"><table>
 <thead>
 <tr>
@@ -1817,6 +1817,37 @@ article h2:target{color:#087f8c} .hero h1{font-size:32px} .table-wrap td{overflo
 </tr>
 </tbody>
 </table></div>
+<h3>批量导出 Excel 交接增量（2026-10-26）</h3>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>编号</th>
+<th>分类</th>
+<th>后续任务 / 人工核对 / 验收证据</th>
+<th>状态</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>T36</td>
+<td>IT实施</td>
+<td>基于现有FOP员工订单读取接口完成生产导出联调，保证完整授权结果，验证10,000单/50,000商品行耗时、内存及并发；超过上限需缩小筛选，后续更大需求另评估异步任务。不得静默分页截断或回退Demo。</td>
+<td>平台已实现；生产待联调</td>
+</tr>
+<tr>
+<td>H38</td>
+<td>人工核对</td>
+<td>IT/业务核对正式订单/商品字段、币种、收款UTC+8时间、发运与配货状态、部门和员工身份；确认Excel/WPS版本及真实典型订单量，回填生产导出时效与并发预算。没有SKU单价来源时不编造单价。</td>
+<td>待提供真实样例与环境</td>
+</tr>
+<tr>
+<td>D39</td>
+<td>验收</td>
+<td>九队列分别导出所选及全部筛选；超过一页且数量与合计一致；一单多品金额不重复；混合币种分开；前导零及公式样文本安全；本人/经理/管理员范围不串数据；切换账号/页面取消下载；撤权或状态变化失败；仓库阶段/状态排序一致；超限413无截断；文件可由Excel/WPS打开。</td>
+<td>自动化和Demo验证通过，生产待验收</td>
+</tr>
+</tbody>
+</table></div>
 <h2 id="hz-section-9">8. 销售个人收款与净毛利（月／周／天）</h2>
 <p>本节追加2026-10-23需求，保留前述所有模块和编号。交付目标是本工程销售工作台、BFF聚合／明细、独立授权、Mock和机器契约同步；其完成及测试结论以 <code>VERIFICATION.md</code> 为准。<strong>这些产物不等于真实FOP已发布查询、具备历史利润账本或通过生产财务验收。</strong> 后台源码本轮只读，真实适配保持未配置边界。</p>
 <h3>8.1 页面、查询和权限</h3>
@@ -2378,8 +2409,46 @@ article h2:target{color:#087f8c} .hero h1{font-size:32px} .table-wrap td{overflo
 </table></div>
 <p>上述FOP路径是本工程提出的员工网关合同，<strong>不是已发现或已上线的金蝶标准URL</strong>。BFF环境<code>FOP_EMPLOYEE_API_URL</code>必须为HTTPS，<code>FOP_EMPLOYEE_API_TOKEN</code>仅放服务端；不填时保持未配置。每次HTTP请求15秒超时、不跟随重定向、不自动重试。审核目标解析必须排除取消/作废/替代历史单据，按包裹精确关联；不能只按SKU或订单号字符串碰撞关联。网关必须将<code>subject</code>作为服务端授权委托，校验服务调用方有权委托该用户；事务内重查支付、来源、审核权限和版本，记录幂等响应。同一幂等键不同载荷拒绝，重复请求重放原结果；不同请求对同一单据也须锁定避免重复副作用。请求编号用于排查，不能当作权限凭证。</p>
 <p>适配器当前覆盖订单授权/清单与审核；回款、毛利、物流成本及联系人等接口仍沿用原有待接入计划，不因配置本接口而冒充全部业务已接通。</p>
+<h3>9.12 所有工作台待办清单批量导出 Excel（2026-10-26）</h3>
+<ul>
+<li>覆盖五工作台九队列：unpaid、review、exceptions、procurement、procurement_shipping、allocation、allocation_review、dispatch、shipping。每页提供单选、多选、全选当前页与清空；与审核复用选择，但导出不要求审核权。</li>
+<li><strong>导出所选</strong>：导出本页勾选订单，最多100笔。切换页码/队列/筛选清空选择；所选ID只缩小范围。订单状态、授权或当前筛选已变化时返回409，整个文件不生成，提示刷新后重选。</li>
+<li><strong>导出筛选结果</strong>：重新查询已应用的搜索、精确订单、所属部门、仓库出库阶段及排序，跨全部分页；尚未点击查询的搜索文本不参与。无数据时禁用按钮；查询时无记录返回409。不发送page/pageSize。</li>
+<li>入口位于清单工具栏，下载中防止重复提交并显示“导出中”；保留列表及筛选。页面切换、卸载、账号退出/更换时取消请求并丢弃延迟下载；错误显示就地重试提示。</li>
+<li>接口：<code>POST /api/autoflow/integrations/fop/fulfillment-orders/export</code>，JSON请求，成功返回<code>application/vnd.openxmlformats-officedocument.spreadsheetml.sheet</code>二进制及attachment文件名，<code>Cache-Control: private, no-store</code>。字段级定义见<code>FulfillmentOrderExportRequest</code>。</li>
+<li>权限：JWT/cookie → 当前有效会话 → 工作台可见角色 → FOP绑定/租户/订单白名单 → 本人/管理部门/全量业务范围 → 当前队列和筛选。输出前重新检查会话及授权；系统管理员不能仅凭管理权限扩大业务数据。使用清单读权，不套用ECharts图表导出开关，不执行FOP写操作。</li>
+</ul>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>工作表</th>
+<th>字段与规则</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>订单清单</td>
+<td>一单一行：订单编号、商品信息（第二列）、Shopify单号、客户名称、收款日期（UTC+8）、该队列的两类状态、店铺、本地SKU/规格、数量、订单金额、币种；异常队列增加异常时长；发货仓库；发运/仓库增加物流商与物流单号；业务员、所属部门、创建日期（UTC+8）。不显示组织主体、内部租户标识、账号凭据或供应商聊天信息。商品摘要最多5行，完整商品见下一表。</td>
+</tr>
+<tr>
+<td>商品明细</td>
+<td>每个订单的每个商品行独立展示：订单编号、商品信息、SKU、规格、数量、商品图片链接。图片为链接文本，不抓取外部图片；不重复订单金额。</td>
+</tr>
+<tr>
+<td>导出说明</td>
+<td>清单、所选/筛选模式、生成时间UTC+8、演示/FOP来源、搜索条件、指定订单、所属部门、仓库阶段、排序、金额口径、商品说明及数据时效。</td>
+</tr>
+</tbody>
+</table></div>
+<ul>
+<li>状态与页面列一致：销售支付＋审核/异常；采购下单与采购款独立事实＋供应商发货；配货发运单逐张状态＋配货单状态；发运发运单状态＋Shopify同步；仓库配货单状态＋出库状态。未知仍待确认，不能推断已支付/已审核。</li>
+<li>冻结首行及首列、数据区域筛选、换行与列宽；编号和外部文本以字符串写入，保留前导零/长编号并避免当作公式。数量金额为数值；订单清单末尾有订单数、商品数合计及按币种金额合计，商品表仅数量合计，避免一单多品重复计额。不同币种不直接相加，不擅自换汇；订单金额不是回款业绩。</li>
+<li>单次上限10,000笔订单、50,000行商品，超出413明确提示缩小筛选，不能只导出前N条。上游超时/不可用503，无Mock静默兜底。取消浏览器请求不保证上游立即停止计算；生产仍需验证网关耗时、并发与内存。</li>
+<li>文件生成后重新读取最新授权订单，核验归属员工/部门、队列及筛选。生成期间归属变化导致范围不符返回403，离开队列/筛选返回409，均不发送旧文件；金额等普通业务字段为首次读取时的数据快照，不保证数据库级事务快照。</li>
+<li>FOP对接继续复用已有<code>resolvePermissions</code>及<code>listOrders</code>协议，不新增供应商访问或后台审核能力；后台<code>hzkj_orders</code>及商品行读取需完整。生产发布前执行下方T36/H38/D39，不把演示下载等同于生产已接通。</li>
+</ul>
 <h2 id="hz-section-11">10. OpenAPI 接口清单与请求/响应定义</h2>
-<p>本规范覆盖 <strong>35 个操作、144 个数据模型</strong>。以下清单由同目录 OpenAPI JSON 生成。Base URL 为 <code>/api</code>，表中路径不重复此前缀。响应为实际裸 JSON，不额外包装成 <code>{code,data}</code>。时间序列数值数组必须与对应时间轴等长：counts 对应 registrations、amounts 对应 months、values 及 warehouses 内数组对应 periods；items/series/options 等集合不适用。该跨字段规则需联调测试，单纯 schema 校验不能证明。</p>
+<p>本规范覆盖 <strong>36 个操作、145 个数据模型</strong>。以下清单由同目录 OpenAPI JSON 生成。Base URL 为 <code>/api</code>，表中路径不重复此前缀。除Excel导出返回XLSX二进制外，响应为实际裸 JSON，不额外包装成 <code>{code,data}</code>。时间序列数值数组必须与对应时间轴等长：counts 对应 registrations、amounts 对应 months、values 及 warehouses 内数组对应 periods；items/series/options 等集合不适用。该跨字段规则需联调测试，单纯 schema 校验不能证明。</p>
 <div class="table-wrap"><table>
 <thead>
 <tr>
@@ -2599,6 +2668,12 @@ article h2:target{color:#087f8c} .hero h1{font-size:32px} .table-wrap td{overflo
 <td><code>/autoflow/integrations/fop/fulfillment-orders/approvals</code></td>
 <td><code>submitWorkbenchApproval</code></td>
 <td>执行工作台单笔或批量审核</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/autoflow/integrations/fop/fulfillment-orders/export</code></td>
+<td><code>exportFulfillmentOrders</code></td>
+<td>所有工作台待办清单批量导出Excel</td>
 </tr>
 </tbody>
 </table></div>
@@ -6920,6 +6995,75 @@ Accept: application/json
 }
 </code></pre>
 <p>实现证据：<code>backend/src/modules/fop-data/fop-approval.service.ts</code>, <code>frontend/src/components/autoflow/OrderApprovalDialog.vue</code>。</p>
+<h3>10.37 所有工作台待办清单批量导出Excel</h3>
+<p><code>POST /api/autoflow/integrations/fop/fulfillment-orders/export</code> · operationId: <code>exportFulfillmentOrders</code></p>
+<p>九类待办清单统一导出所选或全部筛选结果。先校验登录会话、工作台角色，再取FOP身份与订单白名单和本人/部门/全量业务范围交集，复用清单队列/部门/搜索/仓库阶段/排序过滤。selected要求全部ID仍在结果内；filtered不接受分页或ID数组。输出前再次校验会话、绑定、业务范围及FOP授权。只继承该清单查看权限，不依赖审核操作权，也不以图表导出授权替代待办权限。图片仅文本链接，编号和外部文本为字符串，金额数量为数值，UTC+8；金额按币种合计且一单多品只计一次。固定上限10000单/50000商品行，无静默截断，无FOP写操作。生产依赖现有员工订单读取协议完整返回授权数据，无额外上游导出端点。 Re-read authorized orders after workbook generation; reject changed owner/department scope with 403 and changed queue/filter membership with 409. Ordinary business values remain the initial read snapshot, not a database transaction snapshot.</p>
+<p>实现状态：前端与BFF已实现，Demo可下载真实XLSX；生产沿用待接入FOP员工网关，数据量与时效仍需联调。</p>
+<p>鉴权：<code>[{"BearerAuth": []}, {"SessionCookie": []}]</code>。</p>
+<p>请求示例（日期和主体为脱敏样例，联调时替换）：</p>
+<pre><code class="language-http">POST /api/autoflow/integrations/fop/fulfillment-orders/export
+Authorization: Bearer &lt;有效会话JWT&gt;
+Accept: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+</code></pre>
+<p>无查询/路径参数。</p>
+<p>请求体：<code>application/json</code>；必需：True；模型：<code>FulfillmentOrderExportRequest</code>。</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>状态码</th>
+<th>说明</th>
+<th>Content-Type / 响应模型</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>400</td>
+<td>400：DTO失败、未知DTO字段、日期或跨参数条件错误。</td>
+<td>application/json: HttpError</td>
+</tr>
+<tr>
+<td>401</td>
+<td>401：缺失/过期/无效JWT或账户不存在。</td>
+<td>application/json: HttpError</td>
+</tr>
+<tr>
+<td>403</td>
+<td>403：入口/系统管理权限不足、业务禁用、绑定/范围缺失、FOP拒绝或请求期间授权变更。</td>
+<td>application/json: ErrorResponse</td>
+</tr>
+<tr>
+<td>429</td>
+<td>429：AppModule全局默认每60秒120次；实际计数受部署IP/代理策略影响。</td>
+<td>application/json: HttpError</td>
+</tr>
+<tr>
+<td>500</td>
+<td>500：未捕获服务/数据库异常。</td>
+<td>application/json: HttpError</td>
+</tr>
+<tr>
+<td>503</td>
+<td>503：FOP provider未配置或调用异常；不会降级mock。</td>
+<td>application/json: FopError</td>
+</tr>
+<tr>
+<td>200</td>
+<td>完整XLSX二进制，订单清单、商品明细、导出说明三个工作表。不是JSON、Base64或CSV。</td>
+<td>application/vnd.openxmlformats-officedocument.spreadsheetml.sheet: string (binary)</td>
+</tr>
+<tr>
+<td>409</td>
+<td>export_selection_changed：所选订单已离开队列、筛选或授权范围；整笔请求失败，不静默漏行。export_empty：没有可导出记录。</td>
+<td>application/json: object</td>
+</tr>
+<tr>
+<td>413</td>
+<td>export_limit_exceeded：超过10000笔订单或50000商品行，缩小筛选范围，不截断导出。</td>
+<td>application/json: object</td>
+</tr>
+</tbody>
+</table></div>
+<p>实现证据：<code>frontend/src/views/autoflow/FopOrdersView.vue</code>, <code>frontend/src/api/fop-order-export.ts</code>, <code>backend/src/modules/users/workbench.controller.ts</code>, <code>backend/src/modules/fop-data/fop-data.service.ts</code>, <code>backend/src/modules/fop-data/fop-order-export.ts</code>。</p>
 <h2 id="hz-section-12">11. 字段级数据字典</h2>
 <p>模型引用按名称交叉查阅。例如 <code>OrderVolumeData.series[] → VolumeSeries.amounts → VolumeAmounts</code>；每一层字段均在下表列出。必填是相对于当前父对象；父对象本身可选时不强制创建。可空只以类型中的 <code>null</code> 或 <code>anyOf/oneOf</code> null 分支为准。示例不是生产值。内部 FOP 提供器模型若标注为内部，则不能从浏览器直接传入。</p>
 <h3>DataSource</h3>
@@ -16748,6 +16892,109 @@ Accept: application/json
 </tr>
 </tbody>
 </table></div>
+<h3>FulfillmentOrderExportRequest</h3>
+<p>工作台Excel导出请求；身份由JWT/cookie确定，禁止userId/tenantId/ownerId/page/pageSize等额外参数。其他筛选、排序及岗位约束与履约清单GET一致。</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>字段路径</th>
+<th>类型/引用</th>
+<th>必填</th>
+<th>说明</th>
+<th>约束/示例</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>queue</code></td>
+<td>string</td>
+<td>是</td>
+<td>必传工作台队列。前端默认首页：sales=review、dispatch=dispatch、procurement=procurement、allocation=allocation_review、warehouse=shipping；页面显式queue优先。unpaid在销售页签第一但不是默认页；procurement_shipping为已采购待发货。此GET不能省略queue。</td>
+<td>enum=["unpaid", "review", "dispatch", "procurement", "procurement_shipping", "allocation", "allocation_review", "shipping", "exceptions"]</td>
+</tr>
+<tr>
+<td><code>workbenchRole</code></td>
+<td>WorkbenchRole</td>
+<td>否</td>
+<td>可选，提供时必须匹配queue所需角色，否则400。</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>search</code></td>
+<td>string</td>
+<td>否</td>
+<td>trim/忽略大小写，匹配orderNumber/shopifyOrderNumber/customerName/storeName/items.sku。</td>
+<td>maxLength=200</td>
+</tr>
+<tr>
+<td><code>orderNumber</code></td>
+<td>string</td>
+<td>否</td>
+<td>FOP业务订单号精确匹配，不trim。</td>
+<td>maxLength=100</td>
+</tr>
+<tr>
+<td><code>departmentId</code></td>
+<td>string</td>
+<td>否</td>
+<td>所属部门稳定ID，精确匹配department.id或departmentPathIds祖先。省略/空串表示当前账号全部可见部门；非身份或授权参数。</td>
+<td>maxLength=128</td>
+</tr>
+<tr>
+<td><code>warehouseStage</code></td>
+<td>string</td>
+<td>否</td>
+<td>仅shipping：all全部待出库，pending_review已齐套未审核，pending_outbound已审核未出库。省略同all；其他队列携带/非法/重复参数400。先授权并阶段过滤，再合计和分页。 前端仓库筛选栏置于最左侧、搜索框之前；所属部门置于最右侧。</td>
+<td>enum=["all", "pending_review", "pending_outbound"]; default="all"</td>
+</tr>
+<tr>
+<td><code>sortBy</code></td>
+<td>string</td>
+<td>否</td>
+<td>主排序字段；状态字段只允许在对应显示列的队列使用，其他组合400。详见接口描述。</td>
+<td>enum=["paidAt", "dispatchDocumentStatus", "allocationDocumentStatus", "outboundStatus"]; default="paidAt"</td>
+</tr>
+<tr>
+<td><code>sortOrder</code></td>
+<td>string</td>
+<td>否</td>
+<td>升序asc/降序desc。显式值优先；省略时日期沿用paidAtOrder，状态默认asc。未知始终最后；同状态按收款升序/id升序。非法或重复参数400。</td>
+<td>enum=["asc", "desc"]</td>
+</tr>
+<tr>
+<td><code>paidAtOrder</code></td>
+<td>string</td>
+<td>否</td>
+<td>收款日期排序：asc最早在前，desc最新在前。先授权和筛选，再对完整结果排序后分页；同时间id升序，空/非法日期始终最后。非法值或重复参数返回400。 仅sortBy省略或paidAt且sortOrder未指定时决定日期排序方向；状态排序的同值顺序固定收款升序。</td>
+<td>enum=["asc", "desc"]; default="asc"</td>
+</tr>
+<tr>
+<td><code>mode</code></td>
+<td>string</td>
+<td>是</td>
+<td>selected导出当前页勾选订单（最多100笔）；filtered导出全部已应用筛选结果，跨分页。</td>
+<td>enum=["selected", "filtered"]</td>
+</tr>
+<tr>
+<td><code>orderIds</code></td>
+<td>string[]</td>
+<td>否</td>
+<td>selected必填，filtered禁止；只是从授权筛选结果中进一步选择，不能扩大权限。按当前排序导出，不按ID提交顺序。</td>
+<td>minItems=1; maxItems=100; uniqueItems=true</td>
+</tr>
+</tbody>
+</table></div>
+<p>组合规则 <code>oneOf</code>：<code>见 schema</code>, <code>见 schema</code>。完整约束见 OpenAPI JSON。</p>
+<pre><code class="language-json">{
+  &quot;queue&quot;: &quot;review&quot;,
+  &quot;mode&quot;: &quot;selected&quot;,
+  &quot;orderIds&quot;: [
+    &quot;FO-DEMO-001&quot;,
+    &quot;FO-DEMO-002&quot;
+  ],
+  &quot;paidAtOrder&quot;: &quot;asc&quot;
+}
+</code></pre>
 <h2 id="hz-section-13">12. 前端功能诊断与复现证据</h2>
 <p>更新日期：2026-10-23（UTC+8），保留2026-10-22诊断。范围：<code>work-app/frontend</code> 全部 ECharts 实例、调用组件、直接相关 API 客户端、统计工具、路由、权限与测试。本文源码路径均相对于 <code>work-app/</code>。原诊断行号保留作历史定位；方案2及后续扩展应以当前函数／组件名定位，最终验证见 VERIFICATION.md。</p>
 <p>原始诊断为只读；本轮按方案2更新了收款口径、来源拆分和工作台下钻，并修复 FE-01/FE-02。本文历史测试只证明当时结果，不能代替本轮验证。没有访问生产 FOP。结论区分“源码已实现”“本地测试已验证”“未实现”“生产待验证”，不能将 mock/stub 测试等同于真实浏览器或生产验收。</p>
@@ -18111,7 +18358,17 @@ describe('ECharts audit: assertions of current incorrect behavior', () =&gt; {
 <p>合同审计关注：未知图表默认拒绝；账号override唯一且不能扩大记录范围；PUT仅系统管理员；管理角色不授业务范围；明细chartId只能证明所请求的固定业务入口而不能任意选宽权限；经理个人默认绑定员工，缺失则不选择他人；客户当前归属与冻结历史分开。实际测试及代码检查结果统一记录VERIFICATION，本节不是测试通过证明。</p>
 <h2 id="hz-section-15">14. 本次验证记录与限制</h2>
 <p>业务方案版本：2026-10-26（UTC+8）；最新为工作台、接口需求及Git交付全量复核，以下保留各轮独立验证记录。环境：macOS、Node.js 22.23.3、npm 10.9.9、本地隔离 PostgreSQL 16。执行结果不等同于生产 FOP 验收。</p>
-<h3>最新版本全量交付复核（2026-10-26，UTC+8）</h3>
+<h3>所有工作台待办 Excel 批量导出（2026-10-26，最新）</h3>
+<ul>
+<li>五工作台九队列统一勾选导出/筛选跨分页导出；新增 POST fulfillment-orders/export。Excel工作簿测试先记录缺实现失败，再实现通过。</li>
+<li>全量验证：前端54文件316项、后端单元59套518项通过；完整HTTP 5套187项通过。随后独立审阅发现生成后只复核FOP白名单会遗漏本地归属变化，补充部门经理及生成期归属/队列变化用例；两项先红后修复，最终FOP HTTP专项117项通过。输出前重新读取授权订单并检查最新员工/部门范围、队列和筛选，拒绝旧文件。独立复核所选/筛选两种模式下的员工、部门、队列变化共6个场景均拒绝文件，无剩余发现。</li>
+<li>前后端lint、TypeScript/Vue检查、生产构建及前端打包通过。完整HTTP后一次FOP专项回归有既有审核用例socket hang up，无断言差异；独立运行及最终整套117项通过，未为此修改业务代码。</li>
+<li>实际浏览器Demo仓库页每页50条、共85单：筛选导出85订单/143商品行/247件，USD合计10,395.70；勾选前两单导出2订单/4商品行/9件，USD328.20。重新读取实际下载的XLSX并核对合计与三张工作表。截图：<code>.runtime/local-demo/workbench-excel-export.png</code>。</li>
+<li>覆盖前导零/长编号、公式样字符串、多商品金额不重复、多币种、九队列、仓库阶段及排序、121单跨分页、本人/经理/跨租户权限、失效选择原子拒绝、撤权/会话变化、导航/退出取消及容量上限。未调用生产FOP或审核操作。</li>
+<li>OpenAPI 36操作/145模型，418个schema示例通过；MD/HTML同源生成，目录锚点与嵌入Logo检查通过。既有Browserslist、bundle大小及文档Python LibreSSL警告保留。</li>
+<li>边界：Demo与隔离HTTP验证不代表生产FOP上线；未做10,000单/50,000商品行多用户并发压测，也未通过桌面Excel/WPS原生应用打开文件，继续T36/H38/D39。</li>
+</ul>
+<h3>上一版本全量交付复核（2026-10-26，UTC+8）</h3>
 <ul>
 <li>当前契约版本2026-10-26：35项平台HTTP操作、144个模型。文档补齐九类待办、单笔/批量审核与旺旺催办、页大小20/50/100（默认50）、仓库筛选位置、配货默认allocation_review、USD基准四位汇率。API未改变fxRateToUsd方向/精度；待办GET省略pageSize仍兼容20，前端明确发送50。</li>
 <li>全量<code>npm test</code>：前端53文件309项、后端58套件515项通过；<code>npm run test:e2e</code>：5套件164项通过，数据库类测试显式使用独立127.0.0.1:55432/autoflow_test，不使用演示或生产业务库。</li>
@@ -19428,6 +19685,8 @@ hzkj_total_amount = hzkj_fre_quo_amount + hzkj_fixed_tax_fee
 <p>状态排序追加（2026-10-25）：需求9.9/OpenAPI提供sortBy与sortOrder，兼容paidAtOrder；发运单依dispatchDocuments最早阶段归一，含未知则置后。配货/出库按实际展示阶段排序，状态同值收款日期升序。已落地BFF全量排序后分页；真实FOP数据库分页需同等规则，联调D36。</p>
 <p>采购旺旺催办追加（2026-10-25）：需求9.10/源码映射12.7及OpenAPI新增两条GET接口（查询联系人、校验后取唤醒地址）。BFF/前端/Mock已实现，真实FOP适配仍需T34；采购资源独立授权、多供应商关联及桌面旺旺实机验证见H36/D37。Mock只显示演示联系结果，不唤醒虚构账号，不自动发送消息。</p>
 <p>工作台审核新增（2026-10-25）：需求9.11/源码12.8，销售待审核与配货已齐套待审核可单选/多选预览后审核。已实现BFF逐单委托、独立操作授权、版本校验、幂等键、部分结果与Mock状态刷新；可配置HTTPS员工网关适配器。环境为<code>FOP_EMPLOYEE_API_URL</code>、<code>FOP_EMPLOYEE_API_TOKEN</code>，无配置拒绝，生产禁用Demo。FOP真实端点、员工委托鉴权、持久化幂等、单据锁及最终状态验证由T35/H37/D38完成；本地Mock通过不等于生产已接通。仅这两项审批新增写操作，其他履约业务流程继续只读。</p>
+<h3>待办清单批量 Excel 导出（2026-10-26）</h3>
+<p>新增需求9.12：五工作台全部九队列支持所选（当前页最多100笔）与全部筛选结果（跨分页）导出。平台POST <code>/api/autoflow/integrations/fop/fulfillment-orders/export</code> 返回真实XLSX，含订单清单、商品明细和导出说明；查看权限交集、会话复核、状态变化409、超限413已落地。单次10,000单/50,000商品行；按币种合计且订单金额不重复。无需新增FOP上游写接口，继续由员工网关完整返回授权订单。生产跨员工/部门、下载过程中撤权、多币种、一单多品、上限并发及Excel/WPS验收见T36/H38/D39。接口清单现为36个操作、145个模型。</p>
 <h2 id="hz-section-18">17. 规范来源与文档再生成</h2>
 <p>OpenAPI 结构参考 <a href="https://spec.openapis.org/oas/v3.1.1.html" rel="noopener noreferrer">OpenAPI Specification 3.1.1</a>。产品事实来自本仓库源码和本次诊断，不来自通用规范。HTML 使用项目共享 HyperZone 样式、内嵌 CSS 和透明 SVG Logo，可离线打开及打印。</p>
 <pre><code class="language-sh">python3 -m venv .runtime/local-demo/docs-venv

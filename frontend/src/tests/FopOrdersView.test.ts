@@ -6,6 +6,9 @@ import FopOrdersView from '@/views/autoflow/FopOrdersView.vue'
 import * as orders from '@/api/fop-orders'
 import api from '@/api'
 import { mockFopOrders } from '@/api/fop-order-fixtures'
+import * as exporter from '@/api/fop-order-export'
+import * as downloads from '@/utils/export'
+import { invalidateSession } from '@/utils/session'
 
 vi.mock('@/components/layout', () => ({ AppLayout: { template: '<div><slot /></div>' } }))
 const mounted: VueWrapper[] = []
@@ -33,6 +36,51 @@ vi.mock('@/api/index', () => ({ default: { get: vi.fn(async (_path, { params: qu
 describe('fulfillment order list', () => {
   const originalClipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard')
   afterEach(() => { mounted.splice(0).forEach(w => { if (w.exists()) w.unmount() }); vi.restoreAllMocks(); vi.useRealTimers(); vi.unstubAllGlobals(); if (originalClipboard) Object.defineProperty(navigator, 'clipboard', originalClipboard); else Reflect.deleteProperty(navigator, 'clipboard') })
+
+  it('exports selected orders or all filtered pages from a non-approval queue', async () => {
+    const blob = new Blob(['xlsx'])
+    const run = vi.spyOn(exporter, 'exportFopOrders').mockResolvedValue(blob)
+    const download = vi.spyOn(downloads, 'downloadBlob').mockImplementation(() => {})
+    const { wrapper } = await setup('?queue=shipping&warehouseStage=pending_outbound&departmentId=d1&sortBy=outboundStatus&sortOrder=desc', 'warehouse')
+    expect(wrapper.find('[data-testid="open-approval"]').exists()).toBe(false)
+    expect(wrapper.get('[data-testid="export-selected"]').attributes('disabled')).toBeDefined()
+    await wrapper.findAll('tbody input.order-checkbox')[0]!.setValue(true)
+    await wrapper.get('[data-testid="export-selected"]').trigger('click'); await flushPromises()
+    expect(run).toHaveBeenLastCalledWith(expect.objectContaining({ mode: 'selected', orderIds: [expect.any(String)], queue: 'shipping', warehouseStage: 'pending_outbound', departmentId: 'd1', sortBy: 'outboundStatus', sortOrder: 'desc' }), expect.any(AbortSignal))
+    expect(download).toHaveBeenCalledWith(blob, expect.stringMatching(/\.xlsx$/))
+    await wrapper.get('input[type="search"]').setValue('not-yet-submitted')
+    await wrapper.get('[data-testid="export-filtered"]').trigger('click'); await flushPromises()
+    const query = run.mock.calls.at(-1)![0]
+    expect(query).toMatchObject({ mode: 'filtered', search: '' })
+    expect(query).not.toHaveProperty('page')
+    expect(query).not.toHaveProperty('orderIds')
+  })
+
+  it.each(['navigation', 'session', 'unmount'])('discards a pending export after %s', async cause => {
+    let resolve!: (blob: Blob) => void
+    const run = vi.spyOn(exporter, 'exportFopOrders').mockImplementation(() => new Promise(r => { resolve = r }))
+    const download = vi.spyOn(downloads, 'downloadBlob').mockImplementation(() => {})
+    const { wrapper, router } = await setup('?queue=allocation', 'allocation')
+    await wrapper.get('[data-testid="export-filtered"]').trigger('click'); await flushPromises()
+    expect(wrapper.get('[data-testid="export-filtered"]').attributes('disabled')).toBeDefined()
+    if (cause === 'navigation') await router.push('/workbench/allocation?queue=allocation_review')
+    if (cause === 'session') invalidateSession()
+    if (cause === 'unmount') wrapper.unmount()
+    await flushPromises()
+    expect(run.mock.calls[0]![1]?.aborted).toBe(true)
+    resolve(new Blob(['xlsx'])); await flushPromises()
+    expect(download).not.toHaveBeenCalled()
+  })
+
+  it('shows export failures without clearing the list and allows retry', async () => {
+    vi.spyOn(exporter, 'exportFopOrders').mockRejectedValue({ code: 'export_selection_changed' })
+    const { wrapper } = await setup('?queue=review', 'sales')
+    await wrapper.get('thead input.order-checkbox').setValue(true)
+    await wrapper.get('[data-testid="export-selected"]').trigger('click'); await flushPromises()
+    expect(wrapper.get('.export-feedback').text()).toContain('刷新后重新选择')
+    expect(wrapper.find('tbody tr').exists()).toBe(true)
+    expect(wrapper.get('[data-testid="export-selected"]').attributes('disabled')).toBeUndefined()
+  })
 
   it('selects one or all visible approval orders, preserves product column, and clears selection on navigation', async () => {
     const { wrapper, router } = await setup('?queue=review', 'sales')
