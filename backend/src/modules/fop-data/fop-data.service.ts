@@ -37,17 +37,22 @@ function matchesQueue(order: FopOrder, queue: Queue, warehouseStage?: ListFulfil
   if (order.paymentStatus !== 'paid') return false
   if (queue === 'review') return order.reviewStatus === 'pending'
   if (queue === 'exceptions') return order.shippingStatus !== 'shipped' && order.exception !== null
-  if (order.reviewStatus !== 'approved' || !order.fulfillmentProgress) return false
   const progress = order.fulfillmentProgress
+  if (!progress) return false
+  // Only reviewed fulfillment orders can await Shopify tracking/fulfillment sync.
+  if (queue === 'dispatch') return order.reviewStatus === 'approved' && (progress.shopifySync === 'pending' || progress.shopifySync === 'partial')
+  if (queue === 'procurement' || queue === 'procurement_shipping') {
+    const purchase = order.procurementProgress
+    if (!purchase) return false
+    if (queue === 'procurement_shipping') return purchase.purchaseOrder === 'ordered' && purchase.supplierPayment === 'paid'
+      && (progress.supplierShipment === 'pending' || progress.supplierShipment === 'partial')
+    // Remaining unplaced demand is not fully paid; unknown facts are not unpaid facts.
+    return purchase.purchaseOrder === 'not_ordered' || purchase.purchaseOrder === 'partial'
+      || purchase.purchaseOrder === 'ordered' && ['unpaid', 'partial', 'refunded'].includes(purchase.supplierPayment)
+  }
+  if (order.reviewStatus !== 'approved' || progress.allocationCreated !== true) return false
   switch (queue) {
-    case 'dispatch': return progress.shopifySync === 'pending' || progress.shopifySync === 'partial'
-    case 'procurement':
-    case 'procurement_shipping': {
-      const paidPurchase = order.procurementProgress?.purchaseOrder === 'ordered' && order.procurementProgress?.supplierPayment === 'paid'
-      return (progress.supplierShipment === 'pending' || progress.supplierShipment === 'partial')
-        && (queue === 'procurement_shipping' ? paidPurchase : !paidPurchase)
-    }
-    case 'allocation': return progress.stockReadiness === 'incomplete'
+    case 'allocation': return progress.stockReadiness === 'incomplete' && progress.allocationReview === 'pending' && progress.outbound !== 'completed'
     case 'allocation_review': return progress.stockReadiness === 'ready' && progress.allocationReview === 'pending' && progress.outbound !== 'completed'
     case 'shipping': return progress.stockReadiness === 'ready' && progress.outbound !== 'completed'
       && (warehouseStage !== 'pending_review' || progress.allocationReview === 'pending')
@@ -84,9 +89,10 @@ function publicOrder(order: FopOrderCandidate): FopOrder {
     allocationReview: ['pending', 'approved', 'unknown'],
     outbound: ['pending', 'partial', 'completed', 'unknown'],
   }
-  if (!progress || Object.entries(values).some(([key, allowed]) => !allowed.includes(progress[key as keyof typeof progress]))) {
+  if (!progress || Object.entries(values).some(([key, allowed]) => !allowed.includes(progress[key as keyof typeof values]))) {
     throw new Error('Missing or invalid fulfillment progress')
   }
+  if (progress.allocationCreated != null && typeof progress.allocationCreated !== 'boolean') throw new Error('Invalid allocation document fact')
   const procurement = order.procurementProgress
   if (procurement !== undefined && (!procurement
     || !['not_ordered', 'partial', 'ordered', 'cancelled', 'not_required', 'unknown'].includes(procurement.purchaseOrder)
@@ -105,7 +111,7 @@ function publicOrder(order: FopOrderCandidate): FopOrder {
     dispatchDocuments: documents?.map(({ id, number, status }) => ({ id, number, status })) ?? null,
     procurementProgress: { purchaseOrder: procurement?.purchaseOrder ?? 'unknown', supplierPayment: procurement?.supplierPayment ?? 'unknown' },
     ...(order.salesDepartmentCode ? { salesDepartmentCode: order.salesDepartmentCode } : {}),
-    fulfillmentProgress: { shopifySync: progress.shopifySync, supplierShipment: progress.supplierShipment, stockReadiness: progress.stockReadiness, allocationReview: progress.allocationReview, outbound: progress.outbound },
+    fulfillmentProgress: { allocationCreated: progress.allocationCreated ?? null, shopifySync: progress.shopifySync, supplierShipment: progress.supplierShipment, stockReadiness: progress.stockReadiness, allocationReview: progress.allocationReview, outbound: progress.outbound },
     id: order.id, orderNumber: order.orderNumber, shopifyOrderNumber: order.shopifyOrderNumber,
     customerId: order.customerId, customerCode: order.customerCode, warehouseCode: order.warehouseCode, carrierCode: order.carrierCode,
     customerName: order.customerName, storeName: order.storeName,
@@ -570,20 +576,25 @@ export class FopDataService {
     const { orders, departmentPaths } = scoped
     // Derive filter options from the same permitted records, never the administrator's organization directory.
     const departments = orderDepartments(orders)
+    const departmentOrders = orders.filter(order => !query.departmentId || order.department?.id === query.departmentId || departmentPaths.get(order.id)?.includes(query.departmentId))
+    // Owner IDs are filters, never identity or permission grants. Options share the
+    // authorized department scope and stay stable across queue/search/page changes.
+    const salespeople = [...new Map(departmentOrders.filter(order => order.owner?.id).map(order => [order.owner!.id, order.owner!])).values()]
+      .sort((a, b) => a.name.localeCompare(b.name, 'zh-CN') || a.id.localeCompare(b.id))
     const search = query.search?.trim().toLowerCase()
-    const filtered = orders.filter((order) => matchesQueue(order, query.queue, query.warehouseStage)
-      && (!query.departmentId || order.department?.id === query.departmentId || departmentPaths.get(order.id)?.includes(query.departmentId))
+    const filtered = departmentOrders.filter((order) => matchesQueue(order, query.queue, query.warehouseStage)
+      && (!query.ownerId || order.owner?.id === query.ownerId)
       && (!query.orderNumber || order.orderNumber === query.orderNumber)
-      && (!search || [order.orderNumber, order.shopifyOrderNumber, order.customerName, order.storeName, ...order.items.map((item) => item.sku)]
+      && (!search || [order.orderNumber, order.shopifyOrderNumber, order.customerName, order.storeName, order.owner?.name || order.salesperson, ...order.items.map((item) => item.sku)]
         .some((value) => value.toLowerCase().includes(search))))
       .sort((left, right) => compareFulfillmentOrders(left, right, query))
-    return { filtered, departments, authorizedOrderIds: new Set(orders.map(order => order.id)), initial: scoped.initial }
+    return { filtered, departments, salespeople, authorizedOrderIds: new Set(orders.map(order => order.id)), initial: scoped.initial }
   }
 
   async getOrders(userId: string, query: ListFulfillmentOrdersDto) {
-    const { filtered, departments } = await this.filteredOrders(userId, query)
+    const { filtered, departments, salespeople } = await this.filteredOrders(userId, query)
     const start = (query.page - 1) * query.pageSize
-    return { source: this.provider.source ?? 'fop', refreshedAt: new Date().toISOString(), departments, items: filtered.slice(start, start + query.pageSize), total: filtered.length, totals: summarizeFopOrders(filtered), page: query.page, pageSize: query.pageSize }
+    return { source: this.provider.source ?? 'fop', refreshedAt: new Date().toISOString(), departments, salespeople, items: filtered.slice(start, start + query.pageSize), total: filtered.length, totals: summarizeFopOrders(filtered), page: query.page, pageSize: query.pageSize }
   }
 
   async exportOrders(userId: string, query: ExportFulfillmentOrdersDto, sessionVersion = 0): Promise<Buffer> {
@@ -666,11 +677,15 @@ export class FopDataService {
     // Date controls belong to registrations/receipts, not the current pending queues.
     const orders = scoped.orders
     const allowed = (queue: Queue) => scoped.roles.includes(FULFILLMENT_QUEUE_ROLES[queue])
-    const count = (queue: Queue) => allowed(queue) ? orders.filter((order) => matchesQueue(order, queue)).length : 0
+    // Procurement and allocation cards cover both tabs; scopedOrders already deduplicates IDs.
+    const pendingOrders = (queue: Queue) => orders.filter(order => matchesQueue(order, queue)
+      || queue === 'procurement' && matchesQueue(order, 'procurement_shipping')
+      || queue === 'allocation' && matchesQueue(order, 'allocation_review'))
+    const count = (queue: Queue) => allowed(queue) ? pendingOrders(queue).length : 0
     const queues = { review: count('review'), dispatch: count('dispatch'), procurement: count('procurement'), allocation: count('allocation'), shipping: count('shipping') }
     const tasks = (['review', 'dispatch', 'procurement', 'allocation', 'shipping'] as const).filter((queue) => allowed(queue) && queues[queue] > 0)
       .map((queue) => {
-        const oldest = orders.filter(order => matchesQueue(order, queue)).map(paymentTime).filter(Number.isFinite).sort((a, b) => a - b)[0]
+        const oldest = pendingOrders(queue).map(paymentTime).filter(Number.isFinite).sort((a, b) => a - b)[0]
         const time = oldest === undefined ? '' : new Date(oldest + 8 * 3_600_000).toISOString().slice(11, 16)
         return { id: queue, kind: queue, count: queues[queue], time, priority: queue === 'allocation' ? 'normal' : 'high' }
       })

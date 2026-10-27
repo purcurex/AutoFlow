@@ -37,11 +37,24 @@ describe('fulfillment order list', () => {
   const originalClipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard')
   afterEach(() => { mounted.splice(0).forEach(w => { if (w.exists()) w.unmount() }); vi.restoreAllMocks(); vi.useRealTimers(); vi.unstubAllGlobals(); if (originalClipboard) Object.defineProperty(navigator, 'clipboard', originalClipboard); else Reflect.deleteProperty(navigator, 'clipboard') })
 
+  it('queries by salesperson, resets paging, preserves other filters and clears it on a department change', async () => {
+    const get = vi.spyOn(orders, 'getFopOrders').mockResolvedValue({ source: 'mock', refreshedAt: new Date().toISOString(), items: [], total: 100, page: 2, pageSize: 20,
+      totals: { orderCount: 100, itemQuantity: 100, amountsByCurrency: [] }, departments: [{ id: 'd1', name: 'Department 1' }, { id: 'd2', name: 'Department 2' }],
+      salespeople: [{ id: 'employee-1', name: 'Employee 1' }] })
+    const { wrapper, router } = await setup('?queue=shipping&departmentId=d1&warehouseStage=pending_outbound&search=SKU&page=2&pageSize=20&paidAtOrder=desc', 'warehouse')
+    await wrapper.get('select[aria-label="业务员"]').setValue('employee-1'); await flushPromises()
+    expect(router.currentRoute.value.query).toMatchObject({ ownerId: 'employee-1', page: '1', departmentId: 'd1', search: 'SKU', warehouseStage: 'pending_outbound', paidAtOrder: 'desc' })
+    expect(get).toHaveBeenLastCalledWith(expect.objectContaining({ ownerId: 'employee-1', departmentId: 'd1', page: 1 }))
+    await wrapper.get('select[aria-label="所属部门"]').setValue('d2'); await flushPromises()
+    expect(router.currentRoute.value.query.ownerId).toBeUndefined()
+    expect(get).toHaveBeenLastCalledWith(expect.objectContaining({ ownerId: undefined, departmentId: 'd2', page: 1 }))
+  })
+
   it('exports selected orders or all filtered pages from a non-approval queue', async () => {
     const blob = new Blob(['xlsx'])
     const run = vi.spyOn(exporter, 'exportFopOrders').mockResolvedValue(blob)
     const download = vi.spyOn(downloads, 'downloadBlob').mockImplementation(() => {})
-    const { wrapper } = await setup('?queue=shipping&warehouseStage=pending_outbound&departmentId=d1&sortBy=outboundStatus&sortOrder=desc', 'warehouse')
+    const { wrapper } = await setup('?queue=shipping&warehouseStage=pending_outbound&departmentId=d1&ownerId=employee-1&sortBy=outboundStatus&sortOrder=desc', 'warehouse')
     expect(wrapper.find('[data-testid="open-approval"]').exists()).toBe(false)
     expect(wrapper.get('[data-testid="export-selected"]').attributes('disabled')).toBeDefined()
     await wrapper.findAll('tbody input.order-checkbox')[0]!.setValue(true)
@@ -51,7 +64,8 @@ describe('fulfillment order list', () => {
     await wrapper.get('input[type="search"]').setValue('not-yet-submitted')
     await wrapper.get('[data-testid="export-filtered"]').trigger('click'); await flushPromises()
     const query = run.mock.calls.at(-1)![0]
-    expect(query).toMatchObject({ mode: 'filtered', search: '' })
+    expect(query).toMatchObject({ mode: 'filtered', search: '', ownerId: 'employee-1' })
+    expect(run.mock.calls[0]![0]).toMatchObject({ mode: 'selected', ownerId: 'employee-1' })
     expect(query).not.toHaveProperty('page')
     expect(query).not.toHaveProperty('orderIds')
   })
@@ -300,10 +314,10 @@ describe('fulfillment order list', () => {
   it.each([
     ['allocation', 'allocation', '发运单状态', 'dispatchDocumentStatus'],
     ['allocation', 'allocation_review', '发运单状态', 'dispatchDocumentStatus'],
-    ['allocation', 'allocation_review', '配货单状态', 'allocationDocumentStatus'],
+    ['allocation', 'allocation_review', '配货状态', 'stockReadiness'],
+    ['allocation', 'allocation_review', '配货单状态', 'allocationReviewStatus'],
     ['dispatch', 'dispatch', '发运单状态', 'dispatchDocumentStatus'],
     ['warehouse', 'shipping', '配货单状态', 'allocationDocumentStatus'],
-    ['warehouse', 'shipping', '出库状态', 'outboundStatus'],
   ])('sorts %s/%s %s and retains filters across refresh', async (role, queue, label, field) => {
     const { wrapper, router } = await setup(`?queue=${queue}&departmentId=d1&search=DEMO`, role)
     const button = () => wrapper.get(`button[aria-label^="${label}："]`)
@@ -317,7 +331,7 @@ describe('fulfillment order list', () => {
     await wrapper.get('button.refresh-orders').trigger('click'); await flushPromises()
     expect(api.get).toHaveBeenLastCalledWith('/autoflow/integrations/fop/fulfillment-orders', { params: expect.objectContaining({ sortBy: field, sortOrder: 'desc', departmentId: 'd1', search: 'DEMO' }) })
     if (queue === 'shipping') {
-      await wrapper.get('select[aria-label="出库阶段"]').setValue('pending_review'); await flushPromises()
+      await wrapper.get('select[aria-label="配货单状态"]').setValue('pending_review'); await flushPromises()
       expect(router.currentRoute.value.query).toMatchObject({ sortBy: field, sortOrder: 'desc', warehouseStage: 'pending_review' })
     }
     await wrapper.get('button.sort-payment').trigger('click'); await flushPromises()
@@ -362,16 +376,17 @@ describe('fulfillment order list', () => {
   })
   it('shows the required fields and only the selected business status, retaining its queue while searching', async () => {
     const { wrapper, router } = await setup()
-    expect(wrapper.find('h2').text()).toContain('待配货')
+    expect(wrapper.find('h2').text()).toContain('未配货')
     const headers = wrapper.find('thead').text()
-    for (const label of ['订单编号', 'Shopify 单号', '客户名称', '商品', '配货单状态']) expect(headers).toContain(label)
+    for (const label of ['订单编号', 'Shopify 单号', '客户名称', '商品', '配货状态', '配货单状态']) expect(headers).toContain(label)
     expect(headers).toContain('发运单状态')
     for (const label of ['支付状态', '审核状态', '发运状态', '发货状态']) expect(wrapper.findAll('thead th').map(th => th.text())).not.toContain(label)
-    expect(wrapper.findAll('tbody tr')).toHaveLength(14)
+    expect(wrapper.findAll('tbody tr')).toHaveLength(6)
     expect((wrapper.get('select[aria-label="每页条数"]').element as HTMLSelectElement).value).toBe('50')
     expect(api.get).toHaveBeenLastCalledWith('/autoflow/integrations/fop/fulfillment-orders', { params: expect.objectContaining({ page: 1, pageSize: 50 }) })
     expect(wrapper.findAll('tbody img').length).toBeGreaterThan(0)
-    expect(wrapper.find('tbody').text()).toContain('未齐套，未配货')
+    expect(wrapper.find('tbody').text()).toContain('未齐套')
+    expect(wrapper.find('tbody').text()).not.toContain('未齐套，未配货')
     expect(wrapper.find('tbody').text()).not.toContain('已齐套未审核')
     await wrapper.find('input[type=search]').setValue('DEMO-SO-10241')
     await wrapper.find('form').trigger('submit')
@@ -387,21 +402,46 @@ describe('fulfillment order list', () => {
     await router.push('/workbench/warehouse?queue=shipping'); await flushPromises()
     const warehouseHeaders = wrapper.findAll('thead th').map(th => th.text())
     expect(warehouseHeaders).toContain('配货单状态')
-    expect(warehouseHeaders).toContain('出库状态')
+    expect(warehouseHeaders).not.toContain('出库状态')
     expect(warehouseHeaders).not.toContain('支付状态')
+    expect(wrapper.findAll('tfoot th, tfoot td').reduce((sum, cell) => sum + Number(cell.attributes('colspan') || 1), 0)).toBe(warehouseHeaders.length)
     for (const row of wrapper.findAll('tbody tr')) {
       expect(row.findAll('td')).toHaveLength(warehouseHeaders.length)
       expect(['已齐套未审核', '已审核未出库']).toContain(row.findAll('td')[warehouseHeaders.indexOf('配货单状态')]!.text())
     }
     expect(wrapper.find('tbody').text()).toContain('已齐套未审核')
     expect(wrapper.find('tbody').text()).toContain('已审核未出库')
-    expect(wrapper.find('tbody').text()).toContain('待配货审核')
+    expect(wrapper.find('tbody').text()).not.toContain('待配货审核')
     wrapper.unmount()
+  })
+
+  it('keeps readiness and audit facts independent, with aligned rows and totals in both allocation tabs', async () => {
+    const base = mockFopOrders.find(o => orders.matchesFopQueue(o, 'allocation'))!
+    const spy = vi.spyOn(orders, 'getFopOrders').mockImplementation(async query => ({
+      source: 'mock', refreshedAt: new Date().toISOString(), departments: [], page: 1, pageSize: 50, total: 2,
+      totals: { orderCount: 2, itemQuantity: 2, amountsByCurrency: [{ currency: 'USD', amount: 30 }] },
+      items: [0, 1].map(i => ({ ...base, id: `split-${i}`, fulfillmentProgress: { ...base.fulfillmentProgress, stockReadiness: query.queue === 'allocation' ? 'incomplete' : 'ready', allocationReview: 'pending' } })),
+    }))
+    const { wrapper, router } = await setup()
+    for (const queue of ['allocation', 'allocation_review']) {
+      await router.push(`/workbench/allocation?queue=${queue}`); await flushPromises()
+      const headers = wrapper.findAll('thead th').map(th => th.text())
+      expect(headers.slice(5, 8)).toEqual(['发运单状态', '配货状态', '配货单状态'])
+      const rows = wrapper.findAll('tbody tr')
+      rows.forEach(row => {
+        const cells = row.findAll('td')
+        expect(cells).toHaveLength(headers.length)
+        expect(cells[6]!.text()).toBe(queue === 'allocation' ? '未齐套' : '已齐套')
+        expect(cells[7]!.text()).toBe('未审核')
+      })
+      expect(wrapper.findAll('tfoot tr').at(-1)!.findAll('th,td').reduce((sum, cell) => sum + Number(cell.attributes('colspan') || 1), 0)).toBe(headers.length)
+    }
+    wrapper.unmount(); spy.mockRestore()
   })
 
   it('filters warehouse stages through the API and preserves them during search, sort and refresh', async () => {
     const { wrapper, router } = await setup('?queue=shipping&departmentId=d1&page=2&pageSize=20', 'warehouse')
-    const filter = () => wrapper.get('select[aria-label="出库阶段"]')
+    const filter = () => wrapper.get('select[aria-label="配货单状态"]')
     expect(filter().findAll('option').map(o => o.text())).toEqual(['全部待出库', '已齐套未审核', '已审核未出库'])
     await filter().setValue('pending_review'); await flushPromises()
     expect(router.currentRoute.value.query).toMatchObject({ warehouseStage: 'pending_review', departmentId: 'd1', page: '1' })
@@ -417,7 +457,7 @@ describe('fulfillment order list', () => {
     expect(wrapper.find('tbody').text()).toContain('已审核未出库')
     await router.push('/workbench/warehouse?queue=shipping&warehouseStage=bad'); await flushPromises()
     expect(wrapper.find('tbody').exists()).toBe(false)
-    expect(wrapper.get('[role=alert]').text()).toContain('出库阶段筛选无效')
+    expect(wrapper.get('[role=alert]').text()).toContain('配货单状态筛选无效')
   })
 
   it('shows an empty state and rejects unsupported queue links', async () => {

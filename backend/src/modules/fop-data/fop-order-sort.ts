@@ -4,6 +4,8 @@ import type { FopOrder } from './fop-data.types'
 const statusQueues: Record<Exclude<FulfillmentSortBy, 'paidAt'>, readonly FulfillmentOrderFiltersDto['queue'][]> = {
   dispatchDocumentStatus: ['dispatch', 'allocation', 'allocation_review'],
   allocationDocumentStatus: ['allocation', 'allocation_review', 'shipping'],
+  stockReadiness: ['allocation', 'allocation_review'],
+  allocationReviewStatus: ['allocation', 'allocation_review'],
   outboundStatus: ['shipping'],
 }
 
@@ -38,6 +40,8 @@ function statusRank(order: FopOrder, field: Exclude<FulfillmentSortBy, 'paidAt'>
     return Math.min(...documents.map(document => ranks[document.status]))
   }
   const progress = order.fulfillmentProgress
+  if (field === 'stockReadiness') return ({ incomplete: 0, ready: 1, unknown: Infinity })[progress.stockReadiness]
+  if (field === 'allocationReviewStatus') return ({ pending: 0, approved: 1, unknown: Infinity })[progress.allocationReview]
   if (field === 'allocationDocumentStatus') {
     if (progress.stockReadiness === 'incomplete') return 0
     if (progress.stockReadiness === 'ready') {

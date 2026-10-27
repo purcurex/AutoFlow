@@ -10,6 +10,8 @@ export interface FopOrderItem {
 }
 /** Independent, normalized FOP facts; unknown must never be inferred as pending. */
 export interface FulfillmentProgress {
+  /** Effective allocation document exists; missing/null cannot enter allocation or warehouse queues. */
+  allocationCreated?: boolean | null
   shopifySync: 'pending' | 'partial' | 'synced' | 'not_required' | 'unknown'
   supplierShipment: 'pending' | 'partial' | 'shipped' | 'not_required' | 'unknown'
   stockReadiness: 'incomplete' | 'ready' | 'unknown'
@@ -73,7 +75,7 @@ export type WarehouseStage = typeof warehouseStages[number]
 export function isWarehouseStage(value: unknown): value is WarehouseStage {
   return typeof value === 'string' && (warehouseStages as readonly string[]).includes(value)
 }
-export const fopOrderSortFields = ['paidAt', 'dispatchDocumentStatus', 'allocationDocumentStatus', 'outboundStatus'] as const
+export const fopOrderSortFields = ['paidAt', 'dispatchDocumentStatus', 'allocationDocumentStatus', 'stockReadiness', 'allocationReviewStatus', 'outboundStatus'] as const
 export type FopOrderSortBy = typeof fopOrderSortFields[number]
 export function isFopOrderSortBy(value: unknown): value is FopOrderSortBy {
   return typeof value === 'string' && (fopOrderSortFields as readonly string[]).includes(value)
@@ -82,6 +84,8 @@ export function canSortFopQueue(queue: FopOrderQueue, field: FopOrderSortBy): bo
   const queues: Record<Exclude<FopOrderSortBy, 'paidAt'>, readonly FopOrderQueue[]> = {
     dispatchDocumentStatus: ['dispatch', 'allocation', 'allocation_review'],
     allocationDocumentStatus: ['allocation', 'allocation_review', 'shipping'],
+    stockReadiness: ['allocation', 'allocation_review'],
+    allocationReviewStatus: ['allocation', 'allocation_review'],
     outboundStatus: ['shipping'],
   }
   return field === 'paidAt' || !!queues[field]?.includes(queue)
@@ -94,6 +98,7 @@ export interface FopOrderQuery {
   search?: string
   orderNumber?: string
   departmentId?: string
+  ownerId?: string
   paidAtOrder?: 'asc' | 'desc'
   page: number
   pageSize: number
@@ -118,6 +123,8 @@ export interface FopQueuePage extends FopOrderPage {
   refreshedAt: string
   /** Departments from permitted orders, independent of queue/search/page filters. */
   departments: { id: string; name: string }[]
+  /** Authorized order owners in the selected department, independent of queue/search/page. */
+  salespeople?: { id: string; name: string }[]
 }
 
 export function isFopOrderQueue(value: unknown): value is FopOrderQueue {
@@ -131,6 +138,7 @@ function validateQuery(query: FopOrderQuery) {
   if (!isFopOrderQueue(query.queue)) throw new Error('Invalid fulfillment queue')
   if (query.paidAtOrder !== undefined && !['asc', 'desc'].includes(query.paidAtOrder)) throw new Error('Invalid payment sort order')
   if (query.departmentId !== undefined && (typeof query.departmentId !== 'string' || query.departmentId.length > 128)) throw new Error('Invalid department')
+  if (query.ownerId !== undefined && (typeof query.ownerId !== 'string' || query.ownerId.length > 128)) throw new Error('Invalid salesperson')
   if (!Number.isInteger(query.page) || query.page < 1 || !Number.isInteger(query.pageSize) || query.pageSize < 1 || query.pageSize > 100) {
     throw new Error('Invalid pagination')
   }
@@ -142,17 +150,22 @@ export function matchesFopQueue(order: FopOrder, queue: FopOrderQueue, warehouse
   if (order.paymentStatus !== 'paid') return false
   if (queue === 'review') return order.reviewStatus === 'pending'
   if (queue === 'exceptions') return order.shippingStatus !== 'shipped' && order.exception !== null
-  if (order.reviewStatus !== 'approved' || !order.fulfillmentProgress) return false
   const progress = order.fulfillmentProgress
+  if (!progress) return false
+  // Only reviewed fulfillment orders can await Shopify tracking/fulfillment sync.
+  if (queue === 'dispatch') return order.reviewStatus === 'approved' && (progress.shopifySync === 'pending' || progress.shopifySync === 'partial')
+  if (queue === 'procurement' || queue === 'procurement_shipping') {
+    const purchase = order.procurementProgress
+    if (!purchase) return false
+    if (queue === 'procurement_shipping') return purchase.purchaseOrder === 'ordered' && purchase.supplierPayment === 'paid'
+      && (progress.supplierShipment === 'pending' || progress.supplierShipment === 'partial')
+    // Remaining unplaced demand is not fully paid; unknown facts are not unpaid facts.
+    return purchase.purchaseOrder === 'not_ordered' || purchase.purchaseOrder === 'partial'
+      || purchase.purchaseOrder === 'ordered' && ['unpaid', 'partial', 'refunded'].includes(purchase.supplierPayment)
+  }
+  if (order.reviewStatus !== 'approved' || progress.allocationCreated !== true) return false
   switch (queue) {
-    case 'dispatch': return progress.shopifySync === 'pending' || progress.shopifySync === 'partial'
-    case 'procurement':
-    case 'procurement_shipping': {
-      const paidPurchase = order.procurementProgress?.purchaseOrder === 'ordered' && order.procurementProgress?.supplierPayment === 'paid'
-      return (progress.supplierShipment === 'pending' || progress.supplierShipment === 'partial')
-        && (queue === 'procurement_shipping' ? paidPurchase : !paidPurchase)
-    }
-    case 'allocation': return progress.stockReadiness === 'incomplete'
+    case 'allocation': return progress.stockReadiness === 'incomplete' && progress.allocationReview === 'pending' && progress.outbound !== 'completed'
     case 'allocation_review': return progress.stockReadiness === 'ready' && progress.allocationReview === 'pending' && progress.outbound !== 'completed'
     case 'shipping': return progress.stockReadiness === 'ready' && progress.outbound !== 'completed'
       && (warehouseStage !== 'pending_review' || progress.allocationReview === 'pending')
@@ -165,7 +178,7 @@ export function matchesFopQueue(order: FopOrder, queue: FopOrderQueue, warehouse
 export async function getFopOrders(query: FopOrderQuery): Promise<FopQueuePage> {
   validateQuery(query)
   const { default: api } = await import('./index')
-  const { queue, search, orderNumber, departmentId, paidAtOrder, sortBy, sortOrder, warehouseStage, page, pageSize } = query
-  return api.get('/autoflow/integrations/fop/fulfillment-orders', { params: { queue, search, orderNumber, departmentId, paidAtOrder, sortBy, sortOrder, warehouseStage, page, pageSize } })
+  const { queue, search, orderNumber, departmentId, ownerId, paidAtOrder, sortBy, sortOrder, warehouseStage, page, pageSize } = query
+  return api.get('/autoflow/integrations/fop/fulfillment-orders', { params: { queue, search, orderNumber, departmentId, ownerId, paidAtOrder, sortBy, sortOrder, warehouseStage, page, pageSize } })
 }
 export const getFopOrdersFromApi = getFopOrders

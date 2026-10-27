@@ -86,7 +86,11 @@ describe('isolated mock FOP dataset', () => {
       expect(orders.items[0]).toMatchObject({ organization: { id: 'org-1', name: 'HyperZone' }, department: { id: expect.any(String), name: expect.any(String) }, owner: { id: expect.any(String), name: expect.any(String) } })
       expect(orders.items[0].items[0]).toMatchObject({ sku: expect.any(String), productId: expect.any(String), imageUrl: expect.stringContaining('data:image/svg+xml'), quantity: expect.any(Number) })
       expect(orders.items[0]).not.toHaveProperty('tenantId')
-      if (queue in dashboard.queues) expect(dashboard.queues[queue as keyof typeof dashboard.queues]).toBe(orders.total)
+      if (queue in dashboard.queues) {
+        const companion = queue === 'procurement' ? 'procurement_shipping' : queue === 'allocation' ? 'allocation_review' : undefined
+        const extra = companion ? (await data.getOrders('alice', { queue: companion, page: 1, pageSize: 100 })).total : 0
+        expect(dashboard.queues[queue as keyof typeof dashboard.queues]).toBe(orders.total + extra)
+      }
     }
     expect(count).toBeGreaterThan(100)
     expect(dashboard.source).toBe('mock')
@@ -112,8 +116,8 @@ describe('isolated mock FOP dataset', () => {
     const data = new FopDataService(users, new DemoFopDataProvider(organizations, env))
     const result = await data.getOrders('alice', { queue: 'procurement', page: 1, pageSize: 100 })
     expect(result.items.every(row => row.paymentStatus === 'paid' && row.reviewStatus === 'approved')).toBe(true)
-    expect(new Set(result.items.map(row => row.procurementProgress?.purchaseOrder))).toEqual(new Set(['not_ordered', 'partial', 'ordered', 'unknown']))
-    expect(new Set(result.items.map(row => row.procurementProgress?.supplierPayment))).toEqual(new Set(['not_required', 'unpaid', 'partial', 'paid', 'refunded', 'unknown']))
+    expect(new Set(result.items.map(row => row.procurementProgress?.purchaseOrder))).toEqual(new Set(['not_ordered', 'partial', 'ordered']))
+    expect(new Set(result.items.map(row => row.procurementProgress?.supplierPayment))).toEqual(new Set(['not_required', 'unpaid', 'partial', 'paid', 'refunded']))
     expect(result.items.every(row => row.procurementProgress?.purchaseOrder !== 'ordered' || row.procurementProgress?.supplierPayment !== 'paid')).toBe(true)
     const purchased = await data.getOrders('alice', { queue: 'procurement_shipping', page: 1, pageSize: 100 })
     expect(purchased.items.every(row => row.procurementProgress?.purchaseOrder === 'ordered' && row.procurementProgress?.supplierPayment === 'paid')).toBe(true)
@@ -128,7 +132,10 @@ describe('isolated mock FOP dataset', () => {
     })
     const data = new FopDataService(users, provider)
     const missing = await data.getOrders('alice', { queue: 'procurement', page: 1, pageSize: 100 })
-    expect(missing.items.every(row => row.procurementProgress?.purchaseOrder === 'unknown' && row.procurementProgress?.supplierPayment === 'unknown')).toBe(true)
+    expect(missing.total).toBe(0)
+    const review = await data.getOrders('alice', { queue: 'review', page: 1, pageSize: 100 })
+    expect(review.items.length).toBeGreaterThan(0)
+    expect(review.items[0].procurementProgress).toEqual({ purchaseOrder: 'unknown', supplierPayment: 'unknown' })
     provider.listOrders = async (identity, grant) => (await original(identity, grant)).map(row => ({ ...row, procurementProgress: { purchaseOrder: 'ordered', supplierPayment: 'unpaid', secret: 'private metadata' } }))
     const result = await data.getOrders('alice', { queue: 'procurement', page: 1, pageSize: 100 })
     expect(result.items[0].procurementProgress).toEqual({ purchaseOrder: 'ordered', supplierPayment: 'unpaid' })
@@ -145,6 +152,7 @@ describe('isolated mock FOP dataset', () => {
     expect(result.items.some(row => (row.dispatchDocuments?.length ?? 0) > 1)).toBe(true)
     expect(result.items.filter(row => row.fulfillmentProgress.shopifySync === 'partial').every(row => row.dispatchDocuments?.some(document => document.status === 'approved'))).toBe(true)
     expect(result.items.every(row => row.paymentStatus === 'paid' && row.reviewStatus === 'approved' && ['pending', 'partial'].includes(row.fulfillmentProgress.shopifySync))).toBe(true)
+    expect(result.items.some(row => row.reviewStatus === 'pending')).toBe(false)
   })
   it('keeps missing dispatch facts unknown, distinguishes confirmed empty documents and whitelists document fields', async () => {
     const provider = new DemoFopDataProvider(organizations, env)
@@ -179,7 +187,7 @@ describe('isolated mock FOP dataset', () => {
     const identity = { tenantId: 'demo:alice', userId: 'alice' }
     const grant = await provider.resolvePermissions(identity)
     const seeds = await provider.listOrders(identity, grant)
-    const progress = { shopifySync: 'synced', supplierShipment: 'shipped', stockReadiness: 'ready', allocationReview: 'approved', outbound: 'completed' } as const
+    const progress = { allocationCreated: true, shopifySync: 'synced', supplierShipment: 'shipped', stockReadiness: 'ready', allocationReview: 'approved', outbound: 'completed' } as const
     const examples = [
       { orderNumber: 'PAID-REVIEW', reviewStatus: 'pending' as const },
       { orderNumber: 'UNPAID-REVIEW', reviewStatus: 'pending' as const, paymentStatus: 'unpaid' as const },
@@ -190,13 +198,14 @@ describe('isolated mock FOP dataset', () => {
       { orderNumber: 'PARTIAL-OUTBOUND', fulfillmentProgress: { ...progress, outbound: 'partial' as const } },
       { orderNumber: 'CANCELLED', cancelled: true, fulfillmentProgress: { ...progress, shopifySync: 'pending' as const } },
       { orderNumber: 'REFUNDED', paymentStatus: 'refunded' as const, fulfillmentProgress: { ...progress, outbound: 'pending' as const } },
-      { orderNumber: 'UNKNOWN', fulfillmentProgress: { shopifySync: 'unknown', supplierShipment: 'unknown', stockReadiness: 'unknown', allocationReview: 'unknown', outbound: 'unknown' } as const },
+      { orderNumber: 'UNKNOWN', fulfillmentProgress: { allocationCreated: true, shopifySync: 'unknown', supplierShipment: 'unknown', stockReadiness: 'unknown', allocationReview: 'unknown', outbound: 'unknown' } as const },
       { orderNumber: 'COMPLETE' },
     ]
     provider.listOrders = async () => {
       const rows = examples.map<FopOrderCandidate>((row, index) => ({ ...seeds[index], reviewStatus: 'approved', paymentStatus: 'paid', cancelled: false, exception: null,
         // Deliberately conflicting legacy fields must not drive the new queues.
         procurementStatus: 'purchased', allocationStatus: 'allocated', dispatchStatus: 'dispatched', shippingStatus: 'shipped',
+        procurementProgress: { purchaseOrder: 'ordered', supplierPayment: ['OVERLAP', 'PARTIAL'].includes(row.orderNumber) ? 'unpaid' : 'paid' },
         fulfillmentProgress: progress, ...row,
       }))
       return [...rows, rows[2]]
@@ -209,7 +218,7 @@ describe('isolated mock FOP dataset', () => {
       expect(result.totals.orderCount).toBe(expected[queue].length)
     }
     const dashboard = await data.getDashboard('alice', query)
-    expect(dashboard.queues).toEqual({ review: 1, dispatch: 2, procurement: 2, allocation: 2, shipping: 3 })
+    expect(dashboard.queues).toEqual({ review: 1, dispatch: 2, procurement: 2, allocation: 3, shipping: 3 })
     expect(dashboard.tasks.map(task => task.kind)).toEqual(['review', 'dispatch', 'procurement', 'allocation', 'shipping'])
   })
   it('fails closed for missing or invalid progress instead of inventing pending counts', async () => {
@@ -477,7 +486,11 @@ describe('business role data scope', () => {
       const scoped = await manager.getOrders('alice', { queue, page: 1, pageSize: 100 })
       expect(scoped.total).toBeGreaterThan(0)
       expect(scoped.items.every(row => row.owner?.id === 'employee-1')).toBe(true)
-      if (queue in dept.queues) expect(dept.queues[queue as keyof typeof dept.queues]).toBe(scoped.total)
+      if (queue in dept.queues) {
+        const companion = queue === 'procurement' ? 'procurement_shipping' : queue === 'allocation' ? 'allocation_review' : undefined
+        const extra = companion ? (await manager.getOrders('alice', { queue: companion, page: 1, pageSize: 100 })).total : 0
+        expect(dept.queues[queue as keyof typeof dept.queues]).toBe(scoped.total + extra)
+      }
       const foreign = (await admin.getOrders('alice', { queue, page: 1, pageSize: 100 })).items.find(row => row.owner?.id === 'employee-2')!
       expect((await manager.getOrders('alice', { queue, page: 1, pageSize: 1, orderNumber: foreign.orderNumber })).total).toBe(0)
     }

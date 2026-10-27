@@ -38,6 +38,7 @@ export const mockFopOrders: FopOrder[] = stages.flatMap((stage, stageIndex) => A
       : stage === 'shipping' ? [{ id: `${orderNumber}:dispatch:1`, number: `FY-${stageIndex}-${index}-1`, status: 'approved' }] : [],
     procurementProgress: { purchaseOrder: stage === 'review' ? 'unknown' : 'ordered', supplierPayment: stage === 'review' ? 'unknown' : 'paid' },
     fulfillmentProgress: {
+      allocationCreated: stage !== 'review',
       shopifySync: stage === 'dispatch' ? 'pending' : 'synced',
       supplierShipment: 'shipped',
       stockReadiness: stage === 'review' ? 'unknown' : stage === 'allocation' && index % 2 === 0 ? 'incomplete' : 'ready',

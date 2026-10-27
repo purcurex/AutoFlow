@@ -8,9 +8,9 @@ const order: FopOrder = {
   amount: 12.34, currency: 'USD', paymentStatus: 'paid', reviewStatus: 'pending', procurementStatus: 'pending', allocationStatus: 'pending', dispatchStatus: 'pending', shippingStatus: 'pending',
   warehouse: '杭州仓', carrier: '云途YT', trackingNumber: null, salesperson: '曹可莹（Ruth）', owner: { id: 'owner', name: '曹可莹（Ruth）' }, department: { id: 'd1', name: '业务一部' },
   createdAt: '2026-10-25T16:00:00Z', paidAt: '2026-10-25T16:30:00Z', cancelled: false, exception: null,
-  fulfillmentProgress: { shopifySync: 'pending', supplierShipment: 'pending', stockReadiness: 'incomplete', allocationReview: 'pending', outbound: 'pending' },
+  fulfillmentProgress: { allocationCreated: true, shopifySync: 'pending', supplierShipment: 'pending', stockReadiness: 'incomplete', allocationReview: 'pending', outbound: 'pending' },
 }
-async function read(orders: FopOrder[], queue: 'review' | 'procurement' | 'allocation_review' = 'review') {
+async function read(orders: FopOrder[], queue: 'review' | 'procurement' | 'allocation_review' | 'shipping' = 'review') {
   const workbook = new ExcelJS.Workbook()
   await workbook.xlsx.load(await buildFulfillmentWorkbook(orders, { queue, mode: 'filtered' }, 'mock') as unknown as ExcelJS.Buffer)
   return workbook
@@ -19,6 +19,11 @@ const headers = (sheet: ExcelJS.Worksheet) => sheet.getRow(1).values as string[]
 const value = (sheet: ExcelJS.Worksheet, row: number, header: string) => sheet.getRow(row).getCell(headers(sheet).indexOf(header))
 
 describe('fulfillment Excel export', () => {
+  it('preserves supplier shipment facts for unpaid purchases even after shipment', async () => {
+    const shipped = { ...order, procurementProgress: { purchaseOrder: 'ordered', supplierPayment: 'unpaid' } as const, fulfillmentProgress: { ...order.fulfillmentProgress, supplierShipment: 'shipped' as const } }
+    const sheet = (await read([shipped], 'procurement')).getWorksheet('订单清单')!
+    expect(value(sheet, 2, '供应商发货状态').value).toBe('供应商已发货')
+  })
   it('preserves IDs and literal text, separates SKU rows, and totals each currency without double counting', async () => {
     const workbook = await read([order, { ...order, id: 'o2', orderNumber: '00003', items: [order.items[0]], currency: 'CNY', amount: 10 }])
     const sheet = workbook.getWorksheet('订单清单')!
@@ -52,6 +57,18 @@ describe('fulfillment Excel export', () => {
     const allocation = (await read([{ ...order, dispatchDocuments: [{ id: 'd1', number: 'FY01', status: 'submitted' }, { id: 'd2', number: 'FY02', status: 'approved' }] }], 'allocation_review')).getWorksheet('订单清单')!
     expect(value(allocation, 2, '发运单状态').value).toBe('FY01：已提交\nFY02：已审核')
     expect(headers(allocation)).not.toContain('支付状态')
+    expect(headers(allocation).slice(6, 9)).toEqual(['发运单状态', '配货状态', '配货单状态'])
+    expect(value(allocation, 2, '配货状态').value).toBe('未齐套')
+    expect(value(allocation, 2, '配货单状态').value).toBe('未审核')
+    const ready = (await read([{ ...order, fulfillmentProgress: { ...order.fulfillmentProgress, stockReadiness: 'ready', allocationReview: 'unknown' } }], 'allocation_review')).getWorksheet('订单清单')!
+    expect(value(ready, 2, '配货状态').value).toBe('已齐套')
+    expect(value(ready, 2, '配货单状态').value).toBe('待确认')
+    const warehouse = (await read([{ ...order, fulfillmentProgress: { ...order.fulfillmentProgress, stockReadiness: 'ready', allocationReview: 'approved' } }], 'shipping')).getWorksheet('订单清单')!
+    expect(headers(warehouse)).not.toContain('出库状态')
+    expect(headers(warehouse).slice(6, 8)).toEqual(['配货单状态', '店铺'])
+    expect(value(warehouse, 2, '配货单状态').value).toBe('已审核未出库')
+    expect(value(warehouse, 3, '数量').value).toBe(5)
+    expect(value(warehouse, 4, '订单金额').value).toBe(12.34)
   })
   it('rejects oversized exports rather than silently truncating', async () => {
     await expect(read(Array(10001).fill(order))).rejects.toMatchObject({ status: 413 })

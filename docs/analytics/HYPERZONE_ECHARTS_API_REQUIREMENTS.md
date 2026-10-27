@@ -1,16 +1,20 @@
 # HyperZone ECharts 全面诊断与 API 对接需求
 
-更新日期：2026-10-26（UTC+8）；当前交付以本版为准，保留历史诊断与验证证据。适用对象：前端、平台后端、FOP（金蝶云苍穹上的 HyperZone 自研应用）开发、测试与实施人员。
+更新日期：2026-10-27（UTC+8）；当前交付以本版为准，保留历史诊断与验证证据。适用对象：前端、平台后端、FOP（金蝶云苍穹上的 HyperZone 自研应用）开发、测试与实施人员。
 
-## 0. 最新交付增量（2026-10-26）
+## 0. 最新交付增量（2026-10-27）
 
-本版包含36项平台HTTP操作、145个数据模型；OpenAPI版本为`2026-10-26`。平台路由使用`/api`前缀，FOP员工网关为待IT发布的上游合同。已有生产接入待办不因Mock验证通过而关闭。
+本版包含36项平台HTTP操作、145个数据模型；OpenAPI版本为`2026-10-27`。平台路由使用`/api`前缀，FOP员工网关为待IT发布的上游合同。已有生产接入待办不因Mock验证通过而关闭。
 
 | 变更 | 当前行为与接口约定 |
 | --- | --- |
+| 看板与清单一致 | 五卡复用服务端队列判断，按有权履约订单ID去重；待采购=procurement＋procurement_shipping，待配货=allocation＋allocation_review，待出库=shipping两组合计。临时筛选仅影响清单；详见9.13 |
+| 待履约审核前提 | 客户已支付＋我方已审核＋Shopify跟踪号上传及履约标记尚未完成；paymentStatus=paid、reviewStatus=approved、shopifySync=pending/partial。未审核订单不进入待履约 |
+| 配货建单事实 | 新增fulfillmentProgress.allocationCreated（boolean/null）；true才进入配货/仓库，false/null不计入。旧网关省略时BFF归一null，非法类型503；已审核不能替代实际建单成功 |
+| 业务员查询 | 九队列支持ownerId精确筛选与search按业务员展示姓名部分匹配；salespeople来自授权订单和所选部门，清单/合计/两种导出同范围 |
 | 待办与默认首页 | 九类queue保留原岗位及用户数据范围；销售默认review，配货默认allocation_review（已齐套待审核），采购默认procurement，发运默认dispatch，仓库默认shipping。显式queue始终优先；Dashboard待配货卡片仍指向allocation，不随默认首页改变 |
 | 分页与展示 | 所有待办每页选项20、50、100，前端默认显式请求50；切换条数回第1页并保留其他筛选。一单多品按订单分页，每页纵向平铺，只使用页面最外层纵向滚动。GET接口兼容1–100，省略pageSize仍为20，不与前端默认值混淆 |
-| 仓库筛选顺序 | 最左出库阶段warehouseStage → 搜索/查询 → 订单数 → 最右所属部门departmentId；all/pending_review/pending_outbound口径不变，先授权再筛选、排序、全量合计及分页 |
+| 仓库筛选顺序 | 最左配货单状态warehouseStage → 搜索/查询 → 订单数 → 业务员ownerId → 最右所属部门departmentId；all/pending_review/pending_outbound口径不变，先授权再筛选、排序、全量合计及分页 |
 | 单笔与批量审核 | review/allocation_review先预览、再委托FOP原生audit；当前页最多100笔，独立approvalActions、版本校验及幂等，逐订单/逐单据返回结果。时间预算或上游故障保留未提交/待核对，不保证100笔在真实环境一次全部完成；生产见T35/H37/D38 |
 | 供应商旺旺催办 | 仅已采购待发货，按真实采购来源关联和独立采购权限查询；打开前再次核对contactVersion。多供应商逐单选择，只唤醒会话，不自动发消息；Mock不打开虚构供应商账号；生产见T34/H36/D37 |
 | 汇率显示 | 运费及毛利明细统一USD为基准、四位小数。CNY显示USD/CNY 7.1200，表示1 USD兑换7.1200 CNY；来源为fxRateToUsd倒数，日期/来源保留。其他原币保持真实币种；API与财务计算仍使用原始完整精度，不使用显示四舍五入值参与金额计算 |
@@ -190,7 +194,7 @@
 | 订单金额与支付 | amount、currency、paymentStatus、reviewStatus、paidAt、cancelled | paid/unpaid/refunded；pending/approved；paidAt 可空且带时区 | 订单 amount 仅用于订单明细，不代替实收；订单量需 paid＋approved |
 | 订单时间 | `createdAt`, `paidAt` | ISO8601时间戳；paidAt=null为未获取/未支付，不回退createdAt | 排序与支付日期统计独立于创建日期 |
 | SKU行 | `items[].productId/sku/name/imageUrl/variant/quantity` | quantity为数量，图片可空，产品ID可缺失 | 一订单多SKU；失效图片降级；图片地址应为获授权可访问资源 |
-| 履约状态 | `reviewStatus`、`fulfillmentProgress.shopifySync/supplierShipment/stockReadiness/allocationReview/outbound` | 枚举见完整 schema | 审核与五项独立进度驱动待办，见第9节；旧采购／发运字段保留兼容但不驱动五队列 |
+| 履约状态 | `reviewStatus`、`fulfillmentProgress.allocationCreated/shopifySync/supplierShipment/stockReadiness/allocationReview/outbound` | 枚举见完整 schema | 审核、实际配货建单与五项独立进度驱动待办，见第9节；旧采购／发运字段保留兼容但不驱动五队列 |
 | 仓库 | `warehouseCode`, `warehouse` | 已审核履约／收款必须 HZ/SZ；未知拒收 | 订单分仓对比。若同单跨仓，需另行约定“订单归属仓”或“按仓发运单数”，不得直接双计订单 |
 | 服务商 | `carrierCode`, `carrier`, `trackingNumber` | 标准代码映射；名称/跟踪号可空 | 固定六类，已知其他明确映射 OTHER，未知／缺失不能掩盖；备货 carrierCode=null |
 | 异常 | `exception.reason/hours` | stock/address/tracking；hours为持续时长 | 异常清单和任务，是否可同单多异常需定义 |
@@ -469,7 +473,7 @@
 | --- | --- | --- | --- |
 | T32 | P0 · 真实适配待完成 | 实现采购单下达、采购付款及有效需求覆盖归一化；前端/BFF/Mock与契约已提供procurementProgress | 与供应商发货三项独立，不能从履约支付或采购申请推导；仅有权订单输出，异常/未知明确 |
 | H34 | 人工核对 | 提供1688及线下采购的未下单/草稿/正式下达/取消重采、同履约多采购单、同采购多履约行、单单部分付款、多单部分付款、退款后重采及部分发货脱敏样本；提供真实下达字段、来源行ID、付款核销关联、有效数量、更新时间 | FOP研发＋采购负责人确认来源/枚举/数量归一与权限，区分已关闭历史退款与当前需跟进退款；不要求聊天中提供凭证 |
-| D32 | 实际联调验收 | 同一笔履约客户已付，采购依次未下单→部分下单→已下单未付→部分支付→已付待发→部分发货→全部发货；混单/退款/取消/未知及撤权反例 | 所有未全部发货阶段可查看；主标签和两个子事实正确；全部发货退出；刷新、页码恢复、日期排序和权限/合计一致；销售支付状态不变，配货/发运/仓库沿用各自业务状态 |
+| D32 | 实际联调验收 | 同一笔履约客户已付，采购依次未下单→部分下单→已下单未付→部分支付→已付待发→部分发货→全部发货；混单/退款/取消/未知及撤权反例 | 采购未完成付款或采购已付但未全部发货可查看；主标签和两个子事实正确；采购已付且全部发货退出；刷新、页码恢复、日期排序和权限/合计一致；销售支付状态不变，配货/发运/仓库沿用各自业务状态 |
 
 
 ### 发运单状态追加交付（2026-10-24）
@@ -485,7 +489,7 @@
 
 | 编号 | 类型 | 待办／需提供信息 | 验收结果 |
 | --- | --- | --- | --- |
-| D34 | 实际联调验收 | 用T31–T33/H33–H35来源样本覆盖采购部分下单且已付、全部下单且付清、部分发货/全部发货、退款重采；配货未齐套→齐套未审→已审→部分/全部出库及撤审；含多张发运单不同审核状态 | 采购两页互斥、配货两页互斥，默认页及Dashboard计数同口径；仓库三项筛选items/total/totals一致；分页/部门/排序/刷新不丢条件，账号越权与无权参数不可扩大范围；多商品/多单只计一次 |
+| D34 | 实际联调验收 | 用T31–T33/H33–H35来源样本覆盖采购部分下单且已付、全部下单且付清、部分发货/全部发货、退款重采；配货未齐套→齐套未审→已审→部分/全部出库及撤审；含多张发运单不同审核状态 | 采购两页互斥、配货两页互斥；待采购/待配货卡片和tasks分别取两页去重并集及最早收款时间；供应商未全部发货时采购付款只跨页签；采购已付且全部发货退出采购合计；配货齐套只跨页签，配货审核完成退出配货合计；配货默认已齐套待审核，齐套/审核两列及Excel独立显示，未知不推断；仓库三项筛选items/total/totals一致；分页/部门/排序/刷新不丢条件，账号越权与无权参数不可扩大范围；多商品/多单只计一次 |
 
 无需新增FOP业务字段；需人工核对的真实来源、付款核销、有效单据、撤审与刷新时效沿用H33–H35。Demo与本地测试完成不等于生产链路验收完成。
 
@@ -522,6 +526,15 @@
 | T36 | IT实施 | 基于现有FOP员工订单读取接口完成生产导出联调，保证完整授权结果，验证10,000单/50,000商品行耗时、内存及并发；超过上限需缩小筛选，后续更大需求另评估异步任务。不得静默分页截断或回退Demo。 | 平台已实现；生产待联调 |
 | H38 | 人工核对 | IT/业务核对正式订单/商品字段、币种、收款UTC+8时间、发运与配货状态、部门和员工身份；确认Excel/WPS版本及真实典型订单量，回填生产导出时效与并发预算。没有SKU单价来源时不编造单价。 | 待提供真实样例与环境 |
 | D39 | 验收 | 九队列分别导出所选及全部筛选；超过一页且数量与合计一致；一单多品金额不重复；混合币种分开；前导零及公式样文本安全；本人/经理/管理员范围不串数据；切换账号/页面取消下载；撤权或状态变化失败；仓库阶段/状态排序一致；超限413无截断；文件可由Excel/WPS打开。 | 自动化和Demo验证通过，生产待验收 |
+
+
+### Dashboard与工作台最终同口径补充（2026-10-27）
+
+本节补充T31–T33/H33–H35/D31–D34，以需求9.13为准：
+
+- **IT适配**：从有效配货单与履约订单来源关联生成`allocationCreated`。已审履约异步建单中、建单失败、作废删除不能返回true；旧网关缺失返回null并排除配货/仓库，不能由履约已审推断。将Shopify同步归一到有效包裹跟踪号的真实成功回执，区分pending/partial/synced/unknown。
+- **人工核对**：提供已付已审待同步、已付未审不得进入待履约的反例、审核成功但配货建单延迟/失败、配货撤审/作废、已发货但采购款未付、多采购单混合付款、多包裹部分同步的脱敏实例；确认有效关联键及源系统同步水位。无需在聊天提供凭证。
+- **生产验收**：同账号、同快照、清除临时搜索/部门/业务员/配货单状态筛选，核对卡片与清单total：待审核=review；待履约=dispatch；待采购=procurement＋procurement_shipping；待配货=allocation＋allocation_review；待出库=shipping两组合计。分别用本人、部门经理、业务全量账号测试，检查一单多品/多配货单去重、空白名单、失效记录和状态流转；不能把Demo数量作为生产固定常数。
 
 
 ## 8. 销售个人收款与净毛利（月／周／天）
@@ -585,22 +598,22 @@ FOP快照的 `hzkj_gp_income_usd/rmb` 已经包含收款调整。适配器若另
 同订单同确认月发生业务员调整时，BFF在已授权业务范围内先做结算替代，再选择业务员，避免管理员选择旧业务员时仍看到已替代的预估。若最终冻结月结属于另一主体且当前用户没有该事实权限，平台不得越权读取其金额用于去重；FOP适配器必须在授权返回前撤销／过滤已替代预估，或提供不含他人金额的可信失效标识。该能力属于T22/T24上线前条件，纳入H25人工核对及D18/D22验收。
 
 
-## 9. 五类履约待办队列（2026-10-23 修订）
+## 9. 五类履约待办队列（2026-10-27 修订）
 
-Dashboard 依次显示 **待审核 → 待履约 → 待采购 → 待配货 → 待出库**。原“待发运”改“待履约”，原“待发货”改“待出库”；新增采购卡片。点击卡片直接进入对应岗位工作台清单，订单号、Shopify 单号、客户、商品图片、SKU、数量、金额、业务员等字段继续保留；采购清单以采购订单状态替换客户支付状态；配货两清单隐藏支付状态，显示配货单状态及发运单状态；发运清单以发运单状态替换支付状态，保留Shopify履约状态；仓库清单以配货单状态替换支付状态，保留独立出库状态；销售清单仍显示支付状态。状态列只展示当前队列相关事实，分页及金额／数量合计沿用全筛选结果。
+Dashboard 依次显示 **待审核 → 待履约 → 待采购 → 待配货 → 待出库**。原“待发运”改“待履约”，原“待发货”改“待出库”；新增采购卡片。点击卡片直接进入对应岗位工作台清单，订单号、Shopify 单号、客户、商品图片、SKU、数量、金额、业务员等字段继续保留；采购清单以采购订单状态替换客户支付状态；配货两清单隐藏支付状态，分列显示发运单状态、配货状态、配货单状态；发运清单以发运单状态替换支付状态，保留Shopify履约状态；仓库清单保留配货单状态，不显示支付状态或出库状态列；销售清单仍显示支付状态。状态列只展示当前队列相关事实，分页及金额／数量合计沿用全筛选结果。
 
 | 顺序／名称 | API 队列键／岗位 | 入选条件（共通：已付款、未取消、未退款） | 清单状态显示 |
 | --- | --- | --- | --- |
 | 1 待审核 | `review`／sales | `reviewStatus=pending` | 待审核 |
-| 2 待履约 | `dispatch`／dispatch | 已审核，`shopifySync=pending/partial` | 待同步 Shopify 发货／部分同步·待完成 |
-| 3 待采购 | `procurement`／procurement | 已审核，`supplierShipment=pending/partial`，尚未同时满足全部下单且采购款付清 | 采购下单、付款及供应商发货进度 |
-| 4 待配货 | `allocation`／allocation | 已审核，`stockReadiness=incomplete` | 未齐套，未配货；并列显示发运单状态 |
-| 5 待出库 | `shipping`／warehouse | 履约已审核，`stockReadiness=ready`；配货未审核，或配货已审核且`outbound=pending/partial`；排除已全部出库 | 已齐套未审核／已审核未出库（含部分出库） |
+| 2 待履约 | `dispatch`／dispatch | `reviewStatus=approved`且`shopifySync=pending/partial`，客户已支付、我方已审核且Shopify跟踪号上传及履约标记未完成 | 待同步 Shopify 发货／部分同步·待完成 |
+| 3 待采购 | `procurement`／procurement | `procurement ∪ procurement_shipping`：采购未完成付款＋已采购未发货（含部分发货） | 两页签去重合计，点击进入待采购清单 |
+| 4 待配货 | `allocation`／allocation | 履约已审核、已实际生成有效配货单，`allocation ∪ allocation_review`：未齐套未审核＋已齐套未审核 | 两页签去重合计；配货状态与审核状态独立展示 |
+| 5 待出库 | `shipping`／warehouse | 履约已审核且`allocationCreated=true`，`stockReadiness=ready`；配货未审核，或配货已审核且`outbound=pending/partial`；排除已全部出库 | 已齐套未审核／已审核未出库（含部分出库） |
 
 - Shopify 同步、供应商发货、库存齐套、配货审核、仓库出库是独立事实，不能用单一顺序状态推导。采购下单不等于供应商已发货；已齐套不等于配货已审核；Shopify 已同步不等于仓库已出库。
 - **统计粒度为履约订单**。上游先汇总有效 SKU、来源分录及包裹，再提供订单级进度；同队列订单 ID 去重。不同队列允许重叠，五卡数量不得相加称作订单总量。
 - 部分同步／部分供应商发货／部分出库仍有剩余事项，计入相应待办。无需采购的备货库存及虚拟商品不能制造供应商待发货；无 Shopify 发货同步需求返回 `not_required`。状态语义与真实枚举由适配器归一化，不能按空字符串猜测。
-- 新增 `FopOrder.fulfillmentProgress` 必填对象：`shopifySync`、`supplierShipment`、`stockReadiness`、`allocationReview`、`outbound`。枚举含 `unknown`，只在有明确信息时入选相应队列；缺失／非法进度返回 `503 fop_unavailable`，不悄悄回退旧逻辑或 Mock。
+- `FopOrder.fulfillmentProgress`包含`allocationCreated`（boolean/null）、`shopifySync`、`supplierShipment`、`stockReadiness`、`allocationReview`、`outbound`。缺失allocationCreated兼容归一为null，不计入配货/仓库；不得根据履约审核推断已建单。枚举含 `unknown`，只在有明确信息时入选相应队列；缺失／非法进度返回 `503 fop_unavailable`，不悄悄回退旧逻辑或 Mock。
 - 保留 `dispatch/shipping` URL 与 API 键及岗位授权，以兼容旧收藏；**这两个键的业务筛选口径已经更新**。既有 `procurementStatus/allocationStatus/dispatchStatus/shippingStatus` 保留兼容，前五队列不再使用这些旧粗粒度字段；异常队列旧口径保持。
 - `dashboard.queues` 新增必填 `procurement`；`tasks.kind/id` 扩展到五个队列，有权限且非空才输出，顺序与卡片相同。日期控件仍不影响待办队列。
 - 全局数据隔离继续生效：先取登录账号对应的 FOP 订单白名单与本人／部门／管理员交集，再按岗位过滤和统计；没有采购岗位权限不能查看采购清单。卡片、清单、分页合计必须来自同一口径。
@@ -620,10 +633,18 @@ Dashboard 依次显示 **待审核 → 待履约 → 待采购 → 待配货 →
 
 验收账号 `test@autoflow.local` 已按既有授权配置为业务数据管理员，看到全部演示订单符合其权限；验收员工隔离须使用绑定不同员工／部门的数据权限配置。本规则不改变五卡结构或已约定队列条件。
 
-### 9.2 协同岗位、部门筛选与收款先后顺序（2026-10-24）
+### 9.2 协同岗位、部门／业务员筛选与收款先后顺序（2026-10-26 更新）
+
+**业务员查询补充**：五个工作台全部九队列统一提供“业务员／全部业务员”下拉，位于“所属部门”之前，仓库“配货单状态”仍最左、部门仍最右。GET清单及POST Excel导出均新增可选`ownerId`（string，最长128；省略/空串为全部可见业务员）。精确匹配订单`owner.id`，不能按姓名匹配，更不能用请求参数替换登录身份。先核验账号岗位、FOP订单白名单与本人/部门/业务管理员范围，再取部门与业务员交集，最后排序、全量合计和分页；未知或无权业务员返回空清单，不回退全部数据。
+
+- 响应新增`salespeople: {id: string, name: string}[]`：从授权订单业务员去重，按姓名、ID稳定排序；受所选部门（含合法后代）限制，独立于当前队列、搜索、指定订单、业务员选择与分页。无权订单、其他租户及无稳定业务员ID的数据不能生成选项。`departments`保留原有口径。
+- 修改业务员回第1页，保留部门、搜索、排序、仓库阶段与每页条数；修改部门清空业务员并回第1页。刷新、搜索、翻页、待办页签及岗位切换保留业务员。进入独立分析页不附带待办业务员筛选。选择变化清空旧勾选，避免误审/误导出。
+- 搜索框也支持业务员姓名：提示为“业务员 / 订单编号 / Shopify 单号 / 客户 / 店铺 / SKU”。`search`去首尾空格、忽略英文大小写，按列表展示的`owner.name`（空缺时才取`salesperson`）包含匹配，支持中文/英文及部分姓名。与原订单/客户/店铺/SKU字段为OR，与业务员ID、部门及其他筛选为AND；同名人员可用业务员下拉精确选择。先授权再搜索，列表合计及两种Excel导出共用同一规则。
+- “导出所选”和“导出筛选结果”复用同一`ownerId`；所选订单不满足筛选返回409，导出完成前再次读取归属及权限。文件说明记录业务员；不把未知业务员ID翻译成其他账号姓名。
+- FOP源事实为`hzkj_orders.hzkj_operator`（元数据4506–4508行），归一为`owner.id/name`，与账号员工稳定ID的映射由服务端维护。不要使用当前客户归属替换源订单归属；无新增FOP写操作。生产联调需核对同名员工、转岗/转交后的查看授权、空业务员、跨部门、个人/经理/协同岗位及两种导出；沿用T03–T05、T36/H38/D39验收。
 
 - **跨部门协同**：销售总监、订单管理、采购、配货、物流发运、仓库等人员可在“账号与权限 → 业务数据权限”独立选择“全部业务数据”（`businessRole=admin`），处理全公司各业务部门的订单；系统管理角色可继续为普通用户。仍需其绑定的 FOP 用户拥有对应公司数据权限。本地设置不能扩大 FOP 白名单。普通业务员默认本人、部门经理默认本部门及子部门；不根据岗位名称自动改写已有账号权限。
-- **筛选入口**：销售、采购、配货、发运、仓库工作台的待审核、待采购、待配货、待履约、待出库及异常清单统一提供右侧“所属部门”，默认“全部部门”。仓库“出库阶段”放在最左侧搜索框之前。先显示业务一部、二部、三部、四部，再显示有可见订单的其他自定义部门。当前人员直接归属业务部门，不重新创建区域销售组。
+- **筛选入口**：销售、采购、配货、发运、仓库工作台的待审核、待采购、待配货、待履约、待出库及异常清单统一提供右侧“所属部门”，默认“全部部门”。仓库“配货单状态”放在最左侧搜索框之前。先显示业务一部、二部、三部、四部，再显示有可见订单的其他自定义部门。当前人员直接归属业务部门，不重新创建区域销售组。
 - **接口**：`GET /autoflow/integrations/fop/fulfillment-orders` 新增可选 `departmentId`（string，最长128），响应 `FulfillmentOrderPage.departments[]` 包含 `id/name`。选项从当前账号可见订单归属去重生成，独立于队列、关键词、部门条件和分页；不借用管理员组织目录。过滤按 `department.id` 或 `departmentPathIds` 匹配。没有可见订单的部门不会凭空补入；无权限或未知部门返回空结果，绝不回退成全部数据。
 - **排序与合计**：所有待办默认按收款时间 `paidAt ASC, id ASC` 稳定排序；点击收款日期表头可切换升序／降序（`paidAtOrder=asc/desc`），切换回第一页并保留部门和已提交搜索。两种方向均在完整筛选集上排序后分页，同时间按id升序，空或无效时间始终排最后。排序条件保留于URL，刷新、查询和翻页保持；非法或重复排序参数返回400。排序按时间戳比较，展示 UTC+8。`total/totals` 覆盖当前账号、当前部门和其他查询条件的完整结果。Dashboard 异常清单同序；待办摘要时间改用最早收款时间，固定业务队列展示顺序不变。
 - **交互**：部门选择保存于 URL，查询、翻页及更改每页条数保留；切换部门回第一页；切换工作台及待办页签保留部门，重置分页与搜索。无匹配结果仍保留所选部门，可手动切回“全部部门”。
@@ -665,31 +686,36 @@ Dashboard 依次显示 **待审核 → 待履约 → 待采购 → 待配货 →
 
 - 接口新增 `FopOrder.procurementProgress`：`purchaseOrder`、`supplierPayment`；枚举及兼容规则见OpenAPI `ProcurementProgress`。BFF始终白名单序列化两个字段，旧provider缺对象转`unknown/unknown`；有对象但非法/缺子字段拒绝为503，不能默认为待下单。前端兼容旧响应无对象。
 - 主标签按退款异常、取消、下单是否齐全、采购付款、供应商发货的优先级展示；每行同时展示下单和采购付款两项事实，不能用单一阶段覆盖多采购单并行环节。`partial+paid`只代表已下单部分已付款。
-- 采购两队列共享`supplierShipment=pending/partial`门槛，再按全部下单及采购付款事实互斥拆分，详见9.7；采购事实未知保留在待采购清单，显示待确认。两页不改变用户权限、部门筛选、排序、分页或合计口径。
+- 待采购以未完成下单/采购付款事实入选，不再以供应商未发货为共同门槛；只有已采购待发货要求`supplierShipment=pending/partial`。采购付款未知不当未付款计入；详见9.13。两页不改变用户权限、部门筛选、排序、分页或合计口径。
 - 真实适配需按有效履约来源行、SKU及数量关联采购单，排除虚拟商品、组合父件重复、已覆盖的取消单/退款单、使用备货无需另采数量；相同SKU不能仅按SKU跨客户串单。采购申请审核不等于供应商下单，线下采购正式下达和部分付款依据需H34样本确认。完整有效需求查全后才可判`not_ordered/ordered/paid`。
 - 演示数据覆盖未下单、部分下单、待付款、部分付款、待发货、部分发货、退款及未知；实际FOP网络适配仍待T32/H34/D32联调。
 
 
-### 9.5 配货工作台的两类待办（2026-10-24）
+### 9.5 配货工作台的两类待办（2026-10-26修订）
 
-配货两个页签不显示履约订单支付状态，均保留“配货单状态”并新增“发运单状态”；配货状态与页签对应：
+两个页签依次为“未配货清单”（`queue=allocation`）和“已齐套待审核”（`queue=allocation_review`）；默认仍打开已齐套待审核。隐藏履约订单支付状态，按顺序分列显示发运单状态、配货状态、配货单状态，禁止将齐套与审核合并为一个状态标签。
 
-| 状态文案 | 归一事实 | 展示 |
+| 列名 | 接口字段 | 显示与排序 |
 | --- | --- | --- |
-| 未齐套，未配货 | `fulfillmentProgress.stockReadiness=incomplete` | 柔和暖色；有效配货需求尚未全部完成，包含未配货／未全部齐套，不把部分配货误认为整单已完成 |
-| 已齐套未审核 | `stockReadiness=ready` 且 `allocationReview=pending` | 柔和蓝色；已齐套且配货审核未全部完成 |
+| 发运单状态 | `dispatchDocuments[]` | 暂存／已提交／已审核，仍逐张显示；沿用现有排序 |
+| 配货状态 | `fulfillmentProgress.stockReadiness` | `incomplete`未齐套、`ready`已齐套、`unknown`待确认；升序未齐套→已齐套 |
+| 配货单状态 | `fulfillmentProgress.allocationReview` | `pending`未审核、`approved`已审核、`unknown`待确认；升序未审核→已审核 |
 
-仍以履约订单为列表粒度、只读查看，已支付且履约已审核是入选门槛；隐藏支付列不放宽条件。配货已齐套未审核的订单进入独立“已齐套待审核”页签及仓库工作台，不再进入“待配货清单”；审核后退出待审核页签，尚未全部出库时继续留在仓库工作台；未知事实不能直接当作已齐套。保留用户权限、部门筛选、收款排序、复制、多商品、刷新及全量合计；两页均增加“发运单状态”，数量/金额合计和空态跨列同步对齐。
+两列分别依据真实字段显示，未知不能自动当作未审核，已齐套不能推导已审核；缺失/非法必需事实由接口拒绝。独立排序的未知始终置后，见9.9。两个页签的列顺序一致，Excel保留相同字段，数量/金额合计和空态跨列对齐。
 
-沿用现有`stockReadiness/allocationReview`接口字段，不新增前端业务写操作。FOP适配需要以有效配货单`hzkj_alloc_status=completed`和`billstatus=C`分别证明齐套与审核；`available`（可配货）不等于已经齐套完成，不能仅凭仓库库存充足标记第二类。多包裹按整单有效需求聚合，真实来源仍按T31/H33/D30联调。
+- 未配货：`stockReadiness=incomplete`，包含尚未齐套及部分配货。
+- 已齐套待审核：`allocationCreated=true && stockReadiness=ready && allocationReview=pending && outbound!=completed`。不再进入未配货清单，可与仓库待审核组重叠；配货审核完成后退出本页，未出库时仍留仓库清单。
+- 两页均要求有效、客户已支付、履约已审核；先按登录账号权限过滤，保留部门筛选、收款排序、复制、多商品、刷新及全量合计。审核操作仅按9.11既有独立授权提供，不新增其他写操作。
+- Dashboard待配货卡片及tasks为两页去重并集；齐套时从未配货转入待审核但合计不变，配货审核完成后退出此卡片。任务时间取并集最早收款日期。卡片链接仍进入未配货页，工作台无queue时默认已齐套待审核。
 
+沿用现有`stockReadiness/allocationReview`响应字段。FOP适配以有效配货单`hzkj_alloc_status=completed`和`billstatus=C`分别证明齐套与审核；`available`（可配货）不等于已齐套，不能仅凭库存充足标记ready。多包裹按整单有效需求聚合，真实来源及回退继续T31/H33/D30联调。
 
-仓库工作台的待出库清单以“配货单状态”替换“支付状态”，包含下列两组数据，在同一清单用柔和暖色/绿色标签区分，默认按收款日期排序，也可点击配货单状态/出库状态排序（见9.9）：
+仓库工作台的待出库清单保留“配货单状态”，移除“出库状态”列及其表头排序入口；Excel同步移除，金额/数量合计与空态跨列同步对齐。配货单状态筛选保留全部待出库、已齐套未审核、已审核未出库。包含下列两组数据，以柔和暖色/绿色标签区分，默认按收款日期排序，也可点击配货单状态排序（见9.9）：
 
-| 分组 | 入选事实（前置：已付款、履约已审核、有效且有权） | 出库状态列 |
+| 分组 | 入选事实（前置：已付款、履约已审核、有效且有权） | 配货单状态显示 |
 | --- | --- | --- |
-| 已齐套未审核 | `stockReadiness=ready`、`allocationReview=pending`，且`outbound!=completed` | 待配货审核；不能把配货未审核标为可出库 |
-| 已审核未出库 | `stockReadiness=ready`、`allocationReview=approved`、`outbound=pending/partial` | 配货已完成·待出库／部分出库·待完成；“未出库”分组包含尚未全部出库 |
+| 已齐套未审核 | `stockReadiness=ready`、`allocationReview=pending`，且`outbound!=completed` | 已齐套未审核；不代表可出库 |
+| 已审核未出库 | `stockReadiness=ready`、`allocationReview=approved`、`outbound=pending/partial` | 已审核未出库；分组仍包含尚未全部出库 |
 
 第一组由已知的齐套与未审核事实确定，即使出库状态尚未提供（unknown）也可显示待审核；不把unknown推断为未出库。第二组必须明确尚有出库事项，出库unknown不入选。任一组明确已全部出库均排除，未齐套、配货审核未知、已取消、未付款、退款或履约未审核均不进入仓库清单。
 
@@ -698,7 +724,7 @@ Dashboard 依次显示 **待审核 → 待履约 → 待采购 → 待配货 →
 
 ### 9.6 发运工作台的发运单状态（2026-10-24）
 
-发运工作台“支付状态”改为“发运单状态”，展示 **暂存、已提交、已审核**。相邻的Shopify履约状态继续独立展示；发运单已审核不等于Shopify已同步。沿用已付款、履约已审核及`shopifySync=pending/partial`的待履约入选条件，不因新展示列改变待办范围或数量。
+发运工作台“支付状态”改为“发运单状态”，展示 **暂存、已提交、已审核**。相邻的Shopify履约状态继续独立展示；发运单已审核不等于Shopify已同步。待履约最新条件为客户已付款、我方履约订单已审核（`reviewStatus=approved`）且`shopifySync=pending/partial`；尚未完成Shopify跟踪号上传及履约标记，完成以平台成功回执为准；未审核订单不进入待履约。
 
 | 接口字段 | 内容与展示 | FOP来源 |
 | --- | --- | --- |
@@ -719,10 +745,10 @@ Dashboard 依次显示 **待审核 → 待履约 → 待采购 → 待配货 →
 
 | 工作台／顺序 | 页签或筛选 | API 参数 | 入选事实 |
 | --- | --- | --- | --- |
-| 采购 1（默认） | 待采购清单 | `queue=procurement` | 供应商pending/partial，且不同时满足`purchaseOrder=ordered`和`supplierPayment=paid`。部分下单即使已下单部分付清，仍留本页；退款、取消重采、未知采购进度保留跟进 |
+| 采购 1（默认） | 待采购清单 | `queue=procurement` | 确认尚未/部分下单，或全部下单且采购款unpaid/partial/refunded；与客户已付独立。已发货但未付采购款仍须跟进；未知采购事实不推断为未付 |
 | 采购 2 | 已采购待发货 | `queue=procurement_shipping` | 供应商pending/partial，并且有效采购需求已全部下单、采购款付清。部分发货保留，全部发货退出 |
-| 配货 1 | 待配货清单 | `queue=allocation` | `stockReadiness=incomplete`，不再混入已齐套未审核 |
-| 配货 2（默认） | 已齐套待审核 | `queue=allocation_review` | `stockReadiness=ready && allocationReview=pending && outbound!=completed` |
+| 配货 1 | 未配货清单 | `queue=allocation` | 已生成有效配货单、`stockReadiness=incomplete && allocationReview=pending && outbound!=completed` |
+| 配货 2（默认） | 已齐套待审核 | `queue=allocation_review` | `allocationCreated=true && stockReadiness=ready && allocationReview=pending && outbound!=completed` |
 | 仓库（默认） | 全部待出库 | `queue=shipping&warehouseStage=all`或省略stage | 9.5定义的两组并集，订单ID去重 |
 | 仓库筛选 | 已齐套未审核 | `warehouseStage=pending_review` | 仓库范围内`allocationReview=pending` |
 | 仓库筛选 | 已审核未出库 | `warehouseStage=pending_outbound` | 仓库范围内`allocationReview=approved`，且出库pending/partial |
@@ -732,7 +758,7 @@ Dashboard 依次显示 **待审核 → 待履约 → 待采购 → 待配货 →
 - 配货两个页签均显示“发运单状态”，复用`dispatchDocuments[].id/number/status`，逐张显示暂存/已提交/已审核，unknown与未生成语义沿用9.6。发运未审核的已齐套订单仍可查看，不代表已允许配货审核或出库；FOP放行校验不变。
 - `warehouseStage`仅适用于shipping；其他队列携带该参数、非法值或重复参数均400。前端路由非法时不查询/不展示旧数据。切换筛选重置第1页；搜索、部门、收款排序、分页、手动/自动刷新保留筛选。
 - 服务端先授权，再队列/阶段/部门/搜索筛选，再排序、全量合计和分页；`items/total/totals`保持同范围，零结果返回零合计，不回退全部。`departments`仍来自有权订单。
-- Dashboard维持五张卡片：待采购卡片/tasks与`procurement`默认清单同口径；待配货卡片/tasks仅统计`allocation`。已采购待发货、已齐套待审核不再计入这两张卡片；仓库shipping仍为两组并集，不受工作台临时筛选影响。卡片不能相加当公司订单总数。
+- Dashboard维持五张卡片：待采购卡片及采购tasks统计`procurement ∪ procurement_shipping`，即采购未完成付款与已采购未发货（含部分发货）的去重合计；采购工作台保留两个独立清单，卡片点击仍进入待采购页，已采购待发货在相邻页签查看。采购待办时间取两类订单中最早的收款时间，供应商未全部发货时付款完成只跨页签、不减少合计；采购已付且供应商全部发货后退出。待配货卡片/tasks统计`allocation ∪ allocation_review`，即未齐套与已齐套未审核的去重合计，任务时间取并集最早收款时间；齐套跨页签不减少合计，审核完成退出；仓库shipping仍为两组并集，不受工作台临时筛选影响。卡片不能相加当公司订单总数。
 - 采购付款完成后在下次查询移至已采购待发货；付款撤回/当前有效退款则重新归入待采购。配货齐套后移至已齐套待审核；审核完成且出库未完成则只保留仓库对应组；全部出库退出仓库。沿用30秒轮询、手动刷新及页码恢复。FOP真实网络适配和同步时效仍待T31–T33，不以Demo代表生产已接通。
 
 
@@ -747,15 +773,17 @@ Dashboard 依次显示 **待审核 → 待履约 → 待采购 → 待配货 →
 - 配货工作台两个页签将“发运单审核状态”统一更名为“发运单状态”，数据字段`dispatchDocuments`、三态映射与权限不变。
 
 
-### 9.9 发运单、配货单与出库状态排序（2026-10-25）
+### 9.9 工作台状态排序
 
 三个状态列支持表头点击排序：未选中显示双向箭头，首次点击升序，再次点击降序；同一时间只激活一个主排序列，使用`aria-sort`标识方向。点击收款日期表头恢复日期排序。切换排序回第一页，保留所属部门、搜索、指定订单和仓库阶段；查询、分页、刷新保留URL排序条件。
 
 | 表头 / sortBy | 可用清单 | 升序的业务顺序 |
 | --- | --- | --- |
 | 发运单状态 / `dispatchDocumentStatus` | dispatch、allocation、allocation_review | 确认未生成 → 暂存 → 已提交 → 已审核；依据dispatchDocuments，不使用旧dispatchStatus |
-| 配货单状态 / `allocationDocumentStatus` | allocation、allocation_review、shipping | 未齐套，未配货 → 已齐套未审核 → 已审核未出库；依据stockReadiness/allocationReview，不使用旧allocationStatus |
-| 出库状态 / `outboundStatus` | shipping | 待配货审核 → 配货已完成·待出库 → 部分出库·待完成；已完成不属于当前仓库待办，不因排序重新进入 |
+| 配货状态 / `stockReadiness` | allocation、allocation_review | 未齐套 → 已齐套；unknown最后 |
+| 配货单状态 / `allocationReviewStatus` | allocation、allocation_review | 未审核 → 已审核；unknown最后，与齐套状态独立 |
+| 配货单状态 / `allocationDocumentStatus` | shipping；兼容allocation、allocation_review旧链接 | 未齐套 → 已齐套未审核 → 已审核未出库；依据stockReadiness/allocationReview，不使用旧allocationStatus |
+| 旧出库排序 / `outboundStatus` | shipping，仅兼容已有链接/API，无表头入口 | 待配货审核 → 配货已完成·待出库 → 部分出库·待完成；已完成不属于当前仓库待办，不因排序重新进入 |
 | 收款日期 / `paidAt`（默认） | 全部待办 | 时间升序；兼容原paidAtOrder参数 |
 
 - 新增可选`sortBy`与`sortOrder=asc/desc`。未指定sortBy默认paidAt；显式sortOrder优先，缺省时paidAt使用原paidAtOrder（默认asc），状态排序默认asc。旧收藏链接继续有效。
@@ -818,7 +846,7 @@ Dashboard 依次显示 **待审核 → 待履约 → 待采购 → 待配货 →
 
 - 覆盖五工作台九队列：unpaid、review、exceptions、procurement、procurement_shipping、allocation、allocation_review、dispatch、shipping。每页提供单选、多选、全选当前页与清空；与审核复用选择，但导出不要求审核权。
 - **导出所选**：导出本页勾选订单，最多100笔。切换页码/队列/筛选清空选择；所选ID只缩小范围。订单状态、授权或当前筛选已变化时返回409，整个文件不生成，提示刷新后重选。
-- **导出筛选结果**：重新查询已应用的搜索、精确订单、所属部门、仓库出库阶段及排序，跨全部分页；尚未点击查询的搜索文本不参与。无数据时禁用按钮；查询时无记录返回409。不发送page/pageSize。
+- **导出筛选结果**：重新查询已应用的搜索、精确订单、所属部门、业务员、仓库配货单状态及排序，跨全部分页；尚未点击查询的搜索文本不参与。无数据时禁用按钮；查询时无记录返回409。不发送page/pageSize。
 - 入口位于清单工具栏，下载中防止重复提交并显示“导出中”；保留列表及筛选。页面切换、卸载、账号退出/更换时取消请求并丢弃延迟下载；错误显示就地重试提示。
 - 接口：`POST /api/autoflow/integrations/fop/fulfillment-orders/export`，JSON请求，成功返回`application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`二进制及attachment文件名，`Cache-Control: private, no-store`。字段级定义见`FulfillmentOrderExportRequest`。
 - 权限：JWT/cookie → 当前有效会话 → 工作台可见角色 → FOP绑定/租户/订单白名单 → 本人/管理部门/全量业务范围 → 当前队列和筛选。输出前重新检查会话及授权；系统管理员不能仅凭管理权限扩大业务数据。使用清单读权，不套用ECharts图表导出开关，不执行FOP写操作。
@@ -827,13 +855,34 @@ Dashboard 依次显示 **待审核 → 待履约 → 待采购 → 待配货 →
 | --- | --- |
 | 订单清单 | 一单一行：订单编号、商品信息（第二列）、Shopify单号、客户名称、收款日期（UTC+8）、该队列的两类状态、店铺、本地SKU/规格、数量、订单金额、币种；异常队列增加异常时长；发货仓库；发运/仓库增加物流商与物流单号；业务员、所属部门、创建日期（UTC+8）。不显示组织主体、内部租户标识、账号凭据或供应商聊天信息。商品摘要最多5行，完整商品见下一表。 |
 | 商品明细 | 每个订单的每个商品行独立展示：订单编号、商品信息、SKU、规格、数量、商品图片链接。图片为链接文本，不抓取外部图片；不重复订单金额。 |
-| 导出说明 | 清单、所选/筛选模式、生成时间UTC+8、演示/FOP来源、搜索条件、指定订单、所属部门、仓库阶段、排序、金额口径、商品说明及数据时效。 |
+| 导出说明 | 清单、所选/筛选模式、生成时间UTC+8、演示/FOP来源、搜索条件、指定订单、所属部门、业务员、仓库阶段、排序、金额口径、商品说明及数据时效。 |
 
-- 状态与页面列一致：销售支付＋审核/异常；采购下单与采购款独立事实＋供应商发货；配货发运单逐张状态＋配货单状态；发运发运单状态＋Shopify同步；仓库配货单状态＋出库状态。未知仍待确认，不能推断已支付/已审核。
+- 状态与页面列一致：销售支付＋审核/异常；采购下单与采购款独立事实＋供应商发货；配货发运单逐张状态＋配货状态＋配货单状态；发运发运单状态＋Shopify同步；仓库仅配货单状态，不再导出出库状态列。未知仍待确认，不能推断已支付/已审核。
 - 冻结首行及首列、数据区域筛选、换行与列宽；编号和外部文本以字符串写入，保留前导零/长编号并避免当作公式。数量金额为数值；订单清单末尾有订单数、商品数合计及按币种金额合计，商品表仅数量合计，避免一单多品重复计额。不同币种不直接相加，不擅自换汇；订单金额不是回款业绩。
 - 单次上限10,000笔订单、50,000行商品，超出413明确提示缩小筛选，不能只导出前N条。上游超时/不可用503，无Mock静默兜底。取消浏览器请求不保证上游立即停止计算；生产仍需验证网关耗时、并发与内存。
 - 文件生成后重新读取最新授权订单，核验归属员工/部门、队列及筛选。生成期间归属变化导致范围不符返回403，离开队列/筛选返回409，均不发送旧文件；金额等普通业务字段为首次读取时的数据快照，不保证数据库级事务快照。
 - FOP对接继续复用已有`resolvePermissions`及`listOrders`协议，不新增供应商访问或后台审核能力；后台`hzkj_orders`及商品行读取需完整。生产发布前执行下方T36/H38/D39，不把演示下载等同于生产已接通。
+
+
+### 9.13 Dashboard与工作台同口径计算（2026-10-27最终规则）
+
+共同前提：当前账号岗位可见、FOP白名单与本人/部门/全量业务范围交集；客户已支付、订单有效、未取消/未退款。卡片与清单均按履约订单ID去重，仍为订单清单而非配货单明细计数；一单多商品、多配货单不重复计单。比较卡片与清单时，应使用相同账号、无临时搜索/部门/业务员过滤以及同一业务状态快照。日期图表筛选不影响当前待办。
+
+| Dashboard卡片 | 完整查询条件 | 卡片数量来源 |
+| --- | --- | --- |
+| 待审核 | reviewStatus=pending | review清单total |
+| 待履约 | reviewStatus=approved且shopifySync=pending/partial；仅已付已审核、未完成Shopify跟踪号上传及履约标记，未审核及已同步/not_required/unknown不计入 | dispatch清单total |
+| 待采购 | 待采购：purchaseOrder=not_ordered/partial，或ordered且supplierPayment=unpaid/partial/refunded；已采购待发货：ordered+paid且supplierShipment=pending/partial。两组互斥，不要求履约已审核 | procurement.total＋procurement_shipping.total |
+| 待配货 | 履约已审核、allocationCreated=true、配货单未审核、未全部出库；未配货incomplete；已齐套待审核ready | allocation.total＋allocation_review.total |
+| 待出库 | 履约已审核、allocationCreated=true、ready且未全部出库；配货未审核，或已审核且outbound=pending/partial | shipping.total（两组合计） |
+
+- **已建配货单证据**：`fulfillmentProgress.allocationCreated`，true有有效配货单、false确认无有效单、null未知/旧网关未提供。false/null均不计入配货与仓库。即便履约审核成功，也须等FOP异步建单实际成功再返回true；作废/删除/失效配货单不算。非法非布尔值503。此字段由服务端来源关联生成，不接受浏览器提交，不提供手动开关。
+- **齐套与审核**：只要尚未齐套且未审核，进未配货；齐套完成但未审核，移入已齐套待审核；审核完成退出配货两页。已审核但未齐套的异常组合不计入待配货，不得把旧stockReadiness=incomplete单条件沿用。若齐套或审核未知，留待数据核对，不猜测。
+- **Shopify跟踪号**：shopifySync须代表有效包裹跟踪号的成功同步/更新回执，不用本地trackingNumber是否非空、发运审核、仓库出库或仅fulfillment_status替代。全部有效包裹完成跟踪号上传及Shopify履约标记才synced，部分成功仍partial；失败但明确待同步保持pending；未取得可信事实unknown。
+- **采购**：已发货但采购款未付仍在待采购；供应商已发货不能抵销采购付款事项。无需采购、失效取消单、未知付款不能强行当未付款。部分下单即使已下单部分付清，未下单需求仍在待采购。当前有效退款恢复未完成付款事项；已被重采覆盖的历史单不重复统计。
+- **仓库筛选**：名称统一“配货单状态”，置最左；选项“全部待出库／已齐套未审核／已审核未出库”。沿用warehouseStage=all/pending_review/pending_outbound兼容API；该筛选只影响清单，卡片始终为两组合计。
+- **一致性**：Dashboard卡片、tasks.count、最早收款时间、清单total/totals及Excel复用服务端同一筛选函数；分页不影响总数。采购/配货同队列分组互斥，跨岗位允许重叠；不能把五卡相加当全公司唯一订单总数。
+- **FOP交付**：实际发布网关必须补齐allocationCreated及跟踪号同步证明；本工程只实现BFF、前端、Mock与契约，未改动FOP生产库。生产验收沿用T31–T33/H33–H35，增加审核提交后建单延迟/失败、撤审/作废、已发货采购未付、多包裹部分同步、空事实及卡片与清单同快照比对。
 
 
 ## 10. OpenAPI 接口清单与请求/响应定义
@@ -883,7 +932,7 @@ Dashboard 依次显示 **待审核 → 待履约 → 待采购 → 待配货 →
 ### 10.1 公共鉴权与响应说明
 
 
-字段级源码快照，仅记录已实现HTTP路由，不将计划FOP上游写为paths。响应裸JSON，无{code,data,message}包装。required=序列化必有；type:null=显式空值；可省略字段不在required中。参数跨字段依赖及已知口径差距见操作描述和配套审计。示例为脱敏契约样例，不是生产数据。 FOP为金蝶云苍穹上的HyperZone自研应用，源码只读核实；本工程方案2收款聚合和Mock已实现，真实生产网络适配器仍未配置。订单与收款各自授权，回款采用实际结算分录，统一UTC+8。 物流运费使用独立freight scope及allowedFreightIds，已实现Mock成本快照；必须保留原币与明确USD折算，按确认时间归期。最终结算、补收退款、调价及真实成本查询/授权仍待核对。 销售工作台增加个人收款与毛利：独立sales_profit授权、已审核净毛利差额优先、无日分配返回null；预估期间事件账本和严格asOf成本链仍是FOP对接前置条件。 全局P0：逐图许可和数据范围独立；普通员工本人，经理部门及下级，所有统计/排名/合计/搜索/趋势/明细先过滤再计算。组织整体汇总另行授权，只返聚合；客户当前分配不重写历史业绩。 五类履约待办按独立Shopify／供应商／库存／配货审核／出库事实统计，旧队列键保持兼容，新增采购卡片与fulfillmentProgress必填模型。 2026-10-26基线：九类待办查询、供应商旺旺只读催办、销售/配货委托审核；当前页最多100笔审核。前端分页20/50/100、默认50；配货默认已齐套待审核。汇率展示以USD为基准保留四位小数，API fxRateToUsd仍为原币折USD的完整精度。
+字段级源码快照，仅记录已实现HTTP路由，不将计划FOP上游写为paths。响应裸JSON，无{code,data,message}包装。required=序列化必有；type:null=显式空值；可省略字段不在required中。参数跨字段依赖及已知口径差距见操作描述和配套审计。示例为脱敏契约样例，不是生产数据。 FOP为金蝶云苍穹上的HyperZone自研应用，源码只读核实；本工程方案2收款聚合和Mock已实现，真实生产网络适配器仍未配置。订单与收款各自授权，回款采用实际结算分录，统一UTC+8。 物流运费使用独立freight scope及allowedFreightIds，已实现Mock成本快照；必须保留原币与明确USD折算，按确认时间归期。最终结算、补收退款、调价及真实成本查询/授权仍待核对。 销售工作台增加个人收款与毛利：独立sales_profit授权、已审核净毛利差额优先、无日分配返回null；预估期间事件账本和严格asOf成本链仍是FOP对接前置条件。 全局P0：逐图许可和数据范围独立；普通员工本人，经理部门及下级，所有统计/排名/合计/搜索/趋势/明细先过滤再计算。组织整体汇总另行授权，只返聚合；客户当前分配不重写历史业绩。 五类履约待办按独立Shopify／供应商／库存／配货审核／出库事实统计，旧队列键保持兼容，新增采购卡片与fulfillmentProgress必填模型。 2026-10-26基线：九类待办查询、供应商旺旺只读催办、销售/配货委托审核；当前页最多100笔审核。前端分页20/50/100、默认50；配货默认已齐套待审核。汇率展示以USD为基准保留四位小数，API fxRateToUsd仍为原币折USD的完整精度。 2026-10-27定稿：待履约要求客户已支付、履约已审核及Shopify跟踪号上传/履约标记尚未完成；看板与对应清单按授权订单ID同口径去重，采购/配货各取两清单合计。新增fulfillmentProgress.allocationCreated（boolean/null），只有true进入配货/仓库；旧上游缺失归一null。九队列ownerId及业务员姓名search、salespeople选项、配货状态/配货单状态独立排序、两种Excel导出同范围。
 
 - `BearerAuth`：Authorization: Bearer <JWT>；角色每次查当前数据库。；type=http，in=Authorization，name=bearer。
 
@@ -1317,15 +1366,18 @@ Accept: application/json
 `GET /api/autoflow/integrations/fop/fulfillment-orders` · operationId: `getFulfillmentOrders`
 
 
-只读履约待办查询。queue角色：unpaid/review/exceptions=sales；dispatch=dispatch；procurement/procurement_shipping=procurement；allocation/allocation_review=allocation；shipping=warehouse。所有队列排除取消和退款。unpaid只包含paymentStatus=unpaid的明确未支付订单；其他队列仍要求已付款。review为履约待审核，exceptions沿用paid且未shipped且exception非null；其余均要求履约已审核。
-procurement：supplierShipment=pending/partial，且不同时满足purchaseOrder=ordered及supplierPayment=paid；procurement_shipping：相同发货门槛且ordered+paid。采购两页互斥，部分下单即使已下单部分付清仍在procurement，未知采购事实保留待确认，全部发货退出两页。
-allocation仅stockReadiness=incomplete；allocation_review为ready且allocationReview=pending且outbound!=completed。配货两页互斥，均显示dispatchDocuments逐张发运单状态与配货单状态，不显示客户支付状态。
-shipping两组：ready且outbound!=completed；第一组allocationReview=pending，第二组approved且outbound=pending/partial。第一组可容许出库unknown，不推断可出库。warehouseStage省略/all取并集，pending_review取第一组，pending_outbound取第二组；只允许shipping携带此参数，跨队列/非法/重复参数400。
+只读履约待办查询，按2026-10-27最终规则。queue角色：unpaid/review/exceptions=sales；dispatch=dispatch；procurement/procurement_shipping=procurement；allocation/allocation_review=allocation；shipping=warehouse。所有队列排除取消和退款；unpaid只含明确未支付，其他均要求客户已支付。
+review：reviewStatus=pending。exceptions沿用paid且未shipped且exception非null。
+dispatch：reviewStatus=approved且shopifySync=pending/partial，前提为客户已支付、我方已审核，尚未完成Shopify跟踪号上传及履约标记。未审核订单不计入。不能从本地跟踪号是否为空、发运审核或fulfillment_status单独推断已成功同步。
+procurement：purchaseOrder=not_ordered/partial，或ordered且supplierPayment=unpaid/partial/refunded。未完成采购付款即使供应商已发货仍计入；unknown/cancelled/not_required不按未付推断。procurement_shipping：ordered+paid且supplierShipment=pending/partial。两组互斥，不额外要求履约已审核。
+allocation/allocation_review/shipping均须履约已审核且allocationCreated=true。allocation为incomplete且allocationReview=pending且outbound!=completed；allocation_review为ready且pending且outbound!=completed。两页分列显示发运单状态、配货状态、配货单状态，不显示客户支付状态。
+shipping：ready且outbound!=completed；第一组allocationReview=pending（outbound未知可保留待审核，不推断可出库）；第二组approved且outbound=pending/partial。warehouseStage=all/省略为并集，pending_review/ pending_outbound分别筛选两组。前端筛选名“配货单状态”，最左；业务员及所属部门在右。其他队列携带/非法/重复参数400。
 先按服务端登录身份取FOP租户/订单白名单与本人/管理部门/业务管理员范围交集，再队列/warehouseStage/部门/搜索/精确订单过滤，再paidAtOrder排序、全量totals及分页；同队列按订单ID去重。系统管理员或全部岗位不得扩大业务范围，空白名单返回零；未知进度不得猜测，缺失或非法必需事实503。
 departmentId匹配订单department.id或仅服务端可用的祖先departmentPathIds，无权/无匹配返回空，departments来自授权订单且独立于队列和筛选。默认paidAt升序、同时间id升序，空或无效日期两种方向均最后。total/totals不受分页影响。
-Dashboard仍五卡：procurement/allocation分别按同名queue计数，配货默认首页allocation_review不改变Dashboard allocation卡片范围，shipping按两组并集，与工作台临时筛选独立。队列跨岗位可重叠，不可将卡片相加作公司订单总数。
-前端切换筛选回第1页，搜索/部门/排序/分页/手动或30秒自动刷新保留筛选；恢复可见或联网立即刷新。refreshedAt仅BFF完成时间，不是FOP同步水位。响应private,no-store，业务操作均在FOP。采购显示下单/采购款/供应商发货独立事实；发运显示dispatchDocuments及Shopify同步状态；仓库显示配货单状态及出库状态。 销售页签unpaid在review之前，但无queue页面默认review；显式unpaid才打开待支付。待支付paidAt=null显示—，不以createdAt替代。金额为订单应付金额，不进入回款或原五张已付待办；付款后刷新退出unpaid并按审核/履约进度进入其他队列。生产unpaid应取hzkj_orderstatus=1，不可由支付查询失败或未知取反推断。 支持sortBy=paidAt/dispatchDocumentStatus/allocationDocumentStatus/outboundStatus和sortOrder=asc/desc。先权限和完整条件过滤再排序后分页；旧paidAtOrder保留。sortBy省略默认paidAt；sortOrder显式值优先，省略时paidAt使用paidAtOrder（默认asc），状态默认asc。发运单排序为[]确认未生成→draft→submitted→approved，多单取最早阶段，null/缺失或任一unknown整单置后；配货排序为未齐套→齐套未审→已审；出库排序为待配货审核→待出库→部分出库，已完成仍不入队列。未知在两个方向均最后；同状态固定按paidAt升序/id升序，缺日期最后，不受paidAtOrder影响。三个sortBy来自归一字段/dispatchDocuments而非旧粗粒度字段。仅dispatch/allocation/allocation_review允许dispatchDocumentStatus；仅allocation/allocation_review/shipping允许allocationDocumentStatus；仅shipping允许outboundStatus。非法/重复/与队列不匹配的排序参数400。
-页面交互：全部待办清单每页选项20/50/100，默认显式发送pageSize=50；按订单平铺、仅外层纵向滚动。切换条数回第1页，保留部门/搜索/排序/出库阶段。配货无queue页面默认allocation_review，明确queue=allocation仍查待配货；仓库筛选从左到右为warehouseStage、搜索/查询、订单数、departmentId。审核写入使用独立preview/approvals接口及approvalActions，不改变本GET只读属性。
+Dashboard仍五卡：procurement卡片及tasks按procurement∪procurement_shipping去重合计（采购未完成付款＋已采购未发货）；allocation卡片及tasks按allocation∪allocation_review去重合计（未齐套＋已齐套未审核）；两者任务时间取对应并集最早收款日期。供应商未全部发货时采购付款只跨页签；采购已付且全部发货退出采购合计。配货齐套只跨页签，配货审核完成退出配货合计。配货默认首页仍allocation_review，卡片显式链接allocation不变，shipping按两组并集，与工作台临时筛选独立。队列跨岗位可重叠，不可将卡片相加作公司订单总数。
+前端切换筛选回第1页，搜索/部门/排序/分页/手动或30秒自动刷新保留筛选；恢复可见或联网立即刷新。refreshedAt仅BFF完成时间，不是FOP同步水位。响应private,no-store，业务操作均在FOP。采购显示下单/采购款/供应商发货独立事实；发运显示dispatchDocuments及Shopify同步状态；仓库仅显示配货单状态，移除出库状态列及对应表头排序入口，配货单状态筛选保留；outbound仍用于队列判断，outboundStatus查询仅兼容旧链接。 销售页签unpaid在review之前，但无queue页面默认review；显式unpaid才打开待支付。待支付paidAt=null显示—，不以createdAt替代。金额为订单应付金额，不进入回款或原五张已付待办；付款后刷新退出unpaid并按审核/履约进度进入其他队列。生产unpaid应取hzkj_orderstatus=1，不可由支付查询失败或未知取反推断。 支持sortBy=paidAt/dispatchDocumentStatus/stockReadiness/allocationReviewStatus/allocationDocumentStatus/outboundStatus和sortOrder=asc/desc。先权限和完整条件过滤再排序后分页；旧paidAtOrder保留。sortBy省略默认paidAt；sortOrder显式值优先，省略时paidAt使用paidAtOrder（默认asc），状态默认asc。发运单排序为[]确认未生成→draft→submitted→approved，多单取最早阶段，null/缺失或任一unknown整单置后；配货排序为未齐套→齐套未审→已审；出库排序为待配货审核→待出库→部分出库，已完成仍不入队列。未知在两个方向均最后；同状态固定按paidAt升序/id升序，缺日期最后，不受paidAtOrder影响。状态sortBy来自归一字段/dispatchDocuments而非旧粗粒度字段。仅dispatch/allocation/allocation_review允许dispatchDocumentStatus；仅allocation/allocation_review允许stockReadiness（未齐套→已齐套）和allocationReviewStatus（未审核→已审核）独立排序；allocationDocumentStatus保留仓库及旧链接兼容，仅allocation/allocation_review/shipping允许；仅shipping允许outboundStatus。非法/重复/与队列不匹配的排序参数400。
+页面交互：全部待办清单每页选项20/50/100，默认显式发送pageSize=50；按订单平铺、仅外层纵向滚动。切换条数回第1页，保留部门/业务员/搜索/排序/配货单状态。配货无queue页面默认allocation_review，明确queue=allocation仍查未配货；仓库筛选从左到右为warehouseStage、搜索/查询、订单数、ownerId、departmentId。审核写入使用独立preview/approvals接口及approvalActions，不改变本GET只读属性。
+ownerId为订单业务员筛选，精确匹配owner.id，与departmentId取交集；不能扩大登录账号权限。salespeople仅由授权订单及所选部门生成，独立于队列/搜索/分页/ownerId，按姓名和ID排序。切换部门清空业务员；待办页签/岗位切换保留选择。两种导出复用此条件并在输出前复核。
 
 
 实现状态：implemented
@@ -1347,11 +1399,12 @@ Accept: application/json
 | --- | --- | --- | --- | --- | --- |
 | `queue` | query | string | 是 | 必传工作台队列。前端默认首页：sales=review、dispatch=dispatch、procurement=procurement、allocation=allocation_review、warehouse=shipping；页面显式queue优先。unpaid在销售页签第一但不是默认页；procurement_shipping为已采购待发货。此GET不能省略queue。 | enum=["unpaid", "review", "dispatch", "procurement", "procurement_shipping", "allocation", "allocation_review", "shipping", "exceptions"] |
 | `workbenchRole` | query | WorkbenchRole | 否 | 可选，提供时必须匹配queue所需角色，否则400。 | enum=["sales", "procurement", "allocation", "dispatch", "warehouse"] |
-| `search` | query | string | 否 | trim/忽略大小写，匹配orderNumber/shopifyOrderNumber/customerName/storeName/items.sku。 | maxLength=200 |
+| `search` | query | string | 否 | trim/忽略大小写，匹配orderNumber/shopifyOrderNumber/customerName/storeName/items.sku及业务员展示姓名（owner.name优先，空缺取salesperson）。包含匹配支持中文/英文部分姓名；上述字段OR，与ownerId、departmentId及其他条件AND，先授权再筛选、合计、排序与分页。列表及两种Excel导出共用。 | maxLength=200 |
 | `orderNumber` | query | string | 否 | FOP业务订单号精确匹配，不trim。 | maxLength=100 |
 | `departmentId` | query | string | 否 | 所属部门稳定ID，精确匹配department.id或departmentPathIds祖先。省略/空串表示当前账号全部可见部门；非身份或授权参数。 | maxLength=128 |
-| `warehouseStage` | query | string | 否 | 仅shipping：all全部待出库，pending_review已齐套未审核，pending_outbound已审核未出库。省略同all；其他队列携带/非法/重复参数400。先授权并阶段过滤，再合计和分页。 前端仓库筛选栏置于最左侧、搜索框之前；所属部门置于最右侧。 | enum=["all", "pending_review", "pending_outbound"]; default="all" |
-| `sortBy` | query | string | 否 | 主排序字段；状态字段只允许在对应显示列的队列使用，其他组合400。详见接口描述。 | enum=["paidAt", "dispatchDocumentStatus", "allocationDocumentStatus", "outboundStatus"]; default="paidAt" |
+| `ownerId` | query | string | 否 | 订单业务员稳定ID，精确匹配owner.id。省略/空串表示全部可见业务员；先取登录账号权限与FOP白名单，再与部门/业务员条件求交集。未知或无权ID返回空，不回退全部；不是身份或授权参数。 | maxLength=128 |
+| `warehouseStage` | query | string | 否 | 仅shipping。前端筛选名称“配货单状态”，置最左。all两组合计，pending_review=已齐套未审核，pending_outbound=已审核未出库（含部分出库）。两组均需实际有效配货单allocationCreated=true。省略同all；其他队列/非法/重复400。 | enum=["all", "pending_review", "pending_outbound"]; default="all" |
+| `sortBy` | query | string | 否 | 主排序字段；stockReadiness和allocationReviewStatus仅allocation/allocation_review，分别对应齐套和审核事实；allocationDocumentStatus保留仓库及旧链接兼容。非法组合400。详见接口描述。 | enum=["paidAt", "dispatchDocumentStatus", "allocationDocumentStatus", "stockReadiness", "allocationReviewStatus", "outboundStatus"]; default="paidAt" |
 | `sortOrder` | query | string | 否 | 升序asc/降序desc。显式值优先；省略时日期沿用paidAtOrder，状态默认asc。未知始终最后；同状态按收款升序/id升序。非法或重复参数400。 | enum=["asc", "desc"] |
 | `paidAtOrder` | query | string | 否 | 收款日期排序：asc最早在前，desc最新在前。先授权和筛选，再对完整结果排序后分页；同时间id升序，空/非法日期始终最后。非法值或重复参数返回400。 仅sortBy省略或paidAt且sortOrder未指定时决定日期排序方向；状态排序的同值顺序固定收款升序。 | enum=["asc", "desc"]; default="asc" |
 | `page` | query | integer | 否 | — | default=1; minimum=1; maximum=1000000 |
@@ -1384,7 +1437,8 @@ Accept: application/json
   "page": 1,
   "pageSize": 20,
   "departments": [],
-  "refreshedAt": "2026-10-24T05:30:00Z"
+  "refreshedAt": "2026-10-24T05:30:00Z",
+  "salespeople": []
 }
 ```
 
@@ -3587,7 +3641,7 @@ Accept: application/json
 `POST /api/autoflow/integrations/fop/fulfillment-orders/export` · operationId: `exportFulfillmentOrders`
 
 
-九类待办清单统一导出所选或全部筛选结果。先校验登录会话、工作台角色，再取FOP身份与订单白名单和本人/部门/全量业务范围交集，复用清单队列/部门/搜索/仓库阶段/排序过滤。selected要求全部ID仍在结果内；filtered不接受分页或ID数组。输出前再次校验会话、绑定、业务范围及FOP授权。只继承该清单查看权限，不依赖审核操作权，也不以图表导出授权替代待办权限。图片仅文本链接，编号和外部文本为字符串，金额数量为数值，UTC+8；金额按币种合计且一单多品只计一次。固定上限10000单/50000商品行，无静默截断，无FOP写操作。生产依赖现有员工订单读取协议完整返回授权数据，无额外上游导出端点。 Re-read authorized orders after workbook generation; reject changed owner/department scope with 403 and changed queue/filter membership with 409. Ordinary business values remain the initial read snapshot, not a database transaction snapshot.
+九类待办清单统一导出所选或全部筛选结果。先校验登录会话、工作台角色，再取FOP身份与订单白名单和本人/部门/全量业务范围交集，复用清单队列/部门/搜索/仓库阶段/排序过滤。selected要求全部ID仍在结果内；filtered不接受分页或ID数组。输出前再次校验会话、绑定、业务范围及FOP授权。只继承该清单查看权限，不依赖审核操作权，也不以图表导出授权替代待办权限。图片仅文本链接，编号和外部文本为字符串，金额数量为数值，UTC+8；金额按币种合计且一单多品只计一次。固定上限10000单/50000商品行，无静默截断，无FOP写操作。生产依赖现有员工订单读取协议完整返回授权数据，无额外上游导出端点。 Re-read authorized orders after workbook generation; reject changed owner/department scope with 403 and changed queue/filter membership with 409. Ordinary business values remain the initial read snapshot, not a database transaction snapshot. 配货两清单Excel分列导出发运单状态、配货状态（stockReadiness）、配货单状态（allocationReview），与页面一致；支持相同的独立状态排序。待出库清单Excel仅保留配货单状态，不输出出库状态列，金额和数量合计位置相应调整。
 
 
 实现状态：前端与BFF已实现，Demo可下载真实XLSX；生产沿用待接入FOP员工网关，数据量与时效仍需联调。
@@ -3886,7 +3940,8 @@ publicOrder白名单输出，不含tenantId、departmentPathIds或任意provider
     "supplierShipment": "shipped",
     "stockReadiness": "ready",
     "allocationReview": "approved",
-    "outbound": "completed"
+    "outbound": "completed",
+    "allocationCreated": true
   },
   "procurementProgress": {
     "purchaseOrder": "unknown",
@@ -4204,8 +4259,8 @@ publicOrder白名单输出，不含tenantId、departmentPathIds或任意provider
 | --- | --- | --- | --- | --- |
 | `review` | integer | 是 | 待审核：paid且reviewStatus=pending。 排除取消，按订单ID去重；无对应岗位权限为0，不受日期筛选。 | minimum=0 |
 | `dispatch` | integer | 是 | 待履约：paid、approved，shopifySync=pending/partial。 排除取消，按订单ID去重；无对应岗位权限为0，不受日期筛选。 | minimum=0 |
-| `procurement` | integer | 是 | 待采购：paid、履约approved，supplierShipment=pending/partial，且不同时满足全部下单(purchaseOrder=ordered)与采购款付清(supplierPayment=paid)。已采购待发货不计入此卡片；排除取消、按订单ID去重、先数据权限过滤，无岗位权限为0，不受日期筛选。 | minimum=0 |
-| `allocation` | integer | 是 | 待配货：paid、履约approved且stockReadiness=incomplete。已齐套待审核不计入此卡片；排除取消、按订单ID去重、先数据权限过滤，无岗位权限为0，不受日期筛选。 | minimum=0 |
+| `procurement` | integer | 是 | 待采购卡片及tasks：procurement与procurement_shipping去重并集，即采购未完成付款＋已采购未发货。共同要求paid、履约approved、supplierShipment=pending/partial；付款完成仅跨采购页签，全部发货退出。排除取消，先数据权限过滤，无岗位权限为0，不受日期筛选。tasks时间取并集最早paidAt。 | minimum=0 |
+| `allocation` | integer | 是 | 待配货卡片及tasks：allocation与allocation_review去重并集，即未齐套＋已齐套未审核。共同要求paid、履约approved；incomplete，或ready且allocationReview=pending且outbound!=completed。齐套跨页签不减少卡片合计，审核完成退出。排除取消，先数据权限过滤，无岗位权限为0，不受日期筛选。tasks时间取并集最早paidAt。 | minimum=0 |
 | `shipping` | integer | 是 | 待出库（仓库两组）：paid、履约approved、stockReadiness=ready，且outbound!=completed；第一组allocationReview=pending，第二组allocationReview=approved且outbound=pending/partial。第一组出库unknown不影响已知待审核事实；配货审核unknown、第二组出库unknown均不入选。 排除取消，按订单ID去重；无对应岗位权限为0，不受日期筛选。 | minimum=0 |
 
 
@@ -6939,16 +6994,17 @@ provider内部归一候选事实（有效字段口径同FopReceipt）；不直�
 ### FulfillmentProgress
 
 
-五项独立履约事实，必填。真实适配器按订单汇总有效SKU／包裹，unknown不推断为待办。
+六项独立履约事实，按有效来源SKU/包裹归一；allocationCreated须以实际有效配货单查询证明。新字段缺失归一null，不影响其他模块读取但不计配货/仓库。unknown不推断为未付款/未审核/已建单。
 
 
 | 字段路径 | 类型/引用 | 必填 | 说明 | 约束/示例 |
 | --- | --- | --- | --- | --- |
-| `shopifySync` | string | 是 | Shopify 发货同步：待同步／部分同步／已同步／不适用／未知。由平台回执事实归一化，不从配货或出库推导。 | enum=["pending", "partial", "synced", "not_required", "unknown"] |
+| `shopifySync` | string | 是 | Shopify有效包裹跟踪号上传及履约标记：pending待同步/partial部分成功/synced全部上传且履约成功/not_required不适用/unknown未知。须以成功创建或更新跟踪号及平台履约确认回执归一；本地trackingNumber非空、fulfillment_status或发运审核不充分。待履约仅含客户已支付、我方履约订单已审核且pending/partial；未审核订单不计入。 | enum=["pending", "partial", "synced", "not_required", "unknown"] |
 | `supplierShipment` | string | 是 | 供应商发货：未发货／部分发货／全部发货或入库／无需采购／未知。采购已下单不等于已发货。 | enum=["pending", "partial", "shipped", "not_required", "unknown"] |
-| `stockReadiness` | string | 是 | 有效库存与配货需求是否齐套。已齐套不代表配货已审核。 配货工作台映射incomplete为“未齐套，未配货”；ready需有效配货需求全部齐套完成事实，不可仅凭库存充足/可配货available代替配货单completed。 | enum=["incomplete", "ready", "unknown"] |
-| `allocationReview` | string | 是 | 有效配货单是否全部审核放行；撤审重新进入待审核。无相关事实返回unknown，不得猜测。 ready且pending显示“已齐套未审核”；不能用履约订单已审核替代配货单审核。 | enum=["pending", "approved", "unknown"] |
+| `stockReadiness` | string | 是 | 配货状态独立列：incomplete未齐套、ready已齐套、unknown待确认。ready需有效配货需求全部齐套完成事实，不可仅凭库存充足/可配货available代替配货单completed。齐套不代表配货单已审核。 | enum=["incomplete", "ready", "unknown"] |
+| `allocationReview` | string | 是 | 配货单状态独立列：pending未审核、approved已审核、unknown待确认。有效配货单全部审核放行才approved，撤审重新归一。无相关事实unknown，不从stockReadiness或履约审核状态推断。 | enum=["pending", "approved", "unknown"] |
 | `outbound` | string | 是 | 仓库实物出库进度，按有效来源商品需求及审核出库数量归一化，不能用Shopify履约状态替代。 | enum=["pending", "partial", "completed", "unknown"] |
+| `allocationCreated` | boolean / null | 是 | 是否已实际生成有效配货单：true已生成且有效，false确认无有效单，null事实未知。FOP履约审核后异步建单，必须查hzkj_alloc_bill实际来源关联，不能以reviewStatus=approved推断。缺失上游字段兼容归一为null；非布尔非null值503。配货与仓库只计true。 | — |
 
 
 ```json
@@ -6957,7 +7013,8 @@ provider内部归一候选事实（有效字段口径同FopReceipt）；不直�
   "supplierShipment": "pending",
   "stockReadiness": "incomplete",
   "allocationReview": "pending",
-  "outbound": "pending"
+  "outbound": "pending",
+  "allocationCreated": true
 }
 ```
 
@@ -7110,7 +7167,7 @@ provider内部归一候选事实（有效字段口径同FopReceipt）；不直�
 ### FulfillmentOrderPage
 
 
-工作台六类履约待办分页与部门筛选选项。合计覆盖完整筛选集；未知部门或越界页为空，不回退全部数据。
+五个工作台九类待办分页，附部门与业务员筛选选项。先授权再筛选；合计覆盖完整筛选集，未知或无权筛选返回空。
 
 
 | 字段路径 | 类型/引用 | 必填 | 说明 | 约束/示例 |
@@ -7125,6 +7182,9 @@ provider内部归一候选事实（有效字段口径同FopReceipt）；不直�
 | `departments[].id` | string | 是 | 当前账号可见订单的所属部门稳定ID；提交为departmentId。 | — |
 | `departments[].name` | string | 是 | 所属部门展示名称，来自订单归属。 | — |
 | `refreshedAt` | string (date-time) | 是 | 本次BFF成功查询完成时间，带明确时区；用于显示最近刷新。不是FOP事件提交时间或同步水位，不能单独证明上游数据的新鲜度。 | — |
+| `salespeople` | object[] | 是 | 当前授权订单业务员去重选项；受departmentId（含合法后代）限制，独立于queue/search/orderNumber/ownerId/page。按name、id稳定排序；无ID不生成选项，无授权返回[]。 | — |
+| `salespeople[].id` | string | 是 | 授权订单owner.id，业务员稳定ID；作为ownerId提交，不按姓名匹配。 | — |
+| `salespeople[].name` | string | 是 | 订单owner.name，业务员展示名。 | — |
 
 
 ### ProcurementProgress
@@ -7616,22 +7676,24 @@ HTTP201仅说明处理完成。检查每行与每单据status；失败不回滚�
 ### FulfillmentOrderExportRequest
 
 
-工作台Excel导出请求；身份由JWT/cookie确定，禁止userId/tenantId/ownerId/page/pageSize等额外参数。其他筛选、排序及岗位约束与履约清单GET一致。
+工作台Excel导出请求；身份由JWT/cookie确定，禁止userId/tenantId/page/pageSize等额外参数。其他筛选、排序及岗位约束与履约清单GET一致。
+ownerId为订单业务员筛选，精确匹配owner.id，与departmentId取交集；不能扩大登录账号权限。salespeople仅由授权订单及所选部门生成，独立于队列/搜索/分页/ownerId，按姓名和ID排序。切换部门清空业务员；待办页签/岗位切换保留选择。两种导出复用此条件并在输出前复核。
 
 
 | 字段路径 | 类型/引用 | 必填 | 说明 | 约束/示例 |
 | --- | --- | --- | --- | --- |
 | `queue` | string | 是 | 必传工作台队列。前端默认首页：sales=review、dispatch=dispatch、procurement=procurement、allocation=allocation_review、warehouse=shipping；页面显式queue优先。unpaid在销售页签第一但不是默认页；procurement_shipping为已采购待发货。此GET不能省略queue。 | enum=["unpaid", "review", "dispatch", "procurement", "procurement_shipping", "allocation", "allocation_review", "shipping", "exceptions"] |
 | `workbenchRole` | WorkbenchRole | 否 | 可选，提供时必须匹配queue所需角色，否则400。 | — |
-| `search` | string | 否 | trim/忽略大小写，匹配orderNumber/shopifyOrderNumber/customerName/storeName/items.sku。 | maxLength=200 |
+| `search` | string | 否 | trim/忽略大小写，匹配orderNumber/shopifyOrderNumber/customerName/storeName/items.sku及业务员展示姓名（owner.name优先，空缺取salesperson）。包含匹配支持中文/英文部分姓名；上述字段OR，与ownerId、departmentId及其他条件AND，先授权再筛选、合计、排序与分页。列表及两种Excel导出共用。 | maxLength=200 |
 | `orderNumber` | string | 否 | FOP业务订单号精确匹配，不trim。 | maxLength=100 |
 | `departmentId` | string | 否 | 所属部门稳定ID，精确匹配department.id或departmentPathIds祖先。省略/空串表示当前账号全部可见部门；非身份或授权参数。 | maxLength=128 |
-| `warehouseStage` | string | 否 | 仅shipping：all全部待出库，pending_review已齐套未审核，pending_outbound已审核未出库。省略同all；其他队列携带/非法/重复参数400。先授权并阶段过滤，再合计和分页。 前端仓库筛选栏置于最左侧、搜索框之前；所属部门置于最右侧。 | enum=["all", "pending_review", "pending_outbound"]; default="all" |
-| `sortBy` | string | 否 | 主排序字段；状态字段只允许在对应显示列的队列使用，其他组合400。详见接口描述。 | enum=["paidAt", "dispatchDocumentStatus", "allocationDocumentStatus", "outboundStatus"]; default="paidAt" |
+| `warehouseStage` | string | 否 | 仅shipping。前端筛选名称“配货单状态”，置最左。all两组合计，pending_review=已齐套未审核，pending_outbound=已审核未出库（含部分出库）。两组均需实际有效配货单allocationCreated=true。省略同all；其他队列/非法/重复400。 | enum=["all", "pending_review", "pending_outbound"]; default="all" |
+| `sortBy` | string | 否 | 主排序字段；stockReadiness和allocationReviewStatus仅allocation/allocation_review，分别对应齐套和审核事实；allocationDocumentStatus保留仓库及旧链接兼容。非法组合400。详见接口描述。 | enum=["paidAt", "dispatchDocumentStatus", "allocationDocumentStatus", "stockReadiness", "allocationReviewStatus", "outboundStatus"]; default="paidAt" |
 | `sortOrder` | string | 否 | 升序asc/降序desc。显式值优先；省略时日期沿用paidAtOrder，状态默认asc。未知始终最后；同状态按收款升序/id升序。非法或重复参数400。 | enum=["asc", "desc"] |
 | `paidAtOrder` | string | 否 | 收款日期排序：asc最早在前，desc最新在前。先授权和筛选，再对完整结果排序后分页；同时间id升序，空/非法日期始终最后。非法值或重复参数返回400。 仅sortBy省略或paidAt且sortOrder未指定时决定日期排序方向；状态排序的同值顺序固定收款升序。 | enum=["asc", "desc"]; default="asc" |
 | `mode` | string | 是 | selected导出当前页勾选订单（最多100笔）；filtered导出全部已应用筛选结果，跨分页。 | enum=["selected", "filtered"] |
 | `orderIds` | string[] | 否 | selected必填，filtered禁止；只是从授权筛选结果中进一步选择，不能扩大权限。按当前排序导出，不按ID提交顺序。 | minItems=1; maxItems=100; uniqueItems=true |
+| `ownerId` | string | 否 | 订单业务员稳定ID，精确匹配owner.id。省略/空串表示全部可见业务员；先取登录账号权限与FOP白名单，再与部门/业务员条件求交集。未知或无权ID返回空，不回退全部；不是身份或授权参数。 | maxLength=128 |
 
 组合规则 `oneOf`：`见 schema`, `见 schema`。完整约束见 OpenAPI JSON。
 
@@ -8229,7 +8291,20 @@ FOP累计收入已经包含调整，`adjustmentIncome`单列时必须先从基�
 业务方案版本：2026-10-26（UTC+8）；最新为工作台、接口需求及Git交付全量复核，以下保留各轮独立验证记录。环境：macOS、Node.js 22.23.3、npm 10.9.9、本地隔离 PostgreSQL 16。执行结果不等同于生产 FOP 验收。
 
 
-### 所有工作台待办 Excel 批量导出（2026-10-26，最新）
+### 采购/配货合计与配货状态拆列（最新）
+
+后续待出库展示修订：清单及Excel移除出库状态列；保留配货单状态、出库阶段筛选、原队列条件与API旧排序兼容。
+
+后续命名修订：配货工作台审核列标题统一为“配货单状态”，Excel表头/排序说明及需求契约同步；状态值与API字段名、排序逻辑不变。以下截图及下载记录保留当时的旧标题。
+
+- 用户确认：Dashboard待采购=采购未完成付款＋已采购未发货，待配货=未齐套＋已齐套未审核；各自按订单ID去重，tasks数量与最早收款时间使用同一并集。工作台保留独立清单，配货页签改为未配货/已齐套待审核，默认仍为后者。
+- 配货保留发运单状态，独立显示stockReadiness配货状态与allocationReview配货单审核状态，未知显示待确认；新增stockReadiness/allocationReviewStatus排序，旧allocationDocumentStatus链接兼容。XLSX三状态列和排序说明同步；未修改FOP源库或新增业务写操作。
+- 回归先记录旧卡片计数、旧列名/页签、缺导出列的失败，再实现。最终前端54文件318项、后端59套518项通过，FOP HTTP专项119项通过；前后端lint、TypeScript/Vue检查、生产构建及资源打包通过。旧Demo断言“卡片等于单页签”按确认后的并集更新。页面新样本中的unknown不能进入allocation_review，保留原队列防御，改用合法样本核验独立未知展示。
+- 覆盖本人/部门经理/全量业务范围、跨租户/未授权/重复记录排除，采购付款及齐套跨页签不减合计，全部供应商发货/配货审核完成退出卡片；审核状态排序先于分页，未知两方向置后；岗位权限不足为零且无tasks。
+- 实际浏览器确认配货默认已齐套待审核、三列独立展示、审核状态排序可用；本机Demo未配货58笔、已齐套待审核19笔，Dashboard待配货77笔，与两页合计一致；待采购两类合计41笔，浏览器无错误日志。实际下载审核清单XLSX为19单/58件，USD合计2,312.40；三张工作表齐全，状态列为发运单状态/配货状态/配货单审核状态，导出说明为审核状态升序。截图`.runtime/local-demo/allocation-review-states.png`。Demo数量为该次查询快照，不是生产业务数据。
+- 继续通过T31/H33/D30及D34联调FOP真实齐套/审核、采购付款/供应商发货及跨阶段回退。真实适配器尚未因此上线，生产权限和同步水位仍须验证。
+
+### 所有工作台待办 Excel 批量导出（2026-10-26）
 
 - 五工作台九队列统一勾选导出/筛选跨分页导出；新增 POST fulfillment-orders/export。Excel工作簿测试先记录缺实现失败，再实现通过。
 - 全量验证：前端54文件316项、后端单元59套518项通过；完整HTTP 5套187项通过。随后独立审阅发现生成后只复核FOP白名单会遗漏本地归属变化，补充部门经理及生成期归属/队列变化用例；两项先红后修复，最终FOP HTTP专项117项通过。输出前重新读取授权订单并检查最新员工/部门范围、队列和筛选，拒绝旧文件。独立复核所选/筛选两种模式下的员工、部门、队列变化共6个场景均拒绝文件，无剩余发现。
@@ -8559,6 +8634,46 @@ MD/HTML从同一需求源及OpenAPI生成，包含FOP源码字段映射和后续
 - OpenAPI新增两个POST及内部目标/命令/结果模型；401个schema和请求/响应例通过验证，需求MD/HTML按共享HyperZone模板生成，锚点与内嵌Logo自动检查通过。浏览器不支持file协议，本轮未用浏览器打开本地HTML。既有Browserslist/构建大包及文档Python LibreSSL提示保留。
 
 
+### 全部待办按业务员筛选（2026-10-26）
+
+- 五工作台九队列新增ownerId查询；部门与业务员取交集，先授权再筛选/合计/排序/分页。salespeople选项只来自可见订单及所选部门，姓名相同仍按ID区分；没有稳定业务员ID的订单保留在全部查询中，不生成可选员工。
+- 前端全量54文件318项、后端单元59套件518项、FOP隔离HTTP132项通过；新增覆盖九队列、同名员工、本人/经理/全量范围、FOP白名单、跨租户、后代部门、无效/重复参数、两种导出及导出生成期间归属变化。lint与前后端构建/打包通过。
+- 浏览器本地Mock：仓库全部85笔→业务一部25笔→曹可滢（Ruth）5笔；业务员选项随部门缩为5人，刷新保留选择。真实下载XLSX核对5笔订单全部属于Ruth、商品15件、导出说明包含所选业务员。1280宽度下查询栏自动换行，搜索框可用，部门保持最右。截图`.runtime/local-demo/workbench-salesperson-filter.png`。
+- OpenAPI3.1及418个请求/响应/模型示例通过验证；MD/HTML、交付导航、README及agent约定同步更新。生产FOP网关owner.id与员工稳定ID映射、历史移交及数据完整性仍须IT联调，本次未修改FOP源库。
+
+
+### 待办搜索框业务员姓名查询补齐（2026-10-26）
+
+- 排查确认：此前ownerId下拉精确筛选已实现，但search只匹配订单/客户/店铺/SKU，搜索提示未列业务员。本次将业务员展示姓名加入共用search条件，并将“业务员”放在占位提示最前；保留下拉精确筛选。
+- 按owner.name优先、缺失才用salesperson，与页面显示一致；中文/英文部分匹配，trim并忽略英文大小写，先授权再与部门/ownerId等条件求交集。九队列、合计和两种Excel导出共用查询逻辑。
+- 回归测试先复现姓名查询为空，修复后FOP HTTP135项通过（九队列、同名精确筛选、中文/英文、大小写/空格、本人/部门/跨租户与两种导出）；红测另遇一次socket hang up，最终完整HTTP重跑无失败。全量前端318项、后端518项、lint及构建/打包通过。
+- 浏览器本地Mock：待审核13笔，输入Ruth查询为1笔，列表业务员和合计一致；清空恢复13笔。placeholder与悬停说明均包含业务员；截图`.runtime/local-demo/workbench-salesperson-search.png`。接口文档同步更新，生产网关身份映射仍按原联调边界。
+
+
+### Dashboard与待办清单统一规则（2026-10-27）
+
+- 按需求9.13统一前后端队列：待履约覆盖已付未审但Shopify跟踪号未同步；采购区分未付清与已付未发；配货及仓库必须有有效配货单allocationCreated=true。未齐套但配货已审、未建单/未知建单、未知采购事实不误入对应队列。仓库筛选名称统一配货单状态，Excel说明同步。
+- 前端全量318项、后端全量518项及新增导出回归4项通过；FOP HTTP139项通过。HTTP新增本人/部门经理/业务全量范围矩阵，核对卡片、tasks、清单total/totals及分页不影响总数，覆盖重复ID、跨租户/白名单、未知/缺失/非法建单标记。已发货但采购款未付仍在待采购，页面及导出正确显示供应商已发货。
+- 本地浏览器Demo实测：review=13；dispatch=142；procurement=25＋procurement_shipping=11，对应卡片36；allocation=58＋allocation_review=19，对应卡片77；shipping=85，其中配货未审19、已审未出库66。均与卡片一致，实际筛选名称为配货单状态。此为当前账号/状态快照，不是生产固定期望。截图`.runtime/local-demo/dashboard-queue-rules.png`。
+- ESLint、Vue/Vite、Nest构建与打包通过；OpenAPI及生成需求MD/HTML同步校验。已有Browserslist数据与大包提示不影响构建结果。
+- FOP源码只读核对：审核提交后异步生成配货单，失败不回滚审核，不能用已审核替代已建单；跟踪号须读真实同步回执。未修改FOP生产实现；生产网关新字段、状态归一、同步水位与真实数据端到端验收仍按交付清单执行。
+
+
+### 待履约审核前提更正（2026-10-27最新）
+
+- 根据业务补充，待履约必须同时满足客户已支付、我方履约订单已审核、尚未完成Shopify物流跟踪号上传及履约标记。前后端均使用paid＋approved＋shopifySync pending/partial；未审核订单不进入待履约，继续按规则进入待审核。此规则覆盖上一节待履约纳入已付未审的记录，上一节dispatch=142及对应截图只代表修订前快照，不作为当前验收数量。
+- Dashboard、tasks、清单、合计与Excel继续共用同一服务端队列判断，并保留账号数据权限。未修改采购、配货、仓库的最新条件。
+- 先运行新增前端反例，确认旧实现错误纳入未审核订单；修正后前端相关3文件54项、Demo后端44项、FOP HTTP139项全部通过。HTTP覆盖本人/经理/全量账号，已审pending和partial纳入、未审pending排除，并核对五卡与对应清单合计。ESLint、前后端构建及打包通过。
+- 已同步README、agent.md、需求9.6/9.13、FOP映射、IT交接清单、OpenAPI及生成MD/HTML。生产网关仍需核对Shopify成功上传与履约确认回执；本轮未修改FOP源库或执行真实业务操作。
+
+
+### 2026-10-27整版交付与提交前验证
+
+- 本轮将本地累计工作台调整及配套方案统一为2026-10-27版：待履约已支付/已审核前提、五卡与清单统计一致、配货实际建单标记、采购两组合计、业务员查询、配货状态独立列/排序、仓库筛选及导出字段、个人设置品牌配色。
+- 提交前重新执行完整前端/后端测试与FOP HTTP回归：前端54文件318项、后端59套件519项、HTTP139项通过；ESLint、前后端构建及打包通过。OpenAPI 3.1.1保留36个操作、145个模型，版本2026-10-27，生成器验证420个schema/响应示例及HTML目录/内嵌Logo。
+- 交付文档移除当前章节的旧版本号与冲突口径，历史测试快照明确为当时证据；最终规则以需求9.13为准。源码映射、人工核对及生产待办继续保留，未将本地测试结果视为FOP生产联调完成。
+
+
 ## 15. HyperZone FOP 源码字段映射
 
 
@@ -8881,7 +8996,7 @@ FOP收入使用收款 `hzkj_exrate`；没有收款汇率时回退当前 `bd_exra
 
 #### 12.2 配货清单状态展示补充（2026-10-24）
 
-再次核对`ordercenter/allocation/AllocationConstants.java`：pending待配货、available可配货、completed已齐套、error配货异常、voided作废；`AllocationReleaseGateService.requireReleased`同时验证`hzkj_alloc_status=completed`与`billstatus=C`并校验有效分录数量。前端沿用stockReadiness与allocationReview两个归一字段，在待配货清单将未完成齐套统一展示“未齐套，未配货”，完成齐套但未审核在独立“已齐套待审核”页签展示；两页同时显示dispatchDocuments发运单状态，不增加客户支付状态，不把库存可用或履约审核代替配货完成/审核事实。真实适配对多单/多包裹、异常/作废以及缺配货单仍按T31/H33核验，生产接口未在本次接入。
+再次核对`ordercenter/allocation/AllocationConstants.java`：pending待配货、available可配货、completed已齐套、error配货异常、voided作废；`AllocationReleaseGateService.requireReleased`同时验证`hzkj_alloc_status=completed`与`billstatus=C`并校验有效分录数量。前端沿用stockReadiness与allocationReview两个归一字段，“未配货清单”按最新9.13取allocationCreated=true、incomplete且allocationReview=pending，完成齐套但未审核在独立“已齐套待审核”页签展示；2026-10-26修订为独立两列：配货状态按stockReadiness映射未齐套/已齐套，配货单状态按allocationReview映射未审核/已审核，未知分别待确认；两页同时显示dispatchDocuments发运单状态，不增加客户支付状态，不把库存可用或履约审核代替配货完成/审核事实。真实适配对多单/多包裹、异常/作废以及缺配货单仍按T31/H33核验，生产接口未在本次接入。
 
 
 仓库工作台追加两组展示：`completed`且未审核的配货事实也进入仓库待办，但不代表已通过`requireReleased`、不允许在本平台执行出库。齐套已审核且出库未完成为第二组。两组继续按履约订单归一，已全部出库排除；FOP生产放行校验不作任何改动。
@@ -8897,8 +9012,8 @@ FOP收入使用收款 `hzkj_exrate`；没有收款汇率时回退当前 `bd_exra
 
 #### 12.4 清单拆分与查询过滤（2026-10-24）
 
-- `procurement_shipping`以12.1归一的有效全部下单与供应商付款完成事实入选，供应商仍pending/partial；`procurement`为相同发货门槛下的补集。`PurchasePaidOrderSyncService`对取消/退款态保护说明付款不可仅凭一次历史已支付回调永久锁定；需有效采购义务的当前事实。线下单和部分付款继续H34人工确认。
-- `allocation_review`来自有效配货单已齐套且未审核、未全部出库事实；与待配货（incomplete）分开。`AllocationDeliveryNoticeService`审核前校验有效关联发运单已审核，解释了配货页需要并列显示发运审核状态；展示未审核记录不改变FOP审核放行条件。
+- `procurement_shipping`以12.1归一的有效全部下单与供应商付款完成事实入选，供应商仍pending/partial；`procurement`按最新9.13取未全部下单或采购付款未完成，不再以供应商未发货为共同门槛。`PurchasePaidOrderSyncService`对取消/退款态保护说明付款不可仅凭一次历史已支付回调永久锁定；需有效采购义务的当前事实。线下单和部分付款继续H34人工确认。
+- `allocation_review`来自有效配货单已齐套且未审核、未全部出库事实；与未配货（已建单且incomplete+pending）分开。`AllocationDeliveryNoticeService`审核前校验有效关联发运单已审核，解释了配货页需要并列显示发运审核状态；展示未审核记录不改变FOP审核放行条件。
 - 仓库`warehouseStage`是BFF查询条件，不是新增FOP字段。两组仍由stockReadiness/allocationReview/outbound组合归一，多包裹各事实按有效需求核验，不能仅取某一张单最高审核状态。
 - 本次不修改FOP生产实现；发布真实接口后验证付款/齐套/审核/出库跨阶段流转、回退、重复回调、更新时间与数据权限。具体契约见需求9.7和OpenAPI。
 
@@ -8912,7 +9027,7 @@ FOP收入使用收款 `hzkj_exrate`；没有收款汇率时回退当前 `bd_exra
 
 #### 12.6 工作台状态排序适配（2026-10-25）
 
-沿用12.2/12.3已核对的配货事实与发运单A暂存/B已提交/C已审核；新增的是查询顺序，不新增FOP字段。`dispatchDocumentStatus`和`allocationDocumentStatus`是sortBy参数，不是FopOrder旧粗粒度dispatchStatus/allocationStatus字段。多发运单只在服务端排序时取最早有效阶段，任何未知单据置后，前端仍逐单展示；null与[]不可混同。仓库先待配货审核，再待出库，再部分出库，已完成仍按队列规则排除。生产数据库分页必须先处理资源权限和有效单据范围，再归一/排序/分页；同状态按收款时间升序稳定排序。
+沿用12.2/12.3已核对的配货事实与发运单A暂存/B已提交/C已审核；新增的是查询顺序，不新增FOP字段。`dispatchDocumentStatus`和`allocationDocumentStatus`是sortBy参数，不是FopOrder旧粗粒度dispatchStatus/allocationStatus字段。多发运单只在服务端排序时取最早有效阶段，任何未知单据置后，前端仍逐单展示；null与[]不可混同。配货工作台stockReadiness与allocationReviewStatus分别按齐套及审核事实排序，保留allocationDocumentStatus旧查询兼容；仓库先待配货审核，再待出库，再部分出库，已完成仍按队列规则排除。生产数据库分页必须先处理资源权限和有效单据范围，再归一/排序/分页；同状态按收款时间升序稳定排序。
 
 #### 12.7 采购旺旺催办映射（2026-10-25）
 
@@ -8936,21 +9051,32 @@ FOP收入使用收款 `hzkj_exrate`；没有收款汇率时回退当前 `bd_exra
 字段映射：`ApprovalTarget.id/number`←目标单内码/单号，`entity`固定上述实体；`orderId`←真实履约来源内码；`tenantId`←隔离域，`version`←实际最后修改时间/数据版本（需后台确认并参与并发比较）；`status`←billstatus；`eligible/reason`←委托用户操作权与实时审核前置条件。每个配货包裹分别返回，失败时禁止泄露无权其他来源单信息。`ApprovalOutcome`必须区分审核提交状态与后置副作用状态。
 
 
+#### 12.9 卡片/清单最终门槛与配货实际建单（2026-10-27核对）
+
+- `ordercenter/allocation/plugin/OrderAllocationAuditOpPlugin.java:32–44`只在audit后登记事务提交后的异步建单任务；失败不得阻塞或回滚履约审核。因此已审核≠配货单已生成。本平台新增`fulfillmentProgress.allocationCreated`：按实际有效`hzkj_alloc_bill`与源履约单关联判断，缺数据为null。`AllocationBuildService.java:515–525`查询`hzkj_order_id/hzkj_order_no/hzkj_pkg_no/hzkj_alloc_status`证明来源关联；作废`voided`不能当有效单。
+- `AllocationConstants.java:58–67`明确pending/available/completed/error/voided，A/B/C审核状态在80–85行。未齐套待办仍须配货未审；已齐套未审为另一页。订单级标志需归一有效全部包裹；不能只见一张单便把整单齐套/审核判完成。履约清单按订单ID去重，不新增配货单级分页。
+- `logistics/plugin/op/DeliverBillShipmentSyncService.java:135`及后续流程明确以平台创建/更新确认后才回写，且校验组织、来源订单、包裹和数量；`hzkj_upload_no`为相关本地上传标记（字段读取34行、变更检查121行）。生产shopifySync需核对当前有效跟踪号、包裹与成功回执/版本，不能只看fulfillment_status或跟踪号非空。平台待履约仅含客户已付且我方履约已审核订单，且尚未完成Shopify跟踪号上传及履约标记；未审订单只留在待审核队列，不授权前端越过发运审核执行同步。
+- 需求9.13更新12.1/12.4原采购门槛：未完成采购付款即使供应商已发货也保留待采购；已采购待发货才要求供应商pending/partial。未知不等于未支付，未下单/部分下单按有效剩余需求保留。FOP付款枚举、来源分录和退款取消事实仍按12.1核对。
+- IT待办：发布allocationCreated归一；核对审核后异步建单失败/重试、撤审/作废/多包裹和已发未付采购样本；提供跟踪号更新成功的可审计事实。测试T31–T33/H33–H35须包含这些边界。源码存在不代表生产HTTP端点已启用，本次未改dtr5b。
+
+
 ## 16. IT 交付导航与实施顺序
 
 
-更新日期：2026-10-26（UTC+8）。最新修订五类履约待办：待审核、待履约、待采购、待配货、待出库；完整需求第9节（含9.1登录用户数据范围）、源码映射第12节及T31/H33/D30–D31为新增对接入口。最新追加P0全局图表授权及员工数据隔离，完整需求第1.1–1.3节优先约束全部图表。本次在原有全量需求上追加销售个人收款／净毛利月、周、天统计；注册、部门／业务员回款、订单量、客户分析、物流运费、权限和全部历史待办保留。
+更新日期：2026-10-27（UTC+8）。最新修订五类履约待办：待审核、待履约、待采购、待配货、待出库；完整需求第9节（含9.1登录用户数据范围）、源码映射第12节及T31/H33/D30–D31为新增对接入口。最新追加P0全局图表授权及员工数据隔离，完整需求第1.1–1.3节优先约束全部图表。本次在原有全量需求上追加销售个人收款／净毛利月、周、天统计；注册、部门／业务员回款、订单量、客户分析、物流运费、权限和全部历史待办保留。
 
-### 最新版本：2026-10-26
+### 最新版本：2026-10-27
 
+- 本次定稿以需求9.13为准：待履约必须客户已支付、我方已审核且Shopify跟踪号上传及履约标记未完成；采购/配货分别统计两个清单合计，仓库统计两组并集。配货与仓库新增allocationCreated实际建单门槛，false/null不计入。
+- 兼容与联调：原有路由及queue键不变，36项平台操作、145个模型；响应新增allocationCreated，业务员ownerId及姓名search、salespeople选项、状态独立列/排序和两种Excel导出均已落地。真实FOP需核对已支付/已审核来源、异步建单结果、平台同步回执及授权过滤。
 - 本版统一交付Markdown、HTML、OpenAPI；完整新增与兼容约定见需求第0节。前端与BFF已实现的接口和待发布FOP网关须分别验收。
-- 近期交付：九类待办及状态排序、采购旺旺催办、销售/配货单笔与批量审核、每页20/50/100（默认50）及100笔审核、USD/CNY四位显示、仓库筛选顺序、配货默认已齐套待审核。GET分页API省略仍默认20，前端明确发送50。
+- 近期交付：九类待办及状态排序、采购旺旺催办、销售/配货单笔与批量审核、每页20/50/100（默认50）及100笔审核、USD/CNY四位显示、仓库配货单状态筛选顺序、配货默认已齐套待审核。GET分页API省略仍默认20，前端明确发送50。
 - 联调优先顺序：先T31–T33确认队列事实/来源映射，再T34供应商联系人与客户端协议，最后T35审核网关的委托身份、原生插件、版本、持久幂等和日志。人工资料H33–H37，验收D30–D38。
 - 审核批次的100笔是请求数量上限，不能作为耗时或成功率承诺。需实测1/20/50/100笔、多配货单、超时/部分成功及撤权；无成功证据时不自动重试。
 
 ### 2026-10-24 工作台协同补充
 
-- 五个岗位工作台的九类待办共用部门筛选，收款日期默认正序、表头可切换倒序；完整规则见需求第9.2节。
+- 五个岗位工作台的九类待办共用部门及业务员筛选（departmentId/ownerId）；salespeople返回当前权限与所选部门内的订单业务员，ownerId精确匹配订单owner.id，search也支持展示业务员姓名部分匹配（owner.name优先，空缺取salesperson；先授权、去首尾空格/忽略英文大小写）；切换部门清空业务员，切换待办保留选择，列表/合计/两种Excel导出同范围，收款日期默认正序、表头可切换倒序；完整规则见需求第9.2节。
 - `fulfillment-orders` 接受 `departmentId` 和 `paidAtOrder=asc/desc`（默认asc），响应为 `FulfillmentOrderPage`，增加 `departments[].id/name`。Mock 与正式预留接口同结构；部门选项从已授权订单生成。生产查询须先授权和筛选，再按 `paidAt ASC, id ASC` 分页，缺失日期最后；合计覆盖完整筛选集。
 - 协同人员账号使用独立“全部业务数据”范围，无需系统管理员权限；业务员本人、经理部门规则保留。请核对具体协同账号名单及 FOP 权限，不按岗位名称自动批量扩大权限。
 - 已核对销售部门 `hzkj_orders.hzkj_dept`、收款日期 `hzkj_receipt_date`；IT 需确认稳定部门ID、祖先路径和分次收款语义。真实FOP接口仍待接通，本地验证基于Mock和隔离测试。
@@ -8959,7 +9085,7 @@ FOP收入使用收款 `hzkj_exrate`；没有收款汇率时回退当前 `bd_exra
 ### 阅读顺序
 
 1. [完整需求HTML](HYPERZONE_ECHARTS_API_REQUIREMENTS.html) 或 [完整需求Markdown](HYPERZONE_ECHARTS_API_REQUIREMENTS.md)：业务、页面、字段、审计与验收的全量交付。源正文为 [REQUIREMENTS_OVERVIEW.md](REQUIREMENTS_OVERVIEW.md)，个人收款／净毛利在第8节。
-2. [OpenAPI](../openapi/hyperzone-analytics.openapi.json)：35项平台HTTP操作、144个模型，servers为`/api`；不是FOP原生接口目录。包含逐图授权、员工创建／编辑／导入／归档／账号维护、内部FOP授权、客户当前归属和独立组织汇总字段契约。
+2. [OpenAPI](../openapi/hyperzone-analytics.openapi.json)：36项平台HTTP操作、145个模型，servers为`/api`；不是FOP原生接口目录。包含逐图授权、员工创建／编辑／导入／归档／账号维护、内部FOP授权、客户当前归属和独立组织汇总字段契约。
 3. [FOP源码映射](HYPERZONE_FOP_SOURCE_MAPPING.md)：实体／字段／Java行号证据。第9节是物流成本，第10节是月结毛利、预计贡献和当前数据缺口。
 4. [后续待办与人工核对](FOLLOW_UP_CHECKLIST.md)：完整T01–T35、H01–H37、D01–D38；最新权限任务为T27–T30/H29–H32/D23–D29，按模板分配、回填和关闭。
 5. [验证记录](VERIFICATION.md)：仅此处记录实际执行的测试、HTTP、浏览器、生成物检查与限制；文档或Mock存在不能替代验证。详细消费检查见 [前端审计](ECHARTS_FRONTEND_AUDIT.md) 和 [后台契约审计](ECHARTS_BACKEND_CONTRACT_AUDIT.md)。
@@ -9030,18 +9156,18 @@ FOP收入使用收款 `hzkj_exrate`；没有收款汇率时回退当前 `bd_exra
 
 待采购清单已改为采购订单状态＋供应商发货状态。新增`procurementProgress.purchaseOrder/supplierPayment`，展示下单与采购付款独立事实，客户付款不作为供应商付款依据。完整需求9.4、源码映射12.1、OpenAPI `ProcurementProgress`、后续T32/H34/D32为本次入口。未接真实FOP，线下采购下达证据、部分付款/混单/取消重采及退款归一化仍需样本确认；旧provider缺字段显示待确认，不能作为生产接入已完成。
 
-配货清单补充见需求9.5／源码映射12.2：拆分“待配货清单”和“已齐套待审核”两个页签，均显示配货单状态与发运单状态，隐藏客户支付状态。沿用stockReadiness/allocationReview，FOP available可配货不得冒充completed已齐套；真实归一继续T31/H33联调。
+配货清单补充见需求9.5／源码映射12.2：拆分“未配货清单”和“已齐套待审核”两个页签，默认已齐套待审核；均分列显示发运单状态、配货状态（未齐套/已齐套）与配货单状态（未审核/已审核），未知仍待确认，隐藏客户支付状态。沿用stockReadiness/allocationReview，FOP available可配货不得冒充completed已齐套；真实归一继续T31/H33联调。
 
 
 发运清单补充见需求9.6／源码映射12.3／OpenAPI `DispatchDocument`：发运单状态（暂存/已提交/已审核）替换支付状态，多张发运单逐单展示；保留独立Shopify履约状态。BFF与Mock已支持`dispatchDocuments`，真实FOP状态/来源/权限及同步延迟按T33/H35/D33继续验证。
 
-仓库工作台补充（以本条为准）：配货单状态替换支付状态，包含已齐套未审核、已审核未出库两组；后者保留部分出库，已全部出库均排除。待审核组与配货工作台重叠，Dashboard shipping卡片/tasks、清单及合计统一两组范围；沿用stockReadiness/allocationReview/outbound，不新增字段或业务写操作。具体未知状态规则与权限见需求9.5，真实适配继续T31/H33/D30。
+仓库工作台补充（以本条为准）：待出库页面及Excel移除出库状态列，保留配货单状态筛选、配货单状态与收款日期排序；outbound底层过滤及旧outboundStatus查询兼容保留。配货单状态替换支付状态，包含已齐套未审核、已审核未出库两组；后者保留部分出库，已全部出库均排除。待审核组与配货工作台重叠，Dashboard shipping卡片/tasks、清单及合计统一两组范围；沿用stockReadiness/allocationReview/outbound，并按2026-10-27规则增加allocationCreated事实门槛，不新增业务写操作。具体未知状态规则与权限见需求9.5，真实适配继续T31/H33/D30。
 
-工作台拆分最新交付见需求9.7：新增queue=procurement_shipping/allocation_review及warehouseStage三值筛选，权限继承原岗位。待采购仅未全部下单或未付清，已采购待发货包含已付部分发货；待配货仅未齐套。Dashboard待采购/待配货卡片分别对应procurement/allocation，独立于配货默认首页allocation_review，仓库仍两组并集。OpenAPI已更新；重点联调D34，真实采购与发运归一沿用T31–T33/H33–H35。
+工作台拆分最新交付见需求9.7：新增queue=procurement_shipping/allocation_review及warehouseStage三值筛选，权限继承原岗位。待采购清单仅未全部下单或未付清，已采购待发货清单包含已付部分发货；未配货清单须已生成有效配货单、未齐套且未审核。Dashboard待采购卡片及采购tasks统计procurement与procurement_shipping去重合计，待配货卡片及tasks统计allocation与allocation_review去重合计，独立于配货默认首页allocation_review，仓库仍两组并集。采购/配货任务最早收款时间均取对应两类并集，供应商未全部发货时采购付款仅跨页签，配货齐套只跨页签；采购款已付且供应商全部发货后退出采购统计，配货审核完成退出配货统计。OpenAPI已更新；重点联调D34，真实采购与发运归一沿用T31–T33/H33–H35。
 
 销售待支付入口见需求9.8/源码映射12.5：queue=unpaid复用sales岗位，页签第一但默认仍review；FOP需明确状态1，不能把未查到付款凭据直接归为未付。前端/BFF/Mock及OpenAPI已提供，真实状态/支付转换见D35。配货两页字段名统一为发运单状态。
 
-状态排序追加（2026-10-25）：需求9.9/OpenAPI提供sortBy与sortOrder，兼容paidAtOrder；发运单依dispatchDocuments最早阶段归一，含未知则置后。配货/出库按实际展示阶段排序，状态同值收款日期升序。已落地BFF全量排序后分页；真实FOP数据库分页需同等规则，联调D36。
+状态排序追加（2026-10-25）：需求9.9/OpenAPI提供sortBy与sortOrder，兼容paidAtOrder；发运单依dispatchDocuments最早阶段归一，含未知则置后。配货新增stockReadiness及allocationReviewStatus独立排序，allocationDocumentStatus保留仓库和旧链接兼容；旧出库状态排序仅保留API兼容，不再提供页面表头，状态同值收款日期升序。已落地BFF全量排序后分页；真实FOP数据库分页需同等规则，联调D36。
 
 采购旺旺催办追加（2026-10-25）：需求9.10/源码映射12.7及OpenAPI新增两条GET接口（查询联系人、校验后取唤醒地址）。BFF/前端/Mock已实现，真实FOP适配仍需T34；采购资源独立授权、多供应商关联及桌面旺旺实机验证见H36/D37。Mock只显示演示联系结果，不唤醒虚构账号，不自动发送消息。
 
@@ -9050,6 +9176,9 @@ FOP收入使用收款 `hzkj_exrate`；没有收款汇率时回退当前 `bd_exra
 ### 待办清单批量 Excel 导出（2026-10-26）
 
 新增需求9.12：五工作台全部九队列支持所选（当前页最多100笔）与全部筛选结果（跨分页）导出。平台POST `/api/autoflow/integrations/fop/fulfillment-orders/export` 返回真实XLSX，含订单清单、商品明细和导出说明；查看权限交集、会话复核、状态变化409、超限413已落地。单次10,000单/50,000商品行；按币种合计且订单金额不重复。无需新增FOP上游写接口，继续由员工网关完整返回授权订单。生产跨员工/部门、下载过程中撤权、多币种、一单多品、上限并发及Excel/WPS验收见T36/H38/D39。接口清单现为36个操作、145个模型。
+
+
+2026-10-27待办最终口径见需求9.13：Dashboard与五工作台九清单共用同一服务端队列判断；新增实际配货单存在事实allocationCreated（true/false/null），未生成或未知不进入配货/仓库。待履约仅含客户已付、我方已审核，且尚未完成Shopify跟踪号上传及履约标记；采购未付款与已采购未发货分别统计。仓库筛选名称为配货单状态。生产网关须补字段、同步回执与多包裹归一，未改FOP生产源码。
 
 
 ## 17. 规范来源与文档再生成

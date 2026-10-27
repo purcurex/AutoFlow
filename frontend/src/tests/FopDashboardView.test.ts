@@ -86,6 +86,8 @@ describe('FOP Dashboard interactions', () => {
     await flushPromises()
     expect(wrapper.text()).toContain('待履约')
     expect(wrapper.text()).not.toContain('待打单')
+    expect(wrapper.text()).toContain('采购未完成付款 / 已采购未发货')
+    expect(wrapper.text()).not.toContain('采购下单 / 采购付款待完成')
     expect(wrapper.text()).not.toContain('MOCK')
     expect(wrapper.findAll('.card-top span').map(node => node.text())).toEqual(['待审核', '待履约', '待采购', '待配货', '待出库'])
     const links = wrapper.findAllComponents(RouterLinkStub)

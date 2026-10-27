@@ -63,7 +63,7 @@ describe('role workbench content', () => {
     expect(wrapper.find('.workbench-queues a').classes()).toContain('active')
     expect(wrapper.find('thead').text()).toContain('供应商发货状态')
     expect(wrapper.find('thead').text()).not.toContain('配货单状态')
-    expect(wrapper.findAll('tbody tr')).toHaveLength(6)
+    expect(wrapper.findAll('tbody tr')).toHaveLength(5)
     await router.push('/workbench/procurement?queue=shipping')
     await flushPromises()
     expect(wrapper.find('[role=alert]').text()).toContain('不属于当前工作台')
@@ -80,7 +80,7 @@ describe('role workbench content', () => {
       expect(wrapper.find('h2').text()).toContain('已齐套待审核')
       expect(wrapper.find('.workbench-queues a.active').text()).toBe('已齐套待审核')
     }
-    expect(wrapper.findAll('.workbench-queues a').slice(0, 2).map(a => a.text())).toEqual([role === 'allocation' ? '待配货清单' : '待采购清单', label])
+    expect(wrapper.findAll('.workbench-queues a').slice(0, 2).map(a => a.text())).toEqual([role === 'allocation' ? '未配货清单' : '待采购清单', label])
     await wrapper.findAll('.workbench-queues a').find(a => a.text() === label)!.trigger('click')
     await flushPromises()
     expect(router.currentRoute.value.query).toEqual({ queue, departmentId: 'd1' })
@@ -97,14 +97,16 @@ describe('role workbench content', () => {
     wrapper.unmount()
   })
 
-  it('retains the department when moving between workbenches and queues, but resets the page', async () => {
-    const { wrapper, router } = await setup('/workbench/sales?queue=review&departmentId=d1&page=2&search=old')
+  it('retains department and salesperson between todo queues and workbenches, but resets the page', async () => {
+    const { wrapper, router } = await setup('/workbench/sales?queue=review&departmentId=d1&ownerId=employee-1&page=2&search=old')
     const exceptions = wrapper.findAll('.workbench-queues a').find(a => a.text().includes('异常订单'))!
     await exceptions.trigger('click'); await flushPromises()
-    expect(router.currentRoute.value.query).toEqual({ queue: 'exceptions', departmentId: 'd1' })
+    expect(router.currentRoute.value.query).toEqual({ queue: 'exceptions', departmentId: 'd1', ownerId: 'employee-1' })
     await wrapper.findAll('.role-tabs a').find(a => a.text().includes('采购'))!.trigger('click'); await flushPromises()
     expect(router.currentRoute.value.params.role).toBe('procurement')
-    expect(router.currentRoute.value.query).toEqual({ departmentId: 'd1' })
+    expect(router.currentRoute.value.query).toEqual({ departmentId: 'd1', ownerId: 'employee-1' })
+    await wrapper.findAll('.workbench-queues a').find(a => a.text().includes('订单分析'))!.trigger('click'); await flushPromises()
+    expect(router.currentRoute.value.query.ownerId).toBeUndefined()
     wrapper.unmount()
   })
 })

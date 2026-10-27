@@ -53,8 +53,9 @@ const descriptions = computed(() => ({
   warehouse: text('查看仓库待出库清单，核对商品、仓库与物流信息。', 'Review warehouse dispatch queues and check product, warehouse and tracking details.'),
 }))
 const departmentQuery = computed(() => typeof route.query.departmentId === 'string' && route.query.departmentId ? { departmentId: route.query.departmentId } : {})
-function roleLink(value: WorkbenchRole) { return { name: 'RoleWorkbench', params: { role: value }, query: departmentQuery.value } }
-function queueLink(value: string) { return { name: 'RoleWorkbench', params: { role: role.value }, query: { ...departmentQuery.value, queue: value } } }
+const todoScopeQuery = computed(() => ({ ...departmentQuery.value, ...(typeof route.query.ownerId === 'string' && route.query.ownerId ? { ownerId: route.query.ownerId } : {}) }))
+function roleLink(value: WorkbenchRole) { return { name: 'RoleWorkbench', params: { role: value }, query: todoScopeQuery.value } }
+function queueLink(value: string) { return { name: 'RoleWorkbench', params: { role: role.value }, query: { ...(role.value && workbenchQueues[role.value].some(queue => queue === value) ? todoScopeQuery.value : departmentQuery.value), queue: value } } }
 </script>
 
 <template>

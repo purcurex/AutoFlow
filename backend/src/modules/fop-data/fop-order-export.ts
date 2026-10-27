@@ -5,7 +5,7 @@ import type { ExportFulfillmentOrdersDto } from '../users/dto/workbench.dto'
 import { moneyToCents, summarizeFopOrders } from './fop-order-totals'
 
 export const FULFILLMENT_EXPORT_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-export const exportQueueLabels = { unpaid: '待支付清单', review: '待审核清单', exceptions: '异常订单清单', procurement: '待采购清单', procurement_shipping: '已采购待发货清单', allocation: '待配货清单', allocation_review: '已齐套待审核清单', dispatch: '待履约清单', shipping: '待出库清单' }
+export const exportQueueLabels = { unpaid: '待支付清单', review: '待审核清单', exceptions: '异常订单清单', procurement: '待采购清单', procurement_shipping: '已采购待发货清单', allocation: '未配货清单', allocation_review: '已齐套待审核清单', dispatch: '待履约清单', shipping: '待出库清单' }
 type Column = { header: string; key: string; width: number; number?: boolean; money?: boolean }
 const itemSummary = (items: readonly string[]) => items.slice(0, 5).join('\n') + (items.length > 5 ? `\n共 ${items.length} 行商品，完整内容见商品明细` : '')
 const column = (header: string, key: string, width = 22): Column => ({ header, key, width })
@@ -22,7 +22,7 @@ function dispatchText(order: FopOrder) {
 }
 function allocationText(order: FopOrder) {
   const p = order.fulfillmentProgress
-  if (p.stockReadiness === 'incomplete') return '未齐套，未配货'
+  if (p.stockReadiness === 'incomplete') return '未齐套'
   if (p.stockReadiness === 'ready' && p.allocationReview === 'pending') return '已齐套未审核'
   if (p.stockReadiness === 'ready' && p.allocationReview === 'approved') return '已审核未出库'
   return '待确认'
@@ -34,18 +34,19 @@ function procurementText(order: FopOrder) {
   return `下单：${placement[p?.purchaseOrder ?? 'unknown']}\n采购款：${payment[p?.supplierPayment ?? 'unknown']}`
 }
 function queueColumns(queue: ExportFulfillmentOrdersDto['queue']) {
+  if (queue === 'shipping') return [column('配货单状态', 'primaryStatus', 28)]
   const procurement = queue === 'procurement' || queue === 'procurement_shipping'
   const allocation = queue === 'allocation' || queue === 'allocation_review'
-  const first = procurement ? '采购订单状态' : allocation || queue === 'dispatch' ? '发运单状态' : queue === 'shipping' ? '配货单状态' : '支付状态'
-  const second = procurement ? '供应商发货状态' : allocation ? '配货单状态' : queue === 'dispatch' ? 'Shopify 履约状态' : queue === 'shipping' ? '出库状态' : queue === 'exceptions' ? '异常原因' : '审核状态'
-  return [column(first, 'primaryStatus', 28), column(second, 'secondaryStatus', 28)]
+  const first = procurement ? '采购订单状态' : allocation || queue === 'dispatch' ? '发运单状态' : '支付状态'
+  const second = procurement ? '供应商发货状态' : allocation ? '配货状态' : queue === 'dispatch' ? 'Shopify 履约状态' : queue === 'exceptions' ? '异常原因' : '审核状态'
+  return [column(first, 'primaryStatus', 28), column(second, 'secondaryStatus', 28), ...(allocation ? [column('配货单状态', 'allocationReviewStatus', 22)] : [])]
 }
 function statuses(order: FopOrder, queue: ExportFulfillmentOrdersDto['queue']) {
   const p = order.fulfillmentProgress
-  if (queue === 'procurement' || queue === 'procurement_shipping') return [procurementText(order), p.supplierShipment === 'partial' ? '供应商部分发货' : '供应商未发货']
-  if (queue === 'allocation' || queue === 'allocation_review') return [dispatchText(order), allocationText(order)]
+  if (queue === 'procurement' || queue === 'procurement_shipping') return [procurementText(order), ({ pending: '供应商未发货', partial: '供应商部分发货', shipped: '供应商已发货', not_required: '无需供应商发货', unknown: '待确认' })[p.supplierShipment]]
+  if (queue === 'allocation' || queue === 'allocation_review') return [dispatchText(order), ({ incomplete: '未齐套', ready: '已齐套', unknown: '待确认' })[p.stockReadiness]]
   if (queue === 'dispatch') return [dispatchText(order), p.shopifySync === 'partial' ? '部分同步 · 待完成' : '待同步 Shopify 发货']
-  if (queue === 'shipping') return [allocationText(order), p.allocationReview === 'pending' ? '待配货审核' : p.outbound === 'partial' ? '部分出库 · 待完成' : '配货已完成 · 待出库']
+  if (queue === 'shipping') return [allocationText(order), '']
   return [{ paid: '已支付', unpaid: '未支付', refunded: '已退款' }[order.paymentStatus], queue === 'exceptions' ? order.exception ? { stock: '库存不足', address: '地址待核验', tracking: '物流单号异常' }[order.exception.reason] : '—' : order.reviewStatus === 'approved' ? '已审核' : '待审核']
 }
 function sheet(workbook: ExcelJS.Workbook, name: string, columns: Column[]) {
@@ -90,7 +91,7 @@ export async function buildFulfillmentWorkbook(orders: readonly FopOrder[], quer
     const [primaryStatus, secondaryStatus] = statuses(order, query.queue)
     addRow(list, {
       orderNumber: order.orderNumber, products: itemSummary(order.items.map(item => `${item.name} × ${item.quantity}`)), shopifyOrderNumber: order.shopifyOrderNumber,
-      customerName: order.customerName, paidAt: dateText(order.paidAt), primaryStatus, secondaryStatus, storeName: order.storeName,
+      customerName: order.customerName, paidAt: dateText(order.paidAt), primaryStatus, secondaryStatus, allocationReviewStatus: ({ pending: '未审核', approved: '已审核', unknown: '待确认' })[order.fulfillmentProgress.allocationReview], storeName: order.storeName,
       variants: itemSummary(order.items.map(item => `${item.sku}${item.variant ? ` / ${item.variant}` : ''}`)), quantity: order.items.reduce((sum, item) => sum + item.quantity, 0),
       amount: moneyToCents(order.amount) / 100, currency: order.currency?.trim().toUpperCase() || 'USD', exceptionHours: order.exception?.hours ?? '', warehouse: order.warehouse,
       carrier: order.carrier ?? '—', trackingNumber: order.trackingNumber ?? '—', salesperson: order.owner?.name || order.salesperson, department: order.department?.name || '—', createdAt: dateText(order.createdAt),
@@ -108,8 +109,9 @@ export async function buildFulfillmentWorkbook(orders: readonly FopOrder[], quer
     ['清单', exportQueueLabels[query.queue]], ['导出方式', query.mode === 'selected' ? '导出所选订单' : '当前筛选全部订单（跨分页）'], ['生成时间（UTC+8）', dateText(workbook.created.toISOString())],
     ['数据来源', source === 'mock' ? '演示数据' : 'FOP'], ['搜索条件', query.search?.trim() || '无'], ['指定订单', query.orderNumber || '无'],
     ['所属部门', query.departmentId ? [...new Set(orders.map(o => o.department?.name).filter(Boolean))].join('、') : '全部可见部门'],
-    ['出库阶段', query.queue === 'shipping' ? ({ all: '全部待出库', pending_review: '已齐套未审核', pending_outbound: '已审核未出库' })[query.warehouseStage ?? 'all'] : '不适用'],
-    ['排序', `${({ paidAt: '收款日期', dispatchDocumentStatus: '发运单状态', allocationDocumentStatus: '配货单状态', outboundStatus: '出库状态' })[query.sortBy ?? 'paidAt']} · ${(query.sortOrder ?? (query.sortBy && query.sortBy !== 'paidAt' ? 'asc' : query.paidAtOrder) ?? 'asc') === 'asc' ? '升序' : '降序'}`],
+    ['业务员', query.ownerId ? [...new Set(orders.map(o => o.owner?.name || o.salesperson))].join('、') : '全部业务员'],
+    ['配货单状态', query.queue === 'shipping' ? ({ all: '全部待出库', pending_review: '已齐套未审核', pending_outbound: '已审核未出库' })[query.warehouseStage ?? 'all'] : '不适用'],
+    ['排序', `${({ paidAt: '收款日期', dispatchDocumentStatus: '发运单状态', allocationDocumentStatus: '配货单状态', stockReadiness: '配货状态', allocationReviewStatus: '配货单状态', outboundStatus: '出库状态' })[query.sortBy ?? 'paidAt']} · ${(query.sortOrder ?? (query.sortBy && query.sortBy !== 'paidAt' ? 'asc' : query.paidAtOrder) ?? 'asc') === 'asc' ? '升序' : '降序'}`],
     ['金额口径', '订单金额按币种分别合计，未换汇；一单多品的订单金额仅计算一次。此表为待办订单金额，不等同于回款业绩。'],
     ['商品信息', '商品明细表每个 SKU 独立一行。图片为原始链接文本，不嵌入外部图片；长商品内容可在编辑栏查看。'],
     ['数据时效', '导出重新查询当前数据，与页面上次刷新后的状态可能不同。'],

@@ -76,6 +76,8 @@ export interface FopOrderItem {
 
 /** Independent, normalized FOP facts; unknown must never be inferred as pending. */
 export interface FulfillmentProgress {
+  /** Effective allocation document exists. Missing/null is unknown, never inferred from order approval. */
+  allocationCreated?: boolean | null
   shopifySync: 'pending' | 'partial' | 'synced' | 'not_required' | 'unknown'
   supplierShipment: 'pending' | 'partial' | 'shipped' | 'not_required' | 'unknown'
   stockReadiness: 'incomplete' | 'ready' | 'unknown'

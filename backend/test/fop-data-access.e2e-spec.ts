@@ -34,7 +34,8 @@ describe('FOP user isolation HTTP API (repository and provider boundaries stubbe
   const dashboard = (id = alice, extra = '') => get(`/autoflow/integrations/fop/dashboard?from=2020-01-01&to=2020-01-31&year=2020${extra}`, id)
   const access = (id = alice) => get('/autoflow/integrations/fop/data-access', id)
   const order = (id: string, extra = {}) => ({
-    fulfillmentProgress: { shopifySync: 'pending', supplierShipment: 'pending', stockReadiness: 'incomplete', allocationReview: 'pending', outbound: 'pending' },
+    procurementProgress: { purchaseOrder: 'ordered', supplierPayment: 'unpaid' },
+    fulfillmentProgress: { allocationCreated: true, shopifySync: 'pending', supplierShipment: 'pending', stockReadiness: 'incomplete', allocationReview: 'pending', outbound: 'pending' },
     owner: { id: 'alice-owner', name: 'Alice' }, tenantId: 'tenant-1', id, orderNumber: id.toUpperCase(), shopifyOrderNumber: `#${id}`, customerName: `Customer ${id}`,
     storeName: `Store ${id}`, items: [{ sku: id, name: id, imageUrl: null, variant: '', quantity: 1 }],
     amount: 10, currency: 'USD', paymentStatus: 'paid', reviewStatus: 'pending', procurementStatus: 'pending',
@@ -255,6 +256,34 @@ describe('FOP user isolation HTTP API (repository and provider boundaries stubbe
       expect(JSON.stringify(sheet.getSheetValues())).not.toContain('PRIVATE')
       await exportOrders({ queue: 'review', mode: 'selected', orderIds: ['private'] }).expect(409)
     })
+    it.each(['filtered', 'selected'])('applies the salesperson filter to %s exports and rejects mismatched selections', async mode => {
+      records = [order('a'), order('b', { owner: { id: 'other-owner', name: 'Other' } })]
+      provider.resolvePermissions = async (subject: any) => ({ subject, allowedOrderIds: ['a', 'b'] })
+      const result = await exportOrders({ queue: 'review', mode, ownerId: 'alice-owner', ...(mode === 'selected' ? { orderIds: ['a'] } : {}) }, bob).expect(200)
+      const sheet = await workbook(result)
+      expect(sheet.getCell('A3').value).toBe('合计 · 1 笔订单')
+      expect(JSON.stringify(sheet.getSheetValues())).not.toContain('Other')
+      await exportOrders({ queue: 'review', mode: 'selected', ownerId: 'alice-owner', orderIds: ['b'] }, bob).expect(409)
+      await exportOrders({ queue: 'review', mode: 'filtered', ownerId: ['alice-owner'] }, bob).expect(400)
+    })
+    it('rechecks the salesperson filter before releasing an administrator export', async () => {
+      records = [order('a')]
+      provider.resolvePermissions = async (subject: any) => ({ subject, allowedOrderIds: ['a'] })
+      let reads = 0
+      provider.listOrders = async () => {
+        if (++reads === 2) records[0].owner = { id: 'other-owner', name: 'Other' }
+        return structuredClone(records)
+      }
+      await exportOrders({ queue: 'review', mode: 'filtered', ownerId: 'alice-owner' }, bob).expect(409)
+    })
+    it.each(['filtered', 'selected'])('applies the salesperson name search to %s exports', async mode => {
+      records = [order('a'), order('b', { owner: { id: 'other-owner', name: 'Other' } })]
+      provider.resolvePermissions = async (subject: any) => ({ subject, allowedOrderIds: ['a', 'b'] })
+      const sheet = await workbook(await exportOrders({ queue: 'review', mode, search: 'aLiCe', ...(mode === 'selected' ? { orderIds: ['a'] } : {}) }, bob).expect(200))
+      expect(sheet.getCell('A3').value).toBe('合计 · 1 笔订单')
+      expect(JSON.stringify(sheet.getSheetValues())).not.toContain('Other')
+      await exportOrders({ queue: 'review', mode: 'selected', search: 'alice', orderIds: ['b'] }, bob).expect(409)
+    })
     it.each(['owner', 'queue'])('withholds the generated workbook when %s changes during export', async change => {
       let reads = 0
       provider.listOrders = async () => {
@@ -267,7 +296,7 @@ describe('FOP user isolation HTTP API (repository and provider boundaries stubbe
       await exportOrders({ queue: 'review', mode: 'selected', orderIds: ['a'] }).expect(change === 'owner' ? 403 : 409)
     })
     it.each(['unpaid', 'review', 'exceptions', 'procurement', 'procurement_shipping', 'allocation', 'allocation_review', 'dispatch', 'shipping'])('exports the %s queue with the same inclusion rules as its list', async queue => {
-      const p = { shopifySync: 'pending', supplierShipment: 'pending', stockReadiness: 'ready', allocationReview: 'pending', outbound: 'pending' }
+      const p = { allocationCreated: true, shopifySync: 'pending', supplierShipment: 'pending', stockReadiness: 'ready', allocationReview: 'pending', outbound: 'pending' }
       records = [order('a', { reviewStatus: queue === 'review' ? 'pending' : 'approved', paymentStatus: queue === 'unpaid' ? 'unpaid' : 'paid',
         procurementProgress: { purchaseOrder: 'ordered', supplierPayment: queue === 'procurement_shipping' ? 'paid' : 'unpaid' },
         fulfillmentProgress: { ...p, stockReadiness: queue === 'allocation' ? 'incomplete' : 'ready' }, exception: { reason: 'stock', hours: 1 } })]
@@ -279,7 +308,7 @@ describe('FOP user isolation HTTP API (repository and provider boundaries stubbe
     })
     it('applies warehouse stage and document-status sorting in exports', async () => {
       accounts.get(alice).businessRole = 'admin'
-      records = ['pending', 'approved'].map((review, i) => order(`s${i}`, { reviewStatus: 'approved', fulfillmentProgress: { shopifySync: 'pending', supplierShipment: 'pending', stockReadiness: 'ready', allocationReview: review, outbound: 'pending' } }))
+      records = ['pending', 'approved'].map((review, i) => order(`s${i}`, { reviewStatus: 'approved', fulfillmentProgress: { allocationCreated: true, shopifySync: 'pending', supplierShipment: 'pending', stockReadiness: 'ready', allocationReview: review, outbound: 'pending' } }))
       provider.resolvePermissions = async (subject: any) => ({ subject, allowedOrderIds: records.map(row => row.id) })
       const sheet = await workbook(await exportOrders({ queue: 'shipping', mode: 'filtered', warehouseStage: 'pending_outbound', sortBy: 'allocationDocumentStatus', sortOrder: 'desc' }).expect(200))
       expect(sheet.getCell('A2').value).toBe('S1')
@@ -844,6 +873,7 @@ describe('FOP user isolation HTTP API (repository and provider boundaries stubbe
 
   it.each(['review', 'dispatch', 'procurement', 'allocation', 'shipping'])('isolates %s counts, tasks, search and totals by the logged-in employee and FOP grant', async queue => {
     const progress = {
+      allocationCreated: true,
       shopifySync: 'pending', supplierShipment: 'partial',
       stockReadiness: queue === 'shipping' ? 'ready' : 'incomplete',
       allocationReview: queue === 'shipping' ? 'approved' : 'pending', outbound: 'pending',
@@ -908,6 +938,64 @@ describe('FOP user isolation HTTP API (repository and provider boundaries stubbe
     expect(summary.tasks).toEqual([])
   })
 
+  it.each(['salesperson', 'department_manager', 'admin'])('keeps every dashboard card equal to its exact todo union for %s', async businessRole => {
+    Object.assign(accounts.get(alice), { businessRole, businessDepartmentId: 'd1', workbenchRoles: ['sales', 'dispatch', 'procurement', 'allocation', 'warehouse'] })
+    const completed = { allocationCreated: true, shopifySync: 'synced', supplierShipment: 'shipped', stockReadiness: 'ready', allocationReview: 'approved', outbound: 'completed' }
+    const row = (id: string, progress = {}, extra = {}) => order(id, { department: { id: 'd1', name: 'Department 1' }, departmentPathIds: ['d1'], reviewStatus: 'approved',
+      procurementProgress: { purchaseOrder: 'ordered', supplierPayment: 'paid' }, fulfillmentProgress: { ...completed, ...progress }, ...extra })
+    const cases = [
+      row('review-and-sync', { allocationCreated: false, shopifySync: 'pending' }, { reviewStatus: 'pending' }),
+      row('approved-sync-pending', { shopifySync: 'pending' }),
+      row('sync-partial', { allocationCreated: true, shopifySync: 'partial' }),
+      row('purchase-unpaid', {}, { procurementProgress: { purchaseOrder: 'ordered', supplierPayment: 'unpaid' } }),
+      row('purchase-paid-pending', { supplierShipment: 'pending' }),
+      row('incomplete', { stockReadiness: 'incomplete', allocationReview: 'pending', outbound: 'pending' }),
+      row('ready', { allocationReview: 'pending', outbound: 'pending' }),
+      row('outbound-pending', { outbound: 'pending' }),
+      row('incomplete-approved', { stockReadiness: 'incomplete', outbound: 'pending' }),
+      row('not-created', { allocationCreated: false, stockReadiness: 'incomplete', allocationReview: 'pending', outbound: 'pending' }),
+      row('not-created-ready', { allocationCreated: false, allocationReview: 'pending', outbound: 'pending' }),
+      row('unknown-created', { allocationCreated: null, stockReadiness: 'incomplete', allocationReview: 'pending', outbound: 'pending' }),
+      row('unknown-purchase', { supplierShipment: 'pending' }, { procurementProgress: { purchaseOrder: 'unknown', supplierPayment: 'unknown' } }),
+      row('unpaid', { allocationCreated: true, shopifySync: 'pending' }, { paymentStatus: 'unpaid', reviewStatus: 'pending' }),
+      row('cancelled', { allocationReview: 'pending', outbound: 'pending', shopifySync: 'pending' }, { cancelled: true }),
+    ]
+    records = cases.flatMap(source => [source,
+      { ...source, id: `${source.id}-member`, owner: { id: 'member', name: 'Member' } },
+      { ...source, id: `${source.id}-outside`, owner: { id: 'outside', name: 'Outside' }, department: { id: 'd2', name: 'Department 2' }, departmentPathIds: ['d2'] }])
+    const allowedIds = records.map(r => r.id)
+    records.push({ ...cases[0], id: 'not-granted' }, { ...cases[0], id: 'foreign', tenantId: 'other-tenant' }, { ...cases[0] })
+    provider.resolvePermissions = async (subject: any) => ({ subject, allowedOrderIds: [...allowedIds, 'foreign'] })
+    const factor = businessRole === 'salesperson' ? 1 : businessRole === 'department_manager' ? 2 : 3
+    const result = (await dashboard().expect(200)).body
+    expect(result.queues).toEqual({ review: factor, dispatch: 2 * factor, procurement: 2 * factor, allocation: 2 * factor, shipping: 2 * factor })
+    for (const [card, queues] of Object.entries({ review: ['review'], dispatch: ['dispatch'], procurement: ['procurement', 'procurement_shipping'], allocation: ['allocation', 'allocation_review'], shipping: ['shipping'] })) {
+      let total = 0
+      for (const queue of queues) {
+        const page = (await list(`queue=${queue}&pageSize=1`).expect(200)).body
+        total += page.total
+        expect(page.totals.orderCount).toBe(page.total)
+      }
+      expect(result.queues[card]).toBe(total)
+      expect(result.tasks.find((task: any) => task.kind === card).count).toBe(total)
+    }
+    const warehouseReview = (await list('queue=shipping&warehouseStage=pending_review').expect(200)).body.total
+    const warehouseApproved = (await list('queue=shipping&warehouseStage=pending_outbound').expect(200)).body.total
+    expect(warehouseReview).toBe(factor)
+    expect(warehouseApproved).toBe(factor)
+  })
+
+  it('does not infer allocation creation from order approval or progress and validates its fact', async () => {
+    accounts.get(alice).workbenchRoles = ['sales', 'allocation', 'warehouse']
+    records = [order('missing', { reviewStatus: 'approved', fulfillmentProgress: { shopifySync: 'pending', supplierShipment: 'pending', stockReadiness: 'ready', allocationReview: 'pending', outbound: 'pending' } })]
+    provider.resolvePermissions = async (subject: any) => ({ subject, allowedOrderIds: ['missing'] })
+    for (const queue of ['allocation', 'allocation_review', 'shipping']) expect((await list(`queue=${queue}`).expect(200)).body.total).toBe(0)
+    records[0].reviewStatus = 'pending'
+    expect((await list('queue=review').expect(200)).body.items[0].fulfillmentProgress.allocationCreated).toBeNull()
+    records[0].fulfillmentProgress.allocationCreated = 'yes'
+    await list('queue=review').expect(503)
+  })
+
   it('prioritizes oldest payment before paging, with stable ties and missing dates last', async () => {
     records = [order('missing', { paidAt: null }), order('invalid', { paidAt: 'bad-date' }),
       order('older', { createdAt: '2020-01-20T00:00:00Z', paidAt: '2020-01-01T09:00:00+08:00' }),
@@ -943,7 +1031,7 @@ describe('FOP user isolation HTTP API (repository and provider boundaries stubbe
   it.each(['review', 'procurement', 'allocation', 'dispatch', 'shipping', 'exceptions'])('filters %s by department before totals and pagination for company collaborators without management rights', async queue => {
     accounts.get(bob).role = UserRole.USER
     const pending = { reviewStatus: queue === 'review' ? 'pending' : 'approved', exception: { reason: 'stock', hours: 1 },
-      ...(queue === 'shipping' ? { fulfillmentProgress: { shopifySync: 'pending', supplierShipment: 'shipped', stockReadiness: 'ready', allocationReview: 'approved', outbound: 'pending' } } : {}) }
+      ...(queue === 'shipping' ? { fulfillmentProgress: { allocationCreated: true, shopifySync: 'pending', supplierShipment: 'shipped', stockReadiness: 'ready', allocationReview: 'approved', outbound: 'pending' } } : {}) }
     records = [order('b', { ...pending, department: { id: 'd2', name: '业务二部' }, salesDepartmentCode: 'sales2', amount: 999 }),
       order('a2', { ...pending, department: { id: 'd1', name: '业务一部' }, salesDepartmentCode: 'sales1', amount: 20 }),
       order('a1', { ...pending, department: { id: 'd1', name: '业务一部' }, salesDepartmentCode: 'sales1', amount: 10, paidAt: '2020-01-01T00:00:00Z' }),
@@ -962,6 +1050,66 @@ describe('FOP user isolation HTTP API (repository and provider boundaries stubbe
     expect(searched.departments).toEqual(all.departments)
     expect((await list(`queue=${queue}&departmentId=secret-dept`, bob).expect(200)).body.total).toBe(0)
     expect((await list(`queue=${queue}&departmentId=unknown`, bob).expect(200)).body.total).toBe(0)
+  })
+
+  it.each(['unpaid', 'review', 'exceptions', 'procurement', 'procurement_shipping', 'allocation', 'allocation_review', 'dispatch', 'shipping'])('filters %s by salesperson before totals and pagination with scoped department options', async queue => {
+    const pending = { reviewStatus: queue === 'review' ? 'pending' : 'approved', paymentStatus: queue === 'unpaid' ? 'unpaid' : 'paid',
+      procurementProgress: { purchaseOrder: 'ordered', supplierPayment: queue === 'procurement_shipping' ? 'paid' : 'unpaid' },
+      fulfillmentProgress: { allocationCreated: true, shopifySync: 'pending', supplierShipment: 'pending', stockReadiness: queue === 'allocation' ? 'incomplete' : 'ready', allocationReview: 'pending', outbound: 'pending' },
+      exception: { reason: 'stock', hours: 1 }, department: { id: 'd1', name: 'Department 1' } }
+    records = [order('a1', { ...pending, amount: 10, paidAt: '2020-01-01T00:00:00Z' }), order('a2', { ...pending, amount: 20 }),
+      order('b', { ...pending, owner: { id: 'bob-owner', name: 'Alice' }, amount: 999 }),
+      order('outside', { ...pending, owner: { id: 'outside-owner', name: 'Outside' }, department: { id: 'd2', name: 'Department 2' } }),
+      order('secret', { ...pending, owner: { id: 'secret-owner', name: 'Secret' } })]
+    provider.resolvePermissions = async (subject: any) => ({ subject, allowedOrderIds: ['a1', 'a2', 'b', 'outside'] })
+    const result = (await list(`queue=${queue}&ownerId=alice-owner&departmentId=d1&pageSize=1`, bob).expect(200)).body
+    expect(result.items.map((row: any) => row.id)).toEqual(['a1'])
+    expect(result.total).toBe(2)
+    expect(result.totals).toEqual({ orderCount: 2, itemQuantity: 2, amountsByCurrency: [{ currency: 'USD', amount: 30 }] })
+    expect(result.salespeople).toEqual([{ id: 'alice-owner', name: 'Alice' }, { id: 'bob-owner', name: 'Alice' }])
+    // Names occur only on owner, not customer/order/SKU: free-text search must
+    // include the displayed salesperson and remain within department scope.
+    const byName = (await list(`queue=${queue}&departmentId=d1&search=%20ALicE%20&pageSize=1`, bob).expect(200)).body
+    expect(byName.items.map((row: any) => row.id)).toEqual(['a1'])
+    expect(byName.total).toBe(3)
+    expect(byName.totals.amountsByCurrency).toEqual([{ currency: 'USD', amount: 1029 }])
+    const precise = (await list(`queue=${queue}&departmentId=d1&search=alice&ownerId=bob-owner`, bob).expect(200)).body
+    expect(precise.items.map((row: any) => row.id)).toEqual(['b'])
+    expect((await list(`queue=${queue}&search=secret`, bob).expect(200)).body.total).toBe(0)
+    const empty = (await list(`queue=${queue}&ownerId=outside-owner&departmentId=d1&search=absent`, bob).expect(200)).body
+    expect(empty.total).toBe(0)
+    expect(empty.salespeople).toEqual(result.salespeople)
+    expect((await list(`queue=${queue}&ownerId=secret-owner`, bob).expect(200)).body.total).toBe(0)
+  })
+
+  it('searches Chinese salesperson names within self and manager scope using the displayed name', async () => {
+    records = [order('mine', { owner: { id: 'alice-owner', name: '陈晨（Alice）' }, department: { id: 'd1', name: 'Department 1' }, departmentPathIds: ['d1'], salesperson: 'Old Name' }),
+      order('member', { owner: { id: 'member-owner', name: '陈晨（Bob）' }, department: { id: 'd1', name: 'Department 1' }, departmentPathIds: ['d1'] }),
+      order('outside', { owner: { id: 'outside-owner', name: '陈晨（Carol）' }, department: { id: 'd2', name: 'Department 2' }, departmentPathIds: ['d2'] }),
+      order('foreign', { tenantId: 'tenant-2', owner: { id: 'foreign-owner', name: '陈晨（Foreign）' } })]
+    provider.resolvePermissions = async (subject: any) => ({ subject, allowedOrderIds: records.map(row => row.id) })
+    const query = `queue=review&search=${encodeURIComponent('陈晨')}`
+    expect((await list(query).expect(200)).body.items.map((row: any) => row.id)).toEqual(['mine'])
+    Object.assign(accounts.get(alice), { businessRole: 'department_manager', businessDepartmentId: 'd1' })
+    expect((await list(query).expect(200)).body.items.map((row: any) => row.id)).toEqual(['member', 'mine'])
+    expect((await list('queue=review&search=Old%20Name').expect(200)).body.total).toBe(0)
+  })
+
+  it('limits salesperson options and filters to employee / manager scope and validates IDs', async () => {
+    records = [order('a', { department: { id: 'd1', name: 'Department 1' }, departmentPathIds: ['d1'] }),
+      order('member', { owner: { id: 'member', name: 'Member' }, department: { id: 'team', name: 'Team' }, departmentPathIds: ['d1', 'team'] }),
+      order('outside', { owner: { id: 'outside', name: 'Outside' }, department: { id: 'd2', name: 'Department 2' }, departmentPathIds: ['d2'] }),
+      order('foreign', { tenantId: 'tenant-2', owner: { id: 'foreign', name: 'Foreign' } })]
+    provider.resolvePermissions = async (subject: any) => ({ subject, allowedOrderIds: records.map(row => row.id) })
+    expect((await list().expect(200)).body.salespeople).toEqual([{ id: 'alice-owner', name: 'Alice' }])
+    expect((await list('queue=review&ownerId=member').expect(200)).body.total).toBe(0)
+    Object.assign(accounts.get(alice), { businessRole: 'department_manager', businessDepartmentId: 'd1' })
+    const manager = (await list('queue=review&departmentId=d1&ownerId=member').expect(200)).body
+    expect(manager.items.map((row: any) => row.id)).toEqual(['member'])
+    expect(manager.salespeople.map((row: any) => row.id)).toEqual(['alice-owner', 'member'])
+    expect((await list('queue=review&ownerId=outside').expect(200)).body.total).toBe(0)
+    await list(`queue=review&ownerId=${'x'.repeat(129)}`).expect(400)
+    await list('queue=review&ownerId=a&ownerId=b').expect(400)
   })
 
   it('sorts dispatch documents across the authorized result before paging with unknowns last', async () => {
@@ -1050,12 +1198,12 @@ describe('FOP user isolation HTTP API (repository and provider boundaries stubbe
       candidate('cancelled', 'ordered', 'paid', { cancelled: true })]
     provider.resolvePermissions = async (subject: any) => ({ subject, allowedOrderIds: records.filter(row => row.id !== 'private').map(row => row.id) })
     const pending = (await list('queue=procurement').expect(200)).body
-    expect(pending.items.map((row: any) => row.id).sort()).toEqual(['part-ordered', 'part-paid', 'refunded', 'unknown', 'unpaid'])
+    expect(pending.items.map((row: any) => row.id).sort()).toEqual(['part-ordered', 'part-paid', 'refunded', 'unpaid'])
     const purchased = (await list('queue=procurement_shipping&pageSize=1').expect(200)).body
     expect(purchased.total).toBe(2)
     expect(purchased.totals.amountsByCurrency).toEqual([{ currency: 'USD', amount: 30 }])
     expect((await list('queue=procurement_shipping&pageSize=1&page=2').expect(200)).body.items).toHaveLength(1)
-    expect((await dashboard().expect(200)).body.queues.procurement).toBe(pending.total)
+    expect((await dashboard().expect(200)).body.queues.procurement).toBe(pending.total + purchased.total)
     records.find(row => row.id === 'unpaid').procurementProgress.supplierPayment = 'paid'
     expect((await list('queue=procurement_shipping').expect(200)).body.total).toBe(3)
     accounts.get(alice).workbenchRoles = ['allocation']
@@ -1068,9 +1216,79 @@ describe('FOP user isolation HTTP API (repository and provider boundaries stubbe
     const ready = (await list('queue=allocation_review').expect(200)).body
     expect(ready.items.map((row: any) => row.id)).toEqual(['ready'])
     expect(ready.items[0].dispatchDocuments[0].status).toBe('submitted')
-    expect((await dashboard().expect(200)).body.queues.allocation).toBe(1)
+    expect((await dashboard().expect(200)).body.queues.allocation).toBe(2)
     accounts.get(alice).workbenchRoles = ['warehouse']
     await list('queue=allocation_review').expect(403)
+  })
+
+  it('combines procurement stages for dashboard counts and task age within the current business scope', async () => {
+    accounts.get(alice).workbenchRoles = ['procurement']
+    accounts.get(alice).businessDepartmentId = 'd1'
+    records = ['alice-owner', 'peer-owner', 'other-owner'].flatMap((ownerId, index) => ['unpaid', 'paid'].map(payment => order(`${index}-${payment}`, {
+      owner: { id: ownerId, name: ownerId }, department: { id: index === 2 ? 'd2' : 'd1', name: index === 2 ? '业务二部' : '业务一部' },
+      reviewStatus: 'approved', procurementProgress: { purchaseOrder: 'ordered', supplierPayment: payment },
+      paidAt: payment === 'paid' ? '2020-01-01T01:15:00Z' : '2020-01-02T03:30:00Z',
+    })))
+    records.push(structuredClone(records[0]), { ...records[1], id: 'foreign', tenantId: 'other-tenant' },
+      { ...records[1], id: 'not-granted' }, { ...records[1], id: 'shipped', fulfillmentProgress: { ...records[1].fulfillmentProgress, supplierShipment: 'shipped' } })
+    provider.resolvePermissions = async (subject: any) => ({ subject, allowedOrderIds: records.filter(row => row.id !== 'not-granted').map(row => row.id) })
+    for (const [role, expected] of [['salesperson', 2], ['department_manager', 4], ['admin', 6]] as const) {
+      accounts.get(alice).businessRole = role
+      const summary = (await dashboard().expect(200)).body
+      expect(summary.queues.procurement).toBe(expected)
+      expect(summary.tasks.find((task: any) => task.kind === 'procurement')).toMatchObject({ count: expected, time: '09:15' })
+      const pending = (await list('queue=procurement').expect(200)).body.total
+      const purchased = (await list('queue=procurement_shipping').expect(200)).body.total
+      expect(summary.queues.procurement).toBe(pending + purchased)
+    }
+    // Payment moves an order between tabs without reducing the combined backlog.
+    accounts.get(alice).businessRole = 'salesperson'
+    records.find(row => row.id === '0-unpaid').procurementProgress.supplierPayment = 'paid'
+    expect((await dashboard().expect(200)).body.queues.procurement).toBe(2)
+    records.find(row => row.id === '0-paid').fulfillmentProgress.supplierShipment = 'shipped'
+    expect((await dashboard().expect(200)).body.queues.procurement).toBe(1)
+    accounts.get(alice).workbenchRoles = ['sales']
+    const restricted = (await dashboard().expect(200)).body
+    expect(restricted.queues.procurement).toBe(0)
+    expect(restricted.tasks.some((task: any) => task.kind === 'procurement')).toBe(false)
+  })
+
+  it('combines allocation stages within data scope and sorts review facts independently', async () => {
+    accounts.get(alice).workbenchRoles = ['allocation']
+    accounts.get(alice).businessDepartmentId = 'd1'
+    records = ['alice-owner', 'peer-owner', 'other-owner'].flatMap((ownerId, index) => ['incomplete', 'ready'].map(stockReadiness => order(`${index}-${stockReadiness}`, {
+      owner: { id: ownerId, name: ownerId }, department: { id: index === 2 ? 'd2' : 'd1', name: '部门' }, reviewStatus: 'approved',
+      paidAt: stockReadiness === 'ready' ? '2020-01-01T01:15:00Z' : '2020-01-02T03:30:00Z',
+      fulfillmentProgress: { ...order('base').fulfillmentProgress, stockReadiness },
+    })))
+    records.push(structuredClone(records[0]), { ...records[1], id: 'private' }, { ...records[1], id: 'foreign', tenantId: 'other-tenant' },
+      { ...records[1], id: 'outbound', fulfillmentProgress: { ...records[1].fulfillmentProgress, outbound: 'completed' } })
+    provider.resolvePermissions = async (subject: any) => ({ subject, allowedOrderIds: records.filter(row => row.id !== 'private').map(row => row.id) })
+    for (const [role, expected] of [['salesperson', 2], ['department_manager', 4], ['admin', 6]] as const) {
+      accounts.get(alice).businessRole = role
+      const summary = (await dashboard().expect(200)).body
+      expect(summary.queues.allocation).toBe(expected)
+      expect(summary.tasks.find((task: any) => task.kind === 'allocation')).toMatchObject({ count: expected, time: '09:15' })
+      expect(summary.queues.allocation).toBe((await list('queue=allocation').expect(200)).body.total + (await list('queue=allocation_review').expect(200)).body.total)
+    }
+    accounts.get(alice).businessRole = 'salesperson'
+    records[0].fulfillmentProgress.stockReadiness = 'ready'
+    expect((await dashboard().expect(200)).body.queues.allocation).toBe(2)
+    records[1].fulfillmentProgress.allocationReview = 'approved'
+    expect((await dashboard().expect(200)).body.queues.allocation).toBe(1)
+    // A reversal to incomplete stock must not overwrite the independent audit fact.
+    records = ['approved', 'pending', 'unknown'].map((allocationReview, index) => order(`sort-${index}`, {
+      reviewStatus: 'approved', paidAt: `2020-01-0${index + 1}T00:00:00Z`,
+      fulfillmentProgress: { ...order('base').fulfillmentProgress, allocationReview },
+    }))
+    expect((await list('queue=allocation&sortBy=allocationReviewStatus&sortOrder=asc&pageSize=1').expect(200)).body.items[0].id).toBe('sort-1')
+    expect((await list('queue=allocation&sortBy=allocationReviewStatus&sortOrder=desc').expect(200)).body.items.map((r: any) => r.id)).toEqual(['sort-1'])
+    expect((await list('queue=allocation&sortBy=stockReadiness').expect(200)).body.items.map((r: any) => r.id)).toEqual(['sort-1'])
+    await list('queue=review&sortBy=allocationReviewStatus').expect(400)
+    accounts.get(alice).workbenchRoles = ['sales']
+    const restricted = (await dashboard().expect(200)).body
+    expect(restricted.queues.allocation).toBe(0)
+    expect(restricted.tasks.some((task: any) => task.kind === 'allocation')).toBe(false)
   })
 
   it('filters warehouse stages before totals and pagination without widening scope', async () => {
@@ -1102,7 +1320,7 @@ describe('FOP user isolation HTTP API (repository and provider boundaries stubbe
     accounts.get(alice).workbenchRoles.push('warehouse')
     const warehouseOrder = (id: string, allocationReview: string, outbound: string, extra = {}) => order(id, {
       reviewStatus: 'approved', department: { id: 'd1', name: '业务一部' },
-      fulfillmentProgress: { shopifySync: 'synced', supplierShipment: 'shipped', stockReadiness: 'ready', allocationReview, outbound }, ...extra,
+      fulfillmentProgress: { allocationCreated: true, shopifySync: 'synced', supplierShipment: 'shipped', stockReadiness: 'ready', allocationReview, outbound }, ...extra,
     })
     records = [warehouseOrder('ready', 'pending', 'pending'),
       warehouseOrder('approved', 'approved', 'pending', { owner: { id: 'bob-owner', name: 'Bob' }, amount: 20 }),

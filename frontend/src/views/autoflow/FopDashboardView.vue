@@ -103,12 +103,12 @@ const latestDepartmentChange = computed(() => selectedDepartment.value ? changes
 const momHint = computed(() => text('差额 = 本月 − 上月；比例 = 差额 ÷ 上月。1 月对比上年 12 月；本月为截至目前数据。', 'Change = this month − prior month; rate = change ÷ prior month. January compares with December; the current month is to date.'))
 
 const reasons = computed(() => ({ stock: text('库存不足，等待补货', 'Insufficient stock · replenishment pending'), address: text('收货地址待核验', 'Delivery address needs verification'), tracking: text('物流单号获取异常', 'Tracking number could not be retrieved') }))
-const taskNames = computed(() => ({ review: text('审核已付款订单', 'Review paid orders'), dispatch: text('同步 Shopify 发货', 'Sync Shopify fulfillment'), procurement: text('跟进采购下单与付款', 'Complete purchase placement and payment'), allocation: text('跟进库存齐套与配货', 'Complete stock allocation'), shipping: text('跟进配货审核与出库', 'Follow up allocation approval and outbound') }))
+const taskNames = computed(() => ({ review: text('审核已付款订单', 'Review paid orders'), dispatch: text('同步 Shopify 发货', 'Sync Shopify fulfillment'), procurement: text('跟进采购付款与供应商发货', 'Follow up purchase payment and supplier shipment'), allocation: text('跟进配货与配货单审核', 'Follow up allocation and approval'), shipping: text('跟进配货审核与出库', 'Follow up allocation approval and outbound') }))
 const cards = computed(() => [
   { id: 'review', label: text('待审核', 'Pending review'), hint: text('已付款 · 待审核', 'Paid · awaiting review'), value: data.value?.queues.review, icon: ClipboardCheck, color: 'review' },
-  { id: 'dispatch', label: text('待履约', 'Pending fulfillment'), hint: text('Shopify 发货待同步', 'Shopify fulfillment sync pending'), value: data.value?.queues.dispatch, icon: Send, color: 'fulfillment' },
-  { id: 'procurement', label: text('待采购', 'Pending procurement'), hint: text('采购下单 / 采购付款待完成', 'Purchase placement / payment pending'), value: data.value?.queues.procurement, icon: ShoppingCart, color: 'procurement' },
-  { id: 'allocation', label: text('待配货', 'Pending allocation'), hint: text('库存未齐套 · 配货未完成', 'Incomplete stock · allocation pending'), value: data.value?.queues.allocation, icon: PackageCheck, color: 'allocation' },
+  { id: 'dispatch', label: text('待履约', 'Pending fulfillment'), hint: text('已付款、已审核 · Shopify 待履约', 'Paid and reviewed · Shopify fulfillment pending'), value: data.value?.queues.dispatch, icon: Send, color: 'fulfillment' },
+  { id: 'procurement', label: text('待采购', 'Pending procurement'), hint: text('采购未完成付款 / 已采购未发货', 'Purchase payment / supplier shipment pending'), value: data.value?.queues.procurement, icon: ShoppingCart, color: 'procurement' },
+  { id: 'allocation', label: text('待配货', 'Pending allocation'), hint: text('配货单未审核 · 未齐套 / 已齐套', 'Incomplete allocation / approval pending'), value: data.value?.queues.allocation, icon: PackageCheck, color: 'allocation' },
   { id: 'shipping', label: text('待出库', 'Pending outbound'), hint: text('齐套待审核 · 已审核待出库', 'Allocation approval / outbound pending'), value: data.value?.queues.shipping, icon: Truck, color: 'shipping' },
 ])
 

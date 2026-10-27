@@ -319,7 +319,7 @@ FOP收入使用收款 `hzkj_exrate`；没有收款汇率时回退当前 `bd_exra
 
 ### 12.2 配货清单状态展示补充（2026-10-24）
 
-再次核对`ordercenter/allocation/AllocationConstants.java`：pending待配货、available可配货、completed已齐套、error配货异常、voided作废；`AllocationReleaseGateService.requireReleased`同时验证`hzkj_alloc_status=completed`与`billstatus=C`并校验有效分录数量。前端沿用stockReadiness与allocationReview两个归一字段，在待配货清单将未完成齐套统一展示“未齐套，未配货”，完成齐套但未审核在独立“已齐套待审核”页签展示；两页同时显示dispatchDocuments发运单状态，不增加客户支付状态，不把库存可用或履约审核代替配货完成/审核事实。真实适配对多单/多包裹、异常/作废以及缺配货单仍按T31/H33核验，生产接口未在本次接入。
+再次核对`ordercenter/allocation/AllocationConstants.java`：pending待配货、available可配货、completed已齐套、error配货异常、voided作废；`AllocationReleaseGateService.requireReleased`同时验证`hzkj_alloc_status=completed`与`billstatus=C`并校验有效分录数量。前端沿用stockReadiness与allocationReview两个归一字段，“未配货清单”按最新9.13取allocationCreated=true、incomplete且allocationReview=pending，完成齐套但未审核在独立“已齐套待审核”页签展示；2026-10-26修订为独立两列：配货状态按stockReadiness映射未齐套/已齐套，配货单状态按allocationReview映射未审核/已审核，未知分别待确认；两页同时显示dispatchDocuments发运单状态，不增加客户支付状态，不把库存可用或履约审核代替配货完成/审核事实。真实适配对多单/多包裹、异常/作废以及缺配货单仍按T31/H33核验，生产接口未在本次接入。
 
 
 仓库工作台追加两组展示：`completed`且未审核的配货事实也进入仓库待办，但不代表已通过`requireReleased`、不允许在本平台执行出库。齐套已审核且出库未完成为第二组。两组继续按履约订单归一，已全部出库排除；FOP生产放行校验不作任何改动。
@@ -335,8 +335,8 @@ FOP收入使用收款 `hzkj_exrate`；没有收款汇率时回退当前 `bd_exra
 
 ### 12.4 清单拆分与查询过滤（2026-10-24）
 
-- `procurement_shipping`以12.1归一的有效全部下单与供应商付款完成事实入选，供应商仍pending/partial；`procurement`为相同发货门槛下的补集。`PurchasePaidOrderSyncService`对取消/退款态保护说明付款不可仅凭一次历史已支付回调永久锁定；需有效采购义务的当前事实。线下单和部分付款继续H34人工确认。
-- `allocation_review`来自有效配货单已齐套且未审核、未全部出库事实；与待配货（incomplete）分开。`AllocationDeliveryNoticeService`审核前校验有效关联发运单已审核，解释了配货页需要并列显示发运审核状态；展示未审核记录不改变FOP审核放行条件。
+- `procurement_shipping`以12.1归一的有效全部下单与供应商付款完成事实入选，供应商仍pending/partial；`procurement`按最新9.13取未全部下单或采购付款未完成，不再以供应商未发货为共同门槛。`PurchasePaidOrderSyncService`对取消/退款态保护说明付款不可仅凭一次历史已支付回调永久锁定；需有效采购义务的当前事实。线下单和部分付款继续H34人工确认。
+- `allocation_review`来自有效配货单已齐套且未审核、未全部出库事实；与未配货（已建单且incomplete+pending）分开。`AllocationDeliveryNoticeService`审核前校验有效关联发运单已审核，解释了配货页需要并列显示发运审核状态；展示未审核记录不改变FOP审核放行条件。
 - 仓库`warehouseStage`是BFF查询条件，不是新增FOP字段。两组仍由stockReadiness/allocationReview/outbound组合归一，多包裹各事实按有效需求核验，不能仅取某一张单最高审核状态。
 - 本次不修改FOP生产实现；发布真实接口后验证付款/齐套/审核/出库跨阶段流转、回退、重复回调、更新时间与数据权限。具体契约见需求9.7和OpenAPI。
 
@@ -350,7 +350,7 @@ FOP收入使用收款 `hzkj_exrate`；没有收款汇率时回退当前 `bd_exra
 
 ### 12.6 工作台状态排序适配（2026-10-25）
 
-沿用12.2/12.3已核对的配货事实与发运单A暂存/B已提交/C已审核；新增的是查询顺序，不新增FOP字段。`dispatchDocumentStatus`和`allocationDocumentStatus`是sortBy参数，不是FopOrder旧粗粒度dispatchStatus/allocationStatus字段。多发运单只在服务端排序时取最早有效阶段，任何未知单据置后，前端仍逐单展示；null与[]不可混同。仓库先待配货审核，再待出库，再部分出库，已完成仍按队列规则排除。生产数据库分页必须先处理资源权限和有效单据范围，再归一/排序/分页；同状态按收款时间升序稳定排序。
+沿用12.2/12.3已核对的配货事实与发运单A暂存/B已提交/C已审核；新增的是查询顺序，不新增FOP字段。`dispatchDocumentStatus`和`allocationDocumentStatus`是sortBy参数，不是FopOrder旧粗粒度dispatchStatus/allocationStatus字段。多发运单只在服务端排序时取最早有效阶段，任何未知单据置后，前端仍逐单展示；null与[]不可混同。配货工作台stockReadiness与allocationReviewStatus分别按齐套及审核事实排序，保留allocationDocumentStatus旧查询兼容；仓库先待配货审核，再待出库，再部分出库，已完成仍按队列规则排除。生产数据库分页必须先处理资源权限和有效单据范围，再归一/排序/分页；同状态按收款时间升序稳定排序。
 
 ### 12.7 采购旺旺催办映射（2026-10-25）
 
@@ -372,3 +372,12 @@ FOP收入使用收款 `hzkj_exrate`；没有收款汇率时回退当前 `bd_exra
 - `plugin/webapi/OrderController.java`已有订单业务API，但本轮未找到满足“员工委托权限+版本+逐单结果+持久幂等”的已部署审核端点。新增HTTP合同见9.11.1，由IT确认发布地址和鉴权。禁止把BFF路径直接充当苍穹原生API，禁止替代原生审核插件直接更新`billstatus`。
 
 字段映射：`ApprovalTarget.id/number`←目标单内码/单号，`entity`固定上述实体；`orderId`←真实履约来源内码；`tenantId`←隔离域，`version`←实际最后修改时间/数据版本（需后台确认并参与并发比较）；`status`←billstatus；`eligible/reason`←委托用户操作权与实时审核前置条件。每个配货包裹分别返回，失败时禁止泄露无权其他来源单信息。`ApprovalOutcome`必须区分审核提交状态与后置副作用状态。
+
+
+### 12.9 卡片/清单最终门槛与配货实际建单（2026-10-27核对）
+
+- `ordercenter/allocation/plugin/OrderAllocationAuditOpPlugin.java:32–44`只在audit后登记事务提交后的异步建单任务；失败不得阻塞或回滚履约审核。因此已审核≠配货单已生成。本平台新增`fulfillmentProgress.allocationCreated`：按实际有效`hzkj_alloc_bill`与源履约单关联判断，缺数据为null。`AllocationBuildService.java:515–525`查询`hzkj_order_id/hzkj_order_no/hzkj_pkg_no/hzkj_alloc_status`证明来源关联；作废`voided`不能当有效单。
+- `AllocationConstants.java:58–67`明确pending/available/completed/error/voided，A/B/C审核状态在80–85行。未齐套待办仍须配货未审；已齐套未审为另一页。订单级标志需归一有效全部包裹；不能只见一张单便把整单齐套/审核判完成。履约清单按订单ID去重，不新增配货单级分页。
+- `logistics/plugin/op/DeliverBillShipmentSyncService.java:135`及后续流程明确以平台创建/更新确认后才回写，且校验组织、来源订单、包裹和数量；`hzkj_upload_no`为相关本地上传标记（字段读取34行、变更检查121行）。生产shopifySync需核对当前有效跟踪号、包裹与成功回执/版本，不能只看fulfillment_status或跟踪号非空。平台待履约仅含客户已付且我方履约已审核订单，且尚未完成Shopify跟踪号上传及履约标记；未审订单只留在待审核队列，不授权前端越过发运审核执行同步。
+- 需求9.13更新12.1/12.4原采购门槛：未完成采购付款即使供应商已发货也保留待采购；已采购待发货才要求供应商pending/partial。未知不等于未支付，未下单/部分下单按有效剩余需求保留。FOP付款枚举、来源分录和退款取消事实仍按12.1核对。
+- IT待办：发布allocationCreated归一；核对审核后异步建单失败/重试、撤审/作废/多包裹和已发未付采购样本；提供跟踪号更新成功的可审计事实。测试T31–T33/H33–H35须包含这些边界。源码存在不代表生产HTTP端点已启用，本次未改dtr5b。

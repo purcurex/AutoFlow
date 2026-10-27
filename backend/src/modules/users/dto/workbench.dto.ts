@@ -43,7 +43,7 @@ export const FULFILLMENT_QUEUE_ROLES = {
   shipping: 'warehouse',
 } as const
 
-export const FULFILLMENT_SORT_FIELDS = ['paidAt', 'dispatchDocumentStatus', 'allocationDocumentStatus', 'outboundStatus'] as const
+export const FULFILLMENT_SORT_FIELDS = ['paidAt', 'dispatchDocumentStatus', 'allocationDocumentStatus', 'stockReadiness', 'allocationReviewStatus', 'outboundStatus'] as const
 export type FulfillmentSortBy = typeof FULFILLMENT_SORT_FIELDS[number]
 
 export class FulfillmentOrderFiltersDto {
@@ -84,6 +84,11 @@ export class FulfillmentOrderFiltersDto {
   @IsString()
   @MaxLength(128)
   departmentId?: string
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(128)
+  ownerId?: string
 }
 
 export class ListFulfillmentOrdersDto extends FulfillmentOrderFiltersDto {

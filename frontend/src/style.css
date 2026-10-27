@@ -7,6 +7,9 @@
     --color-primary: #f26a21;
     --color-primary-strong: #d94d0b;
     --color-accent: #079b83;
+    --color-account-action: #b8521d;
+    --color-account-action-hover: #a94f20;
+    --color-account-action-text: #fff7ed;
     --color-selection-surface: #fff7ed;
     --color-selection-text: #c2410c;
     --color-selection-border: #f97316;
@@ -36,6 +39,8 @@
     --color-primary: #c2a58e;
     --color-primary-strong: #d0b9a5;
     --color-accent: #8eb9ad;
+    --color-account-action: #ac5c2e;
+    --color-account-action-hover: #a9552a;
     --color-selection-surface: #29272a;
     --color-selection-text: #cbb5a3;
     --color-selection-border: #83725e;
@@ -89,6 +94,11 @@
   .dark .btn-primary:hover { background: #855c43; border-color: #a17b62; }
   .btn-secondary { @apply border-slate-300 bg-white text-slate-700 hover:border-slate-400 hover:bg-slate-50 dark:border-slate-700 dark:bg-[#171b21] dark:text-slate-200 dark:hover:border-slate-600 dark:hover:bg-[#20252d]; }
   .btn-danger { @apply border-red-600 bg-red-600 text-white hover:bg-red-700; }
+  .brand-avatar, .btn-account { background: var(--color-account-action); color: var(--color-account-action-text); }
+  .btn-account { border-color: var(--color-account-action); }
+  .btn-account:hover:not(:disabled), button.brand-avatar:hover:not(:disabled) { background: var(--color-account-action-hover); border-color: var(--color-account-action-hover); }
+  .btn-account:active:not(:disabled) { transform: translateY(1px); }
+  .btn-account:focus-visible, button.brand-avatar:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 3px; }
   .btn-ghost { @apply border-transparent bg-transparent text-slate-600 hover:bg-slate-100 hover:text-slate-950 dark:text-slate-300 dark:hover:bg-white/5 dark:hover:text-white; }
   .icon-btn { @apply inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-950 dark:border-slate-700 dark:bg-[#15181d] dark:text-slate-300 dark:hover:bg-[#20242b] dark:hover:text-white; }
 
@@ -128,7 +138,6 @@
   .peer:focus-visible ~ .selection-control { outline: 2px solid var(--color-text-secondary); outline-offset: -3px; }
   .selection-marker { background: #f97316; }
   .dark .selection-marker { background: #b3947b; }
-  .dark .brand-avatar { background: #655047; color: #e4cfc1; }
   .dark .metric-icon { background: var(--color-selection-surface); color: var(--color-primary); }
   .dark .notice { border-left-width: 2px; }
 

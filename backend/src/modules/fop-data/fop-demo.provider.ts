@@ -287,7 +287,7 @@ export class DemoFopDataProvider extends FopDataProvider {
         : stage === 2 || stage === 3 ? [{ id: `${accountKey}:dispatch:${suffix}:1`, number: `FY-${suffix}-1`, status: (['draft', 'submitted', 'approved'] as const)[index % 3] }]
           : []
       if (stage === 3 && index % 4 === 0) dispatchDocuments.push({ id: `${accountKey}:dispatch:${suffix}:2`, number: `FY-${suffix}-2`, status: 'approved' })
-      const shopifySync = completed ? 'synced' : stage === 0 ? 'unknown' : stage === 4 && index % 3 === 0 ? 'synced' : index % 5 === 0 ? 'partial' : 'pending'
+      const shopifySync = completed ? 'synced' : stage === 0 ? paid ? 'pending' : 'not_required' : stage === 4 && index % 3 === 0 ? 'synced' : index % 5 === 0 ? 'partial' : 'pending'
       // A partially synchronized order must already have an approved dispatched package.
       if (shopifySync === 'partial' && !dispatchDocuments.some(document => document.status === 'approved')) {
         const documentIndex = dispatchDocuments.length + 1
@@ -302,6 +302,7 @@ export class DemoFopDataProvider extends FopDataProvider {
         currentCustomerOwner: { id: owner.id, departmentId: owner.departmentId, departmentPathIds: departmentPath(workspace, owner.departmentId) }, departmentPathIds: departmentPath(workspace, owner.departmentId), organization: { id: organization.id, name: organization.name }, department: { id: department.id, name: department.name }, owner: { id: owner.id, name: owner.name },
         amount: cents / 100, currency: 'USD', paymentStatus: paid ? 'paid' : 'unpaid', reviewStatus: completed || stage !== 0 ? 'approved' : 'pending',
         fulfillmentProgress: {
+          allocationCreated: completed || stage !== 0,
           shopifySync,
           supplierShipment: completed || stage >= 2 && stage <= 4 ? 'shipped' : stage === 0 ? 'unknown' : index % 8 === 5 ? 'partial' : 'pending',
           stockReadiness: completed || allocated || stage === 2 && Math.floor(index / employees.length) % 2 === 0 ? 'ready' : stage === 0 ? 'unknown' : 'incomplete',
@@ -334,7 +335,16 @@ export class DemoFopDataProvider extends FopDataProvider {
       createdAt: new Date(today - DAY).toISOString(), paidAt: new Date(today - DAY + 3_600_000).toISOString(),
       customerId: `${accountKey}:prepaid-customer`, customerCode: 'PRE001', customerName: 'Prepaid Demo Customer', exception: null })
     for (const order of orders) {
-      if (this.approved.has(this.documentKey(identity.tenantId, 'hzkj_orders', order.id))) order.reviewStatus = 'approved'
+      if (this.approved.has(this.documentKey(identity.tenantId, 'hzkj_orders', order.id))) {
+        order.reviewStatus = 'approved'
+        if (!order.fulfillmentProgress.allocationCreated) {
+          // Demo completes the post-audit build immediately; production must read
+          // the actual asynchronous allocation result, never infer it from review.
+          order.fulfillmentProgress.allocationCreated = true
+          order.fulfillmentProgress.stockReadiness = 'incomplete'
+          order.fulfillmentProgress.allocationReview = 'pending'
+        }
+      }
       if (this.allocationIds(order).every(id => this.approved.has(this.documentKey(identity.tenantId, 'hzkj_alloc_bill', id)))) order.fulfillmentProgress.allocationReview = 'approved'
     }
     return orders
