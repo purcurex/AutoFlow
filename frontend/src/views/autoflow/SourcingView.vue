@@ -346,7 +346,6 @@ function offerLink(offer: SourcingOffer) {
                 {{ t('sourcing.sourceTag') }}
               </span>
             </div>
-            <p class="panel-description">{{ t('sourcing.resultsDescription') }}</p>
           </div>
           <span
             v-if="!loading"

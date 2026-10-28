@@ -1,3 +1,5 @@
+import { canFilterTaskStatus, type TaskStatus } from '@/utils/workbench-status'
+import { canFilterProcurementStage, type ProcurementStage } from '@/utils/procurement-stage'
 export const fopOrderQueues = ['unpaid', 'review', 'procurement', 'procurement_shipping', 'allocation', 'allocation_review', 'dispatch', 'shipping', 'exceptions'] as const
 export type FopOrderQueue = typeof fopOrderQueues[number]
 export interface FopOrderItem {
@@ -12,7 +14,7 @@ export interface FopOrderItem {
 export interface FulfillmentProgress {
   /** Effective allocation document exists; missing/null cannot enter allocation or warehouse queues. */
   allocationCreated?: boolean | null
-  shopifySync: 'pending' | 'partial' | 'synced' | 'not_required' | 'unknown'
+  shopifySync: 'pending' | 'synced' | 'not_required' | 'unknown'
   supplierShipment: 'pending' | 'partial' | 'shipped' | 'not_required' | 'unknown'
   stockReadiness: 'incomplete' | 'ready' | 'unknown'
   allocationReview: 'pending' | 'approved' | 'unknown'
@@ -21,6 +23,11 @@ export interface FulfillmentProgress {
 
 /** Aggregated over effective linked purchases; independent of customer payment. */
 export interface ProcurementProgress {
+  /** Missing on older adapters means unknown; a known unfinished 1688 push remains a procurement task. */
+  purchaseApplication?: 'not_created' | 'partial' | 'created' | 'not_required' | 'unknown'
+  alibabaOrder?: 'not_pushed' | 'partial' | 'pushed' | 'not_required' | 'unknown'
+  /** Logistics prerequisite for the actual 1688 push only, not permission/readiness to purchase. */
+  logisticsGate?: 'pending_dispatch' | 'pending_logistics' | 'satisfied' | 'not_required' | 'unknown'
   purchaseOrder: 'not_ordered' | 'partial' | 'ordered' | 'cancelled' | 'not_required' | 'unknown'
   supplierPayment: 'unpaid' | 'partial' | 'paid' | 'refunded' | 'not_required' | 'unknown'
 }
@@ -32,7 +39,52 @@ export interface DispatchDocument {
   status: 'draft' | 'submitted' | 'approved' | 'unknown'
 }
 
+/** Shipping recipient on this fulfillment order, never the customer account profile. */
+export interface ShippingRecipient {
+  name: string | null
+  phone: string | null
+  email: string | null
+  state: string | null
+  city: string | null
+  postalCode: string | null
+  addressLine1: string | null
+  addressLine2: string | null
+}
+
+export interface LogisticsChannel { name: string | null; code: string | null }
+
+export interface LogisticsTrackingNumber { type: 'full' | 'first_mile' | 'last_mile'; number: string }
+export interface LogisticsInfo {
+  carrierName: string | null
+  /** Explicit FOP selection for Shopify; never chosen from raw candidate numbers by this app. */
+  shopifyTracking?: LogisticsTrackingNumber | null
+  /** @deprecated Legacy candidates do not prove which number is selected. */
+  trackingNumbers?: LogisticsTrackingNumber[]
+}
+
+export interface AllocationDocumentReference { id: string; number: string }
+
 export interface FopOrder {
+  /** Unique effective FOP allocation for this order; null/omitted = unavailable or not yet created. */
+  allocationDocument?: AllocationDocumentReference | null
+  /** Shopify-selected tracking grouped by shipment/carrier; raw legacy fields do not prove selection. */
+  logisticsInfo?: LogisticsInfo[] | null
+  /** FOP-maintained English custom channel name, independent of UI language; never actual channels or carriers. */
+  customLogisticsChannelName?: string | null
+  /** Actual fulfillment channels, never carrier categories or customer-facing custom channels. */
+  logisticsChannels?: LogisticsChannel[] | null
+  /** First Shopify consumer payment completion, distinct from FOP createdAt and paidAt; unknown = null. */
+  reviewedAt?: string | null
+  consumerPaidAt?: string | null
+  /** Earliest actual payment among effective paid purchase obligations still awaiting supplier shipment. */
+  procurementPaidAt?: string | null
+  /** Current existing allocation completion time; cleared when allocation becomes incomplete. */
+  allocationReadyAt?: string | null
+  /** Successful delivery-notice push to WMS; distinct from order creation. Missing = null. */
+  wmsCreatedAt?: string | null
+  shippingRecipient?: ShippingRecipient | null
+  /** Order delivery destination ISO alpha2, not customer profile country; null/omitted when unavailable. */
+  shippingCountryCode?: string | null
   /** null/omitted = unavailable; [] = confirmed no effective dispatch document. */
   dispatchDocuments?: DispatchDocument[] | null
   /** Optional for rolling upgrades; missing facts display as unknown. */
@@ -75,13 +127,15 @@ export type WarehouseStage = typeof warehouseStages[number]
 export function isWarehouseStage(value: unknown): value is WarehouseStage {
   return typeof value === 'string' && (warehouseStages as readonly string[]).includes(value)
 }
-export const fopOrderSortFields = ['paidAt', 'dispatchDocumentStatus', 'allocationDocumentStatus', 'stockReadiness', 'allocationReviewStatus', 'outboundStatus'] as const
+export const fopOrderSortFields = ['paidAt', 'reviewedAt', 'consumerPaidAt', 'dispatchDocumentStatus', 'allocationDocumentStatus', 'stockReadiness', 'allocationReviewStatus', 'outboundStatus'] as const
 export type FopOrderSortBy = typeof fopOrderSortFields[number]
 export function isFopOrderSortBy(value: unknown): value is FopOrderSortBy {
   return typeof value === 'string' && (fopOrderSortFields as readonly string[]).includes(value)
 }
 export function canSortFopQueue(queue: FopOrderQueue, field: FopOrderSortBy): boolean {
   const queues: Record<Exclude<FopOrderSortBy, 'paidAt'>, readonly FopOrderQueue[]> = {
+    reviewedAt: ['procurement'],
+    consumerPaidAt: ['unpaid', 'review', 'exceptions', 'dispatch', 'allocation'],
     dispatchDocumentStatus: ['dispatch', 'allocation', 'allocation_review'],
     allocationDocumentStatus: ['allocation', 'allocation_review', 'shipping'],
     stockReadiness: ['allocation', 'allocation_review'],
@@ -91,6 +145,9 @@ export function canSortFopQueue(queue: FopOrderQueue, field: FopOrderSortBy): bo
   return field === 'paidAt' || !!queues[field]?.includes(queue)
 }
 export interface FopOrderQuery {
+  warehouseCode?: 'HZ' | 'SZ'
+  taskStatus?: TaskStatus
+  procurementStage?: ProcurementStage
   sortBy?: FopOrderSortBy
   sortOrder?: 'asc' | 'desc'
   warehouseStage?: WarehouseStage
@@ -132,6 +189,8 @@ export function isFopOrderQueue(value: unknown): value is FopOrderQueue {
 }
 
 function validateQuery(query: FopOrderQuery) {
+  if (query.taskStatus !== undefined && !canFilterTaskStatus(query.queue, query.taskStatus)) throw new Error('Invalid task status')
+  if (query.procurementStage !== undefined && !canFilterProcurementStage(query.queue, query.procurementStage)) throw new Error('Invalid procurement stage')
   if (query.sortBy !== undefined && (!isFopOrderSortBy(query.sortBy) || !canSortFopQueue(query.queue, query.sortBy))) throw new Error('Invalid sort field')
   if (query.sortOrder !== undefined && !['asc', 'desc'].includes(query.sortOrder)) throw new Error('Invalid sort direction')
   if (query.warehouseStage !== undefined && (query.queue !== 'shipping' || !isWarehouseStage(query.warehouseStage))) throw new Error('Invalid warehouse stage')
@@ -153,24 +212,24 @@ export function matchesFopQueue(order: FopOrder, queue: FopOrderQueue, warehouse
   const progress = order.fulfillmentProgress
   if (!progress) return false
   // Only reviewed fulfillment orders can await Shopify tracking/fulfillment sync.
-  if (queue === 'dispatch') return order.reviewStatus === 'approved' && (progress.shopifySync === 'pending' || progress.shopifySync === 'partial')
+  if (queue === 'dispatch') return order.reviewStatus === 'approved' && progress.shopifySync === 'pending'
   if (queue === 'procurement' || queue === 'procurement_shipping') {
     const purchase = order.procurementProgress
     if (!purchase) return false
-    if (queue === 'procurement_shipping') return purchase.purchaseOrder === 'ordered' && purchase.supplierPayment === 'paid'
+    const pendingPush = purchase.alibabaOrder === 'not_pushed' || purchase.alibabaOrder === 'partial'
+    if (queue === 'procurement_shipping') return !pendingPush && purchase.purchaseOrder === 'ordered' && purchase.supplierPayment === 'paid'
       && (progress.supplierShipment === 'pending' || progress.supplierShipment === 'partial')
     // Remaining unplaced demand is not fully paid; unknown facts are not unpaid facts.
     return purchase.purchaseOrder === 'not_ordered' || purchase.purchaseOrder === 'partial'
-      || purchase.purchaseOrder === 'ordered' && ['unpaid', 'partial', 'refunded'].includes(purchase.supplierPayment)
+      || purchase.purchaseOrder === 'ordered' && (pendingPush || ['unpaid', 'partial', 'refunded'].includes(purchase.supplierPayment))
   }
   if (order.reviewStatus !== 'approved' || progress.allocationCreated !== true) return false
   switch (queue) {
     case 'allocation': return progress.stockReadiness === 'incomplete' && progress.allocationReview === 'pending' && progress.outbound !== 'completed'
     case 'allocation_review': return progress.stockReadiness === 'ready' && progress.allocationReview === 'pending' && progress.outbound !== 'completed'
-    case 'shipping': return progress.stockReadiness === 'ready' && progress.outbound !== 'completed'
-      && (warehouseStage !== 'pending_review' || progress.allocationReview === 'pending')
-      && (warehouseStage !== 'pending_outbound' || progress.allocationReview === 'approved')
-      && (progress.allocationReview === 'pending' || progress.allocationReview === 'approved' && (progress.outbound === 'pending' || progress.outbound === 'partial'))
+    // Pending allocation approval belongs only to allocation; legacy pending_review queries stay empty.
+    case 'shipping': return warehouseStage !== 'pending_review' && progress.stockReadiness === 'ready'
+      && progress.allocationReview === 'approved' && (progress.outbound === 'pending' || progress.outbound === 'partial')
   }
 }
 
@@ -178,7 +237,7 @@ export function matchesFopQueue(order: FopOrder, queue: FopOrderQueue, warehouse
 export async function getFopOrders(query: FopOrderQuery): Promise<FopQueuePage> {
   validateQuery(query)
   const { default: api } = await import('./index')
-  const { queue, search, orderNumber, departmentId, ownerId, paidAtOrder, sortBy, sortOrder, warehouseStage, page, pageSize } = query
-  return api.get('/autoflow/integrations/fop/fulfillment-orders', { params: { queue, search, orderNumber, departmentId, ownerId, paidAtOrder, sortBy, sortOrder, warehouseStage, page, pageSize } })
+  const { queue, search, orderNumber, departmentId, ownerId, warehouseCode, paidAtOrder, sortBy, sortOrder, warehouseStage, procurementStage, taskStatus, page, pageSize } = query
+  return api.get('/autoflow/integrations/fop/fulfillment-orders', { params: { queue, search, orderNumber, departmentId, ownerId, warehouseCode, paidAtOrder, sortBy, sortOrder, warehouseStage, procurementStage, taskStatus, page, pageSize } })
 }
 export const getFopOrdersFromApi = getFopOrders

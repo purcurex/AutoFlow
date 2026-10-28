@@ -1,3 +1,5 @@
+import { taskStatuses, type TaskStatus } from '../../fop-data/workbench-status'
+import { procurementStages, type ProcurementStage } from '../../fop-data/procurement-stage'
 import { Type } from 'class-transformer'
 import { ArrayMaxSize, ArrayMinSize, ArrayUnique, IsArray, IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min, MinLength } from 'class-validator'
 import { WORKBENCH_ROLES, WorkbenchRole } from '../workbench-role'
@@ -43,10 +45,22 @@ export const FULFILLMENT_QUEUE_ROLES = {
   shipping: 'warehouse',
 } as const
 
-export const FULFILLMENT_SORT_FIELDS = ['paidAt', 'dispatchDocumentStatus', 'allocationDocumentStatus', 'stockReadiness', 'allocationReviewStatus', 'outboundStatus'] as const
+export const FULFILLMENT_SORT_FIELDS = ['paidAt', 'reviewedAt', 'consumerPaidAt', 'dispatchDocumentStatus', 'allocationDocumentStatus', 'stockReadiness', 'allocationReviewStatus', 'outboundStatus'] as const
 export type FulfillmentSortBy = typeof FULFILLMENT_SORT_FIELDS[number]
 
 export class FulfillmentOrderFiltersDto {
+  @IsOptional()
+  @IsIn(['HZ', 'SZ'])
+  warehouseCode?: 'HZ' | 'SZ'
+
+  @IsOptional()
+  @IsIn(procurementStages)
+  procurementStage?: ProcurementStage
+
+  @IsOptional()
+  @IsIn(taskStatuses)
+  taskStatus?: TaskStatus
+
   @IsOptional()
   @IsString()
   @MaxLength(200)

@@ -103,13 +103,13 @@ const latestDepartmentChange = computed(() => selectedDepartment.value ? changes
 const momHint = computed(() => text('差额 = 本月 − 上月；比例 = 差额 ÷ 上月。1 月对比上年 12 月；本月为截至目前数据。', 'Change = this month − prior month; rate = change ÷ prior month. January compares with December; the current month is to date.'))
 
 const reasons = computed(() => ({ stock: text('库存不足，等待补货', 'Insufficient stock · replenishment pending'), address: text('收货地址待核验', 'Delivery address needs verification'), tracking: text('物流单号获取异常', 'Tracking number could not be retrieved') }))
-const taskNames = computed(() => ({ review: text('审核已付款订单', 'Review paid orders'), dispatch: text('同步 Shopify 发货', 'Sync Shopify fulfillment'), procurement: text('跟进采购付款与供应商发货', 'Follow up purchase payment and supplier shipment'), allocation: text('跟进配货与配货单审核', 'Follow up allocation and approval'), shipping: text('跟进配货审核与出库', 'Follow up allocation approval and outbound') }))
+const taskNames = computed(() => ({ review: text('审核履约订单', 'Review fulfillment orders'), dispatch: text('同步 Shopify 发货', 'Sync Shopify fulfillment'), procurement: text('跟进采购付款与供应商发货', 'Follow up purchase payment and supplier shipment'), allocation: text('跟进配货与配货单审核', 'Follow up allocation and approval'), shipping: text('跟进仓库打包与出库', 'Follow up warehouse packing and outbound') }))
 const cards = computed(() => [
-  { id: 'review', label: text('待审核', 'Pending review'), hint: text('已付款 · 待审核', 'Paid · awaiting review'), value: data.value?.queues.review, icon: ClipboardCheck, color: 'review' },
-  { id: 'dispatch', label: text('待履约', 'Pending fulfillment'), hint: text('已付款、已审核 · Shopify 待履约', 'Paid and reviewed · Shopify fulfillment pending'), value: data.value?.queues.dispatch, icon: Send, color: 'fulfillment' },
+  { id: 'review', label: text('待审核', 'Pending review'), hint: text('履约订单待审核', 'Fulfillment orders awaiting review'), value: data.value?.queues.review, icon: ClipboardCheck, color: 'review' },
+  { id: 'dispatch', label: text('待履约', 'Pending fulfillment'), hint: text('已审核 · Shopify 待履约', 'Reviewed · Shopify fulfillment pending'), value: data.value?.queues.dispatch, icon: Send, color: 'fulfillment' },
   { id: 'procurement', label: text('待采购', 'Pending procurement'), hint: text('采购未完成付款 / 已采购未发货', 'Purchase payment / supplier shipment pending'), value: data.value?.queues.procurement, icon: ShoppingCart, color: 'procurement' },
   { id: 'allocation', label: text('待配货', 'Pending allocation'), hint: text('配货单未审核 · 未齐套 / 已齐套', 'Incomplete allocation / approval pending'), value: data.value?.queues.allocation, icon: PackageCheck, color: 'allocation' },
-  { id: 'shipping', label: text('待出库', 'Pending outbound'), hint: text('齐套待审核 · 已审核待出库', 'Allocation approval / outbound pending'), value: data.value?.queues.shipping, icon: Truck, color: 'shipping' },
+  { id: 'shipping', label: text('待出库', 'Pending outbound'), hint: text('配货已审核 · 待打包出库', 'Allocation approved · packing / outbound pending'), value: data.value?.queues.shipping, icon: Truck, color: 'shipping' },
 ])
 
 const orderVolumeRevision = ref(0)
@@ -252,7 +252,7 @@ const salespersonOption = computed(() => collectionsOption(salespersonSeries.val
   <AppLayout>
     <main class="app-page fop-dashboard" :aria-busy="busy">
       <header class="dashboard-heading">
-        <div><p class="eyebrow">HYPERZONE · DASHBOARD</p><h1>Dashboard <span class="mock-badge">{{ data?.source === 'mock' ? 'MOCK · DEMO' : text('业务概览', 'BUSINESS OVERVIEW') }}</span></h1><p class="heading-description">{{ data?.source === 'mock' ? text('查看客户增长、回款表现与订单履约进度；点击履约指标进入岗位工作台。当前为演示数据。', 'Review customer growth, collections and fulfillment. Select a fulfillment metric to open its workbench. Demo data is shown.') : text('查看客户增长、回款表现与订单履约进度，点击履约指标进入岗位工作台。', 'Review customer growth, collections and fulfillment data. Select a fulfillment metric to open its workbench.') }}</p></div>
+        <div><p class="eyebrow">HYPERZONE · DASHBOARD</p><h1>Dashboard <span class="mock-badge">{{ data?.source === 'mock' ? 'MOCK · DEMO' : text('业务概览', 'BUSINESS OVERVIEW') }}</span></h1></div>
         <button class="refresh-button" :disabled="busy" @click="refresh"><RefreshCw :class="{ 'animate-spin': busy }" :size="15" />{{ busy ? text('刷新中', 'Refreshing') : text('刷新数据', 'Refresh') }}</button>
       </header>
       <FopDataAccessNotice @recheck="refresh" />
@@ -287,7 +287,7 @@ const salespersonOption = computed(() => collectionsOption(salespersonSeries.val
 
         <div class="activity-column">
           <section class="dashboard-panel exception-panel">
-            <div class="panel-top"><h2><AlertCircle :size="17" />{{ text('异常订单', 'Order exceptions') }}<RouterLink :to="workbenchOrderLocation('exceptions')" class="count-badge" :aria-label="text('查看全部异常订单', 'View all order exceptions')">{{ data ? data.exceptions.length : '—' }}</RouterLink></h2><span class="subtle-label">{{ text('已付款 · 待处理异常', 'PAID · ACTION REQUIRED') }}</span></div>
+            <div class="panel-top"><h2><AlertCircle :size="17" />{{ text('异常订单', 'Order exceptions') }}<RouterLink :to="workbenchOrderLocation('exceptions')" class="count-badge" :aria-label="text('查看全部异常订单', 'View all order exceptions')">{{ data ? data.exceptions.length : '—' }}</RouterLink></h2><span class="subtle-label">{{ text('待处理异常', 'ACTION REQUIRED') }}</span></div>
             <div class="activity-list"><RouterLink v-for="item in data?.exceptions.slice(0, 5)" :key="item.id" :to="workbenchOrderLocation('exceptions', { orderNumber: item.id })" class="exception-row"><span class="status-dot" /><div><p class="row-heading">{{ item.id }} <span>{{ item.customer }}</span></p><p class="row-description">{{ reasons[item.reason] }}</p></div><span class="age-badge">{{ item.hours }}h</span></RouterLink><p v-if="data && !data.exceptions.length" class="empty-message">{{ text('暂无异常订单', 'No order exceptions') }}</p></div>
             <footer>{{ text('更新时间', 'Updated') }} {{ updated }} · UTC+8<RouterLink v-if="data && data.exceptions.length > 5" :to="workbenchOrderLocation('exceptions')" class="ml-3 text-indigo-600">{{ text(`查看全部 ${data.exceptions.length} 笔异常`, `View all ${data.exceptions.length} exceptions`) }}</RouterLink></footer>
           </section>
@@ -300,7 +300,7 @@ const salespersonOption = computed(() => collectionsOption(salespersonSeries.val
       </div>
 
       <section v-if="visible('department_receipts')" class="dashboard-panel receipts-panel">
-        <div class="panel-top receipts-heading statistics-heading"><div><h2><Wallet :size="17" />{{ text('部门月度回款分析', 'Monthly collections by department') }}</h2><p>{{ appliedYear }} · UTC+8 · {{ data?.departmentReceipts.departments.length ? text('部门回款汇总 · $', 'Department collections summary · $') : text('按业务部门对比 · $', 'By sales department · $') }}</p></div><div class="statistics-filters"><label class="year-filter">{{ text('年份', 'Year') }}<select v-model.number="year" :aria-label="text('回款年份', 'Collections year')" :disabled="busy" @change="refresh"><option v-for="item in years" :key="item" :value="item">{{ item }}</option></select></label><label class="mom-filter"><input v-model="departmentMom" type="checkbox" aria-label="部门回款上月环比">{{ text('上月环比', 'Month-over-month') }}</label></div></div>
+        <div class="panel-top receipts-heading statistics-heading"><div><h2><Wallet :size="17" />{{ text('部门月度回款分析', 'Monthly collections by department') }}</h2></div><div class="statistics-filters"><label class="year-filter">{{ text('年份', 'Year') }}<select v-model.number="year" :aria-label="text('回款年份', 'Collections year')" :disabled="busy" @change="refresh"><option v-for="item in years" :key="item" :value="item">{{ item }}</option></select></label><label class="mom-filter"><input v-model="departmentMom" type="checkbox" aria-label="部门回款上月环比">{{ text('上月环比', 'Month-over-month') }}</label></div></div>
         <div v-if="departmentMom" class="receipt-summary mom-summary"><span>{{ latestReceiptMonth }} · {{ text('营销中心较上月', 'Marketing center change') }}</span><ReceiptChangeValue :value="latestMarketingChange" /><small>{{ momHint }}</small></div>
         <div v-else class="receipt-summary"><span>{{ appliedYear }} {{ text('年部门回款合计', 'department collections total') }}</span><strong>{{ data?.departmentReceipts.departments.length ? money(receiptTotal) : '—' }}</strong><small>{{ marketingBreakdown }}{{ marketingBreakdown ? ' · ' : '' }}{{ text('默认展示最近 6 个月，可向左拖动查看历史；全年合计不重复累加。', 'Latest 6 months shown; drag left for earlier months. Annual totals are counted once.') }}</small></div>
         <div class="receipts-chart"><p v-if="!data?.departmentReceipts.departments.length" class="empty-message">{{ text('暂无可查看的回款统计', 'No collections statistics available') }}</p><EChart v-else :option="receiptOption" :can-export="chart('department_receipts')?.canExport === true" :label="text('各部门月度回款对比柱状图', 'Monthly collections by department')" /></div>
@@ -308,7 +308,7 @@ const salespersonOption = computed(() => collectionsOption(salespersonSeries.val
       </section>
       <section v-if="visible('salesperson_receipts')" class="dashboard-panel receipts-panel salesperson-panel">
         <div class="panel-top receipts-heading statistics-heading">
-          <div><h2><Users :size="17" />{{ text('业务员月度回款分析', 'Monthly collections by salesperson') }}</h2><p>{{ appliedYear }} · UTC+8 · $ · {{ text('当前成员合计与业务员并列对比', 'Current members total alongside salespeople') }}</p></div>
+          <div><h2><Users :size="17" />{{ text('业务员月度回款分析', 'Monthly collections by salesperson') }}</h2></div>
           <div class="statistics-filters"><label v-if="!visible('department_receipts')" class="year-filter">{{ text('年份', 'Year') }}<select v-model.number="year" aria-label="回款年份" :disabled="busy" @change="refresh"><option v-for="item in years" :key="item" :value="item">{{ item }}</option></select></label><label class="year-filter">{{ text('部门', 'Department') }}<select v-model="selectedDepartmentId" :disabled="busy || !data?.receipts.departments.length" :aria-label="text('业务员回款部门', 'Salesperson collections department')"><option v-for="department in data?.receipts.departments" :key="department.id" :value="department.id">{{ department.name || departments[department.id] || department.id }}</option></select></label><label class="mom-filter"><input v-model="salespersonMom" type="checkbox" aria-label="业务员回款上月环比">{{ text('上月环比', 'Month-over-month') }}</label></div>
         </div>
         <div v-if="salespersonMom" class="receipt-summary mom-summary"><span>{{ latestReceiptMonth }} · {{ selectedDepartment?.name }} · {{ text('较上月', 'Change from prior month') }}</span><ReceiptChangeValue :value="latestDepartmentChange" /><small>{{ momHint }}</small></div>

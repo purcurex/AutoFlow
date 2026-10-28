@@ -3,21 +3,29 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createI18n } from 'vue-i18n'
 import OrderApprovalDialog from '@/components/autoflow/OrderApprovalDialog.vue'
 import { previewOrderApproval, submitOrderApproval } from '@/api/fop-approvals'
+import { invalidateSession } from '@/utils/session'
 vi.mock('@/api/fop-approvals', () => ({ previewOrderApproval: vi.fn(), submitOrderApproval: vi.fn() }))
-const item = { orderId: 'o', orderNumber: 'SO-1', version: 'a'.repeat(64), eligible: true, documents: [{ id: 'd', number: 'PH-1', status: 'B', eligible: true, reason: null }] }
+const item = { orderId: 'o', orderNumber: 'SO-1', version: 'a'.repeat(64), eligible: true, documents: [{ id: 'd', number: 'AO261028000404', status: 'B', eligible: true, reason: null }] }
 function setup() { return mount(OrderApprovalDialog, { props: { queue: 'allocation_review', orderIds: ['o'] }, global: { plugins: [createI18n({ legacy: false, locale: 'zh-CN' })], stubs: { OrganizationModal: { template: '<section><slot /><slot name="footer" /></section>' } } } }) }
 describe('approval confirmation', () => {
+  it('does not submit a preview from a previous login session', async () => {
+    const wrapper = setup(); await flushPromises()
+    invalidateSession()
+    await wrapper.get('[data-testid="confirm-approval"]').trigger('click'); await flushPromises()
+    expect(submitOrderApproval).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
   beforeEach(() => { vi.clearAllMocks(); vi.mocked(previewOrderApproval).mockResolvedValue({ source: 'mock', queue: 'allocation_review', items: [item] }) })
   it('previews associated documents before calling approval; reports warnings and refreshes', async () => {
-    vi.mocked(submitOrderApproval).mockResolvedValue({ source: 'mock', requestId: 'r', completedAt: '', items: [{ orderId: 'o', orderNumber: 'SO-1', status: 'approved', message: '审核完成', documents: [{ id: 'd', number: 'PH-1', status: 'approved', message: '成功', warning: '发货通知生成失败' }] }] })
+    vi.mocked(submitOrderApproval).mockResolvedValue({ source: 'mock', requestId: 'r', completedAt: '', items: [{ orderId: 'o', orderNumber: 'SO-1', status: 'approved', message: '审核完成', documents: [{ id: 'd', number: 'AO261028000404', status: 'approved', message: '成功', warning: '发货通知生成失败' }] }] })
     const wrapper = setup(); await flushPromises()
-    expect(wrapper.text()).toContain('PH-1'); expect(submitOrderApproval).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('AO261028000404'); expect(submitOrderApproval).not.toHaveBeenCalled()
     await wrapper.get('[data-testid="confirm-approval"]').trigger('click'); await flushPromises()
     expect(submitOrderApproval).toHaveBeenCalledWith('allocation_review', expect.any(String), [{ orderId: 'o', version: 'a'.repeat(64) }])
     expect(wrapper.text()).toContain('发货通知生成失败'); expect(wrapper.emitted('completed')).toHaveLength(1)
   })
   it('includes every selected order in the result request so blocked rows remain visible', async () => {
-    const blocked = { ...item, orderId: 'blocked', eligible: false, documents: [{ ...item.documents[0]!, eligible: false, reason: '发运未审核' }] }
+    const blocked = { ...item, orderId: 'blocked', eligible: false, documents: [{ ...item.documents[0]!, id: 'd2', number: 'AO261028000405', eligible: false, reason: '发运未审核' }] }
     vi.mocked(previewOrderApproval).mockResolvedValue({ source: 'mock', queue: 'allocation_review', items: [item, blocked] })
     vi.mocked(submitOrderApproval).mockResolvedValue({ source: 'mock', requestId: 'r', completedAt: '', items: [] })
     const wrapper = setup(); await flushPromises(); await wrapper.get('[data-testid="confirm-approval"]').trigger('click'); await flushPromises()

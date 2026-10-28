@@ -26,17 +26,31 @@ describe('role workbench content', () => {
       { path: '/dashboard', name: 'FopDashboard', component: { template: '<div />' } },
     ] })
     await router.push(path)
-    const wrapper = mount(WorkbenchView, { global: { plugins: [router, createI18n({ legacy: false, locale: 'zh-CN', messages: {} })] } })
+    const wrapper = mount(WorkbenchView, { global: { plugins: [router, createI18n({ legacy: false, locale: 'zh-CN', messages: {} })], stubs: { OrderVolumeAnalysis: true, SalesPerformanceView: true, FopFreightView: true, FopReceiptsView: true, OrderVolumeOrdersView: true } } })
     await vi.dynamicImportSettled()
     await flushPromises()
     return { wrapper, router }
   }
 
+  it('retains the same summary and tabs across every kind of workbench page', async () => {
+    const { wrapper, router } = await setup('/workbench/sales')
+    const summary = wrapper.get('.workbench-filter-summary').element
+    const tabs = wrapper.get('.workbench-queues').element
+    for (const queue of ['order-analysis', 'freight', 'performance', 'overview', 'receipts', 'order-volume', 'stock', 'review']) {
+      await router.push(`/workbench/sales?queue=${queue}`); await flushPromises()
+      expect(wrapper.get('.workbench-filter-summary').element).toBe(summary)
+      expect(wrapper.get('.workbench-queues').element).toBe(tabs)
+      expect(summary.nextElementSibling).toBe(tabs)
+      expect(wrapper.get('.workbench-filter-summary p').text()).not.toBe('')
+    }
+    wrapper.unmount()
+  })
+
   it('opens sales review by default while retaining the overview and assigned workbench tabs', async () => {
     const { wrapper, router } = await setup('/workbench/sales', ['sales'])
     expect(wrapper.find('h1').text()).toBe('销售工作台')
     expect(wrapper.find('h2').text()).toContain('待审核清单')
-    expect(wrapper.findAll('.workbench-queues a').slice(0, 3).map(a => a.text())).toEqual(['待支付清单', '待审核清单', '异常订单清单'])
+    expect(wrapper.findAll('.workbench-queues a').slice(0, 4).map(a => a.text())).toEqual(['待支付清单', '待审核清单', '备货清单', '异常订单清单'])
     expect(wrapper.find('.workbench-queues a.active').text()).toBe('待审核清单')
     expect(wrapper.findAll('.role-tabs a')).toHaveLength(1)
     expect(wrapper.find('.workbench-queues').text()).toContain('待审核清单')
@@ -45,7 +59,7 @@ describe('role workbench content', () => {
     expect(router.currentRoute.value.query.queue).toBe('unpaid')
     expect(wrapper.find('h2').text()).toContain('待支付清单')
     expect(wrapper.findAll('tbody tr')).toHaveLength(2)
-    expect(wrapper.find('tbody').text()).toContain('未支付')
+    expect(wrapper.find('thead').text()).not.toContain('支付状态')
     await router.push('/workbench/sales'); await flushPromises()
     expect(wrapper.find('h2').text()).toContain('待审核清单')
     expect(wrapper.find('.workbench-queues a.active').text()).toBe('待审核清单')
@@ -61,7 +75,7 @@ describe('role workbench content', () => {
     expect(wrapper.find('h1').text()).toBe('采购工作台')
     expect(wrapper.find('.workbench-queues a').text()).toBe('待采购清单')
     expect(wrapper.find('.workbench-queues a').classes()).toContain('active')
-    expect(wrapper.find('thead').text()).toContain('供应商发货状态')
+    expect(wrapper.find('thead').text()).toContain('采购进度')
     expect(wrapper.find('thead').text()).not.toContain('配货单状态')
     expect(wrapper.findAll('tbody tr')).toHaveLength(5)
     await router.push('/workbench/procurement?queue=shipping')
@@ -72,15 +86,15 @@ describe('role workbench content', () => {
   })
 
   it.each([
-    ['allocation', '已齐套待审核', 'allocation_review', '发运单状态'],
-    ['procurement', '已采购待发货', 'procurement_shipping', '采购订单状态'],
+    ['allocation', '已齐套未审核', 'allocation_review', '发运单状态'],
+    ['procurement', '已采购待发货', 'procurement_shipping', '供应商发货状态'],
   ])('opens the separate %s follow-up tab and retains department filters', async (role, label, queue, column) => {
     const { wrapper, router } = await setup(`/workbench/${role}?departmentId=d1`)
     if (role === 'allocation') {
-      expect(wrapper.find('h2').text()).toContain('已齐套待审核')
-      expect(wrapper.find('.workbench-queues a.active').text()).toBe('已齐套待审核')
+      expect(wrapper.find('h2').text()).toContain('已齐套未审核')
+      expect(wrapper.find('.workbench-queues a.active').text()).toBe('已齐套未审核')
     }
-    expect(wrapper.findAll('.workbench-queues a').slice(0, 2).map(a => a.text())).toEqual([role === 'allocation' ? '未配货清单' : '待采购清单', label])
+    expect(wrapper.findAll('.workbench-queues a').slice(0, role === 'allocation' ? 2 : 3).map(a => a.text())).toEqual(role === 'allocation' ? ['未齐套清单', label] : ['待采购清单', '待采购待备货清单', label])
     await wrapper.findAll('.workbench-queues a').find(a => a.text() === label)!.trigger('click')
     await flushPromises()
     expect(router.currentRoute.value.query).toEqual({ queue, departmentId: 'd1' })

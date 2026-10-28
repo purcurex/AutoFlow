@@ -11,14 +11,19 @@ onSessionReset(clearWorkbenchAccess)
 export async function refreshWorkbenchAccess() {
   const session = captureSession()
   const request = ++requestId
-  access.value = undefined
-  const result = await getWorkbenchAccess()
-  assertCurrentSession(session)
-  if (request !== requestId) throw new Error('Workbench access request superseded')
-  // Keep the same display/default-entry order regardless of the grant's stored order.
-  const orderedAccess = { ...result, roles: workbenchRoles.filter(role => result.roles.includes(role)) }
-  access.value = orderedAccess
-  return orderedAccess
+  // Keep this session's display structure while the server rechecks authorization.
+  // Data endpoints still enforce permissions on every query; errors/revocation clear the snapshot.
+  try {
+    const result = await getWorkbenchAccess()
+    assertCurrentSession(session)
+    if (request !== requestId) throw new Error('Workbench access request superseded')
+    const orderedAccess = { ...result, roles: workbenchRoles.filter(role => result.roles.includes(role)) }
+    access.value = orderedAccess
+    return orderedAccess
+  } catch (cause) {
+    if (request === requestId) access.value = undefined
+    throw cause
+  }
 }
 export function useWorkbenchAccess() {
   return { access, roles: computed(() => access.value?.roles ?? []), isAdmin: computed(() => access.value?.isAdmin === true) }

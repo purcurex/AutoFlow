@@ -37,7 +37,9 @@ describe('fulfillment queue response validation', () => {
     expect(matchesFopQueue({ ...waiting, reviewStatus: 'pending' }, 'dispatch')).toBe(false)
     expect(matchesFopQueue({ ...waiting, reviewStatus: 'pending' }, 'review')).toBe(true)
     expect(matchesFopQueue({ ...waiting, paymentStatus: 'unpaid' }, 'dispatch')).toBe(false)
-    expect(matchesFopQueue({ ...waiting, fulfillmentProgress: { ...waiting.fulfillmentProgress, shopifySync: 'partial' } }, 'dispatch')).toBe(true)
+    const unsupportedSync = structuredClone(waiting)
+    Reflect.set(unsupportedSync.fulfillmentProgress, 'shopifySync', 'partial')
+    expect(matchesFopQueue(unsupportedSync, 'dispatch')).toBe(false)
     for (const shopifySync of ['synced', 'not_required', 'unknown'] as const) {
       expect(matchesFopQueue({ ...waiting, fulfillmentProgress: { ...waiting.fulfillmentProgress, shopifySync } }, 'dispatch')).toBe(false)
     }
@@ -49,10 +51,10 @@ describe('fulfillment queue response validation', () => {
     expect(matchesFopQueue(ready, 'allocation')).toBe(false)
     expect(matchesFopQueue(ready, 'shipping')).toBe(true)
     const awaitingApproval = { ...ready, fulfillmentProgress: { ...ready.fulfillmentProgress, allocationReview: 'pending' as const } }
-    expect(matchesFopQueue(awaitingApproval, 'shipping')).toBe(true)
+    expect(matchesFopQueue(awaitingApproval, 'shipping')).toBe(false)
     expect(matchesFopQueue(awaitingApproval, 'allocation')).toBe(false)
     expect(matchesFopQueue(awaitingApproval, 'allocation_review')).toBe(true)
-    expect(matchesFopQueue({ ...awaitingApproval, fulfillmentProgress: { ...awaitingApproval.fulfillmentProgress, outbound: 'unknown' } }, 'shipping')).toBe(true)
+    expect(matchesFopQueue({ ...awaitingApproval, fulfillmentProgress: { ...awaitingApproval.fulfillmentProgress, outbound: 'unknown' } }, 'shipping')).toBe(false)
     for (const allocationReview of ['pending', 'approved'] as const) {
       expect(matchesFopQueue({ ...ready, fulfillmentProgress: { ...ready.fulfillmentProgress, allocationReview, outbound: 'completed' } }, 'shipping')).toBe(false)
     }

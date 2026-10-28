@@ -1,4 +1,4 @@
-import { previewOrderApproval, submitOrderApproval, type ApprovalResult } from '@/api/fop-approvals'
+import { previewOrderApproval, submitOrderApproval } from '@/api/fop-approvals'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import { afterEach, expect, it, vi } from 'vitest'
@@ -7,6 +7,7 @@ import { getWorkbenchAccess } from '@/api/workbench-access'
 import { getFopOrders, matchesFopQueue } from '@/api/fop-orders'
 import { mockFopOrders } from '@/api/fop-order-fixtures'
 import { clearWorkbenchAccess } from '@/composables/useWorkbenchAccess'
+import OrderApprovalDialog from '@/components/autoflow/OrderApprovalDialog.vue'
 
 vi.mock('@/components/layout', () => ({ AppLayout: { template: '<div><slot /></div>' } }))
 vi.mock('@/components/FopDataAccessNotice.vue', () => ({ default: { template: '<div />' } }))
@@ -16,14 +17,15 @@ vi.mock('@/api/workbench-access', () => ({ getWorkbenchAccess: vi.fn() }))
 vi.mock('@/api/fop-orders', async importOriginal => ({ ...await importOriginal<typeof import('@/api/fop-orders')>(), getFopOrders: vi.fn() }))
 let wrapper: VueWrapper | undefined
 let removeGuard: (() => void) | undefined
+let removeTestRoute: (() => void) | undefined
 
-afterEach(() => { removeGuard?.(); removeGuard = undefined; wrapper?.unmount(); clearWorkbenchAccess(); localStorage.clear(); vi.restoreAllMocks(); vi.clearAllMocks() })
+afterEach(() => { removeGuard?.(); removeGuard = undefined; wrapper?.unmount(); removeTestRoute?.(); removeTestRoute = undefined; clearWorkbenchAccess(); localStorage.clear(); vi.restoreAllMocks(); vi.clearAllMocks() })
 
 it.each([
   { delayed: false, cancelOnce: false },
   { delayed: true, cancelOnce: false },
   { delayed: false, cancelOnce: true },
-])('preserves a pending search across real guard/parent remounts ($delayed, cancel once: $cancelOnce)', async ({ delayed, cancelOnce }) => {
+])('preserves a pending search across real permission rechecks without parent remounts ($delayed, cancel once: $cancelOnce)', async ({ delayed, cancelOnce }) => {
   localStorage.setItem('user', JSON.stringify({ id: 'test-user' }))
   vi.mocked(getWorkbenchAccess).mockResolvedValue({ roles: ['allocation'], isAdmin: false, businessRole: 'salesperson' })
   let total = 51
@@ -41,6 +43,7 @@ it.each([
   await vi.dynamicImportSettled(); await flushPromises()
   await wrapper.get('input[type=search]').setValue('draft not submitted')
   const originalList = wrapper.find('.fulfillment-page').element
+  const originalSummary = wrapper.find('.workbench-filter-summary').element
   const checks = vi.mocked(getWorkbenchAccess).mock.calls.length
   if (cancelOnce) removeGuard = router.beforeResolve(() => { removeGuard?.(); removeGuard = undefined; return false })
   total = 1
@@ -55,7 +58,10 @@ it.each([
   }
   expect(router.currentRoute.value.query).toMatchObject({ page: '1', departmentId: 'd1', search: 'submitted' })
   expect(vi.mocked(getWorkbenchAccess).mock.calls.length).toBeGreaterThan(checks)
-  expect(wrapper.find('.fulfillment-page').element).not.toBe(originalList)
+  expect(wrapper.find('.fulfillment-page').element).toBe(originalList)
+  expect(wrapper.find('.workbench-filter-summary').element).toBe(originalSummary)
+  expect(wrapper.findAll('button.refresh-orders')).toHaveLength(1)
+  expect(wrapper.text()).not.toContain('刷新状态')
   expect((wrapper.get('input[type=search]').element as HTMLInputElement).value).toBe('draft not submitted')
   expect(getFopOrders).toHaveBeenLastCalledWith(expect.objectContaining({ page: 1, search: 'submitted', departmentId: 'd1' }))
   await vi.waitFor(() => expect(wrapper!.get('button.refresh-orders').attributes('disabled')).toBeUndefined())
@@ -67,31 +73,55 @@ it.each([
 })
 
 
-it('blocks real-router access refresh and query/back navigation while approval is open or pending', async () => {
+it('allows review-list navigation without invoking approval APIs merely by selecting rows', async () => {
   localStorage.setItem('user', JSON.stringify({ id: 'test-user' }))
   vi.mocked(getWorkbenchAccess).mockResolvedValue({ roles: ['sales'], isAdmin: false, businessRole: 'salesperson' })
   const order = mockFopOrders.find(row => matchesFopQueue(row, 'review'))!
   vi.mocked(getFopOrders).mockImplementation(async query => ({ source: 'mock', refreshedAt: '2026-10-25T08:00:00Z', departments: [], items: [order], total: 1, page: query.page, pageSize: query.pageSize, totals: { orderCount: 1, itemQuantity: 1, amountsByCurrency: [] } }))
-  vi.mocked(previewOrderApproval).mockResolvedValue({ source: 'mock', queue: 'review', items: [{ orderId: order.id, orderNumber: order.orderNumber, eligible: true, version: 'a'.repeat(64), documents: [{ id: order.id, number: order.orderNumber, status: 'B', eligible: true, reason: null }] }] })
-  let complete!: (value: ApprovalResult) => void
-  vi.mocked(submitOrderApproval).mockReturnValue(new Promise(resolve => { complete = resolve }))
-  await router.push('/workbench/sales?queue=unpaid'); await router.push('/workbench/sales?queue=review'); await router.isReady()
-  wrapper = mount({ template: '<RouterView />' }, { global: { plugins: [router, createI18n({ legacy: false, locale: 'zh-CN', messages: {} })], stubs: { Teleport: true } } })
+  await router.push('/workbench/sales?queue=review'); await router.isReady()
+  wrapper = mount({ template: '<RouterView />' }, { global: { plugins: [router, createI18n({ legacy: false, locale: 'zh-CN', messages: {} })] } })
   await vi.dynamicImportSettled(); await flushPromises()
   await wrapper.get('tbody input.order-checkbox').setValue(true)
+  expect(wrapper.find('[data-testid="open-approval"]').exists()).toBe(true)
+  vi.mocked(previewOrderApproval).mockResolvedValue({ source: 'mock', queue: 'review', items: [] })
   await wrapper.get('[data-testid="open-approval"]').trigger('click'); await flushPromises()
-  const checks = vi.mocked(getWorkbenchAccess).mock.calls.length
   await router.push('/workbench/sales?queue=review&pageSize=20'); await flushPromises()
+  expect(router.currentRoute.value.query.pageSize).toBeUndefined()
+  wrapper.getComponent(OrderApprovalDialog).vm.$emit('close'); await flushPromises()
+  await router.push('/workbench/sales?queue=review&pageSize=20'); await flushPromises()
+  expect(router.currentRoute.value.query.pageSize).toBe('20')
+  expect(previewOrderApproval).toHaveBeenCalledTimes(1)
+  expect(submitOrderApproval).not.toHaveBeenCalled()
+})
+
+it('keeps an in-flight approval visible when a previously started lazy navigation finishes', async () => {
+  localStorage.setItem('user', JSON.stringify({ id: 'test-user' }))
+  vi.mocked(getWorkbenchAccess).mockResolvedValue({ roles: ['sales'], isAdmin: false, businessRole: 'salesperson' })
+  const order = mockFopOrders.find(row => matchesFopQueue(row, 'review'))!
+  vi.mocked(getFopOrders).mockImplementation(async query => ({ source: 'mock', refreshedAt: '2026-10-27T08:00:00Z', departments: [], items: [order], total: 1, page: query.page, pageSize: query.pageSize, totals: { orderCount: 1, itemQuantity: 1, amountsByCurrency: [] } }))
+  vi.mocked(previewOrderApproval).mockResolvedValue({ source: 'mock', queue: 'review', items: [{ orderId: order.id, orderNumber: order.orderNumber, version: 'v1', eligible: true, documents: [{ id: order.id, number: order.orderNumber, status: 'B', eligible: true, reason: null }] }] })
+  let resolveApproval!: (result: Awaited<ReturnType<typeof submitOrderApproval>>) => void
+  vi.mocked(submitOrderApproval).mockReturnValue(new Promise(resolve => { resolveApproval = resolve }))
+  await router.push('/workbench/sales?queue=review'); await router.isReady()
+  wrapper = mount({ template: '<RouterView />' }, { global: { plugins: [router, createI18n({ legacy: false, locale: 'zh-CN', messages: {} })] } })
+  await vi.dynamicImportSettled(); await flushPromises()
+  let finishImport!: (component: { template: string }) => void
+  const loadDestination = vi.fn(() => new Promise<{ template: string }>(resolve => { finishImport = resolve }))
+  removeTestRoute = router.addRoute({ path: '/pending-approval-test', name: 'PendingApprovalTest', meta: { requiresAuth: true }, component: loadDestination })
+  const navigation = router.push('/pending-approval-test')
+  await vi.waitFor(() => expect(loadDestination).toHaveBeenCalledOnce()); await flushPromises()
+  await wrapper.get('tbody input.order-checkbox').setValue(true)
+  await wrapper.get('[data-testid="open-approval"]').trigger('click'); await flushPromises()
+  document.querySelector<HTMLButtonElement>('[data-testid="confirm-approval"]')!.click(); await flushPromises()
+  expect(submitOrderApproval).toHaveBeenCalledTimes(1)
+  finishImport({ template: '<main>Destination</main>' }); await navigation; await flushPromises()
   expect(router.currentRoute.value.fullPath).toBe('/workbench/sales?queue=review')
-  expect(wrapper.text()).toContain('确认模拟审核')
-  await wrapper.get('[data-testid="confirm-approval"]').trigger('click'); await flushPromises()
-  router.back(); await new Promise(resolve => setTimeout(resolve, 20)); await flushPromises()
-  expect(router.currentRoute.value.fullPath).toBe('/workbench/sales?queue=review')
-  expect(getWorkbenchAccess).toHaveBeenCalledTimes(checks)
-  complete({ source: 'mock', requestId: 'r', completedAt: '', items: [{ orderId: order.id, orderNumber: order.orderNumber, status: 'approved', message: '审核完成', documents: [] }] }); await flushPromises()
-  expect(wrapper.text()).toContain('审核完成')
-  const done = wrapper.findAll('.org-modal button').find(button => button.text() === '完成')!
-  await done.trigger('click'); await flushPromises()
-  await router.push('/workbench/sales?queue=unpaid'); await flushPromises()
-  expect(router.currentRoute.value.query.queue).toBe('unpaid')
+  expect(wrapper.findComponent(OrderApprovalDialog).exists()).toBe(true)
+  resolveApproval({ source: 'mock', requestId: 'r', completedAt: '2026-10-27T08:00:00Z', items: [{ orderId: order.id, orderNumber: order.orderNumber, status: 'approved', message: '审核完成', documents: [] }] })
+  await flushPromises()
+  expect(document.body.textContent).toContain('审核完成')
+  expect(wrapper.findComponent(OrderApprovalDialog).exists()).toBe(true)
+  wrapper.getComponent(OrderApprovalDialog).vm.$emit('close'); await flushPromises()
+  await router.push('/pending-approval-test'); await flushPromises()
+  expect(router.currentRoute.value.path).toBe('/pending-approval-test')
 })

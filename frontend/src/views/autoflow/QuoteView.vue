@@ -420,7 +420,6 @@ onMounted(loadCapabilities)
         <div class="panel-header">
           <div>
             <h2 class="panel-title">{{ t('quotes.productQuotation') }}</h2>
-            <p class="panel-description">{{ t('quotes.productHint') }}</p>
           </div>
           <div class="flex flex-wrap gap-2">
             <button
@@ -510,7 +509,6 @@ onMounted(loadCapabilities)
         <div class="panel-header">
           <div>
             <h2 class="panel-title">{{ t('quotes.freight') }}</h2>
-            <p class="panel-description">{{ t('quotes.freightHint') }}</p>
           </div>
         </div>
         <div class="p-5">
@@ -539,7 +537,6 @@ onMounted(loadCapabilities)
             <Truck class="h-5 w-5 text-orange-600 dark:text-[var(--color-primary)]" />
             <div>
               <h3 class="text-sm font-bold text-slate-950 dark:text-white">{{ t('quotes.logisticsChannels') }}</h3>
-              <p class="text-xs text-slate-500">{{ t('quotes.logisticsChannelHint') }}</p>
             </div>
           </div>
           <div class="grid gap-4 lg:grid-cols-2">
@@ -605,7 +602,6 @@ onMounted(loadCapabilities)
         <div class="panel-header">
           <div>
             <h2 class="panel-title">{{ t('quotes.matrix') }}</h2>
-            <p class="panel-description">{{ t('quotes.matrixHint') }}</p>
           </div>
           <div class="flex flex-wrap gap-2">
             <button

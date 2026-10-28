@@ -1,7 +1,12 @@
+import { getDispatchTaskStatus, getDispatchCompletionStatus } from './workbench-status'
 import type { FulfillmentOrderFiltersDto, FulfillmentSortBy } from '../users/dto/workbench.dto'
 import type { FopOrder } from './fop-data.types'
+import { normalizeBusinessTimestamp } from './fop-business-time'
+import { normalizeConsumerPaidAt } from './consumer-payment-time'
 
 const statusQueues: Record<Exclude<FulfillmentSortBy, 'paidAt'>, readonly FulfillmentOrderFiltersDto['queue'][]> = {
+  reviewedAt: ['procurement'],
+  consumerPaidAt: ['unpaid', 'review', 'exceptions', 'dispatch', 'allocation'],
   dispatchDocumentStatus: ['dispatch', 'allocation', 'allocation_review'],
   allocationDocumentStatus: ['allocation', 'allocation_review', 'shipping'],
   stockReadiness: ['allocation', 'allocation_review'],
@@ -30,14 +35,10 @@ export function comparePaymentTime(left: FopOrder, right: FopOrder, direction: '
   return compareKnown(paymentTime(left), paymentTime(right), direction) || left.id.localeCompare(right.id)
 }
 
-function statusRank(order: FopOrder, field: Exclude<FulfillmentSortBy, 'paidAt'>): number {
+function statusRank(order: FopOrder, field: Exclude<FulfillmentSortBy, 'paidAt' | 'consumerPaidAt' | 'reviewedAt'>): number {
   if (field === 'dispatchDocumentStatus') {
-    const documents = order.dispatchDocuments
-    // A partly unknown document list cannot prove an order's overall stage.
-    if (!documents || documents.some(document => document.status === 'unknown')) return Infinity
-    if (!documents.length) return 0
-    const ranks = { draft: 1, submitted: 2, approved: 3, unknown: Infinity }
-    return Math.min(...documents.map(document => ranks[document.status]))
+    const ranks: Record<string, number> = { dispatch_missing: 0, dispatch_draft: 1, dispatch_submitted: 2, dispatch_approved: 3, dispatch_synced: 4 }
+    return ranks[getDispatchTaskStatus(order.dispatchDocuments, order.fulfillmentProgress.shopifySync)] ?? Infinity
   }
   const progress = order.fulfillmentProgress
   if (field === 'stockReadiness') return ({ incomplete: 0, ready: 1, unknown: Infinity })[progress.stockReadiness]
@@ -58,6 +59,16 @@ function statusRank(order: FopOrder, field: Exclude<FulfillmentSortBy, 'paidAt'>
 export function compareFulfillmentOrders(left: FopOrder, right: FopOrder, query: FulfillmentOrderFiltersDto): number {
   const field = query.sortBy ?? 'paidAt'
   if (field === 'paidAt') return comparePaymentTime(left, right, query.sortOrder ?? query.paidAtOrder ?? 'asc')
+  if (field === 'consumerPaidAt' || field === 'reviewedAt') {
+    const leftTime = field === 'reviewedAt' ? normalizeBusinessTimestamp(left.reviewedAt) : normalizeConsumerPaidAt(left.consumerPaidAt)
+    const rightTime = field === 'reviewedAt' ? normalizeBusinessTimestamp(right.reviewedAt) : normalizeConsumerPaidAt(right.consumerPaidAt)
+    return compareKnown(leftTime ? Date.parse(leftTime) : Infinity, rightTime ? Date.parse(rightTime) : Infinity, query.sortOrder ?? 'asc')
+      || comparePaymentTime(left, right)
+  }
+  if (field === 'dispatchDocumentStatus' && query.queue === 'allocation_review') {
+    return compareKnown(getDispatchCompletionStatus(left.dispatchDocuments) === 'dispatch_complete' ? 1 : 0,
+      getDispatchCompletionStatus(right.dispatchDocuments) === 'dispatch_complete' ? 1 : 0, query.sortOrder ?? 'asc') || comparePaymentTime(left, right)
+  }
   return compareKnown(statusRank(left, field), statusRank(right, field), query.sortOrder ?? 'asc')
     || comparePaymentTime(left, right)
 }

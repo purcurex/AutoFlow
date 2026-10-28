@@ -39,7 +39,7 @@ const metricCards = computed(() => [
 
       <div class="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1.25fr)_minmax(340px,0.75fr)]">
         <section class="panel overflow-hidden">
-          <div class="panel-header"><div><h2 class="panel-title">{{ t('dashboard.workflowActivity') }}</h2><p class="panel-description">{{ t('workflows.description') }}</p></div><RouterLink to="/workflows" class="btn btn-ghost">{{ t('dashboard.viewAll') }}<ArrowRight class="h-4 w-4" /></RouterLink></div>
+          <div class="panel-header"><div><h2 class="panel-title">{{ t('dashboard.workflowActivity') }}</h2></div><RouterLink to="/workflows" class="btn btn-ghost">{{ t('dashboard.viewAll') }}<ArrowRight class="h-4 w-4" /></RouterLink></div>
           <div v-if="workflows.length" class="divide-y divide-slate-100 dark:divide-slate-800">
             <div v-for="workflow in workflows.slice(0, 5)" :key="workflow.id" class="px-5 py-4">
               <div class="flex items-start justify-between gap-4"><div class="min-w-0"><p class="truncate text-sm font-semibold text-slate-900 dark:text-white">{{ workflow.name }}</p><p class="mt-1 text-xs text-slate-500">ID {{ workflow.displayId }} · {{ workflowCreatedDate(workflow.createdAt) }} · {{ $te(`status.${workflow.currentStage}`) ? $t(`status.${workflow.currentStage}`) : workflow.currentStage }} · {{ workflow.targetMarket }}</p></div><StatusBadge :status="workflow.status" /></div>
@@ -50,7 +50,7 @@ const metricCards = computed(() => [
         </section>
 
         <section class="panel overflow-hidden">
-          <div class="panel-header"><div><h2 class="panel-title">{{ t('dashboard.outreachQueue') }}</h2><p class="panel-description">{{ t('outreach.reviewHint') }}</p></div><RouterLink to="/outreach" class="btn btn-ghost">{{ t('dashboard.openQueue') }}<ArrowRight class="h-4 w-4" /></RouterLink></div>
+          <div class="panel-header"><div><h2 class="panel-title">{{ t('dashboard.outreachQueue') }}</h2></div><RouterLink to="/outreach" class="btn btn-ghost">{{ t('dashboard.openQueue') }}<ArrowRight class="h-4 w-4" /></RouterLink></div>
           <div v-if="tasks.length" class="divide-y divide-slate-100 dark:divide-slate-800">
             <div v-for="task in tasks" :key="task.id" class="px-5 py-4"><div class="flex items-center justify-between gap-3"><p class="text-sm font-semibold capitalize text-slate-900 dark:text-white">{{ task.channel }}</p><StatusBadge :status="task.status" /></div><p class="mt-2 line-clamp-2 text-sm leading-6 text-slate-600 dark:text-slate-400">{{ task.message }}</p></div>
           </div>
@@ -59,7 +59,7 @@ const metricCards = computed(() => [
       </div>
 
       <section class="panel mt-5 overflow-hidden">
-        <div class="panel-header"><div><h2 class="panel-title">{{ t('dashboard.highestLeads') }}</h2><p class="panel-description">{{ t('leads.description') }}</p></div><RouterLink to="/leads" class="btn btn-ghost">{{ t('dashboard.leadPool') }}<ArrowRight class="h-4 w-4" /></RouterLink></div>
+        <div class="panel-header"><div><h2 class="panel-title">{{ t('dashboard.highestLeads') }}</h2></div><RouterLink to="/leads" class="btn btn-ghost">{{ t('dashboard.leadPool') }}<ArrowRight class="h-4 w-4" /></RouterLink></div>
         <div v-if="topLeads.length" class="overflow-x-auto"><table class="data-table"><thead><tr><th>{{ t('dashboard.brand') }}</th><th>{{ t('common.market') }}</th><th>{{ t('common.category') }}</th><th>{{ t('common.score') }}</th><th>{{ t('common.status') }}</th></tr></thead><tbody><tr v-for="lead in topLeads" :key="lead.id"><td><RouterLink :to="withReturnTo(`/leads/${lead.id}`, route.fullPath)" class="font-semibold text-orange-600 hover:underline dark:text-orange-400">{{ lead.brandName }}</RouterLink><p class="mt-0.5 text-xs text-slate-500">{{ lead.domain }}</p></td><td>{{ lead.country }}</td><td>{{ lead.category }}</td><td><span class="font-bold text-slate-950 dark:text-white">{{ lead.totalScore }}</span></td><td><StatusBadge :status="lead.status" /></td></tr></tbody></table></div>
         <EmptyState v-else :message="t('dashboard.noLeads')" />
       </section>

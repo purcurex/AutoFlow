@@ -1,5 +1,7 @@
 # HyperZone FOP 源码字段与分析适配依据
 
+当前以需求9.40及9.29–9.39为准：物流门槛仅限实际推1688，未审配货归配货、已审未出库归仓库；销售review及配货allocation_review已恢复原生审核入口。本文旧版只读/移除入口说明仅作历史记录，不用于现行开发。
+
 更新日期：2026-10-23（UTC+8），保留2026-10-22原核查。源码目录：`/Library/VSCode/dtr5b`，原核查HEAD：`bd4c115c`（核查当前工作树，不代表生产部署版本）。仅阅读业务 Java、苍穹元数据与转换规则；未连接生产、未读取配置密钥、未修改FOP后端。
 
 本文件区分源码事实、此次业务口径和仍待接口样本确认的映射。FOP 在本项目指金蝶苍穹上的 HyperZone 自定义应用。
@@ -296,7 +298,7 @@ FOP收入使用收款 `hzkj_exrate`；没有收款汇率时回退当前 `bd_exra
 | 前端标准字段 | 已核实实体／字段和源码 | 映射要求 |
 | --- | --- | --- |
 | `paymentStatus/reviewStatus` | `member/common/service/ShopifyPaidFulfillmentService.java:111`：本地订单状态及成功收款凭据判付；`ordercenter/allocation/AllocationConstants.java:90`：C为已审核、订单2/3/4/5为已支付后续状态 | 已付款才进入待审核；不可只使用Shopify financial_status。五队列的付款门槛不改变回款的双审核口径 |
-| `fulfillmentProgress.shopifySync` | `member/plugin/task/SyncShopifyOrdersTask.java:2066` 读取Shopify `fulfillment_status` 写入订单 `hzkj_fulfillment_status`；`hzkj_fulfillment_gid`独立同步。发运推单回写见 `logistics/plugin/op/DeliverBillCreateOrderOpPlugin.java:757` | 平台履约回执归一化pending/partial/synced；不能从调度、配货、仓库出库反推。已获取未履约与尚未取得平台事实要区分，后者unknown |
+| `fulfillmentProgress.shopifySync` | `member/plugin/task/SyncShopifyOrdersTask.java:2066` 读取Shopify `fulfillment_status` 写入订单 `hzkj_fulfillment_status`；`hzkj_fulfillment_gid`独立同步。发运推单回写见 `logistics/plugin/op/DeliverBillCreateOrderOpPlugin.java:757` | 平台履约回执归一化pending/synced；不能从调度、配货、仓库出库反推。已获取未履约与尚未取得平台事实要区分，后者unknown |
 | `fulfillmentProgress.supplierShipment` | `ordercenter/plugin/util/OrderPurchaseStatusUtil.java:32`：`hzkj_purchase_status`、分录`hzkj_entrypurc_status`；0未采购、1部分采购、2采购中、3已入库、4供应商已发货；`setHeadPurchaseStatus`处理组合父件、虚拟SKU及备货使用 | 先取有效物理商品明细：供应商仍有未发货数量才pending/partial；全部发货/入库则shipped；全部无需采购则not_required。**不能将表头1直接等同“部分供应商发货”**，因为混合已入库/采购中也可能是1 |
 | `fulfillmentProgress.stockReadiness` | `ordercenter/allocation/AllocationConstants.java:58`：pending/available/completed/error/voided；配货实体`hzkj_alloc_bill`及`hzkj_alloc_status` | 有效需求与实际可配库存决定incomplete/ready；completed代表已齐套。缺配货记录或error不能无证据推断齐套；需要需求／库存计算才能判incomplete，否则unknown |
 | `fulfillmentProgress.allocationReview` | `ordercenter/allocation/AllocationReleaseGateService.java:191`：同时要求`hzkj_alloc_status=completed`与`billstatus=C`，并校验有效分录；重复已审核齐套包裹会报错 | 订单有效包裹全部配货审核完成才approved；齐套未审pending；作废、撤审、重复配货须按有效记录处理，不从履约订单审核状态推导 |
@@ -319,7 +321,7 @@ FOP收入使用收款 `hzkj_exrate`；没有收款汇率时回退当前 `bd_exra
 
 ### 12.2 配货清单状态展示补充（2026-10-24）
 
-再次核对`ordercenter/allocation/AllocationConstants.java`：pending待配货、available可配货、completed已齐套、error配货异常、voided作废；`AllocationReleaseGateService.requireReleased`同时验证`hzkj_alloc_status=completed`与`billstatus=C`并校验有效分录数量。前端沿用stockReadiness与allocationReview两个归一字段，“未配货清单”按最新9.13取allocationCreated=true、incomplete且allocationReview=pending，完成齐套但未审核在独立“已齐套待审核”页签展示；2026-10-26修订为独立两列：配货状态按stockReadiness映射未齐套/已齐套，配货单状态按allocationReview映射未审核/已审核，未知分别待确认；两页同时显示dispatchDocuments发运单状态，不增加客户支付状态，不把库存可用或履约审核代替配货完成/审核事实。真实适配对多单/多包裹、异常/作废以及缺配货单仍按T31/H33核验，生产接口未在本次接入。
+再次核对`ordercenter/allocation/AllocationConstants.java`：pending待配货、available可配货、completed已齐套、error配货异常、voided作废；`AllocationReleaseGateService.requireReleased`同时验证`hzkj_alloc_status=completed`与`billstatus=C`并校验有效分录数量。前端沿用stockReadiness与allocationReview两个归一字段，“未配货清单”按最新9.13取allocationCreated=true、incomplete且allocationReview=pending，完成齐套但未审核在独立“已齐套待审核”页签展示；2026-10-26修订为独立两列：配货状态按stockReadiness映射未齐套/已齐套，配货单状态按allocationReview映射未审核/已审核，未知分别待确认；两页同时显示dispatchDocuments发运单状态，不增加客户支付状态，不把库存可用或履约审核代替配货完成/审核事实。真实适配按用户确认的履约订单与配货单一对一取数，多包裹分录、异常/作废以及缺配货单仍按T31/H33核验，生产接口未在本次接入。
 
 
 仓库工作台追加两组展示：`completed`且未审核的配货事实也进入仓库待办，但不代表已通过`requireReleased`、不允许在本平台执行出库。齐套已审核且出库未完成为第二组。两组继续按履约订单归一，已全部出库排除；FOP生产放行校验不作任何改动。
@@ -333,13 +335,9 @@ FOP收入使用收款 `hzkj_exrate`；没有收款汇率时回退当前 `bd_exra
 - 对应新增`FopOrder.dispatchDocuments[]`的id/number/status，缺失与确认无单分开；多包裹逐单展示，不选择最高审核状态冒充整单。未修改FOP生产源码；有效单据过滤、撤销重建、权限与更新时间继续T33/H35联调。
 
 
-### 12.4 清单拆分与查询过滤（2026-10-24）
+### 12.4 清单拆分与查询过滤（以9.14及12.10最新定义为准）
 
-- `procurement_shipping`以12.1归一的有效全部下单与供应商付款完成事实入选，供应商仍pending/partial；`procurement`按最新9.13取未全部下单或采购付款未完成，不再以供应商未发货为共同门槛。`PurchasePaidOrderSyncService`对取消/退款态保护说明付款不可仅凭一次历史已支付回调永久锁定；需有效采购义务的当前事实。线下单和部分付款继续H34人工确认。
-- `allocation_review`来自有效配货单已齐套且未审核、未全部出库事实；与未配货（已建单且incomplete+pending）分开。`AllocationDeliveryNoticeService`审核前校验有效关联发运单已审核，解释了配货页需要并列显示发运审核状态；展示未审核记录不改变FOP审核放行条件。
-- 仓库`warehouseStage`是BFF查询条件，不是新增FOP字段。两组仍由stockReadiness/allocationReview/outbound组合归一，多包裹各事实按有效需求核验，不能仅取某一张单最高审核状态。
-- 本次不修改FOP生产实现；发布真实接口后验证付款/齐套/审核/出库跨阶段流转、回退、重复回调、更新时间与数据权限。具体契约见需求9.7和OpenAPI。
-
+采购准备与已采购待发货分别跟进，物流门槛只限制实际推1688。配货未齐套/已齐套未审核按结果分组，不区分自动和人工；发运状态仅提示。仓库仅配货已审核未出库，旧pending_review返回空。卡片、清单、导出统一先权限后筛选；不把款项、齐套、审核、出库和Shopify状态互相推断。字段级来源及新增1688进度见12.10。
 
 ### 12.5 待支付来源确认（2026-10-24）
 
@@ -380,4 +378,172 @@ FOP收入使用收款 `hzkj_exrate`；没有收款汇率时回退当前 `bd_exra
 - `AllocationConstants.java:58–67`明确pending/available/completed/error/voided，A/B/C审核状态在80–85行。未齐套待办仍须配货未审；已齐套未审为另一页。订单级标志需归一有效全部包裹；不能只见一张单便把整单齐套/审核判完成。履约清单按订单ID去重，不新增配货单级分页。
 - `logistics/plugin/op/DeliverBillShipmentSyncService.java:135`及后续流程明确以平台创建/更新确认后才回写，且校验组织、来源订单、包裹和数量；`hzkj_upload_no`为相关本地上传标记（字段读取34行、变更检查121行）。生产shopifySync需核对当前有效跟踪号、包裹与成功回执/版本，不能只看fulfillment_status或跟踪号非空。平台待履约仅含客户已付且我方履约已审核订单，且尚未完成Shopify跟踪号上传及履约标记；未审订单只留在待审核队列，不授权前端越过发运审核执行同步。
 - 需求9.13更新12.1/12.4原采购门槛：未完成采购付款即使供应商已发货也保留待采购；已采购待发货才要求供应商pending/partial。未知不等于未支付，未下单/部分下单按有效剩余需求保留。FOP付款枚举、来源分录和退款取消事实仍按12.1核对。
-- IT待办：发布allocationCreated归一；核对审核后异步建单失败/重试、撤审/作废/多包裹和已发未付采购样本；提供跟踪号更新成功的可审计事实。测试T31–T33/H33–H35须包含这些边界。源码存在不代表生产HTTP端点已启用，本次未改dtr5b。
+- IT待办：发布allocationCreated归一；核对正常自动建单、人工释放回退、多包裹和已发未付采购样本（本版不新增建单失败工作台）；提供跟踪号更新成功的可审计事实。测试T31–T33/H33–H35须包含这些边界。源码存在不代表生产HTTP端点已启用，本次未改dtr5b。
+
+
+### 12.10 最新正常链路与物流门槛证据（2026-10-27）
+
+本节及需求9.14覆盖12.1–12.9的旧仓库两组和工作台审核入口说明。源码只读核查，未修改或部署FOP。
+
+| 平台事实 | 已核对的FOP证据（相对CRM Java源码目录） | 对接要求 |
+| --- | --- | --- |
+| purchaseApplication | `einkauf/plugin/list/PurapplybillListPlugin.java:26`明确`hzkj_purapplybill`；`einkauf/plugin/from/PurapplyPushPurOrderPlugin.java:53`查询申请并转换采购单；`ordercenter/plugin/util/OrderPurchaseStatusUtil.java:148`申请后可标记采购中 | 沿实际来源行核对有效申请及需求覆盖数量；采购中不等于采购单/1688已完成。直采不要求申请。 |
+| purchaseOrder | `hzkj_purorderbill`实体与`PuroderBillListPlugin.java:145–158`读取billno/billstatus/来源/数量；未审核C会在推送动作时报错 | 只读工作台可展示已创建的未审核采购单；本版purchaseOrder表示有效FOP采购单覆盖需求数量，审核资格留FOP，不用外部订单号替代。 |
+| alibabaOrder | `einkauf/service/Purchase1688OrderService.java:97–117`成功回写头`hzkj_1688_order_n`与行`hzkj_1688_order_no` | 先核对有效采购来源和成功外部单，按需推数量聚合；线下不适用、未获事实unknown。 |
+| logisticsGate | `einkauf/service/Purchase1688PushValidationService.java:54–132`：源行hzkj_salbillnumber→平台单→发运hzkj_order_no，查询发运单头hzkj_logistics_orderno | 条件只限制**实际推1688**。申请、采购单准备不受影响；不得用物流明细追踪号或Shopify状态替代。合并采购须检查全部源订单；最小授权聚合，不泄露其他来源。 |
+| 推送最终资格 | `PuroderBillListPlugin.java:152–179`同时检查C审核、重复外部单和共享物流校验 | logisticsGate=satisfied仅物流前提满足，不能当作完整可推送资格；最终动作重新执行FOP原校验。 |
+| 配货单自动创建 | `ordercenter/allocation/plugin/OrderAllocationAuditOpPlugin.java:32–44`在履约审核事务提交后派发建单任务 | 按用户确认自动创建未审核配货单，本版不扩建单失败异常列表；仍读取实际有效来源事实。 |
+| 配货结果与人工回退 | `AllocationService.manualAllocationFailures/validateForAudit`、`plugin/AllocationReleaseOpPlugin.java:41`调用releaseSelected | available是部分配货，completed才齐套。人工释放后按最新结果回未齐套；不记录或按“自动/人工”分清单。 |
+| 审核与仓库衔接 | `plugin/AllocationAuditOpPlugin.java:46–48`先校验齐套占用及关联已审发运，再在审核后生成发货通知；`AllocationDeliveryNoticeService`完成链路 | 已齐套未审属于配货岗，即使发运未审也仍可见；已审核未出库归仓库，不以WMS已生成过滤衔接中的订单。 |
+
+common.purchase1688PushValidationEnabled仅显式false关闭物流检查；真实适配应与部署配置一致，不能在前端自行放行。尚未发布的只读字段映射、合并采购及多包裹样本见T37/H39/D40。已存在Java插件不等于已有可调用HTTP端点。
+
+- 采购推送前付款事实补充：`Purchase1688OrderService.writeBack:100–106`在成功外部下单后写hzkj_pay_status=0；未推送前缺该付款状态不能当“无需跟进”。明确not_pushed/partial的已建采购单保留待采购并排除待发货；物流条件仍不影响可见性。supplierPayment归一不依赖付款单生成或审核。
+
+### 12.11 采购表头筛选映射（需求9.16）
+
+`procurementStage`由BFF从既有采购申请、采购单、1688、采购付款及供应商发货事实归一，不新增FOP写接口。先复用授权与队列，再阶段筛选，导出共用。用户确认履约订单一对一采购申请；合并采购由FOP处理，无部分创建采购单正常场景。Purchase1688OrderService.writeBack在外部建单成功后写hzkj_1688_order_n并初始化hzkj_pay_status；采购付款须已有1688订单。旧partial兼容规则见9.16；生产不可依赖旧Demo假设。全款备货无需重复采购、押金备货扣减采购执行量，以FOP归集结果为准。
+
+### 12.12 精简协同状态（对应需求9.17）
+本版复核Purchase1688PushValidationService.java：待建发运单来自源单无有效关联发运单；待获取物流单号来自发运单头hzkj_logistics_orderno缺失，不用物流明细追踪号或Shopify标记替代。只在采购单已建、1688尚未推完时用于显示协同原因，采购申请/采购单准备仍先行。taskStatus为BFF派生查询值，不是苍穹新增实体字段。发运状态汇总沿用A/B/C归一与已有最早阶段排序逻辑，任一未知优先待确认；不得丢弃关联单据来伪造全部已审。
+
+## 订单收货国家映射（需求9.19）
+
+`FopOrder.shippingCountryCode` → 履约订单 `hzkj_country.twocountrycode`，用于所有清单Customer列（国家旗帜＋二字码）与Excel国家码。`OrderDeliveryAddressValidationService.java:242–250` 的 `buildOrderAddress` 从订单该字段读取、trim并转大写，作为收货地址regionCode；`OrderAuditVirtualProductOperatePlugin.java:54–55,79–81` 显式展开该关联基础资料字段。两者位于 `/Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/ordercenter/`，分别在 `service/`、`operate/` 下。`plugin/webapi/OrderController.java:589–590` 从收货地址countryId读取bd_country并赋给订单hzkj_country，不能用客户档案国家替代。
+
+适配器返回订单收货国家；BFF规范化ISO二字码，无有效国家时null。UI旧接口缺省显示“—”。国家不是新权限或筛选维度，不改变数据集合；生产字段完整率、关联资料加载、多国与空值样本需IT联调。
+
+## 工作台仓库及物流商搜索（需求9.20）
+
+筛选复用已有 `FopOrder.warehouseCode`（HZ/SZ）与 `carrier/carrierCode`。FOP `ordercenter/plugin/webapi/OrderController.java:646,1995` 写入订单头 `hzkj_dst_warehouse`；分录 `hzkj_warehourse` 与SKU仓库作为既有后台计算输入，前端不重新推算仓库。新查询参数warehouseCode匹配适配后的订单头标准仓库码；生产需按既有仓库/物流渠道映射校验实际FOP基础资料ID，禁止用收货国家或Shopify同步状态猜测。物流查询匹配既有规范化服务商名称及代码，不新增供应商数据接口。
+
+### 2026-10-27：履约订单收件人
+
+核对 `/Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/ordercenter/plugin/webapi/OrderController.java:3698–3714`（明确标注“收货人信息”）及 `service/OrderDeliveryAddressValidationService.java:243–253`。
+
+| 前端/BFF 字段 | FOP 订单字段 | 规则 |
+| --- | --- | --- |
+| shippingRecipient.name | hzkj_customer_first_name + hzkj_customer_last_name | 各自 trim 后空格连接；非 hzkj_customer.name；单独姓/名也保留 |
+| shippingRecipient.phone | hzkj_phone | 字符串、保留区号 |
+| shippingRecipient.email | hzkj_email | 订单收件人邮箱 |
+| shippingRecipient.state | hzkj_state | 基础资料对象需解析显示文本 |
+| shippingRecipient.city | hzkj_city | 城市原文 |
+| shippingRecipient.postalCode | hzkj_post_code | 字符串保留前导零 |
+| shippingRecipient.addressLine1 | hzkj_address1 | 街道详细地址 |
+| shippingRecipient.addressLine2 | hzkj_address2 | 补充地址 |
+| shippingCountryCode | hzkj_country.twocountrycode | 继续沿用订单国家字段 |
+
+BFF 在订单授权过滤后白名单序列化；空字符串/非法类型转 null，全部缺失返回 null。字段已确认不代表生产 HTTP 适配器已上线。IT 需核验首尾名顺序、Unicode 地址、国际电话、空字段及跨账号拒绝访问；不回退客户主档地址。
+
+### 2026-10-27：C端下单时间不是FOP创建/收款时间
+
+源码根目录 `/Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/`。
+
+| 证据 | 当前实现 | 结论 |
+| --- | --- | --- |
+| member/plugin/task/SyncShopifyOrdersTask.java:1195–1196 | Shopify created_at → hzkj_bizdate | 源订单创建日期，不是已核实的付款完成事件 |
+| 同文件:1227–1228 | financial_status → hzkj_sourcepayststus；processed_at → hzkj_datetimefield | 付款状态和订单处理时间独立存储 |
+| 同文件:2089–2101 | 更新源财务状态及processed_at | 当前字段可能随源数据改写，不能直接作为不可变首次付清事实 |
+| 本工程 consumerPaidAt | 新增可信网关响应字段，BFF允许字段读取并校验 | 真正源映射待IT补齐；未核实返回null，不能回退上述字段 |
+
+Shopify官方 processedAt 是订单处理时间，导入可回填，详见需求9.23链接。请IT以店铺+源订单为键持久化消费者首次付清时刻，核实支付网关成功交易及当时订单应收；补款/退款/重复同步不得重写。当前未修改FOP源码，也未声称已接通生产首次支付完成时间。
+
+需求9.32将此同一取数合同扩展到销售unpaid/review/exceptions及发运dispatch清单。再次核对SyncShopifyOrdersTask仍将created_at写hzkj_bizdate、processed_at写hzkj_datetimefield；均不能直接作为已核实的首次付清时间。真实网关须在四类队列一致返回consumerPaidAt，流转过程中不重写首次事实。
+
+## 2026-10-27：销售待审核实际物流渠道映射
+
+- 源码根路径`/Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/`。
+- `ordercenter/plugin/webapi/OrderController.java:3610–3612`查询`hzkj_logistics_info.hzkj_channel.id/name/number`及其物流商；3720–3730现有响应只拼接providers（物流服务商），不是渠道数组；3686–3689的customer_channel是自定义渠道，不能混用。
+- `ordercenter/service/OrderBatchModifyService.java:47`定义实际资料实体`hzkj_logistics_channel`；248–249单包裹修改同时保存订单表头及包裹分录；537–551明确实际取分录优先、历史单包裹空值才回退表头。
+- `OrderShipmentLogisticsWritebackService.java:28–49`的商品明细hzkj_ship_channel来自已审核发运单回写；不作为销售待审核展示的主来源。
+- 可信网关既有`POST /fulfillment-orders`按授权订单批量关联包裹实际渠道并返回`logisticsChannels:[{name,code}]`；name/number须成对来自同一资料。多包裹保留不同渠道；不得仅取第一条或把表头渠道代入缺值包裹。BFF去首尾空白和重复组合，过滤额外属性，旧网关为空时null。
+- 本次不修改FOP生产库。既有OrderController响应不能直接替代本工程完整可信网关契约，真实路由和字段回传需IT适配验证。
+
+## 2026-10-27：待支付自定义物流渠道
+
+- FOP源为`hzkj_orders.hzkj_customer_channel`关联自定义渠道中已维护的英文名称，不是实际包裹渠道hzkj_logistics_info.hzkj_channel，也不是物流商分类。
+- `ordercenter/plugin/webapi/OrderController.java:3602–3603`已加载自定义渠道name；3686–3689响应hzkj_customer_channel_id/number/name，既有响应是通用名称，未显式选择英文。新契约FopOrderCandidate.customLogisticsChannelName必须为该渠道的英文值，不能直接假定现有响应已经满足。
+- BFF仅接受字符串名称、去首尾空白；授权后在unpaid查询中作为物流关键词字段，替代carrier/carrierCode；其他队列沿用物流商字段。缺失不查询实际渠道或客户档案补齐。
+- 已查`datamodel/hzkj_CRM/1.5/main/hzkj_logistics/metadata/hzkj_custom_channel.dym`：其中“英文名”条目为国家/地区引用属性，并非渠道英文名，禁止误接。当前源码未确认渠道英文名称的独立字段或语言键；按业务已维护英文名称的事实，由IT核对运行环境并显式映射，不编造hzkj_enname等字段。
+- 接口键和数据权限不随文案改名而改变；英文未维护返回null，不回退中文或自动翻译。真实网关英文映射、空值、刷新和两个Excel模式仍需IT联调。
+
+## 2026-10-27：待履约已审核未同步（需求9.26）
+
+核对`logistics/plugin/op/DeliverBillShipmentSyncService.java:61–62`：同步前要求billstatus=C；76–93处理外部成功、本地回写失败及重试恢复，137、161、200–219在平台未确认时阻止成功回写。因此发运审核不能代替同步成功事实。按用户确认审核后异步同步，暂时等待及卡单保留为已审核未同步，已同步退出待履约；不从物流号存在推定synced。dispatch_approved仅在发运队列叠加pending，配货状态保持原派生逻辑。真实FOP同步字段、平台成功与回写延迟仍需联调验证；未改FOP代码。
+
+## 2026-10-27：待履约物流信息（需求9.27）
+
+- 源码logistics/plugin/op/DeliverBillShipmentPrepareHelper.java常量及resolveShopifyTrackingNo：全程FIELD_FULL_ROUTE_TRACKING_NO=hzkj_logistics_orderno；尾程FIELD_LAST_MILE_TRACKING_NO=hzkj_logistics_trackno；FIELD_UPLOAD_FULL_ROUTE_NO=hzkj_upload_no仅选择上传全程，关闭时优先尾程、必要时回退全程。选择不改变号码真实类型。
+- 元数据datamodel/hzkj_CRM/1.5/main/hzkj_logistics/metadata/hzkj_deliver_bill.dym包含hzkj_logistics_providers、hzkj_logistics_trackno、hzkj_logistics_orderno。从同一发运单/包裹映射服务商及号码，不能将订单服务商跨配到另一张单。
+- Helper明确Sunyou的syOrderNo为内部订单ID，不是客户追踪号；该服务商须使用明确有效的客户跟踪字段，不能机械将所有orderNo映射全程。
+- 尚未确认头程独立字段：真实网关核实后才输出first_mile，禁止按YT等前缀猜测。全程与尾程均有值时保留两种事实，不只输出最终上传Shopify的一个号码。
+- 既有可信POST /fulfillment-orders返回FopOrderCandidate.logisticsInfo，BFF经原授权后输出至清单和Excel。未修改FOP生产实现；旧carrier/trackingNumber兼容显示但不补类型。
+
+## 2026-10-27：Shopify选定号码与业务部门（需求9.28）
+
+覆盖上一节静态全程映射：业务明确hzkj_logistics_orderno可为全程或头程，hzkj_logistics_trackno为独立尾程。DeliverBillShipmentPrepareHelper.resolveShopifyTrackingNo目前根据hzkj_upload_no及服务商规则返回最终上传号码：开启取主物流号，关闭优先尾程并允许主号回退；顺友特殊取尾程，内部syOrderNo不能上传。上述仅核对现有源码，不代表主号固定QC；resolveTrackingNoSource的FULL_ROUTE名称也不能独立证明实际全程类型。
+
+IT应追踪报价配置到发运单的传递，并复用实际上传路径得出logisticsInfo[].shopifyTracking.number及type；来源及类型未核实返回null，不按号码前缀猜测。全程/头程使用同一主字段的实际类型、报价配置字段与源值转换规则须人工联调确认。平台只消费明确选择，不实现FOP选择算法。
+
+业务部门sales1–sales4仅映射营销中心直属业务一至四部，不能映射同名其他节点；平台选项在订单授权后收敛四部，Demo已校验树关系。真实网关还需验证节点ID与平台business department筛选一致，旧下级组织路径仅保留权限/历史查询兼容。
+
+### 采购筛选与销售审核恢复（需求9.29）
+
+用户确认：履约审核后FOP自动创建采购申请，待采购从待建采购订单开始。已复核OrderPushPurchPlugin.afterConvert读取hzkj_purapplybill及源履约转换链；自动触发配置由IT按实际部署核对，不能仅凭转换插件推断生产任务配置。Purchase1688PushValidationService的缺发运/缺物流号事实合并为dispatch_preparation，不改变后台推送门槛。
+
+销售review复用12.8原生审核合同。再次核对OrderAuditVirtualProductOperatePlugin.beforeExecuteOperationTransaction在audit前校验地址，endOperationTransaction在审核事务内维护虚拟商品采购/出库状态；因此前端/BFF必须委托原生audit而非直接改billstatus。当前源码核对不代表已发现满足员工委托、版本、持久幂等的已发布HTTP接口，targets/audit仍须IT联调。配货审核UI继续关闭。
+
+### 配货单号与发运完成（需求9.30）
+
+本次再次核查ordercenter/allocation/plugin/AllocationAuditOpPlugin.java：beforeExecuteOperationTransaction先validateForAudit，再AllocationDeliveryNoticeService.validateDeliverBills；后置发货通知失败独立提示。AllocationDeliveryNoticeService.java约490–516行按来源订单/包裹匹配，过滤取消/失效，要求已审核并拒绝同包裹多张已审核发运单。
+
+allocationDocument唯一引用来自hzkj_alloc_bill.id/billno，按hzkj_order_id/hzkj_order_no建立履约归属。用户确认当前业务一笔履约订单对应一张配货单；源码中的包裹校验不作为一单多配货单的业务依据。公开只返回单对象id/number，权限仍从真实来源校验。进度二值分类不检查Shopify同步，也不能替代包裹级关系与重复审核单检查。未齐套/待审核/发运前置仍由FOP原生audit原子核对，targets/audit生产端点及版本/幂等持久化由IT确认。
+
+
+## 采购付款时间与待发货时长（需求9.34）
+
+- 源码：`code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/einkauf/service/PaidOrderAmountSyncService.java:37–60,118–125`读取1688订单详情`baseInfo.getPayTime()`，用于已付款判定；87–88写实际支付金额/运费，未见真实付款时刻写回。实际持久化字段须IT核对，不把日志或接口调用时刻当付款时间。
+- 元数据：`datamodel/hzkj_CRM/1.5/main/hzkj_einkauf/metadata/hzkj_purorderbill.dym:1897–1903`中的`hzkj_paydate`是“到期日”，明确排除。
+- `PurchasePaymentBillService.java:30–38,66–76`根据采购单/1688订单下推付款单并按转换规则赋值；其创建、提交、审核时间不证明1688实际付款时刻。
+- 平台新增`FopOrder.procurementPaidAt`/`FopOrderCandidate.procurementPaidAt`（可省略、可null），约定为当前履约订单尚未发货的有效已付款采购义务中最早实际付款时刻；真实上游须沿源单/分录关系归集，按权限输出时间，不暴露采购单敏感明细。当前BFF仅规范化可信网关供给的时刻，不猜生产字段，也不在前端重建采购关联。
+
+
+## 9.35 配货齐套时间核对
+
+- 元数据`datamodel/hzkj_CRM/1.5/main/hzkj_ordercenter/metadata/hzkj_alloc_bill.dym:1325–1336`：DateTimeField，中文名齐套时间，Key=hzkj_complete_time，物理字段fk_hzkj_complete_time，TimeZoneTransType=1。
+- `code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/ordercenter/allocation/AllocationService.java:2284–2291`：齐套且当前值为空写new Date；未齐套清空；`:2372`另一配货路径按completed写当前时间或null；`:2247/:2306/:2458/:2572`有释放/重置清空路径。不是单据创建时间或审核时间，不保证历史首次齐套，网关应原样读取当前字段。
+- 目标字段`FopOrder/FopOrderCandidate.allocationReadyAt`：明确时区ISO时间，当前有效单且ready才返回，否则null；页面allocation_review及Excel按UTC+8展示。真实网关字段发布、关联和时区换算待IT联调。源码已存在不等于HTTP已发布；本次未改FOP库。
+
+
+## 9.36 备货订单与客户库存源码核对
+
+源码根目录 `/Library/VSCode/dtr5b`，本轮只读核实，未改FOP生产代码。
+
+- `datamodel/hzkj_CRM/1.5/main/hzkj_ordercenter/metadata/hzkj_stock_order_new.dym`：备货单billno；hzkj_stock_type=1全款/2押金；hzkj_orderstatus=0取消/1待支付/2已支付；hzkj_order_amount原币订单额，hzkj_receive_amount实际已收额不可混用；hzkj_receipt_date收款时间；hzkj_settlecurrency、hzkj_customer、hzkj_operator、hzkj_dept、hzkj_warehouse；商品hzkj_local_sku/hzkj_qty与SKU档案补图/名称/规格。组合品子分录关系需核实，禁止父子重复计数；本次未找到店铺字段。
+- `code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/ordercenter/plugin/util/StockOrderPurchaseStatusUtil.java`：聚合有效采购关系回写hzkj_purchase_status；共用枚举在同目录OrderPurchaseStatusUtil.java，0未采购/1部分采购/2已采购/3已入库/4已发货。前端展示顺序可先发货后入库，映射值不可互换。
+- `.../ordercenter/plugin/webapi/OrderController.java:4324`：getStockInventoryQty按客户、SKU名称、仓库查询，pageIndex从0开始、按SKU分页，返回warehouseQtyMap/warehouses。不是本项目员工网关路径；必须先补委托员工权限，不能直接向浏览器暴露该查询能力。
+- `.../inventory/util/StockInventoryQueryUtil.java`与`.../inventory/vo/StockInventoryQtyVo.java`：实体hzkj_stock_inventory_data按客户/SKU/仓库聚合，读取全款可用hzkj_total_available_qty、全款锁定hzkj_lock_qty、押金可用hzkj_deposit_avail_qty、押金锁定hzkj_deposit_lock_qty。累计入库hzkj_full_pay_total_qty/hzkj_deposit_total_qty和累计使用hzkj_full_pay_used_qty/hzkj_deposit_used_qty不是即时库存。
+- `.../ordercenter/plugin/util/ReservedStockOrderUtil.java:577–583,668–670`：锁定时从available扣减并增加locked，释放反向。虽然部分字段元数据叫“在库数量”，实际代码语义是可用；因此本项目在库=available+locked。IT应使用真实锁定/释放样本确认，禁止二次扣锁定。
+- 真实库存网关返回当前客户归属；备货单返回单据自身业务归属。独立库存资源授权、不从履约订单权限推导。不把占用量默认为0掩盖缺字段；非法/负数/重复资源返回503，零值正常。
+
+
+## 9.37 源码核对与适配边界
+
+- `code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/ordercenter/plugin/convertplugIn/StockOrderPushValidationPlugin.java:25–30,97–99`明确备货下推要求hzkj_orderstatus=2且billstatus=C；采购待备货复用此事实，不借收款时间推定状态。hzkj_stock_order_new.dym采购0未采购/1部分采购为未完成，2/3/4完成或后续阶段排除。
+- 履约reviewedAt：logistics/service/DeliveredOrderVolumeReportService.java的auditdate属发运单，inventory/plugin/from/saloutbill/SaloutbillOutboundStatusOperatePlugin.java的auditdate属出库单；einkauf/plugin/operate/PurapplybillAuditOperatePlugin.java:59–61取当前采购申请审核时刻，也不是履约审核时间。不能挪用以上来源，hzkj_orders真实审核时间字段和撤审重审策略列为人工确认项。
+- 原OrderController.getStockInventoryQty客户ID必填、SKU分页返回多仓，9.37平台库存支持多客户并不等于原FOP接口已支持。生产员工网关必须完整取得授权集合后统一过滤排序分页，不截前100客户或每客户首页；建议库存实体批量聚合。现有FopDataProvider.listStockInventory合同输出完整授权候选行，由BFF过滤分页，生产网关实现仍待IT。
+
+## 配货即时库存增量（需求9.38）
+
+后台库路径 `/Library/VSCode/dtr5b`，Java前缀 `code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/`。
+`ordercenter/allocation/AllocationInventoryPoolService.java` 通过BalQuery.getBalData4NegativeCheck读取im_inv_realbalance（warehouse/material/qty/auxpty，含实时流水），公共customerId为公共标记，专属客户按辅助属性转换，未知客户不得归为公共；`AllocationBalanceService.java` 为配货占用；`AllocationStockBudget.java` 还有全款权益保护。页面实物余量只做max(0,在库−占用)，不用于直接判断齐套。
+`inventory/webapi/InventoryController.java#getInventoryList` 是固定样例占位，不能作为生产数据源。新增员工网关契约见AllocationInventoryGatewayRequest/Snapshot；独立池授权及完整快照需要人工联调。
+
+## WMS创建时间补充（2026-10-28，需求9.39）
+
+`FopOrder.wmsCreatedAt`表示发货通知成功推送WMS出库指令的时间。`hzkj_deliver_order.hzkj_bill_create_time`在元数据约2484行标注“委托单创建日期”；`DeliverOrderOperationPlugin.createFpxOutboundOrder`约598行在4PX成功后调用`updateDeliverOrderStatus`，约695行写入该字段。疾风`executeJfOutboundOrder`约298–304行调用`markDeliverOrderPushed`，约400–403行仅写推送状态及错误原因，本次未发现出库时刻的可靠回写。`JfService.updateReceiptNoticeStatus`约417行属于入库收货，不能混用。IT核对重试覆盖、超时补确认、多有效通知、取消/全部出库排除；真实员工网关按9.39提供已确认时间，缺失null且不影响仓库任务可见。
+
+
+### 2026-10-28 交付复核
+
+本次再查本地FOP工作树（HEAD bd4c115c，存在未提交改动，不代表生产版本）：InventoryController#getInventoryList仍为固定样例；4PX成功写hzkj_bill_create_time，疾风markDeliverOrderPushed未见同类出库时间写入。字段级历史证据继续保留，正式部署版本、原始事件持久化及员工网关须IT逐项核对；未修改或拉取FOP库。现行重点见WORKBENCH_DELIVERY_BRIEF.html。

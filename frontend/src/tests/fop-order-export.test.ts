@@ -9,11 +9,11 @@ describe('workbench export client', () => {
     const file = new Blob(['xlsx'])
     vi.mocked(api.post).mockResolvedValue(file)
     const controller = new AbortController()
-    const input = { queue: 'review' as const, mode: 'filtered' as const, search: 'A', departmentId: 'd1', ownerId: 'employee-1', page: 2, userId: 'forged', orderIds: ['forged'] }
+    const input = { queue: 'review' as const, mode: 'filtered' as const, search: 'A', warehouseCode: 'SZ', departmentId: 'd1', ownerId: 'employee-1', page: 2, userId: 'forged', orderIds: ['forged'] }
     expect(await exportFopOrders(input as unknown as Parameters<typeof exportFopOrders>[0], controller.signal)).toBe(file)
     const [path, body, options] = vi.mocked(api.post).mock.calls[0]!
     expect(path).toContain('fulfillment-orders/export')
-    expect(body).toMatchObject({ queue: 'review', mode: 'filtered', search: 'A', departmentId: 'd1', ownerId: 'employee-1' })
+    expect(body).toMatchObject({ queue: 'review', mode: 'filtered', search: 'A', warehouseCode: 'SZ', departmentId: 'd1', ownerId: 'employee-1' })
     for (const key of ['page', 'pageSize', 'userId', 'orderIds']) expect(body).not.toHaveProperty(key)
     expect(options).toMatchObject({ responseType: 'blob', signal: controller.signal })
   })

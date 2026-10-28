@@ -19,23 +19,30 @@ const stages = ['review', 'allocation', 'dispatch', 'shipping'] as const
 const counts = [6, 12, 19, 28]
 export const mockFopOrders: FopOrder[] = stages.flatMap((stage, stageIndex) => Array.from({ length: counts[stageIndex]! }, (_, index) => {
   const product = products[index % products.length]!
-  const orderNumber = index === 0 && stage !== 'shipping'
+  const orderId = index === 0 && stage !== 'shipping'
     ? ({ review: 'DEMO-SO-10256', allocation: 'DEMO-SO-10241', dispatch: 'DEMO-SO-10283' } as const)[stage]
     : `DEMO-SO-${20000 + stageIndex * 100 + index}`
+  const documentDate = `2610${String(15 + index % 7).padStart(2, '0')}`
+  const orderNumber = `TO${documentDate}${String(36000 + stageIndex * 100 + index).padStart(6, '0')}`
+  const dispatchNumber = (part = 1) => `FY${documentDate}${String(200 + stageIndex * 100 + index * 2 + part).padStart(6, '0')}`
   const exception: FopOrder['exception'] = index === 0 && stage !== 'shipping'
     ? { reason: stage === 'review' ? 'address' : stage === 'allocation' ? 'stock' : 'tracking', hours: stage === 'review' ? 26 : stage === 'allocation' ? 38 : 18 }
     : null
   const paid = stage !== 'review' || index % 3 !== 2
   return {
-    id: orderNumber, orderNumber, shopifyOrderNumber: `#${1001 + stageIndex * 100 + index}`,
+    shippingCountryCode: ['US', 'GB', 'AU', 'DE', 'FR', 'CA'][index % 6],
+        shippingRecipient: demoRecipient(index),
+    id: orderId, orderNumber, shopifyOrderNumber: `#${1001 + stageIndex * 100 + index}`,
     customerName: ['Everyday Goods', 'Northstar Store', 'Studio Market', 'Harbor Goods'][stageIndex]! + (index ? ` ${index + 1}` : ''),
     storeName: ['Everyday', 'Northstar', 'Studio', 'Harbor'][stageIndex]!,
     items: [{ sku: `DEMO-SKU-${String(index % 3 + 1).padStart(3, '0')}`, name: product.name, imageUrl: productImage(product.image, product.color), variant: product.variant, quantity: index % 3 + 1 }],
     amount: Math.round((11.88 + index * 2.5) * 100) / 100, currency: 'USD', paymentStatus: paid ? 'paid' : 'unpaid',
     dispatchDocuments: stage === 'dispatch'
-      ? [{ id: `${orderNumber}:dispatch:1`, number: `FY-${stageIndex}-${index}-1`, status: (['draft', 'submitted', 'approved'] as const)[index % 3]! },
-        ...(index % 4 === 0 ? [{ id: `${orderNumber}:dispatch:2`, number: `FY-${stageIndex}-${index}-2`, status: 'approved' as const }] : [])]
-      : stage === 'shipping' ? [{ id: `${orderNumber}:dispatch:1`, number: `FY-${stageIndex}-${index}-1`, status: 'approved' }] : [],
+      ? [{ id: `${orderId}:dispatch:1`, number: dispatchNumber(), status: (['draft', 'submitted', 'approved'] as const)[index % 3]! },
+        ...(index % 4 === 0 ? [{ id: `${orderId}:dispatch:2`, number: dispatchNumber(2), status: 'approved' as const }] : [])]
+      : stage === 'shipping' ? [{ id: `${orderId}:dispatch:1`, number: dispatchNumber(), status: 'approved' }] : [],
+    allocationReadyAt: stage === 'review' || stage === 'allocation' && index % 2 === 0 ? null : '2026-10-27T04:30:00Z',
+    allocationDocument: stage === 'review' ? null : { id: `${orderId}:alloc:1`, number: `AO${documentDate}${String(stageIndex * 100 + index + 1).padStart(6, '0')}` },
     procurementProgress: { purchaseOrder: stage === 'review' ? 'unknown' : 'ordered', supplierPayment: stage === 'review' ? 'unknown' : 'paid' },
     fulfillmentProgress: {
       allocationCreated: stage !== 'review',
@@ -51,36 +58,50 @@ export const mockFopOrders: FopOrder[] = stages.flatMap((stage, stageIndex) => A
     dispatchStatus: stageIndex < 2 ? 'not_ready' : stage === 'dispatch' ? 'pending' : 'dispatched',
     shippingStatus: stage === 'shipping' ? 'pending' : 'not_ready',
     warehouse: index % 2 ? 'Sha Tin' : 'Hangzhou', carrier: stage === 'shipping' ? 'Demo Express' : null,
+    logisticsChannels: [{ name: '云途标准专线', code: 'DEMO-YT-STD' }],
+    customLogisticsChannelName: ['Economy Shipping', 'Standard Shipping', 'Battery Shipping'][index % 3],
+    logisticsInfo: stage === 'dispatch' ? [{ carrierName: '云途YT', shopifyTracking: { type: (['full', 'first_mile', 'last_mile'] as const)[index % 3]!, number: `YT${30000 + index}` } }] : null,
     trackingNumber: stage === 'shipping' ? `DEMO-TRK-${30000 + index}` : null,
     salesperson: ['业务员 A', '业务员 B', '业务员 C'][index % 3]!,
     createdAt: `2026-10-${String(15 + index % 7).padStart(2, '0')}T08:30:00Z`,
+    wmsCreatedAt: stage === 'shipping' ? `2026-10-${String(15 + index % 7).padStart(2, '0')}T12:30:00Z` : null,
+    reviewedAt: `2026-10-${String(15 + index % 7).padStart(2, '0')}T09:30:00Z`,
+    consumerPaidAt: `2026-10-${String(15 + index % 7).padStart(2, '0')}T07:45:00Z`,
     paidAt: paid ? `2026-10-${String(15 + index % 7).padStart(2, '0')}T09:00:00Z` : null,
     cancelled: false, exception,
   }
 }))
 
 mockFopOrders.push(...Array.from({ length: 8 }, (_, index): FopOrder => ({
-  ...mockFopOrders[6 + index]!, id: `DEMO-PO-${40001 + index}`, orderNumber: `DEMO-PO-${40001 + index}`,
+  ...mockFopOrders[6 + index]!, id: `DEMO-PO-${40001 + index}`, orderNumber: `TO261028${String(40001 + index).padStart(6, '0')}`,
   procurementProgress: ([
     { purchaseOrder: 'not_ordered', supplierPayment: 'not_required' },
-    { purchaseOrder: 'partial', supplierPayment: 'paid' },
+    { purchaseOrder: 'not_ordered', supplierPayment: 'not_required' },
     { purchaseOrder: 'ordered', supplierPayment: 'unpaid' },
-    { purchaseOrder: 'ordered', supplierPayment: 'partial' },
+    { purchaseOrder: 'ordered', supplierPayment: 'unpaid' },
     { purchaseOrder: 'ordered', supplierPayment: 'paid' },
     { purchaseOrder: 'ordered', supplierPayment: 'paid' },
     { purchaseOrder: 'ordered', supplierPayment: 'refunded' },
     { purchaseOrder: 'unknown', supplierPayment: 'unknown' },
   ] as const)[index]!,
   fulfillmentProgress: { shopifySync: 'synced', supplierShipment: index === 5 ? 'partial' : 'pending', stockReadiness: 'incomplete', allocationReview: 'pending', outbound: 'pending' },
+  procurementPaidAt: index === 4 || index === 5 ? `2026-10-${index === 4 ? '26' : '25'}T08:30:00Z` : null,
   shopifyOrderNumber: `#${1401 + index}`, procurementStatus: 'pending', allocationStatus: 'not_ready', exception: null,
 })))
 
 // These records deliberately never enter a pending queue.
 mockFopOrders.push(
-  { ...mockFopOrders[6]!, id: 'DEMO-CANCELLED', orderNumber: 'DEMO-CANCELLED', cancelled: true, exception: null },
-  { ...mockFopOrders[40]!, id: 'DEMO-SHIPPED', orderNumber: 'DEMO-SHIPPED', fulfillmentProgress: { shopifySync: 'synced', supplierShipment: 'shipped', stockReadiness: 'ready', allocationReview: 'approved', outbound: 'completed' }, shippingStatus: 'shipped', exception: null },
+  { ...mockFopOrders[6]!, id: 'DEMO-CANCELLED', orderNumber: 'TO261028049998', cancelled: true, exception: null },
+  { ...mockFopOrders[40]!, id: 'DEMO-SHIPPED', orderNumber: 'TO261028049999', fulfillmentProgress: { shopifySync: 'synced', supplierShipment: 'shipped', stockReadiness: 'ready', allocationReview: 'approved', outbound: 'completed' }, shippingStatus: 'shipped', exception: null },
 )
 
 export function mockFopQueueCount(queue: FopOrderQueue): number {
   return mockFopOrders.filter(order => matchesFopQueue(order, queue)).length
+}
+
+function demoRecipient(index: number) {
+  const addresses = [["Emma Wilson", "MA", "Boston", "02108", "18 Example Street", "Unit 4"], ["Oliver Bennett", "England", "London", "SW1A 1AA", "24 Demo Road", "Flat 2"], ["Amelia Cooper", "NSW", "Sydney", "2000", "32 Sample Street", "Level 3"], ["Lukas Weber", "Berlin", "Berlin", "10115", "Musterstraße 12", ""], ["Camille Martin", "Île-de-France", "Paris", "75001", "16 rue Exemple", "Appartement 5"], ["Noah Tremblay", "ON", "Toronto", "M5V 2T6", "48 Example Avenue", "Suite 6"]]
+  const [name, state, city, postalCode, addressLine1, addressLine2] = addresses[index % addresses.length]!
+  return { name: name!, state: state!, city: city!, postalCode: postalCode!, addressLine1: addressLine1!, addressLine2: addressLine2 || null,
+    phone: index % 6 === 0 || index % 6 === 5 ? '+1 202-555-0147' : null, email: `recipient.${index + 1}@example.com` }
 }

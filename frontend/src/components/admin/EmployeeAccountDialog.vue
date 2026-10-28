@@ -76,7 +76,7 @@ onBeforeUnmount(() => { active = false; clearPasswords(); off(); disposeDropdown
 
 <template>
   <Teleport to="body"><dialog ref="dialog" class="employee-dialog" aria-modal="true" :aria-labelledby="titleId" @cancel.prevent="!saving && emit('close')">
-    <header><div class="employee-dialog-title"><UserPlus :size="22" /><div><h2 :id="titleId">{{ title }}</h2><p>{{ text('员工归属、登录账号与 FOP 关联', 'Department, login and FOP identity') }}</p></div></div><button type="button" class="btn btn-secondary" :aria-label="text('关闭', 'Close')" :disabled="saving" @click="emit('close')"><X :size="17" /></button></header>
+    <header><div class="employee-dialog-title"><UserPlus :size="22" /><div><h2 :id="titleId">{{ title }}</h2></div></div><button type="button" class="btn btn-secondary" :aria-label="text('关闭', 'Close')" :disabled="saving" @click="emit('close')"><X :size="17" /></button></header>
     <form @submit.prevent="save">
       <div class="employee-dialog-body">
         <p v-if="error" role="alert" class="employee-error">{{ error }}</p>

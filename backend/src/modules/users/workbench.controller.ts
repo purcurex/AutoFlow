@@ -1,3 +1,4 @@
+import { AllocationInventoryQueryDto } from '../fop-data/allocation-inventory.dto'
 import { FopApprovalService } from '../fop-data/fop-approval.service'
 import { ApprovalPreviewDto, ApprovalSubmitDto } from '../fop-data/fop-approval.dto'
 import { SalesPerformanceQueryDto, SalesPerformanceDetailsDto } from '../fop-data/sales-performance.dto'
@@ -10,6 +11,7 @@ import { WorkbenchAccessService } from './workbench-access.service'
 import { ExportFulfillmentOrdersDto, ListFulfillmentOrdersDto } from './dto/workbench.dto'
 import { exportQueueLabels, FULFILLMENT_EXPORT_MIME } from '../fop-data/fop-order-export'
 import { FopDataService } from '../fop-data/fop-data.service'
+import { StockOrdersQueryDto, StockInventoryQueryDto, StockScopeDto, ExportStockOrdersDto } from '../fop-data/fop-stock.dto'
 import { OrderVolumeQueryDto, OrderVolumeDetailsDto, OrderCustomerSearchDto } from '../fop-data/order-volume.dto'
 import { ReceiptQueryDto } from '../fop-data/fop-receipts.dto'
 import { FopDashboardQueryDto, FopDataAccessQueryDto, SupplierChatQueryDto } from '../fop-data/fop-data.dto'
@@ -38,6 +40,31 @@ export class WorkbenchController {
 @UseGuards(JwtAuthGuard)
 export class FulfillmentOrdersController {
   constructor(private readonly data: FopDataService, private readonly approvals: FopApprovalService) {}
+
+  @Post('allocation-inventory/query')
+  @HttpCode(200)
+  @Header('Cache-Control', 'private, no-store')
+  getAllocationInventory(@Request() req: ExpressRequest, @Body() query: AllocationInventoryQueryDto) { return this.data.getAllocationInventory(req.user!.userId, query) }
+
+  @Get('stock-orders')
+  @Header('Cache-Control', 'private, no-store')
+  getStockOrders(@Request() req: ExpressRequest, @Query() query: StockOrdersQueryDto) { return this.data.getStockOrders(req.user!.userId, query) }
+
+  @Get('stock-customers')
+  @Header('Cache-Control', 'private, no-store')
+  getStockCustomers(@Request() req: ExpressRequest, @Query() query: StockScopeDto) { return this.data.getStockCustomers(req.user!.userId, query) }
+
+  @Get('stock-inventory')
+  @Header('Cache-Control', 'private, no-store')
+  getStockInventory(@Request() req: ExpressRequest, @Query() query: StockInventoryQueryDto) { return this.data.getStockInventory(req.user!.userId, query) }
+
+  @Post('stock-orders/export')
+  @HttpCode(200)
+  @Header('Cache-Control', 'private, no-store')
+  async exportStockOrders(@Request() req: ExpressRequest, @Body() body: ExportStockOrdersDto) {
+    const buffer = await this.data.exportStockOrders(req.user!.userId, body, req.user!.sessionVersion ?? 0)
+    return new StreamableFile(buffer, { type: FULFILLMENT_EXPORT_MIME, disposition: `attachment; filename="stock-orders.xlsx"; filename*=UTF-8''${encodeURIComponent('备货清单.xlsx')}` })
+  }
 
   @Post('fulfillment-orders/export')
   @HttpCode(200)

@@ -3,8 +3,8 @@
   "jsonSchemaDialect": "https://spec.openapis.org/oas/3.1/dialect/base",
   "info": {
     "title": "HyperZone 智能办公平台分析与工作台接口契约",
-    "version": "2026-10-27",
-    "description": "字段级源码快照，仅记录已实现HTTP路由，不将计划FOP上游写为paths。响应裸JSON，无{code,data,message}包装。required=序列化必有；type:null=显式空值；可省略字段不在required中。参数跨字段依赖及已知口径差距见操作描述和配套审计。示例为脱敏契约样例，不是生产数据。 FOP为金蝶云苍穹上的HyperZone自研应用，源码只读核实；本工程方案2收款聚合和Mock已实现，真实生产网络适配器仍未配置。订单与收款各自授权，回款采用实际结算分录，统一UTC+8。 物流运费使用独立freight scope及allowedFreightIds，已实现Mock成本快照；必须保留原币与明确USD折算，按确认时间归期。最终结算、补收退款、调价及真实成本查询/授权仍待核对。 销售工作台增加个人收款与毛利：独立sales_profit授权、已审核净毛利差额优先、无日分配返回null；预估期间事件账本和严格asOf成本链仍是FOP对接前置条件。 全局P0：逐图许可和数据范围独立；普通员工本人，经理部门及下级，所有统计/排名/合计/搜索/趋势/明细先过滤再计算。组织整体汇总另行授权，只返聚合；客户当前分配不重写历史业绩。 五类履约待办按独立Shopify／供应商／库存／配货审核／出库事实统计，旧队列键保持兼容，新增采购卡片与fulfillmentProgress必填模型。 2026-10-26基线：九类待办查询、供应商旺旺只读催办、销售/配货委托审核；当前页最多100笔审核。前端分页20/50/100、默认50；配货默认已齐套待审核。汇率展示以USD为基准保留四位小数，API fxRateToUsd仍为原币折USD的完整精度。 2026-10-27定稿：待履约要求客户已支付、履约已审核及Shopify跟踪号上传/履约标记尚未完成；看板与对应清单按授权订单ID同口径去重，采购/配货各取两清单合计。新增fulfillmentProgress.allocationCreated（boolean/null），只有true进入配货/仓库；旧上游缺失归一null。九队列ownerId及业务员姓名search、salespeople选项、配货状态/配货单状态独立排序、两种Excel导出同范围。"
+    "version": "2026-10-28-workbench-delivery",
+    "description": "HyperZone 智能办公平台现行字段级合同，需求9.40为交付入口。41项平台HTTP操作、169个模型；servers=/api，响应为裸JSON。FOP为金蝶云苍穹自研应用，源码核对不代表员工网关已发布或生产已联调。\n权限：岗位/逐图许可、FOP资源许可和本地本人/部门/业务全量范围取交集，先授权后筛选、统计、排序、分页及导出；组织汇总、收款、运费、利润、备货与库存分别授权。\n工作台：九类履约队列加销售备货、采购待备货，共十一类清单；备货独立接口，不计入五类履约看板。采购物流条件仅限制FOP推1688动作；配货按未齐套/齐套未审划分，仓库仅已审未全部出库，不以WMS已建作为可见门槛。Shopify只有待同步/已同步，已同步退出待履约。\n审核：销售review和配货allocation_review开放单笔/批量审核，独立approvalActions、版本、幂等与逐笔结果；一履约一配货，配货写前复核发运制作完成。实际业务审核必须走FOP原生操作，不直接改状态字段；生产网关未配置不得假成功。\n查询：部门仅营销中心直属业务一至四部；业务员通过search搜索，保留ownerId兼容。默认收款最早在前；前端50条，可选20/50/100；API兼容默认20。所选和跨页筛选导出同权限与顺序。前端30秒刷新不等于FOP端到端时效承诺。\n时间：UTC+8显示，ISO时间戳带明确时区；consumerPaidAt、reviewedAt、procurementPaidAt、allocationReadyAt、wmsCreatedAt各按真实事件取值，缺失null不回退createdAt。实际字段与持久化见源码映射待确认清单。\n财务：履约实收加全款备货实收按支付期间归属，押金备货不计业绩；使用库存不重复计款。已审毛利月结用净差额，预计按已知事件及预估运费；日周历史事件和权威日分配待FOP补齐。运费按已确认实际成本及确认时间统计，最终结算/后续补退费仍须财务核对。USD/CNY显示四位小数，计算保留原币折USD的完整精度。\n展示：所有页签保留固定摘要；十一类清单共用标题加文字说明，无问号tips；查询和单号沿用履约页蓝色，刷新浅蓝。纯视觉统一不新增接口或放宽权限。"
   },
   "servers": [
     {
@@ -46,6 +46,10 @@
     {
       "name": "个人收款与毛利",
       "description": "独立授权的个人收款、预计/结算净毛利和分期明细。"
+    },
+    {
+      "name": "Stock workbench",
+      "description": "销售备货单及按客户查询库存，独立于履约待办。"
     }
   ],
   "paths": {
@@ -862,7 +866,7 @@
         "tags": [
           "履约"
         ],
-        "description": "只读履约待办查询，按2026-10-27最终规则。queue角色：unpaid/review/exceptions=sales；dispatch=dispatch；procurement/procurement_shipping=procurement；allocation/allocation_review=allocation；shipping=warehouse。所有队列排除取消和退款；unpaid只含明确未支付，其他均要求客户已支付。\nreview：reviewStatus=pending。exceptions沿用paid且未shipped且exception非null。\ndispatch：reviewStatus=approved且shopifySync=pending/partial，前提为客户已支付、我方已审核，尚未完成Shopify跟踪号上传及履约标记。未审核订单不计入。不能从本地跟踪号是否为空、发运审核或fulfillment_status单独推断已成功同步。\nprocurement：purchaseOrder=not_ordered/partial，或ordered且supplierPayment=unpaid/partial/refunded。未完成采购付款即使供应商已发货仍计入；unknown/cancelled/not_required不按未付推断。procurement_shipping：ordered+paid且supplierShipment=pending/partial。两组互斥，不额外要求履约已审核。\nallocation/allocation_review/shipping均须履约已审核且allocationCreated=true。allocation为incomplete且allocationReview=pending且outbound!=completed；allocation_review为ready且pending且outbound!=completed。两页分列显示发运单状态、配货状态、配货单状态，不显示客户支付状态。\nshipping：ready且outbound!=completed；第一组allocationReview=pending（outbound未知可保留待审核，不推断可出库）；第二组approved且outbound=pending/partial。warehouseStage=all/省略为并集，pending_review/ pending_outbound分别筛选两组。前端筛选名“配货单状态”，最左；业务员及所属部门在右。其他队列携带/非法/重复参数400。\n先按服务端登录身份取FOP租户/订单白名单与本人/管理部门/业务管理员范围交集，再队列/warehouseStage/部门/搜索/精确订单过滤，再paidAtOrder排序、全量totals及分页；同队列按订单ID去重。系统管理员或全部岗位不得扩大业务范围，空白名单返回零；未知进度不得猜测，缺失或非法必需事实503。\ndepartmentId匹配订单department.id或仅服务端可用的祖先departmentPathIds，无权/无匹配返回空，departments来自授权订单且独立于队列和筛选。默认paidAt升序、同时间id升序，空或无效日期两种方向均最后。total/totals不受分页影响。\nDashboard仍五卡：procurement卡片及tasks按procurement∪procurement_shipping去重合计（采购未完成付款＋已采购未发货）；allocation卡片及tasks按allocation∪allocation_review去重合计（未齐套＋已齐套未审核）；两者任务时间取对应并集最早收款日期。供应商未全部发货时采购付款只跨页签；采购已付且全部发货退出采购合计。配货齐套只跨页签，配货审核完成退出配货合计。配货默认首页仍allocation_review，卡片显式链接allocation不变，shipping按两组并集，与工作台临时筛选独立。队列跨岗位可重叠，不可将卡片相加作公司订单总数。\n前端切换筛选回第1页，搜索/部门/排序/分页/手动或30秒自动刷新保留筛选；恢复可见或联网立即刷新。refreshedAt仅BFF完成时间，不是FOP同步水位。响应private,no-store，业务操作均在FOP。采购显示下单/采购款/供应商发货独立事实；发运显示dispatchDocuments及Shopify同步状态；仓库仅显示配货单状态，移除出库状态列及对应表头排序入口，配货单状态筛选保留；outbound仍用于队列判断，outboundStatus查询仅兼容旧链接。 销售页签unpaid在review之前，但无queue页面默认review；显式unpaid才打开待支付。待支付paidAt=null显示—，不以createdAt替代。金额为订单应付金额，不进入回款或原五张已付待办；付款后刷新退出unpaid并按审核/履约进度进入其他队列。生产unpaid应取hzkj_orderstatus=1，不可由支付查询失败或未知取反推断。 支持sortBy=paidAt/dispatchDocumentStatus/stockReadiness/allocationReviewStatus/allocationDocumentStatus/outboundStatus和sortOrder=asc/desc。先权限和完整条件过滤再排序后分页；旧paidAtOrder保留。sortBy省略默认paidAt；sortOrder显式值优先，省略时paidAt使用paidAtOrder（默认asc），状态默认asc。发运单排序为[]确认未生成→draft→submitted→approved，多单取最早阶段，null/缺失或任一unknown整单置后；配货排序为未齐套→齐套未审→已审；出库排序为待配货审核→待出库→部分出库，已完成仍不入队列。未知在两个方向均最后；同状态固定按paidAt升序/id升序，缺日期最后，不受paidAtOrder影响。状态sortBy来自归一字段/dispatchDocuments而非旧粗粒度字段。仅dispatch/allocation/allocation_review允许dispatchDocumentStatus；仅allocation/allocation_review允许stockReadiness（未齐套→已齐套）和allocationReviewStatus（未审核→已审核）独立排序；allocationDocumentStatus保留仓库及旧链接兼容，仅allocation/allocation_review/shipping允许；仅shipping允许outboundStatus。非法/重复/与队列不匹配的排序参数400。\n页面交互：全部待办清单每页选项20/50/100，默认显式发送pageSize=50；按订单平铺、仅外层纵向滚动。切换条数回第1页，保留部门/业务员/搜索/排序/配货单状态。配货无queue页面默认allocation_review，明确queue=allocation仍查未配货；仓库筛选从左到右为warehouseStage、搜索/查询、订单数、ownerId、departmentId。审核写入使用独立preview/approvals接口及approvalActions，不改变本GET只读属性。\nownerId为订单业务员筛选，精确匹配owner.id，与departmentId取交集；不能扩大登录账号权限。salespeople仅由授权订单及所选部门生成，独立于队列/搜索/分页/ownerId，按姓名和ID排序。切换部门清空业务员；待办页签/岗位切换保留选择。两种导出复用此条件并在输出前复核。",
+        "description": "履约待办查询，现行需求9.40；审核写操作使用独立审核接口。销售unpaid/review/exceptions；发运dispatch；采购procurement/procurement_shipping；配货allocation/allocation_review；仓库shipping。全部排除取消，unpaid只取明确未支付，其他均要求paid。\nreview=未审核；dispatch=履约已审核且Shopify有效跟踪号上传及履约标记pending（待同步，无部分同步场景），已出库也不能替代平台同步成功。exceptions保留未shipped且exception非null。\nprocurement=有效FOP采购单未创建/部分创建，或全部创建但采购款unpaid/partial/refunded，或明确alibabaOrder=not_pushed/partial（包含付款unknown/not_required/paid）；申请和采购准备不受物流或Shopify状态门槛限制，不额外要求履约已审核。procurement_shipping=ordered+paid且供应商pending/partial且没有明确未完成的1688推送；供应商全发但款未付仍待采购。未知不能当未付，取消重采归一有效剩余需求。purchaseApplication和logisticsGate只展示；alibabaOrder明确待推是独立未完成任务依据，不能先从两个采购页签消失。\nallocation/allocation_review/shipping要求reviewStatus=approved且实际allocationCreated=true。allocation=incomplete+pending且outbound!=completed；allocation_review=ready+pending且outbound!=completed。只按结果，不分自动/人工；发运未审仍保留已齐套未审核。人工释放后可回未齐套。\nshipping只取ready+approved+outbound pending/partial，不再包含未审配货；无需以WMS/通知已生成额外过滤。warehouseStage省略/all/pending_outbound等价；pending_review兼容返回空，UI提供重置。非法、重复或非shipping传入400。\n统一先服务端会话/FOP身份/白名单与本人、管理部门、业务全量权限交集，再队列、部门、ownerId、search、orderNumber筛选，再排序/全量合计/分页。同订单ID去重，系统管理权不扩业务范围。部门支持可信祖先路径；业务员owner.id精确匹配。search包含owner.name（空时salesperson）和订单、Shopify单号、客户、店铺、SKU，忽略英文大小写/首尾空格。无权筛选为空，缺必需或非法事实503，不静默回退Mock。\n默认paidAt升序/id升序，空日期最后；sortBy/sortOrder及旧paidAtOrder优先级和可用队列见参数；全量排序后分页。departments来自完整授权订单，salespeople另受所选部门限制，均独立于队列/搜索/分页。\nDashboard卡片与tasks复用同谓词：review、dispatch、procurement并procurement_shipping、allocation并allocation_review、shipping；任务时间取对应集合最早收款时间。前端临时筛选不改看板基数；跨岗位可重叠，不能相加成公司唯一单数。\n销售review与配货allocation_review支持单选/多选审核，通过独立审核接口调用FOP原生操作；配货须发运制作完成。其他业务操作在FOP执行。勾选同时用于Excel导出；保留复制、旺旺跟进、刷新。每页20/50/100默认前端显式50，API默认20兼容；仅外层滚动。销售默认review、配货默认allocation_review。手动/可见在线30秒刷新、恢复可见或网络立即刷新；refreshedAt为BFF完成时间，不是FOP同步水位。响应private,no-store。\n需求9.16：支持procurementStage表头筛选（先筛选后合计/排序/分页）。FOP没有采购单部分创建的正常场景，旧partial只兼容待建采购单；Demo不再生成部分创建或未推1688先付款的订单。 最新9.32：销售unpaid/review/exceptions及待履约dispatch列表、所选/全筛选Excel使用consumerPaidAt展示C端下单时间。真实Shopify首次付清事实仍需FOP网关映射；缺失为null，无createdAt/paidAt替代。采购alibaba_pending显示待推1688采购，payment_pending显示待支付采购款；枚举、筛选、权限与统计不变。 最新9.33：销售unpaid/review/exceptions及待履约dispatch支持sortBy=consumerPaidAt、sortOrder=asc/desc。默认仍paidAt升序；同C端时间按paidAt升序/id升序，缺失或非法时间双向均置后，不回退其他日期。先授权/筛选后对完整结果排序再分页；所选及全筛选Excel同顺序。其他队列使用该排序返回400。单号及SKU复制仅客户端原值操作，不新增API或改变权限。 最新9.34：procurement_shipping列表及两种Excel以procurementPaidAt展示采购付款时间，替换创建时间；其他队列不变。供应商pending/partial按当前电脑时间减真实采购付款时间，>24h橙色、>48h红色（已确认48不是487）；等于24h正常、等于48h橙色；缺失/非法/未来日期不标超时，每30秒及重获焦点更新。仅展示提醒，不改业务状态、筛选、权限、计数或默认paidAt升序。 最新9.35：全待办业务员单元格固定两行（姓名、业务部门），不再单列业务部门；原owner/department字段和筛选权限保留。allocation_review时间列为齐套时间allocationReadyAt，allocation未齐套时间列为consumerPaidAt且允许同字段排序；其余队列时间列不变。默认paidAt升序。清空已提交搜索仅移除search并回第1页，保留其余筛选/排序/分页条数；发货仓库空选项显示全部。Excel同步姓名/部门两行及时间字段。 9.35覆盖原四队列限制：allocation未齐套也允许consumerPaidAt；allocation_review仍不允许，使用独立齐套时间展示。\n现行时间列：unpaid/review/exceptions/dispatch/allocation用consumerPaidAt；procurement用reviewedAt；procurement_shipping用procurementPaidAt；allocation_review用allocationReadyAt；shipping用wmsCreatedAt。shipping的WMS创建时间指发货通知成功推送WMS出库指令，缺失为null且不隐藏任务。时间列与两种Excel同源，createdAt保持原单据创建语义。",
         "responses": {
           "200": {
             "description": "成功，裸JSON响应。",
@@ -943,7 +947,7 @@
                 "exceptions"
               ]
             },
-            "description": "必传工作台队列。前端默认首页：sales=review、dispatch=dispatch、procurement=procurement、allocation=allocation_review、warehouse=shipping；页面显式queue优先。unpaid在销售页签第一但不是默认页；procurement_shipping为已采购待发货。此GET不能省略queue。"
+            "description": "必传工作台队列。前端默认首页：sales=review、dispatch=dispatch、procurement=procurement、allocation=allocation_review、warehouse=shipping；页面显式queue优先。unpaid在销售页签第一但不是默认页；procurement_shipping为已采购待发货。此GET不能省略queue。 按最新需求9.26：dispatch始终仅paid+履约approved+shopifySync=pending，状态四项为未创建/暂存/已提交/已审核未同步；dispatch_approved复用为全部关联发运单已审且明确未同步。dispatch_synced在dispatch队列及导出拒绝400；前端旧链接清除该筛选。配货两队列保留已审核/已同步协同状态，不改变配货入列条件。同步成功退出待履约清单、看板及导出；临时异步等待不自动标为失败。原始DispatchDocument.status不变。"
           },
           {
             "name": "workbenchRole",
@@ -961,9 +965,9 @@
             "schema": {
               "type": "string",
               "maxLength": 200,
-              "description": "trim/忽略大小写，匹配orderNumber/shopifyOrderNumber/customerName/storeName/items.sku及业务员展示姓名（owner.name优先，空缺取salesperson）。包含匹配支持中文/英文部分姓名；上述字段OR，与ownerId、departmentId及其他条件AND，先授权再筛选、合计、排序与分页。列表及两种Excel导出共用。"
+              "description": "去首尾空白、忽略大小写的包含匹配：公共字段orderNumber/shopifyOrderNumber/customerName/storeName/items.sku及业务员展示姓名（owner.name优先，空缺salesperson）。queue=unpaid额外匹配customLogisticsChannelName，不匹配carrier/carrierCode或实际渠道；其他队列额外匹配carrier/carrierCode，不匹配自定义渠道。各文本字段OR，与业务部门、发货仓库及其他筛选AND；先权限后筛选、合计、排序、分页与两种Excel。见9.25。"
             },
-            "description": "trim/忽略大小写，匹配orderNumber/shopifyOrderNumber/customerName/storeName/items.sku及业务员展示姓名（owner.name优先，空缺取salesperson）。包含匹配支持中文/英文部分姓名；上述字段OR，与ownerId、departmentId及其他条件AND，先授权再筛选、合计、排序与分页。列表及两种Excel导出共用。"
+            "description": "去首尾空白、忽略大小写的包含匹配：公共字段orderNumber/shopifyOrderNumber/customerName/storeName/items.sku及业务员展示姓名（owner.name优先，空缺salesperson）。queue=unpaid额外匹配customLogisticsChannelName，不匹配carrier/carrierCode或实际渠道；其他队列额外匹配carrier/carrierCode，不匹配自定义渠道。各文本字段OR，与业务部门、发货仓库及其他筛选AND；先权限后筛选、合计、排序、分页与两种Excel。见9.25。"
           },
           {
             "name": "orderNumber",
@@ -983,13 +987,13 @@
               "type": "string",
               "maxLength": 128
             },
-            "description": "所属部门稳定ID，精确匹配department.id或departmentPathIds祖先。省略/空串表示当前账号全部可见部门；非身份或授权参数。"
+            "description": "业务部门稳定ID，匹配department.id或departmentPathIds祖先。默认下拉文案为营销中心，省略/空串仍表示当前账号权限内可见业务，不扩大到整个营销中心。选项仅营销中心直属业务一至四部且受登录权限限制；非身份或授权参数。"
           },
           {
             "name": "ownerId",
             "in": "query",
             "required": false,
-            "description": "订单业务员稳定ID，精确匹配owner.id。省略/空串表示全部可见业务员；先取登录账号权限与FOP白名单，再与部门/业务员条件求交集。未知或无权ID返回空，不回退全部；不是身份或授权参数。",
+            "description": "订单业务员稳定ID，精确匹配owner.id。省略/空串表示全部可见业务员；先取登录账号权限与FOP白名单，再与部门/业务员条件求交集。未知或无权ID返回空，不回退全部；不是身份或授权参数。 UI dropdown removed in9.20; keep API/old-link compatibility. UI shows clearable active filter.",
             "schema": {
               "type": "string",
               "maxLength": 128,
@@ -1008,9 +1012,9 @@
                 "pending_outbound"
               ],
               "default": "all",
-              "description": "仅shipping。前端筛选名称“配货单状态”，置最左。all两组合计，pending_review=已齐套未审核，pending_outbound=已审核未出库（含部分出库）。两组均需实际有效配货单allocationCreated=true。省略同all；其他队列/非法/重复400。"
+              "description": "仅shipping的旧查询兼容：省略/all/pending_outbound均取配货已审核且未全部出库；pending_review返回空，不重引入配货未审核数据。前端已移除该下拉，旧链接可显式重置。其他队列、非法、重复参数400。"
             },
-            "description": "仅shipping。前端筛选名称“配货单状态”，置最左。all两组合计，pending_review=已齐套未审核，pending_outbound=已审核未出库（含部分出库）。两组均需实际有效配货单allocationCreated=true。省略同all；其他队列/非法/重复400。"
+            "description": "仅shipping的旧查询兼容：省略/all/pending_outbound均取配货已审核且未全部出库；pending_review返回空，不重引入配货未审核数据。前端已移除该下拉，旧链接可显式重置。其他队列、非法、重复参数400。"
           },
           {
             "name": "sortBy",
@@ -1020,15 +1024,18 @@
               "type": "string",
               "enum": [
                 "paidAt",
+                "reviewedAt",
+                "consumerPaidAt",
                 "dispatchDocumentStatus",
                 "allocationDocumentStatus",
                 "stockReadiness",
                 "allocationReviewStatus",
                 "outboundStatus"
               ],
-              "default": "paidAt"
+              "default": "paidAt",
+              "description": " reviewedAt仅procurement可用，实际订单审核时间，空值始终最后，同值按paidAt升序及id。"
             },
-            "description": "主排序字段；stockReadiness和allocationReviewStatus仅allocation/allocation_review，分别对应齐套和审核事实；allocationDocumentStatus保留仓库及旧链接兼容。非法组合400。详见接口描述。"
+            "description": "主排序字段；stockReadiness和allocationReviewStatus仅allocation/allocation_review，分别对应齐套和审核事实；allocationDocumentStatus保留仓库及旧链接兼容。非法组合400。详见接口描述。 需求9.30：allocation_review仅dispatch_incomplete未完成和dispatch_complete已完成。已完成=非空关联有效发运单全部已审核，与Shopify同步无关；缺失、未知或任一未审归未完成。未完成保留队列，不改变Dashboard总数。状态排序未完成→已完成，同组收款日期/id。旧细分状态在该队列查询/导出返回400，旧前端书签迁移到对应分类。allocation未齐套页保留五种细分状态，dispatch保留原四种。 最新9.33：销售unpaid/review/exceptions及待履约dispatch支持sortBy=consumerPaidAt、sortOrder=asc/desc。默认仍paidAt升序；同C端时间按paidAt升序/id升序，缺失或非法时间双向均置后，不回退其他日期。先授权/筛选后对完整结果排序再分页；所选及全筛选Excel同顺序。其他队列使用该排序返回400。单号及SKU复制仅客户端原值操作，不新增API或改变权限。 9.35覆盖原四队列限制：allocation未齐套也允许consumerPaidAt；allocation_review仍不允许，使用独立齐套时间展示。"
           },
           {
             "name": "sortOrder",
@@ -1041,7 +1048,7 @@
                 "desc"
               ]
             },
-            "description": "升序asc/降序desc。显式值优先；省略时日期沿用paidAtOrder，状态默认asc。未知始终最后；同状态按收款升序/id升序。非法或重复参数400。"
+            "description": "升序asc/降序desc。显式值优先；省略时仅paidAt沿用paidAtOrder，consumerPaidAt和状态默认asc。缺失或非法值始终最后；C端时间及状态同值按收款日期升序/id升序。非法或重复参数400。"
           },
           {
             "name": "paidAtOrder",
@@ -1079,6 +1086,68 @@
               "default": 20
             },
             "description": "接口兼容1–100，省略时DTO默认20；前端待办清单提供20/50/100并默认显式发送50。按订单分页，多商品不拆订单；切换条数回第1页。"
+          },
+          {
+            "name": "procurementStage",
+            "in": "query",
+            "required": false,
+            "description": "兼容旧采购阶段筛选，省略为全部；新页面使用taskStatus并清除此参数。procurement仅purchase_order_pending、alibaba_pending、payment_pending、refund_pending；procurement_shipping仅supplier_pending、supplier_partial。application_pending/unknown/partially_paid已移除，API返回400。旧前端书签将application_pending转为purchase_order_pending，清除unknown。与taskStatus同时提供时取交集，授权、队列、合计、分页与两种Excel同范围。",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "purchase_order_pending",
+                "alibaba_pending",
+                "payment_pending",
+                "refund_pending",
+                "supplier_pending",
+                "supplier_partial"
+              ]
+            }
+          },
+          {
+            "name": "taskStatus",
+            "in": "query",
+            "required": false,
+            "description": "清单顶部状态筛选，省略为全部。需求9.29：procurement仅purchase_order_pending待建采购订单、dispatch_preparation待制作发运单（采购单已建且1688未推完，logisticsGate=pending_dispatch或pending_logistics）、alibaba_pending待推1688采购、payment_pending待支付采购款、refund_pending采购退款待跟进。无待建采购申请、待确认或已付款未发货选项，后者使用独立procurement_shipping清单。procurement_shipping仅supplier_pending/supplier_partial；dispatch仅dispatch_missing/dispatch_draft/dispatch_submitted/dispatch_approved（已审核未同步），不能查询dispatch_synced；allocation保留五种发运状态含dispatch_synced；shipping仅outbound_pending/outbound_partial；exceptions仅stock/address/tracking；销售unpaid/review不允许状态筛选。先授权再与部门、业务员、仓库、搜索和兼容procurementStage求交集；合计、分页与两种Excel共用。多发运单取最早阶段，未知事实不推断为完成。非法组合、已移除值、重复参数400。筛选不改变Dashboard基数。 需求9.30：allocation_review仅dispatch_incomplete未完成和dispatch_complete已完成。已完成=非空关联有效发运单全部已审核，与Shopify同步无关；缺失、未知或任一未审归未完成。未完成保留队列，不改变Dashboard总数。状态排序未完成→已完成，同组收款日期/id。旧细分状态在该队列查询/导出返回400，旧前端书签迁移到对应分类。allocation未齐套页保留五种细分状态，dispatch保留原四种。",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "purchase_order_pending",
+                "dispatch_preparation",
+                "dispatch_missing",
+                "alibaba_pending",
+                "payment_pending",
+                "refund_pending",
+                "supplier_pending",
+                "supplier_partial",
+                "dispatch_draft",
+                "dispatch_submitted",
+                "dispatch_approved",
+                "outbound_pending",
+                "outbound_partial",
+                "stock",
+                "address",
+                "tracking",
+                "dispatch_synced",
+                "dispatch_incomplete",
+                "dispatch_complete"
+              ],
+              "description": "清单顶部状态筛选，与业务员、所属部门同级。省略为全部；按需求9.17派生单一协同进度。procurement：待建申请、待建采购单、待建发运单、待获取物流单号、待推1688采购、待付款、退款跟进、待确认；procurement_shipping：供应商待发/部分发；dispatch：未创建/暂存/已提交/已审核未同步；allocation/allocation_review：未创建/暂存/已提交/已审核/已同步（不提供待确认筛选）；shipping：待出库/部分出库；exceptions：库存/地址/物流异常。销售unpaid/review不允许状态筛选。多发运单最早阶段、任一未知优先unknown；未完成采购准备不因缺物流号显示阻断。先授权再与部门、业务员、搜索、兼容procurementStage求交集，合计/分页/两种Excel同范围。非法队列组合、未知值、重复参数400；不改变Dashboard统计基数。 按最新需求9.26：dispatch始终仅paid+履约approved+shopifySync=pending，状态四项为未创建/暂存/已提交/已审核未同步；dispatch_approved复用为全部关联发运单已审且明确未同步。dispatch_synced在dispatch队列及导出拒绝400；前端旧链接清除该筛选。配货两队列保留已审核/已同步协同状态，不改变配货入列条件。同步成功退出待履约清单、看板及导出；临时异步等待不自动标为失败。原始DispatchDocument.status不变。"
+            }
+          },
+          {
+            "name": "warehouseCode",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "HZ",
+                "SZ"
+              ],
+              "description": "Order shipping warehouse: HZ=Hangzhou, SZ=Shenzhen. Omit for all. Applied after permission scope and before totals/sort/pagination/export; unrelated to destination country or warehouseStage. Invalid or repeated values return400."
+            },
+            "description": "发货仓库：HZ杭州仓、SZ深圳仓；只改展示名称，不改标准码及原有筛选行为。"
           }
         ]
       }
@@ -4306,7 +4375,7 @@
         "tags": [
           "Workbench"
         ],
-        "description": "需要登录JWT、岗位、用户数据范围和独立FOP approvalActions。配货关联由后台解析；版本变化阻断；审核委托给FOP原生audit。未配置真实网关不写生产业务。Mock仅更新进程内演示状态。",
+        "description": "需求9.30：销售review与配货allocation_review均开放单笔/批量审核。需要JWT、岗位、数据范围及独立FOP approvalActions。配货需关联有效发运单全部已审核，不等待Shopify同步；BFF预览、提交及每张写前复核完成条件，FOP原生audit按包裹核验齐套、待审核、发运有效性、审核状态及重复单。先预览、确认后提交，版本/幂等及逐笔结果保持；结果未知不自动重试。审核成功但后置通知失败返回approved及warning。真实审核网关须IT联调，未配置禁止写生产；Mock仅更新演示状态。 最新9.31：履约订单与配货单一对一，allocationDocument为单对象；配货审核只调用hzkj_alloc_bill/audit，每笔唯一目标，ID/单号及来源在写入前重新核对。旧allocationDocuments未上线合同已替换，真实生产仍须IT联调。",
         "requestBody": {
           "required": true,
           "content": {
@@ -4351,7 +4420,7 @@
                       "documents": [
                         {
                           "id": "alloc1",
-                          "number": "PH-001",
+                          "number": "AO261028000404",
                           "status": "B",
                           "eligible": true,
                           "reason": null
@@ -4393,7 +4462,7 @@
         "tags": [
           "Workbench"
         ],
-        "description": "需要登录JWT、岗位、用户数据范围和独立FOP approvalActions。配货关联由后台解析；版本变化阻断；审核委托给FOP原生audit。未配置真实网关不写生产业务。Mock仅更新进程内演示状态。",
+        "description": "需求9.30：销售review与配货allocation_review均开放单笔/批量审核。需要JWT、岗位、数据范围及独立FOP approvalActions。配货需关联有效发运单全部已审核，不等待Shopify同步；BFF预览、提交及每张写前复核完成条件，FOP原生audit按包裹核验齐套、待审核、发运有效性、审核状态及重复单。先预览、确认后提交，版本/幂等及逐笔结果保持；结果未知不自动重试。审核成功但后置通知失败返回approved及warning。真实审核网关须IT联调，未配置禁止写生产；Mock仅更新演示状态。 最新9.31：履约订单与配货单一对一，allocationDocument为单对象；配货审核只调用hzkj_alloc_bill/audit，每笔唯一目标，ID/单号及来源在写入前重新核对。旧allocationDocuments未上线合同已替换，真实生产仍须IT联调。",
         "requestBody": {
           "required": true,
           "content": {
@@ -4443,7 +4512,7 @@
                       "documents": [
                         {
                           "id": "alloc1",
-                          "number": "PH-001",
+                          "number": "AO261028000404",
                           "status": "approved",
                           "message": "已审核",
                           "warning": "发货通知尚未生成，请核对后置处理"
@@ -4485,7 +4554,7 @@
         ],
         "operationId": "exportFulfillmentOrders",
         "summary": "所有工作台待办清单批量导出Excel",
-        "description": "九类待办清单统一导出所选或全部筛选结果。先校验登录会话、工作台角色，再取FOP身份与订单白名单和本人/部门/全量业务范围交集，复用清单队列/部门/搜索/仓库阶段/排序过滤。selected要求全部ID仍在结果内；filtered不接受分页或ID数组。输出前再次校验会话、绑定、业务范围及FOP授权。只继承该清单查看权限，不依赖审核操作权，也不以图表导出授权替代待办权限。图片仅文本链接，编号和外部文本为字符串，金额数量为数值，UTC+8；金额按币种合计且一单多品只计一次。固定上限10000单/50000商品行，无静默截断，无FOP写操作。生产依赖现有员工订单读取协议完整返回授权数据，无额外上游导出端点。 Re-read authorized orders after workbook generation; reject changed owner/department scope with 403 and changed queue/filter membership with 409. Ordinary business values remain the initial read snapshot, not a database transaction snapshot. 配货两清单Excel分列导出发运单状态、配货状态（stockReadiness）、配货单状态（allocationReview），与页面一致；支持相同的独立状态排序。待出库清单Excel仅保留配货单状态，不输出出库状态列，金额和数量合计位置相应调整。",
+        "description": "九类待办清单统一导出所选或全部筛选结果。先校验登录会话、工作台角色，再取FOP身份与订单白名单和本人/部门/全量业务范围交集，复用清单队列/部门/搜索/仓库阶段/排序过滤。selected要求全部ID仍在结果内；filtered不接受分页或ID数组。输出前再次校验会话、绑定、业务范围及FOP授权。只继承该清单查看权限，不依赖审核操作权，也不以图表导出授权替代待办权限。图片仅文本链接，编号和外部文本为字符串，金额数量为数值，UTC+8；金额按币种合计且一单多品只计一次。固定上限10000单/50000商品行，无静默截断，无FOP写操作。生产依赖现有员工订单读取协议完整返回授权数据，无额外上游导出端点。 Re-read authorized orders after workbook generation; reject changed owner/department scope with 403 and changed queue/filter membership with 409. Ordinary business values remain the initial read snapshot, not a database transaction snapshot. 配货两清单Excel分列导出发运单状态、配货状态（stockReadiness）、配货单状态（allocationReview），与页面一致；支持相同的独立状态排序。待出库清单Excel仅保留配货单状态，不输出出库状态列，金额和数量合计位置相应调整。 最新9.32：销售unpaid/review/exceptions及待履约dispatch列表、所选/全筛选Excel使用consumerPaidAt展示C端下单时间。真实Shopify首次付清事实仍需FOP网关映射；缺失为null，无createdAt/paidAt替代。采购alibaba_pending显示待推1688采购，payment_pending显示待支付采购款；枚举、筛选、权限与统计不变。 最新9.33：销售unpaid/review/exceptions及待履约dispatch支持sortBy=consumerPaidAt、sortOrder=asc/desc。默认仍paidAt升序；同C端时间按paidAt升序/id升序，缺失或非法时间双向均置后，不回退其他日期。先授权/筛选后对完整结果排序再分页；所选及全筛选Excel同顺序。其他队列使用该排序返回400。单号及SKU复制仅客户端原值操作，不新增API或改变权限。 最新9.34：procurement_shipping列表及两种Excel以procurementPaidAt展示采购付款时间，替换创建时间；其他队列不变。供应商pending/partial按当前电脑时间减真实采购付款时间，>24h橙色、>48h红色（已确认48不是487）；等于24h正常、等于48h橙色；缺失/非法/未来日期不标超时，每30秒及重获焦点更新。仅展示提醒，不改业务状态、筛选、权限、计数或默认paidAt升序。 最新9.35：全待办业务员单元格固定两行（姓名、业务部门），不再单列业务部门；原owner/department字段和筛选权限保留。allocation_review时间列为齐套时间allocationReadyAt，allocation未齐套时间列为consumerPaidAt且允许同字段排序；其余队列时间列不变。默认paidAt升序。清空已提交搜索仅移除search并回第1页，保留其余筛选/排序/分页条数；发货仓库空选项显示全部。Excel同步姓名/部门两行及时间字段。 9.35覆盖原四队列限制：allocation未齐套也允许consumerPaidAt；allocation_review仍不允许，使用独立齐套时间展示。",
         "requestBody": {
           "required": true,
           "content": {
@@ -4513,6 +4582,27 @@
                     "departmentId": "department-sales-1",
                     "sortBy": "outboundStatus",
                     "sortOrder": "asc"
+                  }
+                },
+                "coordination": {
+                  "value": {
+                    "queue": "procurement",
+                    "taskStatus": "dispatch_preparation",
+                    "mode": "filtered"
+                  }
+                },
+                "approvedUnsynced": {
+                  "value": {
+                    "queue": "dispatch",
+                    "taskStatus": "dispatch_approved",
+                    "mode": "filtered"
+                  }
+                },
+                "allocationComplete": {
+                  "value": {
+                    "queue": "allocation_review",
+                    "taskStatus": "dispatch_complete",
+                    "mode": "filtered"
                   }
                 }
               }
@@ -4624,6 +4714,728 @@
           "backend/src/modules/fop-data/fop-data.service.ts",
           "backend/src/modules/fop-data/fop-order-export.ts"
         ]
+      }
+    },
+    "/autoflow/integrations/fop/stock-orders": {
+      "get": {
+        "tags": [
+          "Stock workbench"
+        ],
+        "operationId": "getStockOrders",
+        "summary": "销售备货清单 / 采购待备货清单",
+        "description": "销售all展示全部有效备货单（含已采购、已入库、未收款），采购procurement仅已支付、已审核、未完成采购（未采购/部分采购）。岗位、独立备货白名单与本人/部门/全部业务范围求交，先授权和过滤、合计、完整排序后分页。独立于履约九队列及Dashboard五卡。",
+        "parameters": [
+          {
+            "name": "queue",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "all",
+                "procurement"
+              ],
+              "default": "all",
+              "description": "all为销售全部有效备货单，需sales岗位；procurement为采购待备货，需procurement岗位且paymentStatus=paid、reviewStatus=approved、purchaseStatus=unpurchased/partial，排除取消。条件由服务端强制，不能用筛选覆盖。"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200,
+              "description": "备货单号、客户姓名/编码、店铺、业务员姓名、SKU、商品名称大小写不敏感包含匹配；清空自动恢复。"
+            }
+          },
+          {
+            "name": "warehouseCode",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "HZ",
+                "SZ"
+              ],
+              "description": "收货仓库，从hzkj_warehouse通过经确认的编码映射。"
+            }
+          },
+          {
+            "name": "departmentId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "部门ID；省略=营销中心（仅当前登录可读范围）。",
+              "minLength": 1,
+              "maxLength": 160
+            }
+          },
+          {
+            "name": "ownerId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "兼容岗位跳转的业务员ID；界面通过搜索姓名查询，不增加业务员下拉。",
+              "minLength": 1,
+              "maxLength": 160
+            }
+          },
+          {
+            "name": "stockType",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/StockType"
+            }
+          },
+          {
+            "name": "purchaseStatus",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/StockPurchaseStatus"
+            }
+          },
+          {
+            "name": "sortOrder",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "default": "asc",
+              "description": "按paidAt完整排序后分页；空值两向均最后，同值id升序。"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000000,
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "enum": [
+                20,
+                50,
+                100
+              ],
+              "default": 50
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "description": "参数非法。"
+          },
+          "401": {
+            "description": "未登录或会话失效。"
+          },
+          "403": {
+            "description": "未绑定/无销售岗位/本地业务或FOP范围拒绝。"
+          },
+          "429": {
+            "description": "请求过于频繁。"
+          },
+          "503": {
+            "description": "上游不可用、契约无效或库存重复/负数；不降级成演示库存。"
+          },
+          "200": {
+            "description": "成功。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StockOrderPage"
+                },
+                "example": {
+                  "source": "mock",
+                  "refreshedAt": "2026-10-28T06:30:00Z",
+                  "page": 1,
+                  "pageSize": 50,
+                  "total": 1,
+                  "items": [
+                    {
+                      "id": "stock-1",
+                      "stockNumber": "BH261028000001",
+                      "stockType": "full_payment",
+                      "customerId": "customer-1",
+                      "customerCode": "C001",
+                      "customerName": "Olivia Martin",
+                      "storeName": null,
+                      "owner": {
+                        "id": "owner-1",
+                        "name": "Ruth"
+                      },
+                      "department": {
+                        "id": "department-sales-1",
+                        "name": "业务一部"
+                      },
+                      "items": [
+                        {
+                          "sku": "HZ-BAG-001",
+                          "name": "Everyday commuter backpack",
+                          "imageUrl": null,
+                          "variant": "Slate blue / 20L",
+                          "quantity": 30
+                        }
+                      ],
+                      "amount": 1179,
+                      "currency": "USD",
+                      "paidAt": "2026-10-28T01:15:00Z",
+                      "purchaseStatus": "received",
+                      "warehouseCode": "HZ",
+                      "warehouse": "杭州仓",
+                      "paymentStatus": "paid",
+                      "reviewStatus": "approved"
+                    }
+                  ],
+                  "departments": [
+                    {
+                      "id": "department-sales-1",
+                      "name": "业务一部"
+                    }
+                  ],
+                  "totals": {
+                    "orderCount": 1,
+                    "itemQuantity": 30,
+                    "amounts": [
+                      {
+                        "currency": "USD",
+                        "amount": 1179
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-implementation-status": "implemented-platform-and-demo; production-employee-gateway-pending",
+        "x-source-files": [
+          "backend/src/modules/users/workbench.controller.ts",
+          "backend/src/modules/fop-data/fop-data.service.ts",
+          "backend/src/modules/fop-data/fop-stock.dto.ts"
+        ]
+      }
+    },
+    "/autoflow/integrations/fop/stock-customers": {
+      "get": {
+        "tags": [
+          "Stock workbench"
+        ],
+        "operationId": "getStockCustomers",
+        "summary": "备货库存客户选项",
+        "description": "返回当前允许查看的备货单及库存客户并去重；客户选项不授予库存访问权。库存查询仍独立验证当前客户归属和库存资源白名单。 兼容旧入口；新版弹窗不再调用，直接stock-inventory模糊查询，前100客户限制不适用于库存结果。sales/procurement均可使用，但选项不授予单据或库存权限。",
+        "parameters": [
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200,
+              "description": "仅客户名称/编码搜索。最多前100条。"
+            }
+          },
+          {
+            "name": "warehouseCode",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "HZ",
+                "SZ"
+              ],
+              "description": "收货仓库，从hzkj_warehouse通过经确认的编码映射。"
+            }
+          },
+          {
+            "name": "departmentId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "部门ID；省略=营销中心（仅当前登录可读范围）。",
+              "minLength": 1,
+              "maxLength": 160
+            }
+          },
+          {
+            "name": "ownerId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "兼容岗位跳转的业务员ID；界面通过搜索姓名查询，不增加业务员下拉。",
+              "minLength": 1,
+              "maxLength": 160
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "description": "参数非法。"
+          },
+          "401": {
+            "description": "未登录或会话失效。"
+          },
+          "403": {
+            "description": "未绑定/无销售岗位/本地业务或FOP范围拒绝。"
+          },
+          "429": {
+            "description": "请求过于频繁。"
+          },
+          "503": {
+            "description": "上游不可用、契约无效或库存重复/负数；不降级成演示库存。"
+          },
+          "200": {
+            "description": "成功。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StockCustomersPage"
+                },
+                "example": {
+                  "items": [
+                    {
+                      "id": "customer-1",
+                      "name": "Olivia Martin",
+                      "code": "C001"
+                    }
+                  ],
+                  "total": 1
+                }
+              }
+            }
+          }
+        },
+        "x-implementation-status": "implemented-platform-and-demo; production-employee-gateway-pending",
+        "x-source-files": [
+          "backend/src/modules/users/workbench.controller.ts",
+          "backend/src/modules/fop-data/fop-data.service.ts",
+          "backend/src/modules/fop-data/fop-stock.dto.ts"
+        ]
+      }
+    },
+    "/autoflow/integrations/fop/stock-inventory": {
+      "get": {
+        "tags": [
+          "Stock workbench"
+        ],
+        "operationId": "getStockInventory",
+        "summary": "按客户 / SKU 模糊查询备货库存",
+        "description": "读取受权当前库存快照，分全款/押金可用、锁定、在库与合计。原FOP available字段已扣锁定，BFF用Decimal相加计算在库，禁止重复扣减或从订单量推算。owner为客户当前归属。 需sales或procurement岗位。客户名称/编码customerSearch与SKU/商品名search为大小写不敏感包含匹配，组合条件为AND；可省略customerId直接返回多个授权客户。先独立库存白名单+当前归属+范围+搜索，再按客户名称、客户ID、SKU、仓库、ID稳定排序分页，不限制前100客户。未传任何查询条件也仅返回授权库存。",
+        "parameters": [
+          {
+            "name": "customerSearch",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200,
+              "description": "客户名称/编码模糊包含匹配，忽略大小写、去两端空格。空串或省略不限制客户名，但仍强制当前账号权限。"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200,
+              "description": "SKU/商品名称包含搜索"
+            }
+          },
+          {
+            "name": "warehouseCode",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "HZ",
+                "SZ"
+              ],
+              "description": "收货仓库，从hzkj_warehouse通过经确认的编码映射。"
+            }
+          },
+          {
+            "name": "departmentId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "部门ID；省略=营销中心（仅当前登录可读范围）。",
+              "minLength": 1,
+              "maxLength": 160
+            }
+          },
+          {
+            "name": "ownerId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "兼容岗位跳转的业务员ID；界面通过搜索姓名查询，不增加业务员下拉。",
+              "minLength": 1,
+              "maxLength": 160
+            }
+          },
+          {
+            "name": "customerId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160,
+              "description": "可选精确客户ID；与customerSearch组合取交集。无权/无匹配为空，省略时查询全部授权客户。"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000000,
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "enum": [
+                20,
+                50,
+                100
+              ],
+              "default": 50
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "description": "参数非法。"
+          },
+          "401": {
+            "description": "未登录或会话失效。"
+          },
+          "403": {
+            "description": "未绑定/无销售岗位/本地业务或FOP范围拒绝。"
+          },
+          "429": {
+            "description": "请求过于频繁。"
+          },
+          "503": {
+            "description": "上游不可用、契约无效或库存重复/负数；不降级成演示库存。"
+          },
+          "200": {
+            "description": "成功。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StockInventoryPage"
+                },
+                "example": {
+                  "source": "mock",
+                  "refreshedAt": "2026-10-28T06:30:00Z",
+                  "page": 1,
+                  "pageSize": 50,
+                  "total": 1,
+                  "customerId": "customer-1",
+                  "items": [
+                    {
+                      "customerId": "customer-1",
+                      "customerCode": "C001",
+                      "customerName": "Olivia Martin",
+                      "owner": {
+                        "id": "owner-1",
+                        "name": "Ruth"
+                      },
+                      "department": {
+                        "id": "department-sales-1",
+                        "name": "业务一部"
+                      },
+                      "warehouseCode": "HZ",
+                      "warehouse": "杭州仓",
+                      "id": "stock-inventory-1",
+                      "sku": "HZ-BAG-001",
+                      "name": "Everyday commuter backpack",
+                      "imageUrl": null,
+                      "fullPayment": {
+                        "available": 12,
+                        "locked": 3,
+                        "onHand": 15
+                      },
+                      "deposit": {
+                        "available": 7,
+                        "locked": 2,
+                        "onHand": 9
+                      },
+                      "onHand": 24
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "x-implementation-status": "implemented-platform-and-demo; production-employee-gateway-pending",
+        "x-source-files": [
+          "backend/src/modules/users/workbench.controller.ts",
+          "backend/src/modules/fop-data/fop-data.service.ts",
+          "backend/src/modules/fop-data/fop-stock.dto.ts"
+        ]
+      }
+    },
+    "/autoflow/integrations/fop/stock-orders/export": {
+      "post": {
+        "tags": [
+          "Stock workbench"
+        ],
+        "operationId": "exportStockOrders",
+        "summary": "批量导出备货清单Excel",
+        "description": "selected为当前页选中单据，filtered为当前筛选全部跨页。与清单一致权限/排序/筛选，生成后复核会话和资源范围；订单金额按币种分别汇总，多商品金额仅一次。仅只读，无FOP业务操作。 queue与清单相同，默认all需sales，procurement需采购岗位并强制paid+approved+采购未完成；生成后复核队列资格及独立资源权限。",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExportStockOrders"
+              },
+              "examples": {
+                "selected": {
+                  "value": {
+                    "mode": "selected",
+                    "orderIds": [
+                      "stock-1"
+                    ]
+                  }
+                },
+                "filtered": {
+                  "value": {
+                    "mode": "filtered",
+                    "stockType": "full_payment",
+                    "warehouseCode": "HZ"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "400": {
+            "description": "参数非法。"
+          },
+          "401": {
+            "description": "未登录或会话失效。"
+          },
+          "403": {
+            "description": "未绑定/无销售岗位/本地业务或FOP范围拒绝。"
+          },
+          "429": {
+            "description": "请求过于频繁。"
+          },
+          "503": {
+            "description": "上游不可用、契约无效或库存重复/负数；不降级成演示库存。"
+          },
+          "200": {
+            "description": "成功。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              }
+            },
+            "content": {
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "所选备货单已变化或没有可导出结果。"
+          },
+          "413": {
+            "description": "超过10000备货单/50000商品行，不静默截断。"
+          }
+        },
+        "x-implementation-status": "implemented-platform-and-demo; production-employee-gateway-pending",
+        "x-source-files": [
+          "backend/src/modules/users/workbench.controller.ts",
+          "backend/src/modules/fop-data/fop-data.service.ts",
+          "backend/src/modules/fop-data/fop-stock.dto.ts"
+        ]
+      }
+    },
+    "/autoflow/integrations/fop/allocation-inventory/query": {
+      "post": {
+        "tags": [
+          "Stock workbench"
+        ],
+        "operationId": "getAllocationInventory",
+        "summary": "未齐套清单即时库存：选单或SKU搜索",
+        "description": "需要allocation岗位+本地数据权限+独立库存池授权。选单重新校验全部订单仍为有权未齐套配货单，否则409，禁止部分成功。仅展示所选SKU公共与对应客户专属池；公共池去重。未选单必须非空SKU搜索。先授权、过滤、去重、排序（SKU/仓库/客户ID）后按池分页；仅完整成功快照可补零。实物余量不是最终可配量。",
+        "responses": {
+          "400": {
+            "description": "参数非法、空搜索、重复/超量订单或模式混用。"
+          },
+          "401": {
+            "description": "会话失效。"
+          },
+          "403": {
+            "description": "无配货岗位、无业务权限、缺独立库存授权或绑定/范围变化。"
+          },
+          "409": {
+            "description": "inventory_orders_changed：选中订单不再是获权未齐套订单，刷新后重选。"
+          },
+          "429": {
+            "description": "请求过于频繁。"
+          },
+          "503": {
+            "description": "上游未配置、不可用、快照不完整、字段非法或重复池；不返回伪零库存。"
+          },
+          "200": {
+            "description": "当前库存池快照。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AllocationInventoryPage"
+                },
+                "example": {
+                  "source": "fop",
+                  "asOf": "2026-10-28T07:00:00Z",
+                  "page": 1,
+                  "pageSize": 50,
+                  "total": 2,
+                  "items": [
+                    {
+                      "id": "pool-public-1",
+                      "sku": "HZ-BAG-001",
+                      "name": "Everyday commuter backpack",
+                      "warehouseCode": "HZ",
+                      "warehouse": "杭州仓",
+                      "customer": null,
+                      "onHand": 0,
+                      "occupied": 0,
+                      "free": 0
+                    },
+                    {
+                      "id": "pool-client-1",
+                      "sku": "HZ-BAG-001",
+                      "name": "Everyday commuter backpack",
+                      "warehouseCode": "HZ",
+                      "warehouse": "杭州仓",
+                      "customer": {
+                        "id": "customer-1",
+                        "name": "Olivia Martin"
+                      },
+                      "onHand": 20,
+                      "occupied": 5,
+                      "free": 15
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "x-implementation-status": "implemented-platform-and-demo; production-employee-gateway-pending",
+        "x-source-files": [
+          "backend/src/modules/users/workbench.controller.ts",
+          "backend/src/modules/fop-data/allocation-inventory.ts",
+          "backend/src/modules/fop-data/allocation-inventory.dto.ts"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AllocationInventoryQuery"
+              },
+              "examples": {
+                "selected": {
+                  "value": {
+                    "mode": "selected",
+                    "orderIds": [
+                      "order-1"
+                    ],
+                    "page": 1,
+                    "pageSize": 50
+                  }
+                },
+                "search": {
+                  "value": {
+                    "mode": "search",
+                    "search": "HZ-BAG",
+                    "warehouseCode": "HZ",
+                    "page": 1,
+                    "pageSize": 50
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     }
   },
@@ -4988,7 +5800,7 @@
           },
           "department": {
             "$ref": "#/components/schemas/NamedEntity",
-            "description": "订单所属实际部门ID与名称；用于经理直接部门范围匹配。"
+            "description": "业务部门为营销中心直属业务一至四部的稳定ID及名称，与salesDepartmentCode一致；员工实际下级节点通过完整departmentPathIds保留权限祖先关系，不能用同名下级节点替代业务部门ID。真实适配器须依据组织树核实，未映射不伪造。"
           },
           "owner": {
             "$ref": "#/components/schemas/NamedEntity",
@@ -5079,7 +5891,7 @@
                 "type": "null"
               }
             ],
-            "description": "物流跟踪号；尚未生成时null。"
+            "description": "兼容原始单号供其他清单使用；不证明业务员的Shopify上传选择，待履约不得据此自动回退。"
           },
           "salesperson": {
             "type": "string",
@@ -5087,7 +5899,7 @@
           },
           "createdAt": {
             "type": "string",
-            "description": "订单创建时间，履约列表按此时间降序，时刻相同按id排序。",
+            "description": "FOP履约订单创建时间，保留独立原始字段。采购、配货、仓库清单显示；销售unpaid/review/exceptions及待履约dispatch改显示consumerPaidAt。本次不改变默认收款日期paidAt升序/id升序的待办排序。",
             "format": "date-time"
           },
           "paidAt": {
@@ -5156,6 +5968,159 @@
                 }
               ]
             ]
+          },
+          "shippingCountryCode": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[A-Z]{2}$",
+            "description": "Order delivery destination ISO 3166-1 alpha-2 code, normalized uppercase; unknown/unrecognized/absent is null. Source: hzkj_orders.hzkj_country.twocountrycode, not customer profile country. Optional for legacy adapters. All workbench Customer columns display local flag + code; Excel outputs code. See requirements 9.19.",
+            "examples": [
+              "US",
+              "GB",
+              "AU",
+              null
+            ]
+          },
+          "shippingRecipient": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ShippingRecipient"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "订单收件人及收货地址；可空以兼容旧适配器。Customer 国旗/二字码下显示 name，点击打开详情。缺姓名但有地址时提供“查看收件人”；全部缺失返回 null。新适配器应始终返回该属性。见需求 9.21。"
+          },
+          "consumerPaidAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "C端下单时间：Shopify消费者首次完成该订单付款的业务事件时间（首次付清，不是首次授权/押金，也不是最近补款或退款时间）。独立于FOP createdAt与履约收款paidAt。必须由可信网关按店铺+源Shopify订单绑定，从已核实的付款完成事件/交易记录归集并持久化。当前FOP hzkj_datetimefield来自订单processed_at，不能未经核实直接映射本字段。旧适配器可省略；BFF输出带时区ISO UTC或null，无效/缺少时区/缺失不回退其他时间。销售unpaid/review/exceptions及发运dispatch清单和两种Excel显示C端下单时间（UTC+8）；采购、配货、仓库维持FOP创建时间。缺失不回退createdAt/paidAt/processed_at，队列流转不改变首次事实。见需求9.23/9.32。 需求9.35：allocation未齐套清单也显示该字段并支持consumerPaidAt升降序，默认仍按客户收款时间排序。",
+            "examples": [
+              "2026-10-01T21:30:00.000Z",
+              null
+            ]
+          },
+          "logisticsChannels": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/LogisticsChannel"
+            },
+            "description": "履约订单实际物流渠道列表；主要来源hzkj_orders.hzkj_logistics_info.hzkj_channel.name/number。仅单包裹历史记录可按FOP规则回退表头hzkj_logistics_channel；多包裹不得用表头覆盖。名称编码去空白、按二者组合去重；缺失/非法/空列表规范化null。销售review清单与Excel在发货仓库后同格显示名称（编码），多个渠道分行；其他队列不增加列。先订单权限过滤再允许字段输出；来源与待联调事项见需求9.24。"
+          },
+          "customLogisticsChannelName": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "FOP自定义物流渠道已维护的英文名称，固定英文，与界面语言无关；用于待支付列表、搜索及两种Excel。来源为履约订单hzkj_customer_channel关联的自定义渠道基础资料。既有hzkj_customer_channel_name是通用名称，未显式选英文；英文字段或多语言键需IT核对映射。英文缺失返回null，不回退中文、物流商或实际渠道，不自动翻译。",
+            "examples": [
+              "Standard Shipping",
+              null
+            ]
+          },
+          "logisticsInfo": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/LogisticsInfo"
+            },
+            "description": "需求9.28覆盖9.27。每组只展示FOP按业务员运费报价配置最终选定上传Shopify的shopifyTracking；缺失或非法选择为null，不从trackingNumbers、trackingNumber或号码前缀推断。主物流号可头程或全程，尾程独立，真实字段与类型映射由IT人工联调。授权后仅允许carrierName及shopifyTracking，UI与Excel使用TC/WC/QC单行号码；同步成功状态仍独立。",
+            "examples": [
+              [
+                {
+                  "carrierName": "JS",
+                  "shopifyTracking": {
+                    "type": "first_mile",
+                    "number": "JSEJX2881622244YQ"
+                  }
+                },
+                {
+                  "carrierName": "4PX",
+                  "shopifyTracking": {
+                    "type": "last_mile",
+                    "number": "0000123"
+                  }
+                }
+              ],
+              null
+            ]
+          },
+          "allocationDocument": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AllocationDocumentReference"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "需求9.31：一笔履约订单唯一对应一张配货单，无一对多或多对一。返回单对象id/number；null/省略表示尚未取得引用或尚未生成，具体存在性仍看allocationCreated。清单及Excel显示单一编号，示例AO261028000404；生产直接读取FOP billno，不推导编号。数组结构、空白id/number、授权范围内跨订单重复ID返回503。缺失引用不改变待办入列，但不能提交审核。",
+            "examples": [
+              null,
+              {
+                "id": "alloc1",
+                "number": "AO261028000404"
+              }
+            ]
+          },
+          "procurementPaidAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "采购实际付款时间。仅procurement_shipping作为采购付款时间显示并导出（UTC+8）。由可信FOP网关从订单关联的有效采购/1688实际付款事实取值；一笔履约关联多笔仍有未发货义务的已付采购时取其中最早付款时间，已全发、取消、退款或不相关采购排除，不按SKU默认供应商猜测。1688订单baseInfo.payTime可核实；FOP hzkj_paydate为到期日，不能代替。本次未确认生产持久化字段，须IT联调。带时区ISO时间；缺失/非法/无时区归一null，不回退createdAt、paidAt、consumerPaidAt、回调或审核时间。",
+            "examples": [
+              "2026-10-26T04:30:00.000Z",
+              null
+            ]
+          },
+          "allocationReadyAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "当前有效配货单实际齐套时间，映射hzkj_alloc_bill.hzkj_complete_time。一个履约订单一张配货单；按授权关联该单，不以创建/审核/客户收款时间替代。FOP齐套时写入，释放/不齐套时清空，再次齐套读取当前字段；不是历史第一次齐套时间。仅allocationCreated=true且stockReadiness=ready时输出有效带时区ISO时间，BFF规范化UTC；缺失/非法/无时区为null。allocation_review页面及Excel按UTC+8展示齐套时间。真实上游字段发布/映射和时区转换须IT联调。",
+            "examples": [
+              "2026-10-27T04:30:00.000Z",
+              null
+            ]
+          },
+          "reviewedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "履约订单实际审核时间。仅当前reviewStatus=approved且字段为有效带时区ISO时输出UTC规范化时间，否则null；禁止回退创建时间、收款时间或采购申请审核时间。待采购procurement显示订单审核时间，支持sortBy=reviewedAt；默认仍paidAt升序，null两向最后。FOP标准auditdate在其他单据代码有证据，但hzkj_orders实际审核字段/审核历史与撤审重审语义需IT核对后映射，不能直接假定。",
+            "examples": [
+              "2026-10-28T01:30:00.000Z",
+              null
+            ]
+          },
+          "wmsCreatedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "发货通知成功推送WMS出库指令的时间（WMS创建时间），不是履约订单/发运单/发货通知单本身的创建或审核时间，也不是实际出库时间。网关仅按当前授权订单关联有效、仍有未出库任务的发货通知：多张取最早可确认的成功推送时间；取消及已全部出库任务排除，重试不覆盖同一有效指令的首次成功时间。4PX源码在hzkj_deliver_order.hzkj_bill_create_time写成功时间；疾风出库成功分支仅回写hzkj_is_push，本次未确认同类时间回写，须IT补齐可靠事件/字段。超时后补确认须取原成功推送时间，不能用补确认时刻。缺失、无时区、非法值返回null，不回退createdAt/paidAt，不影响待出库队列计数。带时区ISO传输，BFF规范化UTC；shipping页面和Excel按UTC+8显示。",
+            "examples": [
+              "2026-10-28T04:30:00.000Z",
+              null
+            ]
           }
         },
         "required": [
@@ -5184,7 +6149,7 @@
           "fulfillmentProgress"
         ],
         "additionalProperties": false,
-        "description": "publicOrder白名单输出，不含tenantId、departmentPathIds或任意provider元数据。上游金额/时间等尚无完整运行时schema验证。",
+        "description": "publicOrder白名单输出，不含tenantId、departmentPathIds或任意provider元数据。上游金额/时间等尚无完整运行时schema验证。 Requirements 9.19: product SKU and variant appear under each product name. Dispatch and allocation queues display dispatch document numbers separately; status is the single derived result. Customer is the order delivery destination country, not the customer name.",
         "examples": [
           {
             "id": "order-example",
@@ -5253,7 +6218,20 @@
                 "number": "FY-EXAMPLE-003",
                 "status": "approved"
               }
-            ]
+            ],
+            "shippingRecipient": {
+              "name": "Jane Smith",
+              "phone": "+1 202-555-0147",
+              "email": "jane@example.com",
+              "state": "MA",
+              "city": "Boston",
+              "postalCode": "02108",
+              "addressLine1": "18 Example Street",
+              "addressLine2": "Unit 4"
+            },
+            "consumerPaidAt": null,
+            "logisticsChannels": null,
+            "customLogisticsChannelName": null
           }
         ],
         "allOf": [
@@ -6140,12 +7118,12 @@
           "dispatch": {
             "type": "integer",
             "minimum": 0,
-            "description": "待履约：paid、approved，shopifySync=pending/partial。 排除取消，按订单ID去重；无对应岗位权限为0，不受日期筛选。"
+            "description": "待履约：paid、approved，shopifySync=pending。 排除取消，按订单ID去重；无对应岗位权限为0，不受日期筛选。"
           },
           "procurement": {
             "type": "integer",
             "minimum": 0,
-            "description": "待采购卡片及tasks：procurement与procurement_shipping去重并集，即采购未完成付款＋已采购未发货。共同要求paid、履约approved、supplierShipment=pending/partial；付款完成仅跨采购页签，全部发货退出。排除取消，先数据权限过滤，无岗位权限为0，不受日期筛选。tasks时间取并集最早paidAt。"
+            "description": "待采购卡片及tasks：procurement与procurement_shipping去重并集，即采购未完成付款＋已采购未发货。共同要求paid、履约approved、supplierShipment=pending/partial；付款完成仅跨采购页签，全部发货退出。排除取消，先数据权限过滤，无岗位权限为0，不受日期筛选。tasks时间取并集最早paidAt。 已创建PO但明确alibabaOrder=not_pushed/partial仍留待采购，从待发货排除；不依赖物流条件或当前付款事实。"
           },
           "allocation": {
             "type": "integer",
@@ -6155,7 +7133,7 @@
           "shipping": {
             "type": "integer",
             "minimum": 0,
-            "description": "待出库（仓库两组）：paid、履约approved、stockReadiness=ready，且outbound!=completed；第一组allocationReview=pending，第二组allocationReview=approved且outbound=pending/partial。第一组出库unknown不影响已知待审核事实；配货审核unknown、第二组出库unknown均不入选。 排除取消，按订单ID去重；无对应岗位权限为0，不受日期筛选。"
+            "description": "待出库：有权有效、客户已付、履约已审、allocationCreated=true、stockReadiness=ready、allocationReview=approved、outbound=pending/partial。未审核配货仅属于配货工作台。与无临时筛选的shipping.total一致。"
           }
         },
         "required": [
@@ -12256,6 +13234,27 @@
             },
             "uniqueItems": true,
             "description": "独立审核操作权限，缺失/空数组拒绝审核，不从订单读权或系统管理员身份推导。仍需实体与单据级FOP权限。"
+          },
+          "allowedStockOrderIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "独立备货资源白名单；省略或空=无权，不能从allowedOrderIds推导。服务端内部合同，浏览器不可写。"
+          },
+          "allowedStockInventoryIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "独立备货资源白名单；省略或空=无权，不能从allowedOrderIds推导。服务端内部合同，浏览器不可写。"
+          },
+          "allocationInventoryScopes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AllocationInventoryScope"
+            },
+            "description": "独立即时库存池授权；缺失=无权。不能用allowedOrderIds或备货库存行白名单推导。包含零余额可查维度；专属池归属使用客户当前owner/department。"
           }
         }
       },
@@ -12334,7 +13333,7 @@
           },
           "department": {
             "$ref": "#/components/schemas/NamedEntity",
-            "description": "订单所属实际部门ID与名称；用于经理直接部门范围匹配。"
+            "description": "业务部门为营销中心直属业务一至四部的稳定ID及名称，与salesDepartmentCode一致；员工实际下级节点通过完整departmentPathIds保留权限祖先关系，不能用同名下级节点替代业务部门ID。真实适配器须依据组织树核实，未映射不伪造。"
           },
           "owner": {
             "$ref": "#/components/schemas/NamedEntity",
@@ -12425,7 +13424,7 @@
                 "type": "null"
               }
             ],
-            "description": "物流跟踪号；尚未生成时null。"
+            "description": "兼容原始单号供其他清单使用；不证明业务员的Shopify上传选择，待履约不得据此自动回退。"
           },
           "salesperson": {
             "type": "string",
@@ -12433,7 +13432,7 @@
           },
           "createdAt": {
             "type": "string",
-            "description": "订单创建时间，履约列表按此时间降序，时刻相同按id排序。",
+            "description": "FOP履约订单创建时间，保留独立原始字段。采购、配货、仓库清单显示；销售unpaid/review/exceptions及待履约dispatch改显示consumerPaidAt。本次不改变默认收款日期paidAt升序/id升序的待办排序。",
             "format": "date-time"
           },
           "paidAt": {
@@ -12516,6 +13515,159 @@
                   "status": "approved"
                 }
               ]
+            ]
+          },
+          "shippingCountryCode": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[A-Z]{2}$",
+            "description": "Order delivery destination ISO 3166-1 alpha-2 code, normalized uppercase; unknown/unrecognized/absent is null. Source: hzkj_orders.hzkj_country.twocountrycode, not customer profile country. Optional for legacy adapters. All workbench Customer columns display local flag + code; Excel outputs code. See requirements 9.19.",
+            "examples": [
+              "US",
+              "GB",
+              "AU",
+              null
+            ]
+          },
+          "shippingRecipient": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ShippingRecipient"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "订单收件人及收货地址；可空以兼容旧适配器。Customer 国旗/二字码下显示 name，点击打开详情。缺姓名但有地址时提供“查看收件人”；全部缺失返回 null。新适配器应始终返回该属性。见需求 9.21。"
+          },
+          "consumerPaidAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "C端下单时间：Shopify消费者首次完成该订单付款的业务事件时间（首次付清，不是首次授权/押金，也不是最近补款或退款时间）。独立于FOP createdAt与履约收款paidAt。必须由可信网关按店铺+源Shopify订单绑定，从已核实的付款完成事件/交易记录归集并持久化。当前FOP hzkj_datetimefield来自订单processed_at，不能未经核实直接映射本字段。旧适配器可省略；BFF输出带时区ISO UTC或null，无效/缺少时区/缺失不回退其他时间。销售unpaid/review/exceptions及发运dispatch清单和两种Excel显示C端下单时间（UTC+8）；采购、配货、仓库维持FOP创建时间。缺失不回退createdAt/paidAt/processed_at，队列流转不改变首次事实。见需求9.23/9.32。 需求9.35：allocation未齐套清单也显示该字段并支持consumerPaidAt升降序，默认仍按客户收款时间排序。",
+            "examples": [
+              "2026-10-01T21:30:00.000Z",
+              null
+            ]
+          },
+          "logisticsChannels": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/LogisticsChannel"
+            },
+            "description": "履约订单实际物流渠道列表；主要来源hzkj_orders.hzkj_logistics_info.hzkj_channel.name/number。仅单包裹历史记录可按FOP规则回退表头hzkj_logistics_channel；多包裹不得用表头覆盖。名称编码去空白、按二者组合去重；缺失/非法/空列表规范化null。销售review清单与Excel在发货仓库后同格显示名称（编码），多个渠道分行；其他队列不增加列。先订单权限过滤再允许字段输出；来源与待联调事项见需求9.24。"
+          },
+          "customLogisticsChannelName": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "FOP自定义物流渠道已维护的英文名称，固定英文，与界面语言无关；用于待支付列表、搜索及两种Excel。来源为履约订单hzkj_customer_channel关联的自定义渠道基础资料。既有hzkj_customer_channel_name是通用名称，未显式选英文；英文字段或多语言键需IT核对映射。英文缺失返回null，不回退中文、物流商或实际渠道，不自动翻译。",
+            "examples": [
+              "Standard Shipping",
+              null
+            ]
+          },
+          "logisticsInfo": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/LogisticsInfo"
+            },
+            "description": "需求9.28覆盖9.27。每组只展示FOP按业务员运费报价配置最终选定上传Shopify的shopifyTracking；缺失或非法选择为null，不从trackingNumbers、trackingNumber或号码前缀推断。主物流号可头程或全程，尾程独立，真实字段与类型映射由IT人工联调。授权后仅允许carrierName及shopifyTracking，UI与Excel使用TC/WC/QC单行号码；同步成功状态仍独立。",
+            "examples": [
+              [
+                {
+                  "carrierName": "JS",
+                  "shopifyTracking": {
+                    "type": "first_mile",
+                    "number": "JSEJX2881622244YQ"
+                  }
+                },
+                {
+                  "carrierName": "4PX",
+                  "shopifyTracking": {
+                    "type": "last_mile",
+                    "number": "0000123"
+                  }
+                }
+              ],
+              null
+            ]
+          },
+          "allocationDocument": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AllocationDocumentReference"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "需求9.31：一笔履约订单唯一对应一张配货单，无一对多或多对一。返回单对象id/number；null/省略表示尚未取得引用或尚未生成，具体存在性仍看allocationCreated。清单及Excel显示单一编号，示例AO261028000404；生产直接读取FOP billno，不推导编号。数组结构、空白id/number、授权范围内跨订单重复ID返回503。缺失引用不改变待办入列，但不能提交审核。",
+            "examples": [
+              null,
+              {
+                "id": "alloc1",
+                "number": "AO261028000404"
+              }
+            ]
+          },
+          "procurementPaidAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "采购实际付款时间。仅procurement_shipping作为采购付款时间显示并导出（UTC+8）。由可信FOP网关从订单关联的有效采购/1688实际付款事实取值；一笔履约关联多笔仍有未发货义务的已付采购时取其中最早付款时间，已全发、取消、退款或不相关采购排除，不按SKU默认供应商猜测。1688订单baseInfo.payTime可核实；FOP hzkj_paydate为到期日，不能代替。本次未确认生产持久化字段，须IT联调。带时区ISO时间；缺失/非法/无时区归一null，不回退createdAt、paidAt、consumerPaidAt、回调或审核时间。",
+            "examples": [
+              "2026-10-26T04:30:00.000Z",
+              null
+            ]
+          },
+          "allocationReadyAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "当前有效配货单实际齐套时间，映射hzkj_alloc_bill.hzkj_complete_time。一个履约订单一张配货单；按授权关联该单，不以创建/审核/客户收款时间替代。FOP齐套时写入，释放/不齐套时清空，再次齐套读取当前字段；不是历史第一次齐套时间。仅allocationCreated=true且stockReadiness=ready时输出有效带时区ISO时间，BFF规范化UTC；缺失/非法/无时区为null。allocation_review页面及Excel按UTC+8展示齐套时间。真实上游字段发布/映射和时区转换须IT联调。",
+            "examples": [
+              "2026-10-27T04:30:00.000Z",
+              null
+            ]
+          },
+          "reviewedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "履约订单实际审核时间。仅当前reviewStatus=approved且字段为有效带时区ISO时输出UTC规范化时间，否则null；禁止回退创建时间、收款时间或采购申请审核时间。待采购procurement显示订单审核时间，支持sortBy=reviewedAt；默认仍paidAt升序，null两向最后。FOP标准auditdate在其他单据代码有证据，但hzkj_orders实际审核字段/审核历史与撤审重审语义需IT核对后映射，不能直接假定。",
+            "examples": [
+              "2026-10-28T01:30:00.000Z",
+              null
+            ]
+          },
+          "wmsCreatedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "发货通知成功推送WMS出库指令的时间（WMS创建时间），不是履约订单/发运单/发货通知单本身的创建或审核时间，也不是实际出库时间。网关仅按当前授权订单关联有效、仍有未出库任务的发货通知：多张取最早可确认的成功推送时间；取消及已全部出库任务排除，重试不覆盖同一有效指令的首次成功时间。4PX源码在hzkj_deliver_order.hzkj_bill_create_time写成功时间；疾风出库成功分支仅回写hzkj_is_push，本次未确认同类时间回写，须IT补齐可靠事件/字段。超时后补确认须取原成功推送时间，不能用补确认时刻。缺失、无时区、非法值返回null，不回退createdAt/paidAt，不影响待出库队列计数。带时区ISO传输，BFF规范化UTC；shipping页面和Excel按UTC+8显示。",
+            "examples": [
+              "2026-10-28T04:30:00.000Z",
+              null
             ]
           }
         },
@@ -12788,12 +13940,11 @@
             "type": "string",
             "enum": [
               "pending",
-              "partial",
               "synced",
               "not_required",
               "unknown"
             ],
-            "description": "Shopify有效包裹跟踪号上传及履约标记：pending待同步/partial部分成功/synced全部上传且履约成功/not_required不适用/unknown未知。须以成功创建或更新跟踪号及平台履约确认回执归一；本地trackingNumber非空、fulfillment_status或发运审核不充分。待履约仅含客户已支付、我方履约订单已审核且pending/partial；未审核订单不计入。"
+            "description": "Shopify跟踪号上传及履约状态：正常业务仅pending待同步、synced已同步，无部分同步场景；not_required不适用、unknown事实未知，不是业务阶段。取得物流订单号后异步同步成功前仍pending，失败且明确待同步保持pending；成功回执确认后synced。不能以物流号非空、发运审核或出库替代同步成功。待履约仅客户已支付、履约已审核且pending；partial等非法值由BFF拒绝503。"
           },
           "supplierShipment": {
             "type": "string",
@@ -13327,7 +14478,13 @@
                 },
                 "name": {
                   "type": "string",
-                  "description": "所属部门展示名称，来自订单归属。"
+                  "description": "所属部门展示名称，来自订单归属。",
+                  "enum": [
+                    "业务一部",
+                    "业务二部",
+                    "业务三部",
+                    "业务四部"
+                  ]
                 }
               },
               "required": [
@@ -13336,7 +14493,7 @@
               ],
               "additionalProperties": false
             },
-            "description": "授权订单所属部门去重选项，业务一至四部优先，其后自定义部门。独立于队列、搜索与分页；可有当前队列零笔待办的部门；空授权返回[]，不从组织管理员目录补全。"
+            "description": "仅营销中心直属业务一至四部，按sales1到sales4排序。可信适配器须核实组织父子关系并映射salesDepartmentCode与对应业务部门ID/名称；排除其他中心、其他业务部及下级组。选项从授权订单生成，独立于队列/搜索/分页，不从管理员组织目录扩大范围；空授权返回[]。隐藏非法选项不移除有权订单或改变计数。"
           },
           "refreshedAt": {
             "type": "string",
@@ -13382,7 +14539,7 @@
       },
       "ProcurementProgress": {
         "type": "object",
-        "description": "履约订单关联有效采购需求的独立下单、供应商付款事实。不能由履约paymentStatus、采购申请审核或旧procurementStatus推导；多采购单/多SKU先按来源行与有效数量归一化。仅展示进度，不提供业务写操作。",
+        "description": "独立FOP采购申请、采购单创建、1688推送、物流前提及供应商付款事实。物流只限制实际推1688，采购准备允许先行。新增三字段可选，BFF省略归一unknown；非法值503。按有效来源行与数量聚合，禁止从客户付款/Shopify同步推导。",
         "properties": {
           "purchaseOrder": {
             "type": "string",
@@ -13394,7 +14551,7 @@
               "not_required",
               "unknown"
             ],
-            "description": "not_ordered=确认尚无有效下达采购单；partial=仅部分有效采购需求已下单；ordered=全部采购需求已下单；cancelled=原采购单取消且仍待重新采购；not_required=无需采购；unknown=未取得完整事实。采购申请不等于采购订单，草稿不等于正式下达；缺数据不等于未下单。"
+            "description": "FOP采购单创建事实：not_ordered未创建、ordered已创建（含未审核）、not_required无需采购、cancelled已取消、unknown事实未知。履约订单一对一生成采购申请，下游可合并采购，关联由FOP负责；无采购单部分创建正常业务场景。partial仅旧接口兼容值，表头筛选归入purchase_order_pending，行事实显示待确认，新适配器和Demo不得生成。采购单已创建不等于已推1688或采购款已付。"
           },
           "supplierPayment": {
             "type": "string",
@@ -13406,7 +14563,40 @@
               "not_required",
               "unknown"
             ],
-            "description": "独立于客户付款。按有效已下达采购单应付义务汇总：unpaid=未付；partial=部分付款（单单部分付或多单部分付）；paid=所有相关采购应付款已付；refunded=存在影响当前采购义务的退款待跟进，不表示全部已退；not_required=当前无采购应付（尚未下单或无需采购，不等于已支付）；unknown=来源未明。partial下单且paid只表示已下达部分款已付，不代表全部采购完成。历史已关闭/已重建覆盖退款单不得重复干扰当前进度。"
+            "description": "独立于客户付款。按有效采购单应付义务汇总，不依赖付款单生成/审核；采购单未审不能直接当暂无应付：unpaid=未付；partial=部分付款（单单部分付或多单部分付）；paid=所有相关采购应付款已付；refunded=存在影响当前采购义务的退款待跟进，不表示全部已退；not_required=当前无采购应付（尚未下单或无需采购，不等于已支付）；unknown=来源未明。采购付款通过1688接口，先有成功生成的1688订单才能付款；不支持未推1688先付款的正常业务场景。历史已关闭/已重建覆盖退款单不得重复干扰当前进度。"
+          },
+          "purchaseApplication": {
+            "type": "string",
+            "enum": [
+              "not_created",
+              "partial",
+              "created",
+              "not_required",
+              "unknown"
+            ],
+            "description": "采购申请创建事实：not_created未创建、created已创建、not_required无需申请、unknown未知；履约订单与采购申请一对一，合并采购由FOP处理。partial仅旧接口兼容，不是正常业务阶段，行事实显示待确认。省略归一unknown，用于展示及procurementStage，不改变待采购队列资格。 需求9.29：FOP履约审核后自动创建采购申请，前端不单列待建申请阶段；原始字段保留兼容。"
+          },
+          "alibabaOrder": {
+            "type": "string",
+            "enum": [
+              "not_pushed",
+              "partial",
+              "pushed",
+              "not_required",
+              "unknown"
+            ],
+            "description": "按有效应推1688需求数量，确认尚无成功外部单/部分成功/全部成功/线下等不适用/未知；以采购头hzkj_1688_order_n及行hzkj_1688_order_no成功回写核对。不能由FOP采购单存在或付款推断。省略归一unknown。用于展示、表头阶段筛选及待办依据。已创建采购单明确not_pushed/partial时仍属procurement，旧接口缺失付款事实时也不提前退出；paid但未推1688属于矛盾输入，不能作为正常Demo或业务阶段；procurement_shipping排除这些未完成推送，避免提前移出任务。"
+          },
+          "logisticsGate": {
+            "type": "string",
+            "enum": [
+              "pending_dispatch",
+              "pending_logistics",
+              "satisfied",
+              "not_required",
+              "unknown"
+            ],
+            "description": "只针对当前待推1688采购单的物流校验：缺关联发运单/缺发运单头物流订单号/物流前提满足/经FOP确认不适用或配置关闭/未知。按Purchase1688PushValidationService对应部署规则，字段hzkj_logistics_orderno，不使用Shopify同步或物流明细追踪号。共享采购单需检查全部源履约关系；多单任一未知则unknown，否则缺发运优先于缺物流号，全部满足才satisfied。不能泄露无权来源订单；不作为采购队列可见性或操作授权，satisfied仍须FOP实时审核、重复推送等检查。省略归一unknown。"
           }
         },
         "required": [
@@ -13438,6 +14628,27 @@
           {
             "purchaseOrder": "unknown",
             "supplierPayment": "unknown"
+          },
+          {
+            "purchaseApplication": "not_created",
+            "purchaseOrder": "not_ordered",
+            "alibabaOrder": "not_pushed",
+            "logisticsGate": "pending_dispatch",
+            "supplierPayment": "not_required"
+          },
+          {
+            "purchaseApplication": "created",
+            "purchaseOrder": "ordered",
+            "alibabaOrder": "not_pushed",
+            "logisticsGate": "pending_logistics",
+            "supplierPayment": "unpaid"
+          },
+          {
+            "purchaseApplication": "created",
+            "purchaseOrder": "ordered",
+            "alibabaOrder": "pushed",
+            "logisticsGate": "satisfied",
+            "supplierPayment": "paid"
           }
         ]
       },
@@ -13459,7 +14670,7 @@
           "number": {
             "type": "string",
             "minLength": 1,
-            "description": "FOP发运单billno，用于区分同一履约订单的多张发运单。"
+            "description": "FOP发运单billno，用于区分同一履约订单的多张发运单。 Displayed directly in a separate dispatch-number column; all effective linked numbers remain visible."
           },
           "status": {
             "type": "string",
@@ -13469,7 +14680,7 @@
               "approved",
               "unknown"
             ],
-            "description": "draft暂存(A)、submitted已提交(B)、approved已审核(C)；未映射/未知用unknown，不从客户支付、履约审核或Shopify同步推断。"
+            "description": "draft暂存(A)、submitted已提交(B)、approved已审核(C)；未映射/未知用unknown，不从客户支付、履约审核或Shopify同步推断。 按最新需求9.26：dispatch始终仅paid+履约approved+shopifySync=pending，状态四项为未创建/暂存/已提交/已审核未同步；dispatch_approved复用为全部关联发运单已审且明确未同步。dispatch_synced在dispatch队列及导出拒绝400；前端旧链接清除该筛选。配货两队列保留已审核/已同步协同状态，不改变配货入列条件。同步成功退出待履约清单、看板及导出；临时异步等待不自动标为失败。原始DispatchDocument.status不变。"
           }
         },
         "examples": [
@@ -14108,7 +15319,10 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/ApprovalPreviewDocument"
-            }
+            },
+            "minItems": 1,
+            "maxItems": 1,
+            "description": "每笔订单恰好一个审核目标，allocation_review为对应唯一配货单。"
           }
         },
         "description": ""
@@ -14157,7 +15371,7 @@
                 "documents": [
                   {
                     "id": "alloc1",
-                    "number": "PH-001",
+                    "number": "AO261028000404",
                     "status": "B",
                     "eligible": true,
                     "reason": null
@@ -14280,10 +15494,13 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/ApprovalDocumentResult"
-            }
+            },
+            "minItems": 0,
+            "maxItems": 1,
+            "description": "每笔结果最多一张单据；无权/未提交等情况下可为空。不同订单分别成功或失败，不存在同一订单的多配货单部分审核。"
           }
         },
-        "description": ""
+        "description": "每笔结果最多一张单据；无权/未提交等情况下可为空。不同订单分别成功或失败，不存在同一订单的多配货单部分审核。 Legacy partial is reserved for old clients; current one-target rows do not emit partial."
       },
       "ApprovalResponse": {
         "type": "object",
@@ -14334,7 +15551,7 @@
                 "documents": [
                   {
                     "id": "alloc1",
-                    "number": "PH-001",
+                    "number": "AO261028000404",
                     "status": "approved",
                     "message": "已审核",
                     "warning": "发货通知尚未生成，请核对后置处理"
@@ -14405,7 +15622,7 @@
             ]
           }
         },
-        "description": "内部网关 /approvals/targets 返回数组项。来源由FOP解析，发运齐套及委托用户操作权必须校验。生产版version不得使用Demo常量。"
+        "description": "内部网关 /approvals/targets 每笔履约订单必须返回恰好一个目标；allocation_review唯一对应hzkj_alloc_bill，与allocationDocument的ID/单号一致，review对应hzkj_orders。FOP原子校验唯一来源、发运齐套及委托用户操作权；生产version不得使用Demo常量。"
       },
       "ApprovalCommand": {
         "type": "object",
@@ -14521,7 +15738,7 @@
           "search": {
             "type": "string",
             "maxLength": 200,
-            "description": "trim/忽略大小写，匹配orderNumber/shopifyOrderNumber/customerName/storeName/items.sku及业务员展示姓名（owner.name优先，空缺取salesperson）。包含匹配支持中文/英文部分姓名；上述字段OR，与ownerId、departmentId及其他条件AND，先授权再筛选、合计、排序与分页。列表及两种Excel导出共用。"
+            "description": "去首尾空白、忽略大小写的包含匹配：公共字段orderNumber/shopifyOrderNumber/customerName/storeName/items.sku及业务员展示姓名（owner.name优先，空缺salesperson）。queue=unpaid额外匹配customLogisticsChannelName，不匹配carrier/carrierCode或实际渠道；其他队列额外匹配carrier/carrierCode，不匹配自定义渠道。各文本字段OR，与业务部门、发货仓库及其他筛选AND；先权限后筛选、合计、排序、分页与两种Excel。见9.25。"
           },
           "orderNumber": {
             "type": "string",
@@ -14531,7 +15748,7 @@
           "departmentId": {
             "type": "string",
             "maxLength": 128,
-            "description": "所属部门稳定ID，精确匹配department.id或departmentPathIds祖先。省略/空串表示当前账号全部可见部门；非身份或授权参数。"
+            "description": "业务部门稳定ID，匹配department.id或departmentPathIds祖先。默认下拉文案为营销中心，省略/空串仍表示当前账号权限内可见业务，不扩大到整个营销中心。选项仅营销中心直属业务一至四部且受登录权限限制；非身份或授权参数。"
           },
           "warehouseStage": {
             "type": "string",
@@ -14541,12 +15758,14 @@
               "pending_outbound"
             ],
             "default": "all",
-            "description": "仅shipping。前端筛选名称“配货单状态”，置最左。all两组合计，pending_review=已齐套未审核，pending_outbound=已审核未出库（含部分出库）。两组均需实际有效配货单allocationCreated=true。省略同all；其他队列/非法/重复400。"
+            "description": "仅shipping的旧查询兼容：省略/all/pending_outbound均取配货已审核且未全部出库；pending_review返回空，不重引入配货未审核数据。前端已移除该下拉，旧链接可显式重置。其他队列、非法、重复参数400。"
           },
           "sortBy": {
             "type": "string",
             "enum": [
               "paidAt",
+              "reviewedAt",
+              "consumerPaidAt",
               "dispatchDocumentStatus",
               "allocationDocumentStatus",
               "stockReadiness",
@@ -14554,7 +15773,7 @@
               "outboundStatus"
             ],
             "default": "paidAt",
-            "description": "主排序字段；stockReadiness和allocationReviewStatus仅allocation/allocation_review，分别对应齐套和审核事实；allocationDocumentStatus保留仓库及旧链接兼容。非法组合400。详见接口描述。"
+            "description": "主排序字段；stockReadiness和allocationReviewStatus仅allocation/allocation_review，分别对应齐套和审核事实；allocationDocumentStatus保留仓库及旧链接兼容。非法组合400。详见接口描述。 最新9.33：销售unpaid/review/exceptions及待履约dispatch支持sortBy=consumerPaidAt、sortOrder=asc/desc。默认仍paidAt升序；同C端时间按paidAt升序/id升序，缺失或非法时间双向均置后，不回退其他日期。先授权/筛选后对完整结果排序再分页；所选及全筛选Excel同顺序。其他队列使用该排序返回400。单号及SKU复制仅客户端原值操作，不新增API或改变权限。 9.35覆盖原四队列限制：allocation未齐套也允许consumerPaidAt；allocation_review仍不允许，使用独立齐套时间展示。 reviewedAt仅procurement可用，实际订单审核时间，空值始终最后，同值按paidAt升序及id。"
           },
           "sortOrder": {
             "type": "string",
@@ -14562,7 +15781,7 @@
               "asc",
               "desc"
             ],
-            "description": "升序asc/降序desc。显式值优先；省略时日期沿用paidAtOrder，状态默认asc。未知始终最后；同状态按收款升序/id升序。非法或重复参数400。"
+            "description": "升序asc/降序desc。显式值优先；省略时仅paidAt沿用paidAtOrder，consumerPaidAt和状态默认asc。缺失或非法值始终最后；C端时间及状态同值按收款日期升序/id升序。非法或重复参数400。"
           },
           "paidAtOrder": {
             "type": "string",
@@ -14597,6 +15816,51 @@
             "type": "string",
             "maxLength": 128,
             "description": "订单业务员稳定ID，精确匹配owner.id。省略/空串表示全部可见业务员；先取登录账号权限与FOP白名单，再与部门/业务员条件求交集。未知或无权ID返回空，不回退全部；不是身份或授权参数。"
+          },
+          "procurementStage": {
+            "type": "string",
+            "enum": [
+              "purchase_order_pending",
+              "alibaba_pending",
+              "payment_pending",
+              "refund_pending",
+              "supplier_pending",
+              "supplier_partial"
+            ],
+            "description": "兼容旧采购阶段筛选，省略为全部；新页面使用taskStatus并清除此参数。procurement仅purchase_order_pending、alibaba_pending、payment_pending、refund_pending；procurement_shipping仅supplier_pending、supplier_partial。application_pending/unknown/partially_paid已移除，API返回400。旧前端书签将application_pending转为purchase_order_pending，清除unknown。与taskStatus同时提供时取交集，授权、队列、合计、分页与两种Excel同范围。"
+          },
+          "taskStatus": {
+            "type": "string",
+            "enum": [
+              "purchase_order_pending",
+              "dispatch_preparation",
+              "dispatch_missing",
+              "alibaba_pending",
+              "payment_pending",
+              "refund_pending",
+              "supplier_pending",
+              "supplier_partial",
+              "dispatch_draft",
+              "dispatch_submitted",
+              "dispatch_approved",
+              "outbound_pending",
+              "outbound_partial",
+              "stock",
+              "address",
+              "tracking",
+              "dispatch_synced",
+              "dispatch_incomplete",
+              "dispatch_complete"
+            ],
+            "description": "清单顶部状态筛选，省略为全部。需求9.29：procurement仅purchase_order_pending待建采购订单、dispatch_preparation待制作发运单（采购单已建且1688未推完，logisticsGate=pending_dispatch或pending_logistics）、alibaba_pending待推1688采购、payment_pending待支付采购款、refund_pending采购退款待跟进。无待建采购申请、待确认或已付款未发货选项，后者使用独立procurement_shipping清单。procurement_shipping仅supplier_pending/supplier_partial；dispatch仅dispatch_missing/dispatch_draft/dispatch_submitted/dispatch_approved（已审核未同步），不能查询dispatch_synced；allocation保留五种发运状态含dispatch_synced；shipping仅outbound_pending/outbound_partial；exceptions仅stock/address/tracking；销售unpaid/review不允许状态筛选。先授权再与部门、业务员、仓库、搜索和兼容procurementStage求交集；合计、分页与两种Excel共用。多发运单取最早阶段，未知事实不推断为完成。非法组合、已移除值、重复参数400。筛选不改变Dashboard基数。 需求9.30：allocation_review仅dispatch_incomplete未完成和dispatch_complete已完成。已完成=非空关联有效发运单全部已审核，与Shopify同步无关；缺失、未知或任一未审归未完成。未完成保留队列，不改变Dashboard总数。状态排序未完成→已完成，同组收款日期/id。旧细分状态在该队列查询/导出返回400，旧前端书签迁移到对应分类。allocation未齐套页保留五种细分状态，dispatch保留原四种。"
+          },
+          "warehouseCode": {
+            "type": "string",
+            "enum": [
+              "HZ",
+              "SZ"
+            ],
+            "description": "Order shipping warehouse: HZ=Hangzhou, SZ=Shenzhen. Omit for all. Applied after permission scope and before totals/sort/pagination/export; unrelated to destination country or warehouseStage. Invalid or repeated values return400."
           }
         },
         "oneOf": [
@@ -14623,7 +15887,7 @@
             }
           }
         ],
-        "description": "工作台Excel导出请求；身份由JWT/cookie确定，禁止userId/tenantId/page/pageSize等额外参数。其他筛选、排序及岗位约束与履约清单GET一致。\nownerId为订单业务员筛选，精确匹配owner.id，与departmentId取交集；不能扩大登录账号权限。salespeople仅由授权订单及所选部门生成，独立于队列/搜索/分页/ownerId，按姓名和ID排序。切换部门清空业务员；待办页签/岗位切换保留选择。两种导出复用此条件并在输出前复核。",
+        "description": "工作台Excel导出请求；身份由JWT/cookie确定，禁止userId/tenantId/page/pageSize等额外参数。其他筛选、排序及岗位约束与履约清单GET一致。\nownerId为订单业务员筛选，精确匹配owner.id，与departmentId取交集；不能扩大登录账号权限。salespeople仅由授权订单及所选部门生成，独立于队列/搜索/分页/ownerId，按姓名和ID排序。切换部门清空业务员；待办页签/岗位切换保留选择。两种导出复用此条件并在输出前复核。 Requirements9.20: amount after Shopify number, customer before store, SKU quantities grouped in product details; no separate quantity column on order sheet; numeric quantities remain in item sheet.",
         "examples": [
           {
             "queue": "review",
@@ -14642,8 +15906,1808 @@
             "sortBy": "outboundStatus",
             "sortOrder": "asc",
             "ownerId": "EMP-DEMO-001"
+          },
+          {
+            "queue": "procurement",
+            "procurementStage": "payment_pending",
+            "mode": "filtered"
+          },
+          {
+            "queue": "procurement_shipping",
+            "procurementStage": "supplier_pending",
+            "mode": "selected",
+            "orderIds": [
+              "order-001"
+            ]
+          }
+        ],
+        "allOf": [
+          {
+            "if": {
+              "required": [
+                "procurementStage"
+              ]
+            },
+            "then": {
+              "properties": {
+                "queue": {
+                  "enum": [
+                    "procurement",
+                    "procurement_shipping"
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "queue": {
+                  "const": "procurement"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "procurementStage": {
+                  "enum": [
+                    "purchase_order_pending",
+                    "alibaba_pending",
+                    "payment_pending",
+                    "refund_pending"
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "queue": {
+                  "const": "procurement_shipping"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "procurementStage": {
+                  "enum": [
+                    "supplier_pending",
+                    "supplier_partial"
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "required": [
+                "taskStatus"
+              ]
+            },
+            "then": {
+              "oneOf": [
+                {
+                  "properties": {
+                    "queue": {
+                      "const": "procurement"
+                    },
+                    "taskStatus": {
+                      "enum": [
+                        "purchase_order_pending",
+                        "dispatch_preparation",
+                        "alibaba_pending",
+                        "payment_pending",
+                        "refund_pending"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "queue",
+                    "taskStatus"
+                  ]
+                },
+                {
+                  "properties": {
+                    "queue": {
+                      "const": "procurement_shipping"
+                    },
+                    "taskStatus": {
+                      "enum": [
+                        "supplier_pending",
+                        "supplier_partial"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "queue",
+                    "taskStatus"
+                  ]
+                },
+                {
+                  "properties": {
+                    "queue": {
+                      "const": "dispatch"
+                    },
+                    "taskStatus": {
+                      "enum": [
+                        "dispatch_missing",
+                        "dispatch_draft",
+                        "dispatch_submitted",
+                        "dispatch_approved"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "queue",
+                    "taskStatus"
+                  ]
+                },
+                {
+                  "properties": {
+                    "queue": {
+                      "const": "allocation"
+                    },
+                    "taskStatus": {
+                      "enum": [
+                        "dispatch_missing",
+                        "dispatch_draft",
+                        "dispatch_submitted",
+                        "dispatch_approved",
+                        "dispatch_synced"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "queue",
+                    "taskStatus"
+                  ]
+                },
+                {
+                  "properties": {
+                    "queue": {
+                      "const": "allocation_review"
+                    },
+                    "taskStatus": {
+                      "enum": [
+                        "dispatch_incomplete",
+                        "dispatch_complete"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "queue",
+                    "taskStatus"
+                  ]
+                },
+                {
+                  "properties": {
+                    "queue": {
+                      "const": "shipping"
+                    },
+                    "taskStatus": {
+                      "enum": [
+                        "outbound_pending",
+                        "outbound_partial"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "queue",
+                    "taskStatus"
+                  ]
+                },
+                {
+                  "properties": {
+                    "queue": {
+                      "const": "exceptions"
+                    },
+                    "taskStatus": {
+                      "enum": [
+                        "stock",
+                        "address",
+                        "tracking"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "queue",
+                    "taskStatus"
+                  ]
+                }
+              ]
+            }
           }
         ]
+      },
+      "ShippingRecipient": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "phone",
+          "email",
+          "state",
+          "city",
+          "postalCode",
+          "addressLine1",
+          "addressLine2"
+        ],
+        "properties": {
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "收件人姓名：trim(hzkj_customer_first_name + 空格 + hzkj_customer_last_name)，单独姓/名均可；不是 hzkj_customer.name。 空白/缺失规范化为 null。"
+          },
+          "phone": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "hzkj_phone，保留国际区号，按字符串传输。 空白/缺失规范化为 null。"
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "hzkj_email，履约订单收件人邮箱。 空白/缺失规范化为 null。"
+          },
+          "state": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "hzkj_state，关联对象须解析显示文本。 空白/缺失规范化为 null。"
+          },
+          "city": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "hzkj_city。 空白/缺失规范化为 null。"
+          },
+          "postalCode": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "hzkj_post_code，字符串保留前导零。 空白/缺失规范化为 null。"
+          },
+          "addressLine1": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "hzkj_address1，完整地址第一行。 空白/缺失规范化为 null。"
+          },
+          "addressLine2": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "hzkj_address2，公寓/楼层等补充地址。 空白/缺失规范化为 null。"
+          }
+        },
+        "description": "当前履约订单收货地址快照。只能随已经通过 FOP 订单白名单及本地业务数据权限的订单返回；不从客户档案补齐、不写入 URL/日志/本地持久化。",
+        "examples": [
+          {
+            "name": "Jane Smith",
+            "phone": "+1 202-555-0147",
+            "email": "jane@example.com",
+            "state": "MA",
+            "city": "Boston",
+            "postalCode": "02108",
+            "addressLine1": "18 Example Street",
+            "addressLine2": "Unit 4"
+          }
+        ]
+      },
+      "LogisticsChannel": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "code"
+        ],
+        "properties": {
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "FOP实际物流渠道基础资料name；缺失为null，不用物流商或自定义渠道替代。"
+          },
+          "code": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "同一实际渠道基础资料number，按原字符串保留；不是物流服务商分类码。"
+          }
+        },
+        "examples": [
+          {
+            "name": "云途标准专线",
+            "code": "DEMO-YT-STD"
+          },
+          {
+            "name": null,
+            "code": "DEMO-CHANNEL-01"
+          }
+        ]
+      },
+      "LogisticsTrackingNumber": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "type",
+          "number"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "full",
+              "first_mile",
+              "last_mile"
+            ],
+            "description": "全程、头程、尾程；由明确业务事实映射，不按号码前缀猜测。"
+          },
+          "number": {
+            "type": "string",
+            "minLength": 1,
+            "description": "字符串保留前导零，仅去首尾空白。"
+          }
+        },
+        "description": "明确类型的客户物流跟踪号，不含物流商内部订单ID。"
+      },
+      "LogisticsInfo": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "carrierName",
+          "shopifyTracking"
+        ],
+        "properties": {
+          "carrierName": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "同一发运单/包裹关联服务商展示名。"
+          },
+          "trackingNumbers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LogisticsTrackingNumber"
+            },
+            "description": "兼容原始单号供其他清单使用；不证明业务员的Shopify上传选择，待履约不得据此自动回退。",
+            "deprecated": true
+          },
+          "shopifyTracking": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LogisticsTrackingNumber"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "FOP根据业务员运费报价配置最终选定上传Shopify的号码。type: full=QC、first_mile=TC、last_mile=WC。主物流字段可全程或头程，不能根据字段常量或号码前缀猜类型。未知/未映射为null；真实取值由后续IT联调确认。"
+          }
+        },
+        "description": "需求9.28覆盖9.27。每组只展示FOP按业务员运费报价配置最终选定上传Shopify的shopifyTracking；缺失或非法选择为null，不从trackingNumbers、trackingNumber或号码前缀推断。主物流号可头程或全程，尾程独立，真实字段与类型映射由IT人工联调。授权后仅允许carrierName及shopifyTracking，UI与Excel使用TC/WC/QC单行号码；同步成功状态仍独立。"
+      },
+      "AllocationDocumentReference": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "有效且有权访问的配货单引用，取hzkj_alloc_bill.id/billno，按源履约订单/包裹归属。展示引用不授予审核权限。",
+        "required": [
+          "id",
+          "number"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500,
+            "pattern": "\\S"
+          },
+          "number": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500,
+            "pattern": "\\S"
+          }
+        },
+        "examples": [
+          {
+            "id": "allocation-1",
+            "number": "AO261028000404"
+          }
+        ]
+      },
+      "StockType": {
+        "type": "string",
+        "enum": [
+          "full_payment",
+          "deposit"
+        ],
+        "description": "FOP hzkj_stock_type：1全款→full_payment，2押金→deposit。"
+      },
+      "StockPurchaseStatus": {
+        "type": "string",
+        "enum": [
+          "unpurchased",
+          "partial",
+          "purchased",
+          "shipped",
+          "received",
+          "unknown"
+        ],
+        "description": "hzkj_purchase_status：0未采购，1部分采购，2已采购，4已发货，3已入库。缺失/无法识别映射unknown（显示—），不是履约采购进度。"
+      },
+      "StockOrder": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "customerId": {
+            "type": "string",
+            "description": "客户主键，不用名称匹配。"
+          },
+          "customerCode": {
+            "type": "string"
+          },
+          "customerName": {
+            "type": "string"
+          },
+          "owner": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "FOP业务身份/部门主键，字符串保留精度。"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "name"
+            ]
+          },
+          "department": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "FOP业务身份/部门主键，字符串保留精度。"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "name"
+            ]
+          },
+          "id": {
+            "type": "string",
+            "description": "备货单主键，与履约单ID独立。"
+          },
+          "stockNumber": {
+            "type": "string",
+            "description": "备货单billno，保留原值；Demo示例BH261028000001。"
+          },
+          "stockType": {
+            "$ref": "#/components/schemas/StockType"
+          },
+          "storeName": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "店铺名称。备货元数据暂未发现店铺字段，IT确认关系后取值；缺失null，不推断。"
+          },
+          "items": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "$ref": "#/components/schemas/FopOrderItem"
+            }
+          },
+          "amount": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "hzkj_order_amount订单金额，原币；不是hzkj_receive_amount已收金额，也不是押金金额。"
+          },
+          "currency": {
+            "type": "string",
+            "pattern": "^[A-Z]{3}$",
+            "description": "hzkj_settlecurrency原币；按币种分别合计。"
+          },
+          "paidAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "明确时区的ISO时间，前端UTC+8展示；未收款为null，不回退创建时间。"
+          },
+          "purchaseStatus": {
+            "$ref": "#/components/schemas/StockPurchaseStatus"
+          },
+          "warehouseCode": {
+            "type": "string",
+            "enum": [
+              "HZ",
+              "SZ"
+            ],
+            "description": "收货仓库，从hzkj_warehouse通过经确认的编码映射。"
+          },
+          "warehouse": {
+            "type": "string",
+            "description": "收货仓库名称。"
+          },
+          "paymentStatus": {
+            "type": "string",
+            "enum": [
+              "paid",
+              "unpaid",
+              "unknown"
+            ],
+            "description": "FOP hzkj_stock_order_new.hzkj_orderstatus=2映射paid、1映射unpaid，其他/缺失为unknown，取消由cancelled排除。不以收款日期推定状态。"
+          },
+          "reviewStatus": {
+            "type": "string",
+            "enum": [
+              "approved",
+              "pending",
+              "unknown"
+            ],
+            "description": "备货单当前审核状态：billstatus=C为approved，已确认的非审核枚举为pending，缺失/不认识为unknown。与采购申请审核不同，不能相互推定。"
+          }
+        },
+        "required": [
+          "customerId",
+          "customerCode",
+          "customerName",
+          "owner",
+          "department",
+          "id",
+          "stockNumber",
+          "stockType",
+          "storeName",
+          "items",
+          "amount",
+          "currency",
+          "paidAt",
+          "purchaseStatus",
+          "warehouseCode",
+          "warehouse",
+          "paymentStatus",
+          "reviewStatus"
+        ],
+        "description": "独立备货单；无履约/Shopify单号、C端收件人或物流信息。仅全部有效单（排除取消），包括待支付及采购完成。"
+      },
+      "FopStockOrderCandidate": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "customerId": {
+            "type": "string",
+            "description": "客户主键，不用名称匹配。"
+          },
+          "customerCode": {
+            "type": "string"
+          },
+          "customerName": {
+            "type": "string"
+          },
+          "owner": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "FOP业务身份/部门主键，字符串保留精度。"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "name"
+            ]
+          },
+          "department": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "FOP业务身份/部门主键，字符串保留精度。"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "name"
+            ]
+          },
+          "id": {
+            "type": "string",
+            "description": "备货单主键，与履约单ID独立。"
+          },
+          "stockNumber": {
+            "type": "string",
+            "description": "备货单billno，保留原值；Demo示例BH261028000001。"
+          },
+          "stockType": {
+            "$ref": "#/components/schemas/StockType"
+          },
+          "storeName": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "店铺名称。备货元数据暂未发现店铺字段，IT确认关系后取值；缺失null，不推断。"
+          },
+          "items": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "$ref": "#/components/schemas/FopOrderItem"
+            }
+          },
+          "amount": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "hzkj_order_amount订单金额，原币；不是hzkj_receive_amount已收金额，也不是押金金额。"
+          },
+          "currency": {
+            "type": "string",
+            "pattern": "^[A-Z]{3}$",
+            "description": "hzkj_settlecurrency原币；按币种分别合计。"
+          },
+          "paidAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "明确时区的ISO时间，前端UTC+8展示；未收款为null，不回退创建时间。"
+          },
+          "purchaseStatus": {
+            "$ref": "#/components/schemas/StockPurchaseStatus"
+          },
+          "warehouseCode": {
+            "type": "string",
+            "enum": [
+              "HZ",
+              "SZ"
+            ],
+            "description": "收货仓库，从hzkj_warehouse通过经确认的编码映射。"
+          },
+          "warehouse": {
+            "type": "string",
+            "description": "收货仓库名称。"
+          },
+          "tenantId": {
+            "type": "string"
+          },
+          "cancelled": {
+            "type": "boolean",
+            "description": "hzkj_orderstatus=0为true，其余有效状态false；禁止默认已支付。"
+          },
+          "departmentPathIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "授权部门祖先ID，服务端使用，不向浏览器输出。"
+          },
+          "salesDepartmentCode": {
+            "type": "string",
+            "enum": [
+              "sales1",
+              "sales2",
+              "sales3",
+              "sales4"
+            ],
+            "description": "营销中心业务一至四部映射。"
+          },
+          "paymentStatus": {
+            "type": "string",
+            "enum": [
+              "paid",
+              "unpaid",
+              "unknown"
+            ],
+            "description": "FOP hzkj_stock_order_new.hzkj_orderstatus=2映射paid、1映射unpaid，其他/缺失为unknown，取消由cancelled排除。不以收款日期推定状态。"
+          },
+          "reviewStatus": {
+            "type": "string",
+            "enum": [
+              "approved",
+              "pending",
+              "unknown"
+            ],
+            "description": "备货单当前审核状态：billstatus=C为approved，已确认的非审核枚举为pending，缺失/不认识为unknown。与采购申请审核不同，不能相互推定。"
+          }
+        },
+        "required": [
+          "customerId",
+          "customerCode",
+          "customerName",
+          "owner",
+          "department",
+          "id",
+          "stockNumber",
+          "stockType",
+          "storeName",
+          "items",
+          "amount",
+          "currency",
+          "paidAt",
+          "purchaseStatus",
+          "warehouseCode",
+          "warehouse",
+          "tenantId",
+          "cancelled"
+        ],
+        "description": "待IT发布员工网关POST /stock-orders的数组元素。完整返回受委托登录员工可读记录；本地再次校验租户、独立allowedStockOrderIds及本人/部门范围。金额与归属用备货单自身字段。 新增paymentStatus/reviewStatus兼容旧适配器可省略，BFF输出unknown，缺失事实绝不进入采购待备货。"
+      },
+      "StockBalance": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "available": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "当前可用量，FOP已在锁定时扣减；禁止再次减locked。"
+          },
+          "locked": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "当前锁定量。"
+          },
+          "onHand": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "在库=available+locked，非累计入库。"
+          }
+        },
+        "required": [
+          "available",
+          "locked",
+          "onHand"
+        ]
+      },
+      "StockInventory": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "customerId": {
+            "type": "string",
+            "description": "客户主键，不用名称匹配。"
+          },
+          "customerCode": {
+            "type": "string"
+          },
+          "customerName": {
+            "type": "string"
+          },
+          "owner": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "FOP业务身份/部门主键，字符串保留精度。"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "name"
+            ]
+          },
+          "department": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "FOP业务身份/部门主键，字符串保留精度。"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "name"
+            ]
+          },
+          "id": {
+            "type": "string",
+            "description": "客户+SKU+仓库稳定唯一资源ID。"
+          },
+          "sku": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string",
+            "description": "SKU商品名称。"
+          },
+          "imageUrl": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "warehouseCode": {
+            "type": "string",
+            "enum": [
+              "HZ",
+              "SZ"
+            ],
+            "description": "收货仓库，从hzkj_warehouse通过经确认的编码映射。"
+          },
+          "warehouse": {
+            "type": "string"
+          },
+          "fullPayment": {
+            "$ref": "#/components/schemas/StockBalance"
+          },
+          "deposit": {
+            "$ref": "#/components/schemas/StockBalance"
+          },
+          "onHand": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "所选客户全款在库+押金在库，非全仓公共库存。"
+          }
+        },
+        "required": [
+          "customerId",
+          "customerCode",
+          "customerName",
+          "owner",
+          "department",
+          "id",
+          "sku",
+          "name",
+          "imageUrl",
+          "warehouseCode",
+          "warehouse",
+          "fullPayment",
+          "deposit",
+          "onHand"
+        ],
+        "description": "一行一个客户+SKU+仓库；owner/department是客户当前归属。先资源授权再查询/分页，零库存保留。"
+      },
+      "FopStockInventoryCandidate": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "customerId": {
+            "type": "string",
+            "description": "客户主键，不用名称匹配。"
+          },
+          "customerCode": {
+            "type": "string"
+          },
+          "customerName": {
+            "type": "string"
+          },
+          "owner": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "FOP业务身份/部门主键，字符串保留精度。"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "name"
+            ]
+          },
+          "department": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "FOP业务身份/部门主键，字符串保留精度。"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "name"
+            ]
+          },
+          "id": {
+            "type": "string",
+            "description": "客户+SKU+仓库稳定唯一资源ID。"
+          },
+          "sku": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string",
+            "description": "SKU商品名称。"
+          },
+          "imageUrl": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "warehouseCode": {
+            "type": "string",
+            "enum": [
+              "HZ",
+              "SZ"
+            ],
+            "description": "收货仓库，从hzkj_warehouse通过经确认的编码映射。"
+          },
+          "warehouse": {
+            "type": "string"
+          },
+          "fullPayment": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "available": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 9007199254740991,
+                "description": "当前可用量，FOP已在锁定时扣减；禁止再次减locked。"
+              },
+              "locked": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 9007199254740991,
+                "description": "当前锁定量。"
+              }
+            },
+            "required": [
+              "available",
+              "locked"
+            ]
+          },
+          "deposit": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "available": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 9007199254740991,
+                "description": "当前可用量，FOP已在锁定时扣减；禁止再次减locked。"
+              },
+              "locked": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 9007199254740991,
+                "description": "当前锁定量。"
+              }
+            },
+            "required": [
+              "available",
+              "locked"
+            ]
+          },
+          "tenantId": {
+            "type": "string"
+          },
+          "departmentPathIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "授权部门祖先ID，服务端使用，不向浏览器输出。"
+          },
+          "salesDepartmentCode": {
+            "type": "string",
+            "enum": [
+              "sales1",
+              "sales2",
+              "sales3",
+              "sales4"
+            ],
+            "description": "营销中心业务一至四部映射。"
+          }
+        },
+        "required": [
+          "customerId",
+          "customerCode",
+          "customerName",
+          "owner",
+          "department",
+          "id",
+          "sku",
+          "name",
+          "imageUrl",
+          "warehouseCode",
+          "warehouse",
+          "fullPayment",
+          "deposit",
+          "tenantId"
+        ],
+        "description": "员工网关POST /stock-inventory返回完整授权库存快照数组；聚合至客户+SKU+仓库，禁止重复。客户当前归属用于权限，不能从历史备货单复制归属。未实现网关时不可用Demo冒充真实数据。"
+      },
+      "StockCustomer": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "code",
+          "name"
+        ],
+        "description": "仅登录范围内允许查询的客户；重名以主键和编码区分。"
+      },
+      "StockCustomersPage": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "$ref": "#/components/schemas/StockCustomer"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "符合客户名称/编码搜索和范围的总数，最多返回前100条；超过100需进一步搜索。"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ]
+      },
+      "StockOrderTotals": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "orderCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "itemQuantity": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "amounts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "currency": {
+                  "type": "string"
+                },
+                "amount": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "currency",
+                "amount"
+              ]
+            },
+            "description": "完整筛选结果按币种合计订单金额；一单多品只计一次，不作为回款业绩。"
+          }
+        },
+        "required": [
+          "orderCount",
+          "itemQuantity",
+          "amounts"
+        ]
+      },
+      "StockOrderPage": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "source": {
+            "type": "string",
+            "enum": [
+              "mock",
+              "fop"
+            ]
+          },
+          "refreshedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "本次BFF查询完成时间，不保证上游同步SLA；真实库存接口须读取当前有效快照。"
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "pageSize": {
+            "type": "integer",
+            "enum": [
+              20,
+              50,
+              100
+            ],
+            "default": 50
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StockOrder"
+            }
+          },
+          "departments": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "description": "FOP业务身份/部门主键，字符串保留精度。"
+                },
+                "name": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "name"
+              ]
+            },
+            "description": "登录可读有效备货单中营销中心一至四部；按业务一至四部排序。"
+          },
+          "totals": {
+            "$ref": "#/components/schemas/StockOrderTotals"
+          }
+        },
+        "required": [
+          "source",
+          "refreshedAt",
+          "total",
+          "page",
+          "pageSize",
+          "items",
+          "departments",
+          "totals"
+        ]
+      },
+      "StockInventoryPage": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "source": {
+            "type": "string",
+            "enum": [
+              "mock",
+              "fop"
+            ]
+          },
+          "refreshedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "本次BFF查询完成时间，不保证上游同步SLA；真实库存接口须读取当前有效快照。"
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "pageSize": {
+            "type": "integer",
+            "enum": [
+              20,
+              50,
+              100
+            ],
+            "default": 50
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StockInventory"
+            }
+          },
+          "customerId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "请求指定的精确customerId；模糊/跨客户查询为null，每行仍明确返回customerId/code/name。"
+          }
+        },
+        "required": [
+          "source",
+          "refreshedAt",
+          "total",
+          "page",
+          "pageSize",
+          "items",
+          "customerId"
+        ],
+        "description": "按客户+SKU+仓库行分页；适配FOP原有按SKU分页结果时必须先展开/聚合后计算total。不是SKU总数。"
+      },
+      "ExportStockOrders": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "search": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "备货单号、客户姓名/编码、店铺、业务员姓名、SKU、商品名称大小写不敏感包含匹配；清空自动恢复。"
+          },
+          "warehouseCode": {
+            "type": "string",
+            "enum": [
+              "HZ",
+              "SZ"
+            ],
+            "description": "收货仓库，从hzkj_warehouse通过经确认的编码映射。"
+          },
+          "departmentId": {
+            "type": "string",
+            "description": "部门ID；省略=营销中心（仅当前登录可读范围）。"
+          },
+          "ownerId": {
+            "type": "string",
+            "description": "兼容岗位跳转的业务员ID；界面通过搜索姓名查询，不增加业务员下拉。"
+          },
+          "stockType": {
+            "$ref": "#/components/schemas/StockType"
+          },
+          "purchaseStatus": {
+            "$ref": "#/components/schemas/StockPurchaseStatus"
+          },
+          "sortOrder": {
+            "type": "string",
+            "enum": [
+              "asc",
+              "desc"
+            ],
+            "default": "asc",
+            "description": "按paidAt完整排序后分页；空值两向均最后，同值id升序。"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "selected",
+              "filtered"
+            ]
+          },
+          "orderIds": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 100,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "description": "仅selected必填，filtered禁止。"
+          },
+          "queue": {
+            "type": "string",
+            "enum": [
+              "all",
+              "procurement"
+            ],
+            "default": "all",
+            "description": "all为销售全部有效备货单，需sales岗位；procurement为采购待备货，需procurement岗位且paymentStatus=paid、reviewStatus=approved、purchaseStatus=unpurchased/partial，排除取消。条件由服务端强制，不能用筛选覆盖。"
+          }
+        },
+        "required": [
+          "mode"
+        ],
+        "oneOf": [
+          {
+            "properties": {
+              "mode": {
+                "const": "selected"
+              }
+            },
+            "required": [
+              "orderIds"
+            ]
+          },
+          {
+            "properties": {
+              "mode": {
+                "const": "filtered"
+              }
+            },
+            "not": {
+              "required": [
+                "orderIds"
+              ]
+            }
+          }
+        ]
+      },
+      "AllocationInventoryScope": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "独立库存池授权ID。"
+          },
+          "sku": {
+            "type": "string",
+            "minLength": 1,
+            "description": "本地SKU编码。"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "description": "商品名称。"
+          },
+          "warehouseCode": {
+            "type": "string",
+            "enum": [
+              "HZ",
+              "SZ"
+            ]
+          },
+          "warehouse": {
+            "type": "string",
+            "minLength": 1,
+            "description": "仓库名称。"
+          },
+          "customer": {
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "客户稳定ID。"
+                  },
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "客户名称，不拼接业务员。"
+                  }
+                },
+                "required": [
+                  "id",
+                  "name"
+                ],
+                "description": ""
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "null=公共池；对象=对应客户专属实物池，不能用未知客户代替公共池。"
+          },
+          "owner": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "description": "客户当前归属员工ID。"
+              }
+            },
+            "required": [
+              "id"
+            ],
+            "description": ""
+          },
+          "department": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "description": "客户当前归属部门ID。"
+              }
+            },
+            "required": [
+              "id"
+            ],
+            "description": ""
+          },
+          "departmentPathIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "description": ""
+            },
+            "description": "部门祖先链。"
+          }
+        },
+        "required": [
+          "id",
+          "sku",
+          "name",
+          "warehouseCode",
+          "warehouse",
+          "customer"
+        ],
+        "description": "可信网关独立授权；SKU×仓库×客户池（公共池客户为null）唯一，包含允许查但当前没有库存记录的维度。专属池必须提供owner和department，BFF再与账号业务权限取交集。此模型不直接返回浏览器。"
+      },
+      "AllocationInventoryRow": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "独立库存池授权ID。"
+          },
+          "sku": {
+            "type": "string",
+            "minLength": 1,
+            "description": "本地SKU编码。"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "description": "商品名称。"
+          },
+          "warehouseCode": {
+            "type": "string",
+            "enum": [
+              "HZ",
+              "SZ"
+            ]
+          },
+          "warehouse": {
+            "type": "string",
+            "minLength": 1,
+            "description": "仓库名称。"
+          },
+          "customer": {
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "客户稳定ID。"
+                  },
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "客户名称，不拼接业务员。"
+                  }
+                },
+                "required": [
+                  "id",
+                  "name"
+                ],
+                "description": ""
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "null=公共池；对象=对应客户专属实物池，不能用未知客户代替公共池。"
+          },
+          "onHand": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "即时实物在库，公共池和客户池分别聚合。"
+          },
+          "occupied": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "同一库存池有效配货占用。"
+          },
+          "free": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "max(0,onHand-occupied)，实物余量，不等于最终可配量（另有全款权益保护等规则）。"
+          }
+        },
+        "required": [
+          "id",
+          "sku",
+          "name",
+          "warehouseCode",
+          "warehouse",
+          "customer",
+          "onHand",
+          "occupied",
+          "free"
+        ],
+        "description": ""
+      },
+      "AllocationInventoryQuery": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "mode": {
+                "const": "selected"
+              },
+              "orderIds": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 100,
+                "uniqueItems": true,
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 120,
+                  "pattern": "\\S"
+                }
+              },
+              "warehouseCode": {
+                "type": "string",
+                "enum": [
+                  "HZ",
+                  "SZ"
+                ]
+              },
+              "page": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 100000,
+                "default": 1
+              },
+              "pageSize": {
+                "type": "integer",
+                "enum": [
+                  20,
+                  50,
+                  100
+                ],
+                "default": 50
+              }
+            },
+            "required": [
+              "mode",
+              "orderIds"
+            ],
+            "description": "仅传订单ID，BFF从当前获权未齐套订单推导SKU、客户及仓库，不能客户端自传池范围。"
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "mode": {
+                "const": "search"
+              },
+              "search": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "pattern": "\\S",
+                "description": "必须非空；SKU忽略大小写包含匹配，清空后停止查询。"
+              },
+              "warehouseCode": {
+                "type": "string",
+                "enum": [
+                  "HZ",
+                  "SZ"
+                ]
+              },
+              "page": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 100000,
+                "default": 1
+              },
+              "pageSize": {
+                "type": "integer",
+                "enum": [
+                  20,
+                  50,
+                  100
+                ],
+                "default": 50
+              }
+            },
+            "required": [
+              "mode",
+              "search"
+            ],
+            "description": "未选订单时必须搜索SKU；仅匹配获权公共与专属池。"
+          }
+        ]
+      },
+      "AllocationInventoryPage": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "source": {
+            "type": "string",
+            "enum": [
+              "mock",
+              "fop"
+            ],
+            "description": "保留技术来源字段，待办页面不显示来源徽标。"
+          },
+          "asOf": {
+            "type": "string",
+            "format": "date-time",
+            "description": "有结果时为上游完整快照时间，UTC+8展示；无匹配时为查询时间。"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AllocationInventoryRow"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "过滤后的库存池行数，不是SKU数；公共池仅出现一次。"
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100000,
+            "default": 1
+          },
+          "pageSize": {
+            "type": "integer",
+            "enum": [
+              20,
+              50,
+              100
+            ],
+            "default": 50
+          }
+        },
+        "required": [
+          "source",
+          "asOf",
+          "items",
+          "total",
+          "page",
+          "pageSize"
+        ],
+        "description": ""
+      },
+      "AllocationInventorySnapshot": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "subject": {
+            "$ref": "#/components/schemas/FopIdentity"
+          },
+          "complete": {
+            "type": "boolean",
+            "description": "必须true，表示本次请求scopeIds均已授权并完整查询，包括已确认无余额的池。false或缺失不得补零。"
+          },
+          "asOf": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "scopeId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": ""
+                },
+                "onHand": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "occupied": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "scopeId",
+                "onHand",
+                "occupied"
+              ],
+              "description": ""
+            }
+          }
+        },
+        "required": [
+          "subject",
+          "complete",
+          "asOf",
+          "items"
+        ],
+        "description": "员工网关返回，不直接暴露浏览器；只允许请求范围内每个scopeId至多一行，缺失余额仅在complete=true且已授权时补零，错误/不完整/无权不能当零。"
+      },
+      "AllocationInventoryGatewayRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "subject": {
+            "$ref": "#/components/schemas/FopIdentity"
+          },
+          "scopeIds": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 100,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "description": ""
+            }
+          }
+        },
+        "required": [
+          "subject",
+          "scopeIds"
+        ],
+        "description": "平台服务端POST员工网关 /allocation-inventory。身份来自登录绑定，网关重校当前授权、客户归属，并读取实时库存与占用；服务凭证不授予全公司访问。"
       }
     },
     "responses": {
@@ -14835,8 +17899,8 @@
     "description": "OpenAPI3.1.1官方规范",
     "url": "https://spec.openapis.org/oas/v3.1.1.html"
   },
-  "x-audit-date": "2026-10-22",
-  "x-implemented-operations": 15,
+  "x-audit-date": "2026-10-28",
+  "x-implemented-operations": 41,
   "x-not-included": [
     "未实现FOP上游HTTP端点/签名/分页/游标/同步",
     "产品成本/物流目录（requireResourcePermission当前总拒绝，不属于图表读契约）",

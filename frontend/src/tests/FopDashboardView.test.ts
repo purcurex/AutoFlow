@@ -138,7 +138,8 @@ describe('FOP Dashboard interactions', () => {
     expect(wrapper.findAll('input[type=date]')).toHaveLength(0)
     resolve({ ...sample, registrations: [{ date: submitted.from, count: 1 }] }); await flushPromises()
     expect(wrapper.find('.registration-panel .chart-summary').text()).toContain(`${submitted.from} — ${submitted.to}`)
-    expect(wrapper.find('.receipts-panel .panel-top p').text()).toContain(String(submitted.year))
+    expect(wrapper.get('.receipts-panel .receipt-summary').text()).toContain(String(submitted.year))
+    expect(wrapper.find('.receipts-panel .info-tip-trigger').exists()).toBe(false)
     wrapper.unmount()
   })
   it('forwards date and year filters to the authorized aggregate provider', async () => {

@@ -18,6 +18,9 @@ ROOT = Path(__file__).resolve().parents[2]
 SPEC = ROOT / 'docs/openapi/hyperzone-analytics.openapi.json'
 DOCS = ROOT / 'docs/analytics'
 REQUEST_QUERIES = {
+    '/autoflow/integrations/fop/stock-orders': 'page=1&pageSize=50&stockType=full_payment',
+    '/autoflow/integrations/fop/stock-customers': 'search=C001',
+    '/autoflow/integrations/fop/stock-inventory': 'customerSearch=Olivia&search=HZ&page=1&pageSize=50&warehouseCode=HZ',
     '/autoflow/integrations/fop/sales-performance': 'from=2026-01-01&to=2026-10-23&grain=month',
     '/autoflow/integrations/fop/sales-performance/details': 'from=2026-01-01&to=2026-10-23&grain=month&kind=profit&periodId=2026-09&page=1&pageSize=20',
     '/autoflow/integrations/fop/freight': 'grain=year&year=2026&warehouse=ALL&carrierCode=YT',
@@ -127,7 +130,7 @@ def build(spec):
         request_path = path.replace('{role}', 'sales').replace('{id}', '00000000-0000-4000-8000-000000000001')
         if path in REQUEST_QUERIES:
             request_path += '?' + REQUEST_QUERIES[path]
-        accept = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' if path.endswith('/fulfillment-orders/export') else 'application/json'
+        accept = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' if path.endswith(('/fulfillment-orders/export', '/stock-orders/export')) else 'application/json'
         parts.append(f'\n请求示例（日期和主体为脱敏样例，联调时替换）：\n\n```http\n{method.upper()} /api{request_path}\nAuthorization: Bearer <有效会话JWT>\nAccept: {accept}\n```')
         if operation.get('x-cross-parameter-rules'):
             parts.append('\n交叉参数规则：\n\n```json\n' + json.dumps(operation['x-cross-parameter-rules'], ensure_ascii=False, indent=2) + '\n```')

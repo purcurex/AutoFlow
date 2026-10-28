@@ -1,3 +1,16 @@
+import { inventoryTargets, inventorySnapshot } from './allocation-inventory'
+import { AllocationInventoryQueryDto } from './allocation-inventory.dto'
+import { normalizeLogisticsInfo } from './logistics-info'
+import { publicStockOrder, publicStockInventory, stockScopeMatches, stockDepartments, filterStockOrders, stockTotals } from './fop-stock'
+import { StockFilters, StockPageQuery, StockInventoryQuery } from './fop-stock.types'
+import { ExportStockOrdersDto, StockScopeDto } from './fop-stock.dto'
+import { buildStockWorkbook } from './fop-stock-export'
+import { normalizeConsumerPaidAt } from './consumer-payment-time'
+import { normalizeBusinessTimestamp } from './fop-business-time'
+import { normalizeCustomLogisticsChannelName, normalizeLogisticsChannels } from './logistics-channels'
+import { normalizeShippingCountry } from './shipping-country'
+import { canFilterTaskStatus, getTaskStatus } from './workbench-status'
+import { canFilterProcurementStage, getProcurementStage } from './procurement-stage'
 import type { ApprovalQueue } from './fop-approval.types'
 import { supplierFollowUps } from './supplier-follow-up'
 import { CHART_IDS, ChartId, ChartSummaryPolicy, EffectiveChartAccess, resolveChartAccess, resolveChartSummaryPolicy } from '../users/chart-permissions'
@@ -40,24 +53,24 @@ function matchesQueue(order: FopOrder, queue: Queue, warehouseStage?: ListFulfil
   const progress = order.fulfillmentProgress
   if (!progress) return false
   // Only reviewed fulfillment orders can await Shopify tracking/fulfillment sync.
-  if (queue === 'dispatch') return order.reviewStatus === 'approved' && (progress.shopifySync === 'pending' || progress.shopifySync === 'partial')
+  if (queue === 'dispatch') return order.reviewStatus === 'approved' && progress.shopifySync === 'pending'
   if (queue === 'procurement' || queue === 'procurement_shipping') {
     const purchase = order.procurementProgress
     if (!purchase) return false
-    if (queue === 'procurement_shipping') return purchase.purchaseOrder === 'ordered' && purchase.supplierPayment === 'paid'
+    const pendingPush = purchase.alibabaOrder === 'not_pushed' || purchase.alibabaOrder === 'partial'
+    if (queue === 'procurement_shipping') return !pendingPush && purchase.purchaseOrder === 'ordered' && purchase.supplierPayment === 'paid'
       && (progress.supplierShipment === 'pending' || progress.supplierShipment === 'partial')
     // Remaining unplaced demand is not fully paid; unknown facts are not unpaid facts.
     return purchase.purchaseOrder === 'not_ordered' || purchase.purchaseOrder === 'partial'
-      || purchase.purchaseOrder === 'ordered' && ['unpaid', 'partial', 'refunded'].includes(purchase.supplierPayment)
+      || purchase.purchaseOrder === 'ordered' && (pendingPush || ['unpaid', 'partial', 'refunded'].includes(purchase.supplierPayment))
   }
   if (order.reviewStatus !== 'approved' || progress.allocationCreated !== true) return false
   switch (queue) {
     case 'allocation': return progress.stockReadiness === 'incomplete' && progress.allocationReview === 'pending' && progress.outbound !== 'completed'
     case 'allocation_review': return progress.stockReadiness === 'ready' && progress.allocationReview === 'pending' && progress.outbound !== 'completed'
-    case 'shipping': return progress.stockReadiness === 'ready' && progress.outbound !== 'completed'
-      && (warehouseStage !== 'pending_review' || progress.allocationReview === 'pending')
-      && (warehouseStage !== 'pending_outbound' || progress.allocationReview === 'approved')
-      && (progress.allocationReview === 'pending' || progress.allocationReview === 'approved' && (progress.outbound === 'pending' || progress.outbound === 'partial'))
+    // Pending allocation approval belongs only to allocation; legacy pending_review queries stay empty.
+    case 'shipping': return warehouseStage !== 'pending_review' && progress.stockReadiness === 'ready'
+      && progress.allocationReview === 'approved' && (progress.outbound === 'pending' || progress.outbound === 'partial')
   }
 }
 
@@ -70,20 +83,32 @@ function orderDepartments(orders: FopOrder[]): { id: string; name: string }[] {
   for (const order of orders) {
     if (!order.department?.id) continue
     const rank = SALES_DEPARTMENTS.findIndex(d => d.id === order.salesDepartmentCode)
-    options.set(order.department.id, { ...order.department, rank: rank < 0 ? SALES_DEPARTMENTS.length : rank })
+    // The trusted adapter maps these codes only to Marketing Center's direct sales departments.
+    if (rank < 0 || order.department.name !== SALES_DEPARTMENTS[rank].name) continue
+    options.set(order.department.id, { ...order.department, rank })
   }
   return [...options.values()].sort((a, b) => a.rank - b.rank || a.name.localeCompare(b.name, 'zh-CN') || a.id.localeCompare(b.id))
     .map(({ id, name }) => ({ id, name }))
 }
 
 // Only the reviewed client contract is serialized, never arbitrary provider metadata.
+/** Allowlist order-level recipient details only after order scope has been checked. */
+function publicRecipient(value: FopOrderCandidate['shippingRecipient']): FopOrderCandidate['shippingRecipient'] {
+  if (!value || typeof value !== 'object') return null
+  const clean = (field: unknown) => typeof field === 'string' ? field.trim() || null : null
+  const recipient = { name: clean(value.name), phone: clean(value.phone), email: clean(value.email),
+    state: clean(value.state), city: clean(value.city), postalCode: clean(value.postalCode),
+    addressLine1: clean(value.addressLine1), addressLine2: clean(value.addressLine2) }
+  return Object.values(recipient).some(Boolean) ? recipient : null
+}
+
 function publicOrder(order: FopOrderCandidate): FopOrder {
   if (order.reviewStatus === 'approved' && (!['HZ', 'SZ'].includes(order.warehouseCode ?? '') || !['YT', '4PX', 'WB', 'YW', 'JS', 'OTHER'].includes(order.carrierCode ?? ''))) {
     throw new Error('Approved fulfillment requires mapped warehouse and logistics channel')
   }
   const progress = order.fulfillmentProgress
   const values = {
-    shopifySync: ['pending', 'partial', 'synced', 'not_required', 'unknown'],
+    shopifySync: ['pending', 'synced', 'not_required', 'unknown'],
     supplierShipment: ['pending', 'partial', 'shipped', 'not_required', 'unknown'],
     stockReadiness: ['incomplete', 'ready', 'unknown'],
     allocationReview: ['pending', 'approved', 'unknown'],
@@ -94,12 +119,25 @@ function publicOrder(order: FopOrderCandidate): FopOrder {
   }
   if (progress.allocationCreated != null && typeof progress.allocationCreated !== 'boolean') throw new Error('Invalid allocation document fact')
   const procurement = order.procurementProgress
+  const procurementFacts = {
+    purchaseApplication: ['not_created', 'partial', 'created', 'not_required', 'unknown'],
+    alibabaOrder: ['not_pushed', 'partial', 'pushed', 'not_required', 'unknown'],
+    logisticsGate: ['pending_dispatch', 'pending_logistics', 'satisfied', 'not_required', 'unknown'],
+  }
+  if (procurement && Object.entries(procurementFacts).some(([key, allowed]) => {
+    const value = procurement[key as keyof typeof procurementFacts]
+    return value !== undefined && !allowed.includes(value)
+  })) throw new Error('Invalid procurement preparation fact')
   if (procurement !== undefined && (!procurement
     || !['not_ordered', 'partial', 'ordered', 'cancelled', 'not_required', 'unknown'].includes(procurement.purchaseOrder)
     || !['unpaid', 'partial', 'paid', 'refunded', 'not_required', 'unknown'].includes(procurement.supplierPayment))) {
     throw new Error('Invalid procurement progress')
   }
   const documents = order.dispatchDocuments
+  const allocation = order.allocationDocument
+  if (allocation != null && (typeof allocation !== 'object' || Array.isArray(allocation)
+    || typeof allocation.id !== 'string' || !allocation.id.trim() || allocation.id.length > 500
+    || typeof allocation.number !== 'string' || !allocation.number.trim() || allocation.number.length > 500)) throw new Error('Invalid allocation document')
   if (documents != null && (!Array.isArray(documents) || documents.some(document => !document
     || typeof document.id !== 'string' || !document.id.trim()
     || typeof document.number !== 'string' || !document.number.trim()
@@ -108,12 +146,24 @@ function publicOrder(order: FopOrderCandidate): FopOrder {
     throw new Error('Invalid dispatch documents')
   }
   return {
+    allocationDocument: allocation ? { id: allocation.id, number: allocation.number } : null,
     dispatchDocuments: documents?.map(({ id, number, status }) => ({ id, number, status })) ?? null,
-    procurementProgress: { purchaseOrder: procurement?.purchaseOrder ?? 'unknown', supplierPayment: procurement?.supplierPayment ?? 'unknown' },
+    procurementProgress: { purchaseOrder: procurement?.purchaseOrder ?? 'unknown', supplierPayment: procurement?.supplierPayment ?? 'unknown',
+      purchaseApplication: procurement?.purchaseApplication ?? 'unknown', alibabaOrder: procurement?.alibabaOrder ?? 'unknown', logisticsGate: procurement?.logisticsGate ?? 'unknown' },
     ...(order.salesDepartmentCode ? { salesDepartmentCode: order.salesDepartmentCode } : {}),
     fulfillmentProgress: { allocationCreated: progress.allocationCreated ?? null, shopifySync: progress.shopifySync, supplierShipment: progress.supplierShipment, stockReadiness: progress.stockReadiness, allocationReview: progress.allocationReview, outbound: progress.outbound },
     id: order.id, orderNumber: order.orderNumber, shopifyOrderNumber: order.shopifyOrderNumber,
     customerId: order.customerId, customerCode: order.customerCode, warehouseCode: order.warehouseCode, carrierCode: order.carrierCode,
+    reviewedAt: order.reviewStatus === 'approved' ? normalizeBusinessTimestamp(order.reviewedAt) : null,
+    consumerPaidAt: normalizeConsumerPaidAt(order.consumerPaidAt),
+    procurementPaidAt: normalizeBusinessTimestamp(order.procurementPaidAt),
+    wmsCreatedAt: normalizeBusinessTimestamp(order.wmsCreatedAt),
+    allocationReadyAt: progress.allocationCreated === true && progress.stockReadiness === 'ready' ? normalizeBusinessTimestamp(order.allocationReadyAt) : null,
+    logisticsChannels: normalizeLogisticsChannels(order.logisticsChannels),
+    logisticsInfo: normalizeLogisticsInfo(order.logisticsInfo),
+    customLogisticsChannelName: normalizeCustomLogisticsChannelName(order.customLogisticsChannelName),
+    shippingCountryCode: normalizeShippingCountry(order.shippingCountryCode),
+    shippingRecipient: publicRecipient(order.shippingRecipient),
     customerName: order.customerName, storeName: order.storeName,
     items: order.items.map(({ sku, name, imageUrl, variant, quantity, productId }) => ({ sku, name, imageUrl, variant, quantity, ...(productId ? { productId } : {}) })),
     ...(order.organization ? { organization: { id: order.organization.id, name: order.organization.name } } : {}),
@@ -172,6 +222,9 @@ export class FopDataService {
     if (grant.allowedPurchaseOrderIds !== undefined && (!Array.isArray(grant.allowedPurchaseOrderIds) || grant.allowedPurchaseOrderIds.some(id => typeof id !== 'string' || !id.trim()))) {
       throw new ForbiddenException('Invalid FOP purchase permissions')
     }
+    for (const ids of [grant.allowedStockOrderIds, grant.allowedStockInventoryIds]) {
+      if (ids !== undefined && (!Array.isArray(ids) || ids.some(id => typeof id !== 'string' || !id.trim()))) throw new ForbiddenException({ code: 'fop_permission_denied', message: 'Invalid FOP stock permissions' })
+    }
     if (grant.allowedReceiptIds !== undefined && (!Array.isArray(grant.allowedReceiptIds) || grant.allowedReceiptIds.some(id => typeof id !== 'string' || !id.trim()))) {
       throw new ForbiddenException({ code: 'fop_permission_denied', message: 'Invalid FOP receipt permissions' })
     }
@@ -187,7 +240,7 @@ export class FopDataService {
     if (grant.approvalActions !== undefined && (!Array.isArray(grant.approvalActions) || grant.approvalActions.some(action => !['review', 'allocation_review'].includes(action)))) throw new ForbiddenException('Invalid FOP operation permissions')
     const summaries = grant.organizationSummaries ?? []
     if (!Array.isArray(summaries) || new Set(summaries.map((s: FopOrganizationSummaryGrant) => s?.chartId)).size !== summaries.length || summaries.some((s: FopOrganizationSummaryGrant) => !s || !['registrations', 'department_receipts', 'order_volume'].includes(s.chartId) || !Array.isArray(s.departments) || new Set(s.departments.map((d: FopOrganizationSummaryGrant['departments'][number]) => d?.code)).size !== s.departments.length || s.departments.some((d: FopOrganizationSummaryGrant['departments'][number]) => !d || !SALES_DEPARTMENTS.some(item => item.id === d.code) || typeof d.departmentId !== 'string' || !d.departmentId.trim() || d.departmentPathIds !== undefined && (!Array.isArray(d.departmentPathIds) || d.departmentPathIds.some((id: unknown) => typeof id !== 'string' || !id.trim()) || new Set(d.departmentPathIds).size !== d.departmentPathIds.length)))) throw new ForbiddenException({ code: 'fop_permission_denied', message: 'Invalid organization summary grant' })
-    return { approvalActions: [...new Set(grant.approvalActions ?? [])], organizationSummaries: summaries.map((s: FopOrganizationSummaryGrant) => ({ chartId: s.chartId, departments: s.departments.map((d: FopOrganizationSummaryGrant['departments'][number]) => ({ code: d.code, departmentId: d.departmentId, ...(d.departmentPathIds ? { departmentPathIds: [...d.departmentPathIds] } : {}) })) })), subject: { ...identity }, allowedOrderIds: [...new Set(grant.allowedOrderIds)], allowedPurchaseOrderIds: [...new Set(grant.allowedPurchaseOrderIds ?? [])], allowedReceiptIds: [...new Set(grant.allowedReceiptIds ?? [])], allowedFreightIds: [...new Set(grant.allowedFreightIds ?? [])], allowedProfitIds: [...new Set(grant.allowedProfitIds ?? [])], analyticsScopes: [...new Set(grant.analyticsScopes ?? [])] }
+    return { allocationInventoryScopes: grant.allocationInventoryScopes === undefined ? undefined : structuredClone(grant.allocationInventoryScopes), allowedStockOrderIds: [...new Set(grant.allowedStockOrderIds ?? [])], allowedStockInventoryIds: [...new Set(grant.allowedStockInventoryIds ?? [])], approvalActions: [...new Set(grant.approvalActions ?? [])], organizationSummaries: summaries.map((s: FopOrganizationSummaryGrant) => ({ chartId: s.chartId, departments: s.departments.map((d: FopOrganizationSummaryGrant['departments'][number]) => ({ code: d.code, departmentId: d.departmentId, ...(d.departmentPathIds ? { departmentPathIds: [...d.departmentPathIds] } : {}) })) })), subject: { ...identity }, allowedOrderIds: [...new Set(grant.allowedOrderIds)], allowedPurchaseOrderIds: [...new Set(grant.allowedPurchaseOrderIds ?? [])], allowedReceiptIds: [...new Set(grant.allowedReceiptIds ?? [])], allowedFreightIds: [...new Set(grant.allowedFreightIds ?? [])], allowedProfitIds: [...new Set(grant.allowedProfitIds ?? [])], analyticsScopes: [...new Set(grant.analyticsScopes ?? [])] }
   }
 
   private effectiveCharts(initial: Scope, permission: FopPermissionGrant): EffectiveChartAccess[] {
@@ -351,6 +404,12 @@ export class FopDataService {
         departmentPaths.set(candidate.id, [...(candidate.departmentPathIds ?? [])])
         return true
       }).map(publicOrder)
+      const allocationOwners = new Set<string>()
+      for (const order of orders) {
+        if (!order.allocationDocument) continue
+        if (allocationOwners.has(order.allocationDocument.id)) throw new Error('Allocation document belongs to multiple orders')
+        allocationOwners.add(order.allocationDocument.id)
+      }
       return { orders, departmentPaths, roles: initial.roles, permission, initial }
     })
   }
@@ -570,6 +629,8 @@ export class FopDataService {
     if (!Object.prototype.hasOwnProperty.call(FULFILLMENT_QUEUE_ROLES, query.queue)) throw new BadRequestException('Invalid fulfillment queue')
     if (query.sortBy && !canSortFulfillmentQueue(query.queue, query.sortBy)) throw new BadRequestException('sortBy does not match the requested queue')
     if (query.warehouseStage !== undefined && query.queue !== 'shipping') throw new BadRequestException('warehouseStage requires the shipping queue')
+    if (query.taskStatus !== undefined && !canFilterTaskStatus(query.queue, query.taskStatus)) throw new BadRequestException('taskStatus does not match the requested queue')
+    if (query.procurementStage !== undefined && !canFilterProcurementStage(query.queue, query.procurementStage)) throw new BadRequestException('procurementStage does not match the requested queue')
     const role = FULFILLMENT_QUEUE_ROLES[query.queue]
     if (query.workbenchRole && query.workbenchRole !== role) throw new BadRequestException('workbenchRole does not match the requested queue')
     const scoped = await this.scopedOrders(userId, role)
@@ -583,9 +644,13 @@ export class FopDataService {
       .sort((a, b) => a.name.localeCompare(b.name, 'zh-CN') || a.id.localeCompare(b.id))
     const search = query.search?.trim().toLowerCase()
     const filtered = departmentOrders.filter((order) => matchesQueue(order, query.queue, query.warehouseStage)
+      && (!query.taskStatus || getTaskStatus(order, query.queue) === query.taskStatus)
+      && (!query.procurementStage || getProcurementStage(order.procurementProgress, order.fulfillmentProgress.supplierShipment) === query.procurementStage)
+      && (!query.warehouseCode || order.warehouseCode === query.warehouseCode)
       && (!query.ownerId || order.owner?.id === query.ownerId)
       && (!query.orderNumber || order.orderNumber === query.orderNumber)
-      && (!search || [order.orderNumber, order.shopifyOrderNumber, order.customerName, order.storeName, order.owner?.name || order.salesperson, ...order.items.map((item) => item.sku)]
+      && (!search || [order.orderNumber, order.shopifyOrderNumber, order.customerName, order.storeName, order.owner?.name || order.salesperson,
+        ...(query.queue === 'unpaid' ? [order.customLogisticsChannelName ?? ''] : [order.carrier ?? '', order.carrierCode ?? '']), ...order.items.map((item) => item.sku)]
         .some((value) => value.toLowerCase().includes(search))))
       .sort((left, right) => compareFulfillmentOrders(left, right, query))
     return { filtered, departments, salespeople, authorizedOrderIds: new Set(orders.map(order => order.id)), initial: scoped.initial }
@@ -595,6 +660,132 @@ export class FopDataService {
     const { filtered, departments, salespeople } = await this.filteredOrders(userId, query)
     const start = (query.page - 1) * query.pageSize
     return { source: this.provider.source ?? 'fop', refreshedAt: new Date().toISOString(), departments, salespeople, items: filtered.slice(start, start + query.pageSize), total: filtered.length, totals: summarizeFopOrders(filtered), page: query.page, pageSize: query.pageSize }
+  }
+
+  private async stockContext(userId: string, role: 'sales' | 'procurement' | 'inventory' = 'sales') {
+    const initial = await this.scope(userId)
+    if (!(role === 'inventory' ? initial.roles.some(r => r === 'sales' || r === 'procurement') : initial.roles.includes(role))) throw new ForbiddenException('Stock workbench access required')
+    return { initial, permission: await this.permissions(userId, initial) }
+  }
+
+  private async scopedStockOrders(userId: string, role: 'sales' | 'procurement' | 'inventory' = 'sales') {
+    const context = await this.stockContext(userId, role)
+    const allowed = new Set(context.permission.allowedStockOrderIds ?? [])
+    const rows = allowed.size ? await this.providerCall(() => this.provider.listStockOrders(context.permission.subject, context.permission)) : []
+    await this.assertUnchanged(userId, context.initial)
+    const orders = await this.providerCall(async () => {
+      if (!Array.isArray(rows)) throw new Error('Invalid stock response')
+      const seen = new Set<string>()
+      return rows.filter(row => {
+        if (!row || row.tenantId !== context.permission.subject.tenantId || !allowed.has(row.id) || !matchesBusinessScope(context.initial.business, row)) return false
+        publicStockOrder(row)
+        if (seen.has(row.id)) throw new Error('Duplicate stock document')
+        seen.add(row.id)
+        return !row.cancelled
+      })
+    })
+    return { ...context, orders }
+  }
+
+  private async scopedStockInventory(userId: string) {
+    const context = await this.stockContext(userId, 'inventory')
+    const allowed = new Set(context.permission.allowedStockInventoryIds ?? [])
+    const rows = allowed.size ? await this.providerCall(() => this.provider.listStockInventory(context.permission.subject, context.permission)) : []
+    await this.assertUnchanged(userId, context.initial)
+    const inventory = await this.providerCall(async () => {
+      if (!Array.isArray(rows)) throw new Error('Invalid inventory response')
+      const ids = new Set<string>(), groups = new Set<string>()
+      return rows.filter(row => {
+        if (!row || row.tenantId !== context.permission.subject.tenantId || !allowed.has(row.id) || !matchesBusinessScope(context.initial.business, row)) return false
+        publicStockInventory(row)
+        const group = JSON.stringify([row.customerId, row.sku, row.warehouseCode])
+        if (ids.has(row.id) || groups.has(group)) throw new Error('Duplicate inventory snapshot')
+        ids.add(row.id); groups.add(group)
+        return true
+      })
+    })
+    return { ...context, inventory }
+  }
+
+  async getAllocationInventory(userId: string, query: AllocationInventoryQueryDto) {
+    if (query.mode === 'selected' ? !query.orderIds?.length || !!query.search : query.mode !== 'search' || !query.search?.trim() || query.orderIds !== undefined) throw new BadRequestException('Select orders or enter a SKU search')
+    const initial = await this.scope(userId)
+    if (!initial.roles.includes('allocation')) throw new ForbiddenException('Allocation workbench access required')
+    let permission = await this.permissions(userId, initial)
+    let selected: { sku: string; warehouseCode: string; customerId: string }[] | undefined
+    if (query.mode === 'selected') {
+      const current = await this.scopedOrders(userId, 'allocation', undefined)
+      await this.assertUnchanged(userId, initial)
+      // Use the newest independent inventory grant together with the current order snapshot.
+      const orders = current.orders.filter(o => query.orderIds!.includes(o.id) && matchesQueue(o, 'allocation'))
+      if (new Set(orders.map(o => o.id)).size !== new Set(query.orderIds).size) throw new ConflictException({ code: 'inventory_orders_changed', message: 'Selected orders changed; refresh the list and select again' })
+      selected = orders.flatMap(o => {
+        if (!o.customerId || !['HZ', 'SZ'].includes(o.warehouseCode ?? '') || !o.items.length || o.items.some(i => !i.sku?.trim())) throw new ServiceUnavailableException('Order inventory dimensions are incomplete')
+        return o.items.map(i => ({ sku: i.sku, warehouseCode: o.warehouseCode!, customerId: o.customerId! }))
+      })
+      permission = current.permission
+    }
+    const targets = await this.providerCall(async () => inventoryTargets(permission.allocationInventoryScopes, initial.business, selected, query.search, query.warehouseCode))
+    targets.sort((a, b) => a.sku.localeCompare(b.sku) || a.warehouseCode.localeCompare(b.warehouseCode) || (a.customer?.id ?? '').localeCompare(b.customer?.id ?? ''))
+    const page = targets.slice((query.page - 1) * query.pageSize, query.page * query.pageSize)
+    let asOf = new Date().toISOString(), items: ReturnType<typeof inventorySnapshot> = []
+    if (page.length) {
+      const snapshot = await this.providerCall(() => this.provider.getAllocationInventory(permission.subject, permission, page))
+      await this.assertUnchanged(userId, initial)
+      if (!sameIdentity(snapshot?.subject, permission.subject)) throw new ForbiddenException('Inventory subject mismatch')
+      items = await this.providerCall(async () => inventorySnapshot(page, snapshot))
+      asOf = snapshot.asOf
+    }
+    await this.assertUnchanged(userId, initial)
+    return { items, total: targets.length, page: query.page, pageSize: query.pageSize, asOf, source: this.provider.source }
+  }
+
+  async getStockOrders(userId: string, query: StockPageQuery) {
+    const { orders } = await this.scopedStockOrders(userId, query.queue === 'procurement' ? 'procurement' : 'sales')
+    const filtered = filterStockOrders(orders, query)
+    return { source: this.provider.source, refreshedAt: new Date().toISOString(), departments: stockDepartments(orders), items: filtered.slice((query.page - 1) * query.pageSize, query.page * query.pageSize), total: filtered.length, totals: stockTotals(filtered), page: query.page, pageSize: query.pageSize }
+  }
+
+  async getStockCustomers(userId: string, query: StockScopeDto) {
+    const { inventory, initial } = await this.scopedStockInventory(userId)
+    const { orders } = await this.scopedStockOrders(userId, 'inventory')
+    await this.assertUnchanged(userId, initial)
+    const search = query.search?.trim().toLowerCase()
+    const customers = new Map<string, { id: string; code: string; name: string }>()
+    for (const row of [...orders, ...inventory]) if (stockScopeMatches(row, query) && (!search || [row.customerCode, row.customerName].some(v => v.toLowerCase().includes(search)))) customers.set(row.customerId, { id: row.customerId, code: row.customerCode, name: row.customerName })
+    const items = [...customers.values()].sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id))
+    return { items: items.slice(0, 100), total: items.length }
+  }
+
+  async getStockInventory(userId: string, query: StockInventoryQuery) {
+    const { inventory } = await this.scopedStockInventory(userId)
+    const search = query.search?.trim().toLowerCase()
+    const customerSearch = query.customerSearch?.trim().toLowerCase()
+    const filtered = inventory.filter(row => (!query.customerId || row.customerId === query.customerId) && (!customerSearch || [row.customerCode, row.customerName].some(v => v.toLowerCase().includes(customerSearch))) && stockScopeMatches(row, query) && (!search || [row.sku, row.name].some(v => v.toLowerCase().includes(search))))
+      .map(publicStockInventory).sort((a, b) => a.customerName.localeCompare(b.customerName) || a.customerId.localeCompare(b.customerId) || a.sku.localeCompare(b.sku) || a.warehouseCode.localeCompare(b.warehouseCode) || a.id.localeCompare(b.id))
+    return { source: this.provider.source, refreshedAt: new Date().toISOString(), customerId: query.customerId ?? null, items: filtered.slice((query.page - 1) * query.pageSize, query.page * query.pageSize), total: filtered.length, page: query.page, pageSize: query.pageSize }
+  }
+
+  async exportStockOrders(userId: string, query: ExportStockOrdersDto, sessionVersion = 0): Promise<Buffer> {
+    if (query.mode === 'selected' ? !query.orderIds?.length || query.orderIds.length > 100 || new Set(query.orderIds).size !== query.orderIds.length : query.mode !== 'filtered' || query.orderIds !== undefined) throw new BadRequestException('Invalid stock export selection')
+    const assertSession = async () => {
+      const user = await this.users.findById(userId)
+      if (!user || user.accountDisabled || (user.sessionVersion ?? 0) !== sessionVersion) throw new UnauthorizedException('Session expired')
+    }
+    await assertSession()
+    const initial = await this.scopedStockOrders(userId, query.queue === 'procurement' ? 'procurement' : 'sales')
+    const filtered = filterStockOrders(initial.orders, query as StockFilters)
+    const selected = new Set(query.orderIds)
+    const rows = query.mode === 'selected' ? filtered.filter(row => selected.has(row.id)) : filtered
+    if (query.mode === 'selected' && rows.length !== selected.size) throw new ConflictException({ code: 'export_selection_changed', message: '所选备货单已变化，请刷新。' })
+    if (!rows.length) throw new ConflictException({ code: 'export_empty', message: '没有可导出的备货单。' })
+    const buffer = await buildStockWorkbook(rows, this.provider.source)
+    const latest = await this.scopedStockOrders(userId, query.queue === 'procurement' ? 'procurement' : 'sales')
+    await this.assertUnchanged(userId, initial.initial)
+    const current = new Set(filterStockOrders(latest.orders, query).map(row => row.id))
+    if (rows.some(row => !current.has(row.id))) throw new ForbiddenException({ code: 'export_access_changed', message: '备货单查看范围已变化，请刷新。' })
+    await assertSession()
+    return buffer
   }
 
   async exportOrders(userId: string, query: ExportFulfillmentOrdersDto, sessionVersion = 0): Promise<Buffer> {

@@ -94,7 +94,7 @@ async function remove() {
 
 <template>
   <section class="panel overflow-hidden">
-    <div class="panel-header"><div><h2 class="panel-title">{{ t('settings.promptTemplates') }}</h2><p class="panel-description">{{ t('settings.promptTemplatesHint') }}</p></div><button class="btn btn-secondary" @click="createNew"><Plus class="h-4 w-4" />{{ t('settings.newPrompt') }}</button></div>
+    <div class="panel-header"><div><h2 class="panel-title">{{ t('settings.promptTemplates') }}</h2></div><button class="btn btn-secondary" @click="createNew"><Plus class="h-4 w-4" />{{ t('settings.newPrompt') }}</button></div>
     <div v-if="catalog" class="grid gap-5 p-5 lg:grid-cols-[260px_minmax(0,1fr)]">
       <div class="space-y-4">
         <label><span class="field-label">{{ t('settings.promptModule') }}</span><select v-model="moduleKey" class="input" @change="changeModule"><option v-for="item in catalog.modules" :key="item.moduleKey" :value="item.moduleKey">{{ t(`settings.promptModule_${item.moduleKey}`) }}</option></select></label>

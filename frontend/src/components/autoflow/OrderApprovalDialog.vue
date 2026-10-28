@@ -23,7 +23,7 @@ onMounted(async () => {
 })
 onBeforeUnmount(() => { active = false })
 async function confirm() {
-  if (busy.value || attempted.value || !eligible.value.length) return
+  if (!current() || busy.value || attempted.value || !eligible.value.length) return
   busy.value = true; attempted.value = true
   try {
     const response = await submitOrderApproval(props.queue, requestId, preview.value!.items.map(row => ({ orderId: row.orderId, version: row.version })))
@@ -38,18 +38,18 @@ async function confirm() {
     <p v-if="busy" class="approval-note" role="status">{{ attempted ? text('正在提交审核，请勿重复操作…', 'Submitting approval. Please wait…') : text('正在核对权限与关联单据…', 'Checking permissions and linked documents…') }}</p>
     <p v-if="error" class="approval-error" role="alert">{{ error }}</p>
     <template v-if="preview && !attempted">
-      <p class="approval-summary">{{ text(`已选 ${preview.items.length} 笔订单，可审核 ${documentCount} 张单据`, `${preview.items.length} orders selected · ${documentCount} documents eligible`) }}</p>
-      <p class="approval-note">{{ preview.source === 'mock' ? text('演示审核仅更新本地模拟状态，不影响 FOP。', 'Demo approval updates simulated state only.') : text('确认后将在 FOP 执行审核，后台将再次校验权限及单据状态。', 'Confirmation executes approval in FOP after permission and state checks.') }}</p>
+      <p class="approval-summary">{{ queue === 'allocation_review' ? text(`已选 ${preview.items.length} 张配货单，可审核 ${documentCount} 张`, `${preview.items.length} allocation documents selected · ${documentCount} eligible`) : text(`已选 ${preview.items.length} 笔订单，可审核 ${documentCount} 张单据`, `${preview.items.length} orders selected · ${documentCount} documents eligible`) }}</p>
+      <p class="approval-note">{{ text('确认后将执行审核，后台会再次校验权限及单据状态。', 'Confirmation executes approval after permission and document status checks.') }}</p>
       <div class="approval-orders"><article v-for="row in preview.items" :key="row.orderId"><strong>{{ row.orderNumber }}</strong><ul><li v-for="doc in row.documents" :key="doc.id"><span>{{ doc.number }}</span><span :class="doc.eligible ? 'approval-ready' : 'approval-note'">{{ doc.eligible ? text('可审核', 'Ready') : doc.reason || text('暂不可审核', 'Not eligible') }}</span></li></ul></article></div>
     </template>
     <small v-if="error && attempted" class="approval-note">{{ text('请求编号', 'Request ID') }}：{{ requestId }}</small>
     <template v-if="result">
-      <p class="approval-summary" role="status">{{ text(`已完成 ${result.items.filter(r => ['approved', 'already_approved'].includes(r.status)).length} / ${result.items.length} 笔订单`, `${result.items.filter(r => ['approved', 'already_approved'].includes(r.status)).length} / ${result.items.length} orders completed`) }}</p>
+      <p class="approval-summary" role="status">{{ queue === 'allocation_review' ? text(`已完成 ${result.items.filter(r => ['approved', 'already_approved'].includes(r.status)).length} / ${result.items.length} 张配货单`, `${result.items.filter(r => ['approved', 'already_approved'].includes(r.status)).length} / ${result.items.length} allocation documents completed`) : text(`已完成 ${result.items.filter(r => ['approved', 'already_approved'].includes(r.status)).length} / ${result.items.length} 笔订单`, `${result.items.filter(r => ['approved', 'already_approved'].includes(r.status)).length} / ${result.items.length} orders completed`) }}</p>
       <div class="approval-orders"><article v-for="row in result.items" :key="row.orderId"><div class="approval-row-title"><strong>{{ row.orderNumber || row.orderId }}</strong><span :class="['approved','already_approved'].includes(row.status) ? 'approval-ready' : 'approval-alert'">{{ label(row.status) }}</span></div><p class="approval-note">{{ row.message }}</p><ul><li v-for="doc in row.documents" :key="doc.id"><span>{{ doc.number }}</span><div><span>{{ label(doc.status) }} · {{ doc.message }}</span><p v-if="doc.warning" class="approval-alert">{{ doc.warning }}</p></div></li></ul></article></div>
       <p class="approval-note">{{ text('清单将刷新已确认的最新状态；未完成的单据请按提示核对。', 'The list will refresh confirmed state. Review unfinished documents as indicated.') }}</p>
       <small class="approval-note">{{ text('请求编号', 'Request ID') }}：{{ result.requestId }}</small>
     </template>
-    <template #footer><button class="btn btn-secondary" :disabled="busy" @click="emit('close')">{{ attempted ? text('完成', 'Done') : text('取消', 'Cancel') }}</button><button v-if="!attempted" data-testid="confirm-approval" class="btn btn-primary" :disabled="busy || !documentCount" @click="confirm">{{ preview?.source === 'mock' ? text('确认模拟审核', 'Confirm demo approval') : text('确认审核', 'Confirm approval') }}<template v-if="documentCount"> · {{ documentCount }}</template></button></template>
+    <template #footer><button class="btn btn-secondary" :disabled="busy" @click="emit('close')">{{ attempted ? text('完成', 'Done') : text('取消', 'Cancel') }}</button><button v-if="!attempted" data-testid="confirm-approval" class="btn btn-primary" :disabled="busy || !documentCount" @click="confirm">{{ text('确认审核', 'Confirm approval') }}<template v-if="documentCount"> · {{ documentCount }}</template></button></template>
   </OrganizationModal>
 </template>
 <style scoped>

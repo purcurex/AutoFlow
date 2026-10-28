@@ -4,6 +4,7 @@ import { FOP_DATA_PROVIDER, FopDataProvider, FopPermissionDeniedError } from './
 import { FopDataService } from './fop-data.service'
 import { ApprovalPreviewDto, ApprovalSubmitDto } from './fop-approval.dto'
 import { ApprovalQueue, ApprovalTarget, ApprovalRowResult, approvalEntity, approvalVersion } from './fop-approval.types'
+import { getDispatchCompletionStatus } from './workbench-status'
 
 @Injectable()
 export class FopApprovalService {
@@ -19,12 +20,17 @@ export class FopApprovalService {
     const latest = await this.data.approvalContext(userId, queue, orderId, sessionVersion)
     if (JSON.stringify(latest.identity) !== JSON.stringify(context.identity)) throw new ServiceUnavailableException('审核身份已变化，请重新查询')
     const validText = (value: unknown) => typeof value === 'string' && !!value.trim() && value.length <= 500
-    if (!Array.isArray(targets) || !targets.length || targets.length > 100 || new Set(targets.map(d => d?.id)).size !== targets.length
+    if (!Array.isArray(targets) || targets.length !== 1 || new Set(targets.map(d => d?.id)).size !== targets.length
       || queue === 'review' && (targets.length !== 1 || targets[0].id !== orderId)
       || targets.some(d => !d || d.tenantId !== context.identity.tenantId || d.orderId !== orderId || d.entity !== approvalEntity(queue)
         || !validText(d.id) || !validText(d.number) || !validText(d.version) || !['A', 'B', 'C'].includes(d.status) || typeof d.eligible !== 'boolean'
         || (d.reason !== null && !validText(d.reason)))) throw new ServiceUnavailableException('无法确认关联审核单据，请刷新或联系管理员')
-    return { ...latest, targets }
+    if (queue === 'allocation_review' && (!latest.order.allocationDocument
+      || targets[0].id !== latest.order.allocationDocument.id || targets[0].number !== latest.order.allocationDocument.number)) {
+      throw new ServiceUnavailableException('Cannot confirm the unique allocation document')
+    }
+    const dispatchComplete = queue !== 'allocation_review' || getDispatchCompletionStatus(latest.order.dispatchDocuments) === 'dispatch_complete'
+    return { ...latest, targets: dispatchComplete ? targets : targets.map(target => ({ ...target, eligible: false, reason: '请先完成发运单制作' })) }
   }
   async preview(userId: string, query: ApprovalPreviewDto, sessionVersion = 0) {
     if (!['review', 'allocation_review'].includes(query.queue)) throw new BadRequestException('Invalid approval queue')
@@ -61,7 +67,9 @@ export class FopApprovalService {
             if (!document.eligible || document.status !== 'B') { row.documents.push({ id: document.id, number: document.number, status: 'blocked', message: document.reason || '单据不满足审核条件，请在 FOP 核对', warning: null }); continue }
             // Recheck account scope/action grant before each write. FOP must atomically recheck document state and delegated-user permissions.
             const current = await this.data.approvalContext(userId, query.queue, selected.orderId, sessionVersion)
-            if (!current.inQueue || JSON.stringify(current.identity) !== JSON.stringify(context.identity)) throw new Error('Scope changed')
+            if (!current.inQueue || JSON.stringify(current.identity) !== JSON.stringify(context.identity)
+              || query.queue === 'allocation_review' && (getDispatchCompletionStatus(current.order.dispatchDocuments) !== 'dispatch_complete'
+                || current.order.allocationDocument?.id !== document.id || current.order.allocationDocument?.number !== document.number)) throw new Error('Scope or dispatch state changed')
             const idempotencyKey = createHash('sha256').update(JSON.stringify([context.identity, userId, query.requestId, document.entity, document.id])).digest('hex')
             try {
               const outcome = await this.provider.approveDocument(context.identity, { ...document, operation: 'audit', idempotencyKey, requestId: query.requestId, actorAccountId: userId })

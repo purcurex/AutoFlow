@@ -1,7 +1,9 @@
+import type { AllocationInventoryScope, AllocationInventorySnapshot } from './allocation-inventory'
 import type { ApprovalCommand, ApprovalOutcome, ApprovalQueue, ApprovalTarget } from './fop-approval.types'
 import type { SupplierFollowUpResult } from './supplier-follow-up'
 import type { FopFreightCandidate } from './fop-freight.types'
 import type { FopProfitCandidate } from './sales-performance.types'
+import type { FopStockOrderCandidate, FopStockInventoryCandidate } from './fop-stock.types'
 export const SALES_DEPARTMENTS = [
   { id: 'sales1', name: '业务一部' }, { id: 'sales2', name: '业务二部' },
   { id: 'sales3', name: '业务三部' }, { id: 'sales4', name: '业务四部' },
@@ -34,6 +36,10 @@ export interface FopPermissionGrant {
   subject: FopIdentity
   /** Explicit per-subject order allowlist; an empty array grants no order access. */
   allowedOrderIds: readonly string[]
+  /** Independent stock document and current-customer inventory grants; missing means no access. */
+  allowedStockOrderIds?: readonly string[]
+  allowedStockInventoryIds?: readonly string[]
+  allocationInventoryScopes?: readonly AllocationInventoryScope[]
   /** Explicit operation grants; read or system-admin access never implies approval. */
   approvalActions?: readonly ApprovalQueue[]
   /** Independent purchase document/contact visibility; absent means no access. */
@@ -78,7 +84,7 @@ export interface FopOrderItem {
 export interface FulfillmentProgress {
   /** Effective allocation document exists. Missing/null is unknown, never inferred from order approval. */
   allocationCreated?: boolean | null
-  shopifySync: 'pending' | 'partial' | 'synced' | 'not_required' | 'unknown'
+  shopifySync: 'pending' | 'synced' | 'not_required' | 'unknown'
   supplierShipment: 'pending' | 'partial' | 'shipped' | 'not_required' | 'unknown'
   stockReadiness: 'incomplete' | 'ready' | 'unknown'
   allocationReview: 'pending' | 'approved' | 'unknown'
@@ -87,6 +93,11 @@ export interface FulfillmentProgress {
 
 /** Aggregated over effective linked purchases; independent of customer payment. */
 export interface ProcurementProgress {
+  /** Optional preparation facts; known unfinished pushes stay in procurement. Logistics never gates visibility. */
+  purchaseApplication?: 'not_created' | 'partial' | 'created' | 'not_required' | 'unknown'
+  alibabaOrder?: 'not_pushed' | 'partial' | 'pushed' | 'not_required' | 'unknown'
+  /** FOP logistics-only validation for outstanding actual 1688 pushes. */
+  logisticsGate?: 'pending_dispatch' | 'pending_logistics' | 'satisfied' | 'not_required' | 'unknown'
   purchaseOrder: 'not_ordered' | 'partial' | 'ordered' | 'cancelled' | 'not_required' | 'unknown'
   supplierPayment: 'unpaid' | 'partial' | 'paid' | 'refunded' | 'not_required' | 'unknown'
 }
@@ -98,7 +109,52 @@ export interface DispatchDocument {
   status: 'draft' | 'submitted' | 'approved' | 'unknown'
 }
 
+/** Shipping recipient on this fulfillment order, never the customer account profile. */
+export interface ShippingRecipient {
+  name: string | null
+  phone: string | null
+  email: string | null
+  state: string | null
+  city: string | null
+  postalCode: string | null
+  addressLine1: string | null
+  addressLine2: string | null
+}
+
+export interface LogisticsChannel { name: string | null; code: string | null }
+
+export interface LogisticsTrackingNumber { type: 'full' | 'first_mile' | 'last_mile'; number: string }
+export interface LogisticsInfo {
+  carrierName: string | null
+  /** Explicit FOP selection for Shopify; never chosen from raw candidate numbers by this app. */
+  shopifyTracking?: LogisticsTrackingNumber | null
+  /** @deprecated Legacy candidates do not prove which number is selected. */
+  trackingNumbers?: LogisticsTrackingNumber[]
+}
+
+export interface AllocationDocumentReference { id: string; number: string }
+
 export interface FopOrder {
+  /** Unique effective FOP allocation for this order; null/omitted = unavailable or not yet created. */
+  allocationDocument?: AllocationDocumentReference | null
+  /** Shopify-selected tracking grouped by shipment/carrier; raw legacy fields do not prove selection. */
+  logisticsInfo?: LogisticsInfo[] | null
+  /** FOP-maintained English custom channel name, independent of UI language; never actual channels or carriers. */
+  customLogisticsChannelName?: string | null
+  /** Actual fulfillment channels, never carrier categories or customer-facing custom channels. */
+  logisticsChannels?: LogisticsChannel[] | null
+  /** First Shopify consumer payment completion, distinct from FOP createdAt and paidAt; unknown = null. */
+  reviewedAt?: string | null
+  consumerPaidAt?: string | null
+  /** Earliest actual payment among effective paid purchase obligations still awaiting supplier shipment. */
+  procurementPaidAt?: string | null
+  /** Current existing allocation completion time; cleared when allocation becomes incomplete. */
+  allocationReadyAt?: string | null
+  /** Successful delivery-notice push to WMS; distinct from order creation. Missing = null. */
+  wmsCreatedAt?: string | null
+  shippingRecipient?: ShippingRecipient | null
+  /** Order delivery destination ISO alpha2, not customer profile country; null/omitted when unavailable. */
+  shippingCountryCode?: string | null
   /** null/omitted = unavailable; [] = confirmed no effective dispatch document. */
   dispatchDocuments?: DispatchDocument[] | null
   /** Older adapters may omit this; BFF emits explicit unknown facts, never guesses. */
@@ -193,7 +249,10 @@ export abstract class FopDataProvider {
   async approvalTargets(_identity: Readonly<FopIdentity>, _queue: ApprovalQueue, _orderId: string): Promise<ApprovalTarget[]> { throw new Error('FOP approval adapter is not configured') }
   async approveDocument(_identity: Readonly<FopIdentity>, _command: ApprovalCommand): Promise<ApprovalOutcome> { throw new Error('FOP approval adapter is not configured') }
   abstract resolvePermissions(identity: Readonly<FopIdentity>): Promise<FopPermissionGrant>
+  async getAllocationInventory(_identity: Readonly<FopIdentity>, _permission: Readonly<FopPermissionGrant>, _scopes: readonly AllocationInventoryScope[]): Promise<AllocationInventorySnapshot & { subject: FopIdentity }> { throw new Error('Allocation inventory provider is not configured') }
   abstract listOrders(identity: Readonly<FopIdentity>, permission: Readonly<FopPermissionGrant>): Promise<FopOrderCandidate[]>
+  async listStockOrders(_identity: Readonly<FopIdentity>, _permission: Readonly<FopPermissionGrant>): Promise<FopStockOrderCandidate[]> { throw new Error('Stock orders provider is not configured') }
+  async listStockInventory(_identity: Readonly<FopIdentity>, _permission: Readonly<FopPermissionGrant>): Promise<FopStockInventoryCandidate[]> { throw new Error('Stock inventory provider is not configured') }
   async listProfits(_identity: Readonly<FopIdentity>, _permission: Readonly<FopPermissionGrant>): Promise<FopProfitCandidate[]> {
     throw new Error('Profit contribution provider is not configured')
   }

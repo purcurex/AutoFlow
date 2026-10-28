@@ -127,7 +127,7 @@ function adLinkLabel(evidence: LeadAdEvidence) {
 
           <section class="panel overflow-hidden">
             <div class="panel-header">
-              <div><h2 class="panel-title">{{ t('leads.adEvidence') }}</h2><p class="panel-description">{{ t('leads.adEvidenceHint') }}</p></div>
+              <div><h2 class="panel-title">{{ t('leads.adEvidence') }}</h2></div>
             </div>
             <div v-if="adEvidence.length" class="divide-y divide-slate-200 dark:divide-slate-800">
               <article v-for="evidence in adEvidence" :key="`${evidence.provider}-${evidence.adId || evidence.sourceUrl}`" class="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
@@ -155,7 +155,7 @@ function adLinkLabel(evidence: LeadAdEvidence) {
 
           <section class="panel overflow-hidden">
             <div class="panel-header">
-              <div><h2 class="panel-title">{{ t('leads.contacts') }}</h2><p class="panel-description">{{ t('leads.contactEvidenceHint') }}</p></div>
+              <div><h2 class="panel-title">{{ t('leads.contacts') }}</h2></div>
               <button type="button" class="btn btn-secondary" :disabled="contactAnalysisBusy" @click="analyzeContacts">
                 <LoaderCircle v-if="contactAnalysisBusy" class="h-4 w-4 animate-spin" />
                 <RefreshCw v-else class="h-4 w-4" />

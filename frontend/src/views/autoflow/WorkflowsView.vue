@@ -488,7 +488,6 @@ async function confirmLifecycleAction() {
       <section v-if="create" class="panel max-w-4xl overflow-hidden">
         <div class="border-b px-5 py-4" style="border-color: var(--color-border)">
           <h2 class="panel-title">{{ reviseId ? t('workflows.reviseTitle') : t('workflows.createTitle') }}</h2>
-          <p class="panel-description">{{ reviseId ? t('workflows.reviseDescription') : t('workflows.description') }}</p>
         </div>
         <form class="p-5" @submit.prevent="submitWorkflow">
           <div v-if="revisionSource" class="notice mb-5 border-sky-400 bg-sky-50 text-sky-800 dark:bg-sky-950/50 dark:text-sky-200">

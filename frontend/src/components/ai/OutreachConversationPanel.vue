@@ -218,7 +218,6 @@ function getErrorMessage(error: unknown) {
     <div class="panel-header">
       <div>
         <h2 class="panel-title">{{ t('leads.aiWorkspace') }}</h2>
-        <p class="panel-description">{{ t('leads.aiWorkspaceHint') }}</p>
       </div>
       <div class="flex items-center gap-2">
         <StatusBadge v-if="conversation" :status="conversation.status" />

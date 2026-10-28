@@ -190,4 +190,8 @@ router.beforeEach(async (to, _from, next) => {
   }
 })
 
+// Approval may open while an earlier navigation is awaiting access checks or a lazy route.
+// Recheck after those async steps, immediately before Vue commits the destination.
+router.beforeResolve(() => !approvalNavigationBlocked())
+
 export default router

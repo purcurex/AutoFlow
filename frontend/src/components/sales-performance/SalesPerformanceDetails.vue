@@ -60,12 +60,12 @@ onBeforeUnmount(() => {
 <template>
   <Teleport to="body">
     <dialog ref="dialog" class="ov-panel performance-dialog" aria-modal="true" :aria-labelledby="titleId" :aria-describedby="scopeId" @cancel.prevent="emit('close')" @click.self="emit('close')" @wheel.self.prevent @touchmove.self.prevent>
-      <header class="ov-header"><div class="ov-heading"><h2 :id="titleId">{{ title }}<span v-if="data?.source === 'mock'" class="ov-badge">MOCK</span></h2><p :id="scopeId">{{ owner ? `${owner} · ` : '' }}{{ scope }} · UTC+8 · USD ($)</p></div><button ref="closeButton" type="button" class="ov-secondary performance-close" :aria-label="t('关闭明细', 'Close details')" @click="emit('close')"><X :size="18" /></button></header>
+      <header class="ov-header"><div class="ov-heading"><h2 :id="titleId">{{ title }}<span v-if="data?.source === 'mock'" class="ov-badge">MOCK</span></h2><span :id="scopeId" class="sr-only">{{ owner ? `${owner} · ` : '' }}{{ scope }} · UTC+8 · USD ($)</span></div><button ref="closeButton" type="button" class="ov-secondary performance-close" :aria-label="t('关闭明细', 'Close details')" @click="emit('close')"><X :size="18" /></button></header>
       <div ref="scroller" class="ov-body performance-dialog-body" @wheel.capture="scrollOuterPage($event, scroller)">
         <p v-if="busy" class="ov-empty" role="status">{{ t('正在读取明细…', 'Loading details…') }}</p>
         <p v-else-if="error" class="ov-error" role="alert">{{ error }}<button class="ov-link" @click="load">{{ t('重试', 'Retry') }}</button></p>
         <template v-else-if="data">
-          <p class="ov-scope">{{ receipts ? t('按支付日统计已支付、已审核的订单及全款备货收款，押金备货不计入。', 'Paid and approved order and full-payment stocking receipts by payment date; deposits excluded.') : t('净毛利按期间贡献统计，已扣除前期确认金额；结算与预估分别核对。', 'Period net profit contributions after prior recognition; settled and estimated profit are reviewed separately.') }}</p>
+
           <div v-if="data.unallocatedSettlements.length" class="performance-allocation"><strong>{{ t('待补充分期明细 · 整月参考', 'Allocation pending · Full-month reference') }}</strong><p>{{ t('尚无日归属的月结未计入以下分期合计。', 'Settlements without daily allocation are excluded from period totals.') }}</p><span v-for="item in data.unallocatedSettlements" :key="item.month">{{ item.month }} · {{ money(item.amount) }} · {{ item.count }} {{ t('笔', 'entries') }}</span></div>
           <div class="ov-pagination"><span>{{ t('共', 'Total') }} {{ data.total }} {{ t('笔', 'entries') }}</span><button :disabled="page <= 1" @click="navigate(page - 1)">{{ t('上一页', 'Previous') }}</button><span>{{ page }} / {{ Math.max(1, Math.ceil(data.total / props.query.pageSize)) }}</span><button :disabled="page * props.query.pageSize >= data.total" @click="navigate(page + 1)">{{ t('下一页', 'Next') }}</button></div>
           <div class="ov-table-scroll">

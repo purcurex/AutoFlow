@@ -108,7 +108,7 @@ onBeforeUnmount(() => { off(); clear() })
 <template>
   <section v-if="chartVisible" class="ov-panel performance-panel">
     <header class="ov-header">
-      <div class="ov-heading"><h2><ChartNoAxesCombined :size="19" />{{ t('个人收款与毛利', 'Personal receipts and profit') }}<span v-if="data?.source === 'mock'" class="ov-badge">MOCK</span></h2><p>{{ t('独立查看收款与净毛利贡献', 'Track receipts and net profit contributions') }}</p></div>
+      <div class="ov-heading"><h2><ChartNoAxesCombined :size="19" />{{ t('个人收款与毛利', 'Personal receipts and profit') }}<span v-if="data?.source === 'mock'" class="ov-badge">MOCK</span></h2></div>
       <form class="ov-filters" @submit.prevent="applyFilters">
         <label>{{ t('开始日期', 'Start date') }}<input v-model="from" type="date" min="2020-01-01" :max="to || today" aria-label="开始日期" required></label>
         <label>{{ t('结束日期', 'End date') }}<input v-model="to" type="date" :min="from || '2020-01-01'" :max="today" aria-label="结束日期" required></label>
@@ -130,7 +130,7 @@ onBeforeUnmount(() => { off(); clear() })
           <div class="settled-kpi"><span>{{ t('结算毛利', 'Settled profit') }}</span><strong data-testid="settled-total">{{ money(data.totals.settledGrossProfit) }}</strong><small v-if="data.totals.settledGrossProfit === null">{{ t('待补充分期明细', 'Allocation pending') }}</small></div>
           <div class="estimated-kpi"><span>{{ t('预估毛利', 'Estimated profit') }}</span><strong>{{ money(data.totals.estimatedGrossProfit) }}</strong></div>
         </div>
-        <p class="ov-scope performance-note">{{ t('收款按支付日归属；毛利按结算或预估贡献期间归属，采用净毛利口径。结算毛利与预估毛利分别展示，不相加。', 'Receipts follow payment dates; net profit follows settlement or estimate contribution periods. Settled and estimated profit are separate measures.') }}</p>
+
         <div v-if="data.unallocatedSettlements.length" class="performance-unallocated" data-testid="unallocated"><strong>{{ t('待补充分期明细 · 整月参考', 'Allocation pending · Full-month reference') }}</strong><p>{{ t('以下月结尚无可靠的日归属，未分摊至周或天，也未计入当前分期合计。', 'These monthly settlements have no reliable daily allocation and are excluded from the period totals.') }}</p><span v-for="item in data.unallocatedSettlements" :key="item.month">{{ item.month }} · {{ money(item.amount) }} · {{ item.count }} {{ t('笔', 'entries') }}</span></div>
         <div v-if="data.selectedOwner" class="performance-charts">
           <section><h3>{{ t('收款趋势', 'Receipts trend') }}<small>USD ($)</small></h3><EChart :option="receiptChart" :label="t('个人收款趋势', 'Personal receipts trend')" /></section>

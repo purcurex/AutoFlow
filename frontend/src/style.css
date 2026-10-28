@@ -185,3 +185,23 @@ input[type="search"]:focus-visible {
   outline: none;
   box-shadow: none;
 }
+
+/* Shared query control width: leave breathing room in desktop toolbars. */
+:root { --query-search-width: 22.5rem; }
+.query-search-control { width: var(--query-search-width); max-width: 100%; min-width: 0; flex-grow: 0; flex-shrink: 1; }
+
+/* Todo explanations stay below the title, with enough width to wrap as sentences. */
+.task-heading-copy { flex: 1 1 420px; min-width: 0; max-width: 100%; }
+.task-heading-description { display: block; max-width: 88ch; margin: 7px 0 0; color: var(--color-text-secondary); font-size: 12px; font-weight: 400; line-height: 1.75; letter-spacing: normal; white-space: normal; word-break: normal; overflow-wrap: break-word; text-wrap: pretty; }
+
+/* Secondary live refresh uses a soft blue, consistent across workbench lists. */
+button.workbench-refresh:is(.btn, .action-button, .ov-secondary) { color: #356ea5; background: #eaf3fc; border-color: #c5dcf1; }
+button.workbench-refresh:is(.btn, .action-button, .ov-secondary):hover:not(:disabled) { color: #285c91; background: #dfedfa; border-color: #a9cbea; }
+.dark button.workbench-refresh:is(.btn, .action-button, .ov-secondary) { color: #a8cbea; background: #21364b; border-color: #3a5875; }
+.dark button.workbench-refresh:is(.btn, .action-button, .ov-secondary):hover:not(:disabled) { color: #c4ddf2; background: #29435d; border-color: #507498; }
+button.workbench-refresh:is(.btn, .action-button, .ov-secondary):focus-visible { outline: 2px solid #81b4df; outline-offset: 3px; }
+
+/* Shared workbench actions must not inherit the orange account/admin theme. */
+button.workbench-primary:is(.btn, .action-button) { background: #5873d4; border-color: #5873d4; color: #fff; box-shadow: none; }
+button.workbench-primary:is(.btn, .action-button):hover:not(:disabled) { background: #4f68c2; border-color: #4f68c2; }
+button.workbench-primary:is(.btn, .action-button):focus-visible { outline: 2px solid #9aace5; outline-offset: 3px; }
