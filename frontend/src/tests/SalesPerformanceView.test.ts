@@ -38,7 +38,7 @@ const receipt = {
 }
 const profit = {
   id: 'p1', orderId: 'order1', orderNumber: 'ORDER-001', customerCode: 'C001', customerName: 'Example customer', owner, department: owner.department, salesDepartmentCode: 'sales1',
-  recognitionMonth: '2026-10', recognitionDate: '2026-10-01', knownAt: '2026-10-02T10:00:00+08:00', status: 'settled', settlementId: 'SETTLE-001', version: '3', approvedAt: '2026-10-02T10:00:00+08:00', cutoffAt: '2026-10-01T23:59:59+08:00', freightBasis: 'frozen',
+  recognitionMonth: '2026-10', recognitionDate: '2026-10-01', knownAt: '2026-10-02T10:00:00+08:00', status: 'settled', settlementId: 'SETTLE-001', settlementNumber: 'GP202610000001', version: '3', approvedAt: '2026-10-02T10:00:00+08:00', cutoffAt: '2026-10-01T23:59:59+08:00', freightBasis: 'frozen',
   incomeAmount: 100, adjustmentIncome: 4, productCost: 30, freightCost: 10, refundCost: 2, returnCost: 3, otherCost: 4, previousRecognizedProfit: 15, roundingAdjustment: 0, amount: 40, currency: 'USD', originalAmount: 40, originalCurrency: 'USD', fxRateToUsd: 1, fxRateDate: '2026-10-01', fxRateSource: 'USD',
 }
 const details = { source: 'mock', timeZone: 'UTC+8', currency: 'USD', asOf: sample.asOf, kind: 'receipts', total: 23, page: 1, pageSize: 10, receipts: [receipt], profits: [], totals: metrics, range: { from: '2026-10-01', to: '2026-10-23' }, unallocatedSettlements: [] }
@@ -60,6 +60,15 @@ async function setup(path = '/workbench/sales?queue=performance', teleportStub =
   return { wrapper, router }
 }
 describe('sales performance workbench', () => {
+  it.each(['GP202610000001', null, undefined])('shows only the settlement number, with no internal-ID fallback (%s)', async settlementNumber => {
+    get.mockImplementation(async (path: string) => structuredClone(path.endsWith('/details') ? { ...details, kind: 'profit', receipts: [], profits: [{ ...profit, settlementNumber }] } : sample))
+    const { wrapper } = await setup()
+    await wrapper.findAll('button').find(b => b.text() === '毛利明细')!.trigger('click'); await flushPromises()
+    const table = new DOMWrapper(document.querySelector('.performance-profits')!)
+    expect(table.findAll('th')[4]!.text()).toBe('结算单号')
+    expect(table.findAll('tbody tr')[0]!.findAll('td')[4]!.text()).toBe(settlementNumber ?? '—')
+    expect(table.text()).not.toContain('SETTLE-001')
+  })
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-10-22T16:30:00Z'))
     get.mockReset().mockImplementation(async (path: string) => structuredClone(path.endsWith('/details') ? details : sample))
@@ -101,6 +110,29 @@ describe('sales performance workbench', () => {
     await wrapper.find('select[aria-label="统计粒度"]').setValue('day'); await flushPromises()
     expect(get).toHaveBeenLastCalledWith('/autoflow/integrations/fop/sales-performance', { params: expect.objectContaining({ grain: 'day', ownerId: 'owner-2' }) })
   })
+  it('offers names only and opens all-owner details without accidentally retaining one owner', async () => {
+    get.mockImplementation(async (path: string, options: { params: Record<string, unknown> }) => structuredClone(path.endsWith('/details')
+      ? details
+      : { ...sample, query: options.params, selectedOwner: options.params.ownerScope === 'all' ? null : owner }))
+    const { wrapper } = await setup(undefined, false)
+    const select = wrapper.get('select[aria-label="业务员"]')
+    expect(select.findAll('option').map(option => option.text())).toEqual(['全部', 'Alice', 'Bob'])
+    await select.setValue('all'); await flushPromises()
+    expect(wrapper.find('.performance-owner-prompt').exists()).toBe(false)
+    expect(wrapper.find('.performance-scope').text()).toContain('全部业务员')
+    expect(wrapper.find('.performance-table').exists()).toBe(true)
+    expect(wrapper.findAllComponents({ name: 'EChart' })).toHaveLength(2)
+    expect(wrapper.find('.performance-table tfoot').text()).toContain('全部收款')
+    expect(wrapper.find('.performance-table tfoot').text()).toContain('全部毛利')
+    await wrapper.findAll('button').find(button => button.text() === '收款明细')!.trigger('click'); await flushPromises()
+    const dialog = new DOMWrapper(document.querySelector('dialog')!)
+    expect(dialog.text()).toContain('全部业务员')
+    expect(dialog.text()).toContain('STOCK-001')
+    const params = get.mock.calls.at(-1)![1].params
+    expect(params.ownerScope).toBe('all'); expect(params).not.toHaveProperty('ownerId')
+    await dialog.findAll('button').find(button => button.text() === '下一页')!.trigger('click'); await flushPromises()
+    expect(get.mock.calls.at(-1)![1].params).toMatchObject({ ownerScope: 'all', page: 2 })
+  })
   it('keeps missing settlement allocation as unknown and displays a separate monthly reference', async () => {
     get.mockResolvedValue({ ...sample, canSelectOwner: false, totals: { ...metrics, settledGrossProfit: null, unallocatedCount: 1 }, periods: [{ ...sample.periods[1], settledGrossProfit: null, unallocatedCount: 1, profitStatus: 'unallocated' }], unallocatedSettlements: [{ month: '2026-10', amount: 99, count: 1 }] })
     const { wrapper } = await setup()
@@ -133,7 +165,7 @@ describe('sales performance workbench', () => {
     const dialog = wrapper.find('dialog')
     expect(dialog.text()).toContain('ORDER-001')
     expect(dialog.text()).toContain('已结算')
-    expect(dialog.text()).toContain('SETTLE-001')
+    expect(dialog.text()).toContain('GP202610000001')
     expect(dialog.find('thead').text()).not.toContain('退款')
     await dialog.findAll('button').find(b => b.text() === '查看构成')!.trigger('click')
     expect(wrapper.find('dialog').text()).toContain('退款')
@@ -273,6 +305,38 @@ describe('sales performance workbench', () => {
     await wrapper.find('form').trigger('submit'); await flushPromises()
     expect(wrapper.text()).not.toContain('Bob')
     invalidateSession(); resolve(sample); await flushPromises()
+  })
+
+  it.each(['receipts', 'profit'] as const)('guides an unselected manager to an owner before opening %s details', async kind => {
+    const unselected = { ...sample, selectedOwner: null, totals: { ...metrics, collectionsAmount: 0, orderAmount: 0, stockAmount: 0, settledGrossProfit: 0, estimatedGrossProfit: 0 } }
+    get.mockImplementation(async (path: string, options: { params: { ownerId?: string } }) => structuredClone(path.endsWith('/details')
+      ? { ...details, kind, receipts: kind === 'receipts' ? [receipt] : [], profits: kind === 'profit' ? [profit] : [] }
+      : options.params.ownerId ? sample : unselected))
+    const { wrapper } = await setup(undefined, false)
+    expect(wrapper.find('.performance-table').exists()).toBe(false)
+    expect(wrapper.find('[data-testid=performance-kpis]').exists()).toBe(false)
+    expect(wrapper.findAll('button').some(b => ['收款明细', '毛利明细'].includes(b.text()))).toBe(false)
+    const choose = wrapper.findAll('button').find(b => b.text() === '选择业务员')!
+    expect(choose).toBeDefined()
+    await choose.trigger('click')
+    expect(document.activeElement).toBe(wrapper.get('select[aria-label="业务员"]').element)
+    await wrapper.get('select[aria-label="业务员"]').setValue('owner-1'); await flushPromises()
+    await wrapper.findAll('button').find(b => b.text() === (kind === 'receipts' ? '收款明细' : '毛利明细'))!.trigger('click'); await flushPromises()
+    const dialog = new DOMWrapper(document.querySelector('dialog')!)
+    expect(dialog.attributes('open')).toBeDefined()
+    expect(dialog.text()).toContain(kind === 'receipts' ? 'STOCK-001' : 'ORDER-001')
+    expect(get).toHaveBeenLastCalledWith('/autoflow/integrations/fop/sales-performance/details', { params: expect.objectContaining({ ownerId: 'owner-1', kind, periodId: '2026-10' }) })
+    await dialog.get('button[aria-label="关闭明细"]').trigger('click'); await flushPromises()
+    expect(document.querySelector('dialog')).toBeNull()
+  })
+
+  it('shows an empty scope without detail actions when no salesperson is available', async () => {
+    get.mockResolvedValueOnce({ ...sample, selectedOwner: null, owners: [], canSelectOwner: false })
+    const { wrapper } = await setup()
+    expect(wrapper.find('.performance-table').exists()).toBe(false)
+    expect(wrapper.find('[data-testid=performance-kpis]').exists()).toBe(false)
+    expect(wrapper.text()).toContain('暂无可查看的业务员数据')
+    expect(wrapper.findAll('button').some(b => b.text() === '选择业务员')).toBe(false)
   })
 
   it('requires an explicit employee choice when a manager has no bound personal owner', async () => {

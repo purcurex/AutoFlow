@@ -1,7 +1,7 @@
 import type { EffectiveChartAccess } from '../users/chart-permissions'
 import type { FopReceipt, SalesDepartmentCode } from './fop-data.types'
 export type PerformanceGrain = 'month' | 'week' | 'day'
-export interface PerformanceQuery { from: string; to: string; grain: PerformanceGrain; ownerId?: string }
+export interface PerformanceQuery { from: string; to: string; grain: PerformanceGrain; ownerId?: string; ownerScope?: 'all' }
 export interface PerformanceOwner { id: string; name: string; department: { id: string; name: string } }
 /** A period contribution, NEVER a cumulative order profit to be summed repeatedly. */
 export interface FopProfit {
@@ -9,7 +9,7 @@ export interface FopProfit {
   owner: { id: string; name: string }; department: { id: string; name: string }; salesDepartmentCode: SalesDepartmentCode
   /** knownAt covers every constituent fact. cutoffAt is an exclusive boundary, not knowledge time. */
   recognitionMonth: string; recognitionDate: string | null; knownAt: string
-  status: 'estimated' | 'settled'; settlementId: string | null; version: string
+  status: 'estimated' | 'settled'; settlementId: string | null; settlementNumber?: string | null; version: string
   /** Approved timestamp is required for settled rows; not an economic recognition date. */
   approvedAt: string | null; cutoffAt: string; freightBasis: 'estimated' | 'frozen'
   incomeAmount: number; adjustmentIncome: number; productCost: number; freightCost: number; refundCost: number; returnCost: number; otherCost: number; previousRecognizedProfit: number; roundingAdjustment: number

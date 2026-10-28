@@ -10,13 +10,24 @@ const page: AllocationInventoryPage = { source: 'mock', asOf: '2026-10-28T01:00:
   { id: 'client', sku: 'SKU-1', name: 'Lamp', warehouseCode: 'HZ', warehouse: '杭州仓', customer: { id: 'c1', name: 'Customer One' }, onHand: 20, occupied: 5, free: 15 },
 ] }
 beforeEach(() => { vi.resetAllMocks(); vi.mocked(getAllocationInventory).mockResolvedValue(page) })
-async function setup(orderIds: string[] = []) { const w = mount(AllocationInventoryDialog, { props: { orderIds }, global: { stubs: { Teleport: true }, plugins: [createI18n({ legacy: false, locale: 'zh-CN', messages: {} })] } }); await flushPromises(); return w }
+async function setup(orderIds: string[] = [], queue?: 'allocation' | 'shipping') { const w = mount(AllocationInventoryDialog, { props: { orderIds, queue }, global: { stubs: { Teleport: true }, plugins: [createI18n({ legacy: false, locale: 'zh-CN', messages: {} })] } }); await flushPromises(); return w }
 it('only loads selected IDs and displays separate public/customer zero balances without source badges', async () => {
   const w = await setup(['o1', 'o2'])
-  expect(getAllocationInventory).toHaveBeenCalledWith({ mode: 'selected', orderIds: ['o1', 'o2'], warehouseCode: undefined, page: 1, pageSize: 50 })
+  expect(getAllocationInventory).toHaveBeenCalledWith({ mode: 'selected', queue: 'allocation', orderIds: ['o1', 'o2'], warehouseCode: undefined, page: 1, pageSize: 50 })
   expect(w.findAll('tbody tr')).toHaveLength(2)
   expect(w.text()).toContain('公共库存'); expect(w.text()).toContain('Customer One'); expect(w.findAll('tbody tr')[0].text()).toContain('0')
   expect(w.text()).not.toMatch(/MOCK|演示数据/i); w.unmount()
+})
+it('carries warehouse context through selected-order, SKU search and warehouse changes', async () => {
+  const selected = await setup(['warehouse-order'], 'shipping')
+  expect(getAllocationInventory).toHaveBeenLastCalledWith(expect.objectContaining({ queue: 'shipping', mode: 'selected', orderIds: ['warehouse-order'] }))
+  await selected.get('select').setValue('SZ'); await flushPromises()
+  expect(getAllocationInventory).toHaveBeenLastCalledWith(expect.objectContaining({ queue: 'shipping', warehouseCode: 'SZ' }))
+  selected.unmount()
+  const search = await setup([], 'shipping')
+  await search.get('input[type=search]').setValue('SKU'); await search.get('form').trigger('submit'); await flushPromises()
+  expect(getAllocationInventory).toHaveBeenLastCalledWith(expect.objectContaining({ queue: 'shipping', mode: 'search', search: 'SKU' }))
+  search.unmount()
 })
 it('does not query before a SKU search and returns to the prompt when cleared', async () => {
   const w = await setup()

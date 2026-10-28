@@ -13,6 +13,13 @@ const profit = profitFixture
 const receipt = (id: string, extra: Partial<FopReceipt> = {}): FopReceipt => ({ id, sourceType: 'fulfillment', documentId: id, documentNumber: id, customerId: 'c1', customerCode: 'C1', customerName: 'Customer', owner: { id: 'alice', name: 'Alice' }, department: { id: 'd1', name: 'Sales' }, salesDepartmentCode: 'sales1', warehouseCode: 'HZ', warehouse: '杭州仓', carrierCode: 'YT', amount: 80, orderAmount: 100, handlingFee: 20, currency: 'USD', paidAt: '2026-01-10T00:00:00Z', reviewStatus: 'approved', receiptReviewStatus: 'approved', paymentStatus: 'paid', cancelled: false, items: [], ...extra })
 const settled = (id: string, extra: Partial<FopProfit> = {}) => profit(id, { status: 'settled', settlementId: 'bill-1', version: 's1', approvedAt: '2026-02-02T08:00:00+08:00', knownAt: '2026-02-02T08:00:00+08:00', freightBasis: 'frozen', cutoffAt: '2026-01-31T23:59:59+08:00', ...extra })
 describe('sales performance period contributions', () => {
+  it('keeps the settlement bill number separate from the internal ID and never invents one', () => {
+    expect(publicProfit(settled('number', { settlementNumber: 'GP202601000001' }))).toMatchObject({ settlementId: 'bill-1', settlementNumber: 'GP202601000001' })
+    expect(publicProfit(settled('legacy')).settlementNumber).toBeNull()
+    expect(publicProfit(profit('estimate')).settlementNumber).toBeNull()
+    expect(() => publicProfit(settled('invalid', { settlementNumber: ' ' }))).toThrow()
+    expect(() => publicProfit(profit('invalid', { settlementNumber: 'GP202601000001' }))).toThrow()
+  })
   it('uses UTC+8 and clips Monday-start weeks and months to the selected range', () => {
     expect(performancePeriods({ from: '2026-01-31', to: '2026-02-03', grain: 'week' }, now)).toEqual([
       { id: '2026-01-26', label: '01-31 — 02-01', from: '2026-01-31', to: '2026-02-01' }, { id: '2026-02-02', label: '02-02 — 02-03', from: '2026-02-02', to: '2026-02-03' },

@@ -45,8 +45,9 @@ export function publicProfit(row: FopProfit): FopProfit {
   if (row.recognitionMonth > businessDate(row.cutoffAt).slice(0, 7)) throw new Error('Profit month exceeds its cutoff')
   if (row.status === 'settled') {
     text(row.settlementId); timestamp(row.approvedAt)
+    if (row.settlementNumber != null) text(row.settlementNumber)
     if (row.freightBasis !== 'frozen') throw new Error('Settlement requires frozen costs')
-  } else if (row.settlementId !== null || row.approvedAt !== null || row.freightBasis !== 'estimated' || row.recognitionDate === null) throw new Error('Estimate requires dated event contribution and estimated freight')
+  } else if (row.settlementId !== null || row.settlementNumber != null || row.approvedAt !== null || row.freightBasis !== 'estimated' || row.recognitionDate === null) throw new Error('Estimate requires dated event contribution and estimated freight')
   for (const value of [row.incomeAmount, row.adjustmentIncome, row.productCost, row.freightCost, row.refundCost, row.returnCost, row.otherCost, row.previousRecognizedProfit, row.roundingAdjustment]) cents(value)
   const components = [row.incomeAmount, row.adjustmentIncome, -row.productCost, -row.freightCost, -row.refundCost, -row.returnCost, -row.otherCost, -row.previousRecognizedProfit, row.roundingAdjustment]
   cents(row.amount); cents(row.originalAmount)
@@ -57,7 +58,7 @@ export function publicProfit(row: FopProfit): FopProfit {
     || Math.sign(row.originalAmount) * convertFreightAmount(Math.abs(row.originalAmount), row.fxRateToUsd) !== row.amount) throw new Error('Invalid profit currency conversion')
   return {
     id: row.id, orderId: row.orderId, orderNumber: row.orderNumber, customerCode: row.customerCode, customerName: row.customerName, owner, department, salesDepartmentCode: row.salesDepartmentCode,
-    recognitionMonth: row.recognitionMonth, recognitionDate: row.recognitionDate, knownAt: row.knownAt, status: row.status, settlementId: row.settlementId, version: row.version,
+    recognitionMonth: row.recognitionMonth, recognitionDate: row.recognitionDate, knownAt: row.knownAt, status: row.status, settlementId: row.settlementId, settlementNumber: row.settlementNumber?.trim() ?? null, version: row.version,
     approvedAt: row.approvedAt, cutoffAt: row.cutoffAt, freightBasis: row.freightBasis,
     incomeAmount: row.incomeAmount, adjustmentIncome: row.adjustmentIncome, productCost: row.productCost, freightCost: row.freightCost, refundCost: row.refundCost, returnCost: row.returnCost,
     otherCost: row.otherCost, previousRecognizedProfit: row.previousRecognizedProfit, roundingAdjustment: row.roundingAdjustment, amount: row.amount, currency: 'USD',
@@ -68,7 +69,8 @@ export function publicProfit(row: FopProfit): FopProfit {
 export function performancePeriods(query: PerformanceQuery, now = new Date()): Period[] {
   if (!validBusinessDay(query.from) || !validBusinessDay(query.to) || query.from < '2020-01-01' || query.from > query.to
     || query.to > businessDate(now) || time(query.to) - time(query.from) > 365 * DAY_MS || !['month', 'week', 'day'].includes(query.grain)
-    || (query.ownerId !== undefined && (typeof query.ownerId !== 'string' || !query.ownerId.trim() || query.ownerId.length > 128))) throw new BadRequestException('Invalid sales performance query')
+    || (query.ownerId !== undefined && (typeof query.ownerId !== 'string' || !query.ownerId.trim() || query.ownerId.length > 128))
+    || (query.ownerScope !== undefined && (query.ownerScope !== 'all' || query.ownerId !== undefined))) throw new BadRequestException('Invalid sales performance query')
   const periods: Period[] = []
   let start = time(query.from)
   if (query.grain === 'month') start = time(query.from.slice(0, 7) + '-01')
@@ -154,7 +156,7 @@ export function aggregateSalesPerformance(receipts: readonly FopReceipt[], profi
     const profitStatus: PerformancePeriod['profitStatus'] = totals.unallocatedCount ? 'unallocated' : hasSettled && hasEstimated ? 'mixed' : hasSettled ? 'settled' : hasEstimated ? 'estimated' : 'none'
     return { ...range, ...totals, profitStatus }
   })
-  return { query: { from: query.from, to: query.to, grain: query.grain, ...(query.ownerId ? { ownerId: query.ownerId } : {}) }, timeZone: BUSINESS_TIME_ZONE, currency: 'USD', asOf: now.toISOString(), periods,
+  return { query: { from: query.from, to: query.to, grain: query.grain, ...(query.ownerId ? { ownerId: query.ownerId } : {}), ...(query.ownerScope ? { ownerScope: query.ownerScope } : {}) }, timeZone: BUSINESS_TIME_ZONE, currency: 'USD', asOf: now.toISOString(), periods,
     totals: metrics(rows.receipts, rows.profits, query), unallocatedSettlements: unallocatedSettlements(rows.profits, query) }
 }
 export function performanceDetails(receipts: readonly FopReceipt[], profits: readonly FopProfit[], query: PerformanceDetailsQuery, now = new Date()): Omit<PerformancePage, 'source'> {

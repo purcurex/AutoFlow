@@ -25,7 +25,7 @@ export function demoProfits(identity: Readonly<FopIdentity>, references: readonl
         tenantId: identity.tenantId, departmentPathIds: [...(reference.departmentPathIds ?? [])], id: `${identity.tenantId}:profit:${owner.id}:${key}`, orderId: `${identity.tenantId}:profit-order:${owner.id}:${key}`,
         orderNumber: `GP${month.replace('-', '')}${date?.slice(-2) ?? '00'}-${String(ownerIndex + 1).padStart(3, '0')}${key.endsWith('refund') ? 'R' : ''}`, customerCode: reference.customerCode ?? 'DEMO', customerName: reference.customerName,
         owner: { ...owner }, department: { ...department }, salesDepartmentCode: reference.salesDepartmentCode!, recognitionMonth: month, recognitionDate: date, knownAt,
-        status, settlementId: status === 'settled' ? `demo-settlement:${owner.id}:${month}` : null, version: status === 'settled' ? 'settled-v1' : `event:${date}`, approvedAt,
+        status, settlementId: status === 'settled' ? `demo-settlement:${owner.id}:${month}` : null, settlementNumber: status === 'settled' ? `GP${month.replace('-', '')}${String(ownerIndex + 1).padStart(6, '0')}` : null, version: status === 'settled' ? 'settled-v1' : `event:${date}`, approvedAt,
         cutoffAt: status === 'settled' ? `${nextMonth}T00:00:00+08:00` : new Date(Date.parse(`${date}T00:00:00+08:00`) + 86_400_000).toISOString(), freightBasis: status === 'settled' ? 'frozen' : 'estimated',
         incomeAmount, adjustmentIncome: adjustment, productCost, freightCost, refundCost, returnCost, otherCost, previousRecognizedProfit: 0, roundingAdjustment: 0,
         amount, currency: 'USD', originalAmount: amount, originalCurrency: 'USD', fxRateToUsd: 1, fxRateDate: date ?? `${month}-01`, fxRateSource: 'demo-usd-independent-contribution',

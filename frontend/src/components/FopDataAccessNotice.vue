@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { getFopDataAccess, type FopDataAccess } from '@/api/fop-access'
+const props = defineProps<{ busy?: boolean }>()
 const emit = defineEmits<{ recheck: [] }>()
 const { locale } = useI18n()
 const route = useRoute()
@@ -22,6 +23,7 @@ const status = computed(() => {
   }
 })
 async function refresh(recheck = false) {
+  if (recheck && (loading.value || props.busy)) return
   if (recheck) emit('recheck')
   const id = ++requestId
   access.value = undefined
@@ -39,6 +41,6 @@ onBeforeUnmount(() => { requestId++ })
 <template>
   <aside class="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300" aria-live="polite">
     <div><p class="font-semibold">{{ text('业务数据', 'Business data') }} · {{ loading ? text('正在加载…', 'Loading…') : status }}</p><p v-if="access?.businessScope" class="mt-1 font-medium">{{ text('业务范围', 'Business scope') }}：{{ access.businessScope.role === 'none' ? text('尚未开通', 'Not enabled') : access.businessScope.role === 'admin' ? text('当前账号可查看的业务', 'Business available to your account') : access.businessScope.role === 'department_manager' ? text('本部门及下级', 'My department and teams') : text('我的业务', 'My business') }}</p><p v-if="access?.source === 'mock'" class="mt-1">{{ text('当前展示演示数据，便于体验各项功能。', 'Demo data is shown so you can explore the features.') }}</p></div>
-    <button class="shrink-0 text-indigo-600 dark:text-indigo-300" :disabled="loading" @click="refresh(true)">{{ text('刷新状态', 'Refresh status') }}</button>
+    <button class="shrink-0 text-indigo-600 dark:text-indigo-300" data-testid="refresh-data-status" :disabled="loading || props.busy" @click="refresh(true)">{{ text('刷新状态', 'Refresh status') }}</button>
   </aside>
 </template>

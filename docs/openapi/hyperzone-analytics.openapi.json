@@ -3,7 +3,7 @@
   "jsonSchemaDialect": "https://spec.openapis.org/oas/3.1/dialect/base",
   "info": {
     "title": "HyperZone 智能办公平台分析与工作台接口契约",
-    "version": "2026-10-28-workbench-delivery",
+    "version": "2026-10-28-procurement-status",
     "description": "HyperZone 智能办公平台现行字段级合同，需求9.40为交付入口。41项平台HTTP操作、169个模型；servers=/api，响应为裸JSON。FOP为金蝶云苍穹自研应用，源码核对不代表员工网关已发布或生产已联调。\n权限：岗位/逐图许可、FOP资源许可和本地本人/部门/业务全量范围取交集，先授权后筛选、统计、排序、分页及导出；组织汇总、收款、运费、利润、备货与库存分别授权。\n工作台：九类履约队列加销售备货、采购待备货，共十一类清单；备货独立接口，不计入五类履约看板。采购物流条件仅限制FOP推1688动作；配货按未齐套/齐套未审划分，仓库仅已审未全部出库，不以WMS已建作为可见门槛。Shopify只有待同步/已同步，已同步退出待履约。\n审核：销售review和配货allocation_review开放单笔/批量审核，独立approvalActions、版本、幂等与逐笔结果；一履约一配货，配货写前复核发运制作完成。实际业务审核必须走FOP原生操作，不直接改状态字段；生产网关未配置不得假成功。\n查询：部门仅营销中心直属业务一至四部；业务员通过search搜索，保留ownerId兼容。默认收款最早在前；前端50条，可选20/50/100；API兼容默认20。所选和跨页筛选导出同权限与顺序。前端30秒刷新不等于FOP端到端时效承诺。\n时间：UTC+8显示，ISO时间戳带明确时区；consumerPaidAt、reviewedAt、procurementPaidAt、allocationReadyAt、wmsCreatedAt各按真实事件取值，缺失null不回退createdAt。实际字段与持久化见源码映射待确认清单。\n财务：履约实收加全款备货实收按支付期间归属，押金备货不计业绩；使用库存不重复计款。已审毛利月结用净差额，预计按已知事件及预估运费；日周历史事件和权威日分配待FOP补齐。运费按已确认实际成本及确认时间统计，最终结算/后续补退费仍须财务核对。USD/CNY显示四位小数，计算保留原币折USD的完整精度。\n展示：所有页签保留固定摘要；十一类清单共用标题加文字说明，无问号tips；查询和单号沿用履约页蓝色，刷新浅蓝。纯视觉统一不新增接口或放宽权限。"
   },
   "servers": [
@@ -3021,7 +3021,7 @@
         "tags": [
           "个人收款与毛利"
         ],
-        "description": "必须具备sales工作台、receipts及sales_profit analytics scope。服务端重新读取用户FOP绑定、业务角色范围，分别以allowedReceiptIds/allowedProfitIds授权并与租户/业务员/部门范围求交，不从订单权限推导。普通业务员仅自身；业务管理员/部门经理可选择已授权业务员，显式越权ownerId为403。身份/权限查询参数禁止。from/to为UTC+8含首尾日期，2020起、不晚于今天，最大366天；grain month/week/day，周一开始，首尾裁剪。收款复用方案2（履约实际收款+全款备货收款，排除押金），按支付日期；毛利按独立确认日期/月，已结算取冻结净毛利差额、预估以预估运费及已知成本收入计算期间贡献。不会把全款备货回款直接再加利润。同订单同确认月已结算替代预估，跨期差额保留。无可信日明细的结算只能进入完整自然月month桶；week/day/部分月返回null和整月参考，不均摊。未来knownAt/approvedAt/paidAt排除；不支持客户端asOf历史回放。现有FOP原生实时服务未满足严格cutoff/预估成本，新事件账本与只读适配器待实现。 同时校验sales_performance逐图有效权限与范围；响应chartAccess为本次实际能力，前端必须覆盖预查询能力并清理失效数据。",
+        "description": "必须具备sales工作台、receipts及sales_profit analytics scope。服务端重新读取用户FOP绑定、业务角色范围，分别以allowedReceiptIds/allowedProfitIds授权并与租户/业务员/部门范围求交，不从订单权限推导。普通业务员仅自身；业务管理员/部门经理可选择已授权业务员，显式越权ownerId为403。身份/权限查询参数禁止。from/to为UTC+8含首尾日期，2020起、不晚于今天，最大366天；grain month/week/day，周一开始，首尾裁剪。收款复用方案2（履约实际收款+全款备货收款，排除押金），按支付日期；毛利按独立确认日期/月，已结算取冻结净毛利差额、预估以预估运费及已知成本收入计算期间贡献。不会把全款备货回款直接再加利润。同订单同确认月已结算替代预估，跨期差额保留。无可信日明细的结算只能进入完整自然月month桶；week/day/部分月返回null和整月参考，不均摊。未来knownAt/approvedAt/paidAt排除；不支持客户端asOf历史回放。现有FOP原生实时服务未满足严格cutoff/预估成本，新事件账本与只读适配器待实现。 同时校验sales_performance逐图有效权限与范围；响应chartAccess为本次实际能力，前端必须覆盖预查询能力并清理失效数据。 新增ownerScope=all显式汇总当前可见业务员，不能与ownerId并用（400）；本人范围不可使用（403）。汇总、两类明细、分页合计同范围，系统管理员身份不自动授予业务记录。",
         "parameters": [
           {
             "name": "from",
@@ -3066,6 +3066,18 @@
               "minLength": 1
             },
             "description": "授权业务员稳定ID。不是FOP登录用户ID；仅缩小服务端范围。"
+          },
+          {
+            "name": "ownerScope",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "all"
+              ]
+            },
+            "description": "显式选择全部业务员；仅canSelectOwner=true可用，仍与账号本人/部门范围、逐图范围及独立FOP收款/毛利白名单求交。与ownerId互斥，普通本人范围请求返回403。省略时保持绑定本人优先、无绑定需主动选择。"
           }
         ],
         "responses": {
@@ -3192,7 +3204,7 @@
         "tags": [
           "个人收款与毛利"
         ],
-        "description": "必须具备sales工作台、receipts及sales_profit analytics scope。服务端重新读取用户FOP绑定、业务角色范围，分别以allowedReceiptIds/allowedProfitIds授权并与租户/业务员/部门范围求交，不从订单权限推导。普通业务员仅自身；业务管理员/部门经理可选择已授权业务员，显式越权ownerId为403。身份/权限查询参数禁止。from/to为UTC+8含首尾日期，2020起、不晚于今天，最大366天；grain month/week/day，周一开始，首尾裁剪。收款复用方案2（履约实际收款+全款备货收款，排除押金），按支付日期；毛利按独立确认日期/月，已结算取冻结净毛利差额、预估以预估运费及已知成本收入计算期间贡献。不会把全款备货回款直接再加利润。同订单同确认月已结算替代预估，跨期差额保留。无可信日明细的结算只能进入完整自然月month桶；week/day/部分月返回null和整月参考，不均摊。未来knownAt/approvedAt/paidAt排除；不支持客户端asOf历史回放。现有FOP原生实时服务未满足严格cutoff/预估成本，新事件账本与只读适配器待实现。 分页前计算合计；明细kind仅切换事实清单，periodId不得扩大日期范围。 同时校验sales_performance逐图有效权限与范围；响应chartAccess为本次实际能力，前端必须覆盖预查询能力并清理失效数据。直接明细入口还要求canViewDetails。",
+        "description": "必须具备sales工作台、receipts及sales_profit analytics scope。服务端重新读取用户FOP绑定、业务角色范围，分别以allowedReceiptIds/allowedProfitIds授权并与租户/业务员/部门范围求交，不从订单权限推导。普通业务员仅自身；业务管理员/部门经理可选择已授权业务员，显式越权ownerId为403。身份/权限查询参数禁止。from/to为UTC+8含首尾日期，2020起、不晚于今天，最大366天；grain month/week/day，周一开始，首尾裁剪。收款复用方案2（履约实际收款+全款备货收款，排除押金），按支付日期；毛利按独立确认日期/月，已结算取冻结净毛利差额、预估以预估运费及已知成本收入计算期间贡献。不会把全款备货回款直接再加利润。同订单同确认月已结算替代预估，跨期差额保留。无可信日明细的结算只能进入完整自然月month桶；week/day/部分月返回null和整月参考，不均摊。未来knownAt/approvedAt/paidAt排除；不支持客户端asOf历史回放。现有FOP原生实时服务未满足严格cutoff/预估成本，新事件账本与只读适配器待实现。 分页前计算合计；明细kind仅切换事实清单，periodId不得扩大日期范围。 同时校验sales_performance逐图有效权限与范围；响应chartAccess为本次实际能力，前端必须覆盖预查询能力并清理失效数据。直接明细入口还要求canViewDetails。 新增ownerScope=all显式汇总当前可见业务员，不能与ownerId并用（400）；本人范围不可使用（403）。汇总、两类明细、分页合计同范围，系统管理员身份不自动授予业务记录。",
         "parameters": [
           {
             "name": "from",
@@ -3237,6 +3249,18 @@
               "minLength": 1
             },
             "description": "授权业务员稳定ID。不是FOP登录用户ID；仅缩小服务端范围。"
+          },
+          {
+            "name": "ownerScope",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "all"
+              ]
+            },
+            "description": "显式选择全部业务员；仅canSelectOwner=true可用，仍与账号本人/部门范围、逐图范围及独立FOP收款/毛利白名单求交。与ownerId互斥，普通本人范围请求返回403。省略时保持绑定本人优先、无绑定需主动选择。"
           },
           {
             "name": "kind",
@@ -3356,7 +3380,8 @@
                       "originalCurrency": "USD",
                       "fxRateToUsd": 1,
                       "fxRateDate": "2026-09-30",
-                      "fxRateSource": "mock-contract-example"
+                      "fxRateSource": "mock-contract-example",
+                      "settlementNumber": "GP202609000001"
                     }
                   ],
                   "totals": {
@@ -4554,7 +4579,7 @@
         ],
         "operationId": "exportFulfillmentOrders",
         "summary": "所有工作台待办清单批量导出Excel",
-        "description": "九类待办清单统一导出所选或全部筛选结果。先校验登录会话、工作台角色，再取FOP身份与订单白名单和本人/部门/全量业务范围交集，复用清单队列/部门/搜索/仓库阶段/排序过滤。selected要求全部ID仍在结果内；filtered不接受分页或ID数组。输出前再次校验会话、绑定、业务范围及FOP授权。只继承该清单查看权限，不依赖审核操作权，也不以图表导出授权替代待办权限。图片仅文本链接，编号和外部文本为字符串，金额数量为数值，UTC+8；金额按币种合计且一单多品只计一次。固定上限10000单/50000商品行，无静默截断，无FOP写操作。生产依赖现有员工订单读取协议完整返回授权数据，无额外上游导出端点。 Re-read authorized orders after workbook generation; reject changed owner/department scope with 403 and changed queue/filter membership with 409. Ordinary business values remain the initial read snapshot, not a database transaction snapshot. 配货两清单Excel分列导出发运单状态、配货状态（stockReadiness）、配货单状态（allocationReview），与页面一致；支持相同的独立状态排序。待出库清单Excel仅保留配货单状态，不输出出库状态列，金额和数量合计位置相应调整。 最新9.32：销售unpaid/review/exceptions及待履约dispatch列表、所选/全筛选Excel使用consumerPaidAt展示C端下单时间。真实Shopify首次付清事实仍需FOP网关映射；缺失为null，无createdAt/paidAt替代。采购alibaba_pending显示待推1688采购，payment_pending显示待支付采购款；枚举、筛选、权限与统计不变。 最新9.33：销售unpaid/review/exceptions及待履约dispatch支持sortBy=consumerPaidAt、sortOrder=asc/desc。默认仍paidAt升序；同C端时间按paidAt升序/id升序，缺失或非法时间双向均置后，不回退其他日期。先授权/筛选后对完整结果排序再分页；所选及全筛选Excel同顺序。其他队列使用该排序返回400。单号及SKU复制仅客户端原值操作，不新增API或改变权限。 最新9.34：procurement_shipping列表及两种Excel以procurementPaidAt展示采购付款时间，替换创建时间；其他队列不变。供应商pending/partial按当前电脑时间减真实采购付款时间，>24h橙色、>48h红色（已确认48不是487）；等于24h正常、等于48h橙色；缺失/非法/未来日期不标超时，每30秒及重获焦点更新。仅展示提醒，不改业务状态、筛选、权限、计数或默认paidAt升序。 最新9.35：全待办业务员单元格固定两行（姓名、业务部门），不再单列业务部门；原owner/department字段和筛选权限保留。allocation_review时间列为齐套时间allocationReadyAt，allocation未齐套时间列为consumerPaidAt且允许同字段排序；其余队列时间列不变。默认paidAt升序。清空已提交搜索仅移除search并回第1页，保留其余筛选/排序/分页条数；发货仓库空选项显示全部。Excel同步姓名/部门两行及时间字段。 9.35覆盖原四队列限制：allocation未齐套也允许consumerPaidAt；allocation_review仍不允许，使用独立齐套时间展示。",
+        "description": "九类待办清单统一导出所选或全部筛选结果。先校验登录会话、工作台角色，再取FOP身份与订单白名单和本人/部门/全量业务范围交集，复用清单队列/部门/搜索/仓库阶段/排序过滤。selected要求全部ID仍在结果内；filtered不接受分页或ID数组。输出前再次校验会话、绑定、业务范围及FOP授权。只继承该清单查看权限，不依赖审核操作权，也不以图表导出授权替代待办权限。图片仅文本链接，编号和外部文本为字符串，金额数量为数值，UTC+8；金额按币种合计且一单多品只计一次。固定上限10000单/50000商品行，无静默截断，无FOP写操作。生产依赖现有员工订单读取协议完整返回授权数据，无额外上游导出端点。 Re-read authorized orders after workbook generation; reject changed owner/department scope with 403 and changed queue/filter membership with 409. Ordinary business values remain the initial read snapshot, not a database transaction snapshot. 配货两清单Excel分列导出发运单状态、配货状态（stockReadiness）、配货单状态（allocationReview），与页面一致；支持相同的独立状态排序。待出库清单Excel仅保留配货单状态，不输出出库状态列，金额和数量合计位置相应调整。 最新9.32：销售unpaid/review/exceptions及待履约dispatch列表、所选/全筛选Excel使用consumerPaidAt展示C端下单时间。真实Shopify首次付清事实仍需FOP网关映射；缺失为null，无createdAt/paidAt替代。采购alibaba_pending显示待推1688采购，payment_pending显示待支付采购款；枚举、筛选、权限与统计不变。 最新9.33：销售unpaid/review/exceptions及待履约dispatch支持sortBy=consumerPaidAt、sortOrder=asc/desc。默认仍paidAt升序；同C端时间按paidAt升序/id升序，缺失或非法时间双向均置后，不回退其他日期。先授权/筛选后对完整结果排序再分页；所选及全筛选Excel同顺序。其他队列使用该排序返回400。单号及SKU复制仅客户端原值操作，不新增API或改变权限。 最新9.34：procurement_shipping列表及两种Excel以procurementPaidAt展示采购付款时间，替换创建时间；其他队列不变。供应商pending/partial按当前电脑时间减真实采购付款时间，>24h橙色、>48h红色（已确认48不是487）；等于24h正常、等于48h橙色；缺失/非法/未来日期不标超时，每30秒及重获焦点更新。仅展示提醒，不改业务状态、筛选、权限、计数或默认paidAt升序。 最新9.35：全待办业务员单元格固定两行（姓名、业务部门），不再单列业务部门；原owner/department字段和筛选权限保留。allocation_review时间列为齐套时间allocationReadyAt，allocation未齐套时间列为consumerPaidAt且允许同字段排序；其余队列时间列不变。默认paidAt升序。清空已提交搜索仅移除search并回第1页，保留其余筛选/排序/分页条数；发货仓库空选项显示全部。Excel同步姓名/部门两行及时间字段。 9.35覆盖原四队列限制：allocation未齐套也允许consumerPaidAt；allocation_review仍不允许，使用独立齐套时间展示。 页面“导出 Excel”点击直接执行：有勾选时mode=selected并传当前所选ID；无勾选时mode=filtered，导出全部已应用筛选结果（跨分页）。没有下拉选项；清空勾选后恢复filtered。两种API模式、授权、容量和输出前复核不变。",
         "requestBody": {
           "required": true,
           "content": {
@@ -4723,7 +4748,7 @@
         ],
         "operationId": "getStockOrders",
         "summary": "销售备货清单 / 采购待备货清单",
-        "description": "销售all展示全部有效备货单（含已采购、已入库、未收款），采购procurement仅已支付、已审核、未完成采购（未采购/部分采购）。岗位、独立备货白名单与本人/部门/全部业务范围求交，先授权和过滤、合计、完整排序后分页。独立于履约九队列及Dashboard五卡。",
+        "description": "销售all展示全部有效备货单（含已采购、已入库、未收款），采购procurement仅已支付、已审核、待跟进采购（未采购/部分采购/已采购待发货）。岗位、独立备货白名单与本人/部门/全部业务范围求交，先授权和过滤、合计、完整排序后分页。独立于履约九队列及Dashboard五卡。 orderStatus按互斥阶段筛选，与备货类型/采购状态/搜索/仓库/部门取交集；先权限和筛选后合计分页。已审核不得包含在paid筛选中。 最新9.45：支持备货订单状态与采购状态排序，默认收款时间升序；同状态保持最早收款优先。",
         "parameters": [
           {
             "name": "queue",
@@ -4736,7 +4761,21 @@
                 "procurement"
               ],
               "default": "all",
-              "description": "all为销售全部有效备货单，需sales岗位；procurement为采购待备货，需procurement岗位且paymentStatus=paid、reviewStatus=approved、purchaseStatus=unpurchased/partial，排除取消。条件由服务端强制，不能用筛选覆盖。"
+              "description": "all为销售全部有效备货单，需sales岗位；procurement为备货待采购清单，需procurement岗位且paymentStatus=paid、reviewStatus=approved、purchaseStatus=unpurchased/partial/purchased，排除取消。条件由服务端强制，不能用筛选覆盖。"
+            }
+          },
+          {
+            "name": "orderStatus",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "unpaid",
+                "paid",
+                "approved"
+              ],
+              "description": "备货订单状态：unpaid未支付；paid已支付但未审核；approved已支付且已审核。按真实paymentStatus/reviewStatus归一，不取采购状态或日期推定。"
             }
           },
           {
@@ -4798,6 +4837,22 @@
             "required": false,
             "schema": {
               "$ref": "#/components/schemas/StockPurchaseStatus"
+            },
+            "description": "采购状态筛选；procurement队列允许展示未采购、部分采购、已采购待发货（purchased）。已发货/已入库不进入该队列。"
+          },
+          {
+            "name": "sortBy",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "paidAt",
+                "orderStatus",
+                "purchaseStatus"
+              ],
+              "default": "paidAt",
+              "description": "主排序字段：paidAt收款时间（默认）、orderStatus备货订单状态、purchaseStatus采购状态。状态升序按unpaid→paid→approved，以及unpurchased→partial→purchased→shipped→received；状态未知/null双向置后。同状态按paidAt升序（空值最后）、id升序。先授权和筛选，再完整排序后分页；Excel沿用相同顺序。sortBy非法、空值、重复参数返回400。"
             }
           },
           {
@@ -4811,7 +4866,7 @@
                 "desc"
               ],
               "default": "asc",
-              "description": "按paidAt完整排序后分页；空值两向均最后，同值id升序。"
+              "description": "指定主排序字段的方向；默认asc。省略sortBy兼容原paidAt排序。状态同值始终收款升序/id升序，未知状态及空收款时间双向最后。"
             }
           },
           {
@@ -4910,7 +4965,8 @@
                       "warehouseCode": "HZ",
                       "warehouse": "杭州仓",
                       "paymentStatus": "paid",
-                      "reviewStatus": "approved"
+                      "reviewStatus": "approved",
+                      "orderStatus": "approved"
                     }
                   ],
                   "departments": [
@@ -5241,7 +5297,7 @@
         ],
         "operationId": "exportStockOrders",
         "summary": "批量导出备货清单Excel",
-        "description": "selected为当前页选中单据，filtered为当前筛选全部跨页。与清单一致权限/排序/筛选，生成后复核会话和资源范围；订单金额按币种分别汇总，多商品金额仅一次。仅只读，无FOP业务操作。 queue与清单相同，默认all需sales，procurement需采购岗位并强制paid+approved+采购未完成；生成后复核队列资格及独立资源权限。",
+        "description": "selected为当前页选中单据，filtered为当前筛选全部跨页。与清单一致权限/排序/筛选，生成后复核会话和资源范围；订单金额按币种分别汇总，多商品金额仅一次。仅只读，无FOP业务操作。 queue与清单相同，默认all需sales，procurement需采购岗位并强制paid+approved且purchaseStatus为unpurchased/partial/purchased（含已采购待发货）；生成后复核队列资格及独立资源权限。 orderStatus与列表同口径；销售导出增加备货订单状态列，采购队列均为已审核，不重复增加该列。 页面“导出 Excel”点击直接执行：有勾选时mode=selected并传当前所选ID；无勾选时mode=filtered，导出全部已应用筛选结果（跨分页）。没有下拉选项；清空勾选后恢复filtered。两种API模式、授权、容量和输出前复核不变。 最新9.45：sortBy=paidAt/orderStatus/purchaseStatus，所选与全筛选导出复用完整结果的状态/日期排序，不按勾选顺序。",
         "requestBody": {
           "required": true,
           "content": {
@@ -5325,8 +5381,8 @@
           "Stock workbench"
         ],
         "operationId": "getAllocationInventory",
-        "summary": "未齐套清单即时库存：选单或SKU搜索",
-        "description": "需要allocation岗位+本地数据权限+独立库存池授权。选单重新校验全部订单仍为有权未齐套配货单，否则409，禁止部分成功。仅展示所选SKU公共与对应客户专属池；公共池去重。未选单必须非空SKU搜索。先授权、过滤、去重、排序（SKU/仓库/客户ID）后按池分页；仅完整成功快照可补零。实物余量不是最终可配量。",
+        "summary": "未齐套与待出库清单即时库存：选单或SKU搜索",
+        "description": "queue=allocation（省略时兼容此值）需要allocation岗位，queue=shipping需要warehouse岗位；两者均须本地数据权限+独立库存池授权。选单重新校验全部订单仍在对应获权队列，否则409，禁止部分成功。shipping只取配货已齐套已审核且尚未全部出库，不以WMS时间有值为门槛。仅展示所选SKU公共与对应客户专属池；公共池去重。未选单必须非空SKU搜索。先授权、过滤、去重、排序（SKU/仓库/客户ID）后按池分页；仅完整成功快照可补零。实物余量不是最终可配量或选中订单的可出库量。",
         "responses": {
           "400": {
             "description": "参数非法、空搜索、重复/超量订单或模式混用。"
@@ -5335,10 +5391,10 @@
             "description": "会话失效。"
           },
           "403": {
-            "description": "无配货岗位、无业务权限、缺独立库存授权或绑定/范围变化。"
+            "description": "缺对应岗位、无业务权限、缺独立库存授权或绑定/范围变化。"
           },
           "409": {
-            "description": "inventory_orders_changed：选中订单不再是获权未齐套订单，刷新后重选。"
+            "description": "inventory_orders_changed：选中订单已不在对应获权队列（例如已配齐、已出库），刷新后重选。"
           },
           "429": {
             "description": "请求过于频繁。"
@@ -5420,11 +5476,36 @@
                       "order-1"
                     ],
                     "page": 1,
-                    "pageSize": 50
+                    "pageSize": 50,
+                    "queue": "allocation"
                   }
                 },
                 "search": {
                   "value": {
+                    "mode": "search",
+                    "search": "HZ-BAG",
+                    "warehouseCode": "HZ",
+                    "page": 1,
+                    "pageSize": 50,
+                    "queue": "allocation"
+                  }
+                },
+                "warehouseSelected": {
+                  "summary": "待出库选单库存",
+                  "value": {
+                    "queue": "shipping",
+                    "mode": "selected",
+                    "orderIds": [
+                      "order-1"
+                    ],
+                    "page": 1,
+                    "pageSize": 50
+                  }
+                },
+                "warehouseSearch": {
+                  "summary": "仓库岗位SKU搜索",
+                  "value": {
+                    "queue": "shipping",
                     "mode": "search",
                     "search": "HZ-BAG",
                     "warehouseCode": "HZ",
@@ -11617,6 +11698,13 @@
             "description": "授权业务员稳定ID。不是FOP登录用户ID；仅缩小服务端范围。",
             "minLength": 1,
             "maxLength": 128
+          },
+          "ownerScope": {
+            "type": "string",
+            "enum": [
+              "all"
+            ],
+            "description": "显式选择全部业务员；仅canSelectOwner=true可用，仍与账号本人/部门范围、逐图范围及独立FOP收款/毛利白名单求交。与ownerId互斥，普通本人范围请求返回403。省略时保持绑定本人优先、无绑定需主动选择。"
           }
         },
         "required": [
@@ -11624,7 +11712,13 @@
           "to",
           "grain"
         ],
-        "additionalProperties": false
+        "additionalProperties": false,
+        "not": {
+          "required": [
+            "ownerId",
+            "ownerScope"
+          ]
+        }
       },
       "PerformanceOwner": {
         "type": "object",
@@ -11844,6 +11938,14 @@
             "type": "string",
             "description": "可信汇率来源，禁止用今天汇率隐式改写历史。",
             "minLength": 1
+          },
+          "settlementNumber": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1,
+            "description": "展示用结算单号。取订单结算分录 hzkj_gp_settle_bill（审核时从月结单 billno 写入）。与内部 settlementId 独立；estimated 必须为 null，历史缺失可省略或为 null，页面显示 —，不得用 ID、版本或截止时间代替。"
           }
         },
         "required": [
@@ -11920,6 +12022,9 @@
                 "recognitionDate": {
                   "type": "string",
                   "format": "date"
+                },
+                "settlementNumber": {
+                  "type": "null"
                 }
               }
             }
@@ -11981,7 +12086,8 @@
             "originalCurrency": "USD",
             "fxRateToUsd": 1,
             "fxRateDate": "2026-09-30",
-            "fxRateSource": "mock-contract-example"
+            "fxRateSource": "mock-contract-example",
+            "settlementNumber": "GP202609000001"
           },
           {
             "id": "gp-estimated-example",
@@ -12022,7 +12128,8 @@
             "originalCurrency": "USD",
             "fxRateToUsd": 1,
             "fxRateDate": "2026-10-20",
-            "fxRateSource": "mock-contract-example"
+            "fxRateSource": "mock-contract-example",
+            "settlementNumber": null
           }
         ]
       },
@@ -12294,7 +12401,7 @@
                 "type": "null"
               }
             ],
-            "description": "本次实际选择；个人强制本人；经理/管理员默认绑定员工，未绑定不静默选择同事，需主动选择授权人员。"
+            "description": "实际选定人员；个人默认绑定本人。经理/管理员无绑定时需主动选择，不自动选择同事；query.ownerScope=all时为null，表示全部已授权业务员，非未选择。"
           },
           "canSelectOwner": {
             "type": "boolean",
@@ -12579,7 +12686,8 @@
                 "originalCurrency": "USD",
                 "fxRateToUsd": 1,
                 "fxRateDate": "2026-09-30",
-                "fxRateSource": "mock-contract-example"
+                "fxRateSource": "mock-contract-example",
+                "settlementNumber": "GP202609000001"
               }
             ],
             "totals": {
@@ -16443,7 +16551,8 @@
             "description": "明确时区的ISO时间，前端UTC+8展示；未收款为null，不回退创建时间。"
           },
           "purchaseStatus": {
-            "$ref": "#/components/schemas/StockPurchaseStatus"
+            "$ref": "#/components/schemas/StockPurchaseStatus",
+            "description": "采购业务阶段：unpurchased未采购；partial部分采购；purchased采购付款完成且供应商待发货；shipped供应商已发货；received已入库；unknown未知。展示文案与履约采购状态统一；时长提醒不改变状态值。"
           },
           "warehouseCode": {
             "type": "string",
@@ -16474,6 +16583,27 @@
               "unknown"
             ],
             "description": "备货单当前审核状态：billstatus=C为approved，已确认的非审核枚举为pending，缺失/不认识为unknown。与采购申请审核不同，不能相互推定。"
+          },
+          "orderStatus": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "unpaid",
+              "paid",
+              "approved",
+              null
+            ],
+            "description": "备货订单状态：unpaid未支付；paid已支付但未审核；approved已支付且已审核。按真实paymentStatus/reviewStatus归一，不取采购状态或日期推定。 unpaid=paymentStatus未付且reviewStatus不是approved；paid=paid+pending；approved=paid+approved；其他不完整/矛盾事实返回null并显示—，不作为筛选项；全部清单仍保留。此字段仅BFF派生，上游保留两个原始事实。"
+          },
+          "procurementPaidAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "供应商实际采购付款时间，用于供应商待发货超过24/48小时提醒。取当前仍有待发货义务的有效已付采购中最早实际付款时间；已全发、取消、退款记录排除。缺失或非法归一null，不得用客户收款paidAt、订单创建、审核、到期日或同步时间替代。可省略以兼容旧网关；生产映射需联调。"
           }
         },
         "required": [
@@ -16494,9 +16624,10 @@
           "warehouseCode",
           "warehouse",
           "paymentStatus",
-          "reviewStatus"
+          "reviewStatus",
+          "orderStatus"
         ],
-        "description": "独立备货单；无履约/Shopify单号、C端收件人或物流信息。仅全部有效单（排除取消），包括待支付及采购完成。"
+        "description": "独立备货单；无履约/Shopify单号、C端收件人或物流信息。仅全部有效单（排除取消），包括待支付及采购完成。 需求9.48：供应商待发货统一文案，procurementPaidAt独立于客户收款时间，仅供时长提醒。"
       },
       "FopStockOrderCandidate": {
         "type": "object",
@@ -16591,7 +16722,8 @@
             "description": "明确时区的ISO时间，前端UTC+8展示；未收款为null，不回退创建时间。"
           },
           "purchaseStatus": {
-            "$ref": "#/components/schemas/StockPurchaseStatus"
+            "$ref": "#/components/schemas/StockPurchaseStatus",
+            "description": "采购业务阶段：unpurchased未采购；partial部分采购；purchased采购付款完成且供应商待发货；shipped供应商已发货；received已入库；unknown未知。展示文案与履约采购状态统一；时长提醒不改变状态值。"
           },
           "warehouseCode": {
             "type": "string",
@@ -16646,6 +16778,14 @@
               "unknown"
             ],
             "description": "备货单当前审核状态：billstatus=C为approved，已确认的非审核枚举为pending，缺失/不认识为unknown。与采购申请审核不同，不能相互推定。"
+          },
+          "procurementPaidAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "供应商实际采购付款时间，用于供应商待发货超过24/48小时提醒。取当前仍有待发货义务的有效已付采购中最早实际付款时间；已全发、取消、退款记录排除。缺失或非法归一null，不得用客户收款paidAt、订单创建、审核、到期日或同步时间替代。可省略以兼容旧网关；生产映射需联调。"
           }
         },
         "required": [
@@ -16668,7 +16808,7 @@
           "tenantId",
           "cancelled"
         ],
-        "description": "待IT发布员工网关POST /stock-orders的数组元素。完整返回受委托登录员工可读记录；本地再次校验租户、独立allowedStockOrderIds及本人/部门范围。金额与归属用备货单自身字段。 新增paymentStatus/reviewStatus兼容旧适配器可省略，BFF输出unknown，缺失事实绝不进入采购待备货。"
+        "description": "待IT发布员工网关POST /stock-orders的数组元素。完整返回受委托登录员工可读记录；本地再次校验租户、独立allowedStockOrderIds及本人/部门范围。金额与归属用备货单自身字段。 新增paymentStatus/reviewStatus兼容旧适配器可省略，BFF输出unknown，缺失事实绝不进入采购待备货。 需求9.48：供应商待发货统一文案，procurementPaidAt独立于客户收款时间，仅供时长提醒。"
       },
       "StockBalance": {
         "type": "object",
@@ -17212,7 +17352,8 @@
             "$ref": "#/components/schemas/StockType"
           },
           "purchaseStatus": {
-            "$ref": "#/components/schemas/StockPurchaseStatus"
+            "$ref": "#/components/schemas/StockPurchaseStatus",
+            "description": "备货采购进度：unpurchased未采购、partial部分采购、purchased已采购待发货、shipped已发货、received已入库、unknown事实未知。purchased沿用FOP采购进度，不代表采购款已支付；与履约procurement_shipping的付款门槛不同。"
           },
           "sortOrder": {
             "type": "string",
@@ -17221,7 +17362,7 @@
               "desc"
             ],
             "default": "asc",
-            "description": "按paidAt完整排序后分页；空值两向均最后，同值id升序。"
+            "description": "指定主排序字段的方向；默认asc。省略sortBy兼容原paidAt排序。状态同值始终收款升序/id升序，未知状态及空收款时间双向最后。"
           },
           "mode": {
             "type": "string",
@@ -17248,7 +17389,26 @@
               "procurement"
             ],
             "default": "all",
-            "description": "all为销售全部有效备货单，需sales岗位；procurement为采购待备货，需procurement岗位且paymentStatus=paid、reviewStatus=approved、purchaseStatus=unpurchased/partial，排除取消。条件由服务端强制，不能用筛选覆盖。"
+            "description": "all为销售全部有效备货单，需sales岗位；procurement为备货待采购清单，需procurement岗位且paymentStatus=paid、reviewStatus=approved、purchaseStatus=unpurchased/partial/purchased，排除取消。条件由服务端强制，不能用筛选覆盖。"
+          },
+          "orderStatus": {
+            "type": "string",
+            "enum": [
+              "unpaid",
+              "paid",
+              "approved"
+            ],
+            "description": "备货订单状态：unpaid未支付；paid已支付但未审核；approved已支付且已审核。按真实paymentStatus/reviewStatus归一，不取采购状态或日期推定。"
+          },
+          "sortBy": {
+            "type": "string",
+            "enum": [
+              "paidAt",
+              "orderStatus",
+              "purchaseStatus"
+            ],
+            "default": "paidAt",
+            "description": "主排序字段：paidAt收款时间（默认）、orderStatus备货订单状态、purchaseStatus采购状态。状态升序按unpaid→paid→approved，以及unpurchased→partial→purchased→shipped→received；状态未知/null双向置后。同状态按paidAt升序（空值最后）、id升序。先授权和筛选，再完整排序后分页；Excel沿用相同顺序。sortBy非法、空值、重复参数返回400。"
           }
         },
         "required": [
@@ -17523,13 +17683,22 @@
                   100
                 ],
                 "default": 50
+              },
+              "queue": {
+                "type": "string",
+                "enum": [
+                  "allocation",
+                  "shipping"
+                ],
+                "default": "allocation",
+                "description": "查询来源队列：未齐套allocation→配货岗位；待出库shipping→仓库岗位。服务端映射岗位并校验，不赋予额外数据权限。"
               }
             },
             "required": [
               "mode",
               "orderIds"
             ],
-            "description": "仅传订单ID，BFF从当前获权未齐套订单推导SKU、客户及仓库，不能客户端自传池范围。"
+            "description": "仅传订单ID和来源queue，BFF从对应当前获权队列推导SKU、客户及实际仓库，不能客户端自传池范围。"
           },
           {
             "type": "object",
@@ -17566,6 +17735,15 @@
                   100
                 ],
                 "default": 50
+              },
+              "queue": {
+                "type": "string",
+                "enum": [
+                  "allocation",
+                  "shipping"
+                ],
+                "default": "allocation",
+                "description": "查询来源队列：未齐套allocation→配货岗位；待出库shipping→仓库岗位。服务端映射岗位并校验，不赋予额外数据权限。"
               }
             },
             "required": [

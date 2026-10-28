@@ -92,6 +92,41 @@ describe('independently authorized sales performance', () => {
     const duplicate = kind === 'profit' ? { profits: [profit(), profit()] } : { receipts: [receipt(), receipt()] }
     await expect(setup(duplicate).service.getSalesPerformance('u', query)).rejects.toMatchObject({ status: 503 })
   })
+  it('aggregates all authorized department owners and keeps details within the same independent grants', async () => {
+    const all = { ...query, ownerScope: 'all' } as PerformanceQuery
+    const bob = { id: 'bob', name: 'Bob' }
+    const { service } = setup({ account: { businessRole: 'department_manager', businessDepartmentId: 'sales' },
+      profits: [profit(), profit('b', { owner: bob }), profit('hidden'), profit('outside', { department: { id: 'd2', name: 'Private' }, departmentPathIds: ['d2'] })],
+      receipts: [receipt(), receipt('rb', { owner: bob }), receipt('foreign', { tenantId: 't2' })],
+      grant: { allowedProfitIds: ['p1', 'b', 'outside'] } })
+    const summary = await service.getSalesPerformance('u', all)
+    expect(summary).toMatchObject({ query: { ownerScope: 'all' }, selectedOwner: null, canSelectOwner: true, totals: { collectionsAmount: 160, estimatedGrossProfit: 120, receiptCount: 2, profitCount: 2 } })
+    expect(summary.owners.map(row => row.id)).toEqual(['alice', 'bob'])
+    for (const kind of ['receipts', 'profit'] as const) {
+      const first = await service.getSalesPerformanceDetails('u', { ...all, kind, page: 1, pageSize: 1 })
+      const second = await service.getSalesPerformanceDetails('u', { ...all, kind, page: 2, pageSize: 1 })
+      expect(first.total).toBe(2); expect(second.total).toBe(2)
+      expect(first.totals).toEqual(summary.totals); expect(second.totals).toEqual(summary.totals)
+      const rows = kind === 'receipts' ? [...first.receipts, ...second.receipts] : [...first.profits, ...second.profits]
+      expect(rows.map(row => row.owner?.id).sort()).toEqual(['alice', 'bob'])
+    }
+  })
+  it.each([
+    { role: 'admin' },
+    { businessRole: 'none' },
+    { businessRole: 'admin', chartPermissions: [{ chartId: 'sales_performance', visibility: 'inherit', dataScope: 'self', summaryMode: 'inherit', summaryDepartments: [], details: 'inherit', export: 'inherit' }] },
+  ])('does not grant all-owner access from system role or a restricted chart %j', async account => {
+    const { service } = setup({ account })
+    const all = { ...query, ownerScope: 'all' } as PerformanceQuery
+    await expect(service.getSalesPerformance('u', all)).rejects.toMatchObject({ status: 403 })
+    await expect(service.getSalesPerformanceDetails('u', { ...all, kind: 'profit', page: 1, pageSize: 10 })).rejects.toMatchObject({ status: 403 })
+  })
+  it('rejects conflicting and invalid all-owner selectors before querying the provider', async () => {
+    const { service } = setup({ account: { businessRole: 'admin' } })
+    for (const invalid of [{ ownerScope: 'all', ownerId: 'alice' }, { ownerScope: '' }, { ownerScope: null }, { ownerScope: 'self' }]) {
+      await expect(service.getSalesPerformance('u', { ...query, ...invalid } as PerformanceQuery)).rejects.toMatchObject({ status: 400 })
+    }
+  })
   it.each(['binding', 'employee', 'role'])('discards results after %s changes while provider is loading', async field => {
     const { service, provider, account } = setup()
     ;(provider as any).listProfits = async () => { if (field === 'binding') account.fopUserId = 'replacement'; if (field === 'employee') account.businessEmployeeId = 'bob'; if (field === 'role') account.workbenchRoles = []; return [profit()] }

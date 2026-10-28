@@ -7,7 +7,7 @@ import StockCopy from './StockCopy.vue'
 import { getAllocationInventory, type AllocationInventoryPage } from '@/api/allocation-inventory'
 import { fopAccessError } from '@/api/fop-access'
 import { captureSession, isCurrentSession, onSessionReset } from '@/utils/session'
-const props = defineProps<{ orderIds: string[]; warehouseCode?: string }>()
+const props = withDefaults(defineProps<{ orderIds: string[]; warehouseCode?: string; queue?: 'allocation' | 'shipping' }>(), { queue: 'allocation' })
 const emit = defineEmits<{ close: [] }>()
 const { locale } = useI18n(), zh = computed(() => String(locale.value).startsWith('zh'))
 const text = (cn: string, en: string) => zh.value ? cn : en
@@ -24,7 +24,7 @@ async function load() {
   if (!selectedMode.value && !applied.value) return
   loading.value = true
   try {
-    const next = await getAllocationInventory({ ...(selectedMode.value ? { mode: 'selected' as const, orderIds: [...props.orderIds] } : { mode: 'search' as const, search: applied.value }), warehouseCode: warehouse.value || undefined, page: page.value, pageSize: 50 })
+    const next = await getAllocationInventory({ ...(selectedMode.value ? { mode: 'selected' as const, orderIds: [...props.orderIds] } : { mode: 'search' as const, search: applied.value }), queue: props.queue, warehouseCode: warehouse.value || undefined, page: page.value, pageSize: 50 })
     if (closed || ticket !== request || !isCurrentSession(session)) return
     if (next.total > 0 && page.value > Math.ceil(next.total / 50)) { page.value = Math.ceil(next.total / 50); void load(); return }
     result.value = next

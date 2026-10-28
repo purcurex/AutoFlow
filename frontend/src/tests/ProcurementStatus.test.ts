@@ -4,6 +4,12 @@ import { describe, expect, it } from 'vitest'
 import ProcurementStatus from '@/components/autoflow/ProcurementStatus.vue'
 
 describe('procurement workflow facts', () => {
+  it('uses a gentle pending tone for dispatch collaboration instead of a danger alert', () => {
+    const wrapper = mount(ProcurementStatus, { props: { progress: { purchaseOrder: 'ordered', supplierPayment: 'unpaid', alibabaOrder: 'not_pushed', logisticsGate: 'pending_dispatch' }, shipment: 'pending' }, global: { plugins: [createI18n({ legacy: false, locale: 'zh-CN' })] } })
+    expect(wrapper.get('.procurement-stage').text()).toBe('待制作发运单')
+    expect(wrapper.get('.procurement-stage').attributes('data-tone')).toBe('warning')
+    wrapper.unmount()
+  })
   it.each([
     ['not_ordered', 'not_required', 'pending', '待建采购订单'],
     ['partial', 'paid', 'partial', '待建采购订单'],

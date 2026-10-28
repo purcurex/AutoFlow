@@ -547,3 +547,25 @@ allocationDocument唯一引用来自hzkj_alloc_bill.id/billno，按hzkj_order_id
 ### 2026-10-28 交付复核
 
 本次再查本地FOP工作树（HEAD bd4c115c，存在未提交改动，不代表生产版本）：InventoryController#getInventoryList仍为固定样例；4PX成功写hzkj_bill_create_time，疾风markDeliverOrderPushed未见同类出库时间写入。字段级历史证据继续保留，正式部署版本、原始事件持久化及员工网关须IT逐项核对；未修改或拉取FOP库。现行重点见WORKBENCH_DELIVERY_BRIEF.html。
+
+
+## 9.42 备货状态及在途使用边界
+
+- hzkj_stock_order_new.hzkj_orderstatus=1/2是未支付/已支付，billstatus=C才是备货单已审核；两者共同派生界面三阶段，已支付筛选须排除已审。StockOrderPushValidationPlugin第25–30、97–99行已确认下推要求已付+已审，但该校验不能证明审核操作本身已校验付款或已开放在途量。
+- 用户确认：客户支付完成才可审核，审核后备货库存（含在途权益）可用。本次在需求及提示中采用该业务规则。
+- StockInventoryQueryUtil从hzkj_stock_inventory_data读取已存可用/锁定字段；PurorderbillAuditOperatePlugin第216行起可确认采购入库增量。尚未完全确认备货单审核时在途权益的写入/开放入口、反审核释放及与实物余额的关系，须IT联调，不凭入库逻辑认定审核在途实现。
+
+
+## 9.43 备货采购进度与待发货边界
+
+本轮只读核对`ordercenter/plugin/util/StockOrderPurchaseStatusUtil.java`：markPurchased仅在采购数量大于0时置STATUS_PURCHASED（2）；markShipped在收货通知审核后由2推进4；混合采购中/已发货/入库由calculateStatus汇总，部分采购保留待办。元数据hzkj_stock_order_new.dym的2标为已采购。9.43将归一purchased显示为已采购待发货并纳入备货采购队列，覆盖9.37“2排除”的旧规则；3/4继续排除。此源码不证明1688采购款已支付，不可套用履约procurement_shipping的付款推断。真实员工网关仍须核对组合品、混合子分录、取消/反审核和收货通知回写时效；本轮未修改FOP或发布生产接口。
+
+
+### 毛利明细结算单号展示补充（2026-10-28）
+
+`settlementNumber` 对应 `OrderGrossProfitSettlementRecordService.ENTRY_SETTLEMENT_BILL = hzkj_gp_settle_bill`（75、228 行），其值来自 `OrderGrossProfitMonthlyAuditOperationPlugin.auditOne` 读取的月结单 `billno`（71 行）。此字段是展示单号，与接口 `settlementId` 内部标识分离。历史缺失返回 null；不可拼接版本号/截止时间，不得把内部 ID 当单号。取数接口仍需联调验证，未改 FOP 生产源代码。
+
+
+### 备货供应商待发货提醒补充（需求9.48）
+
+备货复用9.34真实采购付款时间口径，新增StockOrder.procurementPaidAt。再次核对PaidOrderAmountSyncService.java 118–125行，1688 baseInfo.payTime参与付款判定，尚未确认其持久化字段。备货单→有效采购→1688订单关系及最早仍待发货付款时间由真实网关联调核对；禁止使用客户收款、到期日、创建/审核或同步时刻代替。缺失返回null，前端不伪造超时。生产FOP源码未修改。

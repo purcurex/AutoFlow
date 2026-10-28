@@ -6,8 +6,12 @@ import { downloadBlob } from '@/utils/export'
 import { formatCurrency } from '@/utils/currency'
 import AllocationInventoryDialog from '@/components/autoflow/AllocationInventoryDialog.vue'
 import SupplierFollowUpDialog from '@/components/autoflow/SupplierFollowUpDialog.vue'
+import WorkbenchListActions from '@/components/autoflow/WorkbenchListActions.vue'
+import WorkbenchStatusBadge from '@/components/autoflow/WorkbenchStatusBadge.vue'
+import WorkbenchExportButton from '@/components/autoflow/WorkbenchExportButton.vue'
 import WorkbenchTaskHeading from '@/components/autoflow/WorkbenchTaskHeading.vue'
 import OrderSortHeader from '@/components/autoflow/OrderSortHeader.vue'
+import SupplierShipmentStatus from '@/components/autoflow/SupplierShipmentStatus.vue'
 import ProcurementStatus from '@/components/autoflow/ProcurementStatus.vue'
 import { canFilterTaskStatus, getTaskStatus, taskStatusHeading, taskStatusLabel, taskStatusOptions } from '@/utils/workbench-status'
 import { canFilterProcurementStage, getProcurementStage, procurementStageLabels } from '@/utils/procurement-stage'
@@ -24,9 +28,9 @@ import OrderAmountTotals from '@/components/ui/OrderAmountTotals.vue'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { ArrowUp, ArrowDown, ArrowUpDown, Check, Copy, ChevronLeft, ChevronRight, PackageSearch, RefreshCw, Search, MessageCircle, Download } from 'lucide-vue-next'
+import { ArrowUp, ArrowDown, ArrowUpDown, Check, Copy, ChevronLeft, ChevronRight, PackageSearch, RefreshCw, Search, MessageCircle } from 'lucide-vue-next'
 import { copyText } from '@/utils/copyText'
-import { procurementPaymentTime, supplierShipmentAging } from '@/utils/procurement-payment'
+import { procurementPaymentTime } from '@/utils/procurement-payment'
 import { getFopOrders, canSortFopQueue, isFopOrderSortBy, type FopOrderSortBy, isFopOrderQueue, isWarehouseStage, matchesFopQueue, type FopOrder, type FopOrderQuery, type FopQueuePage } from '@/api/fop-orders'
 import { fopAccessError } from '@/api/fop-access'
 
@@ -115,9 +119,9 @@ const descriptions = computed(() => ({
   unpaid: text('尚未付款的履约订单，跟进客户付款进度。', 'Unpaid fulfillment orders awaiting customer payment.'),
   procurement: text('跟进采购建单、1688 下单及采购付款，业务处理请在 FOP 完成。', 'Track purchase preparation, 1688 placement and payment. Process orders in FOP.'),
   procurement_shipping: text('采购款已付清，等待供应商发货；超过 24 小时提醒，超过 48 小时预警。', 'Paid purchases awaiting supplier shipment; reminders after 24 hours and alerts after 48 hours.'),
-  allocation_review: text('已齐套的配货单待审核；发运单制作完成后，可单笔或批量审核配货单。', 'Fully allocated documents awaiting approval. Once dispatch preparation is complete, approve allocations individually or in batches.'),
+  allocation_review: text('已齐套的配货单待审核；发运单制作完成后，可单笔或批量审核配货单。请及时处理未完成的发运单后审核配货单。', 'Fully allocated documents awaiting approval. Once dispatch preparation is complete, approve allocations individually or in batches. Please complete unfinished dispatch documents promptly, then approve the allocation documents.'),
   review: text('等待审核的履约订单，可勾选后单笔或批量审核。', 'Fulfillment orders awaiting review. Select orders for individual or batch approval.'),
-  allocation: text('已生成配货单但尚未齐套，可查询即时库存，配货操作请在 FOP 完成。', 'Existing allocation documents awaiting stock completion. Check inventory here and allocate in FOP.'),
+  allocation: text('已生成配货单但尚未齐套，可按选中订单查询即时库存，配货操作请在 FOP 完成。', 'Existing allocation documents awaiting stock completion. Query current inventory for selected orders and allocate in FOP.'),
   dispatch: text('跟进发运单制作与 Shopify 同步，重点关注已审核未同步的订单。', 'Track dispatch preparation and Shopify sync, especially approved orders still awaiting sync.'),
   shipping: text('配货单已审核，等待仓库打包及出库，包含尚未全部出库的订单。', 'Approved allocations awaiting packing and outbound completion, including partially shipped orders.'),
   exceptions: text('尚未发货且存在异常的履约订单。', 'Unshipped fulfillment orders with an active exception.'),
@@ -400,11 +404,6 @@ function orderTime(order: FopOrder): string | null {
   }
   return usesConsumerOrderTime.value ? order.consumerPaidAt ?? null : order.createdAt
 }
-function shipmentAgingHint(order: FopOrder) {
-  const tone = supplierShipmentAging(order.procurementPaidAt, currentTime.value)
-  return tone === 'danger' ? text('采购付款已超过48小时，仍有商品待供应商发货', 'Over 48 hours since procurement payment; supplier shipment still pending')
-    : tone === 'warning' ? text('采购付款已超过24小时，仍有商品待供应商发货', 'Over 24 hours since procurement payment; supplier shipment still pending') : undefined
-}
 const consumerSortHint = computed(() => timeSortField.value === 'reviewedAt' ? sortDirection('reviewedAt') === 'asc' ? text('最早审核在前，点击切换为最新审核在前', 'Oldest approval first; click for newest first') : sortDirection('reviewedAt') === 'desc' ? text('最新审核在前，点击切换为最早审核在前', 'Newest approval first; click for oldest first') : text('点击按最早审核在前排序', 'Click for oldest approval first') : sortDirection(timeSortField.value ?? 'consumerPaidAt') === 'asc'
   ? text('最早下单在前，点击切换为最新下单在前', 'Oldest checkout first; click for newest first')
   : sortDirection(timeSortField.value ?? 'consumerPaidAt') === 'desc' ? text('最新下单在前，点击切换为最早下单在前', 'Newest checkout first; click for oldest first')
@@ -416,37 +415,34 @@ const formatMoney = (amount: number, currency: string) => formatCurrency(amount,
 <template>
   <div class="fulfillment-page" :aria-busy="busy">
       <WorkbenchTaskHeading class="list-heading" :title="(queue ? labels[queue] : text('履约订单', 'Fulfillment orders')) + (queue && !['exceptions', 'allocation_review', 'procurement_shipping'].includes(queue) ? text('清单', ' orders') : '')" :description="queue ? descriptions[queue] : undefined">
-        <div class="refresh-controls"><button class="action-button refresh-orders workbench-refresh" :disabled="busy || !queue || !online" @click="load()"><RefreshCw :size="15" :class="{ 'animate-spin': busy }" />{{ busy ? text('刷新中…', 'Refreshing…') : text('刷新', 'Refresh') }}</button><span class="refresh-status" :class="{ 'sync-paused': !online }">{{ !online ? text('网络已断开 · 自动刷新暂停', 'Offline · Auto-refresh paused') : !visible ? text('页面未激活 · 自动刷新暂停', 'Page inactive · Auto-refresh paused') : text('每 30 秒自动刷新', 'Refreshes every 30 seconds') }}<template v-if="refreshedTime"><br />{{ text('最近刷新', 'Last refreshed') }} {{ refreshedTime }} · UTC+8</template></span></div>
+        <div class="refresh-controls"><button class="workbench-button refresh-orders workbench-refresh" :disabled="busy || !queue || !online" @click="load()"><RefreshCw :size="15" :class="{ 'animate-spin': busy }" />{{ busy ? text('刷新中…', 'Refreshing…') : text('刷新', 'Refresh') }}</button><span class="refresh-status" :class="{ 'sync-paused': !online }">{{ !online ? text('网络已断开 · 自动刷新暂停', 'Offline · Auto-refresh paused') : !visible ? text('页面未激活 · 自动刷新暂停', 'Page inactive · Auto-refresh paused') : text('每 30 秒自动刷新', 'Refreshes every 30 seconds') }}<template v-if="refreshedTime"><br />{{ text('最近刷新', 'Last refreshed') }} {{ refreshedTime }} · UTC+8</template></span></div>
       </WorkbenchTaskHeading>
       <p v-if="queue === 'shipping' && warehouseStage === 'pending_review'" class="read-only-note">{{ text('已齐套未审核已归入配货工作台。', 'Allocation approval is tracked in the Allocation Workbench.') }} <button class="clear-selection" @click="navigate({ warehouseStage: undefined, page: 1 })">{{ text('查看待出库清单', 'View pending outbound') }}</button></p>
       <p v-if="copyMessage" class="copy-feedback" role="status">{{ copyMessage }}</p>
       <section class="list-panel">
-        <div class="approval-toolbar">
-          <button v-if="queue === 'allocation'" type="button" class="action-button" data-testid="open-inventory" :disabled="busy || !online || !data" @click="inventoryOrderIds = [...selectedOrders]"><PackageSearch :size="15" />{{ text('查询即时库存', 'Current inventory') }}</button>
-          <span>{{ text(`已选 ${selectedOrders.length} 笔 · 全选仅选当前页`, `${selectedOrders.length} selected · Select all applies to this page`) }}</span>
-          <button v-if="selectedOrders.length" class="clear-selection" @click="selectedOrders = []">{{ text('清空', 'Clear') }}</button>
-          <div class="export-actions">
-            <button class="action-button" data-testid="export-selected" :disabled="busy || !!exporting || !online || !selectedOrders.length || !data" @click="exportOrders('selected')"><Download :size="15" />{{ exporting === 'selected' ? text('导出中…', 'Exporting…') : text('导出所选', 'Export selected') }}</button>
-            <button class="action-button" data-testid="export-filtered" :disabled="busy || !!exporting || !online || !data?.total" :title="text('导出当前筛选下的全部订单，包含其他分页', 'Export all matching orders across every page')" @click="exportOrders('filtered')"><Download :size="15" />{{ exporting === 'filtered' ? text('导出中…', 'Exporting…') : text('导出筛选结果', 'Export filtered results') }}</button>
-          </div>
-        </div>
+        <WorkbenchListActions :selected-count="selectedOrders.length" @clear="selectedOrders = []">
+          <button v-if="queue === 'allocation' || queue === 'shipping'" type="button" class="workbench-button" data-testid="open-inventory" :disabled="busy || !online || !data" @click="inventoryOrderIds = [...selectedOrders]"><PackageSearch :size="15" />{{ text('查询即时库存', 'Current inventory') }}</button>
+          <template #export>
+            <WorkbenchExportButton :selected-count="selectedOrders.length" :total="data?.total ?? 0" :disabled="busy || !online || !data" :busy="!!exporting" @export="exportOrders" />
+          </template>
+        </WorkbenchListActions>
         <p v-if="exportFeedback" class="export-feedback" :class="{ 'export-error': exportFailed }" :role="exportFailed ? 'alert' : 'status'">{{ exportFeedback }}</p>
         <div class="list-toolbar">
           <div class="query-controls">
-            <button v-if="approvalQueue" type="button" class="action-button workbench-primary" data-testid="open-approval" :disabled="busy || !online || !hasApprovableSelection || !data || !!approvalOrderIds" :title="queue === 'allocation_review' ? text('审核发运单制作已完成的配货单', 'Approve allocations with completed dispatch preparation') : undefined" @click="openApproval"><Check :size="15" />{{ text('审核', 'Approve') }}</button>
+            <button v-if="approvalQueue" type="button" class="workbench-button workbench-primary" data-testid="open-approval" :disabled="busy || !online || !hasApprovableSelection || !data || !!approvalOrderIds" :title="queue === 'allocation_review' ? text('审核发运单制作已完成的配货单', 'Approve allocations with completed dispatch preparation') : undefined" @click="openApproval"><Check :size="15" />{{ text('审核', 'Approve') }}</button>
             <label v-if="hasStatus" class="department-filter status-filter">{{ statusHeading }}
-              <select :value="taskStatus ?? (procurementStage ? `legacy:${procurementStage}` : '')" :disabled="busy" :aria-label="`${statusHeading}${text('筛选', ' filter')}`" @change="navigate({ taskStatus: ($event.target as HTMLSelectElement).value || undefined, procurementStage: undefined, page: 1 })">
+              <select class="workbench-filter-select" :value="taskStatus ?? (procurementStage ? `legacy:${procurementStage}` : '')" :disabled="busy" :aria-label="`${statusHeading}${text('筛选', ' filter')}`" @change="navigate({ taskStatus: ($event.target as HTMLSelectElement).value || undefined, procurementStage: undefined, page: 1 })">
                 <option value="">{{ queue === 'dispatch' ? text('全部待履约', 'All pending fulfillment') : text('全部状态', 'All statuses') }}</option>
                 <option v-if="procurementStage && !taskStatus" :value="`legacy:${procurementStage}`" disabled>{{ procurementStageLabels[procurementStage][zh ? 0 : 1] }}{{ text('（原筛选）', ' (legacy filter)') }}</option>
                 <option v-for="value in statusOptions" :key="value" :value="value">{{ taskStatusLabel(value, queue ?? '')[zh ? 0 : 1] }}</option>
               </select>
             </label>
-          <form class="search-form" @submit.prevent="submitSearch"><label class="search-field"><Search :size="16" /><input v-model="search" type="search" @input="clearSearchIfEmpty" :aria-label="text('搜索履约订单', 'Search fulfillment orders')" :placeholder="searchPlaceholder" :title="searchHint" /></label><button class="action-button workbench-primary" :disabled="busy || !queue">{{ text('查询', 'Search') }}</button></form>
+          <form class="search-form" @submit.prevent="submitSearch"><label class="search-field workbench-search-field"><Search :size="16" /><input v-model="search" type="search" @input="clearSearchIfEmpty" :aria-label="text('搜索履约订单', 'Search fulfillment orders')" :placeholder="searchPlaceholder" :title="searchHint" /></label><button class="workbench-button workbench-primary" :disabled="busy || !queue">{{ text('查询', 'Search') }}</button></form>
           <span class="result-count" aria-live="polite">{{ data ? text(`共 ${data.total} 笔订单`, `${data.total} orders`) : '—' }}</span>
           </div>
           <div class="scope-filters">
-          <label class="department-filter warehouse-filter"><span>{{ text('发货仓库', 'Shipping warehouse') }}</span><select :value="warehouseCode" :disabled="busy || !queue" :aria-label="text('发货仓库', 'Shipping warehouse')" @change="navigate({ warehouseCode: ($event.target as HTMLSelectElement).value || undefined, page: 1 })"><option value="">{{ text('全部', 'All') }}</option><option value="HZ">{{ text('杭州仓', 'Hangzhou') }}</option><option value="SZ">{{ text('深圳仓', 'Shenzhen') }}</option></select></label>
-          <label class="department-filter"><span>{{ text('业务部门', 'Business department') }}</span><select :value="departmentId" :disabled="busy || !queue" :aria-label="text('业务部门', 'Business department')" @change="navigate({ departmentId: ($event.target as HTMLSelectElement).value || undefined, ownerId: undefined, page: 1 })"><option value="">{{ text('营销中心', 'Marketing Center') }}</option><option v-if="departmentId && !departments.some(item => item.id === departmentId)" :value="departmentId" disabled>{{ text('所选业务部门', 'Selected business department') }}</option><option v-for="department in departments" :key="department.id" :value="department.id">{{ department.name }}</option></select></label>
+          <label class="department-filter warehouse-filter"><span>{{ text('发货仓库', 'Shipping warehouse') }}</span><select class="workbench-filter-select" :value="warehouseCode" :disabled="busy || !queue" :aria-label="text('发货仓库', 'Shipping warehouse')" @change="navigate({ warehouseCode: ($event.target as HTMLSelectElement).value || undefined, page: 1 })"><option value="">{{ text('全部', 'All') }}</option><option value="HZ">{{ text('杭州仓', 'Hangzhou') }}</option><option value="SZ">{{ text('深圳仓', 'Shenzhen') }}</option></select></label>
+          <label class="department-filter"><span>{{ text('业务部门', 'Business department') }}</span><select class="workbench-filter-select" :value="departmentId" :disabled="busy || !queue" :aria-label="text('业务部门', 'Business department')" @change="navigate({ departmentId: ($event.target as HTMLSelectElement).value || undefined, ownerId: undefined, page: 1 })"><option value="">{{ text('营销中心', 'Marketing Center') }}</option><option v-if="departmentId && !departments.some(item => item.id === departmentId)" :value="departmentId" disabled>{{ text('所选业务部门', 'Selected business department') }}</option><option v-for="department in departments" :key="department.id" :value="department.id">{{ department.name }}</option></select></label>
           </div>
         </div>
         <div v-if="procurementStage && taskStatus" class="exact-filter legacy-status-filter"><span>{{ text('原采购筛选', 'Legacy purchase filter') }}：{{ procurementStageLabels[procurementStage][zh ? 0 : 1] }}</span><button :disabled="busy" :aria-label="text('清除原采购状态筛选', 'Clear legacy purchase status filter')" @click="navigate({ procurementStage: undefined, page: 1 })">{{ text('清除', 'Clear') }}</button></div>
@@ -462,7 +458,7 @@ const formatMoney = (amount: number, currency: string) => formatCurrency(amount,
             <button v-if="leadingSortField" class="compact-status-sort" :disabled="busy" :aria-label="`${statusHeading}：${sortDirection(leadingSortField) === 'asc' ? text('当前升序，点击降序', 'Ascending; sort descending') : sortDirection(leadingSortField) === 'desc' ? text('当前降序，点击升序', 'Descending; sort ascending') : text('点击按状态升序排列', 'Sort status ascending')}`" @click="sortStatus(leadingSortField)">{{ statusHeading }}<component :is="sortDirection(leadingSortField) === 'asc' ? ArrowUp : sortDirection(leadingSortField) === 'desc' ? ArrowDown : ArrowUpDown" :size="13" /></button>
           </div>
           <div class="table-scroll" :aria-label="text('履约订单明细表', 'Fulfillment orders')">
-            <table>
+            <table class="workbench-task-table">
               <colgroup><col v-for="column in listColumns" :key="column.key" :class="`${column.key}-column`" :style="{ width: column.size }" /></colgroup>
               <thead><tr>
                 <th class="order-cell"><input type="checkbox" class="order-checkbox" :checked="pageSelected" :indeterminate="!!selectedOrders.length && !pageSelected" :disabled="busy || !data.items.length" :aria-label="text('全选当前页订单', 'Select all orders on this page')" @change="togglePage(($event.target as HTMLInputElement).checked)" />{{ text('订单编号', 'Order number') }}</th>
@@ -498,10 +494,10 @@ const formatMoney = (amount: number, currency: string) => formatCurrency(amount,
                 <td :data-label="text('收款日期', 'Payment date')">{{ formatDate(order.paidAt) }}</td>
                 <td v-if="queue === 'allocation_review'" class="dispatch-numbers mono" :data-label="text('配货单号', 'Allocation document number')"><button v-if="order.allocationDocument?.number?.trim()" type="button" class="copy-value" :title="order.allocationDocument.number" :aria-label="`${text('复制配货单号', 'Copy allocation number')} ${order.allocationDocument.number}`" @click="copyValue(order.allocationDocument.number, `allocation:${order.id}`, text('配货单号', 'Allocation number'))"><span>{{ order.allocationDocument.number }}</span><Check v-if="copiedValue === `allocation:${order.id}`" :size="12" /><Copy v-else :size="12" /></button><span v-else>—</span></td>
                 <td v-if="showDispatchNumbers" class="dispatch-numbers mono" :data-label="text('发运单编号', 'Dispatch document number')"><div v-for="document in order.dispatchDocuments" :key="document.id"><button v-if="document.number?.trim()" type="button" class="copy-value" :title="document.number" :aria-label="`${text('复制发运单编号', 'Copy dispatch number')} ${document.number}`" @click="copyValue(document.number, `dispatch:${order.id}:${document.id}`, text('发运单编号', 'Dispatch number'))"><span>{{ document.number }}</span><Check v-if="copiedValue === `dispatch:${order.id}:${document.id}`" :size="12" /><Copy v-else :size="12" /></button><span v-else>—</span></div><span v-if="!order.dispatchDocuments?.length">—</span></td>
-                <td v-if="queue === 'procurement'" :data-label="statusHeading"><ProcurementStatus :progress="order.procurementProgress" :shipment="order.fulfillmentProgress.supplierShipment" /></td>
+                <td v-if="queue === 'procurement'" :data-label="statusHeading"><ProcurementStatus :paid-at="order.procurementPaidAt" :now="currentTime" :progress="order.procurementProgress" :shipment="order.fulfillmentProgress.supplierShipment" /></td>
                 <td v-else-if="queue === 'dispatch' || isAllocation" :data-label="statusHeading"><DispatchStatus :queue="queue ?? undefined" :documents="order.dispatchDocuments" :shopify-sync="order.fulfillmentProgress.shopifySync" /></td>
-                <td v-else-if="queue === 'procurement_shipping'" :data-label="statusHeading"><span class="status-pill supplier-shipment-pill" :data-aging="supplierShipmentAging(order.procurementPaidAt, currentTime)" :title="shipmentAgingHint(order)">{{ statusLabel(order) }}</span></td>
-                <td v-else-if="hasStatus" :data-label="statusHeading"><span class="status-pill pending">{{ statusLabel(order) }}</span></td>
+                <td v-else-if="queue === 'procurement_shipping'" :data-label="statusHeading"><SupplierShipmentStatus class="status-pill" :paid-at="order.procurementPaidAt" :now="currentTime" :shipment="order.fulfillmentProgress.supplierShipment === 'partial' ? 'partial' : 'pending'" /></td>
+                <td v-else-if="hasStatus" :data-label="statusHeading"><WorkbenchStatusBadge class="status-pill pending" tone="info">{{ statusLabel(order) }}</WorkbenchStatusBadge></td>
                 <td :data-label="text('客户名称', 'Customer name')"><button type="button" class="copy-customer" :aria-label="`${text('复制客户名称', 'Copy customer name')} ${order.customerName}`" :title="text('复制客户名称', 'Copy customer name')" @click="copyOrderValue(order, 'customerName')"><span>{{ order.customerName }}</span><Check v-if="copiedValue === `customerName:${order.id}`" :size="14" /><Copy v-else :size="14" /></button></td>
                 <td :data-label="text('店铺', 'Store')">{{ order.storeName }}</td>
                 <td v-if="queue === 'exceptions'" :data-label="text('异常时长', 'Exception age')">{{ order.exception?.hours }}h</td>
@@ -523,19 +519,19 @@ const formatMoney = (amount: number, currency: string) => formatCurrency(amount,
               </TableTotals>
             </table>
           </div>
-          <footer class="pagination"><span>{{ text('按订单分页，多商品在同一订单中展示', 'Paginated by order; items stay grouped') }}</span><div><label>{{ text('每页', 'Per page') }}<select :value="pageSize" :aria-label="text('每页条数', 'Page size')" @change="navigate({ pageSize: ($event.target as HTMLSelectElement).value, page: 1 })"><option v-for="size in [20, 50, 100]" :key="size" :value="size">{{ size }}</option></select></label><button :disabled="page <= 1" :aria-label="text('上一页', 'Previous page')" @click="navigate({ page: page - 1 })"><ChevronLeft :size="16" /></button><span>{{ page }} / {{ pageCount }}</span><button :disabled="page >= pageCount" :aria-label="text('下一页', 'Next page')" @click="navigate({ page: page + 1 })"><ChevronRight :size="16" /></button></div></footer>
+          <footer class="pagination"><span>{{ text('按订单分页，多商品在同一订单中展示', 'Paginated by order; items stay grouped') }}</span><div><label>{{ text('每页', 'Per page') }}<select class="workbench-filter-select" :value="pageSize" :aria-label="text('每页条数', 'Page size')" @change="navigate({ pageSize: ($event.target as HTMLSelectElement).value, page: 1 })"><option v-for="size in [20, 50, 100]" :key="size" :value="size">{{ size }}</option></select></label><button :disabled="page <= 1" :aria-label="text('上一页', 'Previous page')" @click="navigate({ page: page - 1 })"><ChevronLeft :size="16" /></button><span>{{ page }} / {{ pageCount }}</span><button :disabled="page >= pageCount" :aria-label="text('下一页', 'Next page')" @click="navigate({ page: page + 1 })"><ChevronRight :size="16" /></button></div></footer>
         </template>
       </section>
     <RecipientDetailsDialog v-if="recipientOrder?.shippingRecipient" :recipient="recipientOrder.shippingRecipient" :country-code="recipientOrder.shippingCountryCode" :order-number="recipientOrder.orderNumber" @close="recipientOrderId = undefined" />
     <OrderApprovalDialog v-if="approvalOrderIds && approvalQueue" :queue="approvalQueue" :order-ids="approvalOrderIds" @close="closeApproval" @completed="approvalCompleted" />
-      <AllocationInventoryDialog v-if="inventoryOrderIds" :order-ids="inventoryOrderIds" :warehouse-code="warehouseCode || undefined" @close="inventoryOrderIds = undefined" />
+      <AllocationInventoryDialog v-if="inventoryOrderIds" :order-ids="inventoryOrderIds" :queue="queue === 'shipping' ? 'shipping' : 'allocation'" :warehouse-code="warehouseCode || undefined" @close="inventoryOrderIds = undefined" />
       <SupplierFollowUpDialog v-if="followUpOrder" :key="followUpOrder.id" :order-id="followUpOrder.id" :order-number="followUpOrder.orderNumber" @close="followUpOrder = undefined" />
   </div>
 </template>
 
 <style scoped>
 
-.approval-toolbar{display:flex;flex-wrap:wrap;gap:14px;align-items:center;padding:14px 20px;border-bottom:1px solid var(--color-border);background:color-mix(in srgb,var(--color-chart-link) 4%,var(--color-surface));font-size:12px;color:var(--color-text-secondary)}.export-actions{display:flex;flex-wrap:wrap;gap:8px;margin-left:auto}.export-feedback{margin:0;padding:10px 20px;color:var(--color-text-secondary);font-size:12px;border-bottom:1px solid var(--color-border)}.export-error{color:var(--color-warning,#c69568)}.clear-selection{color:var(--color-chart-link)}input.order-checkbox{width:15px;height:15px;min-width:15px;margin-right:10px;padding:0;vertical-align:middle;accent-color:#8398c9}.action-button:disabled{opacity:.45;cursor:not-allowed}
+.export-feedback{margin:0;padding:10px 20px;color:var(--color-text-secondary);font-size:12px;border-bottom:1px solid var(--color-border)}.export-error{color:var(--color-warning,#c69568)}.clear-selection{color:var(--color-chart-link)}input.order-checkbox{width:15px;height:15px;min-width:15px;margin-right:10px;padding:0;vertical-align:middle;accent-color:#8398c9}
 
 .follow-up-cell{position:static;min-width:0;}
 .follow-up-order{display:inline-flex;align-items:center;gap:5px;color:var(--color-chart-link);padding:6px 9px;border-radius:6px;background:color-mix(in srgb,var(--color-chart-link) 9%,transparent);white-space:nowrap}
@@ -551,7 +547,6 @@ const formatMoney = (amount: number, currency: string) => formatCurrency(amount,
 h2 { display: flex; gap: 12px; align-items: center; font-size: 21px; font-weight: 750; letter-spacing: -.03em; }
 .description { margin-top: 8px; font-size: 12px; color: #8490a3; line-height: 1.7; }
 .source-badge { border: 1px solid #f4d59a; color: #ae7616; background: #fff8e8; border-radius: 5px; padding: 3px 7px; font-size: 10px; letter-spacing: .06em; }
-.action-button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; border: 1px solid var(--color-border); background: var(--color-surface); border-radius: 6px; padding: 9px 14px; font-size: 12px; font-weight: 600; white-space: nowrap; }
 
 .queue-tabs { display: flex; gap: 6px; overflow-x: auto; margin-bottom: 18px; }
 .queue-tabs a { display: flex; align-items: center; justify-content: center; gap: 14px; padding: 11px 17px; border: 1px solid transparent; border-radius: 6px; color: #8490a3; font-size: 13px; white-space: nowrap; }
@@ -566,16 +561,16 @@ h2 { display: flex; gap: 12px; align-items: center; font-size: 21px; font-weight
 .query-controls .status-filter { margin-left: 0; flex-shrink: 0; }
 .query-controls .search-form { flex: 0 1 calc(var(--query-search-width) + 64px); width: calc(var(--query-search-width) + 64px); min-width: min(240px, 100%); max-width: 100%; }
 .status-filter select { min-width: 150px; }
-.department-filter select { min-width: 160px; max-width: 280px; padding: 9px 28px 9px 12px; border: 1px solid var(--color-border); border-radius: 6px; background: var(--color-surface); color: var(--color-text); font-size: 12px; }
+.department-filter select { min-width:160px;max-width:280px; }
 .search-form { display: flex; gap: 8px; }
-.search-field { display: flex; align-items: center; gap: 9px; padding: 0 12px; border: 1px solid var(--color-border); border-radius: 6px; color: #8a96a8; flex: 1; min-width: 0; }
-input { width: 100%; min-width: 0; background: transparent; color: var(--color-text); border: 0; padding: 10px 0; font-size: 12px; }
+.search-field { flex:1; }
+
 .result-count { white-space: nowrap; color: #8490a3; font-size: 12px; }
 .exact-filter { padding: 0 20px 16px; display: flex; gap: 16px; font-size: 12px; }
 .exact-filter button, .error-message button { color: #5873d4; text-decoration: underline; }
 .table-scroll { width: 100%; min-width: 0; max-width: 100%; border-top: 1px solid var(--color-border); }
 table { table-layout: fixed; width: 100%; border-collapse: separate; border-spacing: 0; text-align: left; white-space: normal; overflow-wrap: anywhere; font-size: 12px; }
-th { position: sticky; top: 0; z-index: 2; background: var(--color-surface); color: #8490a3; font-size: 11px; font-weight: 600; padding: 14px 8px; border-bottom: 1px solid var(--color-border); }
+th { position: sticky; top: 0; z-index: 2; background: var(--color-surface); padding: 14px 8px; border-bottom: 1px solid var(--color-border); }
 td { border-bottom: 1px solid var(--color-border); padding: 12px 8px; min-width: 0; }
 tbody tr:last-child td { border-bottom: 0; }
 tbody tr:hover td { background: color-mix(in srgb, var(--color-surface) 94%, #5873d4); }
@@ -599,28 +594,18 @@ th.order-cell { z-index: 3; }
 .product-name { display: block; min-width: 0; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.5; }
 .product-sku, .product-variant { font-size: 10px; color: var(--color-text-secondary); line-height: 1.5; white-space: normal; overflow-wrap: anywhere; }
 
-
 .image-fallback { display: flex; align-items: center; justify-content: center; background: #e5eaf1; color: #8893a5; }
 .money, .mono { font-variant-numeric: tabular-nums; }
-.status-pill { display: inline-flex; border-radius: 4px; padding: 4px 7px; font-size: 11px; white-space: nowrap; }
-.supplier-shipment-pill { color: #208477; background: #e5f4f0; }
-.dark .supplier-shipment-pill { color: #79d2b8; background: #203b38; }
-.supplier-shipment-pill[data-aging="warning"] { color: #aa5d1c; background: #fbefdf; }
-.supplier-shipment-pill[data-aging="danger"] { color: #b13e4e; background: #fbe9ec; }
-.dark .supplier-shipment-pill[data-aging="warning"] { color: #dfab72; background: #392e23; }
-.dark .supplier-shipment-pill[data-aging="danger"] { color: #dc919b; background: #38272d; }
-.paid { color: #0f9874; background: #14b8a612; }.unpaid, .refunded { color: #b57b20; background: #f59e0b12; }.pending { color: #5873d4; background: #5873d412; }
+
 .pagination { display: flex; justify-content: space-between; align-items: center; gap: 12px; border-top: 1px solid var(--color-border); padding: 14px 20px; color: #8490a3; font-size: 11px; }
 .pagination div, .pagination label { display: flex; align-items: center; gap: 12px; }.pagination button { padding: 5px; }.pagination select { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 4px; padding: 4px; }
 .state-message { min-height: 260px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: #8490a3; font-size: 13px; padding: 24px; text-align: center; }.error-message { color: #dc6767; }
 .demo-note { margin-top: 14px; color: #8a96a8; font-size: 11px; }
-button:disabled { opacity: .4; cursor: not-allowed; }
+button:disabled { opacity: .45; cursor: not-allowed; }
 @media (max-width: 700px) { .list-heading { align-items: flex-start; }h2 { font-size: 23px; }.list-toolbar { flex-wrap: wrap; padding: 14px; }.query-controls { flex-wrap: wrap; flex-basis: 100%; }.query-controls .search-form { flex-basis: 100%; min-width: 0; }.pagination { flex-wrap: wrap; padding: 14px; }.queue-tabs a { padding: 9px 12px; }.order-cell { position: static; }.exact-filter { flex-wrap: wrap; } }
 
 .dark .source-badge { color: #ebc781; background: #352e23; border-color: #5b4d31; }
-.dark .paid { color: #79d2b8; background: #203b38; }
-.dark .unpaid, .dark .refunded { color: #e5bc7f; background: #392f23; }
-.dark .pending { color: #b2c5f6; background: #25344f; }
+
 .dark .image-fallback { background: #253347; color: #b5c4d9; }
 
 .refresh-controls { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; justify-content: flex-end; }
@@ -694,7 +679,7 @@ a.salesperson-department:hover { color: var(--color-chart-link); }
   .order-record .amount-cell { padding-left: 0; }
   .query-controls .search-form { min-width: 0; flex-basis: 100%; }
   .department-filter { max-width: 100%; }
-  .department-filter select { min-width: 0; max-width: 100%; }
+  .department-filter select { min-width:160px;max-width:280px; }
   .pagination > div { flex-wrap: wrap; }
 }
 .order-recipient{display:flex;flex-direction:column;align-items:flex-start;gap:8px;min-width:0}.recipient-name{border:0;padding:0;background:none;color:var(--color-chart-link);font:inherit;text-align:left;line-height:1.5;white-space:normal;overflow-wrap:anywhere;max-width:100%;cursor:pointer;text-decoration:underline;text-decoration-color:transparent;text-underline-offset:3px}.recipient-name:hover,.recipient-name:focus-visible{text-decoration-color:currentColor}.recipient-empty{color:var(--color-text-secondary)}

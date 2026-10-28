@@ -4,6 +4,12 @@ import { SALES_DEPARTMENTS } from './fop-data.types'
 import { FopStockOrderCandidate, FopStockInventoryCandidate, FopStockOrder, StockFilters, StockOwnership, STOCK_TYPES, STOCK_PURCHASE_STATUSES, StockBalance } from './fop-stock.types'
 
 const string = (value: unknown): value is string => typeof value === 'string' && !!value.trim()
+function stockOrderStatus(row: FopStockOrderCandidate): FopStockOrder['orderStatus'] {
+  if (row.paymentStatus === 'unpaid' && row.reviewStatus !== 'approved') return 'unpaid'
+  if (row.paymentStatus === 'paid' && row.reviewStatus === 'pending') return 'paid'
+  if (row.paymentStatus === 'paid' && row.reviewStatus === 'approved') return 'approved'
+  return null
+}
 function ownership(row: StockOwnership) {
   if (!string(row.customerId) || !string(row.customerName) || typeof row.customerCode !== 'string' || !string(row.owner?.id) || !string(row.owner?.name) || !string(row.department?.id) || !string(row.department?.name)) throw new Error('Invalid stock ownership')
   if (row.departmentPathIds !== undefined && (!Array.isArray(row.departmentPathIds) || row.departmentPathIds.some(id => !string(id)))) throw new Error('Invalid stock ancestry')
@@ -20,7 +26,7 @@ export function publicStockOrder(row: FopStockOrderCandidate): FopStockOrder {
     if (!string(item.sku) || !string(item.name) || !Number.isFinite(item.quantity) || item.quantity <= 0 || item.quantity > Number.MAX_SAFE_INTEGER || typeof item.variant !== 'string' || item.imageUrl !== null && typeof item.imageUrl !== 'string') throw new Error('Invalid stock product')
     return { sku: item.sku, name: item.name, imageUrl: item.imageUrl, variant: item.variant, quantity: item.quantity }
   })
-  return { ...ownership(row), id: row.id, stockNumber: row.stockNumber, stockType: row.stockType, storeName: row.storeName, items, amount: row.amount, currency: row.currency, paidAt, paymentStatus: row.paymentStatus ?? 'unknown', reviewStatus: row.reviewStatus ?? 'unknown', purchaseStatus: row.purchaseStatus, warehouseCode: row.warehouseCode, warehouse: row.warehouse }
+  return { ...ownership(row), id: row.id, stockNumber: row.stockNumber, stockType: row.stockType, storeName: row.storeName, items, amount: row.amount, currency: row.currency, paidAt, paymentStatus: row.paymentStatus ?? 'unknown', reviewStatus: row.reviewStatus ?? 'unknown', orderStatus: stockOrderStatus(row), purchaseStatus: row.purchaseStatus, procurementPaidAt: normalizeBusinessTimestamp(row.procurementPaidAt), warehouseCode: row.warehouseCode, warehouse: row.warehouse }
 }
 function balance(value: StockBalance) {
   if (!value || [value.available, value.locked].some(qty => !Number.isFinite(qty) || qty < 0 || qty > Number.MAX_SAFE_INTEGER)) throw new Error('Invalid inventory quantity')
@@ -45,11 +51,23 @@ export function stockDepartments(rows: StockOwnership[]) {
 }
 export function filterStockOrders(rows: FopStockOrderCandidate[], query: StockFilters): FopStockOrder[] {
   const search = query.search?.trim().toLowerCase()
-  return rows.filter(row => !row.cancelled && (query.queue !== 'procurement' || row.paymentStatus === 'paid' && row.reviewStatus === 'approved' && ['unpurchased', 'partial'].includes(row.purchaseStatus)) && stockScopeMatches(row, query) && (!query.stockType || row.stockType === query.stockType) && (!query.purchaseStatus || row.purchaseStatus === query.purchaseStatus)
+  return rows.filter(row => !row.cancelled && (query.queue !== 'procurement' || row.paymentStatus === 'paid' && row.reviewStatus === 'approved' && ['unpurchased', 'partial', 'purchased'].includes(row.purchaseStatus)) && stockScopeMatches(row, query) && (!query.stockType || row.stockType === query.stockType) && (!query.purchaseStatus || row.purchaseStatus === query.purchaseStatus)
     && (!search || [row.stockNumber, row.customerCode, row.customerName, row.storeName ?? '', row.owner.name, ...row.items.flatMap(i => [i.sku, i.name])].some(v => v.toLowerCase().includes(search))))
-    .map(publicStockOrder).sort((a, b) => {
+    .map(publicStockOrder).filter(row => !query.orderStatus || row.orderStatus === query.orderStatus).sort((a, b) => {
+      const direction = query.sortOrder === 'desc' ? -1 : 1
+      const statusSort = query.sortBy === 'orderStatus' || query.sortBy === 'purchaseStatus'
+      const field = query.sortBy
+      if (field === 'orderStatus' || field === 'purchaseStatus') {
+        const stages: readonly (string | null)[] = field === 'orderStatus'
+          ? ['unpaid', 'paid', 'approved'] : ['unpurchased', 'partial', 'purchased', 'shipped', 'received']
+        const left = stages.indexOf(a[field]), right = stages.indexOf(b[field])
+        // Unknown facts remain last in either direction, never a business stage.
+        if (left < 0 || right < 0) {
+          if (left !== right) return left < 0 ? 1 : -1
+        } else if (left !== right) return (left - right) * direction
+      }
       if (!a.paidAt || !b.paidAt) return a.paidAt ? -1 : b.paidAt ? 1 : a.id.localeCompare(b.id)
-      return (Date.parse(a.paidAt) - Date.parse(b.paidAt)) * (query.sortOrder === 'desc' ? -1 : 1) || a.id.localeCompare(b.id)
+      return (Date.parse(a.paidAt) - Date.parse(b.paidAt)) * (statusSort ? 1 : direction) || a.id.localeCompare(b.id)
     })
 }
 export function stockTotals(rows: FopStockOrder[]) {

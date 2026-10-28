@@ -509,6 +509,8 @@ export class FopDataService {
 
   private performanceOwner(scoped: { receipts: FopReceipt[]; profits: FopProfit[]; initial: Scope }, query: PerformanceQuery, now: Date) {
     const canSelectOwner = ['admin', 'department_manager'].includes(scoped.initial.business.role) && scoped.initial.charts.find(c => c.chartId === 'sales_performance')?.dataScope !== 'self'
+    const allOwners = query.ownerScope === 'all'
+    if (allOwners && !canSelectOwner) throw new ForbiddenException({ code: 'fop_permission_denied', message: 'Multiple salesperson access is not enabled for this account' })
     const byId = new Map<string, PerformanceOwner>()
     const knownProfits = scoped.profits.filter(row => Date.parse(row.knownAt) <= now.getTime() && (!row.approvedAt || Date.parse(row.approvedAt) <= now.getTime())
       && (row.recognitionDate ? row.recognitionDate <= businessDate(now) : row.recognitionMonth <= businessDate(now).slice(0, 7)))
@@ -518,9 +520,9 @@ export class FopDataService {
     const owners = [...byId.values()].sort((a, b) => a.id.localeCompare(b.id))
     const boundId = scoped.initial.business.employeeId
     if (query.ownerId !== undefined && (canSelectOwner ? !byId.has(query.ownerId) : query.ownerId !== boundId)) throw new ForbiddenException({ code: 'fop_permission_denied', message: 'Salesperson is outside the authorized scope' })
-    const ownerId = canSelectOwner ? query.ownerId ?? (boundId && byId.has(boundId) ? boundId : undefined) : boundId ?? undefined
+    const ownerId = allOwners ? undefined : canSelectOwner ? query.ownerId ?? (boundId && byId.has(boundId) ? boundId : undefined) : boundId ?? undefined
     return { canSelectOwner, owners, selectedOwner: ownerId ? byId.get(ownerId) ?? null : null, ownerId,
-      receipts: scoped.receipts.filter(row => row.owner?.id === ownerId), profits: scoped.profits.filter(row => row.owner.id === ownerId) }
+      receipts: scoped.receipts.filter(row => allOwners || row.owner?.id === ownerId), profits: scoped.profits.filter(row => allOwners || row.owner.id === ownerId) }
   }
 
   async getSalesPerformance(userId: string, query: PerformanceQuery): Promise<PerformanceData> {
@@ -709,15 +711,18 @@ export class FopDataService {
 
   async getAllocationInventory(userId: string, query: AllocationInventoryQueryDto) {
     if (query.mode === 'selected' ? !query.orderIds?.length || !!query.search : query.mode !== 'search' || !query.search?.trim() || query.orderIds !== undefined) throw new BadRequestException('Select orders or enter a SKU search')
+    const queue = query.queue === undefined ? 'allocation' : query.queue
+    if (queue !== 'allocation' && queue !== 'shipping') throw new BadRequestException('Invalid inventory queue')
+    const role = queue === 'shipping' ? 'warehouse' : 'allocation'
     const initial = await this.scope(userId)
-    if (!initial.roles.includes('allocation')) throw new ForbiddenException('Allocation workbench access required')
+    if (!initial.roles.includes(role)) throw new ForbiddenException('Inventory workbench access required')
     let permission = await this.permissions(userId, initial)
     let selected: { sku: string; warehouseCode: string; customerId: string }[] | undefined
     if (query.mode === 'selected') {
-      const current = await this.scopedOrders(userId, 'allocation', undefined)
+      const current = await this.scopedOrders(userId, role, undefined)
       await this.assertUnchanged(userId, initial)
       // Use the newest independent inventory grant together with the current order snapshot.
-      const orders = current.orders.filter(o => query.orderIds!.includes(o.id) && matchesQueue(o, 'allocation'))
+      const orders = current.orders.filter(o => query.orderIds!.includes(o.id) && matchesQueue(o, queue))
       if (new Set(orders.map(o => o.id)).size !== new Set(query.orderIds).size) throw new ConflictException({ code: 'inventory_orders_changed', message: 'Selected orders changed; refresh the list and select again' })
       selected = orders.flatMap(o => {
         if (!o.customerId || !['HZ', 'SZ'].includes(o.warehouseCode ?? '') || !o.items.length || o.items.some(i => !i.sku?.trim())) throw new ServiceUnavailableException('Order inventory dimensions are incomplete')
@@ -779,7 +784,7 @@ export class FopDataService {
     const rows = query.mode === 'selected' ? filtered.filter(row => selected.has(row.id)) : filtered
     if (query.mode === 'selected' && rows.length !== selected.size) throw new ConflictException({ code: 'export_selection_changed', message: '所选备货单已变化，请刷新。' })
     if (!rows.length) throw new ConflictException({ code: 'export_empty', message: '没有可导出的备货单。' })
-    const buffer = await buildStockWorkbook(rows, this.provider.source)
+    const buffer = await buildStockWorkbook(rows, this.provider.source, query.queue !== 'procurement')
     const latest = await this.scopedStockOrders(userId, query.queue === 'procurement' ? 'procurement' : 'sales')
     await this.assertUnchanged(userId, initial.initial)
     const current = new Set(filterStockOrders(latest.orders, query).map(row => row.id))

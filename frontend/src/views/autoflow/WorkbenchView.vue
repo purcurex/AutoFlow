@@ -66,7 +66,7 @@ function queueLink(value: string) { return { name: 'RoleWorkbench', params: { ro
           <template v-for="item in workbenchQueues[role]" :key="item">
             <RouterLink :to="queueLink(item)" :class="{ active: choice === item }">{{ queueNames[item][zh ? 0 : 1] }}{{ ['procurement_shipping', 'allocation_review'].includes(item) ? '' : text('清单', item === 'exceptions' ? '' : ' orders') }}</RouterLink>
             <RouterLink v-if="role === 'sales' && item === 'review'" :to="queueLink('stock')" :class="{ active: choice === 'stock' }">{{ text('备货清单', 'Stock orders') }}</RouterLink>
-            <RouterLink v-if="role === 'procurement' && item === 'procurement'" :to="queueLink('stock_procurement')" :class="{ active: choice === 'stock_procurement' }">{{ text('待采购待备货清单', 'Stock procurement') }}</RouterLink>
+            <RouterLink v-if="role === 'procurement' && item === 'procurement_shipping'" :to="queueLink('stock_procurement')" :class="{ active: choice === 'stock_procurement' }">{{ text('备货待采购清单', 'Stock procurement') }}</RouterLink>
           </template>
           <RouterLink v-if="role === 'sales'" :to="queueLink('performance')" :class="{ active: choice === 'performance' }">{{ text('个人收款与毛利', 'Personal receipts and profit') }}</RouterLink>
           <RouterLink :to="queueLink('order-analysis')" :class="{ active: choice === 'order-analysis' || choice === 'order-volume' || choice === 'receipts' }">{{ text('订单分析', 'Order analysis') }}</RouterLink>

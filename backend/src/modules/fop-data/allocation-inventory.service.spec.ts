@@ -44,6 +44,42 @@ it('rejects unauthorized, no longer incomplete and cross-owner selections', asyn
   }
   expect(provider.getAllocationInventory).not.toHaveBeenCalled()
 })
+it('lets warehouse-only users query selected pending outbound orders and SKU inventory', async () => {
+  user.workbenchRoles = ['warehouse']
+  provider.orders[0].fulfillmentProgress = { ...order.fulfillmentProgress!, stockReadiness: 'ready', allocationReview: 'approved' }
+  const selected = await service.getAllocationInventory('u', { ...query, queue: 'shipping' } as AllocationInventoryQueryDto)
+  expect(selected.total).toBe(2)
+  expect(selected.items.map(row => row.customer?.id ?? 'public')).toEqual(['public', 'c1'])
+  const search = await service.getAllocationInventory('u', { mode: 'search', search: 'SKU', queue: 'shipping', page: 1, pageSize: 50 } as AllocationInventoryQueryDto)
+  expect(search.items).toEqual(selected.items)
+})
+it('keeps queue roles and independent inventory authorization separate', async () => {
+  const shipping = { ...query, queue: 'shipping' } as AllocationInventoryQueryDto
+  await expect(service.getAllocationInventory('u', shipping)).rejects.toThrow()
+  user.workbenchRoles = ['warehouse']
+  await expect(service.getAllocationInventory('u', query)).rejects.toThrow()
+  provider.orders[0].fulfillmentProgress = { ...order.fulfillmentProgress!, stockReadiness: 'ready', allocationReview: 'approved' }
+  provider.grant.allocationInventoryScopes = undefined
+  await expect(service.getAllocationInventory('u', shipping)).rejects.toThrow()
+  expect(provider.getAllocationInventory).not.toHaveBeenCalled()
+})
+it('rejects wrong-stage, completed and out-of-scope warehouse selections without partial results', async () => {
+  user.workbenchRoles = ['warehouse']
+  const ready = { ...order.fulfillmentProgress!, stockReadiness: 'ready' as const, allocationReview: 'approved' as const }
+  for (const patch of [
+    {}, { fulfillmentProgress: { ...ready, outbound: 'completed' as const } },
+    { fulfillmentProgress: ready, owner: { id: 'other', name: 'Other' } },
+  ]) {
+    provider.orders = [{ ...order, ...patch }]
+    await expect(service.getAllocationInventory('u', { ...query, queue: 'shipping' } as AllocationInventoryQueryDto)).rejects.toThrow()
+  }
+  expect(provider.getAllocationInventory).not.toHaveBeenCalled()
+})
+it('rejects invalid inventory queue contexts at the HTTP validation boundary', async () => {
+  for (const queue of ['procurement', 'allocation_review', '', null]) {
+    expect((await validate(plainToInstance(AllocationInventoryQueryDto, { ...query, queue }))).length).toBeGreaterThan(0)
+  }
+})
 it('does not derive inventory authorization from an order grant or administrator UI role', async () => {
   provider.grant.allocationInventoryScopes = undefined
   await expect(service.getAllocationInventory('u', query)).rejects.toThrow()

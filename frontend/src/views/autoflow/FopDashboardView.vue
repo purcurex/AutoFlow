@@ -7,7 +7,7 @@ import TableTotals from '@/components/ui/TableTotals.vue'
 import ReceiptChangeValue from '@/components/charts/ReceiptChangeValue.vue'
 import { receiptChanges, totalReceiptChange, formatReceiptChange } from '@/utils/receiptChanges'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { AlertCircle, ClipboardCheck, Clock3, PackageCheck, ShoppingCart, Send, RefreshCw, Truck, Users, Wallet } from 'lucide-vue-next'
+import { AlertCircle, ClipboardCheck, Clock3, PackageCheck, ShoppingCart, Send, Truck, Users, Wallet } from 'lucide-vue-next'
 import { refreshWorkbenchAccess } from '@/composables/useWorkbenchAccess'
 import { RouterLink, useRouter } from 'vue-router'
 import { workbenchOrderLocation } from '@/utils/workbench'
@@ -253,9 +253,8 @@ const salespersonOption = computed(() => collectionsOption(salespersonSeries.val
     <main class="app-page fop-dashboard" :aria-busy="busy">
       <header class="dashboard-heading">
         <div><p class="eyebrow">HYPERZONE · DASHBOARD</p><h1>Dashboard <span class="mock-badge">{{ data?.source === 'mock' ? 'MOCK · DEMO' : text('业务概览', 'BUSINESS OVERVIEW') }}</span></h1></div>
-        <button class="refresh-button" :disabled="busy" @click="refresh"><RefreshCw :class="{ 'animate-spin': busy }" :size="15" />{{ busy ? text('刷新中', 'Refreshing') : text('刷新数据', 'Refresh') }}</button>
       </header>
-      <FopDataAccessNotice @recheck="refresh" />
+      <FopDataAccessNotice :busy="busy" @recheck="refresh" />
       <p v-if="error" class="error-message" role="alert">{{ error }}</p>
 
       <section class="summary-grid" :aria-label="text('履约概览', 'Fulfillment overview')">
@@ -347,8 +346,8 @@ const salespersonOption = computed(() => collectionsOption(salespersonSeries.val
 h1 { display: flex; align-items: center; gap: 12px; font-size: 28px; font-weight: 750; letter-spacing: -.035em; }
 .mock-badge { border: 1px solid #f4d59a; color: #ae7616; background: #fff8e8; border-radius: 5px; padding: 3px 7px; font-size: 10px; letter-spacing: .06em; font-weight: 700; }
 .heading-description { color: #8490a3; font-size: 12px; margin-top: 5px; line-height: 1.6; }
-.refresh-button, .query-button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; border-radius: 6px; padding: 9px 13px; font-size: 12px; font-weight: 600; white-space: nowrap; }
-.refresh-button { background: var(--color-surface); border: 1px solid var(--color-border); }
+.query-button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; border-radius: 6px; padding: 9px 13px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+
 button:disabled { opacity: .5; cursor: wait; }
 .summary-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 16px; margin-bottom: 22px; }.work-calendar-card { grid-column: 1 / -1; }
 .summary-card:hover { transform: translateY(-2px); filter: brightness(1.04); }
@@ -366,7 +365,7 @@ button:disabled { opacity: .5; cursor: wait; }
 @media (max-width: 1024px) { .summary-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }.insights-grid { grid-template-columns: 1fr; }.activity-column { grid-template-columns: repeat(2, minmax(0, 1fr)); }.summary-card:hover { transform: translateY(-2px); filter: brightness(1.04); }
 .exception-row:hover, .task-row:hover { background: #5873d408; }
 .summary-card { display: block; transition: transform .15s, filter .15s; padding: 17px; }.card-top { font-size: 12px; } }
-@media (max-width: 640px) { .dashboard-heading { align-items: flex-start; gap: 12px; }h1 { font-size: 24px; }.heading-description { max-width: 240px; }.summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }.activity-column { grid-template-columns: 1fr; }.panel-top { padding: 16px; }.date-filter { padding: 14px 14px 0; gap: 5px; }.date-filter input { padding: 7px 4px; max-width: 128px; }.query-button { padding: 8px; }.chart-summary small { width: 100%; margin: 0; }.receipt-summary small { width: 100%; margin: 0; }.receipts-chart { padding: 0; height: 355px; }.registration-chart { padding: 0; }.refresh-button { padding: 9px; }.receipts-heading { align-items: flex-start; } }
+@media (max-width: 640px) { .dashboard-heading { align-items: flex-start; gap: 12px; }h1 { font-size: 24px; }.heading-description { max-width: 240px; }.summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }.activity-column { grid-template-columns: 1fr; }.panel-top { padding: 16px; }.date-filter { padding: 14px 14px 0; gap: 5px; }.date-filter input { padding: 7px 4px; max-width: 128px; }.query-button { padding: 8px; }.chart-summary small { width: 100%; margin: 0; }.receipt-summary small { width: 100%; margin: 0; }.receipts-chart { padding: 0; height: 355px; }.registration-chart { padding: 0; }.receipts-heading { align-items: flex-start; } }
 
 /* Amount and MoM views share one layout; only their values change. */
 .receipts-panel .receipt-summary {

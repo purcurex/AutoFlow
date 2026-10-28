@@ -3,14 +3,14 @@ import api from './index'
 import type { FopReceipt } from './fop-receipts'
 
 export type PerformanceGrain = 'month' | 'week' | 'day'
-export interface PerformanceQuery { from: string; to: string; grain: PerformanceGrain; ownerId?: string }
+export interface PerformanceQuery { from: string; to: string; grain: PerformanceGrain; ownerId?: string; ownerScope?: 'all' }
 export interface PerformanceOwner { id: string; name: string; department: { id: string; name: string } }
 /** One period's net profit contribution, never a cumulative order balance. */
 export interface FopProfit {
   id: string; orderId: string; orderNumber: string; customerCode: string; customerName: string
   owner: { id: string; name: string }; department: { id: string; name: string }; salesDepartmentCode: 'sales1' | 'sales2' | 'sales3' | 'sales4'
   recognitionMonth: string; recognitionDate: string | null; knownAt: string
-  status: 'estimated' | 'settled'; settlementId: string | null; version: string
+  status: 'estimated' | 'settled'; settlementId: string | null; settlementNumber?: string | null; version: string
   approvedAt: string | null; cutoffAt: string; freightBasis: 'estimated' | 'frozen'
   incomeAmount: number; adjustmentIncome: number; productCost: number; freightCost: number; refundCost: number; returnCost: number; otherCost: number; previousRecognizedProfit: number; roundingAdjustment: number
   amount: number; currency: 'USD'

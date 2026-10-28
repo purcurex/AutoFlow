@@ -77,6 +77,27 @@ describe('FOP user isolation HTTP API (repository and provider boundaries stubbe
     await request(app.getHttpServer()).post('/api/autoflow/integrations/fop/allocation-inventory/query').send(selected).expect(401)
   })
 
+  it('queries warehouse inventory with its own role and rejects wrong queues and finished orders', async () => {
+    accounts.get(alice).workbenchRoles = ['warehouse']
+    records = [order('outbound-order', { customerId: 'c1', reviewStatus: 'approved', department: { id: 'd1', name: '业务一部' },
+      fulfillmentProgress: { allocationCreated: true, shopifySync: 'pending', supplierShipment: 'shipped', stockReadiness: 'ready', allocationReview: 'approved', outbound: 'partial' } })]
+    const scopes = demoAllocationScopes(records)
+    provider.resolvePermissions = async (subject: any) => ({ subject, allowedOrderIds: records.map(o => o.id), allocationInventoryScopes: scopes })
+    provider.getAllocationInventory = async (subject: any) => ({ subject, complete: true, asOf: '2026-10-28T01:00:00Z', items: [] })
+    const post = (body: object) => request(app.getHttpServer()).post('/api/autoflow/integrations/fop/allocation-inventory/query').auth(token(alice), { type: 'bearer' }).send(body)
+    const selected = { mode: 'selected', queue: 'shipping', orderIds: ['outbound-order'] }
+    const result = await post(selected).expect(200)
+    expect(result.headers['cache-control']).toBe('private, no-store')
+    expect(result.body.items.map((r: any) => r.customer?.id ?? 'public')).toEqual(['public', 'c1'])
+    await post({ mode: 'search', queue: 'shipping', search: 'outbound' }).expect(200)
+    await post({ ...selected, queue: 'allocation' }).expect(403)
+    for (const queue of ['procurement', '', null]) await post({ ...selected, queue }).expect(400)
+    records[0].fulfillmentProgress.outbound = 'completed'
+    await post(selected).expect(409)
+    provider.resolvePermissions = async (subject: any) => ({ subject, allowedOrderIds: records.map(o => o.id) })
+    await post({ mode: 'search', queue: 'shipping', search: 'outbound' }).expect(403)
+  })
+
   it('projects and sorts only actual procurement review timestamps with nulls last before pagination', async () => {
     accounts.get(alice).workbenchRoles = ['procurement', 'sales']
     records = [
@@ -377,6 +398,25 @@ describe('FOP user isolation HTTP API (repository and provider boundaries stubbe
     await get(`${base}/stock-orders?pageSize=21`).expect(400)
     await get(`${base}/stock-orders?warehouseCode=OTHER`).expect(400)
     await get(`${base}/stock-orders?stockType=invalid`).expect(400)
+    for (const sortBy of ['paidAt', 'orderStatus', 'purchaseStatus']) {
+      expect((await get(`${base}/stock-orders?sortBy=${sortBy}&sortOrder=desc`).expect(200)).body.items.map((row: any) => row.id)).toEqual(['stock-1'])
+    }
+    for (const suffix of ['sortBy=invalid', 'sortBy=', 'sortBy=paidAt&sortBy=orderStatus', 'sortOrder=invalid']) await get(`${base}/stock-orders?${suffix}`).expect(400)
+    for (const sortBy of ['bad', null, ['paidAt', 'orderStatus']]) await request(app.getHttpServer()).post(`/api${base}/stock-orders/export`).auth(token(alice), { type: 'bearer' }).send({ mode: 'filtered', sortBy }).expect(400)
+
+    for (const status of ['invalid', 'unknown', '']) await get(`${base}/stock-orders?orderStatus=${status}`).expect(400)
+    await get(`${base}/stock-orders?orderStatus=paid&orderStatus=approved`).expect(400)
+    expect(response.body.items[0].orderStatus).toBeNull()
+    for (const [paymentStatus, reviewStatus, orderStatus] of [['unpaid', 'pending', 'unpaid'], ['paid', 'pending', 'paid'], ['paid', 'approved', 'approved']]) {
+      Object.assign(stock, { paymentStatus, reviewStatus })
+      const filtered = await get(`${base}/stock-orders?orderStatus=${orderStatus}`).expect(200)
+      expect(filtered.body.items.map((r: any) => r.id)).toEqual(['stock-1'])
+      expect(filtered.body.items[0].orderStatus).toBe(orderStatus)
+      expect(filtered.body.totals.orderCount).toBe(1)
+      expect((await get(`${base}/stock-orders?orderStatus=${orderStatus === 'paid' ? 'approved' : 'paid'}`).expect(200)).body.total).toBe(0)
+    }
+    Object.assign(stock, { paymentStatus: 'unknown', reviewStatus: 'unknown' })
+    for (const orderStatus of ['bad', null]) await request(app.getHttpServer()).post(`/api${base}/stock-orders/export`).auth(token(alice), { type: 'bearer' }).send({ mode: 'filtered', orderStatus }).expect(400)
     expect((await get(`${base}/stock-inventory`).expect(200)).body.total).toBe(1)
     await get(`${base}/stock-inventory?customerId=`).expect(400)
     expect((await get(`${base}/stock-inventory?customerSearch=cli&search=SKU`).expect(200)).body.total).toBe(1)
@@ -386,6 +426,12 @@ describe('FOP user isolation HTTP API (repository and provider boundaries stubbe
     expect((await get(`${base}/stock-orders?queue=procurement`).expect(200)).body.total).toBe(0)
     Object.assign(stock, { paymentStatus: 'paid', reviewStatus: 'approved', purchaseStatus: 'partial' })
     expect((await get(`${base}/stock-orders?queue=procurement`).expect(200)).body.total).toBe(1)
+    Object.assign(stock, { purchaseStatus: 'purchased' })
+    const purchased = await get(`${base}/stock-orders?queue=procurement&purchaseStatus=purchased`).expect(200)
+    expect(purchased.body.total).toBe(1)
+    expect(purchased.body.items[0].id).toBe('stock-1')
+    Object.assign(stock, { purchaseStatus: 'shipped' })
+    expect((await get(`${base}/stock-orders?queue=procurement`).expect(200)).body.total).toBe(0)
     accounts.get(alice).workbenchRoles = ['sales']
     expect((await get(`${base}/stock-inventory?customerId=c1`).expect(200)).body.items[0].onHand).toBe(24)
     expect((await get(`${base}/stock-inventory?customerId=other`).expect(200)).body.total).toBe(0)
@@ -901,6 +947,16 @@ describe('FOP user isolation HTTP API (repository and provider boundaries stubbe
       expect(result).toMatchObject({ total: 1, totals: { settledGrossProfit: null, unallocatedCount: 1 }, unallocatedSettlements: [{ month: '2020-01', amount: 60, count: 1 }] })
       for (const suffix of ['&page=0', '&pageSize=101', '&periodId=2021-01', '&ownerId=', '&kind=unknown']) await get(root + '/details' + filters + '&kind=profit' + suffix).expect(400)
       for (const dates of ['from=2020-02-30&to=2020-03-01', 'from=2019-01-01&to=2019-01-02', 'from=2020-01-01&to=2021-01-02']) await get(root + '?' + dates + '&grain=day').expect(400)
+    })
+    it('allows explicit all-owner queries only within the account scope and rejects ambiguous selectors', async () => {
+      for (const path of paths()) {
+        await get(path + '&ownerScope=all').expect(403)
+        for (const suffix of ['&ownerScope=', '&ownerScope=self', '&ownerScope=all&ownerId=bob-owner', '&ownerScope=all&ownerScope=all']) await get(path + suffix, bob).expect(400)
+      }
+      const summary = (await get(root + filters + '&ownerScope=all', bob).expect(200)).body
+      expect(summary).toMatchObject({ query: { ownerScope: 'all' }, selectedOwner: null, totals: { collectionsAmount: 8, settledGrossProfit: 120 } })
+      const page = (await get(root + '/details' + filters + '&ownerScope=all&kind=profit&pageSize=1&page=2', bob).expect(200)).body
+      expect(page.total).toBe(2); expect(page.profits).toHaveLength(1); expect(page.totals).toEqual(summary.totals)
     })
     it('requires separate cost and receipt grants and sales access even for system administrators', async () => {
       provider.resolvePermissions = async (subject: any) => ({ subject, allowedOrderIds: ['o1'], allowedReceiptIds: ['receipt1'], allowedProfitIds: ['p1'], analyticsScopes: ['receipts'] })

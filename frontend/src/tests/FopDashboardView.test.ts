@@ -3,6 +3,7 @@ import { createMemoryHistory, createRouter } from 'vue-router'
 import { createI18n } from 'vue-i18n'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import FopDashboardView from '@/views/autoflow/FopDashboardView.vue'
+import { getFopDataAccess } from '@/api/fop-access'
 import { chartAccessFixture } from './chart-access-fixtures'
 import { getFopDashboard, type FopDashboardData } from '@/api/fop-dashboard'
 
@@ -10,7 +11,7 @@ vi.mock('@/composables/useWorkbenchAccess', () => ({ refreshWorkbenchAccess: vi.
 vi.mock('@/components/order-volume/OrderVolumeAnalysis.vue', () => ({ default: { template: '<div />' } }))
 vi.mock('@/components/freight/FreightAnalysis.vue', () => ({ default: { template: '<div />' } }))
 vi.mock('@/components/layout', () => ({ AppLayout: { template: '<div><slot /></div>' } }))
-vi.mock('@/components/FopDataAccessNotice.vue', () => ({ default: { template: '<div />' } }))
+vi.mock('@/api/fop-access', async importOriginal => ({ ...await importOriginal<object>(), getFopDataAccess: vi.fn().mockResolvedValue({ source: 'fop', status: 'ready', binding: { tenantId: 't', userId: 'u' } }) }))
 vi.mock('@/components/charts/EChart.vue', () => ({ default: { name: 'EChart', props: ['option', 'label'], template: '<div class="chart-stub" />' } }))
 vi.mock('@/api/fop-dashboard', async importOriginal => ({ ...await importOriginal<object>(), getFopDashboard: vi.fn() }))
 const sample: FopDashboardData = {
@@ -27,7 +28,23 @@ function mountView() {
   return mount(FopDashboardView, { global: { plugins: [router, createI18n({ legacy: false, locale: 'zh-CN', messages: {} })], stubs: { RouterLink: RouterLinkStub } } })
 }
 describe('FOP Dashboard interactions', () => {
-  beforeEach(() => { vi.mocked(getFopDashboard).mockReset().mockResolvedValue(dashboardFixture(structuredClone(sample))) })
+  beforeEach(() => { vi.mocked(getFopDataAccess).mockClear(); vi.mocked(getFopDashboard).mockReset().mockResolvedValue(dashboardFixture(structuredClone(sample))) })
+  it('refreshes access and dashboard data from the single status action and waits for data completion', async () => {
+    const wrapper = mountView(); await flushPromises()
+    expect(wrapper.findAll('button').filter(b => /刷新数据|刷新状态/.test(b.text()))).toHaveLength(1)
+    let resolve!: (data: FopDashboardData) => void
+    vi.mocked(getFopDashboard).mockImplementationOnce(() => new Promise(done => { resolve = done }))
+    const button = wrapper.findAll('button').find(b => b.text() === '刷新状态')!
+    await button.trigger('click'); await flushPromises()
+    expect(getFopDataAccess).toHaveBeenCalledTimes(2)
+    expect(getFopDashboard).toHaveBeenCalledTimes(2)
+    expect(button.attributes('disabled')).toBeDefined()
+    resolve({ ...dashboardFixture(structuredClone(sample)), queues: { ...sample.queues, review: 9 } })
+    await flushPromises()
+    expect(wrapper.get('.summary-card strong').text()).toBe('9')
+    expect(button.attributes('disabled')).toBeUndefined()
+    wrapper.unmount()
+  })
   it('independently switches department and salesperson charts to signed monthly changes, including December baselines', async () => {
     vi.mocked(getFopDashboard).mockResolvedValue(dashboardFixture({ ...sample, receipts: { currency: 'USD', previousMonth: '2025-12', months: ['2026-01', '2026-02', '2026-03'],
       marketingCenter: { id: 'marketing', name: '营销中心', previousAmount: 80, amounts: [100, 50, 0] },
@@ -215,7 +232,7 @@ describe('FOP Dashboard interactions', () => {
     expect(wrapper.text()).toContain('该部门在所选年份暂无业务员回款数据')
     await filter.setValue('sales1')
     vi.mocked(getFopDashboard).mockRejectedValueOnce({ code: 'fop_binding_required' })
-    await wrapper.find('button.refresh-button').trigger('click')
+    await wrapper.find('[data-testid="refresh-data-status"]').trigger('click')
     await flushPromises()
     expect(employeeChart()).toBeUndefined()
     expect(wrapper.text()).not.toContain('林知远')
@@ -249,7 +266,7 @@ describe('FOP Dashboard interactions', () => {
     expect((wrapper.find('[aria-label="注册统计维度"]').element as HTMLSelectElement).value).toBe('sales2')
     expect(chart().props('option').xAxis.data).toEqual(['2026-10-20', '2026-10-21'])
     vi.mocked(getFopDashboard).mockRejectedValueOnce({ code: 'fop_binding_required' })
-    await wrapper.find('.refresh-button').trigger('click')
+    await wrapper.find('[data-testid="refresh-data-status"]').trigger('click')
     await flushPromises()
     expect(chart()).toBeUndefined()
     expect(wrapper.text()).not.toContain('周雨桐')
@@ -279,7 +296,7 @@ describe('FOP Dashboard interactions', () => {
     await flushPromises()
     expect(wrapper.text()).toContain('My customer')
     vi.mocked(getFopDashboard).mockRejectedValueOnce({ code: 'fop_binding_required' })
-    await wrapper.find('button.refresh-button').trigger('click')
+    await wrapper.find('[data-testid="refresh-data-status"]').trigger('click')
     await flushPromises()
     expect(wrapper.find('[role=alert]').text()).toContain('业务数据暂不可查看')
     expect(wrapper.text()).not.toContain('My customer')

@@ -4,11 +4,15 @@ import type { FopStockOrderCandidate, FopStockInventoryCandidate } from './fop-s
 import { businessDate } from './fop-business-time'
 
 /** Independent synthetic stock records; never mixed into fulfillment orders or receipt statistics. */
-export function demoStockOrders(orders: readonly FopOrderCandidate[]): FopStockOrderCandidate[] {
+export function demoStockOrders(orders: readonly FopOrderCandidate[], now = new Date()): FopStockOrderCandidate[] {
   const customers = [...new Map(orders.filter(o => o.customerId && o.owner && o.department && o.salesDepartmentCode).map(o => [o.customerId!, o])).values()]
   return customers.flatMap((order, index) => [0, 1].map((type): FopStockOrderCandidate => {
     const date = businessDate(order.createdAt).replaceAll('-', '')
     const id = `${order.tenantId}:stock-order:${order.customerId}:${type}`
+    // Partial procurement is a rare compatibility scenario, not the main workload.
+    const stage = (index * 2 + type) % 20
+    const purchaseStatus = index % 7 === 0 || index % 11 === 0 ? 'unpurchased' : stage < 8 ? 'unpurchased' : stage < 16 ? 'purchased' : stage === 16 ? 'partial' : stage < 19 ? 'shipped' : 'received'
+    const procurementPaidAt = purchaseStatus === 'purchased' ? new Date(Math.max(Date.parse(order.paidAt ?? order.createdAt), now.getTime() - [12, 30, 60][(index + type) % 3] * 3600000)).toISOString() : null
     return { tenantId: order.tenantId, id, stockNumber: `BH${date.slice(2)}${String(index * 2 + type + 1).padStart(6, '0')}`,
       stockType: type ? 'deposit' : 'full_payment', customerId: order.customerId!, customerCode: order.customerCode!, customerName: order.customerName,
       owner: order.owner!, department: order.department!, departmentPathIds: order.departmentPathIds, salesDepartmentCode: order.salesDepartmentCode,
@@ -16,7 +20,7 @@ export function demoStockOrders(orders: readonly FopOrderCandidate[]): FopStockO
       items: order.items.map(item => ({ ...item, quantity: 20 + item.quantity * 10 })), amount: Math.round(order.amount * (type ? 3 : 10) * 100) / 100, currency: 'USD',
       paymentStatus: index % 7 === 0 ? 'unpaid' : 'paid', reviewStatus: index % 7 === 0 || index % 11 === 0 ? 'pending' : 'approved',
       paidAt: index % 7 === 0 ? null : order.paidAt ?? order.createdAt,
-      purchaseStatus: (['unpurchased', 'partial', 'purchased', 'shipped', 'received'] as const)[(index + type) % 5], cancelled: false }
+      purchaseStatus, procurementPaidAt, cancelled: false }
   }))
 }
 export function demoStockInventory(orders: readonly FopOrderCandidate[]): FopStockInventoryCandidate[] {

@@ -94,7 +94,7 @@ describe('role workbench content', () => {
       expect(wrapper.find('h2').text()).toContain('已齐套未审核')
       expect(wrapper.find('.workbench-queues a.active').text()).toBe('已齐套未审核')
     }
-    expect(wrapper.findAll('.workbench-queues a').slice(0, role === 'allocation' ? 2 : 3).map(a => a.text())).toEqual(role === 'allocation' ? ['未齐套清单', label] : ['待采购清单', '待采购待备货清单', label])
+    expect(wrapper.findAll('.workbench-queues a').slice(0, role === 'allocation' ? 2 : 3).map(a => a.text())).toEqual(role === 'allocation' ? ['未齐套清单', label] : ['待采购清单', label, '备货待采购清单'])
     await wrapper.findAll('.workbench-queues a').find(a => a.text() === label)!.trigger('click')
     await flushPromises()
     expect(router.currentRoute.value.query).toEqual({ queue, departmentId: 'd1' })

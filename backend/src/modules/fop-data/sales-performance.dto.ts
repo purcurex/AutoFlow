@@ -6,6 +6,7 @@ export class SalesPerformanceQueryDto {
   @IsString() @Matches(/^\d{4}-\d{2}-\d{2}$/) to: string
   @IsIn(['month', 'week', 'day']) grain: PerformanceGrain
   @IsOptional() @IsString() @Matches(/\S/) @MaxLength(128) ownerId?: string
+  @IsOptional() @IsIn(['all']) ownerScope?: 'all'
 }
 export class SalesPerformanceDetailsDto extends SalesPerformanceQueryDto {
   @IsIn(['receipts', 'profit']) kind: 'receipts' | 'profit'

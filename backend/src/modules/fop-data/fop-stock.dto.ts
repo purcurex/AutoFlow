@@ -1,6 +1,6 @@
 import { Type, Transform } from 'class-transformer'
-import { IsArray, ArrayMaxSize, ArrayMinSize, ArrayUnique, IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min, MinLength } from 'class-validator'
-import { STOCK_TYPES, STOCK_PURCHASE_STATUSES, StockType, StockPurchaseStatus } from './fop-stock.types'
+import { IsArray, ArrayMaxSize, ArrayMinSize, ArrayUnique, IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min, MinLength, ValidateIf } from 'class-validator'
+import { STOCK_TYPES, STOCK_PURCHASE_STATUSES, STOCK_ORDER_STATUSES, STOCK_SORT_FIELDS, StockSortField, StockType, StockPurchaseStatus, StockOrderStatus } from './fop-stock.types'
 
 export class StockScopeDto {
   @IsOptional() @IsString() @MaxLength(200) @Transform(({ value }) => typeof value === 'string' ? value.trim() : value) search?: string
@@ -12,6 +12,8 @@ export class StockFiltersDto extends StockScopeDto {
   @IsOptional() @IsIn(['all', 'procurement']) queue?: 'all' | 'procurement'
   @IsOptional() @IsIn(STOCK_TYPES) stockType?: StockType
   @IsOptional() @IsIn(STOCK_PURCHASE_STATUSES) purchaseStatus?: StockPurchaseStatus
+  @ValidateIf((_object, value) => value !== undefined) @IsIn(STOCK_ORDER_STATUSES) orderStatus?: StockOrderStatus
+  @ValidateIf((_object, value) => value !== undefined) @IsIn(STOCK_SORT_FIELDS) sortBy?: StockSortField
   @IsOptional() @IsIn(['asc', 'desc']) sortOrder?: 'asc' | 'desc'
 }
 export class StockOrdersQueryDto extends StockFiltersDto {

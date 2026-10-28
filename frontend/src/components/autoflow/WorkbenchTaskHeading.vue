@@ -6,7 +6,7 @@ defineProps<{ title: string; description?: string }>()
   <header class="workbench-task-heading">
     <div class="task-heading-copy">
       <h2>{{ title }}</h2>
-      <p v-if="description" class="task-heading-description">{{ description }}</p>
+      <p v-if="description" class="task-heading-description" :title="description">{{ description }}</p>
     </div>
     <slot />
   </header>

@@ -67,7 +67,7 @@
 
 - 最新清单展示以需求9.17为准：状态筛选移至顶部同级；每单最多一项差异状态，固定状态不重复列出。taskStatus服务端先授权再筛选/合计/分页/导出；旧procurementStage保留兼容。采购协同门槛只在采购准备完成、1688待推时显示；多发运单最早进度、任一未知待确认，详情折叠。
 
-- 发运展示最新补充9.18：独立发运单编号列，状态直接显示未创建/暂存/已提交/已审核/已同步，不折叠显示编号。已同步由全部有效关联单审核C和Shopify成功事实共同派生，不改原始A/B/C审核枚举。最新9.26：待履约任何查询、看板与导出均排除已同步，dispatch_synced在发运队列拒绝400，旧前端链接清除；dispatch_approved仅显示已审核未同步，不保留单独已审核选项。配货发运状态同步该派生顺序，其队列定义不变。
+- 发运展示最新补充9.18：独立发运单编号列，状态直接显示未创建/暂存/已提交/已审核/已同步，不折叠显示编号。已同步由全部有效关联单审核C和Shopify成功事实共同派生，不改原始A/B/C审核枚举。最新9.26：待履约任何查询、看板与导出均排除已同步，dispatch_synced在发运队列拒绝400，旧前端链接清除；dispatch_approved仅显示已审核未同步，以柔和红色danger呈现，不保留单独已审核选项。配货发运状态同步该派生顺序，其队列定义不变。
 
 - 9.19清单布局：状态筛选在搜索前最左侧；发运及配货两清单状态仅结果，发运编号独立列。所有清单商品第二列合并名称/SKU/规格。Customer列为订单收货国家国旗＋ISO alpha-2，API shippingCountryCode来自hzkj_orders.hzkj_country.twocountrycode；缺失/非法为null，不取客户资料国家。Excel国家码及商品分组同步，权限/队列谓词不变。
 
@@ -101,7 +101,7 @@
 
 - 最新9.36：销售待审核后增加独立备货清单，全部有效单含已采购/已入库、未付款（paidAt=null）且排除取消；不混入履约queue/看板。独立allowedStockOrderIds/allowedStockInventoryIds与本地范围求交。库存以客户当前归属、客户+SKU+仓库聚合，全款/押金分别可用/锁定，在库=可用+锁定（FOP available已扣锁定）。备货店铺源未找到，待IT确认，允许null；员工网关待发布，见需求9.36。
 
-- 最新9.37：采购工作台独立stock_procurement页签，stock-orders/export queue=procurement仅采购岗位+paid+approved+unpurchased/partial；all为销售全部有效。库存customerId可选、customerSearch+SKU模糊查询、多客户完整过滤分页，sales/procurement及独立库存授权共同生效。原FOP客户必填API需网关扩展，不得截前100。待采购履约列表reviewedAt为真实订单审核时间、可排序，默认paidAt不变；缺失不回退，真实字段映射待IT核对。详见需求9.37。
+- 最新9.37：采购工作台独立stock_procurement页签，stock-orders/export queue=procurement仅采购岗位+paid+approved+unpurchased/partial/purchased（9.43扩展）；all为销售全部有效。库存customerId可选、customerSearch+SKU模糊查询、多客户完整过滤分页，sales/procurement及独立库存授权共同生效。原FOP客户必填API需网关扩展，不得截前100。待采购履约列表reviewedAt为真实订单审核时间、可排序，默认paidAt不变；缺失不回退，真实字段映射待IT核对。详见需求9.37。
 
 ## 2026-10-28：待办摘要与配货即时库存
 
@@ -112,3 +112,27 @@
 - 最新需求9.39：所有工作台页签固定保留76px摘要框和24px页签间距；待办展示已应用查询，分析页展示统计范围说明（不能冒用未实际传给图表的待办筛选）。刷新统一浅蓝，标题使用简短行文案。shipping显示wmsCreatedAt=WMS出库指令成功推送时刻，独立于createdAt；缺失null不回退、队列及收款排序不变、Excel同源。FOP 4PX成功回写hzkj_deliver_order.hzkj_bill_create_time；疾风成功分支仅写hzkj_is_push，本次未确认出库时间回写，须IT联调，JfService的入库时间不可混用。
 
 - 最新需求9.40：十一类清单统一WorkbenchTaskHeading；查询（含库存弹窗）使用workbench-primary履约蓝，备货单号使用color-chart-link。所有岗位页签固定摘要，无标题问号。OpenAPI版本2026-10-28-workbench-delivery，41操作169模型；销售/配货审核已恢复，旧只读入口说明是历史。HTML精简交接入口docs/analytics/WORKBENCH_DELIVERY_BRIEF.html。
+
+- 最新需求9.41：即时库存入口扩展至warehouse/shipping。原query接口可选queue=allocation|shipping，默认allocation兼容；服务端映射配货/仓库岗位并校验对应队列+订单读权+本地范围+独立allocationInventoryScopes。选单必须仍在对应队列，已出库或失权整体409；无选单非空SKU搜索，不自动全库。库存口径及生产网关待联调边界不变。未齐套说明“可按选中订单查询即时库存”，已齐套未审核追加“请及时处理未完成的发运单后审核配货单。”
+
+- 最新需求9.42：销售备货清单增加备货订单状态orderStatus及筛选（unpaid/paid/approved；事实不足或矛盾null）；paid特指paymentStatus=paid且reviewStatus=pending，approved须两者已付+已审。查询/合计/分页/两种导出同条件，采购待备货不重复固定状态列。用户确认支付后才可审核、审核后备货在途权益可用；不等于物理库存可出库。源码目前确认下推已付已审校验及采购入库增量，审核即开放在途链路未完全核实，IT需样本验证；不修改FOP或库存算法。
+
+- 最新需求9.43：“备货待采购清单”统一名称，放在履约“已采购待发货”后；queue=procurement备货纳入unpurchased/partial/purchased（客户已付、备货已审且有效），shipped/received退出。purchased展示“已采购待发货”，不代表采购已付款；FOP markPurchased采购数量形成即可置2。所有十一类待办导出交互按9.44：点击直接导出，有勾选selected、无勾选filtered，授权/全量筛选/输出前复核不变。
+
+- 最新需求9.44：销售备货类型筛选在状态筛选前；两类备货库存查询在操作栏最左侧。导出Excel取消菜单，有勾选直接selected，否则filtered全部已应用筛选跨页，清空勾选恢复filtered。Dashboard仅保留刷新状态，同时刷新接入状态、卡片及业务图表，主数据请求中禁用重复刷新；原接口/权限不变。
+
+- 最新需求9.45：两类备货支持sortBy=paidAt/orderStatus/purchaseStatus及sortOrder，默认paidAt升序。状态按业务阶段（采购已发货先于已入库）升降序，未知双向最后，同状态paidAt升序/id升序；授权筛选后完整排序再分页及Excel。标题说明“在途可用”；全待办摘要维度细竖线分隔两侧14px，76px固定高度。
+
+- 标题说明最新展示约定：全部待办标题下说明固定单行，溢出省略号，悬停显示全文；覆盖此前自然换行规则。
+
+- 个人收款与毛利：selectedOwner为空时使用选择业务员/无可用业务员状态，隐藏全零分期及无效明细入口。选定后按原期间及权限展示收款/毛利弹窗，范围信息可见；不得自动选择首个业务员或放宽访问范围。
+
+- 最新9.46：备货状态/类型标签统一12px并适配深浅主题。个人业绩业务员下拉固定168px、仅姓名，明确选全部传ownerScope=all，与ownerId互斥；仅canSelectOwner账户可用，本人范围请求403。全部仍取账号/部门/逐图及FOP独立收款毛利白名单交集，不是公司完整汇总保证；query.ownerScope=all时selectedOwner=null可正常展示统计与明细，其余null保留选择提示。默认绑定本人、跨账号清理、独立逐账号业务数据配置均不变，不自动给管理/协同账号扩权。
+
+
+### 待办样式及毛利结算号约定（2026-10-28）
+
+履约/备货待办统一复用 WorkbenchListActions、WorkbenchExportButton、WorkbenchStatusBadge 和 workbench-list.css，勿在单页重新定义同类工具栏背景、按钮或状态字号。毛利明细仅展示 settlementNumber（FOP 订单结算分录 hzkj_gp_settle_bill），不以内部 settlementId、版本、截止时间代替；缺失或预计显示 —，核算原字段保留。
+
+
+- 需求9.48：采购状态颜色按处理优先级统一，销售备货/采购备货共用StockProcurementStatus，未采购和部分采购均info柔和蓝色；SupplierShipmentStatus是履约/备货待发货唯一展示组件，正常success、真实采购付款>24h warning、>48h danger。stock purchased/shipped文案与履约一致，列表/筛选/摘要/Excel同步。StockOrder.procurementPaidAt可选且独立于客户paidAt，缺失/非法/未来不误报；不可捏造FOP实际付款时刻。备货类型全款用info浅蓝、押金用neutral灰色，分类标签不使用警示色。
