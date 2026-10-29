@@ -1,5 +1,7 @@
 # HyperZone 项目事实与设计入口
 
+- 2026-10-29 最新FOP联调覆盖先前缺凭证状态：用户提供另一前端凭据，已核对同一测试应用/数据中心；实测增强型getToken成功，access_token头有效。queryOrder进入参数校验（400：缺customerId/type），尚未读到测试订单。组织、3个用户查询、发运、采购共6项接口返回2505未订阅；配货返回2530路由未找到。需后台授权/发布及订单客户内码和单据类型。认证成功不等于Wendy资源权限验证，不绑定代理身份为Wendy、不切换demo。详见docs/FOP_TEST_CONNECTION.md。
+
 - 2026-10-29 鉴权补充：用户确认ID-000015为Wendy的FOP用户编号，不是本地编号或已确认内码。私有资料已补应用身份、accountId及应用编码；仅带身份实测HTTP200但errorCode401“未经授权的访问”，尚缺client_secret/真实代理用户名或有效Token。截图开启代理用户控制，当前应用代理身份不能直接冒充Wendy。凭证仅存Git忽略的本机文件，未绑定账号或切换真实数据。
 
 - 2026-10-29 FOP测试联调：用户提供hyperzone.test.kdgalaxy.com、ierp、R202606.001及4个查询Swagger，路径含/kapi。无凭证实测订单路径返回HTTP519/errorCode2501（不存在应用信息[网关]），仅证明网关可达。凭证、数据中心accountId、Wendy真实身份、测试订单客户ID/类型及组织用户权限契约待补。只读工具npm run fop:test-api，私有backend/.env.fop.local，说明docs/FOP_TEST_CONNECTION.md。未将原始苍穹API冒充员工授权网关，未切换demo或修改FOP源码。
