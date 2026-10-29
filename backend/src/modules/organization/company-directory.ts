@@ -35,7 +35,7 @@ export function directoryPolicy(member: DirectoryMember): DirectoryPolicy {
     })) }
   }
   if (/\/营销中心\/业务[一二三四]部(?:\/|$)/.test(member.primaryDepartment) || paths.some(path => /\/(合作伙伴|外部伙伴)(\/|$)/.test(path))) {
-    return { role: UserRole.USER, businessRole: member.jobTitle === '部门经理' && /\/营销中心\/业务[一二三四]部(?:\/|$)/.test(member.primaryDepartment) ? 'department_manager' : 'salesperson', workbenchRoles: ['sales'], chartPermissions: [] }
+    return { role: UserRole.USER, businessRole: member.jobTitle === '部门经理' && /\/营销中心\/业务[一二三四]部(?:\/|$)/.test(member.primaryDepartment) ? 'department_manager' : 'salesperson', workbenchRoles: [...WORKBENCH_ROLES], chartPermissions: [] }
   }
   return { role: UserRole.USER, businessRole: 'none', workbenchRoles: [], chartPermissions: [] }
 }

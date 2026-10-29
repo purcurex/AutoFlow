@@ -3,6 +3,8 @@ import * as bcrypt from 'bcrypt'
 import { directoryMembers } from '../src/modules/organization/company-directory'
 import { provisionCompanyDirectory } from '../src/database/provision-company-directory'
 import { consolidateLocalDirectory } from '../src/database/consolidate-local-directory'
+import { CompanyDirectoryAllWorkbenches1793200002000 } from '../src/database/migrations/1793200002000-CompanyDirectoryAllWorkbenches'
+import { WORKBENCH_ROLES } from '../src/modules/users/workbench-role'
 import { User } from '../src/modules/users/user.entity'
 import { OrganizationEmployeeEntity } from '../src/modules/organization/organization-employee.entity'
 import { OrganizationService } from '../src/modules/organization/organization.service'
@@ -49,6 +51,7 @@ describe('company directory transaction (isolated test database)', () => {
     const staff = await db.getRepository(User).findOneByOrFail({ email: emails[2] })
     expect(owner.role).toBe('admin'); expect(manager.role).toBe('user')
     expect(manager.businessRole).toBe('department_manager')
+    expect(manager.workbenchRoles).toEqual([...WORKBENCH_ROLES])
     expect(staff.businessRole).toBe('admin')
     expect(staff.chartPermissions.find(p => p.chartId === 'order_volume')?.dataScope).toBe('none')
     expect(await bcrypt.compare('TestOnlyPassword123', manager.password)).toBe(true)
@@ -76,6 +79,28 @@ describe('company directory transaction (isolated test database)', () => {
     conflicting[0].phone = 'changed'
     await expect(provisionCompanyDirectory(db, conflicting, { apply: true, password: 'TestOnlyPassword123', backupDirectory })).rejects.toThrow(/冲突/)
     expect((await db.getRepository(OrganizationEmployeeEntity).findOneByOrFail({ code: members[0].code })).phone).toBe('')
+  })
+  it('upgrades existing company workbench grants without changing scopes or unrelated accounts', async () => {
+    const users = db.getRepository(User)
+    const manager = await users.findOneByOrFail({ email: emails[1] })
+    await users.update(manager.id, { workbenchRoles: ['sales'] })
+    const unrelated = await users.save(users.create({ email: 'directory-unrelated@example.test', username: 'directory-unrelated', password: 'test-only-hash', businessRole: 'salesperson', workbenchRoles: ['sales'] }))
+    createdIds.push(unrelated.id)
+    const before = await users.findOneByOrFail({ id: manager.id })
+    const runner = db.createQueryRunner()
+    try {
+      await runner.connect()
+      await new CompanyDirectoryAllWorkbenches1793200002000().up(runner)
+      const after = await users.findOneByOrFail({ id: manager.id })
+      expect(after).toEqual({ ...before, workbenchRoles: [...WORKBENCH_ROLES], sessionVersion: before.sessionVersion + 1, updatedAt: expect.any(Date) })
+      expect((await users.findOneByOrFail({ id: unrelated.id })).workbenchRoles).toEqual(['sales'])
+      await new CompanyDirectoryAllWorkbenches1793200002000().up(runner)
+      expect((await users.findOneByOrFail({ id: manager.id })).sessionVersion).toBe(after.sessionVersion)
+      await users.update(manager.id, { businessRole: 'none', workbenchRoles: [] })
+      await new CompanyDirectoryAllWorkbenches1793200002000().up(runner)
+      expect((await users.findOneByOrFail({ id: manager.id })).workbenchRoles).toEqual([])
+      await users.update(manager.id, { businessRole: before.businessRole, workbenchRoles: [...WORKBENCH_ROLES] })
+    } finally { await runner.release() }
   })
   it('database accepts none but still rejects malformed policies', async () => {
     const [row] = await db.query(`SELECT autoflow_valid_chart_permissions($1::jsonb) AS valid`, [JSON.stringify([{ chartId: 'order_volume', visibility: 'allow', dataScope: 'none', summaryMode: 'marketing', summaryDepartments: [], details: 'deny', export: 'deny' }])])

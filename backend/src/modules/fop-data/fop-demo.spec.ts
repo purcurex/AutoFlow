@@ -565,6 +565,9 @@ describe('business role data scope', () => {
       const scoped = await manager.getOrders('alice', { queue, page: 1, pageSize: 100 })
       expect(scoped.total).toBeGreaterThan(0)
       expect(scoped.items.every(row => row.owner?.id === 'employee-1')).toBe(true)
+      const personal = await sales.getOrders('alice', { queue, page: 1, pageSize: 100 })
+      expect(personal.total).toBeGreaterThan(0)
+      expect(personal.items.every(row => row.owner?.id === 'employee-1')).toBe(true)
       if (queue in dept.queues) {
         const companion = queue === 'procurement' ? 'procurement_shipping' : queue === 'allocation' ? 'allocation_review' : undefined
         const extra = companion ? (await manager.getOrders('alice', { queue: companion, page: 1, pageSize: 100 })).total : 0
@@ -572,6 +575,7 @@ describe('business role data scope', () => {
       }
       const foreign = (await admin.getOrders('alice', { queue, page: 1, pageSize: 100 })).items.find(row => row.owner?.id === 'employee-2')!
       expect((await manager.getOrders('alice', { queue, page: 1, pageSize: 1, orderNumber: foreign.orderNumber })).total).toBe(0)
+      expect((await sales.getOrders('alice', { queue, page: 1, pageSize: 1, orderNumber: foreign.orderNumber })).total).toBe(0)
     }
   })
   it('grants business administrators every workbench without needing system administrator privileges', async () => {

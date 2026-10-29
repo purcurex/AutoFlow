@@ -1,4 +1,5 @@
 import { directoryMembers, directoryPolicy } from './company-directory'
+import { WORKBENCH_ROLES } from '../users/workbench-role'
 
 const header = ['姓名', '账号', '英文名', '职务', '部门', '性别', '手机', '座机', '邮箱', '地址', '企业邮箱', '视频号', '激活状态', '禁用状态']
 const row = (name = 'Alice', job = '外贸业务员', department = '华智云服/营销中心/业务一部') => ['测试员工', `wx_${name}`, name, job, department, '女', '13000000000', '', 'old@example.test', '', '', '', '已激活', '']
@@ -8,7 +9,7 @@ describe('company directory import rules', () => {
     const member = parse(row('Alex', '营销伙伴', '华智云服/营销中心/业务三部;华智云服/合作伙伴'))[0]
     expect(member).toMatchObject({ email: 'alex@hzdrop.com', code: 'wx_Alex', englishName: 'Alex', primaryDepartment: '华智云服/营销中心/业务三部', phone: '13000000000' })
     expect(member.profile.departmentPaths).toHaveLength(2)
-    expect(directoryPolicy(member)).toMatchObject({ role: 'user', businessRole: 'salesperson', workbenchRoles: ['sales'] })
+    expect(directoryPolicy(member)).toMatchObject({ role: 'user', businessRole: 'salesperson', workbenchRoles: [...WORKBENCH_ROLES] })
   })
   it('recognizes all five explicit admins regardless of their department', () => {
     for (const name of ['Ethan', 'Robin', 'Nora', 'Mason', 'XinKe']) expect(directoryPolicy(parse(row(name, '部门经理', '华智云服/信息管理部'))[0])).toMatchObject({ role: 'admin', businessRole: 'admin', chartPermissions: [] })
@@ -17,6 +18,9 @@ describe('company directory import rules', () => {
     expect(directoryPolicy(parse(row('Cici', '部门经理'))[0]).businessRole).toBe('department_manager')
     expect(directoryPolicy(parse(row('Partner', '营销伙伴', '华智云服/合作伙伴'))[0]).businessRole).toBe('salesperson')
     for (const [job, department] of [['HR', '华智云服/总经办'], ['业务助理', '华智云服/供应链中心/商品管理']]) expect(directoryPolicy(parse(row('Staff', job, department))[0])).toMatchObject({ businessRole: 'none', workbenchRoles: [] })
+  })
+  it.each([['Seller', '外贸业务员'], ['Cici', '部门经理'], ['Partner', '营销伙伴']])('opens all five workbenches for %s without widening business or chart scope', (name, job) => {
+    expect(directoryPolicy(parse(row(name, job))[0])).toEqual({ role: 'user', businessRole: job === '部门经理' ? 'department_manager' : 'salesperson', workbenchRoles: [...WORKBENCH_ROLES], chartPermissions: [] })
   })
   it.each(['采购管理', '订单管理', '物流管理', '杭州仓', '深圳仓', '信息管理部'])('keeps %s on all operational lists but only department analytics', department => {
     const policy = directoryPolicy(parse(row('Staff', '部门经理', `华智云服/${department}`))[0])
