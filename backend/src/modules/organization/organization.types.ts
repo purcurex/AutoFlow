@@ -10,6 +10,8 @@ export interface OrganizationNode {
 }
 
 export interface OrganizationEmployee {
+  salesOwner?: boolean
+  directoryProfile?: import('./company-directory').DirectoryProfile | null
   accountId?: string | null
   jobTitle?: string
   phone?: string

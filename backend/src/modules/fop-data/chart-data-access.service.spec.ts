@@ -32,6 +32,23 @@ function setup(changes: object = {}) {
   return { service, provider, account, orders, receipts, grant }
 }
 describe('chart authorization and scoped analytics', () => {
+  it('keeps operational orders accessible while restricting analytics to anonymous department aggregates', async () => {
+    const { service, provider } = setup({ businessRole: 'admin', chartPermissions: [
+      ...['registrations', 'department_receipts', 'order_volume'].map(id => override(id, { dataScope: 'none', summaryMode: 'marketing', details: 'deny' })),
+      ...['customer_orders', 'salesperson_receipts', 'sales_performance', 'freight'].map(id => override(id, { visibility: 'deny' })),
+    ] })
+    const listing = await service.getOrders('u', { queue: 'shipping', page: 1, pageSize: 20 } as any)
+    expect(listing).toHaveProperty('items')
+    const read = jest.spyOn(provider, 'listOrders')
+    const summary = await service.getOrderVolume('u', { ...volume, category: 'organization', view: 'summary' })
+    expect(summary).toMatchObject({ total: 48, summaryOnly: true, customerCount: null, options: { objects: [] } })
+    expect(read).not.toHaveBeenCalled()
+    expect(JSON.stringify(summary)).not.toContain('secret')
+    for (const category of ['customer', 'salesperson', 'carrier'] as const) await expect(service.getOrderVolume('u', { ...volume, category })).rejects.toMatchObject({ status: 403 })
+    await expect(service.getOrderVolumeDetails('u', { ...volume, category: 'organization', workbenchRole: 'sales', page: 1, pageSize: 10 })).rejects.toMatchObject({ status: 403 })
+    await expect(service.searchOrderCustomers('u', { keyword: 'customer', page: 1, pageSize: 10 })).rejects.toMatchObject({ status: 403 })
+    await expect(service.getSalesPerformance('u', { from: period.from, to: period.to, grain: 'month' })).rejects.toMatchObject({ status: 403 })
+  })
   beforeEach(() => jest.useFakeTimers().setSystemTime(new Date('2026-03-15T04:00:00Z')))
   afterEach(() => jest.useRealTimers())
   it('denies direct chart, customer search and detail routes independently of record grants', async () => {

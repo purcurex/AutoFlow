@@ -92,6 +92,16 @@ onBeforeUnmount(() => { active = false; clearPasswords(); off(); disposeDropdown
             <label><span class="field-label">{{ text('职务', 'Job title') }}</span><input v-model="draft.jobTitle" class="input" :aria-label="text('职务', 'Job title')" maxlength="100" :disabled="!!employee && !edit" /></label>
             <label><span class="field-label">{{ text('手机', 'Phone') }}</span><input v-model="draft.phone" class="input" :aria-label="text('手机', 'Phone')" maxlength="40" :disabled="!!employee && !edit" /></label>
           </div>
+          <details v-if="employee?.directoryProfile" class="employee-note" data-directory-profile>
+            <summary>{{ text('通讯录原始资料', 'Directory source details') }}</summary>
+            <p>{{ text('英文名', 'English name') }}：{{ employee.directoryProfile.englishName }} · {{ text('原账号', 'Source account') }}：{{ employee.directoryProfile.sourceAccount }}</p>
+            <p>{{ text('原部门及兼任部门', 'Original and additional departments') }}：{{ employee.directoryProfile.departmentPaths.join('；') }}</p>
+            <p v-if="employee.directoryProfile.gender">{{ text('性别', 'Gender') }}：{{ employee.directoryProfile.gender }}</p>
+            <p v-if="employee.directoryProfile.originalEmail">{{ text('原联系邮箱', 'Original contact email') }}：{{ employee.directoryProfile.originalEmail }}</p>
+            <p v-if="employee.directoryProfile.enterpriseEmail">{{ text('原企业邮箱', 'Original enterprise email') }}：{{ employee.directoryProfile.enterpriseEmail }}</p>
+            <p v-if="employee.directoryProfile.telephone">{{ text('座机', 'Telephone') }}：{{ employee.directoryProfile.telephone }}</p>
+            <p v-if="employee.directoryProfile.address">{{ text('地址', 'Address') }}：{{ employee.directoryProfile.address }}</p>
+          </details>
           <p v-if="edit" class="employee-note">{{ text('修改员工岗位档案不会改变账号权限；请在账号权限中独立分配。邮箱修改会同步到登录账号。', 'Employee roles do not change account grants. Email changes also update the login account.') }}</p>
           <p class="field-label mt-4">{{ text('工作台岗位', 'Workbench roles') }}</p><div class="employee-roles"><label v-for="role in workbenchRoles" :key="role"><input v-model="draft.workbenchRoles" type="checkbox" :value="role" :disabled="!!employee && !edit" />{{ workbenchNames[role][zh ? 0 : 1] }}</label></div>
         </fieldset>

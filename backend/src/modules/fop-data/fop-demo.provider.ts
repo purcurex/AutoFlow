@@ -16,7 +16,7 @@ import { FopAnalytics, FopDataProvider, FopIdentity, FopOrderCandidate, Dispatch
 
 interface DemoWorkspace {
   nodes: { id: string; parentId: string | null; name: string; kind: 'organization' | 'department'; sortOrder: number }[]
-  employees: { id: string; name: string; code: string; email: string; departmentId: string; workbenchRoles: readonly string[] }[]
+  employees: { id: string; name: string; code: string; email: string; departmentId: string; workbenchRoles: readonly string[]; salesOwner?: boolean }[]
 }
 interface WorkspaceReader { getWorkspace(ownerUserId: string): Promise<DemoWorkspace> }
 
@@ -196,7 +196,7 @@ export class DemoFopDataProvider extends FopDataProvider {
       const workspace = await this.organizations.getWorkspace(identity.userId)
       for (let at = Date.parse(`${query.from}T00:00:00Z`); at <= Date.parse(`${query.to}T00:00:00Z`); at += DAY) {
         const date = new Date(at).toISOString().slice(0, 10)
-        for (const owner of workspace.employees.filter(owner => owner.workbenchRoles.includes('sales'))) {
+        for (const owner of workspace.employees.filter(owner => owner.workbenchRoles.includes('sales') && owner.salesOwner !== false)) {
           const code = salesDepartmentFor(workspace, owner.departmentId)
           if (!code) continue
           const count = createHash('sha256').update(`${identity.tenantId}:registration:${owner.id}:${date}`).digest().readUInt32BE(0) % 18
@@ -244,7 +244,7 @@ export class DemoFopDataProvider extends FopDataProvider {
     if (!Number.isFinite(start) || !Number.isFinite(end) || start > end || end - start > 365 * DAY) throw new Error('Invalid demo analytics range')
     if (permission.analyticsScopes?.includes('registrations')) {
       const workspace = await this.organizations.getWorkspace(identity.userId)
-      const employees = workspace.employees.filter(owner => owner.workbenchRoles.includes('sales')).map(owner => ({ owner, department: salesDepartmentFor(workspace, owner.departmentId) })).filter(item => item.department)
+      const employees = workspace.employees.filter(owner => owner.workbenchRoles.includes('sales') && owner.salesOwner !== false).map(owner => ({ owner, department: salesDepartmentFor(workspace, owner.departmentId) })).filter(item => item.department)
       // One authorized ledger drives totals, departments and salesperson series.
       for (let at = start; at <= end; at += DAY) {
         const date = new Date(at).toISOString().slice(0, 10)
@@ -263,7 +263,7 @@ export class DemoFopDataProvider extends FopDataProvider {
   private async orders(identity: Readonly<FopIdentity>): Promise<FopOrderCandidate[]> {
     const workspace = await this.organizations.getWorkspace(identity.userId)
     // Customers belong to salespeople. Collaboration roles process those orders through their business scope.
-    const employees = workspace.employees.filter(employee => employee.workbenchRoles.includes('sales'))
+    const employees = workspace.employees.filter(employee => employee.workbenchRoles.includes('sales') && employee.salesOwner !== false)
       .sort((a, b) => a.code.localeCompare(b.code) || a.id.localeCompare(b.id))
     if (!employees.length) return []
     const nodes = new Map(workspace.nodes.map(node => [node.id, node]))

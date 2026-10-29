@@ -4,11 +4,13 @@ import { UsersService } from './users.service'
 import { UserRole } from './user.entity'
 import { isWorkbenchRole, WORKBENCH_ROLES, WorkbenchRole } from './workbench-role'
 import { ListWorkbenchAccountsDto } from './dto/workbench.dto'
+import { ChartId, resolveChartAccess } from './chart-permissions'
 
 export interface WorkbenchAccess {
   roles: WorkbenchRole[]
   isAdmin: boolean
   businessRole: BusinessRole
+  chartVisibility: Record<ChartId, boolean>
 }
 
 @Injectable()
@@ -26,6 +28,7 @@ export class WorkbenchAccessService {
       roles: businessRole === 'none' ? [] : businessRole === 'admin' ? [...WORKBENCH_ROLES] : (user.workbenchRoles ?? []).filter(isWorkbenchRole),
       isAdmin,
       businessRole,
+      chartVisibility: Object.fromEntries(resolveChartAccess(user).map(chart => [chart.chartId, chart.visible])) as Record<ChartId, boolean>,
     }
   }
 

@@ -22,7 +22,18 @@ const router = useRouter()
 const { locale } = useI18n()
 const zh = computed(() => String(locale.value).startsWith('zh'))
 const text = (cn: string, en: string) => zh.value ? cn : en
-const { roles } = useWorkbenchAccess()
+const { roles, access: workbenchAccess } = useWorkbenchAccess()
+// Older backends omit the display hint; all data endpoints still enforce access.
+const chartVisible = (id: import('@/api/fop-chart-access').ChartId) => workbenchAccess?.value?.chartVisibility === undefined || workbenchAccess.value.chartVisibility[id] === true
+const analyticsAllowed = computed(() => {
+  const page = choice.value
+  if (page === 'performance' || page === 'overview') return chartVisible('sales_performance')
+  if (page === 'freight') return chartVisible('freight')
+  if (page === 'receipts') return chartVisible('salesperson_receipts')
+  if (page === 'order-volume') return chartVisible('order_volume')
+  if (page === 'order-analysis') return chartVisible('order_volume') || chartVisible('customer_orders')
+  return true
+})
 const dataRevision = ref(0)
 const filterLabels = ref<Record<string, string>>({})
 function updateFilterLabels(rows: { id: string; name: string }[]) { for (const row of rows) filterLabels.value[row.id] = row.name }
@@ -68,18 +79,19 @@ function queueLink(value: string) { return { name: 'RoleWorkbench', params: { ro
             <RouterLink v-if="role === 'sales' && item === 'review'" :to="queueLink('stock')" :class="{ active: choice === 'stock' }">{{ text('备货清单', 'Stock orders') }}</RouterLink>
             <RouterLink v-if="role === 'procurement' && item === 'procurement_shipping'" :to="queueLink('stock_procurement')" :class="{ active: choice === 'stock_procurement' }">{{ text('备货待采购清单', 'Stock procurement') }}</RouterLink>
           </template>
-          <RouterLink v-if="role === 'sales'" :to="queueLink('performance')" :class="{ active: choice === 'performance' }">{{ text('个人收款与毛利', 'Personal receipts and profit') }}</RouterLink>
-          <RouterLink :to="queueLink('order-analysis')" :class="{ active: choice === 'order-analysis' || choice === 'order-volume' || choice === 'receipts' }">{{ text('订单分析', 'Order analysis') }}</RouterLink>
-          <RouterLink :to="queueLink('freight')" :class="{ active: choice === 'freight' }">{{ text('物流运费', 'Actual freight') }}</RouterLink>
-          <RouterLink v-if="role === 'sales'" :to="queueLink('overview')" :class="{ active: choice === 'overview' }">{{ text('客户开发概览', 'Prospecting overview') }}</RouterLink>
+          <RouterLink v-if="role === 'sales' && chartVisible('sales_performance')" :to="queueLink('performance')" :class="{ active: choice === 'performance' }">{{ text('个人收款与毛利', 'Personal receipts and profit') }}</RouterLink>
+          <RouterLink v-if="chartVisible('order_volume') || chartVisible('customer_orders')" :to="queueLink('order-analysis')" :class="{ active: choice === 'order-analysis' || choice === 'order-volume' || choice === 'receipts' }">{{ text('订单分析', 'Order analysis') }}</RouterLink>
+          <RouterLink v-if="chartVisible('freight')" :to="queueLink('freight')" :class="{ active: choice === 'freight' }">{{ text('物流运费', 'Actual freight') }}</RouterLink>
+          <RouterLink v-if="role === 'sales' && chartVisible('sales_performance')" :to="queueLink('overview')" :class="{ active: choice === 'overview' }">{{ text('客户开发概览', 'Prospecting overview') }}</RouterLink>
         </nav>
-        <SalesOverview v-if="choice === 'overview' && role === 'sales'" />
+        <div v-if="!analyticsAllowed" class="access-message" role="alert">{{ text('暂无此功能权限，请选择其他工作台功能。', 'This feature is not available for your account.') }}</div>
+        <SalesOverview v-else-if="choice === 'overview' && role === 'sales'" />
         <SalesPerformanceView v-else-if="choice === 'performance' && role === 'sales'" :key="dataRevision" />
         <StockOrdersView v-else-if="choice === 'stock' && role === 'sales' || choice === 'stock_procurement' && role === 'procurement'" :key="`${dataRevision}-${choice}`" :procurement="role === 'procurement'" @filter-labels="updateFilterLabels" />
         <FopFreightView v-else-if="choice === 'freight'" :key="dataRevision" />
         <FopReceiptsView v-else-if="choice === 'receipts'" :key="dataRevision" />
         <OrderVolumeOrdersView v-else-if="choice === 'order-volume'" :key="dataRevision" />
-        <div v-else-if="choice === 'order-analysis'"><OrderVolumeAnalysis :revision="dataRevision" /><OrderVolumeAnalysis customer :revision="dataRevision" /></div>
+        <div v-else-if="choice === 'order-analysis'"><OrderVolumeAnalysis v-if="chartVisible('order_volume')" :revision="dataRevision" /><OrderVolumeAnalysis v-if="chartVisible('customer_orders')" customer :revision="dataRevision" /></div>
         <FopOrdersView @filter-labels="updateFilterLabels" v-else-if="validChoice" :key="dataRevision" :search-recovery="searchRecovery" :recover-page="recoverOrderPage" @clear-search-recovery="clearSearchRecovery" />
         <div v-else class="access-message" role="alert">{{ text('该清单不属于当前工作台，请选择上方功能。', 'This list does not belong to the selected workbench. Choose a function above.') }}</div>
       </template>

@@ -75,6 +75,8 @@ export class User {
   password: string
 
   @Column({ name: 'account_disabled', default: false }) accountDisabled: boolean
+  // Explicit server-maintained directory link for non-employee administrators.
+  @Column({ name: 'organization_workspace_owner_id', type: 'uuid', nullable: true }) organizationWorkspaceOwnerId: string | null
   @Column({ name: 'session_version', type: 'integer', default: 0 }) sessionVersion: number
 
   @Column({ unique: true })

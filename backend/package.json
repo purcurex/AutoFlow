@@ -19,7 +19,9 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
-    "test:e2e": "jest --config test/jest-e2e.config.js --runInBand"
+    "test:e2e": "jest --config test/jest-e2e.config.js --runInBand",
+    "directory:import": "ts-node src/database/import-company-directory.ts",
+    "directory:finalize-local": "ts-node src/database/finalize-local-directory.ts"
   },
   "keywords": [],
   "author": "",

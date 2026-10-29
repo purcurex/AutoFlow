@@ -89,7 +89,7 @@ npm run db:migrate
 npm run seed --workspace=backend
 unset PGPASSWORD
 echo
-echo 'Demo account initialized: test@autoflow.local / AutoFlowLocal123'
+echo 'Account initialization checked. Existing company directory accounts and passwords are preserved.'
 echo 'Starting services. Once Vite and Nest report ready, open http://localhost:5173/login'
 echo 'Keep this terminal open; Ctrl+C stops the app and the database started by this script.'
 npm run dev

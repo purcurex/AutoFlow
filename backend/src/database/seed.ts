@@ -13,6 +13,14 @@ async function seed() {
   console.log('Database connected')
 
   const userRepository = AppDataSource.getRepository(User)
+  // An explicitly initialized company directory must never recreate the retired
+  // synthetic account or reset the administrator password on local restart.
+  if (await userRepository.existsBy({ email: 'admin@hzdrop.com' })
+    || (await AppDataSource.query("SELECT EXISTS(SELECT 1 FROM organization_employees WHERE directory_profile->>'source' = 'company-directory') AS ready"))[0].ready) {
+    console.log('Company directory already initialized; demo account seeding skipped.')
+    await AppDataSource.destroy()
+    return
+  }
   const noteRepository = AppDataSource.getRepository(Note)
   const folderRepository = AppDataSource.getRepository(Folder)
 

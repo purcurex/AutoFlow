@@ -1,5 +1,7 @@
 # HyperZone 项目事实与设计入口
 
+- 2026-10-28 通讯录账号落地：本机保留36名员工＋唯一非员工管理员admin@hzdrop.com；旧演示账号与无关员工已按用户要求清理，笔记/文件夹转交测试管理员。Ethan/Robin/Nora/Mason/XinKe为员工管理员；Cici/Dolly/Wendy/Eileen为销售部门经理，其余销售/伙伴本人范围。HR与商品部门无业务权限，信息管理与订单/采购/物流/仓库同属协同查看：全部待办及订单读权，分析只开放各业务部门汇总，不开放客户/业务员分析、个人业绩或物流财务明细。通过chartPermissions.dataScope=none明确隔离汇总与记录，FOP独立资源授权仍是上限。新账号均未绑定真实FOP。通讯录来源资料仅管理员可读，兼任部门不自动扩权。初始化/协同开发/云端联调步骤见docs/COMPANY_DIRECTORY_SETUP.md；真实通讯录、口令和备份不入Git，迁移与启动不自动导入人员。重复导入保留密码、FOP绑定和外部业务员工/部门ID；目录归属使用主部门。非员工管理员通过服务端organizationWorkspaceOwnerId共享公司目录，不创建虚假员工。
+
 - 本前端项目：HyperZone 智能办公平台，工程目录 `/Library/VSCode/AutoFlow/work-app`。
 - FOP 后台不是通用第三方 ERP：它是基于金蝶云苍穹平台自研的 **HyperZone** 应用。
 - FOP 后台代码库：`/Library/VSCode/dtr5b`。设计接口、统计口径、字段或业务规则前，先读取该库 `AGENTS.md`，核对实体元数据、枚举、校验和 Java 插件实现。

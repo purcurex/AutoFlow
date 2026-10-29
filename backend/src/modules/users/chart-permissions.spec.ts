@@ -12,6 +12,11 @@ const override = (extra: Partial<ChartPermissionOverride> = {}): ChartPermission
 const access = (user: User, chartId: string) => resolveChartAccess(user).find(chart => chart.chartId === chartId)
 
 describe('account chart policy', () => {
+  it('allows department aggregates without record analytics even with company-wide order access', () => {
+    const user = account({ businessRole: 'admin', chartPermissions: [override({ chartId: 'order_volume', dataScope: 'none' as never, summaryMode: 'marketing', details: 'allow' })] })
+    expect(validateChartPermissions(user.chartPermissions)).toBe(true)
+    expect(access(user, 'order_volume')).toMatchObject({ visible: true, dataScope: 'none', summaryOnly: true, canViewDetails: false, summaryDepartments: ['sales1', 'sales2', 'sales3', 'sales4'] })
+  })
   it('keeps salespeople on their own records and does not fabricate department totals', () => {
     expect(access(account(), 'customer_orders')).toMatchObject({ visible: true, dataScope: 'self', canViewDetails: true, summaryDepartments: [] })
     expect(access(account(), 'department_receipts')).toMatchObject({ visible: false, dataScope: 'none', canViewDetails: false })

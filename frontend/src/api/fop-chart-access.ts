@@ -4,7 +4,7 @@ export type ChartId = typeof chartIds[number]
 export type SalesDepartmentCode = 'sales1' | 'sales2' | 'sales3' | 'sales4'
 export type ChartDecision = 'inherit' | 'allow' | 'deny'
 export interface ChartPermissionOverride {
-  chartId: ChartId; visibility: ChartDecision; dataScope: 'inherit' | 'self' | 'department'
+  chartId: ChartId; visibility: ChartDecision; dataScope: 'inherit' | 'none' | 'self' | 'department'
   summaryMode: 'inherit' | 'none' | 'selected' | 'marketing'; summaryDepartments: SalesDepartmentCode[]
   details: ChartDecision; export: ChartDecision
 }

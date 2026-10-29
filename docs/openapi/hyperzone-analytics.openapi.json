@@ -5699,6 +5699,34 @@
           "businessRole": {
             "$ref": "#/components/schemas/BusinessRole",
             "description": "当前数据库读取的业务角色，与isAdmin的系统管理权限相互独立。"
+          },
+          "chartVisibility": {
+            "type": "object",
+            "description": "服务端当前本地图表配置，用于入口展示；真实数据仍须FOP独立授权。",
+            "properties": {
+              "registrations": {
+                "type": "boolean"
+              },
+              "department_receipts": {
+                "type": "boolean"
+              },
+              "salesperson_receipts": {
+                "type": "boolean"
+              },
+              "order_volume": {
+                "type": "boolean"
+              },
+              "customer_orders": {
+                "type": "boolean"
+              },
+              "freight": {
+                "type": "boolean"
+              },
+              "sales_performance": {
+                "type": "boolean"
+              }
+            },
+            "additionalProperties": false
           }
         },
         "required": [
@@ -12827,10 +12855,11 @@
             "type": "string",
             "enum": [
               "inherit",
+              "none",
               "self",
               "department"
             ],
-            "description": "继承账号范围、仅本人、本部门；最终与账号及FOP范围求交，不能扩大权限。"
+            "description": "继承账号范围、不读取记录（仅独立组织汇总）、仅本人、本部门；订单待办读权独立，不能通过图表扩大FOP授权。"
           },
           "summaryMode": {
             "type": "string",

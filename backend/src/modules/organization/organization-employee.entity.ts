@@ -2,6 +2,7 @@ import { Check, Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, 
 import { User } from '../users/user.entity'
 import type { WorkbenchRole } from '../users/workbench-role'
 import { OrganizationNodeEntity } from './organization-node.entity'
+import type { DirectoryProfile } from './company-directory'
 
 @Entity('organization_employees')
 @Unique('uq_organization_employees_owner_code', ['ownerUserId', 'code'])
@@ -16,6 +17,7 @@ export class OrganizationEmployeeEntity {
   @Column({ type: 'varchar', length: 40 }) code: string
   @Column({ type: 'varchar', length: 160 }) email: string
   @Column({ name: 'job_title', type: 'varchar', length: 100, default: '' }) jobTitle: string
+  @Column({ name: 'directory_profile', type: 'jsonb', nullable: true }) directoryProfile: DirectoryProfile | null
   @Column({ type: 'varchar', length: 40, default: '' }) phone: string
   @Column({ name: 'archived_at', type: 'timestamptz', nullable: true }) archivedAt: Date | null
   @Column({ name: 'workbench_roles', type: 'text', array: true }) workbenchRoles: WorkbenchRole[]

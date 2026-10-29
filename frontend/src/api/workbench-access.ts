@@ -1,9 +1,9 @@
-import type { ChartPermissionOverride } from './fop-chart-access'
+import type { ChartId, ChartPermissionOverride } from './fop-chart-access'
 import type { WorkbenchRole } from '@/utils/workbench'
 import type { FopBinding } from './fop-access'
 
 export interface BusinessScope { role: 'none' | 'admin' | 'department_manager' | 'salesperson'; departmentId: string | null; employeeId: string | null }
-export interface WorkbenchAccess { roles: WorkbenchRole[]; isAdmin: boolean; businessRole?: BusinessScope['role'] }
+export interface WorkbenchAccess { roles: WorkbenchRole[]; isAdmin: boolean; businessRole?: BusinessScope['role']; chartVisibility?: Record<ChartId, boolean> }
 export interface WorkbenchAccount {
   id: string; displayId: string; email: string; username: string
   role: 'admin' | 'user'; workbenchRoles: WorkbenchRole[]

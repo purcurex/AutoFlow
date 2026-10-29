@@ -18,8 +18,8 @@ vi.mock('@/api/index', () => ({ default: { get: vi.fn(async (_path, { params }) 
 }) } }))
 
 describe('role workbench content', () => {
-  async function setup(path: string, roles = ['sales', 'procurement', 'allocation', 'dispatch', 'warehouse']) {
-    vi.mocked(getWorkbenchAccess).mockResolvedValue({ roles: roles as never, isAdmin: false })
+  async function setup(path: string, roles = ['sales', 'procurement', 'allocation', 'dispatch', 'warehouse'], chartVisibility?: any) {
+    vi.mocked(getWorkbenchAccess).mockResolvedValue({ roles: roles as never, isAdmin: false, chartVisibility })
     await refreshWorkbenchAccess()
     const router = createRouter({ history: createMemoryHistory(), routes: [
       { path: '/workbench/:role', name: 'RoleWorkbench', component: WorkbenchView },
@@ -31,6 +31,20 @@ describe('role workbench content', () => {
     await flushPromises()
     return { wrapper, router }
   }
+
+  it('hides private analytics and prevents direct queue links from mounting denied views', async () => {
+    const { wrapper, router } = await setup('/workbench/sales', undefined, { order_volume: true, customer_orders: false, sales_performance: false, salesperson_receipts: false, freight: false })
+    expect(wrapper.find('.workbench-queues').text()).toContain('订单分析')
+    expect(wrapper.find('.workbench-queues').text()).not.toContain('个人收款与毛利')
+    expect(wrapper.find('.workbench-queues').text()).not.toContain('客户开发概览')
+    expect(wrapper.find('.workbench-queues').text()).not.toContain('物流运费')
+    await router.push('/workbench/sales?queue=order-analysis'); await flushPromises()
+    expect(wrapper.findAllComponents({ name: 'OrderVolumeAnalysis' })).toHaveLength(1)
+    await router.push('/workbench/sales?queue=performance'); await flushPromises()
+    expect(wrapper.findComponent({ name: 'SalesPerformanceView' }).exists()).toBe(false)
+    expect(wrapper.find('[role="alert"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
 
   it('retains the same summary and tabs across every kind of workbench page', async () => {
     const { wrapper, router } = await setup('/workbench/sales')

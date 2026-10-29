@@ -96,6 +96,8 @@ docs/openapi/               机器可读 API 契约
 
 ## 本地开发
 
+公司通讯录账号、唯一非员工测试管理员及多人开发数据初始化见 [账号初始化与共同联调](docs/COMPANY_DIRECTORY_SETUP.md)。Git仅同步代码与迁移；本地组织、用户及权限需显式导入或从数据库快照恢复。
+
 在仓库根目录执行（PowerShell 可使用 `npm.cmd`）：
 
 ```sh

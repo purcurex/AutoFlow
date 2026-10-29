@@ -24,7 +24,7 @@ const navItems = computed(() => [
   { label: t('nav.outreach'), to: '/outreach', match: ['Outreach'], icon: MessageSquareText },
   { label: t('nav.quotes'), to: '/quotes', match: ['Quotes'], icon: Calculator },
   { label: t('nav.followUps'), to: '/follow-ups', match: ['FollowUps'], icon: ListTodo },
-].filter(() => hasBusinessAccess.value))
+].filter(item => hasBusinessAccess.value && (['/dashboard', '/'].includes(item.to) || access.value?.chartVisibility?.customer_orders !== false)))
 
 function isActive(item: { match: string[] }) {
   return item.match.includes(String(route.name))

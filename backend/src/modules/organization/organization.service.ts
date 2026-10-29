@@ -221,7 +221,7 @@ export class OrganizationService {
       const canEdit = account.role === UserRole.ADMIN
       if (requiresAdmin && !canEdit) throw new ForbiddenException('System administrator access is required for organization management')
       const employee = await manager.getRepository(OrganizationEmployeeEntity).findOneBy({ accountId: actorId })
-      const ownerUserId = employee?.ownerUserId ?? actorId
+      const ownerUserId = employee?.ownerUserId ?? account.organizationWorkspaceOwnerId ?? actorId
       // Seed and all mutations use the same lock. This serializes reciprocal moves,
       // move/delete races and first-GET creation without locking other accounts.
       await manager.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [`autoflow:organization:${ownerUserId}`])
@@ -233,7 +233,9 @@ export class OrganizationService {
       return {
         source: 'mock' as const, canEdit,
         nodes: nodes.map(({ id, parentId, name, kind, sortOrder }) => ({ id, parentId, name, kind, sortOrder, archivedEmployeeCount: archived.filter(employee => employee.departmentId === id).length })),
-        employees: employees.map(({ id, name, code, email, departmentId, workbenchRoles, accountId, jobTitle, phone, archivedAt }) => ({ id, name, code, email, departmentId, workbenchRoles, accountId, jobTitle, phone, archivedAt: archivedAt?.toISOString() ?? null })),
+        employees: employees.map(({ id, name, code, email, departmentId, workbenchRoles, accountId, jobTitle, phone, archivedAt, directoryProfile }) => ({ id, name, code, email, departmentId, workbenchRoles, accountId, jobTitle, phone, archivedAt: archivedAt?.toISOString() ?? null,
+          ...(!requiresAdmin && directoryProfile ? { salesOwner: /\/营销中心\/业务[一二三四]部(?:\/|$)|\/(合作伙伴|外部伙伴)(?:\/|$)/.test(directoryProfile.departmentPaths[0] ?? '') } : {}),
+          ...(requiresAdmin && directoryProfile ? { directoryProfile } : {}) })),
       }
     }).catch(error => {
       if ((error as { driverError?: { code?: string } }).driverError?.code === '23505') throw new ConflictException('员工编号、邮箱、登录名称或 FOP 用户已被使用，请核对后重试')

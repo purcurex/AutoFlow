@@ -7,7 +7,7 @@ export type ChartId = typeof CHART_IDS[number]
 export interface ChartPermissionOverride {
   chartId: ChartId
   visibility: 'inherit' | 'allow' | 'deny'
-  dataScope: 'inherit' | 'self' | 'department'
+  dataScope: 'inherit' | 'none' | 'self' | 'department'
   summaryMode: 'inherit' | 'none' | 'selected' | 'marketing'
   summaryDepartments: SalesDepartmentCode[]
   details: 'inherit' | 'allow' | 'deny'
@@ -41,7 +41,7 @@ export function validateChartPermissions(value: unknown): value is ChartPermissi
     if (Object.keys(row).length !== FIELDS.length || Object.keys(row).some(key => !FIELDS.includes(key))) return false
     if (!isIn(row.chartId, CHART_IDS) || seen.has(row.chartId as string)) return false
     seen.add(row.chartId as string)
-    if (!isIn(row.visibility, ['inherit', 'allow', 'deny']) || !isIn(row.dataScope, ['inherit', 'self', 'department'])
+    if (!isIn(row.visibility, ['inherit', 'allow', 'deny']) || !isIn(row.dataScope, ['inherit', 'none', 'self', 'department'])
       || !isIn(row.details, ['inherit', 'allow', 'deny']) || !isIn(row.export, ['inherit', 'allow', 'deny'])
       || !isIn(row.summaryMode, ['inherit', 'none', 'selected', 'marketing'])) return false
     if (!Array.isArray(row.summaryDepartments) || row.summaryDepartments.some(code => !isIn(code, DEPARTMENTS))
@@ -66,6 +66,7 @@ export function resolveChartSummaryPolicy(user: ChartPolicyUser, chartId: ChartI
 }
 
 function recordScope(user: ChartPolicyUser, override?: ChartPermissionOverride): EffectiveChartAccess['dataScope'] {
+  if (override?.dataScope === 'none') return 'none'
   let scope: EffectiveChartAccess['dataScope'] = 'none'
   if (user.businessRole === 'admin') scope = 'all'
   else if (user.businessRole === 'department_manager') scope = user.businessDepartmentId ? 'department' : 'none'

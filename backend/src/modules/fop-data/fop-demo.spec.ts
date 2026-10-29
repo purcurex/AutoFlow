@@ -42,6 +42,13 @@ const env = { FOP_DATA_MODE: 'demo', NODE_ENV: 'development' }
 const query = { from: '2026-10-01', to: '2026-10-21', year: 2026 }
 
 describe('isolated mock FOP dataset', () => {
+  it('does not assign customer orders to directory staff who only have operational sales-workbench access', async () => {
+    const provider = new DemoFopDataProvider({ getWorkspace: async () => ({ ...workspace, employees: [...workspace.employees, { ...workspace.employees[0], id: 'coordinator', code: 'staff', salesOwner: false }] }) }, env)
+    const identity = provider.demoIdentity('alice')!
+    const orders = await provider.listOrders(identity, await provider.resolvePermissions(identity))
+    expect(orders.length).toBeGreaterThan(0)
+    expect(orders.some(order => order.owner?.id === 'coordinator')).toBe(false)
+  })
   beforeEach(() => { jest.useFakeTimers().setSystemTime(new Date('2026-10-21T12:00:00Z')) })
   afterEach(() => jest.useRealTimers())
   it('uses the direct sales department for same-named descendants while retaining permission ancestry', async () => {
