@@ -1,5 +1,7 @@
 # HyperZone 智能办公平台
 
+FOP测试API首次联调与私有配置说明：[FOP_TEST_CONNECTION.md](docs/FOP_TEST_CONNECTION.md)。
+
 最新交付：需求9.48统一销售/采购备货状态及供应商待发货提醒，待履约“已审核未同步”使用柔和红色；十一类待办统一组件、库存/导出入口，支持备货状态排序与个人业绩权限范围，毛利明细仅展示结算单号。接口基线为41操作、169模型，生产FOP员工网关及实际采购付款时间仍需联调。先看[精简交接报告](docs/analytics/WORKBENCH_DELIVERY_BRIEF.html)，完整需求及OpenAPI入口见下文。
 
 
