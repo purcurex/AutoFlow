@@ -1,5 +1,7 @@
 # HyperZone 项目事实与设计入口
 
+- 2026-10-29 鉴权补充：用户确认ID-000015为Wendy的FOP用户编号，不是本地编号或已确认内码。私有资料已补应用身份、accountId及应用编码；仅带身份实测HTTP200但errorCode401“未经授权的访问”，尚缺client_secret/真实代理用户名或有效Token。截图开启代理用户控制，当前应用代理身份不能直接冒充Wendy。凭证仅存Git忽略的本机文件，未绑定账号或切换真实数据。
+
 - 2026-10-29 FOP测试联调：用户提供hyperzone.test.kdgalaxy.com、ierp、R202606.001及4个查询Swagger，路径含/kapi。无凭证实测订单路径返回HTTP519/errorCode2501（不存在应用信息[网关]），仅证明网关可达。凭证、数据中心accountId、Wendy真实身份、测试订单客户ID/类型及组织用户权限契约待补。只读工具npm run fop:test-api，私有backend/.env.fop.local，说明docs/FOP_TEST_CONNECTION.md。未将原始苍穹API冒充员工授权网关，未切换demo或修改FOP源码。
 
 - 2026-10-28 工作台授权补充：通讯录业务员（含伙伴）、部门经理、管理协同岗及管理员均开放销售/采购/配货/发运/仓库5个入口。记录继续按本人/部门/公司业务范围与FOP授权求交，筛选、合计、明细和导出一致；协同岗分析仅部门汇总限制不变，HR及商品管理仍无业务权限。存量通过CompanyDirectoryAllWorkbenches迁移更新入口并撤销受影响会话，不调整业务范围或FOP绑定。
