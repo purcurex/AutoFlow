@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed, onScopeDispose } from 'vue'
 import type { User } from '@/types'
 import { authApi } from '@/api/auth'
+import { englishDisplayName, PRESET_AVATARS } from '@/utils/user-display'
 import { assertCurrentSession, captureSession, invalidateSession, isCurrentSession, onSessionReset } from '@/utils/session'
 
 const API_URL = import.meta.env.VITE_API_URL || '/api'
@@ -17,9 +18,11 @@ export const useUserStore = defineStore('user', () => {
   }
   const isLoggedIn = computed(() => !!user.value)
   const username = computed(() => user.value?.username || '')
+  const displayName = computed(() => englishDisplayName(user.value))
   const isAdmin = computed(() => user.value?.role === 'admin')
   const avatarUrl = computed(() => {
     if (!user.value?.avatarUrl) return null
+    if (PRESET_AVATARS.some(avatar => avatar.url === user.value?.avatarUrl)) return `${import.meta.env.BASE_URL}${user.value.avatarUrl.slice(1)}`
     // 如果是完整URL则直接返回，否则拼接API地址
     if (user.value.avatarUrl.startsWith('http')) {
       return user.value.avatarUrl
@@ -107,6 +110,7 @@ export const useUserStore = defineStore('user', () => {
     user,
     isLoggedIn,
     username,
+    displayName,
     isAdmin,
     avatarUrl,
     login,

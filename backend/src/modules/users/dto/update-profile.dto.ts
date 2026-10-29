@@ -10,8 +10,8 @@ export class UpdateProfileDto {
   @IsOptional()
   @IsString()
   @MaxLength(500)
-  @Matches(/^(https?:\/\/|\/uploads\/)/, {
-    message: 'avatarUrl must be an HTTP URL or an uploaded asset path',
+  @Matches(/^(?:https?:\/\/|\/uploads\/|\/avatars\/preset-(?:ocean|mint|iris|rose|amber|slate)\.svg$)/, {
+    message: 'avatarUrl must be an HTTP URL, uploaded asset path or supported preset',
   })
   avatarUrl?: string
 }

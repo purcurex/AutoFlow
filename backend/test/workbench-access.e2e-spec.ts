@@ -171,6 +171,17 @@ describe('Workbench authorization HTTP API (repository boundary stub)', () => {
     }
   })
 
+  it('persists supported preset avatars for the current user without changing permissions', async () => {
+    for (const name of ['ocean', 'mint', 'iris', 'rose', 'amber', 'slate']) {
+      await request(app.getHttpServer()).put('/api/users/profile').auth(token(), { type: 'bearer' })
+        .send({ avatarUrl: `/avatars/preset-${name}.svg` }).expect(200)
+      expect((await get('/users/profile').expect(200)).body).toMatchObject({ avatarUrl: `/avatars/preset-${name}.svg`, role: 'user', workbenchRoles: ['sales'] })
+    }
+    for (const avatarUrl of ['/avatars/preset-unknown.svg', '/avatars/preset-mint.svg/../secret', 'javascript:alert(1)']) {
+      await request(app.getHttpServer()).put('/api/users/profile').auth(token(), { type: 'bearer' }).send({ avatarUrl }).expect(400)
+    }
+  })
+
   it.each([
     ['review', 'sales'], ['exceptions', 'sales'], ['procurement', 'procurement'],
     ['allocation', 'allocation'], ['dispatch', 'dispatch'], ['shipping', 'warehouse'],
