@@ -65,7 +65,7 @@ export function compareFulfillmentOrders(left: FopOrder, right: FopOrder, query:
     return compareKnown(leftTime ? Date.parse(leftTime) : Infinity, rightTime ? Date.parse(rightTime) : Infinity, query.sortOrder ?? 'asc')
       || comparePaymentTime(left, right)
   }
-  if (field === 'dispatchDocumentStatus' && query.queue === 'allocation_review') {
+  if (field === 'dispatchDocumentStatus' && ['allocation', 'allocation_review'].includes(query.queue)) {
     return compareKnown(getDispatchCompletionStatus(left.dispatchDocuments) === 'dispatch_complete' ? 1 : 0,
       getDispatchCompletionStatus(right.dispatchDocuments) === 'dispatch_complete' ? 1 : 0, query.sortOrder ?? 'asc') || comparePaymentTime(left, right)
   }

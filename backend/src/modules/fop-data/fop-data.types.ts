@@ -1,3 +1,4 @@
+import type { PurchaseLinkSnapshot } from './procurement-groups.types'
 import type { AllocationInventoryScope, AllocationInventorySnapshot } from './allocation-inventory'
 import type { ApprovalCommand, ApprovalOutcome, ApprovalQueue, ApprovalTarget } from './fop-approval.types'
 import type { SupplierFollowUpResult } from './supplier-follow-up'
@@ -245,6 +246,7 @@ export abstract class FopDataProvider {
   async listSupplierFollowUps(_identity: Readonly<FopIdentity>, _permission: Readonly<FopPermissionGrant>, _orderId: string): Promise<SupplierFollowUpResult> {
     throw new Error('Supplier follow-up provider is not configured')
   }
+  async getPurchaseLinks(_identity: Readonly<FopIdentity>, _permission: Readonly<FopPermissionGrant>, _orderIds: readonly string[]): Promise<PurchaseLinkSnapshot> { throw new Error('Purchase linkage provider is not configured') }
   abstract isConfigured(): boolean
   async approvalTargets(_identity: Readonly<FopIdentity>, _queue: ApprovalQueue, _orderId: string): Promise<ApprovalTarget[]> { throw new Error('FOP approval adapter is not configured') }
   async approveDocument(_identity: Readonly<FopIdentity>, _command: ApprovalCommand): Promise<ApprovalOutcome> { throw new Error('FOP approval adapter is not configured') }

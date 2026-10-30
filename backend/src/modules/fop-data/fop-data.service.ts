@@ -1,3 +1,7 @@
+import { createHash } from 'crypto'
+import { buildPurchaseGroups, purchaseGroupSummary, purchaseGroupTotals } from './procurement-groups'
+import { PurchaseGroupQueryDto, PurchaseGroupExportDto, PurchaseGroupFiltersDto, PurchaseGroupChatQueryDto } from './procurement-groups.dto'
+import { buildPurchaseGroupWorkbook } from './procurement-groups-export'
 import { inventoryTargets, inventorySnapshot } from './allocation-inventory'
 import { AllocationInventoryQueryDto } from './allocation-inventory.dto'
 import { normalizeLogisticsInfo } from './logistics-info'
@@ -9,6 +13,7 @@ import { normalizeConsumerPaidAt } from './consumer-payment-time'
 import { normalizeBusinessTimestamp } from './fop-business-time'
 import { normalizeCustomLogisticsChannelName, normalizeLogisticsChannels } from './logistics-channels'
 import { normalizeShippingCountry } from './shipping-country'
+import { consumerPaymentRange } from './consumer-payment-range'
 import { canFilterTaskStatus, getTaskStatus } from './workbench-status'
 import { canFilterProcurementStage, getProcurementStage } from './procurement-stage'
 import type { ApprovalQueue } from './fop-approval.types'
@@ -598,7 +603,14 @@ export class FopDataService {
     const scoped = await this.scopedOrders(userId, 'procurement')
     const order = scoped.orders.find(row => row.id === orderId)
     if (!order) throw new NotFoundException('Order not found')
-    if (!matchesQueue(order, 'procurement_shipping')) throw new ConflictException({ code: 'purchase_queue_changed', message: '该订单已不在已采购待发货清单，请刷新列表。' })
+    const eligible = async (context: typeof scoped) => {
+      const source = context.orders.find(o => o.id === orderId)
+      if (!source || source.cancelled || source.paymentStatus !== 'paid') return false
+      if (matchesQueue(source, 'procurement_shipping')) return true
+      const links = await this.providerCall(() => this.provider.getPurchaseLinks(context.permission.subject, context.permission, [orderId]))
+      return (await this.providerCall(async () => buildPurchaseGroups([source], context.departmentPaths, context.permission, links, { queue: 'procurement_shipping' }))).length > 0
+    }
+    if (!await eligible(scoped)) throw new ConflictException({ code: 'purchase_queue_changed', message: '该订单已不在已采购待发货清单，请刷新列表。' })
     const identity = Object.freeze({ ...scoped.permission.subject })
     const permission = Object.freeze({ subject: identity, allowedOrderIds: Object.freeze([orderId]), allowedPurchaseOrderIds: Object.freeze([...(scoped.permission.allowedPurchaseOrderIds ?? [])]) })
     const result = permission.allowedPurchaseOrderIds.length
@@ -608,8 +620,11 @@ export class FopDataService {
     // Re-read scope and grants after the upstream request: revocation must not leak contacts.
     const current = await this.scopedOrders(userId, 'procurement')
     await this.assertUnchanged(userId, scoped.initial)
-    if (!current.orders.some(row => row.id === orderId && matchesQueue(row, 'procurement_shipping'))) throw new ConflictException({ code: 'purchase_queue_changed', message: '订单状态或可见范围已变化，请刷新列表。' })
-    const permitted = new Set(current.permission.allowedPurchaseOrderIds ?? [])
+    if (!await eligible(current)) throw new ConflictException({ code: 'purchase_queue_changed', message: '订单状态或可见范围已变化，请刷新列表。' })
+    const final = await this.scopedOrders(userId, 'procurement')
+    await this.assertUnchanged(userId, scoped.initial)
+    if (!final.orders.some(row => row.id === orderId)) throw new NotFoundException('Order not found')
+    const permitted = new Set(final.permission.allowedPurchaseOrderIds ?? [])
     return { order, contacts: contacts.filter(row => permitted.has(row.purchaseOrderId)) }
   }
 
@@ -633,6 +648,9 @@ export class FopDataService {
     if (query.warehouseStage !== undefined && query.queue !== 'shipping') throw new BadRequestException('warehouseStage requires the shipping queue')
     if (query.taskStatus !== undefined && !canFilterTaskStatus(query.queue, query.taskStatus)) throw new BadRequestException('taskStatus does not match the requested queue')
     if (query.procurementStage !== undefined && !canFilterProcurementStage(query.queue, query.procurementStage)) throw new BadRequestException('procurementStage does not match the requested queue')
+    if (query.timeRange !== undefined && (query.queue !== 'unpaid' || !['all', '1w', '1m', '3m'].includes(query.timeRange))) throw new BadRequestException('timeRange requires the unpaid queue')
+    if (query.shippingCountryCode !== undefined && (query.queue !== 'review' || !normalizeShippingCountry(query.shippingCountryCode) || normalizeShippingCountry(query.shippingCountryCode) !== query.shippingCountryCode)) throw new BadRequestException('Invalid review destination country')
+    const inTimeRange = consumerPaymentRange(query.timeRange)
     const role = FULFILLMENT_QUEUE_ROLES[query.queue]
     if (query.workbenchRole && query.workbenchRole !== role) throw new BadRequestException('workbenchRole does not match the requested queue')
     const scoped = await this.scopedOrders(userId, role)
@@ -645,7 +663,8 @@ export class FopDataService {
     const salespeople = [...new Map(departmentOrders.filter(order => order.owner?.id).map(order => [order.owner!.id, order.owner!])).values()]
       .sort((a, b) => a.name.localeCompare(b.name, 'zh-CN') || a.id.localeCompare(b.id))
     const search = query.search?.trim().toLowerCase()
-    const filtered = departmentOrders.filter((order) => matchesQueue(order, query.queue, query.warehouseStage)
+    const candidates = departmentOrders.filter((order) => matchesQueue(order, query.queue, query.warehouseStage)
+      && inTimeRange(order.consumerPaidAt)
       && (!query.taskStatus || getTaskStatus(order, query.queue) === query.taskStatus)
       && (!query.procurementStage || getProcurementStage(order.procurementProgress, order.fulfillmentProgress.supplierShipment) === query.procurementStage)
       && (!query.warehouseCode || order.warehouseCode === query.warehouseCode)
@@ -654,14 +673,100 @@ export class FopDataService {
       && (!search || [order.orderNumber, order.shopifyOrderNumber, order.customerName, order.storeName, order.owner?.name || order.salesperson,
         ...(query.queue === 'unpaid' ? [order.customLogisticsChannelName ?? ''] : [order.carrier ?? '', order.carrierCode ?? '']), ...order.items.map((item) => item.sku)]
         .some((value) => value.toLowerCase().includes(search))))
+    const shippingCountries = query.queue === 'review' ? [...new Set(candidates.map(o => normalizeShippingCountry(o.shippingCountryCode)).filter((code): code is string => code !== null))].sort() : undefined
+    const filtered = candidates.filter(order => !query.shippingCountryCode || order.shippingCountryCode === query.shippingCountryCode)
       .sort((left, right) => compareFulfillmentOrders(left, right, query))
-    return { filtered, departments, salespeople, authorizedOrderIds: new Set(orders.map(order => order.id)), initial: scoped.initial }
+    return { filtered, departments, salespeople, shippingCountries, authorizedOrderIds: new Set(orders.map(order => order.id)), initial: scoped.initial }
   }
 
   async getOrders(userId: string, query: ListFulfillmentOrdersDto) {
-    const { filtered, departments, salespeople } = await this.filteredOrders(userId, query)
+    const { filtered, departments, salespeople, shippingCountries } = await this.filteredOrders(userId, query)
     const start = (query.page - 1) * query.pageSize
-    return { source: this.provider.source ?? 'fop', refreshedAt: new Date().toISOString(), departments, salespeople, items: filtered.slice(start, start + query.pageSize), total: filtered.length, totals: summarizeFopOrders(filtered), page: query.page, pageSize: query.pageSize }
+    return { source: this.provider.source ?? 'fop', refreshedAt: new Date().toISOString(), departments, salespeople, ...(shippingCountries ? { shippingCountries } : {}), items: filtered.slice(start, start + query.pageSize), total: filtered.length, totals: summarizeFopOrders(filtered), page: query.page, pageSize: query.pageSize }
+  }
+
+  private async purchaseGroups(userId: string, query: PurchaseGroupFiltersDto) {
+    if (query.purchaseStage !== undefined && query.queue !== 'procurement') throw new BadRequestException('purchaseStage requires the procurement queue')
+    const scoped = await this.scopedOrders(userId, 'procurement')
+    const orders = scoped.orders.filter(o => !o.cancelled && o.paymentStatus === 'paid')
+    const snapshot = orders.length ? await this.providerCall(() => this.provider.getPurchaseLinks(scoped.permission.subject, scoped.permission, orders.map(o => o.id))) : { subject: scoped.permission.subject, orders: [] }
+    await this.assertUnchanged(userId, scoped.initial)
+    // Whitelist membership does not imply unchanged record ownership/department.
+    const current = await this.scopedOrders(userId, 'procurement')
+    await this.assertUnchanged(userId, scoped.initial)
+    const requested = new Set(orders.map(o => o.id))
+    const currentOrders = current.orders.filter(o => requested.has(o.id))
+    const groups = await this.providerCall(async () => buildPurchaseGroups(currentOrders, current.departmentPaths, current.permission, snapshot, query))
+    const departments = [...new Map(currentOrders.filter(o => o.department && o.salesDepartmentCode).map(o => [o.department!.id, o.department!])).values()]
+    return { groups, departments, initial: scoped.initial }
+  }
+
+  async getPurchaseGroups(userId: string, query: PurchaseGroupQueryDto) {
+    const { groups, departments } = await this.purchaseGroups(userId, query)
+    return { source: this.provider.source, refreshedAt: new Date().toISOString(), items: groups.slice((query.page - 1) * query.pageSize, query.page * query.pageSize).map(purchaseGroupSummary), departments,
+      total: groups.length, page: query.page, pageSize: query.pageSize, totals: purchaseGroupTotals(groups) }
+  }
+
+  async getPurchaseGroupDetails(userId: string, groupId: string, query: PurchaseGroupQueryDto) {
+    const { groups } = await this.purchaseGroups(userId, query)
+    const group = groups.find(g => g.id === groupId)
+    if (!group) throw new NotFoundException('Purchase group unavailable')
+    return { group: purchaseGroupSummary(group), items: group.rows.slice((query.page - 1) * query.pageSize, query.page * query.pageSize), total: group.rows.length, page: query.page, pageSize: query.pageSize }
+  }
+
+  private async purchaseGroupContact(userId: string, groupId: string, query: PurchaseGroupFiltersDto) {
+    if (query.queue !== 'procurement_shipping') throw new BadRequestException('Purchase follow-up requires pending supplier shipment')
+    const initial = await this.purchaseGroups(userId, query)
+    const group = initial.groups.find(g => g.id === groupId && g.purchase)
+    if (!group?.purchase || !group.rows.length) throw new NotFoundException('Purchase group unavailable')
+    if (group.purchase.purchaseType !== 'online' || group.purchase.platform !== '1688') throw new ConflictException({ code: 'supplier_contact_unavailable', message: '此采购类型请在 FOP 联系供应商。' })
+    // A purchase has exactly one supplier. An authorized source is only the
+    // server-side route to the existing contact adapter, never the dialog scope.
+    const sourceId = group.rows[0].orderId
+    const { contacts } = await this.supplierContacts(userId, sourceId)
+    const contact = contacts.find(c => c.purchaseOrderId === group.purchase!.id)
+    if (!contact) throw new ConflictException({ code: 'supplier_contact_changed', message: '采购单供应商资料不可用，请在 FOP 核对后刷新。' })
+    const current = await this.purchaseGroups(userId, query)
+    await this.assertUnchanged(userId, initial.initial)
+    const fresh = current.groups.find(g => g.id === groupId && g.purchase)
+    if (!fresh?.purchase || !fresh.rows.some(r => r.orderId === sourceId)) throw new NotFoundException('Purchase group unavailable')
+    if (JSON.stringify(fresh.purchase) !== JSON.stringify(group.purchase)
+      || contact.supplier.id !== fresh.purchase.supplier.id || contact.supplier.name !== fresh.purchase.supplier.name
+      || contact.purchaseOrderNumber !== fresh.purchase.number || contact.platformOrderNumber !== fresh.purchase.platformOrderNumber) {
+      throw new ConflictException({ code: 'supplier_contact_changed', message: '采购单或供应商信息已变化，请刷新后重试。' })
+    }
+    // No source-order partial quantities are presented as whole-purchase totals.
+    const version = createHash('sha256').update(JSON.stringify([groupId, fresh.purchase, contact.supplier, contact.url, contact.availability])).digest('hex')
+    return { ...contact, contactVersion: version, lines: [] }
+  }
+
+  async getPurchaseGroupSupplier(userId: string, groupId: string, query: PurchaseGroupFiltersDto) {
+    const { url: _url, ...contact } = await this.purchaseGroupContact(userId, groupId, query)
+    return { source: this.provider.source, orderId: groupId, orderNumber: contact.purchaseOrderNumber, refreshedAt: new Date().toISOString(), items: [contact] }
+  }
+
+  async getPurchaseGroupSupplierChat(userId: string, groupId: string, query: PurchaseGroupChatQueryDto) {
+    const contact = await this.purchaseGroupContact(userId, groupId, query)
+    if (contact.contactVersion !== query.contactVersion) throw new ConflictException({ code: 'supplier_contact_changed', message: '采购单或供应商信息已变化，请刷新后重试。' })
+    if (!contact.url || contact.availability !== 'ready') throw new ConflictException({ code: 'supplier_chat_unavailable', message: '供应商旺旺信息不完整，请在 FOP 核对。' })
+    return { source: this.provider.source, mode: this.provider.source === 'mock' ? 'demo' : 'live', orderId: groupId, purchaseOrderId: contact.purchaseOrderId, wangwangAccount: contact.supplier.wangwangAccount, url: this.provider.source === 'mock' ? null : contact.url }
+  }
+
+  async exportPurchaseGroups(userId: string, query: PurchaseGroupExportDto, sessionVersion = 0) {
+    if (query.mode === 'selected' ? !query.groupIds?.length || query.groupIds.length > 100 || new Set(query.groupIds).size !== query.groupIds.length : query.mode !== 'filtered' || query.groupIds !== undefined) throw new BadRequestException('Invalid purchase export selection')
+    const session = async () => { const user = await this.users.findById(userId); if (!user || user.accountDisabled || (user.sessionVersion ?? 0) !== sessionVersion) throw new UnauthorizedException('Session expired') }
+    await session()
+    const initial = await this.purchaseGroups(userId, query)
+    const ids = new Set(query.groupIds)
+    const chosen = initial.groups.filter(g => query.mode === 'filtered' || ids.has(g.id))
+    if (!chosen.length || query.mode === 'selected' && chosen.length !== ids.size) throw new ConflictException({ code: 'purchase_groups_changed', message: '采购分组已变化，请刷新后重新选择。' })
+    const buffer = await buildPurchaseGroupWorkbook(chosen, query, this.provider.source)
+    await session(); await this.assertUnchanged(userId, initial.initial)
+    const current = await this.purchaseGroups(userId, query)
+    const fresh = current.groups.filter(g => query.mode === 'filtered' || ids.has(g.id))
+    if (JSON.stringify(fresh) !== JSON.stringify(chosen)) throw new ConflictException({ code: 'purchase_groups_changed', message: '采购分组已变化，请刷新后重新导出。' })
+    await session()
+    return buffer
   }
 
   private async stockContext(userId: string, role: 'sales' | 'procurement' | 'inventory' = 'sales') {
@@ -763,10 +868,23 @@ export class FopDataService {
   }
 
   async getStockInventory(userId: string, query: StockInventoryQuery) {
-    const { inventory } = await this.scopedStockInventory(userId)
+    if (query.orderIds !== undefined && (!Array.isArray(query.orderIds) || !query.orderIds.length || query.orderIds.length > 100 || new Set(query.orderIds).size !== query.orderIds.length || query.orderIds.some(id => typeof id !== 'string' || !id.trim() || id.length > 200))) throw new BadRequestException('Invalid stock inventory selection')
+    const selected = query.orderIds ? await this.scopedStockOrders(userId, query.queue === 'procurement' ? 'procurement' : 'sales') : undefined
+    const { inventory, initial, permission } = await this.scopedStockInventory(userId)
+    let pairs: Set<string> | undefined
+    if (selected) {
+      await this.assertUnchanged(userId, selected.initial)
+      const ids = new Set(query.orderIds)
+      const currentAllowed = new Set(permission.allowedStockOrderIds ?? [])
+      const orders = filterStockOrders(selected.orders, { queue: query.queue }).filter(row => ids.has(row.id) && currentAllowed.has(row.id))
+      if (orders.length !== ids.size) throw new ConflictException({ code: 'stock_inventory_orders_changed', message: 'Selected stock orders changed; refresh and select again' })
+      // Keep each customer's SKU set separate; never cross-join customers and SKUs.
+      pairs = new Set(orders.flatMap(row => row.items.map(item => JSON.stringify([row.customerId, item.sku]))))
+    }
     const search = query.search?.trim().toLowerCase()
     const customerSearch = query.customerSearch?.trim().toLowerCase()
-    const filtered = inventory.filter(row => (!query.customerId || row.customerId === query.customerId) && (!customerSearch || [row.customerCode, row.customerName].some(v => v.toLowerCase().includes(customerSearch))) && stockScopeMatches(row, query) && (!search || [row.sku, row.name].some(v => v.toLowerCase().includes(search))))
+    const filtered = inventory.filter(row => (pairs ? pairs.has(JSON.stringify([row.customerId, row.sku])) : !!initial.business.employeeId && row.owner.id === initial.business.employeeId)
+      && (!query.customerId || row.customerId === query.customerId) && (!customerSearch || [row.customerCode, row.customerName].some(v => v.toLowerCase().includes(customerSearch))) && stockScopeMatches(row, query) && (!search || [row.sku, row.name].some(v => v.toLowerCase().includes(search))))
       .map(publicStockInventory).sort((a, b) => a.customerName.localeCompare(b.customerName) || a.customerId.localeCompare(b.customerId) || a.sku.localeCompare(b.sku) || a.warehouseCode.localeCompare(b.warehouseCode) || a.id.localeCompare(b.id))
     return { source: this.provider.source, refreshedAt: new Date().toISOString(), customerId: query.customerId ?? null, items: filtered.slice((query.page - 1) * query.pageSize, query.page * query.pageSize), total: filtered.length, page: query.page, pageSize: query.pageSize }
   }

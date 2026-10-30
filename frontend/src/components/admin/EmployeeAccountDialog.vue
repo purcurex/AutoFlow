@@ -103,13 +103,13 @@ onBeforeUnmount(() => { active = false; clearPasswords(); off(); disposeDropdown
             <p v-if="employee.directoryProfile.address">{{ text('地址', 'Address') }}：{{ employee.directoryProfile.address }}</p>
           </details>
           <p v-if="edit" class="employee-note">{{ text('修改员工岗位档案不会改变账号权限；请在账号权限中独立分配。邮箱修改会同步到登录账号。', 'Employee roles do not change account grants. Email changes also update the login account.') }}</p>
-          <p class="field-label mt-4">{{ text('工作台岗位', 'Workbench roles') }}</p><div class="employee-roles"><label v-for="role in workbenchRoles" :key="role"><input v-model="draft.workbenchRoles" type="checkbox" :value="role" :disabled="!!employee && !edit" />{{ workbenchNames[role][zh ? 0 : 1] }}</label></div>
+          <p class="field-label mt-4">{{ text('工作台访问', 'Workbench access') }}</p><div class="employee-roles"><label v-for="role in workbenchRoles" :key="role"><input v-model="draft.workbenchRoles" type="checkbox" :value="role" :disabled="!!employee && !edit" />{{ workbenchNames[role][zh ? 0 : 1] }}</label></div>
         </fieldset>
         <fieldset v-if="!edit" :disabled="saving || loading || !directory?.canEdit">
           <legend>{{ text('登录账号', 'Login account') }}</legend>
           <label v-if="!employee" class="employee-check"><input v-model="createLogin" type="checkbox" :aria-label="text('同时开通登录账号', 'Create a login account')" />{{ text('同时开通登录账号', 'Create a login account') }}</label>
           <template v-if="createLogin">
-            <p class="employee-note">{{ text('默认普通员工账号，仅查看本人业务数据。管理员可在“账号与权限”中另行调整角色和数据范围。', 'New accounts are standard employees with access to their own records. Administrators can adjust roles and data access in Account & Access.') }}</p>
+            <p class="employee-note">{{ text('默认外贸业务员，仅查看本人业务。角色在“账号与权限”中调整。', 'Defaults to Sales representative with own-record access. Manage roles in Accounts & access.') }}</p>
             <label class="block mb-4"><span class="field-label">{{ text('登录名称', 'Login name') }}</span><input v-model="draft.username" class="input" :aria-label="text('登录名称', 'Login name')" minlength="2" maxlength="50" autocomplete="off" required /></label>
             <div class="employee-fields"><label><span class="field-label">{{ text('初始密码', 'Initial password') }}</span><input v-model="draft.password" type="password" class="input" :aria-label="text('初始密码', 'Initial password')" minlength="10" maxlength="72" autocomplete="new-password" required /></label><label><span class="field-label">{{ text('确认初始密码', 'Confirm initial password') }}</span><input v-model="draft.confirmPassword" type="password" class="input" :aria-label="text('确认初始密码', 'Confirm initial password')" minlength="10" maxlength="72" autocomplete="new-password" required /></label></div>
             <label class="employee-check mt-5"><input v-model="bindFop" type="checkbox" :aria-label="text('同时绑定 FOP 用户', 'Link FOP user now')" />{{ text('同时绑定 FOP 用户', 'Link FOP user now') }}<span class="text-xs text-slate-400">{{ text('可稍后设置', 'Optional') }}</span></label>

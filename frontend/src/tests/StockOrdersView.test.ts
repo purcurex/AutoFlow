@@ -1,3 +1,4 @@
+import { useWorkbenchAccess, clearWorkbenchAccess } from '@/composables/useWorkbenchAccess'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { createI18n } from 'vue-i18n'
@@ -166,4 +167,32 @@ it.each([['备货订单状态', 'orderStatus', false], ['采购状态', 'purchas
   await wrapper.findAll('thead button').find(b => b.text() === '收款时间')!.trigger('click'); await flushPromises()
   expect(router.currentRoute.value.query).toMatchObject({ sortBy: 'paidAt', sortOrder: 'asc' })
   wrapper.unmount()
+})
+
+it.each([false, true])('queries own inventory without list filters, or the selected orders as a group (procurement=%s)', async procurement => {
+  vi.mocked(api.get).mockImplementation(async url => String(url).endsWith('stock-inventory') ? { ...response, items: [], total: 0, customerId: null } : { ...response, items: [row, { ...row, id: 's2', customerId: 'c2' }], total: 2 })
+  const { wrapper } = await setup('/workbench/sales?queue=stock&ownerId=other&departmentId=d1&warehouseCode=HZ', procurement)
+  const open = () => wrapper.findAll('button').find(b => b.text().includes('查询备货库存'))!.trigger('click')
+  await open(); await flushPromises()
+  const first = vi.mocked(api.get).mock.calls.find(call => String(call[0]).endsWith('stock-inventory'))![1]!.params
+  expect(first.ownerId).toBeUndefined(); expect(first.departmentId).toBeUndefined(); expect(first.warehouseCode).toBeUndefined(); expect(first.orderIds).toBeUndefined()
+  const dialog = wrapper.findComponent({ name: 'StockInventoryDialog' })
+  dialog.vm.$emit('close'); await flushPromises()
+  for (const checkbox of wrapper.findAll('tbody input[type=checkbox]')) await checkbox.setValue(true)
+  await open(); await flushPromises()
+  const calls = vi.mocked(api.get).mock.calls.filter(call => String(call[0]).endsWith('stock-inventory'))
+  expect(calls.at(-1)![1]!.params).toMatchObject({ orderIds: ['s1', 's2'], queue: procurement ? 'procurement' : 'all' })
+  wrapper.unmount()
+})
+
+
+it.each([false, true])('shows the account department on stock lists, procurement=%s', async procurement => {
+  useWorkbenchAccess().access.value = { roles: [], isAdmin: false, businessRole: 'department_manager', businessDepartment: { id: 'd1', name: '业务一部' } }
+  vi.mocked(api.get).mockResolvedValue({ ...response, items: [], departments: [], total: 0 })
+  try {
+    const { wrapper, router } = await setup(procurement ? '/workbench/procurement?queue=stock_procurement' : '/workbench/sales?queue=stock', procurement)
+    expect(wrapper.findAll('select')[0].get('option[value=""]').text()).toBe('业务一部')
+    expect(router.currentRoute.value.query.departmentId).toBeUndefined()
+    wrapper.unmount()
+  } finally { clearWorkbenchAccess() }
 })

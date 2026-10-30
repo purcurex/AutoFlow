@@ -1,3 +1,5 @@
+import { demoShipmentOrders } from './supplier-shipment-demo'
+import { demoPurchaseLinks } from './procurement-groups-demo'
 import { demoAllocationScopes, demoAllocationBalances } from './allocation-inventory-demo'
 import type { AllocationInventoryScope } from './allocation-inventory'
 import { ApprovalCommand, ApprovalOutcome, ApprovalQueue, ApprovalTarget, approvalEntity } from './fop-approval.types'
@@ -132,7 +134,12 @@ export class DemoFopDataProvider extends FopDataProvider {
       return node ? [{ code: d.id, departmentId: node.id, departmentPathIds: departmentPath(workspace, node.id) }] : []
     })
     const organizationSummaries = (['registrations', 'department_receipts', 'order_volume'] as const).map(chartId => ({ chartId, departments }))
-    return { allocationInventoryScopes: demoAllocationScopes(await this.orders(identity)), approvalActions: ['review', 'allocation_review'], organizationSummaries, subject: { ...identity }, allowedOrderIds: (await this.orders(identity)).map(order => order.id), allowedStockOrderIds: demoStockOrders(await this.orders(identity)).map(row => row.id), allowedStockInventoryIds: demoStockInventory(await this.orders(identity)).map(row => row.id), allowedPurchaseOrderIds: (await this.orders(identity)).flatMap(order => demoSupplierFollowUps(order).map(row => row.purchaseOrderId)), allowedReceiptIds: (await this.receipts(identity)).map(receipt => receipt.id), allowedFreightIds: demoFreight(identity, await this.orders(identity)).map(row => row.id), allowedProfitIds: demoProfits(identity, await this.orders(identity)).map(row => row.id), analyticsScopes: ['rates', 'registrations', 'receipts', 'freight', 'sales_profit'] }
+    return { allocationInventoryScopes: demoAllocationScopes(await this.orders(identity)), approvalActions: ['review', 'allocation_review'], organizationSummaries, subject: { ...identity }, allowedOrderIds: (await this.orders(identity)).map(order => order.id), allowedStockOrderIds: demoStockOrders(await this.orders(identity)).map(row => row.id), allowedStockInventoryIds: demoStockInventory(await this.orders(identity)).map(row => row.id), allowedPurchaseOrderIds: [...(await this.orders(identity)).flatMap(order => demoSupplierFollowUps(order).map(row => row.purchaseOrderId)), ...demoPurchaseLinks(identity, await this.orders(identity)).orders.flatMap(o => o.obligations?.flatMap(link => link.purchase ? [link.purchase.id] : []) ?? [])], allowedReceiptIds: (await this.receipts(identity)).map(receipt => receipt.id), allowedFreightIds: demoFreight(identity, await this.orders(identity)).map(row => row.id), allowedProfitIds: demoProfits(identity, await this.orders(identity)).map(row => row.id), analyticsScopes: ['rates', 'registrations', 'receipts', 'freight', 'sales_profit'] }
+  }
+  async getPurchaseLinks(identity: Readonly<FopIdentity>, permission: Readonly<FopPermissionGrant>, orderIds: readonly string[]) {
+    this.assertIdentity(identity, permission)
+    const ids = new Set(orderIds)
+    return demoPurchaseLinks(identity, (await this.orders(identity)).filter(o => ids.has(o.id) && permission.allowedOrderIds.includes(o.id)))
   }
   async listSupplierFollowUps(identity: Readonly<FopIdentity>, permission: Readonly<FopPermissionGrant>, orderId: string) {
     this.assertIdentity(identity, permission)
@@ -397,6 +404,7 @@ export class DemoFopDataProvider extends FopDataProvider {
     if (source) orders.push({ ...source, id: `${source.id}:prepaid-fulfillment`, orderNumber: `TO${businessDate(new Date(backlogDay - DAY)).slice(2).replaceAll('-', '')}039999`, amount: 60,
       createdAt: new Date(backlogDay - DAY).toISOString(), paidAt: new Date(backlogDay - DAY + 3_600_000).toISOString(),
       customerId: `${accountKey}:prepaid-customer`, customerCode: 'PRE001', customerName: 'Prepaid Demo Customer', exception: null })
+    orders.push(...demoShipmentOrders(orders, this.paymentDemoAnchor))
     for (const [allocationIndex, order] of orders.entries()) {
       if (this.approved.has(this.documentKey(identity.tenantId, 'hzkj_orders', order.id))) {
         order.reviewStatus = 'approved'

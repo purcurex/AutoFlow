@@ -3,11 +3,12 @@ import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { MessageCircle, Copy, RefreshCw } from 'lucide-vue-next'
 import OrganizationModal from '@/components/admin/OrganizationModal.vue'
-import { getSupplierFollowUps, getSupplierChat, type SupplierFollowUp, type SupplierFollowUpPage } from '@/api/supplier-follow-up'
+import type { PurchaseFilters } from '@/api/procurement-groups'
+import { getSupplierFollowUps, getSupplierChat, getPurchaseSupplier, getPurchaseSupplierChat, type SupplierFollowUp, type SupplierFollowUpPage } from '@/api/supplier-follow-up'
 import { openSupplierChat } from '@/utils/supplierChat'
 import { copyText } from '@/utils/copyText'
 import { onSessionReset } from '@/utils/session'
-const props = defineProps<{ orderId: string; orderNumber: string }>()
+const props = defineProps<{ orderId: string; orderNumber: string; purchaseOrderId?: string; groupFilters?: PurchaseFilters }>()
 const emit = defineEmits<{ close: [] }>()
 const { locale } = useI18n()
 const t = (cn: string, en: string) => String(locale.value).startsWith('zh') ? cn : en
@@ -24,9 +25,10 @@ async function load(auto = false) {
   const current = ++generation
   page.value = undefined; error.value = ''; notice.value = ''; loading.value = true
   try {
-    const result = await getSupplierFollowUps(props.orderId)
+    const result = await (props.groupFilters ? getPurchaseSupplier(props.orderId, props.groupFilters) : getSupplierFollowUps(props.orderId))
     if (!active || current !== generation) return
     if (result.orderId !== props.orderId || !Array.isArray(result.items)) throw new Error('供应商信息不匹配，请刷新重试。')
+    if (props.groupFilters && (result.items.length !== 1 || result.items[0]?.purchaseOrderId !== props.purchaseOrderId)) throw new Error('采购单供应商信息不匹配，请刷新重试。')
     page.value = result
     if (auto && result.items.length === 1 && result.items[0]?.availability === 'ready') await launch(result.items[0])
   } catch (cause) { if (active && current === generation) error.value = errorText(cause) }
@@ -37,7 +39,7 @@ async function launch(contact: SupplierFollowUp) {
   const current = generation
   launching.value = contact.purchaseOrderId; error.value = ''; notice.value = ''
   try {
-    const result = await getSupplierChat(props.orderId, contact.purchaseOrderId, contact.contactVersion)
+    const result = await (props.groupFilters ? getPurchaseSupplierChat(props.orderId, props.groupFilters, contact.contactVersion) : getSupplierChat(props.orderId, contact.purchaseOrderId, contact.contactVersion))
     if (!active || current !== generation) return
     if (result.orderId !== props.orderId || result.purchaseOrderId !== contact.purchaseOrderId || result.wangwangAccount !== contact.supplier.wangwangAccount || result.source !== page.value?.source) throw new Error('供应商信息已变化，请刷新后重新选择。')
     if (result.source === 'mock' && result.mode === 'demo' && result.url === null) {
@@ -56,15 +58,15 @@ onMounted(() => load(true))
 </script>
 <template>
   <OrganizationModal :title="t('采购催办', 'Purchase follow-up')" @close="close">
-    <div class="follow-up-intro"><div><strong>{{ orderNumber }}</strong><p>{{ t('联系本单待发货采购单的供应商', 'Contact suppliers for this order’s pending purchases') }}</p></div><button type="button" class="btn btn-secondary" :disabled="loading || !!launching" @click="load()"><RefreshCw :size="14" />{{ t('刷新', 'Refresh') }}</button></div>
+    <div class="follow-up-intro"><div><strong>{{ orderNumber }}</strong><p>{{ groupFilters ? t('联系本采购订单的供应商', 'Contact this purchase order’s supplier') : t('联系本单待发货采购单的供应商', 'Contact suppliers for this order’s pending purchases') }}</p></div><button type="button" class="btn btn-secondary" :disabled="loading || !!launching" @click="load()"><RefreshCw :size="14" />{{ t('刷新', 'Refresh') }}</button></div>
     <p v-if="loading" role="status" class="follow-up-hint">{{ t('正在核对采购单与供应商…', 'Checking purchases and suppliers…') }}</p>
     <p v-if="error" role="alert" class="follow-up-error">{{ error }}</p>
     <p v-if="page && !page.items.length" class="follow-up-hint">{{ t('暂无可联系的待发货采购单，请在 FOP 核对采购关联与供应商资料。', 'No pending purchase contacts. Check purchase links and supplier details in FOP.') }}</p>
     <div v-if="page?.items.length" class="supplier-cards">
       <article v-for="contact in page.items" :key="contact.purchaseOrderId" :data-purchase="contact.purchaseOrderId" class="supplier-card">
-        <header><div><h3>{{ contact.supplier.name }}</h3><p>{{ t('旺旺', 'Wangwang') }}：{{ contact.supplier.wangwangAccount || t('未填写', 'Not provided') }}<button v-if="contact.supplier.wangwangAccount" class="copy-contact" :aria-label="t('复制旺旺账号', 'Copy Wangwang account')" @click="copy(contact.supplier.wangwangAccount)"><Copy :size="13" /></button></p></div><span class="shipment-pill">{{ contact.shipmentStatus === 'partial' ? t('部分发货', 'Partly shipped') : t('待发货', 'Awaiting shipment') }}</span></header>
+        <header><div><h3>{{ contact.supplier.name }}</h3><p>{{ t('旺旺', 'Wangwang') }}：{{ contact.supplier.wangwangAccount || t('未填写', 'Not provided') }}<button v-if="contact.supplier.wangwangAccount" class="copy-contact" :aria-label="t('复制旺旺账号', 'Copy Wangwang account')" @click="copy(contact.supplier.wangwangAccount)"><Copy :size="13" /></button></p></div><span v-if="!groupFilters" class="shipment-pill">{{ contact.shipmentStatus === 'partial' ? t('部分发货', 'Partly shipped') : t('待发货', 'Awaiting shipment') }}</span></header>
         <div class="purchase-numbers"><div class="purchase-number"><small>{{ t('采购单号', 'Purchase order') }}</small><span><b>{{ contact.purchaseOrderNumber }}</b><button class="copy-contact" :aria-label="t('复制采购单号', 'Copy purchase number')" @click="copy(contact.purchaseOrderNumber)"><Copy :size="13" /></button></span></div><div v-if="contact.platformOrderNumber" class="purchase-number"><small>{{ t('1688 订单号', '1688 order') }}</small><span><b>{{ contact.platformOrderNumber }}</b><button class="copy-contact" :aria-label="t('复制1688订单号', 'Copy 1688 order number')" @click="copy(contact.platformOrderNumber)"><Copy :size="13" /></button></span></div></div>
-        <ul><li v-for="line in contact.lines" :key="`${line.fulfillmentLineId}:${line.purchaseLineId}`"><div><strong>{{ line.sku }}</strong><span>{{ line.name }}</span></div><span>{{ t('待发', 'Pending') }} <b>{{ line.pendingQuantity }}</b></span></li></ul>
+        <ul v-if="!groupFilters"><li v-for="line in contact.lines" :key="`${line.fulfillmentLineId}:${line.purchaseLineId}`"><div><strong>{{ line.sku }}</strong><span>{{ line.name }}</span></div><span>{{ t('待发', 'Pending') }} <b>{{ line.pendingQuantity }}</b></span></li></ul>
         <footer><span>{{ contact.availability === 'missing_account' ? t('旺旺账号未填写，请在 FOP 补充。', 'Add the Wangwang account in FOP.') : contact.availability === 'chat_unavailable' ? t('联系地址待核对，请在 FOP 确认。', 'Verify the chat address in FOP.') : t('打开会话后由您发送催办信息', 'Send your follow-up in the chat') }}</span><button type="button" class="btn btn-primary open-chat" :disabled="contact.availability !== 'ready' || !!launching" @click="launch(contact)"><MessageCircle :size="15" />{{ launching === contact.purchaseOrderId ? t('核对中…', 'Checking…') : t('打开旺旺', 'Open Wangwang') }}</button></footer>
       </article>
     </div>

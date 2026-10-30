@@ -29,6 +29,7 @@ import { UpdateBusinessScopeDto } from './dto/business-scope.dto'
 import { UpdateFopBindingDto } from './dto/fop-binding.dto'
 import { UpdateManagementRoleDto } from './dto/management-role.dto'
 import { UpdateChartPermissionsDto } from './dto/chart-permissions.dto'
+import { UpdateAccountAccessDto } from './dto/account-access.dto'
 
 // 确保上传目录存在
 const uploadDir = './uploads/avatars'
@@ -66,6 +67,14 @@ export class UsersController {
     @Body() body: UpdateWorkbenchRolesDto,
   ) {
     return this.workbenchAccess.updateRoles(req.user!.userId, id, body.workbenchRoles)
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Put(':id/account-access')
+  @Header('Cache-Control', 'private, no-store')
+  async updateAccountAccess(@Request() req: ExpressRequest, @Param('id', ParseUUIDPipe) id: string, @Body() body: UpdateAccountAccessDto) {
+    await this.workbenchAccess.requireAdmin(req.user!.userId)
+    return this.usersService.updateAccountAccess(req.user!.userId, id, body)
   }
 
   @UseGuards(JwtAuthGuard)

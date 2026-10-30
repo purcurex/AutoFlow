@@ -12,6 +12,7 @@ import FopFreightView from './FopFreightView.vue'
 import SalesPerformanceView from './SalesPerformanceView.vue'
 import FopOrdersView from './FopOrdersView.vue'
 import StockOrdersView from './StockOrdersView.vue'
+import ProcurementOrdersView from './ProcurementOrdersView.vue'
 import WorkbenchFilterSummary from '@/components/WorkbenchFilterSummary.vue'
 import { useWorkbenchAccess } from '@/composables/useWorkbenchAccess'
 import { sessionEpoch } from '@/utils/session'
@@ -63,7 +64,7 @@ const icons = { sales: BriefcaseBusiness, procurement: Boxes, allocation: Packag
 const departmentQuery = computed(() => typeof route.query.departmentId === 'string' && route.query.departmentId ? { departmentId: route.query.departmentId } : {})
 const todoScopeQuery = computed(() => ({ ...departmentQuery.value, ...(typeof route.query.ownerId === 'string' && route.query.ownerId ? { ownerId: route.query.ownerId } : {}) }))
 function roleLink(value: WorkbenchRole) { return { name: 'RoleWorkbench', params: { role: value }, query: todoScopeQuery.value } }
-function queueLink(value: string) { return { name: 'RoleWorkbench', params: { role: role.value }, query: { ...(['stock', 'stock_procurement'].includes(value) || role.value && workbenchQueues[role.value].some(queue => queue === value) ? todoScopeQuery.value : departmentQuery.value), queue: value } } }
+function queueLink(value: string) { return { name: 'RoleWorkbench', params: { role: role.value }, query: { ...(role.value === 'procurement' && ['fulfillment', 'purchase'].includes(String(route.query.view)) ? { view: route.query.view } : {}), ...(['stock', 'stock_procurement'].includes(value) || role.value && workbenchQueues[role.value].some(queue => queue === value) ? todoScopeQuery.value : departmentQuery.value), queue: value } } }
 </script>
 
 <template>
@@ -92,6 +93,7 @@ function queueLink(value: string) { return { name: 'RoleWorkbench', params: { ro
         <FopReceiptsView v-else-if="choice === 'receipts'" :key="dataRevision" />
         <OrderVolumeOrdersView v-else-if="choice === 'order-volume'" :key="dataRevision" />
         <div v-else-if="choice === 'order-analysis'"><OrderVolumeAnalysis v-if="chartVisible('order_volume')" :revision="dataRevision" /><OrderVolumeAnalysis v-if="chartVisible('customer_orders')" customer :revision="dataRevision" /></div>
+        <ProcurementOrdersView :key="dataRevision" :search-recovery="searchRecovery" :recover-page="recoverOrderPage" @clear-search-recovery="clearSearchRecovery" v-else-if="validChoice && role === 'procurement' && (choice === 'procurement' || choice === 'procurement_shipping')" @filter-labels="updateFilterLabels" />
         <FopOrdersView @filter-labels="updateFilterLabels" v-else-if="validChoice" :key="dataRevision" :search-recovery="searchRecovery" :recover-page="recoverOrderPage" @clear-search-recovery="clearSearchRecovery" />
         <div v-else class="access-message" role="alert">{{ text('该清单不属于当前工作台，请选择上方功能。', 'This list does not belong to the selected workbench. Choose a function above.') }}</div>
       </template>

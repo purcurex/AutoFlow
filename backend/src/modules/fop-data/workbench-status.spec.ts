@@ -3,22 +3,22 @@ import type { FopOrder } from './fop-data.types'
 import { canFilterTaskStatus, getDispatchTaskStatus, getProcurementTaskStatus, getTaskStatus, taskStatusOptions } from './workbench-status'
 
 describe('compact workbench statuses', () => {
-  it('classifies allocation review by completed dispatch preparation without waiting for Shopify', () => {
-    expect(taskStatusOptions('allocation_review')).toEqual(['dispatch_incomplete', 'dispatch_complete'])
+  it.each(['allocation', 'allocation_review'])('classifies %s by audited dispatches without waiting for Shopify', queue => {
+    expect(taskStatusOptions(queue)).toEqual(['dispatch_incomplete', 'dispatch_complete'])
     for (const sync of ['pending', 'synced', 'unknown'] as const) {
       const row = { dispatchDocuments: [{ id: 'd', number: 'D', status: 'approved' }], fulfillmentProgress: { shopifySync: sync } } as FopOrder
-      expect(getTaskStatus(row, 'allocation_review')).toBe('dispatch_complete')
+      expect(getTaskStatus(row, queue)).toBe('dispatch_complete')
       for (const docs of [undefined, null, [], [{ id: 'd', number: 'D', status: 'unknown' }], [...row.dispatchDocuments!, { id: 'x', number: 'X', status: 'submitted' }]]) {
-        expect(getTaskStatus({ ...row, dispatchDocuments: docs } as FopOrder, 'allocation_review')).toBe('dispatch_incomplete')
+        expect(getTaskStatus({ ...row, dispatchDocuments: docs } as FopOrder, queue)).toBe('dispatch_incomplete')
       }
     }
   })
-  it('sorts allocation review by binary completion and keeps payment order within each group', () => {
+  it.each(['allocation', 'allocation_review'] as const)('sorts %s by binary completion and keeps payment order within each group', queue => {
     const make = (id: string, day: string, status: string) => ({ id, paidAt: `2026-10-${day}T00:00:00Z`, dispatchDocuments: [{ id, number: id, status }], fulfillmentProgress: { shopifySync: 'pending' } } as FopOrder)
     const rows = [make('complete', '04', 'approved'), make('submitted', '03', 'submitted'), make('draft', '02', 'draft'), make('unknown', '01', 'unknown')]
-    rows.sort((a,b) => compareFulfillmentOrders(a,b,{ queue: 'allocation_review', sortBy: 'dispatchDocumentStatus', sortOrder: 'asc' }))
+    rows.sort((a,b) => compareFulfillmentOrders(a,b,{ queue, sortBy: 'dispatchDocumentStatus', sortOrder: 'asc' }))
     expect(rows.map(row => row.id)).toEqual(['unknown', 'draft', 'submitted', 'complete'])
-    rows.sort((a,b) => compareFulfillmentOrders(a,b,{ queue: 'allocation_review', sortBy: 'dispatchDocumentStatus', sortOrder: 'desc' }))
+    rows.sort((a,b) => compareFulfillmentOrders(a,b,{ queue, sortBy: 'dispatchDocumentStatus', sortOrder: 'desc' }))
     expect(rows.map(row => row.id)).toEqual(['complete', 'unknown', 'draft', 'submitted'])
   })
   it.each(['pending_dispatch', 'pending_logistics', 'unknown'] as const)('keeps preparation actionable before logistics (%s)', logisticsGate => {

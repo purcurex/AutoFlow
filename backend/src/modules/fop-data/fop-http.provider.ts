@@ -1,3 +1,4 @@
+import type { PurchaseLinkSnapshot } from './procurement-groups.types'
 import type { AllocationInventoryScope, AllocationInventorySnapshot } from './allocation-inventory'
 import { FopDataProvider, FopIdentity, FopPermissionGrant, FopOrderCandidate, FopPermissionDeniedError } from './fop-data.types'
 import { ApprovalCommand, ApprovalOutcome, ApprovalQueue, ApprovalTarget } from './fop-approval.types'
@@ -21,6 +22,7 @@ export class HttpFopDataProvider extends FopDataProvider {
     if (!response.ok) throw new Error('FOP employee API request failed')
     return response.json() as Promise<T>
   }
+  getPurchaseLinks(identity: Readonly<FopIdentity>, _permission: Readonly<FopPermissionGrant>, orderIds: readonly string[]): Promise<PurchaseLinkSnapshot> { return this.call('/purchase-links', identity, { orderIds }) }
   resolvePermissions(identity: Readonly<FopIdentity>): Promise<FopPermissionGrant> { return this.call('/permissions', identity, {}) }
   listOrders(identity: Readonly<FopIdentity>, _permission: Readonly<FopPermissionGrant>): Promise<FopOrderCandidate[]> { return this.call('/fulfillment-orders', identity, {}) }
   listStockOrders(identity: Readonly<FopIdentity>, _permission: Readonly<FopPermissionGrant>): Promise<FopStockOrderCandidate[]> { return this.call('/stock-orders', identity, {}) }

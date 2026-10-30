@@ -4,7 +4,6 @@ import { useRoute, useRouter } from 'vue-router'
 import { ArrowRight, LockKeyhole, Mail } from 'lucide-vue-next'
 import { useI18n } from 'vue-i18n'
 import { useUserStore } from '@/stores'
-import { useTheme } from '@/composables/useTheme'
 import { BrandLogo, LanguageSwitch, ThemeToggle } from '@/components/ui'
 
 const email = ref('')
@@ -15,7 +14,6 @@ const router = useRouter()
 const route = useRoute()
 const userStore = useUserStore()
 const { t } = useI18n()
-const { setTheme } = useTheme()
 
 async function handleLogin() {
   if (!email.value || !password.value) {
@@ -26,7 +24,6 @@ async function handleLogin() {
   error.value = ''
   try {
     await userStore.login(email.value, password.value)
-    setTheme(true)
     const redirect = typeof route.query.redirect === 'string' && route.query.redirect.startsWith('/') ? route.query.redirect : '/'
     await router.push(redirect)
   } catch (err: unknown) {

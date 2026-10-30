@@ -1,129 +1,110 @@
 import { createPinia } from 'pinia'
-import { flushPromises, mount, RouterLinkStub } from '@vue/test-utils'
+import { flushPromises, mount, RouterLinkStub, type VueWrapper } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import WorkbenchRoleAdminView from '@/views/WorkbenchRoleAdminView.vue'
-import { getWorkbenchAccounts, updateWorkbenchRoles, updateBusinessScope, updateManagementRole, updateChartPermissions } from '@/api/workbench-access'
-
+import { getWorkbenchAccounts, updateAccountAccess, updateChartPermissions, type WorkbenchAccount } from '@/api/workbench-access'
+import { workbenchRoles } from '@/utils/workbench'
+import { useUserStore } from '@/stores/user'
+import { invalidateSession } from '@/utils/session'
 vi.mock('@/components/layout', () => ({ AppLayout: { template: '<div><slot /></div>' } }))
-vi.mock('@/api/workbench-access', () => ({ getWorkbenchAccounts: vi.fn(), updateWorkbenchRoles: vi.fn(), updateBusinessScope: vi.fn(), updateManagementRole: vi.fn(), updateChartPermissions: vi.fn() }))
-
-describe('workbench role administration', () => {
-  it('saves selected roles and only marks them saved after server confirmation', async () => {
-    const account = { chartPermissions: [], id: 'u1', displayId: '000001', email: 'sales@example.test', username: 'Alice', fopBinding: null, role: 'user' as const, workbenchRoles: ['sales' as const] }
-    vi.mocked(getWorkbenchAccounts).mockResolvedValue({ items: [account], total: 1 })
-    vi.mocked(updateWorkbenchRoles).mockRejectedValueOnce(new Error('Forbidden')).mockResolvedValueOnce({ ...account, workbenchRoles: ['sales', 'warehouse'] })
-    const wrapper = mount(WorkbenchRoleAdminView, { global: { plugins: [createPinia(), createI18n({ legacy: false, locale: 'zh-CN', messages: {} })], stubs: { RouterLink: RouterLinkStub } } })
-    await flushPromises()
-    await wrapper.find('input[value=warehouse]').setValue(true)
-    await wrapper.find('button[data-save]').trigger('click')
-    await flushPromises()
-    expect(wrapper.find('[role=alert]').text()).toContain('保存失败')
-    expect(wrapper.find('button[data-save]').attributes('disabled')).toBeUndefined()
-    await wrapper.find('button[data-save]').trigger('click')
-    await flushPromises()
-    expect(updateWorkbenchRoles).toHaveBeenLastCalledWith('u1', ['sales', 'warehouse'])
-    expect(wrapper.find('[role=status]').text()).toContain('已保存')
-    expect(wrapper.find('button[data-save]').attributes('disabled')).toBeDefined()
-    wrapper.unmount()
-  })
+vi.mock('@/api/workbench-access', async original => ({ ...await original<object>(), getWorkbenchAccounts: vi.fn(), updateAccountAccess: vi.fn(), updateChartPermissions: vi.fn() }))
+const base: WorkbenchAccount = { chartPermissions: [], id: 'u1', displayId: '000001', email: 'alice@example.test', username: 'Alice', fopBinding: null, role: 'user', workbenchRoles: [...workbenchRoles], businessScope: { role: 'salesperson', departmentId: 'd1', employeeId: 'e1' }, employee: { id: 'e1', name: '张丽（Alice）', code: 'ID-001', department: { id: 'd1', name: '业务一部' } } }
+let current: WorkbenchAccount
+const wrappers: VueWrapper[] = []
+beforeEach(() => {
+  vi.resetAllMocks(); current = structuredClone(base)
+  vi.mocked(getWorkbenchAccounts).mockImplementation(async () => ({ items: [structuredClone(current)], total: 1 }))
+  vi.mocked(updateAccountAccess).mockImplementation(async (_id, input) => { current = { ...current, role: input.accountRole === 'administrator' ? 'admin' : 'user', businessScope: input.businessScope, workbenchRoles: input.workbenchRoles }; return structuredClone(current) })
 })
-
-describe('permissions-only account listing', () => {
-  it('lists organization accounts and routes account editing back to organization without creation or binding forms', async () => {
-    const account = { chartPermissions: [], id: 'u2', displayId: '000002', email: 'member@example.test', username: 'Member', role: 'user' as const, workbenchRoles: [], fopBinding: { tenantId: 'company', userId: 'fop-member' } }
-    vi.mocked(getWorkbenchAccounts).mockResolvedValue({ items: [account], total: 1 })
-    const wrapper = mount(WorkbenchRoleAdminView, { global: { plugins: [createPinia(), createI18n({ legacy: false, locale: 'zh-CN', messages: {} })], stubs: { RouterLink: RouterLinkStub } } })
-    await flushPromises()
-    expect(wrapper.find('[data-create-employee]').exists()).toBe(false)
-    expect(wrapper.find('[data-save-binding]').exists()).toBe(false)
-    expect(wrapper.find('input[aria-label*="FOP"]').exists()).toBe(false)
-    expect(wrapper.text()).toContain('已绑定 FOP 用户')
-    expect(wrapper.findAllComponents(RouterLinkStub).some(link => JSON.stringify(link.props('to')).includes('accountId'))).toBe(true)
-    wrapper.unmount()
-  })
+afterEach(() => { wrappers.splice(0).forEach(wrapper => wrapper.unmount()); vi.restoreAllMocks() })
+async function setup(self = false) {
+  const pinia = createPinia()
+  if (self) useUserStore(pinia).user = { id: current.id, role: 'admin' } as never
+  const wrapper = mount(WorkbenchRoleAdminView, { attachTo: document.body, global: { plugins: [pinia, createI18n({ legacy: false, locale: 'zh-CN', messages: {} })], stubs: { RouterLink: RouterLinkStub, teleport: true } } })
+  wrappers.push(wrapper); await flushPromises(); return wrapper
+}
+async function edit(wrapper: VueWrapper) { await wrapper.get('[data-edit-access]').trigger('click'); await flushPromises() }
+async function submit(wrapper: VueWrapper) { await wrapper.get('.account-access-dialog form').trigger('submit'); await flushPromises() }
+const roleButton = (role: string) => `[data-role="${role}"][aria-pressed]`
+it('keeps the list compact and exposes exactly four roles on demand', async () => {
+  const w = await setup()
+  expect(w.find('.account-access-dialog').exists()).toBe(false)
+  expect(w.find('tbody input, tbody select').exists()).toBe(false)
+  expect(w.find('tbody').text()).toContain('外贸业务员')
+  expect(w.find('tbody').text()).toContain('业务一部')
+  expect(w.findAllComponents(RouterLinkStub).some(link => JSON.stringify(link.props('to')).includes('accountId'))).toBe(true)
+  await edit(w)
+  expect(w.findAll('.role-options button').map(b => b.get('span').text())).toEqual(['管理员', '部门经理', '外贸业务员', '协同管理岗'])
+  expect(w.get('.account-access-dialog details').attributes('open')).toBeUndefined()
 })
-
-describe('business data scope editor', () => {
-  it('requires manager assignment, handles rejection, and persists the server-confirmed role', async () => {
-    const account = { chartPermissions: [], id: 'scope-user', displayId: '000003', email: 'scope@example.test', username: 'Scope', fopBinding: null, role: 'user' as const, workbenchRoles: ['sales' as const], businessScope: { role: 'salesperson' as const, departmentId: null, employeeId: 'employee-1' } }
-    vi.mocked(getWorkbenchAccounts).mockResolvedValue({ items: [account], total: 1 })
-    const wrapper = mount(WorkbenchRoleAdminView, { global: { plugins: [createPinia(), createI18n({ legacy: false, locale: 'zh-CN', messages: {} })], stubs: { RouterLink: RouterLinkStub } } })
-    await flushPromises()
-    await wrapper.find('select[aria-label="Scope · 业务数据角色"]').setValue('department_manager')
-    const submit = () => wrapper.find('button[data-save-scope]').element.closest('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
-    submit(); await flushPromises()
-    expect(wrapper.find('[role=alert]').text()).toContain('部门经理必须绑定部门')
-    expect(updateBusinessScope).not.toHaveBeenCalled()
-    await wrapper.find('input[aria-label="Scope · 所属部门 ID"]').setValue(' sales-1 ')
-    vi.mocked(updateBusinessScope).mockRejectedValueOnce(new Error('Forbidden')).mockResolvedValueOnce({ ...account, businessScope: { role: 'department_manager', departmentId: 'sales-1', employeeId: 'employee-1' } })
-    submit(); await flushPromises()
-    expect(wrapper.find('[role=alert]').text()).toContain('保存失败')
-    submit(); await flushPromises()
-    expect(updateBusinessScope).toHaveBeenLastCalledWith('scope-user', { role: 'department_manager', departmentId: 'sales-1', employeeId: 'employee-1' })
-    expect(wrapper.find('[role=status]').text()).toContain('下次请求立即生效')
-    expect(wrapper.find('button[data-save-scope]').attributes('disabled')).toBeDefined()
-    wrapper.unmount()
-  })
+it('saves role, scope and workbenches in one confirmed request', async () => {
+  const w = await setup(); await edit(w); await w.get(roleButton('department_manager')).trigger('click')
+  expect(updateAccountAccess).not.toHaveBeenCalled()
+  expect(w.find('tbody').text()).toContain('外贸业务员')
+  await submit(w)
+  expect(updateAccountAccess).toHaveBeenCalledExactlyOnceWith('u1', { accountRole: 'department_manager', businessScope: { role: 'department_manager', departmentId: 'd1', employeeId: 'e1' }, workbenchRoles: [...workbenchRoles] })
+  expect(w.find('.account-access-dialog').exists()).toBe(false)
+  expect(w.find('tbody').text()).toContain('部门经理')
+  expect(w.get('[role=status]').text()).toContain('已保存')
 })
-
-
-describe('independent system administrator data access', () => {
-  it('lets an administrator disable their business data without removing management rights', async () => {
-    const account = { chartPermissions: [], id: 'admin-only', displayId: '000004', email: 'admin@example.test', username: 'Admin', fopBinding: null, role: 'admin' as const, workbenchRoles: [], businessScope: { role: 'admin' as const, departmentId: null, employeeId: null } }
-    vi.mocked(getWorkbenchAccounts).mockResolvedValue({ items: [account], total: 1 })
-    const wrapper = mount(WorkbenchRoleAdminView, { global: { plugins: [createPinia(), createI18n({ legacy: false, locale: 'zh-CN', messages: {} })], stubs: { RouterLink: RouterLinkStub } } })
-    await flushPromises()
-    const select = wrapper.get('select[aria-label="Admin · 业务数据角色"]')
-    expect(select.attributes('disabled')).toBeUndefined()
-    expect(select.find('option[value="none"]').exists()).toBe(true)
-    expect(wrapper.find('select[aria-label="Admin · 系统管理角色"]').exists()).toBe(true)
-    await select.setValue('none')
-    vi.mocked(updateBusinessScope).mockResolvedValue({ ...account, businessScope: { role: 'none', departmentId: null, employeeId: null } } as never)
-    await wrapper.get('button[data-save-scope]').element.closest('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
-    await flushPromises()
-    expect(updateBusinessScope).toHaveBeenLastCalledWith('admin-only', { role: 'none', departmentId: null, employeeId: null })
-    expect(account.role).toBe('admin')
-    wrapper.unmount()
-  })
+it('retains failed drafts and permits retry without partial list updates', async () => {
+  const w = await setup(); await edit(w); await w.get(roleButton('collaboration')).trigger('click')
+  vi.mocked(updateAccountAccess).mockRejectedValueOnce(new Error('Forbidden')); await submit(w)
+  expect(w.get('[role=alert]').text()).toContain('保存失败')
+  expect(w.find('tbody').text()).toContain('外贸业务员')
+  expect(w.get('[data-save-access]').attributes('disabled')).toBeUndefined()
+  await submit(w); expect(w.find('tbody').text()).toContain('协同管理岗')
 })
-
-
-it('saves management rights independently from the business scope', async () => {
-  const account = { chartPermissions: [], id: 'manager', displayId: '000005', email: 'manager@example.test', username: 'Manager', fopBinding: null, role: 'user' as const, workbenchRoles: [], businessScope: { role: 'none' as const, departmentId: null, employeeId: null } }
-  vi.mocked(getWorkbenchAccounts).mockResolvedValue({ items: [account], total: 1 })
-  vi.mocked(updateManagementRole).mockResolvedValue({ ...account, role: 'admin' })
-  const wrapper = mount(WorkbenchRoleAdminView, { global: { plugins: [createPinia(), createI18n({ legacy: false, locale: 'zh-CN', messages: {} })], stubs: { RouterLink: RouterLinkStub } } })
-  await flushPromises()
-  await wrapper.get('select[aria-label="Manager · 系统管理角色"]').setValue('admin')
-  await wrapper.get('button[data-save-management]').element.closest('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
-  await flushPromises()
-  expect(updateManagementRole).toHaveBeenLastCalledWith('manager', 'admin')
-  expect(wrapper.get('select[aria-label="Manager · 业务数据角色"]').element).toHaveProperty('value', 'none')
-  expect(wrapper.find('[role=status]').text()).toContain('业务数据范围保持不变')
-  wrapper.unmount()
+it('discards cancelled edits', async () => {
+  const w = await setup(); await edit(w); await w.get(roleButton('administrator')).trigger('click'); await w.get('.access-close').trigger('click')
+  expect(updateAccountAccess).not.toHaveBeenCalled()
+  await edit(w); expect(w.get(roleButton('salesperson')).attributes('aria-pressed')).toBe('true')
 })
-
-
-it('configures chart visibility, scope, organization summaries and independent actions', async () => {
-  const account = { chartPermissions: [], id: 'charts', displayId: '000007', email: 'chart@example.test', username: 'Charts', fopBinding: null, role: 'user' as const, workbenchRoles: [] }
-  vi.mocked(getWorkbenchAccounts).mockResolvedValue({ items: [account], total: 1 })
-  vi.mocked(updateChartPermissions).mockImplementation(async (_id, chartPermissions) => ({ ...account, chartPermissions }))
-  const wrapper = mount(WorkbenchRoleAdminView, { attachTo: document.body, global: { plugins: [createPinia(), createI18n({ legacy: false, locale: 'zh-CN', messages: {} })], stubs: { RouterLink: RouterLinkStub, teleport: true } } })
-  await flushPromises()
-  await wrapper.get('[data-chart-permissions]').trigger('click')
-  const row = wrapper.get('[data-chart-id="order_volume"]')
-  await row.get('[aria-label="图表可见性"]').setValue('allow')
-  await row.get('[aria-label="记录范围"]').setValue('self')
-  await row.get('[aria-label="组织汇总"]').setValue('selected')
-  await flushPromises()
-  expect((row.get('[aria-label="组织汇总"]').element as HTMLSelectElement).value).toBe('selected')
-  await wrapper.get('[data-chart-id="order_volume"] input[value="sales2"]').setValue(true)
-  await row.get('[aria-label="明细权限"]').setValue('deny')
-  await row.get('[aria-label="导出权限"]').setValue('allow')
-  expect(wrapper.get('[data-chart-id="customer_orders"]').find('option[value="marketing"]').exists()).toBe(false)
-  await wrapper.get('[data-save-chart-permissions]').trigger('click'); await flushPromises()
-  expect(updateChartPermissions).toHaveBeenCalledWith('charts', expect.arrayContaining([{ chartId: 'order_volume', visibility: 'allow', dataScope: 'self', summaryMode: 'selected', summaryDepartments: ['sales2'], details: 'deny', export: 'allow' }]))
-  expect(wrapper.text()).toContain('图表权限已保存')
-  wrapper.unmount()
+it('validates assignments and preserves external FOP IDs', async () => {
+  current.employee = null; current.businessScope = { role: 'admin', departmentId: null, employeeId: 'FOP-0001' }
+  const w = await setup(); await edit(w); await w.get(roleButton('department_manager')).trigger('click'); await submit(w)
+  expect(w.get('[role=alert]').text()).toContain('请补全'); expect(updateAccountAccess).not.toHaveBeenCalled()
+  await w.get('input[aria-label="业务部门 ID"]').setValue(' FOP-D1 '); await submit(w)
+  expect(updateAccountAccess).toHaveBeenCalledWith('u1', expect.objectContaining({ businessScope: { role: 'department_manager', departmentId: 'FOP-D1', employeeId: 'FOP-0001' } }))
+})
+it('preserves HR closed access and independent admin business scope', async () => {
+  current.businessScope = { role: 'none', departmentId: 'd1', employeeId: 'e1' }; current.workbenchRoles = []
+  const w = await setup(); await edit(w)
+  expect(w.get('[aria-label="开通业务数据"]').element).toHaveProperty('checked', false)
+  expect(w.get('[data-save-access]').attributes('disabled')).toBeDefined()
+  await w.get(roleButton('administrator')).trigger('click'); await w.get('[aria-label="业务数据范围"]').setValue('none'); await submit(w)
+  expect(updateAccountAccess).toHaveBeenCalledWith('u1', expect.objectContaining({ accountRole: 'administrator', businessScope: { role: 'none', departmentId: 'd1', employeeId: 'e1' } }))
+})
+it('disables self-demotion', async () => {
+  current.role = 'admin'; current.businessScope!.role = 'admin'
+  const w = await setup(true); await edit(w)
+  expect(w.get(roleButton('collaboration')).attributes('disabled')).toBeDefined()
+  expect(w.get(roleButton('administrator')).attributes('disabled')).toBeUndefined()
+})
+it('filters on the server with pagination reset', async () => {
+  const w = await setup(); await w.get('input[type=search]').setValue('Alice'); await w.get('[data-filter-role="collaboration"]').trigger('click'); await flushPromises()
+  expect(getWorkbenchAccounts).toHaveBeenLastCalledWith({ page: 1, pageSize: 20, search: 'Alice', accountRole: 'collaboration' })
+})
+it('preserves custom workbench grants when role stays unchanged', async () => {
+  const w = await setup(); await edit(w); await w.get('input[value=warehouse]').setValue(false); await submit(w)
+  expect(updateAccountAccess).toHaveBeenCalledWith('u1', expect.objectContaining({ workbenchRoles: workbenchRoles.filter(role => role !== 'warehouse') }))
+})
+it('keeps detailed chart configuration available', async () => {
+  vi.mocked(updateChartPermissions).mockImplementation(async (_id, chartPermissions) => ({ ...current, chartPermissions }))
+  const w = await setup(); await edit(w); await w.get('[data-chart-permissions]').trigger('click'); await flushPromises()
+  expect(w.find('.account-access-dialog').exists()).toBe(false)
+  const row = w.get('[data-chart-id="order_volume"]')
+  await row.get('[aria-label="图表可见性"]').setValue('allow'); await row.get('[aria-label="记录范围"]').setValue('self'); await row.get('[aria-label="组织汇总"]').setValue('selected'); await flushPromises(); await w.get('[data-chart-id="order_volume"] input[value="sales2"]').setValue(true); await row.get('[aria-label="明细权限"]').setValue('deny'); await row.get('[aria-label="导出权限"]').setValue('allow')
+  await w.get('[data-save-chart-permissions]').trigger('click'); await flushPromises()
+  expect(updateChartPermissions).toHaveBeenCalledWith('u1', expect.arrayContaining([{ chartId: 'order_volume', visibility: 'allow', dataScope: 'self', summaryMode: 'selected', summaryDepartments: ['sales2'], details: 'deny', export: 'allow' }]))
+})
+it('ignores late saves after a session reset', async () => {
+  let finish!: (account: WorkbenchAccount) => void
+  vi.mocked(updateAccountAccess).mockImplementation(() => new Promise(resolve => { finish = resolve }))
+  const w = await setup(); await edit(w); await w.get(roleButton('department_manager')).trigger('click'); await submit(w)
+  invalidateSession(); await flushPromises(); finish({ ...current }); await flushPromises()
+  expect(w.find('.account-access-dialog').exists()).toBe(false)
+  expect(w.find('[role=status]').exists()).toBe(false)
+  expect(w.find('tbody').text()).not.toContain('Alice')
 })

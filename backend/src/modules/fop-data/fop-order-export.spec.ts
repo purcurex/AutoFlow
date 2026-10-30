@@ -93,10 +93,10 @@ describe('fulfillment Excel export', () => {
   it.each(['unpaid', 'review', 'exceptions', 'dispatch', 'allocation'] as const)('exports consumer payment completion time for %s instead of creation time', async queue => {
     const unpaid = { ...order, paymentStatus: 'unpaid' as const, paidAt: null, consumerPaidAt: '2026-10-01T17:30:00-04:00' }
     const ws = (await read([unpaid, { ...unpaid, id: 'missing', consumerPaidAt: undefined }], queue)).getWorksheet('订单清单')!
-    expect(headers(ws)).toContain('C端下单时间（UTC+8）')
+    expect(headers(ws)).toContain('C端付款时间（UTC+8）')
     expect(headers(ws)).not.toContain('创建日期（UTC+8）')
-    expect(value(ws, 2, 'C端下单时间（UTC+8）').value).toBe('2026-10-02 05:30:00')
-    expect(value(ws, 3, 'C端下单时间（UTC+8）').value).toBe('—')
+    expect(value(ws, 2, 'C端付款时间（UTC+8）').value).toBe('2026-10-02 05:30:00')
+    expect(value(ws, 3, 'C端付款时间（UTC+8）').value).toBe('—')
     expect(value(ws, 2, '收款日期（UTC+8）').value).toBe('—')
     expect(headers((await read([order], 'procurement')).getWorksheet('订单清单')!)).toContain('订单审核时间（UTC+8）')
   })

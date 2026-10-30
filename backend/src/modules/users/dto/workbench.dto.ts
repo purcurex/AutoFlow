@@ -3,8 +3,13 @@ import { procurementStages, type ProcurementStage } from '../../fop-data/procure
 import { Type } from 'class-transformer'
 import { ArrayMaxSize, ArrayMinSize, ArrayUnique, IsArray, IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min, MinLength } from 'class-validator'
 import { WORKBENCH_ROLES, WorkbenchRole } from '../workbench-role'
+import { ACCOUNT_ROLES, AccountRole } from '../account-role'
 
 export class ListWorkbenchAccountsDto {
+  @IsOptional()
+  @IsIn(ACCOUNT_ROLES)
+  accountRole?: AccountRole
+
   @IsOptional()
   @Type(() => Number)
   @IsInt()
@@ -49,6 +54,15 @@ export const FULFILLMENT_SORT_FIELDS = ['paidAt', 'reviewedAt', 'consumerPaidAt'
 export type FulfillmentSortBy = typeof FULFILLMENT_SORT_FIELDS[number]
 
 export class FulfillmentOrderFiltersDto {
+  @IsOptional()
+  @IsIn(['all', '1w', '1m', '3m'])
+  timeRange?: 'all' | '1w' | '1m' | '3m'
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(2)
+  shippingCountryCode?: string
+
   @IsOptional()
   @IsIn(['HZ', 'SZ'])
   warehouseCode?: 'HZ' | 'SZ'

@@ -181,6 +181,22 @@ describe('isolated mock FOP dataset', () => {
       expect(second.items.map(o => o.procurementPaidAt)).toEqual(first.items.map(o => o.procurementPaidAt))
     } finally { jest.useRealTimers() }
   })
+  it('shows six independently grouped supplier shipment aging examples with stable payment times', async () => {
+    const data = new FopDataService(users, new DemoFopDataProvider(organizations, env))
+    const query = { queue: 'procurement_shipping' as const, search: '发货演示', page: 1, pageSize: 20 }
+    const result = await data.getPurchaseGroups('alice', query)
+    expect(result.total).toBe(6)
+    expect(new Set(result.items.map(g => g.purchase!.supplier.id)).size).toBe(6)
+    expect(result.items.map(g => [Math.round((Date.now() - Date.parse(g.purchase!.paidAt!)) / 3600000), g.shipment]).sort())
+      .toEqual([[12, 'pending'], [30, 'pending'], [60, 'pending'], [12, 'partial'], [30, 'partial'], [60, 'partial']].sort())
+    expect(result.items.every(g => g.orderCount === 1 && g.quantity === 4)).toBe(true)
+    const details = await data.getPurchaseGroupDetails('alice', result.items[0].id, query)
+    expect(details.items).toHaveLength(1)
+    expect(details.items[0].lines[0].shippedQuantity).toBe(result.items[0].shipment === 'partial' ? 2 : 0)
+    const next = await data.getPurchaseGroups('alice', query)
+    expect(next.items.map(g => [g.id, g.purchase!.paidAt])).toEqual(result.items.map(g => [g.id, g.purchase!.paidAt]))
+    expect((await data.getPurchaseGroups('alice', { ...query, queue: 'procurement' })).total).toBe(0)
+  })
   it('preserves outstanding purchase payment instants across UTC+8 midnight', async () => {
     jest.setSystemTime(new Date('2026-10-28T15:59:59Z'))
     const data = new FopDataService(users, new DemoFopDataProvider(organizations, env))

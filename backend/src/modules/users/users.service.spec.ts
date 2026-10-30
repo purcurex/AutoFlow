@@ -1,4 +1,5 @@
-import type { Repository } from 'typeorm'
+import { IsNull, type Repository } from 'typeorm'
+import { OrganizationEmployeeEntity } from '../organization/organization-employee.entity'
 import { User, UserRole } from './user.entity'
 import { UsersService } from './users.service'
 import type { ChartPermissionOverride } from './chart-permissions'
@@ -149,5 +150,87 @@ describe('UsersService chart permission persistence', () => {
     expect(result.items[0].chartPermissions).toEqual(chartPermissions)
     expect(result.items[1].chartPermissions).toEqual([])
     expect((repository.findAndCount as jest.Mock).mock.calls[0][0].select.chartPermissions).toBe(true)
+  })
+})
+
+
+describe('Procurement defaults from current employee job and organization', () => {
+  function setup(businessRole = 'admin', departmentName = '采购管理', jobTitle = '', parentName = '供应链中心') {
+    const employee = { id: 'employee', ownerUserId: 'directory', departmentId: 'department', jobTitle }
+    const employees = { find: jest.fn().mockResolvedValue([employee]) }
+    const nodes = { find: jest.fn().mockResolvedValue([
+      { id: 'department', parentId: 'parent', name: departmentName },
+      { id: 'parent', parentId: null, name: parentName },
+    ]) }
+    const repository = { manager: { getRepository: (entity: unknown) => entity === OrganizationEmployeeEntity ? employees : nodes } } as unknown as Repository<User>
+    const user = { id: 'account', role: UserRole.USER, businessRole, workbenchRoles: ['sales', 'procurement', 'allocation', 'dispatch', 'warehouse'] } as User
+    return { service: new UsersService(repository), user, employees, nodes }
+  }
+  it.each(['salesperson', 'department_manager', 'none'])('keeps %s on fulfillment despite all five grants', async role => {
+    const { service, user } = setup(role)
+    expect(await service.defaultProcurementView(user)).toBe('fulfillment')
+  })
+  it('uses current procurement department and ignores entry grants', async () => {
+    const { service, user, employees, nodes } = setup()
+    expect(await service.defaultProcurementView(user)).toBe('purchase')
+    expect(employees.find).toHaveBeenCalledWith(expect.objectContaining({ where: { accountId: 'account', archivedAt: IsNull() }, take: 2 }))
+    expect(nodes.find).toHaveBeenCalledWith(expect.objectContaining({ where: { ownerUserId: 'directory' } }))
+    nodes.find.mockResolvedValue([{ id: 'department', parentId: null, name: '信息管理部' }])
+    expect(await service.defaultProcurementView(user)).toBe('fulfillment')
+  })
+  it('recognizes procurement jobs but prioritizes Marketing Center ancestry', async () => {
+    const { service, user, nodes } = setup('admin', '运营部', '采购专员')
+    expect(await service.defaultProcurementView(user)).toBe('purchase')
+    nodes.find.mockResolvedValue([{ id: 'department', parentId: 'marketing', name: '业务一部' }, { id: 'marketing', parentId: null, name: '营销中心' }])
+    expect(await service.defaultProcurementView(user)).toBe('fulfillment')
+  })
+  it('uses fulfillment for administrators, missing or ambiguous employee bindings', async () => {
+    const { service, user, employees } = setup()
+    expect(await service.defaultProcurementView({ ...user, role: UserRole.ADMIN })).toBe('fulfillment')
+    employees.find.mockResolvedValue([])
+    expect(await service.defaultProcurementView(user)).toBe('fulfillment')
+    employees.find.mockResolvedValue([{}, {}])
+    expect(await service.defaultProcurementView(user)).toBe('fulfillment')
+  })
+  it('stops traversing malformed organization cycles', async () => {
+    const { service, user, nodes } = setup()
+    nodes.find.mockResolvedValue([{ id: 'department', parentId: 'department', name: '运营部' }])
+    expect(await service.defaultProcurementView(user)).toBe('fulfillment')
+  })
+})
+
+
+describe('Workbench department display follows business scope', () => {
+  function setup() {
+    const employees = { find: jest.fn().mockResolvedValue([{ ownerUserId: 'company' }]) }
+    const nodes = { find: jest.fn().mockResolvedValue([{ id: 'd1', name: '业务一部' }, { id: 'd2', name: '业务二部' }]) }
+    const repository = { manager: { getRepository: (entity: unknown) => entity === OrganizationEmployeeEntity ? employees : nodes } } as unknown as Repository<User>
+    const user = { id: 'employee-account', role: UserRole.USER, businessRole: 'salesperson', businessDepartmentId: 'd1' } as User
+    return { service: new UsersService(repository), user, employees, nodes }
+  }
+  it.each(['salesperson', 'department_manager'] as const)('resolves the %s scope even without order data', async businessRole => {
+    const { service, user, nodes } = setup()
+    expect(await service.workbenchDepartment({ ...user, businessRole })).toEqual({ id: 'd1', name: '业务一部' })
+    expect(nodes.find).toHaveBeenCalledWith({ where: { ownerUserId: 'company' }, select: { id: true, name: true } })
+    expect(await service.workbenchDepartment({ ...user, role: UserRole.ADMIN, businessDepartmentId: 'd2' })).toEqual({ id: 'd2', name: '业务二部' })
+  })
+  it.each([UserRole.ADMIN, UserRole.USER])('uses company-wide display for business admins with system role %s', async role => {
+    const { service, user, employees } = setup()
+    expect(await service.workbenchDepartment({ ...user, role, businessRole: 'admin' })).toBeNull()
+    expect(employees.find).not.toHaveBeenCalled()
+  })
+  it('never assigns a local department name to an external scope ID', async () => {
+    const { service, user } = setup()
+    expect(await service.workbenchDepartment({ ...user, businessDepartmentId: 'FOP-DEPT-1' })).toEqual({ id: 'FOP-DEPT-1', name: null })
+  })
+  it('handles absent and ambiguous employee bindings without choosing another workspace', async () => {
+    const { service, user, employees, nodes } = setup()
+    employees.find.mockResolvedValue([{ ownerUserId: 'other' }, { ownerUserId: 'company' }])
+    expect(await service.workbenchDepartment(user)).toEqual({ id: 'd1', name: null })
+    expect(nodes.find).not.toHaveBeenCalled()
+    employees.find.mockResolvedValue([])
+    expect(await service.workbenchDepartment({ ...user, organizationWorkspaceOwnerId: 'company' })).toEqual({ id: 'd1', name: '业务一部' })
+    expect(await service.workbenchDepartment({ ...user, businessRole: 'none' })).toBeNull()
+    expect(await service.workbenchDepartment({ ...user, businessDepartmentId: null })).toBeNull()
   })
 })

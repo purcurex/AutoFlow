@@ -8,10 +8,10 @@ export type FopOrderExportQuery = Omit<FopOrderQuery, 'page' | 'pageSize'> & (
 
 export async function exportFopOrders(query: FopOrderExportQuery, signal?: AbortSignal): Promise<Blob> {
   // Explicitly allow list filters only; identity and record scope come from the session.
-  const { queue, search, orderNumber, departmentId, ownerId, warehouseCode, paidAtOrder, sortBy, sortOrder, warehouseStage, procurementStage, taskStatus, mode } = query
+  const { queue, timeRange, shippingCountryCode, search, orderNumber, departmentId, ownerId, warehouseCode, paidAtOrder, sortBy, sortOrder, warehouseStage, procurementStage, taskStatus, mode } = query
   try {
     return await api.post<Blob, Blob>('/autoflow/integrations/fop/fulfillment-orders/export', {
-      queue, search, orderNumber, departmentId, ownerId, warehouseCode, paidAtOrder, sortBy, sortOrder, warehouseStage, procurementStage, taskStatus, mode,
+      queue, timeRange, shippingCountryCode, search, orderNumber, departmentId, ownerId, warehouseCode, paidAtOrder, sortBy, sortOrder, warehouseStage, procurementStage, taskStatus, mode,
       ...(mode === 'selected' ? { orderIds: query.orderIds } : {}),
     }, { responseType: 'blob', timeout: 120000, signal })
   } catch (error) {
@@ -27,6 +27,7 @@ export async function exportFopOrders(query: FopOrderExportQuery, signal?: Abort
 export function fopExportError(error: unknown, zh: boolean): string {
   const code = typeof error === 'object' && error !== null && 'code' in error ? String(error.code) : ''
   const messages: Record<string, [string, string]> = {
+    purchase_groups_changed: ['采购分组或查看范围已变化，请刷新后重新选择。', 'Purchase groups or access changed. Refresh and select again.'],
     export_selection_changed: ['所选订单状态或查看范围已变化，请刷新后重新选择。', 'Selected orders have changed. Refresh and select again.'],
     export_access_changed: ['订单查看范围已变化，请刷新后重试。', 'Order access changed. Refresh and retry.'],
     export_empty: ['当前筛选下没有可导出的订单，请刷新或调整筛选。', 'No matching orders. Refresh or change the filters.'],

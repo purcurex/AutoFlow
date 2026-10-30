@@ -6,5 +6,16 @@
 .workbench-filter-select{height:38px;max-width:100%;padding:8px 28px 8px 12px;border:1px solid var(--color-border);border-radius:6px;background:var(--color-surface);color:var(--color-text);font-size:12px;line-height:20px}
 .workbench-search-field{display:flex;align-items:center;gap:9px;height:38px;padding:0 12px;border:1px solid var(--color-border);border-radius:6px;color:var(--color-text-secondary);min-width:0}
 .workbench-search-field input{width:100%;min-width:0;border:0;padding:8px 0;background:transparent;color:var(--color-text);font-size:12px;line-height:20px}
+/* All task lists: search → department → warehouse; task-specific filters follow. */
+.workbench-filter-toolbar{display:flex;flex-direction:column;gap:12px;padding:18px 20px;border-bottom:1px solid var(--color-border);min-width:0}
+.workbench-filter-main,.workbench-filter-secondary{display:flex;flex-wrap:wrap;align-items:center;gap:12px;min-width:0}
+.workbench-filter-search{display:flex;align-items:center;gap:8px;flex:0 1 424px;width:424px;min-width:230px;max-width:100%}
+.workbench-filter-search .workbench-search-field{flex:1;min-width:0}
+.workbench-filter-toolbar label:not(.workbench-search-field){display:flex;align-items:center;gap:8px;margin:0;white-space:nowrap;font-size:12px;color:var(--color-text-secondary)}
+.workbench-filter-main > label select{width:136px;min-width:0}
+.workbench-filter-main > label:last-child select{width:112px}
+.workbench-filter-secondary select{width:150px}
+.workbench-filter-secondary .result-count,.workbench-filter-secondary .count{margin-left:auto;white-space:nowrap;font-size:12px;color:var(--color-text-secondary)}
+@media(max-width:700px){.workbench-filter-toolbar{padding:14px}.workbench-filter-search{flex-basis:100%;width:100%;min-width:0}.workbench-filter-toolbar label:not(.workbench-search-field){max-width:100%}.workbench-filter-toolbar select{max-width:100%}.workbench-filter-secondary .result-count,.workbench-filter-secondary .count{margin-left:0}}
 .workbench-task-table{font-size:12px}
 .workbench-task-table th{font-size:11px;font-weight:600;line-height:1.5;color:var(--color-text-secondary)}

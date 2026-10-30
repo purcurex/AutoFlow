@@ -1,4 +1,4 @@
-import { CHART_IDS, ChartPermissionOverride } from '../users/chart-permissions'
+import { collaborationChartPermissions, ChartPermissionOverride } from '../users/chart-permissions'
 import { BusinessRole } from '../users/business-scope'
 import { UserRole } from '../users/user.entity'
 import { WORKBENCH_ROLES, WorkbenchRole } from '../users/workbench-role'
@@ -23,16 +23,12 @@ export interface DirectoryPolicy {
 }
 
 const ADMIN_NAMES = new Set(['ethan', 'robin', 'nora', 'mason', 'xinke'])
-const SUMMARY_CHARTS = new Set(['registrations', 'department_receipts', 'order_volume'])
 export function directoryPolicy(member: DirectoryMember): DirectoryPolicy {
   if (ADMIN_NAMES.has(member.englishName.toLowerCase())) return { role: UserRole.ADMIN, businessRole: 'admin', workbenchRoles: [...WORKBENCH_ROLES], chartPermissions: [] }
   const paths = member.profile.departmentPaths
   if (/\bHR\b|人事|人力资源/i.test(member.jobTitle) || paths.some(path => path.split('/').includes('商品管理'))) return { role: UserRole.USER, businessRole: 'none', workbenchRoles: [], chartPermissions: [] }
   if (/\/(订单管理|采购管理|物流管理|仓库管理|杭州仓|深圳仓|信息管理部)(\/|$)/.test(member.primaryDepartment)) {
-    return { role: UserRole.USER, businessRole: 'admin', workbenchRoles: [...WORKBENCH_ROLES], chartPermissions: CHART_IDS.map(chartId => ({
-      chartId, visibility: SUMMARY_CHARTS.has(chartId) ? 'allow' : 'deny', dataScope: 'none',
-      summaryMode: SUMMARY_CHARTS.has(chartId) ? 'marketing' : 'none', summaryDepartments: [], details: 'deny', export: 'deny',
-    })) }
+    return { role: UserRole.USER, businessRole: 'admin', workbenchRoles: [...WORKBENCH_ROLES], chartPermissions: collaborationChartPermissions() }
   }
   if (/\/营销中心\/业务[一二三四]部(?:\/|$)/.test(member.primaryDepartment) || paths.some(path => /\/(合作伙伴|外部伙伴)(\/|$)/.test(path))) {
     return { role: UserRole.USER, businessRole: member.jobTitle === '部门经理' && /\/营销中心\/业务[一二三四]部(?:\/|$)/.test(member.primaryDepartment) ? 'department_manager' : 'salesperson', workbenchRoles: [...WORKBENCH_ROLES], chartPermissions: [] }

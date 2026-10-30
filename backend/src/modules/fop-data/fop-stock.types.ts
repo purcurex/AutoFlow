@@ -40,4 +40,4 @@ export interface StockFilters {
   stockType?: StockType; purchaseStatus?: StockPurchaseStatus; orderStatus?: StockOrderStatus; sortBy?: StockSortField; sortOrder?: 'asc' | 'desc'
 }
 export interface StockPageQuery extends StockFilters { page: number; pageSize: number }
-export interface StockInventoryQuery { customerId?: string; customerSearch?: string; search?: string; warehouseCode?: string; departmentId?: string; ownerId?: string; page: number; pageSize: number }
+export interface StockInventoryQuery { orderIds?: string[]; queue?: 'all' | 'procurement'; customerId?: string; customerSearch?: string; search?: string; warehouseCode?: string; departmentId?: string; ownerId?: string; page: number; pageSize: number }

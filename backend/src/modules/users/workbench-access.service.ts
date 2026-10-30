@@ -10,6 +10,8 @@ export interface WorkbenchAccess {
   roles: WorkbenchRole[]
   isAdmin: boolean
   businessRole: BusinessRole
+  businessDepartment: { id: string; name: string | null } | null
+  defaultProcurementView: 'fulfillment' | 'purchase'
   chartVisibility: Record<ChartId, boolean>
 }
 
@@ -28,6 +30,8 @@ export class WorkbenchAccessService {
       roles: businessRole === 'none' ? [] : businessRole === 'admin' ? [...WORKBENCH_ROLES] : (user.workbenchRoles ?? []).filter(isWorkbenchRole),
       isAdmin,
       businessRole,
+      businessDepartment: await this.usersService.workbenchDepartment(user),
+      defaultProcurementView: await this.usersService.defaultProcurementView(user),
       chartVisibility: Object.fromEntries(resolveChartAccess(user).map(chart => [chart.chartId, chart.visible])) as Record<ChartId, boolean>,
     }
   }

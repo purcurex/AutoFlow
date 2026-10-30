@@ -7,7 +7,7 @@ import type { DispatchDocument, FulfillmentProgress } from '@/api/fop-orders'
 
 const props = defineProps<{ documents?: DispatchDocument[] | null; shopifySync?: FulfillmentProgress['shopifySync']; queue?: string }>()
 const { locale } = useI18n()
-const status = computed(() => props.queue === 'allocation_review' ? getDispatchCompletionStatus(props.documents) : getDispatchTaskStatus(props.documents, props.shopifySync))
+const status = computed(() => ['allocation', 'allocation_review'].includes(props.queue ?? '') ? getDispatchCompletionStatus(props.documents) : getDispatchTaskStatus(props.documents, props.shopifySync))
 const tone = computed(() => {
   if (status.value === 'dispatch_approved') return (props.queue ?? 'dispatch') === 'dispatch' ? 'danger' : 'success'
   if (['dispatch_draft', 'dispatch_missing', 'dispatch_incomplete'].includes(status.value)) return 'warning'

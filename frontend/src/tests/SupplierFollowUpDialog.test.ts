@@ -27,6 +27,19 @@ describe('supplier follow-up contact selection', () => {
     expect(open).toHaveBeenCalledWith('aliim:sendmsg?touid=cnalichn%E5%8D%96%E5%AE%B6p1', '卖家p1')
     expect(w.text()).toContain('已尝试打开旺旺')
   })
+  it('uses purchase-group contact and launch endpoints and suppresses source-order detail quantities', async () => {
+    const open = vi.spyOn(chat, 'openSupplierChat').mockImplementation(() => {})
+    vi.mocked(api.get).mockImplementation(async path => path.endsWith('/launch')
+      ? { source: 'mock', mode: 'demo', orderId: 'purchase:p1', purchaseOrderId: 'p1', wangwangAccount: '卖家p1', url: null }
+      : { source: 'mock', orderId: 'purchase:p1', orderNumber: 'PO-p1', items: [contact('p1')], refreshedAt: new Date().toISOString() })
+    wrapper = mount(SupplierFollowUpDialog, { props: { orderId: 'purchase:p1', orderNumber: 'PO-p1', purchaseOrderId: 'p1', groupFilters: { queue: 'procurement_shipping', departmentId: 'd1' } }, global: { plugins: [createI18n({ legacy: false, locale: 'zh-CN', messages: {} })], stubs: { Teleport: true } } })
+    await flushPromises()
+    expect(api.get).toHaveBeenCalledWith('/autoflow/integrations/fop/purchase-groups/purchase%3Ap1/supplier-follow-up', { params: { queue: 'procurement_shipping', departmentId: 'd1' } })
+    expect(api.get).toHaveBeenLastCalledWith('/autoflow/integrations/fop/purchase-groups/purchase%3Ap1/supplier-follow-up/launch', { params: { queue: 'procurement_shipping', departmentId: 'd1', contactVersion: 'a'.repeat(64) } })
+    expect(wrapper.text()).toContain('联系本采购订单的供应商')
+    expect(wrapper.find('ul').exists()).toBe(false)
+    expect(open).not.toHaveBeenCalled()
+  })
   it('requires selection when multiple purchases exist and opens only the chosen supplier', async () => {
     const open = vi.spyOn(chat, 'openSupplierChat').mockImplementation(() => {})
     const w = await show([contact('p1'), contact('p2')])

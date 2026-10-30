@@ -5,7 +5,7 @@ import WorkbenchStatusBadge from './WorkbenchStatusBadge.vue'
 import { supplierShipmentAging } from '@/utils/procurement-payment'
 import { procurementStageLabels } from '@/utils/procurement-stage'
 
-const props = withDefaults(defineProps<{ paidAt?: string | null; now: number; shipment?: 'pending' | 'partial' }>(), { shipment: 'pending' })
+const props = withDefaults(defineProps<{ paidAt?: string | null; now: number; shipment?: 'pending' | 'partial'; current?: boolean }>(), { shipment: 'pending' })
 const { locale } = useI18n()
 const zh = computed(() => String(locale.value).startsWith('zh'))
 const aging = computed(() => supplierShipmentAging(props.paidAt, props.now))
@@ -16,5 +16,5 @@ const hint = computed(() => aging.value === 'danger'
 </script>
 
 <template>
-  <WorkbenchStatusBadge class="supplier-shipment-pill" :tone="aging === 'normal' ? 'success' : aging" :data-aging="aging" :title="hint">{{ label }}</WorkbenchStatusBadge>
+  <WorkbenchStatusBadge class="supplier-shipment-pill" :current="current" :tone="aging === 'normal' ? 'success' : aging" :data-aging="aging" :title="hint">{{ label }}</WorkbenchStatusBadge>
 </template>

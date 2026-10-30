@@ -15,6 +15,7 @@ const { t } = useI18n()
 
 const { access } = useWorkbenchAccess()
 const hasBusinessAccess = computed(() => (access.value?.businessRole ?? userStore.user?.businessRole) !== 'none')
+// Business-wide collaboration access must never reveal system management.
 const canManage = computed(() => access.value?.isAdmin === true)
 const navItems = computed(() => [
   { label: t('nav.overview'), to: '/dashboard', match: ['FopDashboard'], icon: LayoutDashboard },
@@ -79,7 +80,7 @@ function isActive(item: { match: string[] }) {
       <RouterLink to="/organization" :title="t('nav.organization')" class="flex h-10 items-center rounded-md text-sm font-semibold transition" :class="[props.collapsed ? 'justify-center' : 'px-3', route.name === 'Organization' ? 'selection-active' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-white/5 dark:hover:text-white']" @click="emit('navigate')">
         <GitBranch class="h-[18px] w-[18px]" :class="props.collapsed ? '' : 'mr-3'" /><span v-if="!props.collapsed">{{ t('nav.organization') }}</span>
       </RouterLink>
-      <RouterLink to="/admin/workbenches" :title="t('nav.workbenchRoles')" class="flex h-10 items-center rounded-md text-sm font-semibold text-slate-600 hover:bg-slate-100 dark:text-slate-400" :class="props.collapsed ? 'justify-center' : 'px-3'" @click="emit('navigate')"><Shield class="h-[18px] w-[18px]" :class="props.collapsed ? '' : 'mr-3'" /><span v-if="!props.collapsed">{{ t('nav.workbenchRoles') }}</span></RouterLink>
+      <RouterLink to="/admin/workbenches" :title="t('nav.workbenchRoles')" class="flex h-10 items-center rounded-md text-sm font-semibold transition" :class="[props.collapsed ? 'justify-center' : 'px-3', route.name === 'WorkbenchRoleAdmin' ? 'selection-active' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-white/5 dark:hover:text-white']" @click="emit('navigate')"><Shield class="h-[18px] w-[18px]" :class="props.collapsed ? '' : 'mr-3'" /><span v-if="!props.collapsed">{{ t('nav.workbenchRoles') }}</span></RouterLink>
     </div>
   </aside>
 </template>

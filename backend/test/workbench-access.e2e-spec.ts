@@ -79,13 +79,49 @@ describe('Workbench authorization HTTP API (repository boundary stub)', () => {
   it('requires authentication and reads effective grants from the current database account', async () => {
     await request(app.getHttpServer()).get('/api/workbench/access').expect(401)
     const response = await get('/workbench/access').expect(200)
-    expect(response.body).toMatchObject({ roles: ['sales'], isAdmin: false })
+    expect(response.body).toMatchObject({ roles: ['sales'], isAdmin: false, defaultProcurementView: 'fulfillment' })
     await get('/workbench/procurement/access').expect(403)
     await get('/workbench/not-a-role/access').expect(400)
     accounts.get(userId).workbenchRoles = []
     await get('/workbench/sales/access').expect(403)
     accounts.delete(userId)
     await get('/workbench/access').expect(401)
+  })
+
+  const accessInput = (accountRole: string) => ({ accountRole, businessScope: { role: accountRole === 'collaboration' || accountRole === 'administrator' ? 'admin' : accountRole, departmentId: 'department-1', employeeId: 'employee-1' }, workbenchRoles: ['sales', 'procurement', 'allocation', 'dispatch', 'warehouse'] })
+  const putAccess = (input: object, actor = adminId, target = userId) => request(app.getHttpServer()).put(`/api/users/${target}/account-access`).auth(token(actor), { type: 'bearer' }).send(input)
+
+  it.each(['administrator', 'department_manager', 'salesperson', 'collaboration'])('saves the unified %s role and exposes only its permitted management access', async role => {
+    const response = await putAccess(accessInput(role)).expect(200)
+    expect(response.body.accountRole).toBe(role)
+    expect(response.body).not.toHaveProperty('password')
+    const access = await get('/workbench/access').expect(200)
+    expect(access.body.isAdmin).toBe(role === 'administrator')
+    expect(access.body.roles).toHaveLength(5)
+    await get('/users/workbench-accounts').expect(role === 'administrator' ? 200 : 403)
+    if (role === 'collaboration') expect(response.body.chartPermissions.every((chart: any) => chart.dataScope === 'none' && chart.details === 'deny')).toBe(true)
+  })
+  it.each(['salesperson', 'department_manager', 'admin', 'none'])('denies management APIs for system users with %s business scope', async businessRole => {
+    accounts.get(userId).businessRole = businessRole
+    await get('/users/workbench-accounts').expect(403)
+    await putAccess(accessInput('administrator'), userId).expect(403)
+    expect(accounts.get(userId).role).toBe(UserRole.USER)
+  })
+  it.each([
+    {}, { ...accessInput('administrator'), accountRole: 'superuser' },
+    { ...accessInput('department_manager'), businessScope: { role: 'department_manager', departmentId: null, employeeId: null } },
+    { ...accessInput('salesperson'), businessScope: { role: 'salesperson', departmentId: null, employeeId: null } },
+    { ...accessInput('collaboration'), businessScope: { role: 'salesperson', departmentId: null, employeeId: 'e1' } },
+    { ...accessInput('administrator'), workbenchRoles: ['admin'] },
+  ])('rejects invalid unified access without partially promoting the account: %j', async payload => {
+    await putAccess(payload).expect(400)
+    expect(accounts.get(userId).role).toBe(UserRole.USER)
+  })
+  it('blocks self-demotion and supports closing business data while retaining system administration', async () => {
+    await putAccess(accessInput('collaboration'), adminId, adminId).expect(409)
+    const result = await putAccess({ ...accessInput('administrator'), businessScope: { role: 'none', departmentId: null, employeeId: null } }, adminId, adminId).expect(200)
+    expect(result.body).toMatchObject({ role: 'admin', businessScope: { role: 'none' } })
+    await get('/users/workbench-accounts', adminId).expect(200)
   })
 
   it('keeps business grants unchanged when system management is revoked', async () => {

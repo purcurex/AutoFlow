@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useWorkbenchDepartment } from '@/composables/useWorkbenchDepartment'
 import { orderTimestamp } from '@/utils/order-timestamp'
 import { captureSession, isCurrentSession, onSessionReset } from '@/utils/session'
 import { exportFopOrders, fopExportError } from '@/api/fop-order-export'
@@ -18,6 +19,7 @@ import { canFilterProcurementStage, getProcurementStage, procurementStageLabels 
 import OrderProductImage from '@/components/autoflow/OrderProductImage.vue'
 import RecipientDetailsDialog from '@/components/autoflow/RecipientDetailsDialog.vue'
 import ShippingCountryBadge from '@/components/autoflow/ShippingCountryBadge.vue'
+import { normalizeShippingCountry } from '@/utils/shipping-country'
 import OrderLogisticsInfo from '@/components/autoflow/OrderLogisticsInfo.vue'
 import TrackingNumberCopy from '@/components/autoflow/TrackingNumberCopy.vue'
 import OrderApprovalDialog from '@/components/autoflow/OrderApprovalDialog.vue'
@@ -38,6 +40,7 @@ import { defaultWorkbenchQueue, isWorkbenchRole, workbenchOrderLocation, workben
 
 type SearchRecovery = { token: symbol; from: string; to: string; search: string }
 const props = defineProps<{ searchRecovery?: SearchRecovery; recoverPage?: (recovery: SearchRecovery) => Promise<void> }>()
+const { defaultDepartmentLabel } = useWorkbenchDepartment(computed(() => Object.fromEntries((data.value?.departments ?? []).map(d => [d.id, d.name]))))
 const emit = defineEmits<{ 'clear-search-recovery': [token: symbol]; 'filter-labels': [rows: { id: string; name: string }[]] }>()
 const route = useRoute()
 const router = useRouter()
@@ -49,6 +52,10 @@ const queue = computed(() => {
   const value = route.query.queue ?? defaultWorkbenchQueue(role.value)
   return isFopOrderQueue(value) && workbenchQueues[role.value].includes(value) ? value : undefined
 })
+const timeRange = computed(() => queue.value === 'unpaid' && (route.query.timeRange === '1w' || route.query.timeRange === '1m' || route.query.timeRange === '3m') ? route.query.timeRange : undefined)
+const shippingCountryCode = computed(() => queue.value === 'review' ? normalizeShippingCountry(route.query.shippingCountryCode) ?? '' : '')
+const shippingCountries = computed(() => [...new Set((data.value?.shippingCountries ?? []).map(normalizeShippingCountry).filter((code): code is string => code !== null))].sort())
+const countryFlag = (code: string) => String.fromCodePoint(...[...code].map(char => 127397 + char.charCodeAt(0)))
 const selectedOrders = ref<string[]>([])
 const inventoryOrderIds = ref<string[]>()
 const approvalOrderIds = ref<string[]>()
@@ -73,7 +80,7 @@ const exportFailed = ref(false)
 let exportController: AbortController | undefined
 function cancelExport() { exportController?.abort(); exportController = undefined; exporting.value = undefined; exportFeedback.value = '' }
 function currentFilters(): Omit<FopOrderQuery, 'page' | 'pageSize'> {
-  return { queue: queue.value!, procurementStage: procurementStage.value, taskStatus: taskStatus.value, warehouseStage: queue.value === 'shipping' ? warehouseStage.value : undefined, departmentId: departmentId.value || undefined, ownerId: ownerId.value || undefined, warehouseCode: warehouseCode.value || undefined,
+  return { queue: queue.value!, timeRange: timeRange.value, shippingCountryCode: shippingCountryCode.value || undefined, procurementStage: procurementStage.value, taskStatus: taskStatus.value, warehouseStage: queue.value === 'shipping' ? warehouseStage.value : undefined, departmentId: departmentId.value || undefined, ownerId: ownerId.value || undefined, warehouseCode: warehouseCode.value || undefined,
     search: typeof route.query.search === 'string' ? route.query.search : '', orderNumber: typeof route.query.orderNumber === 'string' ? route.query.orderNumber : undefined,
     paidAtOrder: paidAtOrder.value, sortBy: isFopOrderSortBy(route.query.sortBy) ? route.query.sortBy : undefined,
     sortOrder: route.query.sortOrder === 'asc' || route.query.sortOrder === 'desc' ? route.query.sortOrder : undefined }
@@ -154,7 +161,7 @@ const sortBy = computed<FopOrderSortBy>(() => isFopOrderSortBy(route.query.sortB
 const sortOrder = computed(() => route.query.sortOrder === 'desc' ? 'desc' : route.query.sortOrder === 'asc' ? 'asc' : sortBy.value === 'paidAt' && route.query.paidAtOrder === 'desc' ? 'desc' : 'asc')
 const paidAtOrder = computed(() => sortBy.value === 'paidAt' ? sortOrder.value : 'asc')
 const leadingSortField = computed<FopOrderSortBy | undefined>(() => isAllocation.value || queue.value === 'dispatch' ? 'dispatchDocumentStatus' : queue.value === 'shipping' ? 'outboundStatus' : undefined)
-const dispatchSortHint = computed(() => queue.value === 'allocation_review' ? text('未完成 → 已完成；关联发运单全部审核后为已完成', 'Incomplete → Complete; all linked dispatch documents approved') : queue.value === 'dispatch' ? text('未创建 → 暂存 → 已提交 → 已审核未同步；多单取最早进度；含未知状态的订单置后', 'Not created → Draft → Submitted → Approved · sync pending; earliest document stage; unknown statuses last') : text('未创建 → 暂存 → 已提交 → 已审核 → 已同步；多单取最早进度；含未知状态的订单置后', 'Not created → Draft → Submitted → Approved → Synced; earliest document stage; orders with unknown statuses last'))
+const dispatchSortHint = computed(() => isAllocation.value ? text('未完成 → 已完成；关联发运单全部审核后为已完成', 'Incomplete → Complete; all linked dispatch documents approved') : queue.value === 'dispatch' ? text('未创建 → 暂存 → 已提交 → 已审核未同步；多单取最早进度；含未知状态的订单置后', 'Not created → Draft → Submitted → Approved · sync pending; earliest document stage; unknown statuses last') : text('未创建 → 暂存 → 已提交 → 已审核 → 已同步；多单取最早进度；含未知状态的订单置后', 'Not created → Draft → Submitted → Approved → Synced; earliest document stage; orders with unknown statuses last'))
 function sortDirection(field: FopOrderSortBy) { return sortBy.value === field ? sortOrder.value : undefined }
 function sortStatus(field: FopOrderSortBy) {
   return navigate({ sortBy: field, sortOrder: sortBy.value === field && sortOrder.value === 'asc' ? 'desc' : 'asc', page: 1 })
@@ -233,7 +240,7 @@ async function load(reset = false) {
       return
     }
   }
-  if (queue.value === 'allocation_review' && typeof route.query.taskStatus === 'string'
+  if (isAllocation.value && typeof route.query.taskStatus === 'string'
     && ['dispatch_missing', 'dispatch_draft', 'dispatch_submitted', 'dispatch_approved', 'dispatch_synced', 'unknown'].includes(route.query.taskStatus)) {
     const completed = ['dispatch_approved', 'dispatch_synced'].includes(route.query.taskStatus)
     busy.value = false
@@ -377,7 +384,7 @@ function clearSearchIfEmpty(event: Event) {
 function submitSearch() { return navigate({ search: search.value.trim() || undefined, page: 1 }) }
 const usesConsumerOrderTime = computed(() => ['unpaid', 'review', 'exceptions', 'dispatch', 'allocation'].includes(queue.value ?? ''))
 const timeSortField = computed(() => queue.value === 'procurement' ? 'reviewedAt' as const : usesConsumerOrderTime.value ? 'consumerPaidAt' as const : null)
-const createdTimeLabel = computed(() => queue.value === 'shipping' ? text('WMS创建时间', 'WMS creation time') : queue.value === 'procurement' ? text('订单审核时间', 'Order approval time') : queue.value === 'allocation_review' ? text('齐套时间', 'Allocation completion time') : queue.value === 'procurement_shipping' ? text('采购付款时间', 'Procurement payment time') : usesConsumerOrderTime.value ? text('C端下单时间', 'Consumer order time') : text('创建时间', 'Created at'))
+const createdTimeLabel = computed(() => queue.value === 'shipping' ? text('WMS创建时间', 'WMS creation time') : queue.value === 'procurement' ? text('订单审核时间', 'Order approval time') : queue.value === 'allocation_review' ? text('齐套时间', 'Allocation completion time') : queue.value === 'procurement_shipping' ? text('采购付款时间', 'Procurement payment time') : usesConsumerOrderTime.value ? text('C端付款时间', 'Consumer payment time') : text('创建时间', 'Created at'))
 const searchPlaceholder = computed(() => queue.value === 'unpaid' ? text('业务员 / 订单 / 客户 / 自定义物流渠道', 'Salesperson / order / customer / custom channel') : text('业务员 / 订单 / 客户 / SKU / 物流服务商', 'Salesperson / order / customer / SKU / carrier'))
 const searchHint = computed(() => queue.value === 'unpaid' ? text('支持按业务员姓名、订单编号、Shopify 单号、客户、店铺、SKU 或自定义物流渠道名称查询', 'Search by salesperson name, order number, Shopify order, customer, store, SKU or custom logistics channel name') : text('支持按业务员姓名、订单编号、Shopify 单号、客户、店铺、SKU 或物流服务商查询', 'Search by salesperson name, order number, Shopify order, customer, store, SKU or carrier'))
 const createdTimeHint = computed(() => queue.value === 'shipping' ? text('发货通知成功推送 WMS 出库指令的时间（UTC+8）', 'Delivery notice successfully sent to WMS for outbound processing (UTC+8)') : queue.value === 'procurement' ? text('履约订单实际审核时间（UTC+8）', 'Actual fulfillment order approval time (UTC+8)') : queue.value === 'allocation_review'
@@ -405,9 +412,9 @@ function orderTime(order: FopOrder): string | null {
   return usesConsumerOrderTime.value ? order.consumerPaidAt ?? null : order.createdAt
 }
 const consumerSortHint = computed(() => timeSortField.value === 'reviewedAt' ? sortDirection('reviewedAt') === 'asc' ? text('最早审核在前，点击切换为最新审核在前', 'Oldest approval first; click for newest first') : sortDirection('reviewedAt') === 'desc' ? text('最新审核在前，点击切换为最早审核在前', 'Newest approval first; click for oldest first') : text('点击按最早审核在前排序', 'Click for oldest approval first') : sortDirection(timeSortField.value ?? 'consumerPaidAt') === 'asc'
-  ? text('最早下单在前，点击切换为最新下单在前', 'Oldest checkout first; click for newest first')
-  : sortDirection(timeSortField.value ?? 'consumerPaidAt') === 'desc' ? text('最新下单在前，点击切换为最早下单在前', 'Newest checkout first; click for oldest first')
-  : text('点击按最早下单在前排序', 'Click for oldest checkout first'))
+  ? text('最早付款在前，点击切换为最新付款在前', 'Oldest payment first; click for newest first')
+  : sortDirection(timeSortField.value ?? 'consumerPaidAt') === 'desc' ? text('最新付款在前，点击切换为最早付款在前', 'Newest payment first; click for oldest first')
+  : text('点击按最早付款在前排序', 'Click for oldest payment first'))
 const formatDate = (value: string | null) => value ? new Date(value).toLocaleString(zh.value ? 'zh-CN' : 'en-US', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'
 const formatMoney = (amount: number, currency: string) => formatCurrency(amount, currency, zh.value ? 'zh-CN' : 'en-US')
 </script>
@@ -415,21 +422,30 @@ const formatMoney = (amount: number, currency: string) => formatCurrency(amount,
 <template>
   <div class="fulfillment-page" :aria-busy="busy">
       <WorkbenchTaskHeading class="list-heading" :title="(queue ? labels[queue] : text('履约订单', 'Fulfillment orders')) + (queue && !['exceptions', 'allocation_review', 'procurement_shipping'].includes(queue) ? text('清单', ' orders') : '')" :description="queue ? descriptions[queue] : undefined">
-        <div class="refresh-controls"><button class="workbench-button refresh-orders workbench-refresh" :disabled="busy || !queue || !online" @click="load()"><RefreshCw :size="15" :class="{ 'animate-spin': busy }" />{{ busy ? text('刷新中…', 'Refreshing…') : text('刷新', 'Refresh') }}</button><span class="refresh-status" :class="{ 'sync-paused': !online }">{{ !online ? text('网络已断开 · 自动刷新暂停', 'Offline · Auto-refresh paused') : !visible ? text('页面未激活 · 自动刷新暂停', 'Page inactive · Auto-refresh paused') : text('每 30 秒自动刷新', 'Refreshes every 30 seconds') }}<template v-if="refreshedTime"><br />{{ text('最近刷新', 'Last refreshed') }} {{ refreshedTime }} · UTC+8</template></span></div>
+        <div class="refresh-controls"><slot name="heading-actions" /><button class="workbench-button refresh-orders workbench-refresh" :disabled="busy || !queue || !online" @click="load()"><RefreshCw :size="15" :class="{ 'animate-spin': busy }" />{{ busy ? text('刷新中…', 'Refreshing…') : text('刷新', 'Refresh') }}</button><span class="refresh-status" :class="{ 'sync-paused': !online }">{{ !online ? text('网络已断开 · 自动刷新暂停', 'Offline · Auto-refresh paused') : !visible ? text('页面未激活 · 自动刷新暂停', 'Page inactive · Auto-refresh paused') : text('每 30 秒自动刷新', 'Refreshes every 30 seconds') }}<template v-if="refreshedTime"><br />{{ text('最近刷新', 'Last refreshed') }} {{ refreshedTime }} · UTC+8</template></span></div>
       </WorkbenchTaskHeading>
       <p v-if="queue === 'shipping' && warehouseStage === 'pending_review'" class="read-only-note">{{ text('已齐套未审核已归入配货工作台。', 'Allocation approval is tracked in the Allocation Workbench.') }} <button class="clear-selection" @click="navigate({ warehouseStage: undefined, page: 1 })">{{ text('查看待出库清单', 'View pending outbound') }}</button></p>
       <p v-if="copyMessage" class="copy-feedback" role="status">{{ copyMessage }}</p>
       <section class="list-panel">
-        <WorkbenchListActions :selected-count="selectedOrders.length" @clear="selectedOrders = []">
-          <button v-if="queue === 'allocation' || queue === 'shipping'" type="button" class="workbench-button" data-testid="open-inventory" :disabled="busy || !online || !data" @click="inventoryOrderIds = [...selectedOrders]"><PackageSearch :size="15" />{{ text('查询即时库存', 'Current inventory') }}</button>
-          <template #export>
-            <WorkbenchExportButton :selected-count="selectedOrders.length" :total="data?.total ?? 0" :disabled="busy || !online || !data" :busy="!!exporting" @export="exportOrders" />
-          </template>
-        </WorkbenchListActions>
-        <p v-if="exportFeedback" class="export-feedback" :class="{ 'export-error': exportFailed }" :role="exportFailed ? 'alert' : 'status'">{{ exportFeedback }}</p>
-        <div class="list-toolbar">
-          <div class="query-controls">
-            <button v-if="approvalQueue" type="button" class="workbench-button workbench-primary" data-testid="open-approval" :disabled="busy || !online || !hasApprovableSelection || !data || !!approvalOrderIds" :title="queue === 'allocation_review' ? text('审核发运单制作已完成的配货单', 'Approve allocations with completed dispatch preparation') : undefined" @click="openApproval"><Check :size="15" />{{ text('审核', 'Approve') }}</button>
+        <div class="list-toolbar workbench-filter-toolbar">
+          <div class="query-controls workbench-filter-main">
+            <form class="search-form workbench-filter-search" @submit.prevent="submitSearch"><label class="search-field workbench-search-field"><Search :size="16" /><input v-model="search" type="search" @input="clearSearchIfEmpty" :aria-label="text('搜索履约订单', 'Search fulfillment orders')" :placeholder="searchPlaceholder" :title="searchHint" /></label><button class="workbench-button workbench-primary" :disabled="busy || !queue">{{ text('查询', 'Search') }}</button></form>
+            <label class="department-filter"><span>{{ text('业务部门', 'Business department') }}</span><select class="workbench-filter-select" :value="departmentId" :disabled="busy || !queue" :aria-label="text('业务部门', 'Business department')" @change="navigate({ departmentId: ($event.target as HTMLSelectElement).value || undefined, ownerId: undefined, page: 1 })"><option value="">{{ defaultDepartmentLabel }}</option><option v-if="departmentId && !departments.some(item => item.id === departmentId)" :value="departmentId" disabled>{{ text('所选业务部门', 'Selected business department') }}</option><option v-for="department in departments" :key="department.id" :value="department.id">{{ department.name }}</option></select></label>
+            <label class="department-filter warehouse-filter"><span>{{ text('发货仓库', 'Shipping warehouse') }}</span><select class="workbench-filter-select" :value="warehouseCode" :disabled="busy || !queue" :aria-label="text('发货仓库', 'Shipping warehouse')" @change="navigate({ warehouseCode: ($event.target as HTMLSelectElement).value || undefined, page: 1 })"><option value="">{{ text('全部', 'All') }}</option><option value="HZ">{{ text('杭州仓', 'Hangzhou') }}</option><option value="SZ">{{ text('深圳仓', 'Shenzhen') }}</option></select></label>
+          </div>
+          <div class="workbench-filter-secondary">
+            <label v-if="queue === 'unpaid'" class="department-filter"><span>{{ text('C端付款时间', 'Consumer payment time') }}</span>
+              <select class="workbench-filter-select" :value="timeRange ?? ''" :disabled="busy" :aria-label="text('C端付款时间范围', 'Consumer payment time range')" @change="navigate({ timeRange: ($event.target as HTMLSelectElement).value || undefined, page: 1 })">
+                <option value="">{{ text('全部', 'All') }}</option><option value="1w">{{ text('近一周', 'Last week') }}</option><option value="1m">{{ text('近一月', 'Last month') }}</option><option value="3m">{{ text('近三月', 'Last three months') }}</option>
+              </select>
+            </label>
+            <label v-if="queue === 'review'" class="department-filter"><span>{{ text('发货国家', 'Shipping country') }}</span>
+              <select class="workbench-filter-select" :value="shippingCountryCode" :disabled="busy" :aria-label="text('发货国家', 'Shipping country')" @change="navigate({ shippingCountryCode: ($event.target as HTMLSelectElement).value || undefined, page: 1 })">
+                <option value="">{{ text('全部', 'All') }}</option>
+                <option v-if="shippingCountryCode && !shippingCountries.includes(shippingCountryCode)" :value="shippingCountryCode" disabled>{{ countryFlag(shippingCountryCode) }} {{ shippingCountryCode }}{{ busy ? '' : text('（无匹配订单）', ' (no matching orders)') }}</option>
+                <option v-for="code in shippingCountries" :key="code" :value="code">{{ countryFlag(code) }} {{ code }}</option>
+              </select>
+            </label>
             <label v-if="hasStatus" class="department-filter status-filter">{{ statusHeading }}
               <select class="workbench-filter-select" :value="taskStatus ?? (procurementStage ? `legacy:${procurementStage}` : '')" :disabled="busy" :aria-label="`${statusHeading}${text('筛选', ' filter')}`" @change="navigate({ taskStatus: ($event.target as HTMLSelectElement).value || undefined, procurementStage: undefined, page: 1 })">
                 <option value="">{{ queue === 'dispatch' ? text('全部待履约', 'All pending fulfillment') : text('全部状态', 'All statuses') }}</option>
@@ -437,14 +453,17 @@ const formatMoney = (amount: number, currency: string) => formatCurrency(amount,
                 <option v-for="value in statusOptions" :key="value" :value="value">{{ taskStatusLabel(value, queue ?? '')[zh ? 0 : 1] }}</option>
               </select>
             </label>
-          <form class="search-form" @submit.prevent="submitSearch"><label class="search-field workbench-search-field"><Search :size="16" /><input v-model="search" type="search" @input="clearSearchIfEmpty" :aria-label="text('搜索履约订单', 'Search fulfillment orders')" :placeholder="searchPlaceholder" :title="searchHint" /></label><button class="workbench-button workbench-primary" :disabled="busy || !queue">{{ text('查询', 'Search') }}</button></form>
-          <span class="result-count" aria-live="polite">{{ data ? text(`共 ${data.total} 笔订单`, `${data.total} orders`) : '—' }}</span>
-          </div>
-          <div class="scope-filters">
-          <label class="department-filter warehouse-filter"><span>{{ text('发货仓库', 'Shipping warehouse') }}</span><select class="workbench-filter-select" :value="warehouseCode" :disabled="busy || !queue" :aria-label="text('发货仓库', 'Shipping warehouse')" @change="navigate({ warehouseCode: ($event.target as HTMLSelectElement).value || undefined, page: 1 })"><option value="">{{ text('全部', 'All') }}</option><option value="HZ">{{ text('杭州仓', 'Hangzhou') }}</option><option value="SZ">{{ text('深圳仓', 'Shenzhen') }}</option></select></label>
-          <label class="department-filter"><span>{{ text('业务部门', 'Business department') }}</span><select class="workbench-filter-select" :value="departmentId" :disabled="busy || !queue" :aria-label="text('业务部门', 'Business department')" @change="navigate({ departmentId: ($event.target as HTMLSelectElement).value || undefined, ownerId: undefined, page: 1 })"><option value="">{{ text('营销中心', 'Marketing Center') }}</option><option v-if="departmentId && !departments.some(item => item.id === departmentId)" :value="departmentId" disabled>{{ text('所选业务部门', 'Selected business department') }}</option><option v-for="department in departments" :key="department.id" :value="department.id">{{ department.name }}</option></select></label>
+            <span class="result-count" aria-live="polite">{{ data ? text(`共 ${data.total} 笔订单`, `${data.total} orders`) : '—' }}</span>
           </div>
         </div>
+        <WorkbenchListActions :selected-count="selectedOrders.length" @clear="selectedOrders = []">
+          <button v-if="approvalQueue" type="button" class="workbench-button workbench-primary" data-testid="open-approval" :disabled="busy || !online || !hasApprovableSelection || !data || !!approvalOrderIds" :title="queue === 'allocation_review' ? text('审核发运单制作已完成的配货单', 'Approve allocations with completed dispatch preparation') : undefined" @click="openApproval"><Check :size="15" />{{ text('审核', 'Approve') }}</button>
+          <button v-if="queue === 'allocation' || queue === 'shipping'" type="button" class="workbench-button" data-testid="open-inventory" :disabled="busy || !online || !data" @click="inventoryOrderIds = [...selectedOrders]"><PackageSearch :size="15" />{{ text('查询即时库存', 'Current inventory') }}</button>
+          <template #export>
+            <WorkbenchExportButton :selected-count="selectedOrders.length" :total="data?.total ?? 0" :disabled="busy || !online || !data" :busy="!!exporting" @export="exportOrders" />
+          </template>
+        </WorkbenchListActions>
+        <p v-if="exportFeedback" class="export-feedback" :class="{ 'export-error': exportFailed }" :role="exportFailed ? 'alert' : 'status'">{{ exportFeedback }}</p>
         <div v-if="procurementStage && taskStatus" class="exact-filter legacy-status-filter"><span>{{ text('原采购筛选', 'Legacy purchase filter') }}：{{ procurementStageLabels[procurementStage][zh ? 0 : 1] }}</span><button :disabled="busy" :aria-label="text('清除原采购状态筛选', 'Clear legacy purchase status filter')" @click="navigate({ procurementStage: undefined, page: 1 })">{{ text('清除', 'Clear') }}</button></div>
         <div v-if="ownerId" class="exact-filter legacy-owner-filter"><span>{{ text('业务员', 'Salesperson') }}：{{ selectedOwnerName }}</span><button :disabled="busy" @click="navigate({ ownerId: undefined, page: 1 })">{{ text('清除业务员筛选', 'Clear salesperson filter') }}</button></div>
         <div v-if="route.query.orderNumber" class="exact-filter"><span>{{ text('指定订单', 'Selected order') }}：{{ route.query.orderNumber }}</span><button @click="navigate({ orderNumber: undefined, page: 1 })">{{ text('查看该类全部订单', 'View all orders in this queue') }}</button></div>
@@ -552,18 +571,6 @@ h2 { display: flex; gap: 12px; align-items: center; font-size: 21px; font-weight
 .queue-tabs a { display: flex; align-items: center; justify-content: center; gap: 14px; padding: 11px 17px; border: 1px solid transparent; border-radius: 6px; color: #8490a3; font-size: 13px; white-space: nowrap; }
 .queue-tabs a.active { background: var(--color-surface); border-color: var(--color-border); color: #5873d4; font-weight: 700; box-shadow: 0 2px 5px #23375805; }
 .list-panel { container: order-list / inline-size; width: 100%; max-width: 100%; min-width: 0; border: 1px solid var(--color-border); border-radius: 9px; overflow: hidden; background: var(--color-surface); }
-.list-toolbar { padding: 18px 20px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; }
-.department-filter { display: flex; align-items: center; gap: 10px; color: var(--color-text-secondary); font-size: 12px; margin-left: auto; white-space: nowrap; }
-.outbound-stage-filter { margin-left: 0; }
-.scope-filters { display: flex; flex-wrap: wrap; align-items: center; flex: 0 1 auto; justify-content: flex-end; gap: 16px; margin-left: auto; max-width: 100%; }
-.scope-filters .department-filter { margin-left: 0; }
-.query-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; flex: 0 1 auto; min-width: 0; max-width: 100%; }
-.query-controls .status-filter { margin-left: 0; flex-shrink: 0; }
-.query-controls .search-form { flex: 0 1 calc(var(--query-search-width) + 64px); width: calc(var(--query-search-width) + 64px); min-width: min(240px, 100%); max-width: 100%; }
-.status-filter select { min-width: 150px; }
-.department-filter select { min-width:160px;max-width:280px; }
-.search-form { display: flex; gap: 8px; }
-.search-field { flex:1; }
 
 .result-count { white-space: nowrap; color: #8490a3; font-size: 12px; }
 .exact-filter { padding: 0 20px 16px; display: flex; gap: 16px; font-size: 12px; }
@@ -602,7 +609,7 @@ th.order-cell { z-index: 3; }
 .state-message { min-height: 260px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: #8490a3; font-size: 13px; padding: 24px; text-align: center; }.error-message { color: #dc6767; }
 .demo-note { margin-top: 14px; color: #8a96a8; font-size: 11px; }
 button:disabled { opacity: .45; cursor: not-allowed; }
-@media (max-width: 700px) { .list-heading { align-items: flex-start; }h2 { font-size: 23px; }.list-toolbar { flex-wrap: wrap; padding: 14px; }.query-controls { flex-wrap: wrap; flex-basis: 100%; }.query-controls .search-form { flex-basis: 100%; min-width: 0; }.pagination { flex-wrap: wrap; padding: 14px; }.queue-tabs a { padding: 9px 12px; }.order-cell { position: static; }.exact-filter { flex-wrap: wrap; } }
+@media (max-width: 700px) { .list-heading { align-items: flex-start; }h2 { font-size: 23px; }.pagination { flex-wrap: wrap; padding: 14px; }.queue-tabs a { padding: 9px 12px; }.order-cell { position: static; }.exact-filter { flex-wrap: wrap; } }
 
 .dark .source-badge { color: #ebc781; background: #352e23; border-color: #5b4d31; }
 

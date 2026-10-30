@@ -1,3 +1,4 @@
+import { PurchaseGroupQueryDto, PurchaseGroupExportDto, PurchaseGroupFiltersDto, PurchaseGroupChatQueryDto } from '../fop-data/procurement-groups.dto'
 import { AllocationInventoryQueryDto } from '../fop-data/allocation-inventory.dto'
 import { FopApprovalService } from '../fop-data/fop-approval.service'
 import { ApprovalPreviewDto, ApprovalSubmitDto } from '../fop-data/fop-approval.dto'
@@ -40,6 +41,30 @@ export class WorkbenchController {
 @UseGuards(JwtAuthGuard)
 export class FulfillmentOrdersController {
   constructor(private readonly data: FopDataService, private readonly approvals: FopApprovalService) {}
+
+  @Get('purchase-groups')
+  @Header('Cache-Control', 'private, no-store')
+  getPurchaseGroups(@Request() req: ExpressRequest, @Query() query: PurchaseGroupQueryDto) { return this.data.getPurchaseGroups(req.user!.userId, query) }
+
+  @Get('purchase-groups/:groupId')
+  @Header('Cache-Control', 'private, no-store')
+  getPurchaseGroupDetails(@Request() req: ExpressRequest, @Param('groupId') id: string, @Query() query: PurchaseGroupQueryDto) { return this.data.getPurchaseGroupDetails(req.user!.userId, id, query) }
+
+  @Get('purchase-groups/:groupId/supplier-follow-up')
+  @Header('Cache-Control', 'private, no-store')
+  getPurchaseGroupSupplier(@Request() req: ExpressRequest, @Param('groupId') id: string, @Query() query: PurchaseGroupFiltersDto) { return this.data.getPurchaseGroupSupplier(req.user!.userId, id, query) }
+
+  @Get('purchase-groups/:groupId/supplier-follow-up/launch')
+  @Header('Cache-Control', 'private, no-store')
+  getPurchaseGroupSupplierChat(@Request() req: ExpressRequest, @Param('groupId') id: string, @Query() query: PurchaseGroupChatQueryDto) { return this.data.getPurchaseGroupSupplierChat(req.user!.userId, id, query) }
+
+  @Post('purchase-groups/export')
+  @HttpCode(200)
+  @Header('Cache-Control', 'private, no-store')
+  async exportPurchaseGroups(@Request() req: ExpressRequest, @Body() body: PurchaseGroupExportDto) {
+    const buffer = await this.data.exportPurchaseGroups(req.user!.userId, body, req.user!.sessionVersion ?? 0)
+    return new StreamableFile(buffer, { type: FULFILLMENT_EXPORT_MIME, disposition: 'attachment; filename="purchase-groups.xlsx"' })
+  }
 
   @Post('allocation-inventory/query')
   @HttpCode(200)

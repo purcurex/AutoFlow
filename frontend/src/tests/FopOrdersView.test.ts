@@ -1,3 +1,4 @@
+import { useWorkbenchAccess, clearWorkbenchAccess } from '@/composables/useWorkbenchAccess'
 import { getTaskStatus } from '@/utils/workbench-status'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
@@ -180,9 +181,9 @@ describe('fulfillment order list', () => {
   it.each([['unpaid', 'sales'], ['review', 'sales'], ['exceptions', 'sales'], ['dispatch', 'dispatch'], ['allocation', 'allocation']] as const)('sorts consumer checkout time in %s and restores oldest receipt first', async (queue, role) => {
     const { wrapper, router } = await setup(`?queue=${queue}&departmentId=d1`, role)
     expect(wrapper.get('button.sort-payment').element.closest('th')?.getAttribute('aria-sort')).toBe('ascending')
-    await wrapper.get('thead button[aria-label^="C端下单时间："]').trigger('click'); await flushPromises()
+    await wrapper.get('thead button[aria-label^="C端付款时间："]').trigger('click'); await flushPromises()
     expect(router.currentRoute.value.query).toMatchObject({ sortBy: 'consumerPaidAt', sortOrder: 'asc', page: '1', departmentId: 'd1' })
-    expect(wrapper.get('thead button[aria-label^="C端下单时间："]').element.closest('th')?.getAttribute('aria-sort')).toBe('ascending')
+    expect(wrapper.get('thead button[aria-label^="C端付款时间："]').element.closest('th')?.getAttribute('aria-sort')).toBe('ascending')
     await wrapper.get('.compact-consumer-sort').trigger('click'); await flushPromises()
     expect(router.currentRoute.value.query.sortOrder).toBe('desc')
     await wrapper.get('button.refresh-orders').trigger('click'); await flushPromises()
@@ -196,6 +197,25 @@ describe('fulfillment order list', () => {
     const { wrapper, router } = await setup(`?queue=allocation_review&departmentId=d1&page=2&taskStatus=${previous}`, 'allocation')
     expect(router.currentRoute.value.query).toMatchObject({ taskStatus: current, departmentId: 'd1', page: '1' })
     expect(wrapper.text()).not.toContain('状态筛选无效')
+  })
+  it.each([['dispatch_approved', 'dispatch_complete'], ['dispatch_synced', 'dispatch_complete'], ['dispatch_draft', 'dispatch_incomplete'], ['unknown', 'dispatch_incomplete']])('migrates incomplete allocation bookmark %s to binary status', async (previous, current) => {
+    const { router } = await setup(`?queue=allocation&departmentId=d1&page=2&taskStatus=${previous}`, 'allocation')
+    expect(router.currentRoute.value.query).toMatchObject({ taskStatus: current, departmentId: 'd1', page: '1' })
+  })
+  it('uses only incomplete/complete for incomplete allocation filters and rows', async () => {
+    const source = mockFopOrders.find(o => orders.matchesFopQueue(o, 'allocation'))!
+    const items = [
+      { ...source, id: 'ready', dispatchDocuments: [{ id: 'fy1', number: 'FY-001', status: 'approved' as const }] },
+      { ...source, id: 'waiting', dispatchDocuments: [] },
+      { ...source, id: 'mixed', dispatchDocuments: [{ id: 'fy2', number: 'FY-002', status: 'approved' as const }, { id: 'fy3', number: 'FY-003', status: 'submitted' as const }] },
+    ]
+    vi.spyOn(orders, 'getFopOrders').mockResolvedValue({ source: 'mock', items, total: 3, page: 1, pageSize: 50, departments: [], refreshedAt: new Date().toISOString(), totals: { orderCount: 3, itemQuantity: 3, amountsByCurrency: [] } })
+    const { wrapper, router } = await setup('?queue=allocation', 'allocation')
+    const filter = wrapper.get('select[aria-label="发运单状态筛选"]')
+    expect(filter.findAll('option').map(o => o.text())).toEqual(['全部状态', '未完成', '已完成'])
+    expect(wrapper.findAll('.dispatch-stage').map(c => c.text())).toEqual(['已完成', '未完成', '未完成'])
+    await filter.setValue('dispatch_incomplete'); await flushPromises()
+    expect(router.currentRoute.value.query.taskStatus).toBe('dispatch_incomplete')
   })
   it('shows allocation document numbers, binary dispatch filters and enables approval for completed selections', async () => {
     const source = mockFopOrders.find(o => orders.matchesFopQueue(o, 'allocation_review'))!
@@ -231,12 +251,12 @@ describe('fulfillment order list', () => {
     expect(router.currentRoute.value.query.page).toBe('1')
     expect(wrapper.text()).not.toContain('筛选无效')
   })
-  it('places sales approval before search and previews single or multiple selected orders', async () => {
+  it('places sales approval first in the action bar and previews selected orders', async () => {
     vi.mocked(previewOrderApproval).mockResolvedValue({ source: 'mock', queue: 'review', items: [] })
     const { wrapper } = await setup('?queue=review', 'sales')
-    const button = wrapper.get('.query-controls > [data-testid="open-approval"]')
+    const button = wrapper.get('.workbench-list-actions > [data-testid="open-approval"]')
     expect(button.attributes('disabled')).toBeDefined()
-    expect(button.element.compareDocumentPosition(wrapper.get('.search-form').element) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(wrapper.get('.workbench-list-actions').element.firstElementChild).toBe(button.element)
     const rows = wrapper.findAll('tbody input.order-checkbox')
     expect(rows.length).toBeGreaterThan(1)
     await rows[0]!.setValue(true)
@@ -320,16 +340,16 @@ describe('fulfillment order list', () => {
     const page = { source: 'mock' as const, refreshedAt: new Date().toISOString(), items: [row], total: 1, page: 1, pageSize: 50, totals: { orderCount: 1, itemQuantity: 1, amountsByCurrency: [] }, departments: [], salespeople: [] }
     const get = vi.spyOn(orders, 'getFopOrders').mockResolvedValue(page)
     const { wrapper, router } = await setup(`?queue=${queue}`, role)
-    expect(wrapper.findAll('th').map(cell => cell.text())).toContain('C端下单时间')
-    expect(wrapper.get('td[data-label="C端下单时间"]').text()).toBe('2026/10/02 05:30')
+    expect(wrapper.findAll('th').map(cell => cell.text())).toContain('C端付款时间')
+    expect(wrapper.get('td[data-label="C端付款时间"]').text()).toBe('2026/10/02 05:30')
     expect(wrapper.find('td[data-label="创建时间"]').exists()).toBe(false)
     get.mockResolvedValue({ ...page, items: [{ ...row, consumerPaidAt: undefined }] })
     window.dispatchEvent(new Event('focus')); await flushPromises()
-    expect(wrapper.get('td[data-label="C端下单时间"]').text()).toBe('—')
+    expect(wrapper.get('td[data-label="C端付款时间"]').text()).toBe('—')
     get.mockResolvedValue({ ...page, items: [{ ...row, reviewedAt: undefined, paymentStatus: 'paid', reviewStatus: 'pending', procurementProgress: { purchaseOrder: 'ordered', supplierPayment: 'unpaid' } }] })
     await router.push('/workbench/procurement?queue=procurement'); await flushPromises()
     expect(wrapper.get('td[data-label="订单审核时间"]').text()).toBe('—')
-    expect(wrapper.find('td[data-label="C端下单时间"]').exists()).toBe(false)
+    expect(wrapper.find('td[data-label="C端付款时间"]').exists()).toBe(false)
   })
   it('uses Procurement progress and excludes nonexistent filter choices', async () => {
     const { wrapper } = await setup('?queue=procurement', 'procurement')
@@ -387,6 +407,39 @@ describe('fulfillment order list', () => {
   const originalClipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard')
   afterEach(() => { mounted.splice(0).forEach(w => { if (w.exists()) w.unmount() }); vi.restoreAllMocks(); vi.useRealTimers(); vi.unstubAllGlobals(); if (originalClipboard) Object.defineProperty(navigator, 'clipboard', originalClipboard); else Reflect.deleteProperty(navigator, 'clipboard') })
 
+  it.each(['1w', '1m', '3m'])('shows C-end range %s only on unpaid and forwards it to queries and exports', async timeRange => {
+    const get = vi.spyOn(orders, 'getFopOrders').mockResolvedValue({ source: 'mock', refreshedAt: '', items: [], total: 100, page: 2, pageSize: 20, totals: { orderCount: 100, itemQuantity: 100, amountsByCurrency: [] }, departments: [] })
+    const run = vi.spyOn(exporter, 'exportFopOrders').mockResolvedValue(new Blob(['xlsx']))
+    vi.spyOn(downloads, 'downloadBlob').mockImplementation(() => {})
+    const { wrapper, router } = await setup('?queue=unpaid&page=2&departmentId=d1', 'sales')
+    const range = wrapper.get('select[aria-label="C端付款时间范围"]')
+    expect(range.findAll('option').map(o => o.text())).toEqual(['全部', '近一周', '近一月', '近三月'])
+    await range.setValue(timeRange); await flushPromises()
+    expect(router.currentRoute.value.query).toMatchObject({ timeRange, page: '1', departmentId: 'd1' })
+    expect(get).toHaveBeenLastCalledWith(expect.objectContaining({ queue: 'unpaid', timeRange, page: 1 }))
+    await exportNow(wrapper)
+    expect(run).toHaveBeenLastCalledWith(expect.objectContaining({ timeRange, mode: 'filtered' }), expect.any(AbortSignal))
+    for (const queue of ['review', 'exceptions']) {
+      await router.push(`/workbench/sales?queue=${queue}&timeRange=1m`); await flushPromises()
+      expect(wrapper.find('select[aria-label="C端付款时间范围"]').exists()).toBe(false)
+      expect(get).toHaveBeenLastCalledWith(expect.objectContaining({ queue, timeRange: undefined }))
+    }
+  })
+  it('uses full authorized country facets instead of page rows and preserves selection in export', async () => {
+    const get = vi.spyOn(orders, 'getFopOrders').mockResolvedValue({ source: 'mock', refreshedAt: '', items: [], total: 100, page: 1, pageSize: 20, totals: { orderCount: 100, itemQuantity: 100, amountsByCurrency: [] }, departments: [], shippingCountries: ['GB', 'US'] })
+    const run = vi.spyOn(exporter, 'exportFopOrders').mockResolvedValue(new Blob(['xlsx']))
+    vi.spyOn(downloads, 'downloadBlob').mockImplementation(() => {})
+    const { wrapper, router } = await setup('?queue=review', 'sales')
+    const country = wrapper.get('select[aria-label="发货国家"]')
+    expect(country.findAll('option').map(o => o.text())).toEqual(['全部', '🇬🇧 GB', '🇺🇸 US'])
+    await country.setValue('US'); await flushPromises()
+    expect(get).toHaveBeenLastCalledWith(expect.objectContaining({ shippingCountryCode: 'US', page: 1 }))
+    await exportNow(wrapper)
+    expect(run).toHaveBeenLastCalledWith(expect.objectContaining({ shippingCountryCode: 'US', mode: 'filtered' }), expect.any(AbortSignal))
+    await router.push('/workbench/sales?queue=unpaid&shippingCountryCode=US'); await flushPromises()
+    expect(wrapper.find('select[aria-label="发货国家"]').exists()).toBe(false)
+    expect(get).toHaveBeenLastCalledWith(expect.objectContaining({ shippingCountryCode: undefined }))
+  })
   it('filters from the list toolbar and preserves the stage in search and export', async () => {
     const get = vi.spyOn(orders, 'getFopOrders').mockResolvedValue({ source: 'mock', refreshedAt: new Date().toISOString(), items: [], total: 100, page: 2, pageSize: 20,
       totals: { orderCount: 100, itemQuantity: 100, amountsByCurrency: [] }, departments: [], salespeople: [] })
@@ -394,9 +447,9 @@ describe('fulfillment order list', () => {
     vi.spyOn(downloads, 'downloadBlob').mockImplementation(() => {})
     const { wrapper, router } = await setup('?queue=procurement&departmentId=d1&ownerId=employee-1&page=2&pageSize=20', 'procurement')
     expect(wrapper.find('thead select').exists()).toBe(false)
-    expect(wrapper.get('.query-controls').element.firstElementChild).toBe(wrapper.get('.status-filter').element)
-    expect(wrapper.get('.status-filter').element.nextElementSibling).toBe(wrapper.get('.search-form').element)
-    await wrapper.get('div.query-controls select[aria-label="采购进度筛选"]').setValue('payment_pending'); await flushPromises()
+    expect(wrapper.get('.query-controls').element.firstElementChild).toBe(wrapper.get('.search-form').element)
+    expect(wrapper.get('.query-controls').findAll('select').map(el => el.attributes('aria-label'))).toEqual(['业务部门', '发货仓库'])
+    await wrapper.get('.workbench-filter-secondary select[aria-label="采购进度筛选"]').setValue('payment_pending'); await flushPromises()
     expect(router.currentRoute.value.query).toMatchObject({ taskStatus: 'payment_pending', page: '1', departmentId: 'd1', ownerId: 'employee-1' })
     expect(get).toHaveBeenLastCalledWith(expect.objectContaining({ taskStatus: 'payment_pending', page: 1 }))
     await wrapper.get('input[type="search"]').setValue('SKU-1')
@@ -404,19 +457,19 @@ describe('fulfillment order list', () => {
     expect(get).toHaveBeenLastCalledWith(expect.objectContaining({ taskStatus: 'payment_pending', search: 'SKU-1' }))
     await exportNow(wrapper)
     expect(run).toHaveBeenLastCalledWith(expect.objectContaining({ taskStatus: 'payment_pending', search: 'SKU-1', mode: 'filtered' }), expect.any(AbortSignal))
-    await wrapper.get('div.query-controls select[aria-label="采购进度筛选"]').setValue(''); await flushPromises()
+    await wrapper.get('.workbench-filter-secondary select[aria-label="采购进度筛选"]').setValue(''); await flushPromises()
     expect(router.currentRoute.value.query.taskStatus).toBeUndefined()
   })
   it('clears selected rows when changing the compact status and keeps filters usable for an empty result', async () => {
     const { wrapper, router } = await setup('?queue=allocation', 'allocation')
     await wrapper.findAll('tbody input.order-checkbox')[0]!.setValue(true)
     expect(wrapper.get('[data-testid="export-orders"]').attributes('title')).toContain('导出已选')
-    await wrapper.get('.query-controls select[aria-label="发运单状态筛选"]').setValue('dispatch_submitted'); await flushPromises()
-    expect(router.currentRoute.value.query.taskStatus).toBe('dispatch_submitted')
+    await wrapper.get('.workbench-filter-secondary select[aria-label="发运单状态筛选"]').setValue('dispatch_complete'); await flushPromises()
+    expect(router.currentRoute.value.query.taskStatus).toBe('dispatch_complete')
     expect(wrapper.get('.workbench-list-actions').text()).toContain('已选 0 笔')
-    expect(wrapper.get('.query-controls select[aria-label="发运单状态筛选"]').findAll('option')).toHaveLength(6)
+    expect(wrapper.get('.workbench-filter-secondary select[aria-label="发运单状态筛选"]').findAll('option')).toHaveLength(3)
     expect(wrapper.find('thead select').exists()).toBe(false)
-    for (const row of wrapper.findAll('tbody tr').filter(row => row.find('input.order-checkbox').exists())) expect(row.get('.dispatch-stage').text()).toBe('已提交')
+    for (const row of wrapper.findAll('tbody tr').filter(row => row.find('input.order-checkbox').exists())) expect(row.get('.dispatch-stage').text()).toBe('已完成')
   })
 
   it('shows and clears the legacy criterion when both status filters are present', async () => {
@@ -554,7 +607,7 @@ describe('fulfillment order list', () => {
   it('shows purchase stages instead of customer payment in procurement, and keeps payment in sales', async () => {
     const { wrapper, router } = await setup('?queue=procurement', 'procurement')
     const headers = () => wrapper.findAll('thead th').map(th => th.text())
-    expect(wrapper.find('.query-controls select[aria-label="采购进度筛选"]').exists()).toBe(true)
+    expect(wrapper.find('.workbench-filter-secondary select[aria-label="采购进度筛选"]').exists()).toBe(true)
     expect(headers()).not.toContain('支付状态')
     expect(headers()).not.toContain('供应商发货状态')
     for (const label of ['待建采购订单', '待支付采购款', '采购退款待跟进']) expect(wrapper.text()).toContain(label)
@@ -933,4 +986,16 @@ describe('fulfillment order list', () => {
     wrapper.unmount()
     spy.mockRestore()
   })
+})
+
+
+it.each([['unpaid', 'sales'], ['review', 'sales'], ['exceptions', 'sales'], ['dispatch', 'dispatch'], ['procurement', 'procurement'], ['procurement_shipping', 'procurement'], ['allocation', 'allocation'], ['allocation_review', 'allocation'], ['shipping', 'warehouse']])('shows the account department on %s without changing query scope', async (queue, role) => {
+  useWorkbenchAccess().access.value = { roles: [], isAdmin: false, businessRole: 'salesperson', businessDepartment: { id: 'd1', name: '业务一部' } }
+  vi.spyOn(orders, 'getFopOrders').mockResolvedValue({ source: 'mock', items: [], total: 0, page: 1, pageSize: 50, departments: [], refreshedAt: '', totals: { orderCount: 0, itemQuantity: 0, amountsByCurrency: [] } })
+  try {
+    const { wrapper, router } = await setup(`?queue=${queue}`, role)
+    expect(wrapper.get('.department-filter option[value=""]').text()).toBe('业务一部')
+    expect(router.currentRoute.value.query.departmentId).toBeUndefined()
+    expect(orders.getFopOrders).toHaveBeenLastCalledWith(expect.objectContaining({ departmentId: undefined }))
+  } finally { mounted.splice(0).forEach(wrapper => wrapper.unmount()); vi.restoreAllMocks(); clearWorkbenchAccess() }
 })

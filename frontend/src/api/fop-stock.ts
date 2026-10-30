@@ -39,7 +39,7 @@ export interface StockInventoryPage { items: StockInventory[]; customerId: strin
 const base = '/autoflow/integrations/fop'
 export const getStockOrders = (params: StockQuery) => api.get<StockPage, StockPage>(`${base}/stock-orders`, { params })
 export const getStockCustomers = (params: StockScope) => api.get<{ items: StockCustomer[]; total: number }, { items: StockCustomer[]; total: number }>(`${base}/stock-customers`, { params })
-export const getStockInventory = (params: StockScope & { customerId?: string; customerSearch?: string; page: number; pageSize: number }) => api.get<StockInventoryPage, StockInventoryPage>(`${base}/stock-inventory`, { params })
+export const getStockInventory = (params: StockScope & { orderIds?: string[]; queue?: 'all' | 'procurement'; customerId?: string; customerSearch?: string; page: number; pageSize: number }) => api.get<StockInventoryPage, StockInventoryPage>(`${base}/stock-inventory`, { params, paramsSerializer: { indexes: null } })
 export async function exportStockOrders(query: StockFilters & ({ mode: 'selected'; orderIds: string[] } | { mode: 'filtered' }), signal?: AbortSignal): Promise<Blob> {
   const { queue, search, warehouseCode, departmentId, ownerId, stockType, purchaseStatus, orderStatus, sortBy, sortOrder, mode } = query
   try {

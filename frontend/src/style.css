@@ -203,5 +203,5 @@ button.workbench-refresh:is(.btn, .action-button, .workbench-button, .ov-seconda
 
 /* Shared workbench actions must not inherit the orange account/admin theme. */
 button.workbench-primary:is(.btn, .action-button, .workbench-button) { background: #5873d4; border-color: #5873d4; color: #fff; box-shadow: none; }
-button.workbench-primary:is(.btn, .action-button, .workbench-button):hover:not(:disabled) { background: #4f68c2; border-color: #4f68c2; }
+button.workbench-primary:is(.btn, .action-button, .workbench-button):hover:not(:disabled) { background: #4f68c2; border-color: #4f68c2; color: #fff; }
 button.workbench-primary:is(.btn, .action-button, .workbench-button):focus-visible { outline: 2px solid #9aace5; outline-offset: 3px; }

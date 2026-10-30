@@ -102,7 +102,7 @@ watch([selectedId, memberSearch], () => { checkedMembers.value = [] })
 const directMembers = computed(() => workspace.value?.employees.filter(employee => employee.departmentId === selectedId.value) ?? [])
 const parentOptions = computed(() => nodes.value.filter(node => creating.value || !selectedDescendants.value.has(node.id)))
 const deleteBlockedReason = computed(() => {
-  if (!workspace.value?.canEdit) return text('仅系统管理员可删除部门。', 'Only system administrators can delete departments.')
+  if (!workspace.value?.canEdit) return text('仅管理员可删除部门。', 'Only system administrators can delete departments.')
   if (!selected.value?.parentId) return text('根组织不可删除。', 'The root organization cannot be deleted.')
   const childCount = children(selectedId.value).length
   const memberCount = directMembers.value.length

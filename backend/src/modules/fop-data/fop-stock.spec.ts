@@ -151,6 +151,22 @@ it('rechecks independent resource access after export generation', async () => {
   await expect(service.exportStockOrders('u', { mode: 'filtered' })).rejects.toMatchObject({ status: 403 })
 })
 
+it('keeps every stock SKU in a separate detail sheet and filters only data rows, excluding currency totals', async () => {
+  provider.orders[0].items = Array.from({ length: 30 }, (_, i) => ({ sku: `000${i}`, name: `Product ${i}`, imageUrl: null, variant: `Variant ${i}`, quantity: i + 1 }))
+  const book = new ExcelJS.Workbook()
+  await book.xlsx.load(await service.exportStockOrders('u', { mode: 'selected', orderIds: [provider.orders[0].id] }) as never)
+  const list = book.getWorksheet('备货清单')!, detail = book.getWorksheet('商品明细')!
+  expect(list.getCell('B2').text).toContain('完整内容见商品明细')
+  expect(list.autoFilter).toBe('A1:L2')
+  expect(detail).toBeDefined()
+  expect(detail.rowCount).toBe(31)
+  expect(detail.getCell('C31').value).toBe('00029')
+  expect(detail.getCell('C31').type).toBe(ExcelJS.ValueType.String)
+  expect(detail.getCell('D31').value).toBe('Variant 29')
+  expect(detail.getCell('E31').value).toBe(30)
+  expect(detail.autoFilter).toBe('A1:F31')
+})
+
 it('includes purchased stock awaiting shipment in the procurement queue and both exports within scope', async () => {
   user.workbenchRoles = ['procurement']
   provider.orders = [
@@ -228,4 +244,48 @@ it.each(['orderStatus', 'purchaseStatus'] as const)('sorts %s by business stage 
       expect(numbers).toEqual((mode === 'filtered' ? ids : sortOrder === 'asc' ? ['stage-0', 'stage-2'] : ['stage-2', 'stage-0']).map(id => `BH261028${id}`))
     }
   }
+})
+
+it.each(['admin', 'department_manager'])('defaults inventory to the logged-in salesperson even for %s access', async businessRole => {
+  Object.assign(user, { businessRole, businessDepartmentId: 'd1' })
+  provider.inventory = [inventory('i1'), inventory('i2', { customerId: 'c2', owner: { id: 'e2', name: 'Bob' } })]
+  expect((await service.getStockInventory('u', query)).items.map(r => r.id)).toEqual(['i1'])
+  expect((await service.getStockInventory('u', { ...query, ownerId: 'e2' })).total).toBe(0)
+  user.businessEmployeeId = null
+  expect((await service.getStockInventory('u', query)).total).toBe(0)
+})
+it('matches selected stock orders by exact customer/SKU pairs across warehouses before pagination', async () => {
+  user.businessRole = 'admin'
+  provider.orders = [order('1'), order('2', { customerId: 'c2', owner: { id: 'e2', name: 'Bob' }, items: [{ ...order('1').items[0], sku: 'SKU-2' }] })]
+  provider.inventory = [inventory('a'), inventory('b', { warehouseCode: 'SZ' }), inventory('c', { customerId: 'c2', sku: 'SKU-2', owner: { id: 'e2', name: 'Bob' } }),
+    inventory('cross-a', { sku: 'SKU-2' }), inventory('cross-b', { customerId: 'c2' }), inventory('denied', { customerId: 'c2', sku: 'SKU-2', warehouseCode: 'SZ' })]
+  provider.grant.allowedStockInventoryIds = ['a', 'b', 'c', 'cross-a', 'cross-b']
+  const selection = { ...query, orderIds: ['1', '2'] }
+  const result = await service.getStockInventory('u', selection)
+  expect(result.items.map(r => r.id)).toEqual(['a', 'b', 'c'])
+  expect(result.total).toBe(3)
+  expect((await service.getStockInventory('u', { ...selection, warehouseCode: 'SZ' })).items.map(r => r.id)).toEqual(['b'])
+  expect((await service.getStockInventory('u', { ...selection, pageSize: 1, page: 3 })).items.map(r => r.id)).toEqual(['c'])
+  expect((await service.getStockInventory('u', { ...selection, search: 'SKU-1', customerSearch: 'missing' })).total).toBe(0)
+})
+it('rejects the whole selected-stock request if an order is cancelled, foreign or no longer authorized', async () => {
+  for (const orderIds of [['1', '3'], ['1', 'missing']]) {
+    const selection = { ...query, orderIds }
+    await expect(service.getStockInventory('u', selection)).rejects.toMatchObject({ status: 409 })
+  }
+  provider.grant.allowedStockOrderIds = []
+  const selected = { ...query, orderIds: ['1'] }
+  await expect(service.getStockInventory('u', selected)).rejects.toMatchObject({ status: 409 })
+})
+it('checks procurement selection against its current queue and role, while keeping independent inventory authorization', async () => {
+  user.workbenchRoles = ['procurement']
+  provider.orders = [order('1', { paymentStatus: 'paid', reviewStatus: 'approved' })]
+  const selected = { ...query, queue: 'procurement' as const, orderIds: ['1'] }
+  expect((await service.getStockInventory('u', selected)).total).toBe(1)
+  provider.grant.allowedStockInventoryIds = []
+  expect((await service.getStockInventory('u', selected)).total).toBe(0)
+  provider.orders[0].purchaseStatus = 'received'
+  await expect(service.getStockInventory('u', selected)).rejects.toMatchObject({ status: 409 })
+  user.workbenchRoles = ['sales']
+  await expect(service.getStockInventory('u', selected)).rejects.toMatchObject({ status: 403 })
 })

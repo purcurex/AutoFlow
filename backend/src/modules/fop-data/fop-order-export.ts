@@ -66,7 +66,7 @@ export async function buildFulfillmentWorkbook(orders: readonly FopOrder[], quer
   if (query.queue === 'review') columns.push(column('物流渠道', 'logisticsChannels', 36))
   if (query.queue === 'dispatch') columns.push(column('物流信息', 'logisticsInfo', 38))
   if (query.queue === 'shipping') columns.push(column('物流商', 'carrier'), column('物流单号', 'trackingNumber', 30))
-  columns.push(column('业务员', 'salesperson', 26), query.queue === 'shipping' ? column('WMS创建时间（UTC+8）', 'wmsCreatedAt', 26) : query.queue === 'procurement' ? column('订单审核时间（UTC+8）', 'reviewedAt', 26) : query.queue === 'allocation_review' ? column('齐套时间（UTC+8）', 'allocationReadyAt', 26) : query.queue === 'procurement_shipping' ? column('采购付款时间（UTC+8）', 'procurementPaidAt', 26) : ['unpaid', 'review', 'exceptions', 'dispatch', 'allocation'].includes(query.queue) ? column('C端下单时间（UTC+8）', 'consumerPaidAt', 26) : column('创建日期（UTC+8）', 'createdAt', 24))
+  columns.push(column('业务员', 'salesperson', 26), query.queue === 'shipping' ? column('WMS创建时间（UTC+8）', 'wmsCreatedAt', 26) : query.queue === 'procurement' ? column('订单审核时间（UTC+8）', 'reviewedAt', 26) : query.queue === 'allocation_review' ? column('齐套时间（UTC+8）', 'allocationReadyAt', 26) : query.queue === 'procurement_shipping' ? column('采购付款时间（UTC+8）', 'procurementPaidAt', 26) : ['unpaid', 'review', 'exceptions', 'dispatch', 'allocation'].includes(query.queue) ? column('C端付款时间（UTC+8）', 'consumerPaidAt', 26) : column('创建日期（UTC+8）', 'createdAt', 24))
   const list = sheet(workbook, '订单清单', columns)
   const items = sheet(workbook, '商品明细', [column('订单编号', 'orderNumber', 30), column('商品信息', 'name', 40), column('SKU', 'sku', 26), column('规格', 'variant', 26), { ...column('数量', 'quantity', 12), number: true }, column('商品图片链接', 'imageUrl', 50)])
   for (const order of orders) {
@@ -92,12 +92,14 @@ export async function buildFulfillmentWorkbook(orders: readonly FopOrder[], quer
   const entries = [
     ['清单', query.queue === 'dispatch' && query.taskStatus === 'dispatch_synced' ? '已同步清单' : exportQueueLabels[query.queue]], ['导出方式', query.mode === 'selected' ? '导出所选订单' : '当前筛选全部订单（跨分页）'], ['生成时间（UTC+8）', dateText(workbook.created.toISOString())],
     ['数据来源', source === 'mock' ? '演示数据' : 'FOP'], ['搜索条件', query.search?.trim() || '无'], ['指定订单', query.orderNumber || '无'],
+    ...(query.queue === 'unpaid' ? [['C端付款时间范围', query.timeRange === '1w' ? '近一周' : query.timeRange === '1m' ? '近一月' : query.timeRange === '3m' ? '近三月' : '全部']] : []),
+    ...(query.queue === 'review' ? [['发货国家', query.shippingCountryCode || '全部']] : []),
     ['发货仓库', query.warehouseCode === 'HZ' ? '杭州仓' : query.warehouseCode === 'SZ' ? '深圳仓' : '全部'],
     ['业务部门', query.departmentId ? [...new Set(orders.map(o => o.department?.name).filter(Boolean))].join('、') : '全部可见部门'],
     ['清单状态筛选', query.taskStatus ? taskStatusLabel(query.taskStatus, query.queue)[0] : query.queue === 'dispatch' ? '全部待履约' : '全部状态'],
     ['原采购状态筛选', query.procurementStage ? procurementStageLabels[query.procurementStage][0] : '全部状态'],
     ['业务员', query.ownerId ? [...new Set(orders.map(o => o.owner?.name || o.salesperson))].join('、') : '全部业务员'],
-    ['排序', `${({ paidAt: '收款日期', reviewedAt: '订单审核时间', consumerPaidAt: 'C端下单时间', dispatchDocumentStatus: '发运单状态', allocationDocumentStatus: '配货单状态', stockReadiness: '配货状态', allocationReviewStatus: '配货单状态', outboundStatus: '出库状态' })[query.sortBy ?? 'paidAt']} · ${(query.sortOrder ?? (query.sortBy && query.sortBy !== 'paidAt' ? 'asc' : query.paidAtOrder) ?? 'asc') === 'asc' ? '升序' : '降序'}`],
+    ['排序', `${({ paidAt: '收款日期', reviewedAt: '订单审核时间', consumerPaidAt: 'C端付款时间', dispatchDocumentStatus: '发运单状态', allocationDocumentStatus: '配货单状态', stockReadiness: '配货状态', allocationReviewStatus: '配货单状态', outboundStatus: '出库状态' })[query.sortBy ?? 'paidAt']} · ${(query.sortOrder ?? (query.sortBy && query.sortBy !== 'paidAt' ? 'asc' : query.paidAtOrder) ?? 'asc') === 'asc' ? '升序' : '降序'}`],
     ['金额口径', '订单金额按币种分别合计，未换汇；一单多品的订单金额仅计算一次。此表为待办订单金额，不等同于回款业绩。'],
     ['Customer', '订单收货国家二字码；空缺显示—，不使用客户档案国家。'],
     ['商品信息', '商品明细表每个 SKU 独立一行。图片为原始链接文本，不嵌入外部图片；长商品内容可在编辑栏查看。'],

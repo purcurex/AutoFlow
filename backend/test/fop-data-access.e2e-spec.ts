@@ -204,6 +204,31 @@ describe('FOP user isolation HTTP API (repository and provider boundaries stubbe
     expect(Object.fromEntries(response.items.map((row: any) => [row.id, row.shippingCountryCode]))).toEqual({ us: 'US', gb: 'GB', missing: null, invalid: null })
   })
 
+  it('filters unpaid by C-end payment only and review by authorized destination facets across pages', async () => {
+    const clock = jest.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-10-31T04:00:00Z'))
+    try {
+      records = [order('week', { paymentStatus: 'unpaid', consumerPaidAt: '2026-10-24T04:00:00Z' }), order('recent', { paymentStatus: 'unpaid', consumerPaidAt: '2026-09-30T04:00:00Z' }),
+        order('older', { paymentStatus: 'unpaid', consumerPaidAt: '2026-08-31T04:00:00Z' }),
+        order('missing', { paymentStatus: 'unpaid', createdAt: '2026-10-30T00:00:00Z' }),
+        order('future', { paymentStatus: 'unpaid', consumerPaidAt: '2026-11-01T00:00:00Z' }),
+        order('us', { shippingCountryCode: 'US' }), order('gb', { shippingCountryCode: 'GB' }),
+        order('secret', { shippingCountryCode: 'AU', owner: { id: 'other', name: 'Other' } })]
+      provider.resolvePermissions = async (subject: any) => ({ subject, allowedOrderIds: records.map(row => row.id) })
+      const week = (await list('queue=unpaid&timeRange=1w').expect(200)).body
+      expect(week.items.map((o: any) => o.id)).toEqual(['week'])
+      expect(week.totals.orderCount).toBe(1)
+      expect((await list('queue=unpaid&timeRange=1m').expect(200)).body.items.map((o: any) => o.id)).toEqual(['recent', 'week'])
+      expect((await list('queue=unpaid&timeRange=3m').expect(200)).body.total).toBe(3)
+      expect((await list('queue=unpaid').expect(200)).body.total).toBe(5)
+      const page = (await list('queue=review&pageSize=1&shippingCountryCode=US').expect(200)).body
+      expect(page.shippingCountries).toEqual(['GB', 'US'])
+      expect(page.items.map((o: any) => o.id)).toEqual(['us'])
+      expect(page.totals.orderCount).toBe(1)
+      expect((await list('queue=review&search=gb').expect(200)).body.shippingCountries).toEqual(['GB'])
+      for (const query of ['queue=review&timeRange=1m', 'queue=exceptions&timeRange=3m', 'queue=unpaid&shippingCountryCode=US', 'queue=review&shippingCountryCode=ZZ', 'queue=unpaid&timeRange=2m']) await list(query).expect(400)
+    } finally { clock.mockRestore() }
+  })
+
   it('allowlists actual logistics channel names and codes after order authorization', async () => {
     const channels = [{ name: ' 云途标准专线 ', code: ' YT-STD ', privateRate: 99 }, { name: '云途标准专线', code: 'YT-STD' }, { name: '云途带电专线', code: 'YT-BAT' }]
     records = [order('own', { logisticsChannels: channels }), order('legacy'), order('invalid', { logisticsChannels: { name: 'invalid' } }), order('partial', { logisticsChannels: [{ name: ' 渠道名称 ', code: 42 }, { name: null, code: 'CODE-ONLY' }, { name: ' ', code: {} }, null] }), order('foreign', { logisticsChannels: channels, owner: { id: 'other', name: 'Other' } })]
@@ -349,6 +374,7 @@ describe('FOP user isolation HTTP API (repository and provider boundaries stubbe
         getAllocationInventory: (identity: any, grant: any, scopes: any) => provider.getAllocationInventory(identity, grant, scopes),
         resolvePermissions: (identity: any) => provider.resolvePermissions(identity),
         listOrders: (identity: any, grant: any) => provider.listOrders(identity, grant),
+        getPurchaseLinks: (identity: any, grant: any, ids: string[]) => provider.getPurchaseLinks(identity, grant, ids),
         listSupplierFollowUps: (identity: any, grant: any, orderId: string) => provider.listSupplierFollowUps(identity, grant, orderId),
         listReceipts: (identity: any, grant: any) => provider.listReceipts(identity, grant),
         listFreight: (identity: any, grant: any) => provider.listFreight(identity, grant),
@@ -376,6 +402,7 @@ describe('FOP user isolation HTTP API (repository and provider boundaries stubbe
       isConfigured: () => true,
       resolvePermissions: async (identity: any) => ({ subject: { ...identity }, allowedOrderIds: identity.userId === 'alice-fop' ? ['a', 'shared'] : ['b', 'shared'] }),
       listOrders: async () => structuredClone(records),
+      getPurchaseLinks: async (subject: any, _grant: any, ids: string[]) => ({ subject, orders: ids.map(orderId => ({ orderId, obligations: [] })) }),
       listReceipts: async () => structuredClone(receiptRecords),
       listFreight: async () => structuredClone(freightRecords),
       listProfits: async () => structuredClone(profitRecords),
@@ -421,6 +448,10 @@ describe('FOP user isolation HTTP API (repository and provider boundaries stubbe
     await get(`${base}/stock-inventory?customerId=`).expect(400)
     expect((await get(`${base}/stock-inventory?customerSearch=cli&search=SKU`).expect(200)).body.total).toBe(1)
     expect((await get(`${base}/stock-inventory?customerSearch=missing`).expect(200)).body.total).toBe(0)
+    expect((await get(`${base}/stock-inventory?orderIds=stock-1&queue=all`).expect(200)).body.items.map((r: any) => r.id)).toEqual(['inventory-1'])
+    await get(`${base}/stock-inventory?orderIds=stock-1&orderIds=outside`).expect(409)
+    for (const suffix of ['orderIds=', 'orderIds=%20', 'orderIds=stock-1&orderIds=stock-1', 'orderIds=stock-1&queue=invalid', 'orderIds=stock-1&customerIds=c1']) await get(`${base}/stock-inventory?${suffix}`).expect(400)
+    await get(`${base}/stock-inventory?${Array.from({ length: 101 }, (_, i) => `orderIds=s${i}`).join('&')}`).expect(400)
     await get(`${base}/stock-orders?queue=invalid`).expect(400)
     accounts.get(alice).workbenchRoles = ['procurement']
     expect((await get(`${base}/stock-orders?queue=procurement`).expect(200)).body.total).toBe(0)
@@ -440,6 +471,167 @@ describe('FOP user isolation HTTP API (repository and provider boundaries stubbe
     await get(`${base}/stock-orders`).expect(403)
   })
 
+  describe('purchase groups HTTP contract', () => {
+    const base = '/autoflow/integrations/fop/purchase-groups'
+    const purchase = { purchaseType: 'online', platform: '1688', id: 'p1', number: 'CG-001', supplier: { id: 's1', name: 'Supplier' }, platformOrderNumber: '1688-1', payment: 'paid', placement: 'placed', paidAt: '2026-10-01T00:00:00Z' }
+    beforeEach(() => {
+      accounts.get(alice).workbenchRoles = ['procurement']
+      records = Array.from({ length: 23 }, (_, i) => order(`source-${i}`, { department: { id: 'd1', name: '业务一部' }, salesDepartmentCode: 'sales1' }))
+      records.push(order('secret', { owner: { id: 'other', name: 'SECRET OWNER' } }))
+      provider.resolvePermissions = async (subject: any) => ({ subject, allowedOrderIds: records.map(o => o.id), allowedPurchaseOrderIds: ['p1'] })
+      provider.getPurchaseLinks = async (subject: any) => ({ subject, orders: records.map(o => ({ orderId: o.id, obligations: [{ purchase, lines: [{ fulfillmentLineId: `${o.id}-line`, purchaseLineId: 'p-line', sku: o.id, quantity: 1, shippedQuantity: 0 }] }] })) })
+    })
+    it('paginates groups and source rows separately after local isolation and filtering', async () => {
+      const result = await get(`${base}?queue=procurement_shipping&pageSize=20`).expect(200)
+      expect(result.headers['cache-control']).toContain('no-store')
+      expect(result.body.total).toBe(1)
+      expect(result.body.items[0]).toMatchObject({ orderCount: 23, quantity: 23, pendingQuantity: 23 })
+      expect(result.body.items[0]).not.toHaveProperty('rows')
+      expect(JSON.stringify(result.body)).not.toContain('SECRET')
+      const details = await get(`${base}/purchase%3Ap1?queue=procurement_shipping&page=2&pageSize=20`).expect(200)
+      expect(details.body.total).toBe(23); expect(details.body.items).toHaveLength(3)
+      expect(JSON.stringify(details.body)).not.toContain('secret')
+      const filtered = await get(`${base}?queue=procurement_shipping&search=source-22`).expect(200)
+      expect(filtered.body.items[0]).toMatchObject({ orderCount: 1, quantity: 1 })
+      expect((await get(`${base}?queue=procurement`).expect(200)).body.total).toBe(0)
+      await get(`${base}/purchase%3Aunknown?queue=procurement_shipping`).expect(404)
+    })
+    it('serves one uncreated group with paginated fulfillment rows and stable selected export ID', async () => {
+      provider.getPurchaseLinks = async (subject: any) => ({ subject, orders: records.map(o => ({ orderId: o.id, obligations: [{ purchase: null, lines: [{ fulfillmentLineId: `${o.id}-line`, purchaseLineId: null, sku: o.id, quantity: 1, shippedQuantity: 0 }] }] })) })
+      const response = await get(`${base}?queue=procurement`).expect(200)
+      expect(response.body.items).toHaveLength(1)
+      expect(response.body.items[0]).toMatchObject({ id: 'uncreated', orderCount: 23, quantity: 23 })
+      expect(response.body.totals.uncreatedCount).toBe(23)
+      const details = await get(`${base}/uncreated?queue=procurement&page=2&pageSize=20`).expect(200)
+      expect(details.body.total).toBe(23)
+      expect(details.body.items).toHaveLength(3)
+      expect(JSON.stringify(details.body)).not.toContain('secret')
+      const filtered = await get(`${base}?queue=procurement&search=source-22`).expect(200)
+      expect(filtered.body.items[0]).toMatchObject({ id: 'uncreated', orderCount: 1, quantity: 1 })
+      await exportGroups({ queue: 'procurement', mode: 'selected', groupIds: ['uncreated'] }).expect(200)
+    })
+    it('validates purchase-stage filters and applies them to listing, detail, and export', async () => {
+      const original = provider.getPurchaseLinks
+      provider.getPurchaseLinks = async (...args: any[]) => {
+        const snapshot = await original(...args)
+        snapshot.orders.forEach((o: any, i: number) => o.obligations.forEach((link: any) => {
+          link.purchase = i === 0 ? null : { ...link.purchase, payment: 'unpaid' }
+          if (i === 0) link.lines.forEach((line: any) => line.purchaseLineId = null)
+        }))
+        return snapshot
+      }
+      const filtered = await get(`${base}?queue=procurement&purchaseStage=uncreated`).expect(200)
+      expect(filtered.body.total).toBe(1)
+      expect(filtered.body.items[0].id).toBe('uncreated')
+      expect(filtered.body.totals.orderCount).toBe(1)
+      await get(`${base}/uncreated?queue=procurement&purchaseStage=uncreated`).expect(200)
+      await get(`${base}/purchase%3Ap1?queue=procurement&purchaseStage=uncreated`).expect(404)
+      await exportGroups({ queue: 'procurement', purchaseStage: 'uncreated', mode: 'filtered' }).expect(200)
+      await exportGroups({ queue: 'procurement', purchaseStage: 'uncreated', mode: 'selected', groupIds: ['purchase:p1'] }).expect(409)
+      await get(`${base}?queue=procurement&purchaseStage=invalid`).expect(400)
+      await get(`${base}?queue=procurement_shipping&purchaseStage=uncreated`).expect(400)
+    })
+    it('enforces independent purchase access, strict request validation and complete gateway snapshots', async () => {
+      await get(`${base}?queue=review`).expect(400)
+      await get(`${base}?queue=procurement&pageSize=1`).expect(400)
+      await get(`${base}?queue=procurement&tenantId=spoof`).expect(400)
+      provider.resolvePermissions = async (subject: any) => ({ subject, allowedOrderIds: records.map(o => o.id), allowedPurchaseOrderIds: [] })
+      expect((await get(`${base}?queue=procurement_shipping`).expect(200)).body.total).toBe(0)
+      provider.getPurchaseLinks = async (subject: any) => ({ subject, orders: [] })
+      await get(`${base}?queue=procurement_shipping`).expect(503)
+      accounts.get(alice).workbenchRoles = ['sales']
+      await get(`${base}?queue=procurement_shipping`).expect(403)
+      await request(app.getHttpServer()).get(`/api${base}?queue=procurement`).expect(401)
+    })
+    it('rejects incomplete linkage without creating a business task and blocks Wangwang for offline purchases', async () => {
+      provider.getPurchaseLinks = async (subject: any) => ({ subject, orders: records.map(o => ({ orderId: o.id, obligations: null })) })
+      await get(`${base}?queue=procurement`).expect(503)
+      provider.getPurchaseLinks = async (subject: any) => ({ subject, orders: records.map(o => ({ orderId: o.id, obligations: [{ purchase: { ...purchase, purchaseType: 'offline', platform: null, platformOrderNumber: null }, lines: [{ fulfillmentLineId: `${o.id}-line`, purchaseLineId: 'p-line', sku: o.id, quantity: 1, shippedQuantity: 0 }] }] })) })
+      const list = await get(`${base}?queue=procurement_shipping`).expect(200)
+      expect(list.body.items[0].purchase).toMatchObject({ purchaseType: 'offline', platform: null })
+      expect(list.body.totals).not.toHaveProperty('unknownCount')
+      await get(`${base}/purchase%3Ap1/supplier-follow-up?queue=procurement_shipping`).expect(409)
+    })
+    const exportGroups = (body: object) => request(app.getHttpServer()).post(`/api${base}/export`).auth(token(alice), { type: 'bearer' }).send(body)
+    async function groupWorkbook(body: object) {
+      const response = await exportGroups(body).buffer(true).parse((response, callback) => {
+        const chunks: Buffer[] = []; response.on('data', chunk => chunks.push(Buffer.from(chunk))); response.on('end', () => callback(null, Buffer.concat(chunks))); response.on('error', callback)
+      }).expect(200)
+      const book = new ExcelJS.Workbook(); await book.xlsx.load(response.body)
+      return book
+    }
+    it.each(['filtered', 'selected'])('exports all authorized source pages in %s mode without hidden siblings', async mode => {
+      const book = await groupWorkbook({ queue: 'procurement_shipping', mode, ...(mode === 'selected' ? { groupIds: ['purchase:p1'] } : {}) })
+      const sheet = book.getWorksheet('采购关联明细')!
+      expect(sheet.rowCount).toBe(24)
+      expect(sheet.getColumn(6).values).toEqual(expect.arrayContaining(['SOURCE-0', 'SOURCE-22']))
+      expect(JSON.stringify(sheet.getSheetValues())).not.toMatch(/SECRET/)
+      expect(sheet.autoFilter).toBe('A1:Z24')
+    })
+    it.each(['uncreated', 'placement_pending', 'payment_pending', 'refund_pending'])('exports exactly the %s purchase stage in both modes', async purchaseStage => {
+      const stages = ['uncreated', 'placement_pending', 'payment_pending', 'refund_pending']
+      records = stages.map(id => order(id))
+      provider.resolvePermissions = async (subject: any) => ({ subject, allowedOrderIds: records.map(o => o.id), allowedPurchaseOrderIds: stages })
+      provider.getPurchaseLinks = async (subject: any) => ({ subject, orders: records.map(o => ({ orderId: o.id, obligations: [{
+        purchase: o.id === 'uncreated' ? null : { ...purchase, id: o.id, number: o.id, payment: o.id === 'refund_pending' ? 'refunded' : 'unpaid', placement: o.id === 'placement_pending' ? 'pending' : 'placed', paidAt: null },
+        lines: [{ fulfillmentLineId: o.id, purchaseLineId: o.id === 'uncreated' ? null : o.id, sku: o.id, quantity: 1, shippedQuantity: 0 }],
+      }] })) })
+      for (const mode of ['filtered', 'selected']) {
+        const book = await groupWorkbook({ queue: 'procurement', purchaseStage, mode, ...(mode === 'selected' ? { groupIds: [purchaseStage === 'uncreated' ? 'uncreated' : `purchase:${purchaseStage}`] } : {}) })
+        const sheet = book.getWorksheet('采购关联明细')!
+        expect(sheet.rowCount).toBe(2)
+        expect(sheet.getCell('F2').value).toBe(purchaseStage.toUpperCase())
+        if (purchaseStage === 'uncreated') { expect(sheet.getCell('T2').value).toBe(1); expect(sheet.getCell('N2').text).toBe(''); expect(sheet.getCell('O2').text).toBe(''); expect(sheet.getCell('P2').text).toBe('') }
+      }
+      const other = stages.find(stage => stage !== purchaseStage)!
+      await exportGroups({ queue: 'procurement', purchaseStage, mode: 'selected', groupIds: [other === 'uncreated' ? other : `purchase:${other}`] }).expect(409)
+    })
+    it('rechecks latest order ownership after awaiting purchase linkage', async () => {
+      const original = provider.getPurchaseLinks
+      provider.getPurchaseLinks = async (...args: any[]) => { const snapshot = await original(...args); records.forEach(o => o.owner = { id: 'someone-else', name: 'Other' }); return snapshot }
+      const result = await get(`${base}?queue=procurement_shipping`).expect(200)
+      expect(result.body.items).toEqual([])
+      expect(JSON.stringify(result.body)).not.toContain('source-')
+    })
+    it('supports follow-up for a paid purchase even when its fulfillment has another unpaid purchase', async () => {
+      provider.listSupplierFollowUps = async (subject: any) => ({ subject, orderId: 'source-0', items: [] })
+      await get('/autoflow/integrations/fop/fulfillment-orders/source-0/supplier-follow-ups').expect(200)
+    })
+    it('follows up exactly one purchase supplier from its group and revalidates before launch', async () => {
+      provider.listSupplierFollowUps = async (subject: any, _grant: any, orderId: string) => ({ subject, orderId, items: [{ tenantId: subject.tenantId, fulfillmentOrderId: orderId, purchaseOrderId: 'p1', purchaseOrderNumber: 'CG-001', platformOrderNumber: '1688-1', supplier: { id: 's1', name: 'Supplier', wangwangAccount: 'Seller' }, chatUrl: 'aliim:sendmsg?touid=cnalichnSeller', paid: true, cancelled: false, shipmentStatus: 'pending', lines: [{ fulfillmentLineId: `${orderId}-line`, purchaseLineId: 'p-line', sku: orderId, name: 'Product', pendingQuantity: 1 }] }] })
+      const path = `${base}/purchase%3Ap1/supplier-follow-up`
+      const response = await get(`${path}?queue=procurement_shipping`).expect(200)
+      expect(response.body.items).toHaveLength(1)
+      expect(response.body.items[0]).toMatchObject({ purchaseOrderId: 'p1', supplier: { id: 's1' }, lines: [] })
+      expect(response.body.orderNumber).toBe('CG-001')
+      expect(JSON.stringify(response.body)).not.toMatch(/source-0|secret/)
+      const version = response.body.items[0].contactVersion
+      const originalContacts = provider.listSupplierFollowUps
+      provider.listSupplierFollowUps = async (...args: any[]) => { const result = await originalContacts(...args); result.items[0].supplier.id = 'different-supplier'; return result }
+      await get(`${path}?queue=procurement_shipping`).expect(409)
+      provider.listSupplierFollowUps = originalContacts
+      const launch = await get(`${path}/launch?queue=procurement_shipping&contactVersion=${version}`).expect(200)
+      expect(launch.body).toMatchObject({ purchaseOrderId: 'p1', wangwangAccount: 'Seller' })
+      await get(`${path}/launch?queue=procurement_shipping&contactVersion=${'b'.repeat(64)}`).expect(409)
+      provider.resolvePermissions = async (subject: any) => ({ subject, allowedOrderIds: records.map(o => o.id), allowedPurchaseOrderIds: [] })
+      await get(`${path}?queue=procurement_shipping`).expect(404)
+    })
+    it('exports repeated purchase numbers with scoped source quantities, and rejects stale selections', async () => {
+      const response = await exportGroups({ queue: 'procurement_shipping', mode: 'selected', groupIds: ['purchase:p1'], search: 'source-22' }).buffer(true).parse((response, callback) => {
+        const chunks: Buffer[] = []; response.on('data', chunk => chunks.push(Buffer.from(chunk))); response.on('end', () => callback(null, Buffer.concat(chunks))); response.on('error', callback)
+      }).expect(200)
+      const workbook = new ExcelJS.Workbook(); await workbook.xlsx.load(response.body)
+      const sheet = workbook.getWorksheet('采购关联明细')!
+      expect(sheet.rowCount).toBe(2); expect(sheet.getCell('A2').value).toBe('CG-001'); expect(sheet.getCell('F2').value).toBe('SOURCE-22'); expect(sheet.getCell('N2').value).toBe(1)
+      await exportGroups({ queue: 'procurement_shipping', mode: 'selected', groupIds: ['purchase:missing'] }).expect(409)
+      await exportGroups({ queue: 'procurement_shipping', mode: 'filtered', groupIds: ['purchase:p1'] }).expect(400)
+      await exportGroups({ queue: 'procurement_shipping', mode: 'selected', groupIds: ['purchase:p1', 'purchase:p1'] }).expect(400)
+      const original = provider.getPurchaseLinks; let reads = 0
+      provider.getPurchaseLinks = async (...args: any[]) => { const snapshot = await original(...args); if (++reads > 1) snapshot.orders.forEach((o: any) => o.obligations = []); return snapshot }
+      await exportGroups({ queue: 'procurement_shipping', mode: 'filtered' }).expect(409)
+    })
+  })
+
   describe('workbench Excel export', () => {
     const exportOrders = (body: object, actor = alice) => request(app.getHttpServer())
       .post('/api/autoflow/integrations/fop/fulfillment-orders/export').auth(token(actor), { type: 'bearer' }).send(body).buffer(true)
@@ -454,6 +646,18 @@ describe('FOP user isolation HTTP API (repository and provider boundaries stubbe
       await result.xlsx.load(response.body)
       return result.getWorksheet('订单清单')!
     }
+    it('applies payment time and destination filters to full and selected exports', async () => {
+      const now = new Date().toISOString()
+      records = [order('recent', { paymentStatus: 'unpaid', consumerPaidAt: now }), order('missing', { paymentStatus: 'unpaid', paidAt: now }), order('us', { shippingCountryCode: 'US' }), order('gb', { shippingCountryCode: 'GB' })]
+      provider.resolvePermissions = async (subject: any) => ({ subject, allowedOrderIds: records.map(row => row.id) })
+      for (const [filters, expected, denied] of [[{ queue: 'unpaid', timeRange: '1w' }, 'RECENT', 'missing'], [{ queue: 'unpaid', timeRange: '1m' }, 'RECENT', 'missing'], [{ queue: 'review', shippingCountryCode: 'US' }, 'US', 'gb']] as const) {
+        const sheet = await workbook(await exportOrders({ ...filters, mode: 'filtered' }).expect(200))
+        const values = JSON.stringify(sheet.getSheetValues())
+        expect(values).toContain(expected)
+        expect(values).not.toContain(`Customer ${denied}`)
+        await exportOrders({ ...filters, mode: 'selected', orderIds: [denied] }).expect(409)
+      }
+    })
     it('filters procurement progress before paging and totals and uses the same scope for both exports', async () => {
       accounts.get(alice).workbenchRoles = ['procurement']
       const pending = { purchaseOrder: 'ordered', supplierPayment: 'unpaid', purchaseApplication: 'created', alibabaOrder: 'pushed', logisticsGate: 'satisfied' }
@@ -533,6 +737,30 @@ describe('FOP user isolation HTTP API (repository and provider boundaries stubbe
       expect((await list('queue=procurement&taskStatus=purchase_order_pending').expect(200)).body.items.map((o: any) => o.id)).toEqual(['prepared'])
       expect((await list('queue=procurement_shipping').expect(200)).body.items.map((o: any) => o.id)).toEqual(['paid'])
       expect((await list('queue=procurement').expect(200)).body.items.map((o: any) => o.id)).not.toContain('paid')
+    })
+    it('uses binary audited dispatch completion for incomplete allocation lists, sorting and both exports', async () => {
+      accounts.get(alice).workbenchRoles = ['allocation']
+      const progress = { ...order('base').fulfillmentProgress, stockReadiness: 'incomplete', allocationReview: 'pending' }
+      const make = (id: string, status: string, extra = {}) => order(id, { reviewStatus: 'approved', fulfillmentProgress: progress, dispatchDocuments: [{ id: `fy-${id}`, number: `FY-${id}`, status }], ...extra })
+      records = [make('a', 'approved'), make('b', 'approved', { fulfillmentProgress: { ...progress, shopifySync: 'synced' } }), make('c', 'submitted'), make('d', 'unknown'), make('e', 'draft', { dispatchDocuments: [] }), make('hidden', 'approved', { owner: { id: 'other', name: 'Other' } })]
+      provider.resolvePermissions = async (subject: any) => ({ subject, allowedOrderIds: records.map(row => row.id) })
+      const page = (await list('queue=allocation&taskStatus=dispatch_complete&pageSize=1').expect(200)).body
+      expect(page.total).toBe(2); expect(page.totals.orderCount).toBe(2)
+      expect((await list('queue=allocation&taskStatus=dispatch_incomplete').expect(200)).body.items.map((row: any) => row.id)).toEqual(['c', 'd', 'e'])
+      expect((await list('queue=allocation&sortBy=dispatchDocumentStatus&sortOrder=asc').expect(200)).body.items.map((row: any) => row.id)).toEqual(['c', 'd', 'e', 'a', 'b'])
+      for (const mode of ['filtered', 'selected']) {
+        const sheet = await workbook(await exportOrders({ queue: 'allocation', taskStatus: 'dispatch_complete', mode, ...(mode === 'selected' ? { orderIds: ['b'] } : {}) }).expect(200))
+        const column = (sheet.getRow(1).values as string[]).indexOf('发运单状态')
+        expect(sheet.getCell(2, column).value).toBe('已完成')
+        expect(sheet.getCell('A2').value).toBe(mode === 'selected' ? 'B' : 'A')
+        expect(JSON.stringify(sheet.getSheetValues())).not.toContain('HIDDEN')
+      }
+      const incomplete = await workbook(await exportOrders({ queue: 'allocation', taskStatus: 'dispatch_incomplete', mode: 'filtered' }).expect(200))
+      const column = (incomplete.getRow(1).values as string[]).indexOf('发运单状态')
+      for (const row of [2, 3, 4]) expect(incomplete.getCell(row, column).value).toBe('未完成')
+      await exportOrders({ queue: 'allocation', taskStatus: 'dispatch_complete', mode: 'selected', orderIds: ['c'] }).expect(409)
+      await list('queue=allocation&taskStatus=dispatch_approved').expect(400)
+      await exportOrders({ queue: 'allocation', taskStatus: 'dispatch_submitted', mode: 'filtered' }).expect(400)
     })
     it('filters allocation dispatch completion and exports trusted allocation references without losing incomplete tasks', async () => {
       accounts.get(alice).workbenchRoles = ['allocation']

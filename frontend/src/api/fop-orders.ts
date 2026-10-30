@@ -145,6 +145,8 @@ export function canSortFopQueue(queue: FopOrderQueue, field: FopOrderSortBy): bo
   return field === 'paidAt' || !!queues[field]?.includes(queue)
 }
 export interface FopOrderQuery {
+  timeRange?: 'all' | '1w' | '1m' | '3m'
+  shippingCountryCode?: string
   warehouseCode?: 'HZ' | 'SZ'
   taskStatus?: TaskStatus
   procurementStage?: ProcurementStage
@@ -176,6 +178,8 @@ export interface FopOrderPage {
 }
 
 export interface FopQueuePage extends FopOrderPage {
+  /** Authorized review destinations after other filters, before country selection and pagination. */
+  shippingCountries?: string[]
   /** BFF query completion time, not an upstream FOP synchronization watermark. */
   refreshedAt: string
   /** Departments from permitted orders, independent of queue/search/page filters. */
@@ -189,6 +193,8 @@ export function isFopOrderQueue(value: unknown): value is FopOrderQueue {
 }
 
 function validateQuery(query: FopOrderQuery) {
+  if (query.timeRange !== undefined && (query.queue !== 'unpaid' || !['all', '1w', '1m', '3m'].includes(query.timeRange))) throw new Error('Invalid payment time range')
+  if (query.shippingCountryCode !== undefined && (query.queue !== 'review' || !/^[A-Z]{2}$/.test(query.shippingCountryCode))) throw new Error('Invalid destination country')
   if (query.taskStatus !== undefined && !canFilterTaskStatus(query.queue, query.taskStatus)) throw new Error('Invalid task status')
   if (query.procurementStage !== undefined && !canFilterProcurementStage(query.queue, query.procurementStage)) throw new Error('Invalid procurement stage')
   if (query.sortBy !== undefined && (!isFopOrderSortBy(query.sortBy) || !canSortFopQueue(query.queue, query.sortBy))) throw new Error('Invalid sort field')
@@ -237,7 +243,7 @@ export function matchesFopQueue(order: FopOrder, queue: FopOrderQueue, warehouse
 export async function getFopOrders(query: FopOrderQuery): Promise<FopQueuePage> {
   validateQuery(query)
   const { default: api } = await import('./index')
-  const { queue, search, orderNumber, departmentId, ownerId, warehouseCode, paidAtOrder, sortBy, sortOrder, warehouseStage, procurementStage, taskStatus, page, pageSize } = query
-  return api.get('/autoflow/integrations/fop/fulfillment-orders', { params: { queue, search, orderNumber, departmentId, ownerId, warehouseCode, paidAtOrder, sortBy, sortOrder, warehouseStage, procurementStage, taskStatus, page, pageSize } })
+  const { queue, timeRange, shippingCountryCode, search, orderNumber, departmentId, ownerId, warehouseCode, paidAtOrder, sortBy, sortOrder, warehouseStage, procurementStage, taskStatus, page, pageSize } = query
+  return api.get('/autoflow/integrations/fop/fulfillment-orders', { params: { queue, timeRange, shippingCountryCode, search, orderNumber, departmentId, ownerId, warehouseCode, paidAtOrder, sortBy, sortOrder, warehouseStage, procurementStage, taskStatus, page, pageSize } })
 }
 export const getFopOrdersFromApi = getFopOrders

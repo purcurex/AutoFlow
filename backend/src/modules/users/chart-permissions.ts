@@ -31,6 +31,13 @@ const SUMMARY_CHARTS: readonly ChartId[] = ['registrations', 'department_receipt
 const FIELDS = ['chartId', 'visibility', 'dataScope', 'summaryMode', 'summaryDepartments', 'details', 'export']
 const isIn = (value: unknown, allowed: readonly string[]): boolean => typeof value === 'string' && allowed.includes(value)
 
+export function collaborationChartPermissions(): ChartPermissionOverride[] {
+  return CHART_IDS.map(chartId => ({
+    chartId, visibility: SUMMARY_CHARTS.includes(chartId) ? 'allow' : 'deny', dataScope: 'none',
+    summaryMode: SUMMARY_CHARTS.includes(chartId) ? 'marketing' : 'none', summaryDepartments: [], details: 'deny', export: 'deny',
+  }))
+}
+
 /** Strict at the persistence boundary; corrupt or future policy must not grant access. */
 export function validateChartPermissions(value: unknown): value is ChartPermissionOverride[] {
   if (!Array.isArray(value) || value.length > CHART_IDS.length) return false

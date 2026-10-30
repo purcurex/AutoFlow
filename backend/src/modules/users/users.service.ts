@@ -2,19 +2,23 @@ import { businessScope } from './business-scope'
 import type { UpdateBusinessScopeDto } from './dto/business-scope.dto'
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common'
 import { InjectRepository } from '@nestjs/typeorm'
-import { ILike, In, Repository } from 'typeorm'
+import { ILike, In, IsNull, Repository } from 'typeorm'
 import { OrganizationEmployeeEntity } from '../organization/organization-employee.entity'
+import { OrganizationNodeEntity } from '../organization/organization-node.entity'
 import * as bcrypt from 'bcrypt'
 import { User, UserRole } from './user.entity'
 import type { UpdateProfileDto } from './dto/update-profile.dto'
 import type { ListWorkbenchAccountsDto } from './dto/workbench.dto'
 import type { WorkbenchRole } from './workbench-role'
-import { ChartPermissionOverride, validateChartPermissions } from './chart-permissions'
+import { ChartPermissionOverride, collaborationChartPermissions, validateChartPermissions } from './chart-permissions'
+import { accountRole } from './account-role'
+import { UpdateAccountAccessDto } from './dto/account-access.dto'
 
 function workbenchAccount(user: User) {
   return {
     id: user.id, displayId: user.displayId, email: user.email, username: user.username, role: user.role, workbenchRoles: user.workbenchRoles,
     businessScope: businessScope(user),
+    accountRole: accountRole(user),
     chartPermissions: user.chartPermissions ?? [],
     fopBinding: user.fopTenantId && user.fopUserId ? { tenantId: user.fopTenantId, userId: user.fopUserId } : null,
   }
@@ -54,9 +58,11 @@ export class UsersService {
   async listWorkbenchAccounts(query: ListWorkbenchAccountsDto) {
     const search = query.search?.trim()
     const pattern = search ? ILike(`%${search.replace(/[\\%_]/g, '\\$&')}%`) : undefined
+    const roleFilter = query.accountRole === 'administrator' ? { role: UserRole.ADMIN }
+      : query.accountRole ? { role: UserRole.USER, businessRole: query.accountRole === 'collaboration' ? In(['admin', 'none']) : query.accountRole } : {}
     const [users, total] = await this.usersRepository.findAndCount({
       select: { id: true, displayId: true, email: true, username: true, role: true, workbenchRoles: true, chartPermissions: true, fopTenantId: true, fopUserId: true, businessRole: true, businessDepartmentId: true, businessEmployeeId: true },
-      where: pattern ? [{ username: pattern, accountDisabled: false }, { email: pattern, accountDisabled: false }, { displayId: pattern, accountDisabled: false }] : { accountDisabled: false },
+      where: pattern ? [{ username: pattern, accountDisabled: false, ...roleFilter }, { email: pattern, accountDisabled: false, ...roleFilter }, { displayId: pattern, accountDisabled: false, ...roleFilter }] : { accountDisabled: false, ...roleFilter },
       order: { displayId: 'ASC', id: 'ASC' },
       skip: (query.page - 1) * query.pageSize,
       take: query.pageSize,
@@ -80,6 +86,75 @@ export class UsersService {
 
   async findById(id: string): Promise<User | null> {
     return this.usersRepository.findOne({ where: { id } })
+  }
+
+  async workbenchDepartment(user: User): Promise<{ id: string; name: string | null } | null> {
+    const scope = businessScope(user)
+    if (scope.role === 'admin' || scope.role === 'none' || !scope.departmentId) return null
+    const employees = await this.usersRepository.manager.getRepository(OrganizationEmployeeEntity).find({
+      where: { accountId: user.id, archivedAt: IsNull() },
+      select: { ownerUserId: true }, take: 2,
+    })
+    const ownerUserId = employees.length === 1 ? employees[0].ownerUserId : user.organizationWorkspaceOwnerId
+    const nodes = ownerUserId ? await this.usersRepository.manager.getRepository(OrganizationNodeEntity).find({
+      where: { ownerUserId }, select: { id: true, name: true },
+    }) : []
+    // External FOP IDs must not be relabelled with an unrelated local employee department.
+    // Match in memory: external IDs need not be valid UUIDs for organization_nodes.id.
+    return { id: scope.departmentId, name: nodes.find(node => node.id === scope.departmentId)?.name ?? null }
+  }
+
+  async defaultProcurementView(user: User): Promise<'fulfillment' | 'purchase'> {
+    // Workbench grants describe navigation access, not the employee's actual job.
+    if (user.role === UserRole.ADMIN || businessScope(user).role !== 'admin') return 'fulfillment'
+    const employees = await this.usersRepository.manager.getRepository(OrganizationEmployeeEntity).find({
+      where: { accountId: user.id, archivedAt: IsNull() },
+      select: { id: true, ownerUserId: true, departmentId: true, jobTitle: true },
+      take: 2,
+    })
+    if (employees.length !== 1) return 'fulfillment'
+    const employee = employees[0]
+    const nodes = await this.usersRepository.manager.getRepository(OrganizationNodeEntity).find({
+      where: { ownerUserId: employee.ownerUserId },
+      select: { id: true, parentId: true, name: true },
+    })
+    const byId = new Map(nodes.map(node => [node.id, node]))
+    const names: string[] = [], visited = new Set<string>()
+    let id: string | null = employee.departmentId
+    while (id && !visited.has(id)) {
+      visited.add(id)
+      const node = byId.get(id)
+      if (!node) break
+      names.push(node.name)
+      id = node.parentId
+    }
+    if (names.includes('营销中心')) return 'fulfillment'
+    return names.some(name => /采购/.test(name)) || /采购/.test(employee.jobTitle) ? 'purchase' : 'fulfillment'
+  }
+
+  async updateAccountAccess(actorId: string, id: string, input: UpdateAccountAccessDto) {
+    const scope = input.businessScope
+    const valid = input.accountRole === 'administrator'
+      || input.accountRole === 'collaboration' && ['admin', 'none'].includes(scope.role)
+      || input.accountRole === scope.role && ['salesperson', 'department_manager'].includes(scope.role)
+    if (!valid) throw new BadRequestException('角色与数据范围不一致')
+    return this.usersRepository.manager.transaction(async manager => {
+      await manager.query("SELECT pg_advisory_xact_lock(hashtextextended('autoflow:management-roles', 0))")
+      const repository = manager.getRepository(User)
+      const actor = await repository.findOne({ where: { id: actorId }, lock: { mode: 'pessimistic_read' } })
+      if (actor?.role !== UserRole.ADMIN) throw new ForbiddenException('Administrator access required')
+      const target = await repository.findOne({ where: { id }, lock: { mode: 'pessimistic_write' } })
+      if (!target) throw new NotFoundException('用户不存在')
+      const role = input.accountRole === 'administrator' ? UserRole.ADMIN : UserRole.USER
+      if (actorId === id && role !== UserRole.ADMIN) throw new ConflictException('不能撤销自己的管理员角色，请由另一位管理员操作')
+      const resetTemplate = accountRole(target) !== input.accountRole || target.businessRole === 'none' && scope.role !== 'none'
+      await repository.update(id, {
+        role, businessRole: scope.role, businessDepartmentId: scope.departmentId, businessEmployeeId: scope.employeeId,
+        workbenchRoles: [...input.workbenchRoles],
+        ...(resetTemplate ? { chartPermissions: input.accountRole === 'collaboration' ? collaborationChartPermissions() : [] } : {}),
+      })
+      return workbenchAccount((await repository.findOne({ where: { id } }))!)
+    })
   }
 
   async updateManagementRole(actorId: string, id: string, role: UserRole) {

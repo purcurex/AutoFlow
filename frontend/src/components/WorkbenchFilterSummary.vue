@@ -1,13 +1,17 @@
 <script setup lang="ts">
+import { useWorkbenchDepartment } from '@/composables/useWorkbenchDepartment'
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { SlidersHorizontal } from 'lucide-vue-next'
+import { normalizeShippingCountry } from '@/utils/shipping-country'
+import { purchaseStageLabels, isPurchaseStage } from '@/api/procurement-groups'
 import { queueNames } from '@/utils/workbench'
 import { canFilterTaskStatus, taskStatusHeading, taskStatusLabel, type TaskStatus } from '@/utils/workbench-status'
 import { procurementStageLabels, isProcurementStage } from '@/utils/procurement-stage'
 import { stockTypes, stockStatuses, stockOrderStatuses, type StockOrderStatus, type StockType, type StockPurchaseStatus } from '@/api/fop-stock'
 const props = defineProps<{ queue: string; labels?: Record<string, string> }>()
+const { defaultDepartmentLabel } = useWorkbenchDepartment(computed(() => props.labels ?? {}))
 const route = useRoute(), { locale } = useI18n()
 const zh = computed(() => String(locale.value).startsWith('zh'))
 const text = (cn: string, en: string) => zh.value ? cn : en
@@ -28,7 +32,7 @@ const queueName = computed(() => analysis.value?.title ?? (props.queue === 'stoc
 const summaryParts = computed(() => {
   if (analysis.value) return [analysis.value.scope]
   const parts = [
-    `${text('业务部门', 'Department')}：${val('departmentId') ? props.labels?.[val('departmentId')] ?? text('所选部门', 'Selected department') : text('营销中心', 'Marketing Center')}`,
+    `${text('业务部门', 'Department')}：${val('departmentId') ? props.labels?.[val('departmentId')] ?? text('所选部门', 'Selected department') : defaultDepartmentLabel.value}`,
     `${stock.value ? text('收货仓库', 'Receiving warehouse') : text('发货仓库', 'Shipping warehouse')}：${({ HZ: text('杭州仓', 'Hangzhou'), SZ: text('深圳仓', 'Shenzhen') } as Record<string, string>)[val('warehouseCode')] ?? text('全部', 'All')}`,
   ]
   if (val('ownerId')) parts.push(`${text('业务员', 'Salesperson')}：${props.labels?.[val('ownerId')] ?? text('所选业务员', 'Selected salesperson')}`)
@@ -41,6 +45,9 @@ const summaryParts = computed(() => {
     if (isProcurementStage(val('procurementStage'))) parts.push(`${text('采购进度', 'Purchase progress')}：${procurementStageLabels[val('procurementStage') as keyof typeof procurementStageLabels][zh.value ? 0 : 1]}`)
     if (val('warehouseStage')) parts.push(`${text('配货单状态', 'Allocation status')}：${val('warehouseStage') === 'pending_review' ? text('未审核', 'Pending approval') : text('已审核', 'Approved')}`)
   }
+  if (props.queue === 'unpaid') parts.push(`${text('C端付款时间', 'Consumer payment time')}：${val('timeRange') === '1w' ? text('近一周', 'Last week') : val('timeRange') === '1m' ? text('近一月', 'Last month') : val('timeRange') === '3m' ? text('近三月', 'Last three months') : text('全部', 'All')}`)
+  if (props.queue === 'review') parts.push(`${text('发货国家', 'Shipping country')}：${normalizeShippingCountry(val('shippingCountryCode')) ?? text('全部', 'All')}`)
+  if (props.queue === 'procurement' && isPurchaseStage(val('purchaseStage'))) parts.push(`${text('采购进度', 'Purchase progress')}：${purchaseStageLabels[val('purchaseStage') as keyof typeof purchaseStageLabels][zh.value ? 0 : 1]}`)
   if (val('search')) parts.push(`${text('关键词', 'Keyword')}：${val('search')}`)
   if (val('orderNumber')) parts.push(`${text('订单编号', 'Order number')}：${val('orderNumber')}`)
   return parts

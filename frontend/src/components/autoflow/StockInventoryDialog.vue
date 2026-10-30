@@ -9,14 +9,14 @@ import { getStockInventory, type StockInventoryPage } from '@/api/fop-stock'
 import { fopAccessError } from '@/api/fop-access'
 import { captureSession, isCurrentSession, onSessionReset } from '@/utils/session'
 
-const props = defineProps<{ departmentId?: string; ownerId?: string; warehouseCode?: string }>()
+const props = defineProps<{ orderIds?: string[]; queue?: 'all' | 'procurement'; departmentId?: string; ownerId?: string; warehouseCode?: string }>()
 const emit = defineEmits<{ close: [] }>()
 const { locale } = useI18n(), zh = computed(() => String(locale.value).startsWith('zh'))
 const text = (cn: string, en: string) => zh.value ? cn : en
 const customerSearch = ref(''), appliedCustomer = ref(''), sku = ref(''), appliedSku = ref('')
 const warehouse = ref(props.warehouseCode ?? ''), page = ref(1), pageSize = ref(50), result = ref<StockInventoryPage>(), loading = ref(false), error = ref('')
 let inventoryRequest = 0, disposed = false, sessionClosed = false
-const scope = computed(() => ({ departmentId: props.departmentId, ownerId: props.ownerId }))
+const scope = computed(() => ({ orderIds: props.orderIds, queue: props.queue, departmentId: props.departmentId, ownerId: props.ownerId }))
 const pages = computed(() => Math.max(1, Math.ceil((result.value?.total ?? 0) / pageSize.value)))
 const date = (value: string) => new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }).format(new Date(value))
 async function load() {
@@ -42,6 +42,7 @@ onBeforeUnmount(() => { disposed = true; inventoryRequest++; off() })
 </script>
 <template>
   <OrganizationModal :title="text('查询备货库存', 'Stock inventory')" @close="emit('close')">
+    <p class="mb-4 text-sm text-slate-500 dark:text-slate-400">{{ props.orderIds?.length ? text(`查询已选 ${props.orderIds.length} 笔订单对应客户及 SKU 的备货库存`, `Stock for the customers and SKUs in ${props.orderIds.length} selected orders`) : text('查询我名下所有客户的备货库存', 'Stock for all of my customers') }}</p>
     <form class="inventory-filters" @submit.prevent="search">
       <label class="inventory-field"><span>{{ text('客户', 'Customer') }}</span><span class="inventory-search"><Search :size="15" /><input v-model="customerSearch" type="search" maxlength="200" :placeholder="text('客户名称 / 编码', 'Customer name / code')" :aria-label="text('搜索客户', 'Search customers')" /></span></label>
       <label class="inventory-field"><span>{{ text('商品', 'Product') }}</span><span class="inventory-search"><Search :size="15" /><input v-model="sku" type="search" maxlength="200" :aria-label="text('搜索库存 SKU', 'Search inventory SKU')" :placeholder="text('SKU / 商品名称', 'SKU / product name')" /></span></label>
