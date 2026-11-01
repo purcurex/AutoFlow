@@ -1,5 +1,6 @@
 import Decimal from 'decimal.js'
 import { normalizeBusinessTimestamp } from './fop-business-time'
+import { consumerPaymentRange } from './consumer-payment-range'
 import { SALES_DEPARTMENTS } from './fop-data.types'
 import { FopStockOrderCandidate, FopStockInventoryCandidate, FopStockOrder, StockFilters, StockOwnership, STOCK_TYPES, STOCK_PURCHASE_STATUSES, StockBalance } from './fop-stock.types'
 
@@ -26,7 +27,7 @@ export function publicStockOrder(row: FopStockOrderCandidate): FopStockOrder {
     if (!string(item.sku) || !string(item.name) || !Number.isFinite(item.quantity) || item.quantity <= 0 || item.quantity > Number.MAX_SAFE_INTEGER || typeof item.variant !== 'string' || item.imageUrl !== null && typeof item.imageUrl !== 'string') throw new Error('Invalid stock product')
     return { sku: item.sku, name: item.name, imageUrl: item.imageUrl, variant: item.variant, quantity: item.quantity }
   })
-  return { ...ownership(row), id: row.id, stockNumber: row.stockNumber, stockType: row.stockType, storeName: row.storeName, items, amount: row.amount, currency: row.currency, paidAt, paymentStatus: row.paymentStatus ?? 'unknown', reviewStatus: row.reviewStatus ?? 'unknown', orderStatus: stockOrderStatus(row), purchaseStatus: row.purchaseStatus, procurementPaidAt: normalizeBusinessTimestamp(row.procurementPaidAt), warehouseCode: row.warehouseCode, warehouse: row.warehouse }
+  return { ...ownership(row), id: row.id, stockNumber: row.stockNumber, stockType: row.stockType, storeName: row.storeName, items, amount: row.amount, currency: row.currency, paidAt, createdAt: normalizeBusinessTimestamp(row.createdAt), paymentStatus: row.paymentStatus ?? 'unknown', reviewStatus: row.reviewStatus ?? 'unknown', orderStatus: stockOrderStatus(row), purchaseStatus: row.purchaseStatus, procurementPaidAt: normalizeBusinessTimestamp(row.procurementPaidAt), warehouseCode: row.warehouseCode, warehouse: row.warehouse }
 }
 function balance(value: StockBalance) {
   if (!value || [value.available, value.locked].some(qty => !Number.isFinite(qty) || qty < 0 || qty > Number.MAX_SAFE_INTEGER)) throw new Error('Invalid inventory quantity')
@@ -49,11 +50,15 @@ export function stockDepartments(rows: StockOwnership[]) {
   for (const row of rows) if (row.salesDepartmentCode && SALES_DEPARTMENTS.some(d => d.id === row.salesDepartmentCode && d.name === row.department?.name)) map.set(row.department.id, row.department)
   return [...map.values()].map(d => ({ id: d.id, name: d.name })).sort((a, b) => SALES_DEPARTMENTS.findIndex(d => d.name === a.name) - SALES_DEPARTMENTS.findIndex(d => d.name === b.name))
 }
-export function filterStockOrders(rows: FopStockOrderCandidate[], query: StockFilters): FopStockOrder[] {
+export function filterStockOrders(rows: FopStockOrderCandidate[], query: StockFilters, now = Date.now()): FopStockOrder[] {
   const search = query.search?.trim().toLowerCase()
+  const inCreationRange = consumerPaymentRange(query.timeRange, now)
   return rows.filter(row => !row.cancelled && (query.queue !== 'procurement' || row.paymentStatus === 'paid' && row.reviewStatus === 'approved' && ['unpurchased', 'partial', 'purchased'].includes(row.purchaseStatus)) && stockScopeMatches(row, query) && (!query.stockType || row.stockType === query.stockType) && (!query.purchaseStatus || row.purchaseStatus === query.purchaseStatus)
     && (!search || [row.stockNumber, row.customerCode, row.customerName, row.storeName ?? '', row.owner.name, ...row.items.flatMap(i => [i.sku, i.name])].some(v => v.toLowerCase().includes(search))))
-    .map(publicStockOrder).filter(row => !query.orderStatus || row.orderStatus === query.orderStatus).sort((a, b) => {
+    .map(publicStockOrder).filter(row => (!query.orderStatus || row.orderStatus === query.orderStatus) && inCreationRange(row.createdAt)
+      && (!query.lifecycle || (query.lifecycle === 'unpaid' ? row.orderStatus === 'unpaid'
+        : query.lifecycle === 'pending_procurement' ? row.paymentStatus === 'paid' && ['unpurchased', 'partial', 'purchased'].includes(row.purchaseStatus)
+          : row.orderStatus === 'approved' && row.purchaseStatus === 'received'))).sort((a, b) => {
       const direction = query.sortOrder === 'desc' ? -1 : 1
       const statusSort = query.sortBy === 'orderStatus' || query.sortBy === 'purchaseStatus'
       const field = query.sortBy

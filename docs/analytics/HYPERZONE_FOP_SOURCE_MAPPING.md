@@ -569,3 +569,45 @@ allocationDocument唯一引用来自hzkj_alloc_bill.id/billno，按hzkj_order_id
 ### 备货供应商待发货提醒补充（需求9.48）
 
 备货复用9.34真实采购付款时间口径，新增StockOrder.procurementPaidAt。再次核对PaidOrderAmountSyncService.java 118–125行，1688 baseInfo.payTime参与付款判定，尚未确认其持久化字段。备货单→有效采购→1688订单关系及最早仍待发货付款时间由真实网关联调核对；禁止使用客户收款、到期日、创建/审核或同步时刻代替。缺失返回null，前端不伪造超时。生产FOP源码未修改。
+
+### 履约订单金额明细（待支付／待审核）
+
+可信员工网关 `POST /fulfillment-orders` 在原订单授权范围内增加可选 `amountBreakdown`，BFF仅传递四项原币金额：
+
+| 字段 | FOP 履约订单字段 | 含义 |
+| --- | --- | --- |
+| `amountBreakdown.productAmount` | `hzkj_order_amount` | 产品金额 |
+| `amountBreakdown.shippingFee` | `hzkj_fre_quo_amount` | 运费报价金额 |
+| `amountBreakdown.taxAmount` | `hzkj_fixed_tax_fee` | 固定税费金额；旧网关可缺省 |
+| `amountBreakdown.discountAmount` | `hzkj_discount_cost` | 优惠金额，正数表示扣减 |
+| `amount`（保持原字段） | `hzkj_total_amount` | 已按业务规则落库的最终订单金额 |
+
+依据：`OrderController.queryOrder` 返回上述五项；`InvoiceDataService.buildFeeDetails` 使用同一映射。总额以落库值为准，不用页面展示的明细重算最终订单金额，不得再次扣减优惠。缺失明细为 `null`，真实零值传 `0`；不从商品价格、订单总额反推。兼容旧网关，未提供明细时显示“—”。
+
+待支付、待审核在原订单金额单元格中仅展示总额，悬停、聚焦或触屏点击后通过浮层展示明细，Excel在订单金额后追加四列数值（优惠保留原值），订单合计仍只按原最终金额及币种计算。其他清单不追加展示。当前仓库实现BFF契约与演示数据，生产员工网关需按此映射返回字段；不改变FOP计价规则。
+
+### 五工作台完成清单（2026-10-30）
+
+完成清单复用员工网关履约订单、原岗位读权与授权交集：BFF查询/导出传原 `queue` 与 `completed=true`。销售 `review`→已完成清单；发运 `dispatch`→已履约订单；采购 `procurement`→采购完成清单；配货 `allocation_review`→配货完成清单；仓库 `shipping`→已出库清单。不建立独立授权，不扩大数据范围。
+
+| 阶段 | 当前有效完成事实 | 完成时间字段 |
+| --- | --- | --- |
+| 销售 | 履约订单已支付、已审核 | `reviewedAt`，订单实际审核 |
+| 发运 | 已审核履约订单成功同步Shopify | `shopifySyncedAt`，成功同步事件 |
+| 采购 | 全部有效采购已建单、适用推单已完成、采购款已付清 | `procurementCompletedAt`，满足全部条件的完成事件 |
+| 配货 | 有效配货单已审核 | `allocationApprovedAt`，配货单实际审核 |
+| 仓库 | 全部出库完成 | `outboundCompletedAt`，平台订单 `hzkj_outbound_time` 且 `hzkj_delivery_status=2` |
+
+取消、退款及未知/部分完成不计入；正常进入下一阶段不移除前阶段完成记录。近一周为滚动7×24小时，近一月/近三月按UTC+8向前滚动自然月，默认近一周，含边界。缺失、非法、无时区或未来完成时间排除，禁止使用客户付款、C端付款、单据创建/修改、WMS下推或其他阶段时间代替。默认最新完成在前，可显式选择收款排序。
+
+源码核查：`OrderOutboundStatusUtil.syncOutboundTime` 仅在全部出库状态2时写入审核时刻，不满足时清空；仓库名称为“已出库”，不使用“已出口”。Shopify同步成功标记不等于已有可用的实际成功时间；采购聚合完成时间不能从旧 `procurementPaidAt`（仅尚有待发货义务的最早付款）推断。真实员工网关须提供上述实际事件/落库字段；未确认的持久化映射需IT联调，不伪造生产时间。此次未修改FOP源码或发布云端接口。
+
+采购完成清单保留采购单/履约单双视图，仅纳入当前权限及完成时间范围内的履约行，组时间为这些行中的最新完成时间；组内数量、明细和导出同一过滤范围。完成页保留查询、筛选、排序、复制和导出，隐藏审核、库存查询及催办；原待办页面规则不变。
+
+
+### 2026-10-31 销售备货阶段与创建时间筛选
+
+- 销售备货仍为全部有效备货单，含未付款、已付款待采购及已入库；新增 `lifecycle` 快捷条件，页面移除 `orderStatus`、`purchaseStatus` 筛选（API保留兼容），类型及权限取交集。`unpaid` 依据真实未付且非已审核，`pending_procurement` 为已付且未采购/部分采购/供应商待发货，`received` 为已付、已审且整单已入库。待发货、在途与未知记录保留在全部，不伪装为入库完成。
+- `createdAt` 取备货单自身 `hzkj_stock_order_new.createtime`，元数据 `.dym:729–733` 已展示创建时间；不取关联履约、付款或单号。候选协议兼容可省略；BFF输出有效UTC ISO或null。`timeRange` 默认all，可1w/1m/3m，复用UTC+8滚动期间算法；边界包含，缺失/非法/未来排除近期，全量仍保留。
+- 整单入库依据 `StockOrderPurchaseStatusUtil.java:209–241` 的子项汇总：只有全部入库才返回STATUS_INSTOCK。采购审核或供应商发货不等于全部入库。原`partial`包含混合采购阶段，按FOP整单进度继续显示部分采购。
+- 列表/合计/分页/两种Excel共用过滤；Excel保留创建时间并注明阶段及期间，输出前复核沿用同一个时间快照。销售专属筛选传给采购备货返回400；库存查询不继承这些条件。实际员工网关createdAt发布和样本验证仍需联调，本次未修改FOP源码或切换真实数据。

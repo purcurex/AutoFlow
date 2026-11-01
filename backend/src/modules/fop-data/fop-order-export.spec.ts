@@ -20,6 +20,31 @@ const headers = (sheet: ExcelJS.Worksheet) => sheet.getRow(1).values as string[]
 const value = (sheet: ExcelJS.Worksheet, row: number, header: string) => sheet.getRow(row).getCell(headers(sheet).indexOf(header))
 
 describe('fulfillment Excel export', () => {
+  it.each([
+    ['review', '订单审核时间（UTC+8）'], ['dispatch', 'Shopify同步时间（UTC+8）'], ['procurement', '采购完成时间（UTC+8）'],
+    ['allocation_review', '配货审核时间（UTC+8）'], ['shipping', '出库完成时间（UTC+8）'],
+  ] as const)('exports %s completion dates and completed-state metadata consistently with the page', async (queue, dateHeader) => {
+    const at = '2026-10-28T00:00:00Z'
+    const done = { ...order, reviewStatus: 'approved' as const, reviewedAt: at, shopifySyncedAt: at, procurementCompletedAt: at, allocationApprovedAt: at, outboundCompletedAt: at,
+      procurementProgress: { purchaseOrder: 'ordered' as const, supplierPayment: 'paid' as const, alibabaOrder: 'pushed' as const },
+      fulfillmentProgress: { ...order.fulfillmentProgress, shopifySync: 'synced' as const, allocationReview: 'approved' as const, outbound: 'completed' as const } }
+    const book = new ExcelJS.Workbook()
+    await book.xlsx.load(await buildFulfillmentWorkbook([done], { queue, completed: true, mode: 'filtered' }, 'mock') as unknown as ExcelJS.Buffer)
+    const ws = book.getWorksheet('订单清单')!, info = book.getWorksheet('导出说明')!
+    expect(value(ws, 2, dateHeader).value).toBe('2026-10-28 08:00:00')
+    if (queue !== 'review') expect(headers(ws)).toContain('完成状态')
+    const infoRows = info.getSheetValues() as (string[] | undefined)[]
+    expect(infoRows.find(row => row?.[1] === '清单状态筛选')?.[2]).toBe('已完成')
+  })
+  it.each(['unpaid', 'review'] as const)('exports separate numeric amount details in %s without changing the total', async queue => {
+    const detailed = { ...order, amount: 109.5, amountBreakdown: { productAmount: 100, shippingFee: 0, taxAmount: 14.5, discountAmount: 5 } }
+    const ws = (await read([detailed, order], queue)).getWorksheet('订单清单')!
+    expect(headers(ws).slice(headers(ws).indexOf('订单金额'), headers(ws).indexOf('订单金额') + 5)).toEqual(['订单金额', '产品金额', '运费', '税费', '优惠金额'])
+    expect(['订单金额', '产品金额', '运费', '税费', '优惠金额'].map(key => value(ws, 2, key).value)).toEqual([109.5, 100, 0, 14.5, 5])
+    expect(['产品金额', '运费', '税费', '优惠金额'].map(key => value(ws, 3, key).value)).toEqual(['—', '—', '—', '—'])
+    expect(value(ws, 5, '订单金额').value).toBe(121.84)
+    expect(headers((await read([detailed], 'procurement')).getWorksheet('订单清单')!)).not.toContain('产品金额')
+  })
   it('exports WMS push time in UTC+8 without order-created or payment-date fallback', async () => {
     const rows = ['2026-10-28T04:30:00Z', null, '2026-10-28T12:30:00', '2026-02-30T00:00:00Z'].map((wmsCreatedAt, i) => ({ ...order, id: String(i), wmsCreatedAt }))
     const ws = (await read(rows, 'shipping')).getWorksheet('订单清单')!

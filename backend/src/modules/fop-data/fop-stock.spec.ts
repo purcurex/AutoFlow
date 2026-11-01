@@ -5,6 +5,98 @@ import { UsersService } from '../users/users.service'
 import * as ExcelJS from 'exceljs'
 import { publicStockOrder } from './fop-stock'
 
+it('filters stock lifecycle stages without hiding intermediate stages from all records', async () => {
+  provider.orders = [
+    order('unpaid', { paymentStatus: 'unpaid', reviewStatus: 'pending', paidAt: null }),
+    order('paid', { paymentStatus: 'paid', reviewStatus: 'pending' }),
+    order('partial', { paymentStatus: 'paid', reviewStatus: 'approved', purchaseStatus: 'partial' }),
+    order('purchased', { paymentStatus: 'paid', reviewStatus: 'approved', purchaseStatus: 'purchased' }),
+    order('shipped', { paymentStatus: 'paid', reviewStatus: 'approved', purchaseStatus: 'shipped' }),
+    order('received', { paymentStatus: 'paid', reviewStatus: 'approved', purchaseStatus: 'received' }),
+    order('unknown'), order('contradictory', { paymentStatus: 'unpaid', reviewStatus: 'approved', purchaseStatus: 'received' }),
+    order('foreign', { paymentStatus: 'paid', reviewStatus: 'approved', purchaseStatus: 'received', owner: { id: 'e2', name: 'Bob' } }),
+  ]
+  provider.grant.allowedStockOrderIds = provider.orders.map(r => r.id)
+  expect((await service.getStockOrders('u', query)).total).toBe(8)
+  for (const [lifecycle, expected] of [['unpaid', ['unpaid']], ['pending_procurement', ['paid', 'partial', 'purchased']], ['received', ['received']]] as const) {
+    const filters = { lifecycle }
+    const page = await service.getStockOrders('u', { ...query, ...filters, pageSize: 1 })
+    expect(page.total).toBe(expected.length)
+    expect(page.items[0].id).toBe(expected[0])
+    expect(page.totals.amounts).toEqual([{ currency: 'USD', amount: expected.length * 100 }])
+  }
+  for (const mode of ['filtered', 'selected'] as const) {
+    const book = new ExcelJS.Workbook()
+    await book.xlsx.load(await service.exportStockOrders('u', { lifecycle: 'pending_procurement', mode, ...(mode === 'selected' ? { orderIds: ['purchased'] } : {}) }) as never)
+    const sheet = book.getWorksheet('备货清单')!
+    const values = JSON.stringify(sheet.getSheetValues())
+    expect(values).toContain('供应商待发货')
+    expect(values).not.toContain('采购已发货')
+    expect(sheet.rowCount).toBe(mode === 'selected' ? 3 : 5)
+  }
+  const filters = { lifecycle: 'pending_procurement' as const, purchaseStatus: 'partial' as const }
+  expect((await service.getStockOrders('u', { ...query, ...filters })).items.map(r => r.id)).toEqual(['partial'])
+})
+
+it('filters by actual stock creation time and keeps the same scope in both Excel exports', async () => {
+  const now = Date.parse('2026-10-31T08:00:00Z')
+  const clock = jest.spyOn(Date, 'now').mockReturnValue(now)
+  try {
+    const entries = [
+      ['recent-unpaid', '2026-10-30T01:00:00Z', 'unpaid'],
+      ['week-start', '2026-10-24T08:00:00Z', 'unpaid'],
+      ['before-week', '2026-10-24T07:59:59.999Z', 'unpaid'],
+      ['old-paid-recently', '2026-06-01T01:00:00Z', 'paid'],
+      ['future', '2026-10-31T08:00:00.001Z', 'unpaid'],
+      ['missing', null, 'unpaid'], ['invalid', '2026-02-30T01:00:00Z', 'unpaid'],
+      ['naive', '2026-10-30T01:00:00', 'unpaid'],
+    ] as const
+    provider.orders = entries.map(([id, createdAt, paymentStatus]) => Object.assign(order(id, { paymentStatus, reviewStatus: 'pending', paidAt: paymentStatus === 'unpaid' ? null : '2026-10-30T01:00:00Z' }), { createdAt }))
+    provider.grant.allowedStockOrderIds = provider.orders.map(r => r.id)
+    const filters = { timeRange: '1w' as const, lifecycle: 'unpaid' as const }
+    const page = await service.getStockOrders('u', { ...query, ...filters, pageSize: 1 })
+    expect(page.total).toBe(2)
+    expect(page.totals.orderCount).toBe(2)
+    expect((await service.getStockOrders('u', { ...query, ...filters, page: 2, pageSize: 1 })).items).toHaveLength(1)
+    expect((await service.getStockOrders('u', query)).total).toBe(8)
+    for (const mode of ['filtered', 'selected'] as const) {
+      const book = new ExcelJS.Workbook()
+      await book.xlsx.load(await service.exportStockOrders('u', { ...filters, mode, ...(mode === 'selected' ? { orderIds: ['recent-unpaid'] } : {}) }) as never)
+      const sheet = book.getWorksheet('备货清单')!
+      const headings = sheet.getRow(1).values as string[]
+      const createdColumn = headings.indexOf('创建时间（UTC+8）')
+      expect(createdColumn).toBeGreaterThan(0)
+      expect(sheet.getCell(2, createdColumn).text).toBe('2026-10-30 09:00:00')
+      expect(sheet.rowCount).toBe(mode === 'selected' ? 3 : 4)
+      expect(JSON.stringify(sheet.getSheetValues())).not.toContain('old-paid-recently')
+      expect(JSON.stringify(book.getWorksheet('说明')!.getSheetValues())).toContain('近一周')
+    }
+    await expect(service.exportStockOrders('u', { ...filters, mode: 'selected', orderIds: ['before-week'] })).rejects.toMatchObject({ status: 409 })
+  } finally { clock.mockRestore() }
+})
+
+it.each([['1m', '2026-09-30T08:00:00Z'], ['3m', '2026-07-31T08:00:00Z']] as const)('uses UTC+8 rolling calendar boundary for stock creation %s', async (timeRange, boundary) => {
+  const clock = jest.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-10-31T08:00:00Z'))
+  try {
+    provider.orders = [Object.assign(order('boundary'), { createdAt: boundary }), Object.assign(order('before'), { createdAt: new Date(Date.parse(boundary) - 1).toISOString() })]
+    provider.grant.allowedStockOrderIds = provider.orders.map(r => r.id)
+    const filters = { timeRange }
+    expect((await service.getStockOrders('u', { ...query, ...filters })).items.map(r => r.id)).toEqual(['boundary'])
+  } finally { clock.mockRestore() }
+})
+it('keeps the creation-range cutoff fixed while revalidating an Excel export', async () => {
+  const now = Date.parse('2026-10-31T08:00:00Z'), clock = jest.spyOn(Date, 'now').mockReturnValue(now)
+  try {
+    provider.orders = [Object.assign(order('1'), { createdAt: '2026-10-24T08:00:00Z' })]
+    let reads = 0
+    jest.spyOn(provider, 'listStockOrders').mockImplementation(async () => { if (++reads > 1) clock.mockReturnValue(now + 1000); return provider.orders })
+    const filters = { timeRange: '1w' as const }
+    const book = new ExcelJS.Workbook()
+    await book.xlsx.load(await service.exportStockOrders('u', { ...filters, mode: 'filtered' }) as never)
+    expect(book.getWorksheet('备货清单')!.getCell('A2').text).toBe('BH2610281')
+  } finally { clock.mockRestore() }
+})
+
 const order = (id: string, extra: Partial<FopStockOrderCandidate> = {}): FopStockOrderCandidate => ({
   tenantId: 't', id, stockNumber: `BH261028${id}`, stockType: 'full_payment',
   customerId: 'c1', customerCode: 'C001', customerName: 'Customer One', storeName: 'Store One',
@@ -157,7 +249,7 @@ it('keeps every stock SKU in a separate detail sheet and filters only data rows,
   await book.xlsx.load(await service.exportStockOrders('u', { mode: 'selected', orderIds: [provider.orders[0].id] }) as never)
   const list = book.getWorksheet('备货清单')!, detail = book.getWorksheet('商品明细')!
   expect(list.getCell('B2').text).toContain('完整内容见商品明细')
-  expect(list.autoFilter).toBe('A1:L2')
+  expect(list.autoFilter).toBe('A1:M2')
   expect(detail).toBeDefined()
   expect(detail.rowCount).toBe(31)
   expect(detail.getCell('C31').value).toBe('00029')

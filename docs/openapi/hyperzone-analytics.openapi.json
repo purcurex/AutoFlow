@@ -1033,7 +1033,8 @@
                 "allocationDocumentStatus",
                 "stockReadiness",
                 "allocationReviewStatus",
-                "outboundStatus"
+                "outboundStatus",
+                "completedAt"
               ],
               "default": "paidAt",
               "description": " reviewedAt仅procurement可用，实际订单审核时间，空值始终最后，同值按paidAt升序及id。"
@@ -1165,7 +1166,8 @@
                 "3m"
               ],
               "description": "仅unpaid可用，默认all。按consumerPaidAt从当前时刻向前滚动7天（1w）或1、3个自然月（1m/3m，UTC+8，月底钳制），含起止边界；近周/近月排除缺失、非法和未来时间，不回退其他日期。"
-            }
+            },
+            "description": "completed=true按阶段完成时间筛选，默认1w，仅1w/1m/3m；unpaid原筛选仍可all。"
           },
           {
             "name": "shippingCountryCode",
@@ -1176,6 +1178,15 @@
               "pattern": "^[A-Z]{2}$",
               "description": "仅review可用，已知ISO国家二字码，精确过滤订单收货国家；不传为全部。"
             }
+          },
+          {
+            "name": "completed",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            },
+            "description": "阶段完成清单，默认完成时间近一周；原岗位订单读权与数据权限继续生效。"
           }
         ]
       }
@@ -3630,21 +3641,6 @@
           "backend/src/modules/organization/organization.dto.ts"
         ],
         "responses": {
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          },
-          "429": {
-            "$ref": "#/components/responses/TooManyRequests"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalError"
-          },
           "201": {
             "description": "成功，裸JSON响应。",
             "headers": {
@@ -3670,11 +3666,26 @@
               }
             }
           },
-          "409": {
-            "$ref": "#/components/responses/Conflict"
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
           },
           "404": {
             "description": "部门或员工不存在于当前管理目录。"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "operationId": "createOrganizationEmployee",
@@ -3704,21 +3715,6 @@
           "backend/src/modules/organization/organization.dto.ts"
         ],
         "responses": {
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          },
-          "429": {
-            "$ref": "#/components/responses/TooManyRequests"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalError"
-          },
           "201": {
             "description": "成功，裸JSON响应。",
             "headers": {
@@ -3744,11 +3740,26 @@
               }
             }
           },
-          "409": {
-            "$ref": "#/components/responses/Conflict"
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
           },
           "404": {
             "description": "部门或员工不存在于当前管理目录。"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "operationId": "createEmployeeLoginAccount",
@@ -3790,27 +3801,6 @@
           "backend/src/modules/organization/organization.dto.ts"
         ],
         "responses": {
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          },
-          "429": {
-            "$ref": "#/components/responses/TooManyRequests"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalError"
-          },
-          "409": {
-            "$ref": "#/components/responses/Conflict"
-          },
-          "404": {
-            "description": "部门或员工不存在于当前管理目录。"
-          },
           "200": {
             "description": "成功，裸JSON响应。",
             "headers": {
@@ -3829,6 +3819,27 @@
                 }
               }
             }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "description": "部门或员工不存在于当前管理目录。"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "operationId": "updateOrganizationEmployee",
@@ -3870,27 +3881,6 @@
           "backend/src/modules/organization/organization.dto.ts"
         ],
         "responses": {
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          },
-          "429": {
-            "$ref": "#/components/responses/TooManyRequests"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalError"
-          },
-          "409": {
-            "$ref": "#/components/responses/Conflict"
-          },
-          "404": {
-            "description": "部门或员工不存在于当前管理目录。"
-          },
           "201": {
             "description": "成功，裸JSON响应。",
             "headers": {
@@ -3909,6 +3899,27 @@
                 }
               }
             }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "description": "部门或员工不存在于当前管理目录。"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "operationId": "archiveOrganizationEmployees",
@@ -3938,27 +3949,6 @@
           "backend/src/modules/organization/organization.dto.ts"
         ],
         "responses": {
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          },
-          "429": {
-            "$ref": "#/components/responses/TooManyRequests"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalError"
-          },
-          "409": {
-            "$ref": "#/components/responses/Conflict"
-          },
-          "404": {
-            "description": "部门或员工不存在于当前管理目录。"
-          },
           "201": {
             "description": "成功，裸JSON响应。",
             "headers": {
@@ -3977,6 +3967,27 @@
                 }
               }
             }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "description": "部门或员工不存在于当前管理目录。"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "operationId": "importOrganizationEmployees",
@@ -4006,27 +4017,6 @@
           "backend/src/modules/organization/organization.dto.ts"
         ],
         "responses": {
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          },
-          "429": {
-            "$ref": "#/components/responses/TooManyRequests"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalError"
-          },
-          "409": {
-            "$ref": "#/components/responses/Conflict"
-          },
-          "404": {
-            "description": "部门或员工不存在于当前管理目录。"
-          },
           "201": {
             "description": "成功，裸JSON响应。",
             "headers": {
@@ -4046,8 +4036,29 @@
               }
             }
           },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "description": "部门或员工不存在于当前管理目录。"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
           "413": {
             "description": "上传文件超过2MB限制。"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "operationId": "previewOrganizationEmployees",
@@ -4094,27 +4105,6 @@
           "backend/src/modules/organization/organization.dto.ts"
         ],
         "responses": {
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          },
-          "429": {
-            "$ref": "#/components/responses/TooManyRequests"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalError"
-          },
-          "409": {
-            "$ref": "#/components/responses/Conflict"
-          },
-          "404": {
-            "description": "部门或员工不存在于当前管理目录。"
-          },
           "200": {
             "description": "成功，裸JSON响应。",
             "headers": {
@@ -4133,6 +4123,27 @@
                 }
               }
             }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "description": "部门或员工不存在于当前管理目录。"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "operationId": "getOrganizationAccount",
@@ -4162,27 +4173,6 @@
           "backend/src/modules/organization/organization.dto.ts"
         ],
         "responses": {
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          },
-          "429": {
-            "$ref": "#/components/responses/TooManyRequests"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalError"
-          },
-          "409": {
-            "$ref": "#/components/responses/Conflict"
-          },
-          "404": {
-            "description": "部门或员工不存在于当前管理目录。"
-          },
           "200": {
             "description": "成功，裸JSON响应。",
             "headers": {
@@ -4201,6 +4191,27 @@
                 }
               }
             }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "description": "部门或员工不存在于当前管理目录。"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "operationId": "updateOrganizationAccount",
@@ -4250,30 +4261,6 @@
           }
         ],
         "responses": {
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "409": {
-            "$ref": "#/components/responses/Conflict"
-          },
-          "429": {
-            "$ref": "#/components/responses/TooManyRequests"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalError"
-          },
-          "503": {
-            "$ref": "#/components/responses/Unavailable"
-          },
           "200": {
             "description": "成功，裸JSON；本接口不发送消息或修改订单。",
             "headers": {
@@ -4321,6 +4308,30 @@
                 }
               }
             }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
           }
         },
         "x-implementation-status": "implemented",
@@ -4370,30 +4381,6 @@
           }
         ],
         "responses": {
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "409": {
-            "$ref": "#/components/responses/Conflict"
-          },
-          "429": {
-            "$ref": "#/components/responses/TooManyRequests"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalError"
-          },
-          "503": {
-            "$ref": "#/components/responses/Unavailable"
-          },
           "200": {
             "description": "成功，裸JSON；本接口不发送消息或修改订单。",
             "headers": {
@@ -4419,6 +4406,30 @@
                 }
               }
             }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
           }
         },
         "x-implementation-status": "implemented",
@@ -4672,24 +4683,6 @@
           }
         },
         "responses": {
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          },
-          "429": {
-            "$ref": "#/components/responses/TooManyRequests"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalError"
-          },
-          "503": {
-            "$ref": "#/components/responses/Unavailable"
-          },
           "200": {
             "description": "完整XLSX二进制，订单清单、商品明细、导出说明三个工作表。不是JSON、Base64或CSV。",
             "headers": {
@@ -4714,6 +4707,15 @@
                 }
               }
             }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
           },
           "409": {
             "description": "export_selection_changed：所选订单已离开队列、筛选或授权范围；整笔请求失败，不静默漏行。export_empty：没有可导出记录。",
@@ -4766,6 +4768,15 @@
                 }
               }
             }
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
           }
         },
         "x-implementation-status": "前端与BFF已实现，Demo可下载真实XLSX；生产沿用待接入FOP员工网关，数据量与时效仍需联调。",
@@ -4785,7 +4796,7 @@
         ],
         "operationId": "getStockOrders",
         "summary": "销售备货清单 / 采购待备货清单",
-        "description": "销售all展示全部有效备货单（含已采购、已入库、未收款），采购procurement仅已支付、已审核、待跟进采购（未采购/部分采购/已采购待发货）。岗位、独立备货白名单与本人/部门/全部业务范围求交，先授权和过滤、合计、完整排序后分页。独立于履约九队列及Dashboard五卡。 orderStatus按互斥阶段筛选，与备货类型/采购状态/搜索/仓库/部门取交集；先权限和筛选后合计分页。已审核不得包含在paid筛选中。 最新9.45：支持备货订单状态与采购状态排序，默认收款时间升序；同状态保持最早收款优先。",
+        "description": "销售all展示全部有效备货单（含已采购、已入库、未收款），采购procurement仅已支付、已审核、待跟进采购（未采购/部分采购/已采购待发货）。岗位、独立备货白名单与本人/部门/全部业务范围求交，先授权和过滤、合计、完整排序后分页。独立于履约九队列及Dashboard五卡。 orderStatus按互斥阶段筛选，与备货类型/采购状态/搜索/仓库/部门取交集；先权限和筛选后合计分页。已审核不得包含在paid筛选中。 最新9.45：支持备货订单状态与采购状态排序，默认收款时间升序；同状态保持最早收款优先。 销售备货增加lifecycle快捷阶段及基于createdAt的timeRange，默认均为全部，保留未付款至全部入库全阶段；原采购备货队列不变。",
         "parameters": [
           {
             "name": "queue",
@@ -4813,6 +4824,36 @@
                 "approved"
               ],
               "description": "备货订单状态：unpaid未支付；paid已支付但未审核；approved已支付且已审核。按真实paymentStatus/reviewStatus归一，不取采购状态或日期推定。"
+            }
+          },
+          {
+            "name": "lifecycle",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "unpaid",
+                "pending_procurement",
+                "received"
+              ],
+              "description": "仅销售备货清单（queue省略/all）：unpaid已创建待支付，按实际未支付状态；pending_procurement已支付待采购，paymentStatus=paid且purchaseStatus=unpurchased/partial/purchased（未采购、部分采购及供应商待发货）；received采购完成已入库，paymentStatus=paid、reviewStatus=approved且purchaseStatus=received。省略表示全部有效记录，保留已发货在途及未知阶段。与既有筛选取交集，先授权筛选再合计/排序/分页。queue=procurement传入返回400。"
+            }
+          },
+          {
+            "name": "timeRange",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "all",
+                "1w",
+                "1m",
+                "3m"
+              ],
+              "default": "all",
+              "description": "仅销售备货清单，按备货单自身createdAt筛选，默认all。1w向前滚动7×24小时，1m/3m按UTC+8滚动自然月，月底钳制，包含两端且排除未来时间。createdAt缺失/非法/无时区归一null，近期查询排除，不用paidAt、履约创建或单号替代；all仍保留。queue=procurement传入返回400。"
             }
           },
           {
@@ -4933,21 +4974,6 @@
           }
         ],
         "responses": {
-          "400": {
-            "description": "参数非法。"
-          },
-          "401": {
-            "description": "未登录或会话失效。"
-          },
-          "403": {
-            "description": "未绑定/无销售岗位/本地业务或FOP范围拒绝。"
-          },
-          "429": {
-            "description": "请求过于频繁。"
-          },
-          "503": {
-            "description": "上游不可用、契约无效或库存重复/负数；不降级成演示库存。"
-          },
           "200": {
             "description": "成功。",
             "headers": {
@@ -5025,6 +5051,21 @@
                 }
               }
             }
+          },
+          "400": {
+            "description": "参数非法。"
+          },
+          "401": {
+            "description": "未登录或会话失效。"
+          },
+          "403": {
+            "description": "未绑定/无销售岗位/本地业务或FOP范围拒绝。"
+          },
+          "429": {
+            "description": "请求过于频繁。"
+          },
+          "503": {
+            "description": "上游不可用、契约无效或库存重复/负数；不降级成演示库存。"
           }
         },
         "x-implementation-status": "implemented-platform-and-demo; production-employee-gateway-pending",
@@ -5091,21 +5132,6 @@
           }
         ],
         "responses": {
-          "400": {
-            "description": "参数非法。"
-          },
-          "401": {
-            "description": "未登录或会话失效。"
-          },
-          "403": {
-            "description": "未绑定/无销售岗位/本地业务或FOP范围拒绝。"
-          },
-          "429": {
-            "description": "请求过于频繁。"
-          },
-          "503": {
-            "description": "上游不可用、契约无效或库存重复/负数；不降级成演示库存。"
-          },
           "200": {
             "description": "成功。",
             "headers": {
@@ -5133,6 +5159,21 @@
                 }
               }
             }
+          },
+          "400": {
+            "description": "参数非法。"
+          },
+          "401": {
+            "description": "未登录或会话失效。"
+          },
+          "403": {
+            "description": "未绑定/无销售岗位/本地业务或FOP范围拒绝。"
+          },
+          "429": {
+            "description": "请求过于频繁。"
+          },
+          "503": {
+            "description": "上游不可用、契约无效或库存重复/负数；不降级成演示库存。"
           }
         },
         "x-implementation-status": "implemented-platform-and-demo; production-employee-gateway-pending",
@@ -5278,21 +5319,6 @@
           }
         ],
         "responses": {
-          "400": {
-            "description": "参数非法。"
-          },
-          "401": {
-            "description": "未登录或会话失效。"
-          },
-          "403": {
-            "description": "未绑定/无销售岗位/本地业务或FOP范围拒绝。"
-          },
-          "429": {
-            "description": "请求过于频繁。"
-          },
-          "503": {
-            "description": "上游不可用、契约无效或库存重复/负数；不降级成演示库存。"
-          },
           "200": {
             "description": "成功。",
             "headers": {
@@ -5351,8 +5377,23 @@
               }
             }
           },
+          "400": {
+            "description": "参数非法。"
+          },
+          "401": {
+            "description": "未登录或会话失效。"
+          },
+          "403": {
+            "description": "未绑定/无销售岗位/本地业务或FOP范围拒绝。"
+          },
           "409": {
             "description": "所选备货订单失效、已取消、失权或不在原队列，刷新后重新勾选。"
+          },
+          "429": {
+            "description": "请求过于频繁。"
+          },
+          "503": {
+            "description": "上游不可用、契约无效或库存重复/负数；不降级成演示库存。"
           }
         },
         "x-implementation-status": "implemented-platform-and-demo; production-employee-gateway-pending",
@@ -5370,7 +5411,7 @@
         ],
         "operationId": "exportStockOrders",
         "summary": "批量导出备货清单Excel",
-        "description": "selected为当前页选中单据，filtered为当前筛选全部跨页。与清单一致权限/排序/筛选，生成后复核会话和资源范围；订单金额按币种分别汇总，多商品金额仅一次。仅只读，无FOP业务操作。 queue与清单相同，默认all需sales，procurement需采购岗位并强制paid+approved且purchaseStatus为unpurchased/partial/purchased（含已采购待发货）；生成后复核队列资格及独立资源权限。 orderStatus与列表同口径；销售导出增加备货订单状态列，采购队列均为已审核，不重复增加该列。 页面“导出 Excel”点击直接执行：有勾选时mode=selected并传当前所选ID；无勾选时mode=filtered，导出全部已应用筛选结果（跨分页）。没有下拉选项；清空勾选后恢复filtered。两种API模式、授权、容量和输出前复核不变。 最新9.45：sortBy=paidAt/orderStatus/purchaseStatus，所选与全筛选导出复用完整结果的状态/日期排序，不按勾选顺序。",
+        "description": "selected为当前页选中单据，filtered为当前筛选全部跨页。与清单一致权限/排序/筛选，生成后复核会话和资源范围；订单金额按币种分别汇总，多商品金额仅一次。仅只读，无FOP业务操作。 queue与清单相同，默认all需sales，procurement需采购岗位并强制paid+approved且purchaseStatus为unpurchased/partial/purchased（含已采购待发货）；生成后复核队列资格及独立资源权限。 orderStatus与列表同口径；销售导出增加备货订单状态列，采购队列均为已审核，不重复增加该列。 页面“导出 Excel”点击直接执行：有勾选时mode=selected并传当前所选ID；无勾选时mode=filtered，导出全部已应用筛选结果（跨分页）。没有下拉选项；清空勾选后恢复filtered。两种API模式、授权、容量和输出前复核不变。 最新9.45：sortBy=paidAt/orderStatus/purchaseStatus，所选与全筛选导出复用完整结果的状态/日期排序，不按勾选顺序。 销售备货沿用lifecycle/timeRange筛选，新增创建时间（UTC+8）列及阶段/时间范围说明；两次复核使用同一时间窗口，阶段变化或失去当前筛选资格拒绝导出。采购备货不接受上述销售专属筛选。",
         "requestBody": {
           "required": true,
           "content": {
@@ -5399,21 +5440,6 @@
           }
         },
         "responses": {
-          "400": {
-            "description": "参数非法。"
-          },
-          "401": {
-            "description": "未登录或会话失效。"
-          },
-          "403": {
-            "description": "未绑定/无销售岗位/本地业务或FOP范围拒绝。"
-          },
-          "429": {
-            "description": "请求过于频繁。"
-          },
-          "503": {
-            "description": "上游不可用、契约无效或库存重复/负数；不降级成演示库存。"
-          },
           "200": {
             "description": "成功。",
             "headers": {
@@ -5433,11 +5459,26 @@
               }
             }
           },
+          "400": {
+            "description": "参数非法。"
+          },
+          "401": {
+            "description": "未登录或会话失效。"
+          },
+          "403": {
+            "description": "未绑定/无销售岗位/本地业务或FOP范围拒绝。"
+          },
           "409": {
             "description": "所选备货单已变化或没有可导出结果。"
           },
           "413": {
             "description": "超过10000备货单/50000商品行，不静默截断。"
+          },
+          "429": {
+            "description": "请求过于频繁。"
+          },
+          "503": {
+            "description": "上游不可用、契约无效或库存重复/负数；不降级成演示库存。"
           }
         },
         "x-implementation-status": "implemented-platform-and-demo; production-employee-gateway-pending",
@@ -5457,24 +5498,6 @@
         "summary": "未齐套与待出库清单即时库存：选单或SKU搜索",
         "description": "queue=allocation（省略时兼容此值）需要allocation岗位，queue=shipping需要warehouse岗位；两者均须本地数据权限+独立库存池授权。选单重新校验全部订单仍在对应获权队列，否则409，禁止部分成功。shipping只取配货已齐套已审核且尚未全部出库，不以WMS时间有值为门槛。仅展示所选SKU公共与对应客户专属池；公共池去重。未选单必须非空SKU搜索。先授权、过滤、去重、排序（SKU/仓库/客户ID）后按池分页；仅完整成功快照可补零。实物余量不是最终可配量或选中订单的可出库量。",
         "responses": {
-          "400": {
-            "description": "参数非法、空搜索、重复/超量订单或模式混用。"
-          },
-          "401": {
-            "description": "会话失效。"
-          },
-          "403": {
-            "description": "缺对应岗位、无业务权限、缺独立库存授权或绑定/范围变化。"
-          },
-          "409": {
-            "description": "inventory_orders_changed：选中订单已不在对应获权队列（例如已配齐、已出库），刷新后重选。"
-          },
-          "429": {
-            "description": "请求过于频繁。"
-          },
-          "503": {
-            "description": "上游未配置、不可用、快照不完整、字段非法或重复池；不返回伪零库存。"
-          },
           "200": {
             "description": "当前库存池快照。",
             "headers": {
@@ -5526,6 +5549,24 @@
                 }
               }
             }
+          },
+          "400": {
+            "description": "参数非法、空搜索、重复/超量订单或模式混用。"
+          },
+          "401": {
+            "description": "会话失效。"
+          },
+          "403": {
+            "description": "缺对应岗位、无业务权限、缺独立库存授权或绑定/范围变化。"
+          },
+          "409": {
+            "description": "inventory_orders_changed：选中订单已不在对应获权队列（例如已配齐、已出库），刷新后重选。"
+          },
+          "429": {
+            "description": "请求过于频繁。"
+          },
+          "503": {
+            "description": "上游未配置、不可用、快照不完整、字段非法或重复池；不返回伪零库存。"
           }
         },
         "x-implementation-status": "implemented-platform-and-demo; production-employee-gateway-pending",
@@ -5602,6 +5643,24 @@
         "description": "采购岗位、FOP履约和独立采购授权与本地数据范围交集；先筛选再合计分页。仅当前可见来源量，不是采购整单量。按具体采购义务分队列，履约可跨两队列；原履约视图和Dashboard不变。全链路no-store。 关联数据不完整返回503，不生成采购来源或关联待确认任务。采购类型由purchaseType和platform显式给出。",
         "x-implementation-status": "implemented-platform-and-demo; production-employee-gateway-pending",
         "responses": {
+          "200": {
+            "description": "成功",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PurchaseGroupPage"
+                }
+              }
+            }
+          },
           "400": {
             "description": "参数非法"
           },
@@ -5622,24 +5681,6 @@
           },
           "503": {
             "description": "上游不可用或快照不完整/无效"
-          },
-          "200": {
-            "description": "成功",
-            "headers": {
-              "Cache-Control": {
-                "schema": {
-                  "type": "string"
-                },
-                "example": "private, no-store"
-              }
-            },
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PurchaseGroupPage"
-                }
-              }
-            }
           }
         },
         "parameters": [
@@ -5746,6 +5787,29 @@
               ],
               "description": "仅待采购queue=procurement适用；不传为全部。按当前采购进度筛选：未建、待下单/推单（含线下/1688/其他平台）、待付款（含部分付款）、退款待跟进；退款优先，随后下单、付款。未知事实不推断为待付款。先授权及筛选，再合计、分页、展开及导出。"
             }
+          },
+          {
+            "name": "completed",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            },
+            "description": "阶段完成清单，默认完成时间近一周；原岗位订单读权与数据权限继续生效。"
+          },
+          {
+            "name": "timeRange",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1w",
+                "1m",
+                "3m"
+              ]
+            },
+            "description": "completed=true按阶段完成时间筛选，默认1w，仅1w/1m/3m；unpaid原筛选仍可all。"
           }
         ]
       }
@@ -5760,6 +5824,24 @@
         "description": "采购岗位、FOP履约和独立采购授权与本地数据范围交集；先筛选再合计分页。仅当前可见来源量，不是采购整单量。按具体采购义务分队列，履约可跨两队列；原履约视图和Dashboard不变。全链路no-store。 关联数据不完整返回503，不生成采购来源或关联待确认任务。采购类型由purchaseType和platform显式给出。",
         "x-implementation-status": "implemented-platform-and-demo; production-employee-gateway-pending",
         "responses": {
+          "200": {
+            "description": "成功",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PurchaseGroupDetails"
+                }
+              }
+            }
+          },
           "400": {
             "description": "参数非法"
           },
@@ -5780,24 +5862,6 @@
           },
           "503": {
             "description": "上游不可用或快照不完整/无效"
-          },
-          "200": {
-            "description": "成功",
-            "headers": {
-              "Cache-Control": {
-                "schema": {
-                  "type": "string"
-                },
-                "example": "private, no-store"
-              }
-            },
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PurchaseGroupDetails"
-                }
-              }
-            }
           }
         },
         "parameters": [
@@ -5912,6 +5976,29 @@
               ],
               "description": "仅待采购queue=procurement适用；不传为全部。按当前采购进度筛选：未建、待下单/推单（含线下/1688/其他平台）、待付款（含部分付款）、退款待跟进；退款优先，随后下单、付款。未知事实不推断为待付款。先授权及筛选，再合计、分页、展开及导出。"
             }
+          },
+          {
+            "name": "completed",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            },
+            "description": "阶段完成清单，默认完成时间近一周；原岗位订单读权与数据权限继续生效。"
+          },
+          {
+            "name": "timeRange",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1w",
+                "1m",
+                "3m"
+              ]
+            },
+            "description": "completed=true按阶段完成时间筛选，默认1w，仅1w/1m/3m；unpaid原筛选仍可all。"
           }
         ]
       }
@@ -5926,6 +6013,25 @@
         "description": "采购岗位、FOP履约和独立采购授权与本地数据范围交集；先筛选再合计分页。仅当前可见来源量，不是采购整单量。按具体采购义务分队列，履约可跨两队列；原履约视图和Dashboard不变。全链路no-store。 关联数据不完整返回503，不生成采购来源或关联待确认任务。采购类型由purchaseType和platform显式给出。",
         "x-implementation-status": "implemented-platform-and-demo; production-employee-gateway-pending",
         "responses": {
+          "200": {
+            "description": "成功",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              }
+            },
+            "content": {
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
           "400": {
             "description": "参数非法"
           },
@@ -5946,25 +6052,6 @@
           },
           "503": {
             "description": "上游不可用或快照不完整/无效"
-          },
-          "200": {
-            "description": "成功",
-            "headers": {
-              "Cache-Control": {
-                "schema": {
-                  "type": "string"
-                },
-                "example": "private, no-store"
-              }
-            },
-            "content": {
-              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {
-                "schema": {
-                  "type": "string",
-                  "format": "binary"
-                }
-              }
-            }
           }
         },
         "requestBody": {
@@ -6079,6 +6166,24 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "成功",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupplierFollowUpPage"
+                }
+              }
+            }
+          },
           "400": {
             "description": "参数非法"
           },
@@ -6099,24 +6204,6 @@
           },
           "503": {
             "description": "上游不可用或快照不完整/无效"
-          },
-          "200": {
-            "description": "成功",
-            "headers": {
-              "Cache-Control": {
-                "schema": {
-                  "type": "string"
-                },
-                "example": "private, no-store"
-              }
-            },
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SupplierFollowUpPage"
-                }
-              }
-            }
           }
         },
         "x-implementation-status": "implemented-platform-and-demo; production-employee-gateway-pending"
@@ -6231,6 +6318,24 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "成功",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupplierChatLaunch"
+                }
+              }
+            }
+          },
           "400": {
             "description": "参数非法"
           },
@@ -6251,24 +6356,6 @@
           },
           "503": {
             "description": "上游不可用或快照不完整/无效"
-          },
-          "200": {
-            "description": "成功",
-            "headers": {
-              "Cache-Control": {
-                "schema": {
-                  "type": "string"
-                },
-                "example": "private, no-store"
-              }
-            },
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SupplierChatLaunch"
-                }
-              }
-            }
           }
         },
         "x-implementation-status": "implemented-platform-and-demo; production-employee-gateway-pending"
@@ -7114,6 +7201,41 @@
               "2026-10-28T04:30:00.000Z",
               null
             ]
+          },
+          "amountBreakdown": {
+            "$ref": "#/components/schemas/FopOrderAmountBreakdown"
+          },
+          "shopifySyncedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "成功同步Shopify履约的实际时间；仅synced时有效。缺失为null，不回退其他日期。"
+          },
+          "procurementCompletedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "全部有效采购建单、适用下单/推单及付款完成的实际时间。缺失为null，不回退其他日期。"
+          },
+          "allocationApprovedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "有效配货单实际审核完成时间。缺失为null，不回退其他日期。"
+          },
+          "outboundCompletedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "全部出库实际完成时间（hzkj_outbound_time且hzkj_delivery_status=2）。缺失为null，不回退其他日期。"
           }
         },
         "required": [
@@ -14693,6 +14815,41 @@
               "2026-10-28T04:30:00.000Z",
               null
             ]
+          },
+          "amountBreakdown": {
+            "$ref": "#/components/schemas/FopOrderAmountBreakdown"
+          },
+          "shopifySyncedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "成功同步Shopify履约的实际时间；仅synced时有效。缺失为null，不回退其他日期。"
+          },
+          "procurementCompletedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "全部有效采购建单、适用下单/推单及付款完成的实际时间。缺失为null，不回退其他日期。"
+          },
+          "allocationApprovedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "有效配货单实际审核完成时间。缺失为null，不回退其他日期。"
+          },
+          "outboundCompletedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "全部出库实际完成时间（hzkj_outbound_time且hzkj_delivery_status=2）。缺失为null，不回退其他日期。"
           }
         },
         "required": [
@@ -16803,7 +16960,8 @@
               "allocationDocumentStatus",
               "stockReadiness",
               "allocationReviewStatus",
-              "outboundStatus"
+              "outboundStatus",
+              "completedAt"
             ],
             "default": "paidAt",
             "description": "主排序字段；stockReadiness和allocationReviewStatus仅allocation/allocation_review，分别对应齐套和审核事实；allocationDocumentStatus保留仓库及旧链接兼容。非法组合400。详见接口描述。 最新9.33：销售unpaid/review/exceptions及待履约dispatch支持sortBy=consumerPaidAt、sortOrder=asc/desc。默认仍paidAt升序；同C端时间按paidAt升序/id升序，缺失或非法时间双向均置后，不回退其他日期。先授权/筛选后对完整结果排序再分页；所选及全筛选Excel同顺序。其他队列使用该排序返回400。单号及SKU复制仅客户端原值操作，不新增API或改变权限。 9.35覆盖原四队列限制：allocation未齐套也允许consumerPaidAt；allocation_review仍不允许，使用独立齐套时间展示。 reviewedAt仅procurement可用，实际订单审核时间，空值始终最后，同值按paidAt升序及id。"
@@ -16903,12 +17061,16 @@
               "1m",
               "3m"
             ],
-            "description": "仅unpaid可用，默认all。按consumerPaidAt从当前时刻向前滚动7天（1w）或1、3个自然月（1m/3m，UTC+8，月底钳制），含起止边界；近周/近月排除缺失、非法和未来时间，不回退其他日期。"
+            "description": "completed=true按本阶段实际完成时间过滤，默认1w，仅1w/1m/3m；unpaid原按consumerPaidAt且默认全部。"
           },
           "shippingCountryCode": {
             "type": "string",
             "pattern": "^[A-Z]{2}$",
             "description": "仅review可用，已知ISO国家二字码，精确过滤订单收货国家；不传为全部。"
+          },
+          "completed": {
+            "type": "boolean",
+            "description": "阶段完成记录，沿用queue原读权；true默认完成时间近一周。"
           }
         },
         "oneOf": [
@@ -17164,6 +17326,57 @@
                   ]
                 }
               ]
+            }
+          },
+          {
+            "if": {
+              "required": [
+                "completed"
+              ],
+              "properties": {
+                "completed": {
+                  "const": true
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "queue": {
+                  "enum": [
+                    "review",
+                    "dispatch",
+                    "procurement",
+                    "allocation_review",
+                    "shipping"
+                  ]
+                },
+                "timeRange": {
+                  "enum": [
+                    "1w",
+                    "1m",
+                    "3m"
+                  ]
+                }
+              },
+              "not": {
+                "anyOf": [
+                  {
+                    "required": [
+                      "taskStatus"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "procurementStage"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "warehouseStage"
+                    ]
+                  }
+                ]
+              }
             }
           }
         ]
@@ -17544,6 +17757,14 @@
             ],
             "format": "date-time",
             "description": "供应商实际采购付款时间，用于供应商待发货超过24/48小时提醒。取当前仍有待发货义务的有效已付采购中最早实际付款时间；已全发、取消、退款记录排除。缺失或非法归一null，不得用客户收款paidAt、订单创建、审核、到期日或同步时间替代。可省略以兼容旧网关；生产映射需联调。"
+          },
+          "createdAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "备货单自身hzkj_stock_order_new.createtime，明确时区ISO；BFF归一UTC，页面查询及Excel按UTC+8解释。旧网关可省略，缺失或非法归一null，不回退客户付款、关联履约单创建时间或单号。销售备货timeRange以此字段筛选。"
           }
         },
         "required": [
@@ -17726,6 +17947,14 @@
             ],
             "format": "date-time",
             "description": "供应商实际采购付款时间，用于供应商待发货超过24/48小时提醒。取当前仍有待发货义务的有效已付采购中最早实际付款时间；已全发、取消、退款记录排除。缺失或非法归一null，不得用客户收款paidAt、订单创建、审核、到期日或同步时间替代。可省略以兼容旧网关；生产映射需联调。"
+          },
+          "createdAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "备货单自身hzkj_stock_order_new.createtime，明确时区ISO；BFF归一UTC，页面查询及Excel按UTC+8解释。旧网关可省略，缺失或非法归一null，不回退客户付款、关联履约单创建时间或单号。销售备货timeRange以此字段筛选。"
           }
         },
         "required": [
@@ -18349,6 +18578,26 @@
             ],
             "default": "paidAt",
             "description": "主排序字段：paidAt收款时间（默认）、orderStatus备货订单状态、purchaseStatus采购状态。状态升序按unpaid→paid→approved，以及unpurchased→partial→purchased→shipped→received；状态未知/null双向置后。同状态按paidAt升序（空值最后）、id升序。先授权和筛选，再完整排序后分页；Excel沿用相同顺序。sortBy非法、空值、重复参数返回400。"
+          },
+          "lifecycle": {
+            "type": "string",
+            "enum": [
+              "unpaid",
+              "pending_procurement",
+              "received"
+            ],
+            "description": "仅销售备货清单（queue省略/all）：unpaid已创建待支付，按实际未支付状态；pending_procurement已支付待采购，paymentStatus=paid且purchaseStatus=unpurchased/partial/purchased（未采购、部分采购及供应商待发货）；received采购完成已入库，paymentStatus=paid、reviewStatus=approved且purchaseStatus=received。省略表示全部有效记录，保留已发货在途及未知阶段。与既有筛选取交集，先授权筛选再合计/排序/分页。queue=procurement传入返回400。"
+          },
+          "timeRange": {
+            "type": "string",
+            "enum": [
+              "all",
+              "1w",
+              "1m",
+              "3m"
+            ],
+            "default": "all",
+            "description": "仅销售备货清单，按备货单自身createdAt筛选，默认all。1w向前滚动7×24小时，1m/3m按UTC+8滚动自然月，月底钳制，包含两端且排除未来时间。createdAt缺失/非法/无时区归一null，近期查询排除，不用paidAt、履约创建或单号替代；all仍保留。queue=procurement传入返回400。"
           }
         },
         "required": [
@@ -19145,6 +19394,14 @@
               "null"
             ],
             "format": "date-time"
+          },
+          "completedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "当前筛选范围内的采购完成时间；组为关联履约明细中的最新完成时间。"
           }
         },
         "description": " 所有purchase=null需求合并为唯一id=uncreated组；每笔履约单一行，多个待建义务合并lines。不按客户、供应商或SKU拆组。 未建组固定置顶，优先于收款升降序，分页与导出同序；界面默认收起。"
@@ -19246,6 +19503,14 @@
                 }
               }
             }
+          },
+          "completedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "当前筛选范围内的采购完成时间；组为关联履约明细中的最新完成时间。"
           }
         }
       },
@@ -19454,8 +19719,60 @@
                   "refund_pending"
                 ],
                 "description": "仅待采购queue=procurement适用；不传为全部。按当前采购进度筛选：未建、待下单/推单（含线下/1688/其他平台）、待付款（含部分付款）、退款待跟进；退款优先，随后下单、付款。未知事实不推断为待付款。先授权及筛选，再合计、分页、展开及导出。"
+              },
+              "completed": {
+                "type": "boolean",
+                "description": "阶段完成记录，沿用queue原读权；true默认完成时间近一周。"
+              },
+              "timeRange": {
+                "type": "string",
+                "enum": [
+                  "1w",
+                  "1m",
+                  "3m"
+                ],
+                "description": "completed=true按本阶段实际完成时间过滤，默认1w，仅1w/1m/3m；unpaid原按consumerPaidAt且默认全部。"
               }
-            }
+            },
+            "allOf": [
+              {
+                "if": {
+                  "required": [
+                    "completed"
+                  ],
+                  "properties": {
+                    "completed": {
+                      "const": true
+                    }
+                  }
+                },
+                "then": {
+                  "properties": {
+                    "queue": {
+                      "enum": [
+                        "procurement"
+                      ]
+                    },
+                    "timeRange": {
+                      "enum": [
+                        "1w",
+                        "1m",
+                        "3m"
+                      ]
+                    }
+                  },
+                  "not": {
+                    "anyOf": [
+                      {
+                        "required": [
+                          "purchaseStage"
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
           },
           {
             "type": "object",
@@ -19513,8 +19830,60 @@
                   "refund_pending"
                 ],
                 "description": "仅待采购queue=procurement适用；不传为全部。按当前采购进度筛选：未建、待下单/推单（含线下/1688/其他平台）、待付款（含部分付款）、退款待跟进；退款优先，随后下单、付款。未知事实不推断为待付款。先授权及筛选，再合计、分页、展开及导出。"
+              },
+              "completed": {
+                "type": "boolean",
+                "description": "阶段完成记录，沿用queue原读权；true默认完成时间近一周。"
+              },
+              "timeRange": {
+                "type": "string",
+                "enum": [
+                  "1w",
+                  "1m",
+                  "3m"
+                ],
+                "description": "completed=true按本阶段实际完成时间过滤，默认1w，仅1w/1m/3m；unpaid原按consumerPaidAt且默认全部。"
               }
-            }
+            },
+            "allOf": [
+              {
+                "if": {
+                  "required": [
+                    "completed"
+                  ],
+                  "properties": {
+                    "completed": {
+                      "const": true
+                    }
+                  }
+                },
+                "then": {
+                  "properties": {
+                    "queue": {
+                      "enum": [
+                        "procurement"
+                      ]
+                    },
+                    "timeRange": {
+                      "enum": [
+                        "1w",
+                        "1m",
+                        "3m"
+                      ]
+                    }
+                  },
+                  "not": {
+                    "anyOf": [
+                      {
+                        "required": [
+                          "purchaseStage"
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
           }
         ]
       },
@@ -19552,6 +19921,48 @@
             }
           }
         }
+      },
+      "FopOrderAmountBreakdown": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "description": "FOP订单原币独立金额。缺失为null，0为真实零值；不得据此重算订单最终金额。",
+        "properties": {
+          "productAmount": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "产品金额：hzkj_order_amount"
+          },
+          "shippingFee": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "运费报价：hzkj_fre_quo_amount"
+          },
+          "discountAmount": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "优惠金额：hzkj_discount_cost；正数表示扣减"
+          },
+          "taxAmount": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "税费：hzkj_fixed_tax_fee；旧网关可缺省，缺失显示—，不得反推。"
+          }
+        },
+        "required": [
+          "productAmount",
+          "shippingFee",
+          "discountAmount"
+        ]
       }
     },
     "responses": {

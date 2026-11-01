@@ -1,3 +1,5 @@
+import { completedAt, completedRange, isCompletionQueue, isStageCompleted } from './completed-orders'
+import { normalizeOrderAmountBreakdown } from './order-amount-breakdown'
 import { createHash } from 'crypto'
 import { buildPurchaseGroups, purchaseGroupSummary, purchaseGroupTotals } from './procurement-groups'
 import { PurchaseGroupQueryDto, PurchaseGroupExportDto, PurchaseGroupFiltersDto, PurchaseGroupChatQueryDto } from './procurement-groups.dto'
@@ -159,6 +161,10 @@ function publicOrder(order: FopOrderCandidate): FopOrder {
     fulfillmentProgress: { allocationCreated: progress.allocationCreated ?? null, shopifySync: progress.shopifySync, supplierShipment: progress.supplierShipment, stockReadiness: progress.stockReadiness, allocationReview: progress.allocationReview, outbound: progress.outbound },
     id: order.id, orderNumber: order.orderNumber, shopifyOrderNumber: order.shopifyOrderNumber,
     customerId: order.customerId, customerCode: order.customerCode, warehouseCode: order.warehouseCode, carrierCode: order.carrierCode,
+    shopifySyncedAt: isStageCompleted(order, 'dispatch') ? normalizeBusinessTimestamp(order.shopifySyncedAt) : null,
+    procurementCompletedAt: isStageCompleted(order, 'procurement') ? normalizeBusinessTimestamp(order.procurementCompletedAt) : null,
+    allocationApprovedAt: isStageCompleted(order, 'allocation_review') ? normalizeBusinessTimestamp(order.allocationApprovedAt) : null,
+    outboundCompletedAt: isStageCompleted(order, 'shipping') ? normalizeBusinessTimestamp(order.outboundCompletedAt) : null,
     reviewedAt: order.reviewStatus === 'approved' ? normalizeBusinessTimestamp(order.reviewedAt) : null,
     consumerPaidAt: normalizeConsumerPaidAt(order.consumerPaidAt),
     procurementPaidAt: normalizeBusinessTimestamp(order.procurementPaidAt),
@@ -174,7 +180,7 @@ function publicOrder(order: FopOrderCandidate): FopOrder {
     ...(order.organization ? { organization: { id: order.organization.id, name: order.organization.name } } : {}),
     ...(order.department ? { department: { id: order.department.id, name: order.department.name } } : {}),
     ...(order.owner ? { owner: { id: order.owner.id, name: order.owner.name } } : {}),
-    amount: order.amount, currency: order.currency?.trim().toUpperCase() || 'USD', paymentStatus: order.paymentStatus,
+    amount: order.amount, amountBreakdown: normalizeOrderAmountBreakdown(order.amountBreakdown), currency: order.currency?.trim().toUpperCase() || 'USD', paymentStatus: order.paymentStatus,
     reviewStatus: order.reviewStatus, procurementStatus: order.procurementStatus,
     allocationStatus: order.allocationStatus, dispatchStatus: order.dispatchStatus, shippingStatus: order.shippingStatus,
     warehouse: order.warehouse, carrier: order.carrier, trackingNumber: order.trackingNumber,
@@ -644,13 +650,15 @@ export class FopDataService {
 
   private async filteredOrders(userId: string, query: FulfillmentOrderFiltersDto) {
     if (!Object.prototype.hasOwnProperty.call(FULFILLMENT_QUEUE_ROLES, query.queue)) throw new BadRequestException('Invalid fulfillment queue')
+    if (query.completed && (!isCompletionQueue(query.queue) || query.timeRange === 'all' || query.taskStatus || query.procurementStage || query.warehouseStage)) throw new BadRequestException('Invalid completed-list filters')
+    if (query.sortBy === 'completedAt' && !query.completed) throw new BadRequestException('completedAt requires a completed list')
     if (query.sortBy && !canSortFulfillmentQueue(query.queue, query.sortBy)) throw new BadRequestException('sortBy does not match the requested queue')
     if (query.warehouseStage !== undefined && query.queue !== 'shipping') throw new BadRequestException('warehouseStage requires the shipping queue')
     if (query.taskStatus !== undefined && !canFilterTaskStatus(query.queue, query.taskStatus)) throw new BadRequestException('taskStatus does not match the requested queue')
     if (query.procurementStage !== undefined && !canFilterProcurementStage(query.queue, query.procurementStage)) throw new BadRequestException('procurementStage does not match the requested queue')
-    if (query.timeRange !== undefined && (query.queue !== 'unpaid' || !['all', '1w', '1m', '3m'].includes(query.timeRange))) throw new BadRequestException('timeRange requires the unpaid queue')
+    if (query.timeRange !== undefined && (!query.completed && query.queue !== 'unpaid' || !['all', '1w', '1m', '3m'].includes(query.timeRange))) throw new BadRequestException('timeRange requires the unpaid queue')
     if (query.shippingCountryCode !== undefined && (query.queue !== 'review' || !normalizeShippingCountry(query.shippingCountryCode) || normalizeShippingCountry(query.shippingCountryCode) !== query.shippingCountryCode)) throw new BadRequestException('Invalid review destination country')
-    const inTimeRange = consumerPaymentRange(query.timeRange)
+    const inTimeRange = query.completed ? completedRange(query.timeRange as '1w' | '1m' | '3m' | undefined) : consumerPaymentRange(query.timeRange)
     const role = FULFILLMENT_QUEUE_ROLES[query.queue]
     if (query.workbenchRole && query.workbenchRole !== role) throw new BadRequestException('workbenchRole does not match the requested queue')
     const scoped = await this.scopedOrders(userId, role)
@@ -663,8 +671,8 @@ export class FopDataService {
     const salespeople = [...new Map(departmentOrders.filter(order => order.owner?.id).map(order => [order.owner!.id, order.owner!])).values()]
       .sort((a, b) => a.name.localeCompare(b.name, 'zh-CN') || a.id.localeCompare(b.id))
     const search = query.search?.trim().toLowerCase()
-    const candidates = departmentOrders.filter((order) => matchesQueue(order, query.queue, query.warehouseStage)
-      && inTimeRange(order.consumerPaidAt)
+    const candidates = departmentOrders.filter((order) => (query.completed ? isStageCompleted(order, query.queue) : matchesQueue(order, query.queue, query.warehouseStage))
+      && inTimeRange(query.completed ? completedAt(order, query.queue) : order.consumerPaidAt)
       && (!query.taskStatus || getTaskStatus(order, query.queue) === query.taskStatus)
       && (!query.procurementStage || getProcurementStage(order.procurementProgress, order.fulfillmentProgress.supplierShipment) === query.procurementStage)
       && (!query.warehouseCode || order.warehouseCode === query.warehouseCode)
@@ -686,16 +694,19 @@ export class FopDataService {
   }
 
   private async purchaseGroups(userId: string, query: PurchaseGroupFiltersDto) {
+    if (query.completed && (query.purchaseStage || query.queue !== 'procurement' || query.timeRange && !['1w', '1m', '3m'].includes(query.timeRange))) throw new BadRequestException('Invalid completed purchase filters')
+    if (!query.completed && query.timeRange) throw new BadRequestException('timeRange requires completed purchases')
     if (query.purchaseStage !== undefined && query.queue !== 'procurement') throw new BadRequestException('purchaseStage requires the procurement queue')
     const scoped = await this.scopedOrders(userId, 'procurement')
-    const orders = scoped.orders.filter(o => !o.cancelled && o.paymentStatus === 'paid')
+    const inRange = completedRange(query.timeRange as '1w' | '1m' | '3m' | undefined)
+    const orders = scoped.orders.filter(o => !o.cancelled && o.paymentStatus === 'paid' && (!query.completed || isStageCompleted(o, 'procurement') && inRange(completedAt(o, 'procurement'))))
     const snapshot = orders.length ? await this.providerCall(() => this.provider.getPurchaseLinks(scoped.permission.subject, scoped.permission, orders.map(o => o.id))) : { subject: scoped.permission.subject, orders: [] }
     await this.assertUnchanged(userId, scoped.initial)
     // Whitelist membership does not imply unchanged record ownership/department.
     const current = await this.scopedOrders(userId, 'procurement')
     await this.assertUnchanged(userId, scoped.initial)
     const requested = new Set(orders.map(o => o.id))
-    const currentOrders = current.orders.filter(o => requested.has(o.id))
+    const currentOrders = current.orders.filter(o => requested.has(o.id) && (!query.completed || isStageCompleted(o, 'procurement') && inRange(completedAt(o, 'procurement'))))
     const groups = await this.providerCall(async () => buildPurchaseGroups(currentOrders, current.departmentPaths, current.permission, snapshot, query))
     const departments = [...new Map(currentOrders.filter(o => o.department && o.salesDepartmentCode).map(o => [o.department!.id, o.department!])).values()]
     return { groups, departments, initial: scoped.initial }
@@ -851,6 +862,7 @@ export class FopDataService {
   }
 
   async getStockOrders(userId: string, query: StockPageQuery) {
+    if (query.queue === 'procurement' && (query.lifecycle !== undefined || query.timeRange !== undefined)) throw new BadRequestException('Stock lifecycle and creation range are available on the sales stock list only')
     const { orders } = await this.scopedStockOrders(userId, query.queue === 'procurement' ? 'procurement' : 'sales')
     const filtered = filterStockOrders(orders, query)
     return { source: this.provider.source, refreshedAt: new Date().toISOString(), departments: stockDepartments(orders), items: filtered.slice((query.page - 1) * query.pageSize, query.page * query.pageSize), total: filtered.length, totals: stockTotals(filtered), page: query.page, pageSize: query.pageSize }
@@ -890,6 +902,7 @@ export class FopDataService {
   }
 
   async exportStockOrders(userId: string, query: ExportStockOrdersDto, sessionVersion = 0): Promise<Buffer> {
+    if (query.queue === 'procurement' && (query.lifecycle !== undefined || query.timeRange !== undefined)) throw new BadRequestException('Stock lifecycle and creation range are available on the sales stock list only')
     if (query.mode === 'selected' ? !query.orderIds?.length || query.orderIds.length > 100 || new Set(query.orderIds).size !== query.orderIds.length : query.mode !== 'filtered' || query.orderIds !== undefined) throw new BadRequestException('Invalid stock export selection')
     const assertSession = async () => {
       const user = await this.users.findById(userId)
@@ -897,15 +910,16 @@ export class FopDataService {
     }
     await assertSession()
     const initial = await this.scopedStockOrders(userId, query.queue === 'procurement' ? 'procurement' : 'sales')
-    const filtered = filterStockOrders(initial.orders, query as StockFilters)
+    const asOf = Date.now()
+    const filtered = filterStockOrders(initial.orders, query as StockFilters, asOf)
     const selected = new Set(query.orderIds)
     const rows = query.mode === 'selected' ? filtered.filter(row => selected.has(row.id)) : filtered
     if (query.mode === 'selected' && rows.length !== selected.size) throw new ConflictException({ code: 'export_selection_changed', message: '所选备货单已变化，请刷新。' })
     if (!rows.length) throw new ConflictException({ code: 'export_empty', message: '没有可导出的备货单。' })
-    const buffer = await buildStockWorkbook(rows, this.provider.source, query.queue !== 'procurement')
+    const buffer = await buildStockWorkbook(rows, this.provider.source, query.queue !== 'procurement', query)
     const latest = await this.scopedStockOrders(userId, query.queue === 'procurement' ? 'procurement' : 'sales')
     await this.assertUnchanged(userId, initial.initial)
-    const current = new Set(filterStockOrders(latest.orders, query).map(row => row.id))
+    const current = new Set(filterStockOrders(latest.orders, query, asOf).map(row => row.id))
     if (rows.some(row => !current.has(row.id))) throw new ForbiddenException({ code: 'export_access_changed', message: '备货单查看范围已变化，请刷新。' })
     await assertSession()
     return buffer

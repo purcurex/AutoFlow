@@ -6,7 +6,7 @@ import { businessDate } from './fop-business-time'
 /** Independent synthetic stock records; never mixed into fulfillment orders or receipt statistics. */
 export function demoStockOrders(orders: readonly FopOrderCandidate[], now = new Date()): FopStockOrderCandidate[] {
   const customers = [...new Map(orders.filter(o => o.customerId && o.owner && o.department && o.salesDepartmentCode).map(o => [o.customerId!, o])).values()]
-  return customers.flatMap((order, index) => [0, 1].map((type): FopStockOrderCandidate => {
+  const rows = customers.flatMap((order, index) => [0, 1].map((type): FopStockOrderCandidate => {
     const date = businessDate(order.createdAt).replaceAll('-', '')
     const id = `${order.tenantId}:stock-order:${order.customerId}:${type}`
     // Partial procurement is a rare compatibility scenario, not the main workload.
@@ -19,9 +19,22 @@ export function demoStockOrders(orders: readonly FopOrderCandidate[], now = new 
       storeName: order.storeName, warehouseCode: type ? 'SZ' : 'HZ', warehouse: type ? '深圳仓' : '杭州仓',
       items: order.items.map(item => ({ ...item, quantity: 20 + item.quantity * 10 })), amount: Math.round(order.amount * (type ? 3 : 10) * 100) / 100, currency: 'USD',
       paymentStatus: index % 7 === 0 ? 'unpaid' : 'paid', reviewStatus: index % 7 === 0 || index % 11 === 0 ? 'pending' : 'approved',
-      paidAt: index % 7 === 0 ? null : order.paidAt ?? order.createdAt,
+      paidAt: index % 7 === 0 ? null : order.paidAt ?? order.createdAt, createdAt: order.createdAt,
       purchaseStatus, procurementPaidAt, cancelled: false }
   }))
+  // Independent stock examples cover recent and historical creation periods for each owner.
+  // They reuse authorized customer/SKU dimensions, not fulfillment payment/creation events.
+  const owners = [...new Map(rows.map(row => [row.owner.id, row])).values()]
+  const samples = owners.flatMap((base, ownerIndex) => [2, 14, 60, 100].flatMap((days, period) => [0, 1, 2].map((stage): FopStockOrderCandidate => {
+    const createdAt = new Date(now.getTime() - days * 86400000).toISOString()
+    const date = businessDate(createdAt).replaceAll('-', '').slice(2)
+    return { ...base, id: `${base.id}:lifecycle:${period}:${stage}`, stockNumber: `BH${date}${String(800000 + ownerIndex * 12 + period * 3 + stage).padStart(6, '0')}`,
+      stockType: (period + stage) % 2 ? 'deposit' : 'full_payment', createdAt,
+      paidAt: stage === 0 ? null : new Date(Date.parse(createdAt) + 3600000).toISOString(),
+      paymentStatus: stage === 0 ? 'unpaid' : 'paid', reviewStatus: stage === 0 || stage === 1 && period % 2 ? 'pending' : 'approved',
+      purchaseStatus: stage === 2 ? 'received' : 'unpurchased', procurementPaidAt: null }
+  })))
+  return [...rows, ...samples]
 }
 export function demoStockInventory(orders: readonly FopOrderCandidate[]): FopStockInventoryCandidate[] {
   const rows = new Map<string, FopStockInventoryCandidate>()

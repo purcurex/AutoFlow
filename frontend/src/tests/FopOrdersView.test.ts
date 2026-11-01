@@ -44,6 +44,65 @@ vi.mock('@/api/index', () => ({ default: { get: vi.fn(async (_path, { params: qu
 }) } }))
 
 describe('fulfillment order list', () => {
+  it.each([
+    ['sales', '已完成清单', 'review'], ['dispatch', '已履约订单', 'dispatch'], ['procurement', '采购完成清单', 'procurement'],
+    ['allocation', '配货完成清单', 'allocation_review'], ['warehouse', '已出库清单', 'shipping'],
+  ])('reuses the %s list for completed records with a default week and no pending actions', async (role, heading, queue) => {
+    const item: orders.FopOrder = { ...mockFopOrders[0]!, orderNumber: 'COMPLETED-ORDER', reviewedAt: '2026-10-28T00:00:00Z', shopifySyncedAt: '2026-10-28T00:00:00Z', procurementCompletedAt: '2026-10-28T00:00:00Z', allocationApprovedAt: '2026-10-28T00:00:00Z', outboundCompletedAt: '2026-10-28T00:00:00Z', paymentStatus: 'paid', reviewStatus: role === 'procurement' ? 'pending' : 'approved',
+      procurementProgress: { purchaseOrder: 'ordered', supplierPayment: 'paid', alibabaOrder: 'pushed' },
+      fulfillmentProgress: { allocationCreated: true, shopifySync: 'synced', supplierShipment: 'shipped', stockReadiness: 'ready', allocationReview: 'approved', outbound: 'completed' } }
+    const get = vi.spyOn(orders, 'getFopOrders').mockResolvedValue({ source: 'mock', items: [item], total: 1, page: 1, pageSize: 50, departments: [], refreshedAt: '', totals: { orderCount: 1, itemQuantity: 1, amountsByCurrency: [] } })
+    const { wrapper, router } = await setup('?queue=completed', role)
+    expect(wrapper.get('tbody').text()).toContain('COMPLETED-ORDER')
+    expect(wrapper.get('tbody').text()).toContain('2026/10/28 08:00')
+    expect(wrapper.get('h2').text()).toBe(heading)
+    expect(wrapper.get('select[aria-label="完成时间范围"]').element).toHaveProperty('value', '1w')
+    expect(wrapper.find('[data-testid="open-approval"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="open-inventory"]').exists()).toBe(false)
+    expect(get).toHaveBeenLastCalledWith(expect.objectContaining({ queue, completed: true, timeRange: '1w' }))
+    await wrapper.get('select[aria-label="完成时间范围"]').setValue('1m'); await flushPromises()
+    expect(router.currentRoute.value.query).toMatchObject({ queue: 'completed', timeRange: '1m' })
+    expect(get).toHaveBeenLastCalledWith(expect.objectContaining({ completed: true, timeRange: '1m' }))
+    await router.push({ query: { ...router.currentRoute.value.query, page: '99' } }); await flushPromises()
+    expect(router.currentRoute.value.query).toMatchObject({ queue: 'completed', timeRange: '1m', page: '1' })
+    await wrapper.get('button.sort-payment').trigger('click'); await flushPromises()
+    expect(get).toHaveBeenLastCalledWith(expect.objectContaining({ completed: true, sortBy: 'paidAt', sortOrder: 'asc' }))
+    await wrapper.get('button.sort-consumer').trigger('click'); await flushPromises()
+    expect(get).toHaveBeenLastCalledWith(expect.objectContaining({ completed: true, sortBy: 'completedAt', sortOrder: 'desc' }))
+  })
+  it.each(['unpaid', 'review'] as const)('shows only the total until hovering the amount in %s', async queue => {
+    const source = mockFopOrders.find(o => orders.matchesFopQueue(o, queue))!
+    vi.spyOn(orders, 'getFopOrders').mockResolvedValue({ source: 'mock', items: [{ ...source, amount: 109.5, currency: 'USD', amountBreakdown: { productAmount: 100, shippingFee: 12, taxAmount: 2.5, discountAmount: 5 } }], total: 1, page: 1, pageSize: 50, departments: [], refreshedAt: '', totals: { orderCount: 1, itemQuantity: source.items.reduce((sum, item) => sum + item.quantity, 0), amountsByCurrency: [{ currency: 'USD', amount: 109.5 }] } })
+    const { wrapper } = await setup(`?queue=${queue}`, 'sales')
+    const cell = wrapper.get('tbody .amount-cell')
+    expect(cell.text()).toBe('$109.50') // Authoritative total can include tax; never reconstruct it.
+    expect(document.querySelector('[role="tooltip"]')).toBeNull()
+    await cell.get('button').trigger('mouseenter'); await flushPromises()
+    const tooltip = document.querySelector('[role="tooltip"]')!
+    expect(tooltip.textContent).toContain('产品$100.00')
+    expect(tooltip.textContent).toContain('运费$12.00')
+    expect(tooltip.textContent).toContain('税费$2.50')
+    expect(tooltip.textContent).toContain('优惠−$5.00')
+    expect(tooltip.textContent).toContain('总金额$109.50')
+    await cell.get('button').trigger('mouseleave')
+    await vi.waitFor(() => expect(document.querySelector('[role="tooltip"]')).toBeNull())
+  })
+  it('distinguishes zero and missing detail amounts without adding the sales detail layout to other queues', async () => {
+    const source = mockFopOrders.find(o => orders.matchesFopQueue(o, 'review'))!
+    vi.spyOn(orders, 'getFopOrders').mockResolvedValue({ source: 'mock', items: [{ ...source, amount: 25, currency: 'EUR', amountBreakdown: { productAmount: null, shippingFee: 0, taxAmount: 0, discountAmount: 0 } }], total: 1, page: 1, pageSize: 50, departments: [], refreshedAt: '', totals: { orderCount: 1, itemQuantity: source.items.reduce((sum, item) => sum + item.quantity, 0), amountsByCurrency: [{ currency: 'EUR', amount: 25 }] } })
+    const { wrapper, router } = await setup('?queue=review', 'sales')
+    expect(wrapper.get('tbody .amount-cell').text()).toBe('€25.00')
+    await wrapper.get('tbody .amount-cell button').trigger('focus'); await flushPromises()
+    expect(document.querySelector('[role="tooltip"]')?.textContent).toContain('产品—运费€0.00税费€0.00优惠€0.00')
+    await router.push('/workbench/sales?queue=exceptions'); await flushPromises()
+    expect(wrapper.get('tbody .amount-cell').text()).toBe('€25.00')
+    expect(document.querySelector('[role="tooltip"]')).toBeNull()
+  })
+  it('leaves unavailable detail amounts empty rather than deriving them from the total', async () => {
+    const { wrapper } = await setup('?queue=unpaid', 'sales')
+    await wrapper.get('tbody .amount-cell button').trigger('click'); await flushPromises()
+    expect(document.querySelector('[role="tooltip"]')?.textContent).toContain('产品—运费—税费—优惠—')
+  })
   it.each([['allocation', 'allocation'], ['shipping', 'warehouse']] as const)('opens inventory from %s with selected orders and clears it on navigation', async (queue, role) => {
     const { wrapper, router } = await setup(`?queue=${queue}`, role)
     await wrapper.get('[data-testid="open-inventory"]').trigger('click')

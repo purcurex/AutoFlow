@@ -139,3 +139,18 @@ describe('role workbench content', () => {
     wrapper.unmount()
   })
 })
+
+it.each([['sales', '已完成清单'], ['dispatch', '已履约订单'], ['procurement', '采购完成清单'], ['allocation', '配货完成清单'], ['warehouse', '已出库清单']])('offers the %s completed tab with its default week', async (role, title) => {
+  vi.mocked(getWorkbenchAccess).mockResolvedValue({ roles: [role as import('@/utils/workbench').WorkbenchRole], isAdmin: false })
+  await refreshWorkbenchAccess()
+  const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/workbench/:role', name: 'RoleWorkbench', component: WorkbenchView }, { path: '/dashboard', name: 'FopDashboard', component: { template: '<div />' } }] })
+  await router.push(`/workbench/${role}?queue=completed`)
+  const wrapper = mount(WorkbenchView, { global: { plugins: [router, createI18n({ legacy: false, locale: 'zh-CN', messages: {} })] } })
+  await vi.dynamicImportSettled(); await flushPromises()
+  const tab = wrapper.findAll('.workbench-queues a').find(a => a.text() === title)!
+  expect(tab.exists()).toBe(true)
+  expect(tab.attributes('class')).toContain('active')
+  expect(tab.attributes('href')).toContain('queue=completed')
+  expect(tab.attributes('href')).toContain('timeRange=1w')
+  wrapper.unmount()
+})

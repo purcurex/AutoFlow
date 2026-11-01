@@ -1,7 +1,10 @@
+import { CompletionFiltersDto } from '../users/dto/workbench.dto'
 import { Type } from 'class-transformer'
 import { ArrayMaxSize, ArrayMinSize, ArrayUnique, IsArray, IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Matches, Min, MinLength, ValidateIf } from 'class-validator'
 import { purchaseStages, type PurchaseStage, type PurchaseQueue } from './procurement-groups.types'
-export class PurchaseGroupFiltersDto {
+export class PurchaseGroupFiltersDto extends CompletionFiltersDto {
+  @IsOptional() @IsIn(['1w', '1m', '3m']) timeRange?: '1w' | '1m' | '3m'
+
   @IsOptional() @IsIn(purchaseStages) purchaseStage?: PurchaseStage
   @IsIn(['procurement', 'procurement_shipping']) queue!: PurchaseQueue
   @IsOptional() @IsString() @MaxLength(200) search?: string

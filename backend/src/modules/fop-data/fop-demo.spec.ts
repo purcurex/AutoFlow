@@ -42,6 +42,54 @@ const env = { FOP_DATA_MODE: 'demo', NODE_ENV: 'development' }
 const query = { from: '2026-10-01', to: '2026-10-21', year: 2026 }
 
 describe('isolated mock FOP dataset', () => {
+  it('provides stable recent stock creation examples for every salesperson and lifecycle', async () => {
+    jest.setSystemTime(new Date('2026-10-31T08:00:00Z'))
+    const provider = new DemoFopDataProvider(organizations, env)
+    const service = new FopDataService(users, provider)
+    for (const lifecycle of ['unpaid', 'pending_procurement', 'received'] as const) {
+      const result = await service.getStockOrders('alice', { lifecycle, timeRange: '1w', page: 1, pageSize: 100 })
+      expect(new Set(result.items.map(row=>row.owner.id))).toEqual(new Set(['employee-1','employee-2']))
+      expect(result.items.every(row=>!!row.createdAt && Date.parse(row.createdAt) <= Date.now())).toBe(true)
+      if(lifecycle==='unpaid') expect(result.items.every(row=>row.paidAt===null)).toBe(true)
+      else expect(result.items.every(row=>!!row.paidAt && Date.parse(row.paidAt)>=Date.parse(row.createdAt!))).toBe(true)
+    }
+    const first = await service.getStockOrders('alice', { timeRange:'1w', page:1, pageSize:100 })
+    jest.setSystemTime(new Date('2026-11-01T08:00:00Z'))
+    const second = await service.getStockOrders('alice', { timeRange:'1w', page:1, pageSize:100 })
+    expect(second.items.filter(row=>row.id.includes(':lifecycle:')).map(row=>[row.id,row.createdAt])).toEqual(first.items.filter(row=>row.id.includes(':lifecycle:')).map(row=>[row.id,row.createdAt]))
+  })
+  it('provides recent completed outbound examples for every salesperson even after the monthly history ends', async () => {
+    jest.setSystemTime(new Date('2026-10-30T12:00:00Z'))
+    const service = new FopDataService(users, new DemoFopDataProvider(organizations, env))
+    const query = { queue: 'shipping' as const, completed: true, page: 1, pageSize: 100 }
+    const result = await service.getOrders('alice', query)
+    expect(new Set(result.items.map(row => row.owner?.id))).toEqual(new Set(workspace.employees.map(employee => employee.id)))
+  })
+  it.each(['review', 'dispatch', 'procurement', 'allocation_review', 'shipping'] as const)('returns a default week of completed %s records independently of pending queues', async queue => {
+    const service = new FopDataService(users, new DemoFopDataProvider(organizations, env))
+    const query = { queue, completed: true, page: 1, pageSize: 100 }
+    const result = await service.getOrders('alice', query)
+    expect(result.total).toBeGreaterThan(0)
+    expect(result.items.every(order => order.reviewStatus === 'approved')).toBe(true)
+    if (queue === 'dispatch') expect(result.items.every(order => order.fulfillmentProgress.shopifySync === 'synced')).toBe(true)
+    if (queue === 'procurement') expect(result.items.every(order => order.procurementProgress?.purchaseOrder === 'ordered' && order.procurementProgress?.supplierPayment === 'paid')).toBe(true)
+    if (queue === 'allocation_review') expect(result.items.every(order => order.fulfillmentProgress.allocationReview === 'approved')).toBe(true)
+    if (queue === 'shipping') expect(result.items.every(order => order.fulfillmentProgress.outbound === 'completed')).toBe(true)
+  })
+  it.each([
+    [{ productAmount: 100, shippingFee: 12, taxAmount: 2.5, discountAmount: 5, internalNote: 'private' }, { productAmount: 100, shippingFee: 12, taxAmount: 2.5, discountAmount: 5 }],
+    [{ productAmount: 0, shippingFee: 0, taxAmount: 0, discountAmount: 0 }, { productAmount: 0, shippingFee: 0, taxAmount: 0, discountAmount: 0 }],
+    [{ productAmount: '', shippingFee: Infinity, discountAmount: '5' }, { productAmount: null, shippingFee: null, taxAmount: null, discountAmount: null }],
+    [undefined, null],
+  ])('normalizes amount details without changing the stored order total (%j)', async (input, expected) => {
+    const provider = new DemoFopDataProvider(organizations, env)
+    const original = provider.listOrders.bind(provider)
+    jest.spyOn(provider, 'listOrders').mockImplementation(async (...args) => (await original(...args)).map(order => ({ ...order, amount: 109.5, amountBreakdown: input } as unknown as FopOrderCandidate)))
+    const result = await new FopDataService(users, provider).getOrders('alice', { queue: 'review', page: 1, pageSize: 50 })
+    expect(result.items.length).toBeGreaterThan(0)
+    expect(result.items[0]).toMatchObject({ amount: 109.5, amountBreakdown: expected })
+    expect((result.items[0] as unknown as { amountBreakdown: unknown }).amountBreakdown).toEqual(expected)
+  })
   it('does not assign customer orders to directory staff who only have operational sales-workbench access', async () => {
     const provider = new DemoFopDataProvider({ getWorkspace: async () => ({ ...workspace, employees: [...workspace.employees, { ...workspace.employees[0], id: 'coordinator', code: 'staff', salesOwner: false }] }) }, env)
     const identity = provider.demoIdentity('alice')!

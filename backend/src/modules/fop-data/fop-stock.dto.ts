@@ -1,6 +1,6 @@
 import { Type, Transform } from 'class-transformer'
 import { IsArray, ArrayMaxSize, ArrayMinSize, ArrayUnique, IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min, MinLength, ValidateIf } from 'class-validator'
-import { STOCK_TYPES, STOCK_PURCHASE_STATUSES, STOCK_ORDER_STATUSES, STOCK_SORT_FIELDS, StockSortField, StockType, StockPurchaseStatus, StockOrderStatus } from './fop-stock.types'
+import { STOCK_TYPES, STOCK_PURCHASE_STATUSES, STOCK_ORDER_STATUSES, STOCK_SORT_FIELDS, STOCK_LIFECYCLES, StockLifecycle, StockSortField, StockType, StockPurchaseStatus, StockOrderStatus } from './fop-stock.types'
 
 export class StockScopeDto {
   @IsOptional() @IsString() @MaxLength(200) @Transform(({ value }) => typeof value === 'string' ? value.trim() : value) search?: string
@@ -15,6 +15,8 @@ export class StockFiltersDto extends StockScopeDto {
   @ValidateIf((_object, value) => value !== undefined) @IsIn(STOCK_ORDER_STATUSES) orderStatus?: StockOrderStatus
   @ValidateIf((_object, value) => value !== undefined) @IsIn(STOCK_SORT_FIELDS) sortBy?: StockSortField
   @IsOptional() @IsIn(['asc', 'desc']) sortOrder?: 'asc' | 'desc'
+  @ValidateIf((_object, value) => value !== undefined) @IsIn(STOCK_LIFECYCLES) lifecycle?: StockLifecycle
+  @ValidateIf((_object, value) => value !== undefined) @IsIn(['all', '1w', '1m', '3m']) timeRange?: 'all' | '1w' | '1m' | '3m'
 }
 export class StockOrdersQueryDto extends StockFiltersDto {
   @Type(() => Number) @IsInt() @Min(1) @Max(1000000) page = 1

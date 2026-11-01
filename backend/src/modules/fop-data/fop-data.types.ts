@@ -145,6 +145,11 @@ export interface FopOrder {
   /** Actual fulfillment channels, never carrier categories or customer-facing custom channels. */
   logisticsChannels?: LogisticsChannel[] | null
   /** First Shopify consumer payment completion, distinct from FOP createdAt and paidAt; unknown = null. */
+  /** Actual phase completion timestamps supplied by the trusted gateway; no fallbacks. */
+  shopifySyncedAt?: string | null
+  procurementCompletedAt?: string | null
+  allocationApprovedAt?: string | null
+  outboundCompletedAt?: string | null
   reviewedAt?: string | null
   consumerPaidAt?: string | null
   /** Earliest actual payment among effective paid purchase obligations still awaiting supplier shipment. */
@@ -178,6 +183,8 @@ export interface FopOrder {
   storeName: string
   items: FopOrderItem[]
   amount: number
+  /** Independent stored FOP amounts; never reconstruct the authoritative total. */
+  amountBreakdown?: FopOrderAmountBreakdown | null
   currency: string
   paymentStatus: 'paid' | 'unpaid' | 'refunded'
   reviewStatus: 'pending' | 'approved'
@@ -274,4 +281,12 @@ export class UnconfiguredFopDataProvider extends FopDataProvider {
   isConfigured() { return false }
   async resolvePermissions(_identity: FopIdentity): Promise<FopPermissionGrant> { throw new Error('FOP data provider is not configured') }
   async listOrders(_identity: FopIdentity, _permission: FopPermissionGrant): Promise<FopOrderCandidate[]> { throw new Error('FOP data provider is not configured') }
+}
+
+export interface FopOrderAmountBreakdown {
+  productAmount: number | null
+  shippingFee: number | null
+  /** FOP hzkj_fixed_tax_fee; optional for older gateways. */
+  taxAmount?: number | null
+  discountAmount: number | null
 }

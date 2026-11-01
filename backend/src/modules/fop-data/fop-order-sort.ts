@@ -1,3 +1,4 @@
+import { completedAt } from './completed-orders'
 import { getDispatchTaskStatus, getDispatchCompletionStatus } from './workbench-status'
 import type { FulfillmentOrderFiltersDto, FulfillmentSortBy } from '../users/dto/workbench.dto'
 import type { FopOrder } from './fop-data.types'
@@ -5,6 +6,7 @@ import { normalizeBusinessTimestamp } from './fop-business-time'
 import { normalizeConsumerPaidAt } from './consumer-payment-time'
 
 const statusQueues: Record<Exclude<FulfillmentSortBy, 'paidAt'>, readonly FulfillmentOrderFiltersDto['queue'][]> = {
+  completedAt: ['review', 'dispatch', 'procurement', 'allocation_review', 'shipping'],
   reviewedAt: ['procurement'],
   consumerPaidAt: ['unpaid', 'review', 'exceptions', 'dispatch', 'allocation'],
   dispatchDocumentStatus: ['dispatch', 'allocation', 'allocation_review'],
@@ -35,7 +37,7 @@ export function comparePaymentTime(left: FopOrder, right: FopOrder, direction: '
   return compareKnown(paymentTime(left), paymentTime(right), direction) || left.id.localeCompare(right.id)
 }
 
-function statusRank(order: FopOrder, field: Exclude<FulfillmentSortBy, 'paidAt' | 'consumerPaidAt' | 'reviewedAt'>): number {
+function statusRank(order: FopOrder, field: Exclude<FulfillmentSortBy, 'completedAt' | 'paidAt' | 'consumerPaidAt' | 'reviewedAt'>): number {
   if (field === 'dispatchDocumentStatus') {
     const ranks: Record<string, number> = { dispatch_missing: 0, dispatch_draft: 1, dispatch_submitted: 2, dispatch_approved: 3, dispatch_synced: 4 }
     return ranks[getDispatchTaskStatus(order.dispatchDocuments, order.fulfillmentProgress.shopifySync)] ?? Infinity
@@ -57,7 +59,8 @@ function statusRank(order: FopOrder, field: Exclude<FulfillmentSortBy, 'paidAt' 
 }
 
 export function compareFulfillmentOrders(left: FopOrder, right: FopOrder, query: FulfillmentOrderFiltersDto): number {
-  const field = query.sortBy ?? 'paidAt'
+  const field = query.sortBy ?? (query.completed ? 'completedAt' : 'paidAt')
+  if (field === 'completedAt') return compareKnown(completedAt(left, query.queue) ? Date.parse(completedAt(left, query.queue)!) : Infinity, completedAt(right, query.queue) ? Date.parse(completedAt(right, query.queue)!) : Infinity, query.sortOrder ?? 'desc') || left.id.localeCompare(right.id)
   if (field === 'paidAt') return comparePaymentTime(left, right, query.sortOrder ?? query.paidAtOrder ?? 'asc')
   if (field === 'consumerPaidAt' || field === 'reviewedAt') {
     const leftTime = field === 'reviewedAt' ? normalizeBusinessTimestamp(left.reviewedAt) : normalizeConsumerPaidAt(left.consumerPaidAt)

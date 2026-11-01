@@ -1,3 +1,4 @@
+import { matchesCompletedQueue } from '@/utils/completed-orders'
 import { canFilterTaskStatus, type TaskStatus } from '@/utils/workbench-status'
 import { canFilterProcurementStage, type ProcurementStage } from '@/utils/procurement-stage'
 export const fopOrderQueues = ['unpaid', 'review', 'procurement', 'procurement_shipping', 'allocation', 'allocation_review', 'dispatch', 'shipping', 'exceptions'] as const
@@ -74,6 +75,11 @@ export interface FopOrder {
   /** Actual fulfillment channels, never carrier categories or customer-facing custom channels. */
   logisticsChannels?: LogisticsChannel[] | null
   /** First Shopify consumer payment completion, distinct from FOP createdAt and paidAt; unknown = null. */
+  /** Actual phase completion timestamps supplied by the trusted gateway; no fallbacks. */
+  shopifySyncedAt?: string | null
+  procurementCompletedAt?: string | null
+  allocationApprovedAt?: string | null
+  outboundCompletedAt?: string | null
   reviewedAt?: string | null
   consumerPaidAt?: string | null
   /** Earliest actual payment among effective paid purchase obligations still awaiting supplier shipment. */
@@ -106,6 +112,8 @@ export interface FopOrder {
   storeName: string
   items: FopOrderItem[]
   amount: number
+  /** Stored FOP amounts in the order currency; absent details are unknown, never derived. */
+  amountBreakdown?: FopOrderAmountBreakdown | null
   currency: string
   paymentStatus: 'paid' | 'unpaid' | 'refunded'
   reviewStatus: 'pending' | 'approved'
@@ -127,13 +135,14 @@ export type WarehouseStage = typeof warehouseStages[number]
 export function isWarehouseStage(value: unknown): value is WarehouseStage {
   return typeof value === 'string' && (warehouseStages as readonly string[]).includes(value)
 }
-export const fopOrderSortFields = ['paidAt', 'reviewedAt', 'consumerPaidAt', 'dispatchDocumentStatus', 'allocationDocumentStatus', 'stockReadiness', 'allocationReviewStatus', 'outboundStatus'] as const
+export const fopOrderSortFields = ['completedAt', 'paidAt', 'reviewedAt', 'consumerPaidAt', 'dispatchDocumentStatus', 'allocationDocumentStatus', 'stockReadiness', 'allocationReviewStatus', 'outboundStatus'] as const
 export type FopOrderSortBy = typeof fopOrderSortFields[number]
 export function isFopOrderSortBy(value: unknown): value is FopOrderSortBy {
   return typeof value === 'string' && (fopOrderSortFields as readonly string[]).includes(value)
 }
 export function canSortFopQueue(queue: FopOrderQueue, field: FopOrderSortBy): boolean {
   const queues: Record<Exclude<FopOrderSortBy, 'paidAt'>, readonly FopOrderQueue[]> = {
+    completedAt: ['review', 'dispatch', 'procurement', 'allocation_review', 'shipping'],
     reviewedAt: ['procurement'],
     consumerPaidAt: ['unpaid', 'review', 'exceptions', 'dispatch', 'allocation'],
     dispatchDocumentStatus: ['dispatch', 'allocation', 'allocation_review'],
@@ -145,6 +154,7 @@ export function canSortFopQueue(queue: FopOrderQueue, field: FopOrderSortBy): bo
   return field === 'paidAt' || !!queues[field]?.includes(queue)
 }
 export interface FopOrderQuery {
+  completed?: boolean
   timeRange?: 'all' | '1w' | '1m' | '3m'
   shippingCountryCode?: string
   warehouseCode?: 'HZ' | 'SZ'
@@ -193,7 +203,9 @@ export function isFopOrderQueue(value: unknown): value is FopOrderQueue {
 }
 
 function validateQuery(query: FopOrderQuery) {
-  if (query.timeRange !== undefined && (query.queue !== 'unpaid' || !['all', '1w', '1m', '3m'].includes(query.timeRange))) throw new Error('Invalid payment time range')
+  if (query.completed && (!['review', 'dispatch', 'procurement', 'allocation_review', 'shipping'].includes(query.queue) || query.timeRange === 'all' || query.taskStatus || query.procurementStage || query.warehouseStage)) throw new Error('Invalid completed list filters')
+  if (query.sortBy === 'completedAt' && !query.completed) throw new Error('Completion sorting requires a completed list')
+  if (query.timeRange !== undefined && (!query.completed && query.queue !== 'unpaid' || !['all', '1w', '1m', '3m'].includes(query.timeRange))) throw new Error('Invalid payment time range')
   if (query.shippingCountryCode !== undefined && (query.queue !== 'review' || !/^[A-Z]{2}$/.test(query.shippingCountryCode))) throw new Error('Invalid destination country')
   if (query.taskStatus !== undefined && !canFilterTaskStatus(query.queue, query.taskStatus)) throw new Error('Invalid task status')
   if (query.procurementStage !== undefined && !canFilterProcurementStage(query.queue, query.procurementStage)) throw new Error('Invalid procurement stage')
@@ -209,7 +221,8 @@ function validateQuery(query: FopOrderQuery) {
   }
 }
 
-export function matchesFopQueue(order: FopOrder, queue: FopOrderQueue, warehouseStage?: WarehouseStage): boolean {
+export function matchesFopQueue(order: FopOrder, queue: FopOrderQueue, warehouseStage?: WarehouseStage, completed = false): boolean {
+  if (completed) return matchesCompletedQueue(order, queue)
   if (order.cancelled) return false
   if (queue === 'unpaid') return order.paymentStatus === 'unpaid'
   if (order.paymentStatus !== 'paid') return false
@@ -243,7 +256,15 @@ export function matchesFopQueue(order: FopOrder, queue: FopOrderQueue, warehouse
 export async function getFopOrders(query: FopOrderQuery): Promise<FopQueuePage> {
   validateQuery(query)
   const { default: api } = await import('./index')
-  const { queue, timeRange, shippingCountryCode, search, orderNumber, departmentId, ownerId, warehouseCode, paidAtOrder, sortBy, sortOrder, warehouseStage, procurementStage, taskStatus, page, pageSize } = query
-  return api.get('/autoflow/integrations/fop/fulfillment-orders', { params: { queue, timeRange, shippingCountryCode, search, orderNumber, departmentId, ownerId, warehouseCode, paidAtOrder, sortBy, sortOrder, warehouseStage, procurementStage, taskStatus, page, pageSize } })
+  const { queue, completed, timeRange, shippingCountryCode, search, orderNumber, departmentId, ownerId, warehouseCode, paidAtOrder, sortBy, sortOrder, warehouseStage, procurementStage, taskStatus, page, pageSize } = query
+  return api.get('/autoflow/integrations/fop/fulfillment-orders', { params: { queue, ...(completed ? { completed } : {}), timeRange, shippingCountryCode, search, orderNumber, departmentId, ownerId, warehouseCode, paidAtOrder, sortBy, sortOrder, warehouseStage, procurementStage, taskStatus, page, pageSize } })
 }
 export const getFopOrdersFromApi = getFopOrders
+
+export interface FopOrderAmountBreakdown {
+  productAmount: number | null
+  shippingFee: number | null
+  /** FOP hzkj_fixed_tax_fee; optional for older gateways. */
+  taxAmount?: number | null
+  discountAmount: number | null
+}

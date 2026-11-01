@@ -3,7 +3,7 @@ import { nextTick, onBeforeUnmount, onMounted, ref, useId } from 'vue'
 import { CircleHelp } from 'lucide-vue-next'
 import { useI18n } from 'vue-i18n'
 
-defineProps<{ label?: string }>()
+const props = withDefaults(defineProps<{ label?: string; placement?: 'top' | 'bottom' }>(), { placement: 'bottom' })
 const { locale } = useI18n()
 const id = `info-tip-${useId()}`
 const trigger = ref<HTMLButtonElement>()
@@ -28,8 +28,9 @@ async function open() {
   const rect = trigger.value.getBoundingClientRect()
   const box = tip.value.getBoundingClientRect()
   const left = Math.max(12, Math.min(rect.left, window.innerWidth - box.width - 12))
-  const top = rect.bottom + 8 + box.height <= window.innerHeight - 12
-    ? rect.bottom + 8 : Math.max(12, rect.top - box.height - 8)
+  const above = rect.top - box.height - 8
+  const top = props.placement === 'top' && above >= 12 ? above
+    : rect.bottom + 8 + box.height <= window.innerHeight - 12 ? rect.bottom + 8 : Math.max(12, above)
   position.value = { left: `${left}px`, top: `${top}px` }
 }
 function enter() { hovered = true; void open() }
@@ -63,8 +64,8 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <span class="info-tip">
-    <button ref="trigger" type="button" class="info-tip-trigger" :aria-label="label || (String(locale).startsWith('zh') ? '说明' : 'Information')" :aria-describedby="visible ? id : undefined" @mouseenter="enter" @mouseleave="leave" @focus="focus" @blur="blur" @click="open"><CircleHelp :size="14" :stroke-width="1.65" aria-hidden="true" /></button>
+  <span class="info-tip" :class="{ 'info-tip-custom': $slots.trigger }">
+    <button ref="trigger" type="button" class="info-tip-trigger" :aria-label="label || (String(locale).startsWith('zh') ? '说明' : 'Information')" :aria-describedby="visible ? id : undefined" @mouseenter="enter" @mouseleave="leave" @focus="focus" @blur="blur" @click="open"><slot name="trigger"><CircleHelp :size="14" :stroke-width="1.65" aria-hidden="true" /></slot></button>
     <Teleport :to="target">
       <div v-if="visible" :id="id" ref="tip" role="tooltip" class="info-tip-popover" :style="position" @mouseenter="enter" @mouseleave="leave"><slot /></div>
     </Teleport>
@@ -75,6 +76,8 @@ onBeforeUnmount(() => {
 .info-tip { display: inline-flex; flex: 0 0 auto; vertical-align: middle; margin-inline-start: 3px; }
 .info-tip-trigger { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--color-text-secondary, #748399); opacity: .8; cursor: help; transition: color .15s, opacity .15s, background .15s; }
 .info-tip-trigger:hover, .info-tip-trigger:focus-visible { color: var(--color-text, #243247); opacity: 1; background: color-mix(in srgb, var(--color-text-secondary, #748399) 9%, transparent); }
+.info-tip-custom { margin-inline-start: 0; }
+.info-tip-custom .info-tip-trigger { width: auto; height: auto; border-radius: 2px; color: var(--color-text); font: inherit; opacity: 1; }
 .info-tip-trigger:focus-visible { outline: 2px solid var(--color-chart-link, #7389bb); outline-offset: 2px; }
 .info-tip-popover { position: fixed; z-index: 10000; width: max-content; max-width: min(340px, calc(100vw - 24px)); max-height: calc(100vh - 24px); overflow: auto; padding: 11px 14px; border: 1px solid var(--color-border, #d9e1eb); border-radius: 8px; background: var(--color-surface, #fff); color: var(--color-text-secondary, #526279); box-shadow: 0 8px 24px #0002; font-size: 12px; font-weight: 400; line-height: 1.75; letter-spacing: normal; text-transform: none; white-space: normal; overflow-wrap: anywhere; text-align: start; }
 .info-tip-popover :deep(p) { margin: 0; color: inherit; font-size: inherit; line-height: inherit; }

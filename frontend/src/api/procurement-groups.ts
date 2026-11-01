@@ -7,10 +7,10 @@ export interface PurchaseHeader {
 export interface PurchaseGroup {
   id: string; kind: 'purchase' | 'uncreated'; purchase: PurchaseHeader | null
   orderCount: number; skuCount: number; quantity: number | null; shippedQuantity: number | null; pendingQuantity: number | null
-  shipment: 'pending' | 'partial' | 'shipped' | 'unknown'; earliestReceiptAt: string | null
+  shipment: 'pending' | 'partial' | 'shipped' | 'unknown'; earliestReceiptAt: string | null; completedAt?: string | null
 }
 export interface PurchaseGroupRow {
-  orderId: string; orderNumber: string; shopifyOrderNumber: string; customerName: string; storeName: string; ownerName: string; departmentName: string; warehouse: string; paidAt: string | null
+  orderId: string; orderNumber: string; shopifyOrderNumber: string; customerName: string; storeName: string; ownerName: string; departmentName: string; warehouse: string; paidAt: string | null; completedAt?: string | null
   lines: { fulfillmentLineId: string; purchaseLineId: string | null; sku: string; name: string; imageUrl: string | null; variant: string; quantity: number; shippedQuantity: number }[]
 }
 export const purchaseStageLabels = {
@@ -23,7 +23,7 @@ export type PurchaseStage = keyof typeof purchaseStageLabels
 export function isPurchaseStage(value: unknown): value is PurchaseStage {
   return typeof value === 'string' && Object.hasOwn(purchaseStageLabels, value)
 }
-export interface PurchaseFilters { purchaseStage?: PurchaseStage; queue: 'procurement' | 'procurement_shipping'; search?: string; departmentId?: string; ownerId?: string; warehouseCode?: string; sortOrder?: 'asc' | 'desc' }
+export interface PurchaseFilters { completed?: boolean; timeRange?: '1w' | '1m' | '3m'; purchaseStage?: PurchaseStage; queue: 'procurement' | 'procurement_shipping'; search?: string; departmentId?: string; ownerId?: string; warehouseCode?: string; sortOrder?: 'asc' | 'desc' }
 export interface PurchaseQuery extends PurchaseFilters { page: number; pageSize: number }
 export interface PurchasePage { items: PurchaseGroup[]; total: number; page: number; pageSize: number; refreshedAt: string; source: 'mock' | 'fop'; departments: { id: string; name: string }[]; totals: { groupCount: number; purchaseCount: number; orderCount: number; uncreatedCount: number; pendingQuantity: number } }
 export interface PurchaseDetails { group: PurchaseGroup; items: PurchaseGroupRow[]; total: number; page: number; pageSize: number }

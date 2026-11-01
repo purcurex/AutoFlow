@@ -154,7 +154,7 @@ export class DemoFopDataProvider extends FopDataProvider {
   }
   async listStockOrders(identity: Readonly<FopIdentity>, permission: Readonly<FopPermissionGrant>) {
     this.assertIdentity(identity, permission)
-    return demoStockOrders(await this.orders(identity)).filter(row => permission.allowedStockOrderIds?.includes(row.id))
+    return demoStockOrders(await this.orders(identity), new Date(this.paymentDemoAnchor)).filter(row => permission.allowedStockOrderIds?.includes(row.id))
   }
   async getAllocationInventory(identity: Readonly<FopIdentity>, permission: Readonly<FopPermissionGrant>, scopes: readonly AllocationInventoryScope[]) {
     this.assertIdentity(identity, permission)
@@ -308,6 +308,11 @@ export class DemoFopDataProvider extends FopDataProvider {
       const selectedProducts = [0, 3, 5].slice(0, productCount).map(offset => PRODUCTS[(index + offset) % PRODUCTS.length])
       const items = selectedProducts.map((product, line) => ({ productId: `${accountKey}:product:${PRODUCTS.indexOf(product) + 1}`, sku: product.sku, name: product.name, imageUrl: imageUrl(product), variant: product.variant, quantity: line === 0 ? quantity : line }))
       const cents = selectedProducts.reduce((sum, product, line) => sum + product.cents * items[line].quantity, 0)
+      // Synthetic examples retain existing totals; actual FOP details are never inferred this way.
+      const shippingCents = index % 3 === 0 ? 0 : Math.min(cents, 650)
+      const discountCents = index % 5 === 0 ? 500 : 0
+      const taxCents = index % 2 === 0 ? Math.min(cents - shippingCents, 250) : 0
+      const amountBreakdown = { productAmount: (cents - shippingCents - taxCents + discountCents) / 100, shippingFee: shippingCents / 100, taxAmount: taxCents / 100, discountAmount: discountCents / 100 }
       const carrierSeed = createHash('sha256').update(`${accountKey}:carrier:${index}:${createdAt}`).digest().readUInt32BE(0) % 100
       const carrier = FOP_CARRIERS[CARRIER_THRESHOLDS.findIndex(limit => carrierSeed < limit)]
       const purchaseExamples: ProcurementProgress[] = [
@@ -369,7 +374,7 @@ export class DemoFopDataProvider extends FopDataProvider {
         shopifyOrderNumber: `#${10400 + index}`, customerId: `${accountKey}:customer:${owner.id}:${customerIndex + 1}`, customerCode: `${owner.code}-C${String(customerIndex + 1).padStart(3, '0')}`, customerName: CUSTOMERS[customerIndex], storeName: STORES[index % STORES.length], items,
         ...(salesDepartmentCode ? { salesDepartmentCode } : {}),
         currentCustomerOwner: { id: owner.id, departmentId: owner.departmentId, departmentPathIds: departmentPath(workspace, owner.departmentId) }, departmentPathIds: departmentPath(workspace, owner.departmentId), organization: { id: organization.id, name: organization.name }, department: { id: department.id, name: department.name }, owner: { id: owner.id, name: owner.name },
-        amount: cents / 100, currency: 'USD', paymentStatus: paid ? 'paid' : 'unpaid', reviewStatus: completed || stage !== 0 ? 'approved' : 'pending',
+        amount: cents / 100, amountBreakdown, currency: 'USD', paymentStatus: paid ? 'paid' : 'unpaid', reviewStatus: completed || stage !== 0 ? 'approved' : 'pending',
         fulfillmentProgress: {
           allocationCreated: completed || stage !== 0,
           shopifySync,
@@ -382,6 +387,10 @@ export class DemoFopDataProvider extends FopDataProvider {
         dispatchStatus: shipping ? 'dispatched' : stage === 3 ? 'pending' : 'not_ready', shippingStatus: completed ? 'shipped' : stage === 4 ? 'pending' : 'not_ready',
         warehouseCode: (index + Math.floor(index / 12)) % 3 === 0 ? 'SZ' : 'HZ', warehouse: (index + Math.floor(index / 12)) % 3 === 0 ? '深圳仓' : '杭州仓', carrierCode: carrier.id, carrier: carrier.label,
         trackingNumber: shipping ? `HZ${accountKey.slice(0, 5).toUpperCase()}${String(800000000 + index)}` : null,
+        shopifySyncedAt: completed || stage >= 2 && stage <= 4 ? new Date(createdAt + 90 * 60_000).toISOString() : null,
+        procurementCompletedAt: completed || procurementProgress.purchaseOrder === 'ordered' && procurementProgress.supplierPayment === 'paid' ? new Date(createdAt + 60 * 60_000).toISOString() : null,
+        allocationApprovedAt: completed || stage === 4 ? new Date(createdAt + 120 * 60_000).toISOString() : null,
+        outboundCompletedAt: completed ? new Date(createdAt + 180 * 60_000).toISOString() : null,
         reviewedAt: completed || stage !== 0 ? new Date(createdAt + 30 * 60_000).toISOString() : null,
         salesperson: owner.name, consumerPaidAt: new Date(createdAt - 45 * 60_000).toISOString(), createdAt: new Date(createdAt).toISOString(), paidAt: paid ? new Date(createdAt + 15 * 60_000).toISOString() : null,
         cancelled: false, exception: !completed && stage === 5 ? { reason: (['stock', 'address', 'tracking'] as const)[Math.floor(index / 6) % 3], hours: 3 + index % 47 } : null,
@@ -400,8 +409,12 @@ export class DemoFopDataProvider extends FopDataProvider {
       if (at > today) continue
       make(216 + (y - (year - 2)) * 216 + month * 18 + n, at, true)
     }
+    // Recent completion examples for every employee, independent of monthly receipt samples.
+    for (let employee = 0; employee < employees.length; employee++) for (const [ageIndex, age] of [2, 12, 45, 100].entries()) {
+      make(7000 + employee + ageIndex * employees.length, today - age * DAY - 4 * 3_600_000, true)
+    }
     const source = orders.find(o => o.salesDepartmentCode && o.reviewStatus === 'approved' && o.paymentStatus === 'paid')
-    if (source) orders.push({ ...source, id: `${source.id}:prepaid-fulfillment`, orderNumber: `TO${businessDate(new Date(backlogDay - DAY)).slice(2).replaceAll('-', '')}039999`, amount: 60,
+    if (source) orders.push({ ...source, id: `${source.id}:prepaid-fulfillment`, orderNumber: `TO${businessDate(new Date(backlogDay - DAY)).slice(2).replaceAll('-', '')}039999`, amount: 60, amountBreakdown: { productAmount: 55, shippingFee: 5, taxAmount: 0, discountAmount: 0 },
       createdAt: new Date(backlogDay - DAY).toISOString(), paidAt: new Date(backlogDay - DAY + 3_600_000).toISOString(),
       customerId: `${accountKey}:prepaid-customer`, customerCode: 'PRE001', customerName: 'Prepaid Demo Customer', exception: null })
     orders.push(...demoShipmentOrders(orders, this.paymentDemoAnchor))

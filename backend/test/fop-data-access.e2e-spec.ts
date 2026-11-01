@@ -54,6 +54,36 @@ describe('FOP user isolation HTTP API (repository and provider boundaries stubbe
     items: [{ sku: 'sku-1', name: 'Product', imageUrl: null, variant: '', quantity: 1 }], ...extra,
   })
 
+  it('isolates completed lists and exports by owner/whitelist, defaults to a week and validates archive filters', async () => {
+    const recent = new Date(Date.now() - 2 * 86400000).toISOString()
+    const old = new Date(Date.now() - 40 * 86400000).toISOString()
+    records = [order('mine', { reviewStatus: 'approved', reviewedAt: recent }), order('old', { reviewStatus: 'approved', reviewedAt: old }),
+      order('other-owner', { reviewStatus: 'approved', reviewedAt: recent, owner: { id: 'bob-owner', name: 'Bob' } }),
+      order('private', { reviewStatus: 'approved', reviewedAt: recent }), order('unknown', { reviewStatus: 'approved' }), order('pending')]
+    provider.resolvePermissions = async (subject: any) => ({ subject, allowedOrderIds: records.filter(r => r.id !== 'private').map(r => r.id) })
+    const recentList = await list('queue=review&completed=true').expect(200)
+    expect(recentList.body.items.map((r: any) => r.id)).toEqual(['mine'])
+    expect(recentList.body.totals.orderCount).toBe(1)
+    const quarter = await list('queue=review&completed=true&timeRange=3m').expect(200)
+    expect(quarter.body.items.map((r: any) => r.id)).toEqual(['mine', 'old'])
+    await list('queue=review&completed=true&timeRange=all').expect(400)
+    await list('queue=unpaid&completed=true').expect(400)
+    await list('queue=review&completed=1').expect(400)
+    await list('queue=dispatch&completed=true').expect(403)
+    const exported = await request(app.getHttpServer()).post('/api/autoflow/integrations/fop/fulfillment-orders/export').auth(token(alice), { type: 'bearer' }).send({ queue: 'review', completed: true, mode: 'filtered' }).buffer(true).parse((response, callback) => {
+      const chunks: Buffer[] = []
+      response.on('data', chunk => chunks.push(Buffer.from(chunk)))
+      response.on('end', () => callback(null, Buffer.concat(chunks)))
+      response.on('error', callback)
+    }).expect(200)
+    const workbook = new ExcelJS.Workbook()
+    await workbook.xlsx.load(exported.body as unknown as ExcelJS.Buffer)
+    const ws = workbook.getWorksheet('订单清单')!
+    expect(ws.getColumn(1).values).toContain('MINE')
+    expect(ws.getColumn(1).values).not.toContain('OTHER-OWNER')
+    expect(ws.getColumn(1).values).not.toContain('OLD')
+    expect(ws.getRow(1).values).toContain('订单审核时间（UTC+8）')
+  })
   it('serves independently authorized current inventory and rejects invalid, stale and denied queries over HTTP', async () => {
     accounts.get(alice).workbenchRoles = ['allocation']
     records = [order('inventory-order', { customerId: 'c1', reviewStatus: 'approved', department: { id: 'd1', name: '业务一部' } })]
@@ -469,6 +499,28 @@ describe('FOP user isolation HTTP API (repository and provider boundaries stubbe
     expect((await get(`${base}/stock-customers?search=Client`).expect(200)).body.items).toEqual([{ id: 'c1', code: 'C1', name: 'Client' }])
     accounts.get(alice).workbenchRoles = ['warehouse']
     await get(`${base}/stock-orders`).expect(403)
+  })
+
+  it('validates sales stock stage and creation range, applying both inside the authorized scope', async () => {
+    const now = Date.now()
+    const stock = { tenantId: 'tenant-1', id: 'stock-new', stockNumber: 'BH261031000001', stockType: 'full_payment', customerId: 'c1', customerCode: 'C1', customerName: 'Client', storeName: null,
+      owner: { id: 'alice-owner', name: 'Alice' }, department: { id: 'd1', name: '业务一部' }, departmentPathIds: ['d1'], salesDepartmentCode: 'sales1',
+      items: [{ sku: 'sku1', name: 'Product', imageUrl: null, variant: '', quantity: 20 }], amount: 90, currency: 'USD', paidAt: null,
+      createdAt: new Date(now - 2 * 86400000).toISOString(), paymentStatus: 'unpaid', reviewStatus: 'pending', purchaseStatus: 'unpurchased', warehouseCode: 'HZ', warehouse: '杭州仓', cancelled: false }
+    provider.listStockOrders = async () => [stock, { ...stock, id: 'old', createdAt: new Date(now - 100 * 86400000).toISOString() },
+      { ...stock, id: 'received', paymentStatus: 'paid', reviewStatus: 'approved', purchaseStatus: 'received' },
+      { ...stock, id: 'foreign', owner: { id: 'other', name: 'Other' } }]
+    provider.resolvePermissions = async (subject: any) => ({ subject, allowedOrderIds: [], allowedStockOrderIds: ['stock-new', 'old', 'received', 'foreign'] })
+    const base = '/autoflow/integrations/fop/stock-orders'
+    const response = await get(`${base}?lifecycle=unpaid&timeRange=1w`).expect(200)
+    expect(response.body.items.map((row: any) => row.id)).toEqual(['stock-new'])
+    expect(response.body.items[0].createdAt).toBe(stock.createdAt)
+    expect(response.body.totals.orderCount).toBe(1)
+    expect((await get(`${base}`).expect(200)).body.total).toBe(3)
+    expect((await get(`${base}?lifecycle=received&timeRange=1m`).expect(200)).body.items.map((row: any) => row.id)).toEqual(['received'])
+    for (const suffix of ['lifecycle=bad', 'lifecycle=', 'lifecycle=unpaid&lifecycle=received', 'timeRange=bad', 'timeRange=', 'timeRange=1w&timeRange=3m', 'queue=procurement&timeRange=1w', 'queue=procurement&lifecycle=received']) await get(`${base}?${suffix}`).expect(400)
+    for (const body of [{ lifecycle: null }, { lifecycle: ['unpaid'] }, { timeRange: null }, { timeRange: 'bad' }, { queue: 'procurement', lifecycle: 'received' }])
+      await request(app.getHttpServer()).post(`/api${base}/export`).auth(token(alice), { type: 'bearer' }).send({ mode: 'filtered', ...body }).expect(400)
   })
 
   describe('purchase groups HTTP contract', () => {

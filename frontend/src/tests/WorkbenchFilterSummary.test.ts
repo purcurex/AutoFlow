@@ -13,8 +13,10 @@ it('summarizes applied query values without loading or data-source text and reta
   await router.push('/?warehouseCode=SZ'); await flushPromises()
   expect(w.element).toBe(original); expect(w.text()).toContain('营销中心'); expect(w.text()).toContain('深圳仓'); expect(w.text()).not.toContain('YT')
   await w.setProps({ queue: 'stock' }); await router.push('/?stockType=deposit&purchaseStatus=partial&orderStatus=paid&search=lamp'); await flushPromises()
-  expect(w.text()).toContain('押金备货'); expect(w.text()).toContain('部分采购'); expect(w.text()).toContain('lamp'); expect(w.text()).toContain('备货订单状态：已支付')
-  await w.setProps({ queue: 'stock_procurement' }); expect(w.text()).not.toContain('备货订单状态')
+  expect(w.text()).toContain('押金备货'); expect(w.text()).not.toContain('采购状态'); expect(w.text()).toContain('lamp'); expect(w.text()).not.toContain('备货订单状态')
+  await router.push('/?lifecycle=received&timeRange=1w'); await flushPromises()
+  expect(w.text()).toContain('备货阶段：采购完成已入库'); expect(w.text()).toContain('创建时间：近一周')
+  await w.setProps({ queue: 'stock_procurement' }); expect(w.text()).not.toMatch(/备货订单状态|备货阶段|创建时间/)
   w.unmount()
 })
 

@@ -1,7 +1,7 @@
 import { taskStatuses, type TaskStatus } from '../../fop-data/workbench-status'
 import { procurementStages, type ProcurementStage } from '../../fop-data/procurement-stage'
-import { Type } from 'class-transformer'
-import { ArrayMaxSize, ArrayMinSize, ArrayUnique, IsArray, IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min, MinLength } from 'class-validator'
+import { Transform, Type } from 'class-transformer'
+import { ArrayMaxSize, ArrayMinSize, ArrayUnique, IsArray, IsBoolean, IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min, MinLength } from 'class-validator'
 import { WORKBENCH_ROLES, WorkbenchRole } from '../workbench-role'
 import { ACCOUNT_ROLES, AccountRole } from '../account-role'
 
@@ -50,10 +50,17 @@ export const FULFILLMENT_QUEUE_ROLES = {
   shipping: 'warehouse',
 } as const
 
-export const FULFILLMENT_SORT_FIELDS = ['paidAt', 'reviewedAt', 'consumerPaidAt', 'dispatchDocumentStatus', 'allocationDocumentStatus', 'stockReadiness', 'allocationReviewStatus', 'outboundStatus'] as const
+export const FULFILLMENT_SORT_FIELDS = ['completedAt', 'paidAt', 'reviewedAt', 'consumerPaidAt', 'dispatchDocumentStatus', 'allocationDocumentStatus', 'stockReadiness', 'allocationReviewStatus', 'outboundStatus'] as const
 export type FulfillmentSortBy = typeof FULFILLMENT_SORT_FIELDS[number]
 
-export class FulfillmentOrderFiltersDto {
+export class CompletionFiltersDto {
+  @IsOptional()
+  @Transform(({ value }) => value === 'true' ? true : value === 'false' ? false : value)
+  @IsBoolean()
+  completed?: boolean
+}
+
+export class FulfillmentOrderFiltersDto extends CompletionFiltersDto {
   @IsOptional()
   @IsIn(['all', '1w', '1m', '3m'])
   timeRange?: 'all' | '1w' | '1m' | '3m'

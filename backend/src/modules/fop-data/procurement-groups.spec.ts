@@ -114,3 +114,18 @@ it('filters current purchase progress before totals and retains platform-neutral
     expect(purchaseGroupTotals(groups).orderCount).toBe(ids.length)
   }
 })
+
+it('filters completed purchase groups by actual completion time, retaining only fully completed authorized orders', () => {
+  const recent = new Date(Date.now() - 2 * 86400000).toISOString(), old = new Date(Date.now() - 40 * 86400000).toISOString()
+  const facts = { reviewStatus: 'approved', procurementProgress: { purchaseOrder: 'ordered', supplierPayment: 'paid', alibabaOrder: 'pushed' }, fulfillmentProgress: { shopifySync: 'synced' } }
+  const rows = [order('o1', { ...facts, procurementCompletedAt: recent }), order('o2', { ...facts, procurementCompletedAt: old })]
+  const links = snapshot(); links.orders[0].obligations = [link('p1')]
+  const grant = { subject, allowedOrderIds: ['o1', 'o2'], allowedPurchaseOrderIds: ['p1'] }
+  const groups = buildPurchaseGroups(rows, new Map(), grant, links, { queue: 'procurement', completed: true })
+  expect(groups).toHaveLength(1)
+  expect(groups[0].rows.map(row => row.orderId)).toEqual(['o1'])
+  expect(groups[0].completedAt).toBe(recent)
+  const quarter = buildPurchaseGroups(rows, new Map(), grant, links, { queue: 'procurement', completed: true, timeRange: '3m' })
+  expect(quarter[0].rows.map(row => row.orderId)).toEqual(['o1', 'o2'])
+  expect(buildPurchaseGroups(rows, new Map(), { ...grant, allowedPurchaseOrderIds: [] }, links, { queue: 'procurement', completed: true })).toEqual([])
+})
