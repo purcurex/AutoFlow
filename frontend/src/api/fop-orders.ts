@@ -1,6 +1,8 @@
 import { matchesCompletedQueue } from '@/utils/completed-orders'
 import { canFilterTaskStatus, type TaskStatus } from '@/utils/workbench-status'
 import { canFilterProcurementStage, type ProcurementStage } from '@/utils/procurement-stage'
+export const FOP_EXCEPTION_TYPES = ['procurement_exception', 'dispatch_exception', 'allocation_exception', 'logistics_exception', 'delivery_exception'] as const
+export type FopExceptionType = typeof FOP_EXCEPTION_TYPES[number]
 export const fopOrderQueues = ['unpaid', 'review', 'procurement', 'procurement_shipping', 'allocation', 'allocation_review', 'dispatch', 'shipping', 'exceptions'] as const
 export type FopOrderQueue = typeof fopOrderQueues[number]
 export interface FopOrderItem {
@@ -128,7 +130,7 @@ export interface FopOrder {
   createdAt: string
   paidAt: string | null
   cancelled: boolean
-  exception: { reason: 'stock' | 'address' | 'tracking'; hours: number } | null
+  exception: { type: FopExceptionType | null; reason: string | null; hours: number } | null
 }
 export const warehouseStages = ['all', 'pending_review', 'pending_outbound'] as const
 export type WarehouseStage = typeof warehouseStages[number]
@@ -224,10 +226,10 @@ function validateQuery(query: FopOrderQuery) {
 export function matchesFopQueue(order: FopOrder, queue: FopOrderQueue, warehouseStage?: WarehouseStage, completed = false): boolean {
   if (completed) return matchesCompletedQueue(order, queue)
   if (order.cancelled) return false
+  if (queue === 'exceptions') return order.exception != null
   if (queue === 'unpaid') return order.paymentStatus === 'unpaid'
   if (order.paymentStatus !== 'paid') return false
   if (queue === 'review') return order.reviewStatus === 'pending'
-  if (queue === 'exceptions') return order.shippingStatus !== 'shipped' && order.exception !== null
   const progress = order.fulfillmentProgress
   if (!progress) return false
   // Only reviewed fulfillment orders can await Shopify tracking/fulfillment sync.

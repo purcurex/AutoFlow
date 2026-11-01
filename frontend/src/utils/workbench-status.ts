@@ -1,15 +1,15 @@
 import type { DispatchDocument, FopOrder, FulfillmentProgress, ProcurementProgress } from '@/api/fop-orders'
 import { getProcurementStage, procurementStageLabels, procurementStageOptions, type ProcurementStage } from './procurement-stage'
 
-export const taskStatuses = [...new Set(['dispatch_incomplete', 'dispatch_complete', ...Object.keys(procurementStageLabels), 'dispatch_preparation', 'dispatch_missing', 'dispatch_draft', 'dispatch_submitted', 'dispatch_approved', 'dispatch_synced', 'logistics_pending', 'outbound_pending', 'outbound_partial', 'stock', 'address', 'tracking'])] as TaskStatus[]
-export type TaskStatus = ProcurementStage | 'dispatch_incomplete' | 'dispatch_complete' | 'dispatch_preparation' | 'dispatch_missing' | 'dispatch_draft' | 'dispatch_submitted' | 'dispatch_approved' | 'dispatch_synced' | 'logistics_pending' | 'outbound_pending' | 'outbound_partial' | 'stock' | 'address' | 'tracking'
+export const taskStatuses = [...new Set(['dispatch_incomplete', 'dispatch_complete', ...Object.keys(procurementStageLabels), 'dispatch_preparation', 'dispatch_missing', 'dispatch_draft', 'dispatch_submitted', 'dispatch_approved', 'dispatch_synced', 'logistics_pending', 'outbound_pending', 'outbound_partial', 'procurement_exception', 'dispatch_exception', 'allocation_exception', 'logistics_exception', 'delivery_exception'])] as TaskStatus[]
+export type TaskStatus = ProcurementStage | 'dispatch_incomplete' | 'dispatch_complete' | 'dispatch_preparation' | 'dispatch_missing' | 'dispatch_draft' | 'dispatch_submitted' | 'dispatch_approved' | 'dispatch_synced' | 'logistics_pending' | 'outbound_pending' | 'outbound_partial' | 'procurement_exception' | 'dispatch_exception' | 'allocation_exception' | 'logistics_exception' | 'delivery_exception'
 export const taskStatusLabels: Record<TaskStatus, readonly [string, string]> = { ...procurementStageLabels,
   dispatch_incomplete: ['未完成', 'Incomplete'], dispatch_complete: ['已完成', 'Complete'],
   dispatch_preparation: ['待制作发运单', 'Dispatch preparation pending'],
   dispatch_missing: ['待建发运单', 'Dispatch document needed'], dispatch_draft: ['暂存', 'Draft'], dispatch_submitted: ['已提交', 'Submitted'], dispatch_approved: ['已审核', 'Approved'], dispatch_synced: ['已同步', 'Synced'],
   logistics_pending: ['待获取物流单号', 'Logistics order number needed'],
   outbound_pending: ['待出库', 'Awaiting outbound'], outbound_partial: ['部分出库', 'Partly outbound'],
-  stock: ['库存不足', 'Insufficient stock'], address: ['地址待核验', 'Address verification'], tracking: ['物流单号异常', 'Tracking issue'],
+  procurement_exception: ['采购异常', 'Procurement exception'], dispatch_exception: ['发运异常', 'Dispatch exception'], allocation_exception: ['配货异常', 'Allocation exception'], logistics_exception: ['物流异常', 'Logistics exception'], delivery_exception: ['妥投异常', 'Delivery exception'],
 }
 /** Labels are contextual: procurement retains an actionable collaboration instruction. */
 export function taskStatusLabel(status: TaskStatus, queue: string): readonly [string, string] {
@@ -23,7 +23,7 @@ export function taskStatusOptions(queue: string): readonly TaskStatus[] {
   if (queue === 'dispatch') return ['dispatch_missing', 'dispatch_draft', 'dispatch_submitted', 'dispatch_approved']
   if (queue === 'allocation' || queue === 'allocation_review') return ['dispatch_incomplete', 'dispatch_complete']
   if (queue === 'shipping') return ['outbound_pending', 'outbound_partial']
-  if (queue === 'exceptions') return ['stock', 'address', 'tracking']
+  if (queue === 'exceptions') return ['procurement_exception', 'dispatch_exception', 'allocation_exception', 'logistics_exception', 'delivery_exception']
   return []
 }
 export function canFilterTaskStatus(queue: string, value: unknown): value is TaskStatus {
@@ -33,7 +33,7 @@ export function taskStatusHeading(queue: string): readonly [string, string] {
   if (queue === 'procurement') return ['采购进度', 'Procurement progress']
   if (queue === 'procurement_shipping') return ['供应商发货状态', 'Supplier shipment status']
   if (queue === 'shipping') return ['出库进度', 'Outbound progress']
-  if (queue === 'exceptions') return ['异常原因', 'Exception reason']
+  if (queue === 'exceptions') return ['异常类型', 'Exception type']
   return ['发运单状态', 'Dispatch document status']
 }
 export function getDispatchCompletionStatus(documents?: DispatchDocument[] | null): TaskStatus {
@@ -57,6 +57,6 @@ export function getTaskStatus(order: Pick<FopOrder, 'dispatchDocuments' | 'procu
   if (queue === 'allocation' || queue === 'allocation_review') return getDispatchCompletionStatus(order.dispatchDocuments)
   if (queue === 'dispatch') return getDispatchTaskStatus(order.dispatchDocuments, order.fulfillmentProgress.shopifySync)
   if (queue === 'shipping') return order.fulfillmentProgress.outbound === 'partial' ? 'outbound_partial' : order.fulfillmentProgress.outbound === 'pending' ? 'outbound_pending' : 'unknown'
-  if (queue === 'exceptions') return order.exception?.reason ?? 'unknown'
+  if (queue === 'exceptions') return order.exception?.type ?? 'unknown'
   return 'unknown'
 }

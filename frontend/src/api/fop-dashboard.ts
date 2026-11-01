@@ -1,3 +1,4 @@
+import type { FopExceptionType } from './fop-orders'
 import type { EffectiveChartAccess } from './fop-chart-access'
 /** Authenticated backend contract. No client-side mock fallback or scope selection. */
 export interface FopDashboardQuery { from: string; to: string; year: number }
@@ -11,7 +12,7 @@ export interface FopDashboardData {
   rates: { currency: string; cnyPerUnit: number }[]
   registrations: { date: string; count: number }[]
   registrationDepartments?: { id: string; name: string; counts: number[]; salespeople: { id: string; name: string; counts: number[] }[] }[]
-  exceptions: { id: string; customer: string; reason: 'stock' | 'address' | 'tracking'; hours: number }[]
+  exceptions: { id: string; customer: string; type: FopExceptionType | null; reason: string | null; hours: number }[]
   tasks: { id: string; kind: 'review' | 'dispatch' | 'procurement' | 'allocation' | 'shipping'; count: number; time: string; priority: 'high' | 'normal' }[]
   receipts: { timeZone?: 'UTC+8'; basis?: 'actual_received'; currency: 'USD'; months: string[]; previousMonth?: string; marketingCenter?: ReceiptSeries | null; departments: (ReceiptSeries & { salespeople: (ReceiptSeries & { name: string })[] })[] }
 }

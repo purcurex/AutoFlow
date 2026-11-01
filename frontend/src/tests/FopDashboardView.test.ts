@@ -18,7 +18,7 @@ const sample: FopDashboardData = {
   chartAccess: chartAccessFixture().charts, departmentReceipts: { currency: 'USD', months: [], departments: [] },
   source: 'fop', updatedAt: '2026-10-21T12:00:00Z',
   queues: { procurement: 5, review: 1, allocation: 2, dispatch: 3, shipping: 4 }, rates: [], registrations: [],
-  exceptions: [{ id: 'AUTHORIZED-ORDER', customer: 'My customer', reason: 'stock', hours: 10 }],
+  exceptions: [{ id: 'AUTHORIZED-ORDER', customer: 'My customer', type: 'allocation_exception', reason: null, hours: 10 }],
   tasks: [{ id: 'allocation', kind: 'allocation', count: 2, time: '', priority: 'normal' }],
   receipts: { currency: 'USD', months: [], departments: [] },
 }

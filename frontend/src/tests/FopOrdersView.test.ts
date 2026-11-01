@@ -44,6 +44,26 @@ vi.mock('@/api/index', () => ({ default: { get: vi.fn(async (_path, { params: qu
 }) } }))
 
 describe('fulfillment order list', () => {
+  it('filters exceptions by business type and renders the independent reason as plain text', async () => {
+    const source = { ...mockFopOrders[0]!, exception: { type: 'logistics_exception', reason: '<img src=x onerror=alert(1)> 轨迹连续三日未更新', hours: 28 } } as unknown as orders.FopOrder
+    const get = vi.spyOn(orders, 'getFopOrders').mockResolvedValue({ source: 'mock', items: [source], total: 1, page: 1, pageSize: 50, departments: [], refreshedAt: '', totals: { orderCount: 1, itemQuantity: 1, amountsByCurrency: [] } })
+    const { wrapper, router } = await setup('?queue=exceptions', 'sales')
+    const select = wrapper.get('select[aria-label="异常类型筛选"]')
+    expect(select.findAll('option').map(option => option.text())).toEqual(['全部状态', '采购异常', '发运异常', '配货异常', '物流异常', '妥投异常'])
+    expect(wrapper.get('td[data-label="异常类型"]').text()).toBe('物流异常')
+    expect(wrapper.get('td[data-label="异常原因"]').text()).toBe('<img src=x onerror=alert(1)> 轨迹连续三日未更新')
+    expect(wrapper.get('td[data-label="异常原因"]').find('img').exists()).toBe(false)
+    await select.setValue('logistics_exception'); await flushPromises()
+    expect(router.currentRoute.value.query.taskStatus).toBe('logistics_exception')
+    expect(get).toHaveBeenLastCalledWith(expect.objectContaining({ queue: 'exceptions', taskStatus: 'logistics_exception' }))
+  })
+  it('keeps shipped delivery exceptions in the exception list without changing their main workflow', () => {
+    const source = { ...mockFopOrders[0]!, paymentStatus: 'paid', reviewStatus: 'approved', shippingStatus: 'shipped', exception: { type: 'delivery_exception', reason: null, hours: 3 } } as unknown as orders.FopOrder
+    expect(orders.matchesFopQueue(source, 'exceptions')).toBe(true)
+    const main = { ...source, shippingStatus: 'pending', procurementProgress: { purchaseOrder: 'not_ordered', supplierPayment: 'unpaid', alibabaOrder: 'not_required' }, fulfillmentProgress: { allocationCreated: true, shopifySync: 'pending', supplierShipment: 'pending', stockReadiness: 'incomplete', allocationReview: 'pending', outbound: 'pending' } } as orders.FopOrder
+    for (const queue of ['exceptions', 'procurement', 'dispatch', 'allocation'] as const) expect(orders.matchesFopQueue(main, queue)).toBe(true)
+  })
+
   it.each([
     ['sales', '已完成清单', 'review'], ['dispatch', '已履约订单', 'dispatch'], ['procurement', '采购完成清单', 'procurement'],
     ['allocation', '配货完成清单', 'allocation_review'], ['warehouse', '已出库清单', 'shipping'],

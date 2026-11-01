@@ -611,3 +611,10 @@ allocationDocument唯一引用来自hzkj_alloc_bill.id/billno，按hzkj_order_id
 - `createdAt` 取备货单自身 `hzkj_stock_order_new.createtime`，元数据 `.dym:729–733` 已展示创建时间；不取关联履约、付款或单号。候选协议兼容可省略；BFF输出有效UTC ISO或null。`timeRange` 默认all，可1w/1m/3m，复用UTC+8滚动期间算法；边界包含，缺失/非法/未来排除近期，全量仍保留。
 - 整单入库依据 `StockOrderPurchaseStatusUtil.java:209–241` 的子项汇总：只有全部入库才返回STATUS_INSTOCK。采购审核或供应商发货不等于全部入库。原`partial`包含混合采购阶段，按FOP整单进度继续显示部分采购。
 - 列表/合计/分页/两种Excel共用过滤；Excel保留创建时间并注明阶段及期间，输出前复核沿用同一个时间快照。销售专属筛选传给采购备货返回400；库存查询不继承这些条件。实际员工网关createdAt发布和样本验证仍需联调，本次未修改FOP源码或切换真实数据。
+
+
+### 2026-10-31 异常类型与主流程并行
+
+- 异常分类固定为采购、发运、配货、物流、妥投；员工网关输出 `exception.type=procurement_exception/dispatch_exception/allocation_exception/logistics_exception/delivery_exception`，`reason` 为具体原因文本/null。只按类型筛选，原因原文展示及导出，不将库存不足自动认定为异常。
+- 所有非取消、有异常标记的授权履约单均进入异常清单，包括发货后物流/妥投异常；不受支付或发货状态排除。主流程的付款、审核、采购、配货、发运及出库事实独立，标记不会改变其它队列归属或操作条件，两个清单可以包含同一订单。
+- 已核对 FOP `AllocationConstants.java`、`AllocationService.java` 的配货异常及库存不足分支；暂无可核实的五类统一异常字段/原因字典契约，等待FOP功能补齐后对接。前端不编造原因或将旧stock/address/tracking推断成新类型，尚未提供的类型/原因留空；未修改后台实现。

@@ -14,7 +14,7 @@ import type { FopFreightCandidate } from './fop-freight.types'
 import { businessDate } from './fop-business-time'
 import { FOP_CARRIERS } from './fop-carriers'
 import { createHash } from 'crypto'
-import { FopAnalytics, FopDataProvider, FopIdentity, FopOrderCandidate, DispatchDocument, ProcurementProgress, FopReceiptCandidate, FopPermissionDeniedError, FopPermissionGrant, SALES_DEPARTMENTS, SalesDepartmentCode } from './fop-data.types'
+import { FOP_EXCEPTION_TYPES, FopAnalytics, FopDataProvider, FopIdentity, FopOrderCandidate, DispatchDocument, ProcurementProgress, FopReceiptCandidate, FopPermissionDeniedError, FopPermissionGrant, SALES_DEPARTMENTS, SalesDepartmentCode } from './fop-data.types'
 
 interface DemoWorkspace {
   nodes: { id: string; parentId: string | null; name: string; kind: 'organization' | 'department'; sortOrder: number }[]
@@ -393,7 +393,7 @@ export class DemoFopDataProvider extends FopDataProvider {
         outboundCompletedAt: completed ? new Date(createdAt + 180 * 60_000).toISOString() : null,
         reviewedAt: completed || stage !== 0 ? new Date(createdAt + 30 * 60_000).toISOString() : null,
         salesperson: owner.name, consumerPaidAt: new Date(createdAt - 45 * 60_000).toISOString(), createdAt: new Date(createdAt).toISOString(), paidAt: paid ? new Date(createdAt + 15 * 60_000).toISOString() : null,
-        cancelled: false, exception: !completed && stage === 5 ? { reason: (['stock', 'address', 'tracking'] as const)[Math.floor(index / 6) % 3], hours: 3 + index % 47 } : null,
+        cancelled: false, exception: (stage === 5 || index % 13 === 0) ? { type: FOP_EXCEPTION_TYPES[Math.floor(index / 6) % 5], reason: null, hours: 3 + index % 47 } : null,
       })
     }
     // Varied queue backlogs with independent customer, date and warehouse distributions.

@@ -34,7 +34,7 @@ import { isWorkbenchRole, WORKBENCH_ROLES, WorkbenchRole } from '../users/workbe
 import { FULFILLMENT_QUEUE_ROLES, ExportFulfillmentOrdersDto, FulfillmentOrderFiltersDto, ListFulfillmentOrdersDto } from '../users/dto/workbench.dto'
 import { buildFulfillmentWorkbook } from './fop-order-export'
 import { FopDashboardQueryDto } from './fop-data.dto'
-import { FOP_DATA_PROVIDER, FopDataProvider, FopIdentity, FopOrder, FopOrderCandidate, FopPermissionDeniedError, FopPermissionGrant, FopReceipt } from './fop-data.types'
+import { FOP_EXCEPTION_TYPES, FOP_DATA_PROVIDER, FopDataProvider, FopIdentity, FopOrder, FopOrderCandidate, FopPermissionDeniedError, FopPermissionGrant, FopReceipt } from './fop-data.types'
 
 import { businessScope, matchesBusinessScope, BusinessScope } from '../users/business-scope'
 import { OrderVolumeQueryDto, OrderVolumeDetailsDto, OrderCustomerSearchDto } from './order-volume.dto'
@@ -53,10 +53,10 @@ type ChartContext = { initial: Scope; permission: FopPermissionGrant; access: Ef
 
 function matchesQueue(order: FopOrder, queue: Queue, warehouseStage?: ListFulfillmentOrdersDto['warehouseStage']): boolean {
   if (order.cancelled) return false
+  if (queue === 'exceptions') return order.exception != null
   if (queue === 'unpaid') return order.paymentStatus === 'unpaid'
   if (order.paymentStatus !== 'paid') return false
   if (queue === 'review') return order.reviewStatus === 'pending'
-  if (queue === 'exceptions') return order.shippingStatus !== 'shipped' && order.exception !== null
   const progress = order.fulfillmentProgress
   if (!progress) return false
   // Only reviewed fulfillment orders can await Shopify tracking/fulfillment sync.
@@ -185,7 +185,7 @@ function publicOrder(order: FopOrderCandidate): FopOrder {
     allocationStatus: order.allocationStatus, dispatchStatus: order.dispatchStatus, shippingStatus: order.shippingStatus,
     warehouse: order.warehouse, carrier: order.carrier, trackingNumber: order.trackingNumber,
     salesperson: order.salesperson, createdAt: order.createdAt, paidAt: order.paidAt && Number.isFinite(Date.parse(order.paidAt)) ? order.paidAt : null, cancelled: order.cancelled,
-    exception: order.exception ? { reason: order.exception.reason, hours: order.exception.hours } : null,
+    exception: order.exception ? { type: order.exception.type !== null && FOP_EXCEPTION_TYPES.includes(order.exception.type) ? order.exception.type : null, reason: typeof order.exception.reason === 'string' ? order.exception.reason.trim() || null : null, hours: order.exception.hours } : null,
   }
 }
 
@@ -1059,7 +1059,7 @@ export class FopDataService {
       businessScope: scoped.initial.business, source: this.provider.source ?? 'fop', updatedAt: now.toISOString(), queues, rates, ...registrationData, tasks,
       exceptions: allowed('exceptions') ? orders.filter((order) => matchesQueue(order, 'exceptions'))
         .sort(comparePaymentTime)
-        .map((order) => ({ id: order.orderNumber, customer: order.customerName, reason: order.exception!.reason, hours: order.exception!.hours })) : [],
+        .map((order) => ({ id: order.orderNumber, customer: order.customerName, type: order.exception!.type, reason: order.exception!.reason, hours: order.exception!.hours })) : [],
       receipts, departmentReceipts, chartAccess,
     }
   }

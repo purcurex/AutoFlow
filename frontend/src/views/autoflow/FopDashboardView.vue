@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { taskStatusLabels } from '@/utils/workbench-status'
 import type { ChartId } from '@/api/fop-chart-access'
 import { onSessionReset } from '@/utils/session'
 import { formatChartCurrency } from '@/utils/currency'
@@ -102,7 +103,6 @@ const latestMarketingChange = computed(() => {
 const latestDepartmentChange = computed(() => selectedDepartment.value ? changesFor(selectedDepartment.value).at(-1) : undefined)
 const momHint = computed(() => text('差额 = 本月 − 上月；比例 = 差额 ÷ 上月。1 月对比上年 12 月；本月为截至目前数据。', 'Change = this month − prior month; rate = change ÷ prior month. January compares with December; the current month is to date.'))
 
-const reasons = computed(() => ({ stock: text('库存不足，等待补货', 'Insufficient stock · replenishment pending'), address: text('收货地址待核验', 'Delivery address needs verification'), tracking: text('物流单号获取异常', 'Tracking number could not be retrieved') }))
 const taskNames = computed(() => ({ review: text('审核履约订单', 'Review fulfillment orders'), dispatch: text('同步 Shopify 发货', 'Sync Shopify fulfillment'), procurement: text('跟进采购付款与供应商发货', 'Follow up purchase payment and supplier shipment'), allocation: text('跟进配货与配货单审核', 'Follow up allocation and approval'), shipping: text('跟进仓库打包与出库', 'Follow up warehouse packing and outbound') }))
 const cards = computed(() => [
   { id: 'review', label: text('待审核', 'Pending review'), hint: text('履约订单待审核', 'Fulfillment orders awaiting review'), value: data.value?.queues.review, icon: ClipboardCheck, color: 'review' },
@@ -287,7 +287,7 @@ const salespersonOption = computed(() => collectionsOption(salespersonSeries.val
         <div class="activity-column">
           <section class="dashboard-panel exception-panel">
             <div class="panel-top"><h2><AlertCircle :size="17" />{{ text('异常订单', 'Order exceptions') }}<RouterLink :to="workbenchOrderLocation('exceptions')" class="count-badge" :aria-label="text('查看全部异常订单', 'View all order exceptions')">{{ data ? data.exceptions.length : '—' }}</RouterLink></h2><span class="subtle-label">{{ text('待处理异常', 'ACTION REQUIRED') }}</span></div>
-            <div class="activity-list"><RouterLink v-for="item in data?.exceptions.slice(0, 5)" :key="item.id" :to="workbenchOrderLocation('exceptions', { orderNumber: item.id })" class="exception-row"><span class="status-dot" /><div><p class="row-heading">{{ item.id }} <span>{{ item.customer }}</span></p><p class="row-description">{{ reasons[item.reason] }}</p></div><span class="age-badge">{{ item.hours }}h</span></RouterLink><p v-if="data && !data.exceptions.length" class="empty-message">{{ text('暂无异常订单', 'No order exceptions') }}</p></div>
+            <div class="activity-list"><RouterLink v-for="item in data?.exceptions.slice(0, 5)" :key="item.id" :to="workbenchOrderLocation('exceptions', { orderNumber: item.id })" class="exception-row"><span class="status-dot" /><div><p class="row-heading">{{ item.id }} <span>{{ item.customer }}</span></p><p class="row-description">{{ item.type ? taskStatusLabels[item.type][zh ? 0 : 1] : '—' }}<template v-if="item.reason"> · {{ item.reason }}</template></p></div><span class="age-badge">{{ item.hours }}h</span></RouterLink><p v-if="data && !data.exceptions.length" class="empty-message">{{ text('暂无异常订单', 'No order exceptions') }}</p></div>
             <footer>{{ text('更新时间', 'Updated') }} {{ updated }} · UTC+8<RouterLink v-if="data && data.exceptions.length > 5" :to="workbenchOrderLocation('exceptions')" class="ml-3 text-indigo-600">{{ text(`查看全部 ${data.exceptions.length} 笔异常`, `View all ${data.exceptions.length} exceptions`) }}</RouterLink></footer>
           </section>
           <section class="dashboard-panel task-panel">

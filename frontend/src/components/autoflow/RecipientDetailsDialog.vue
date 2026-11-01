@@ -1,9 +1,11 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import OrganizationModal from '@/components/admin/OrganizationModal.vue'
 import ShippingCountryBadge from './ShippingCountryBadge.vue'
 import type { ShippingRecipient } from '@/api/fop-orders'
-defineProps<{ recipient: ShippingRecipient; countryCode?: string | null; orderNumber: string }>()
+const props = defineProps<{ recipient: ShippingRecipient; countryCode?: string | null; orderNumber: string }>()
+const streetAddress = computed(() => [props.recipient.addressLine1, props.recipient.addressLine2].filter(Boolean).join(' ') || '—')
 defineEmits<{ close: [] }>()
 const { locale } = useI18n()
 const text = (cn: string, en: string) => String(locale.value).startsWith('zh') ? cn : en
@@ -18,12 +20,12 @@ const text = (cn: string, en: string) => String(locale.value).startsWith('zh') ?
         <div><dt>{{ text('州 / 省', 'State / Province') }}</dt><dd>{{ recipient.state || '—' }}</dd></div>
         <div><dt>{{ text('城市', 'City') }}</dt><dd>{{ recipient.city || '—' }}</dd></div>
         <div><dt>{{ text('邮编', 'Postal code') }}</dt><dd>{{ recipient.postalCode || '—' }}</dd></div>
-        <div class="recipient-address"><dt>{{ text('详细地址', 'Street address') }}</dt><dd>{{ recipient.addressLine1 || '—' }}<span v-if="recipient.addressLine2">{{ recipient.addressLine2 }}</span></dd></div>
+        <div class="recipient-address"><dt>{{ text('详细地址', 'Street address') }}</dt><dd>{{ streetAddress }}</dd></div>
       </dl>
     </div>
   </OrganizationModal>
 </template>
 <style scoped>
 .recipient-summary{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;padding-bottom:20px;border-bottom:1px solid var(--color-border)}.recipient-summary>div{min-width:0}.recipient-summary strong{font-size:19px;font-weight:600;overflow-wrap:anywhere}.recipient-summary p{font-size:12px;color:var(--color-text-secondary);margin:6px 0 0;overflow-wrap:anywhere}
-.recipient-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px 24px;margin:22px 0 0}.recipient-fields dt{font-size:12px;color:var(--color-text-secondary);margin-bottom:7px}.recipient-fields dd{margin:0;font-size:14px;line-height:1.65;overflow-wrap:anywhere;white-space:pre-wrap}.recipient-address{grid-column:1/-1}.recipient-address span{display:block}@media(max-width:480px){.recipient-fields{grid-template-columns:1fr;gap:16px}}
+.recipient-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px 24px;margin:22px 0 0}.recipient-fields dt{font-size:12px;color:var(--color-text-secondary);margin-bottom:7px}.recipient-fields dd{margin:0;font-size:14px;line-height:1.65;overflow-wrap:anywhere;white-space:pre-wrap}.recipient-address{grid-column:1/-1}.recipient-address dd{white-space:normal}@media(max-width:480px){.recipient-fields{grid-template-columns:1fr;gap:16px}}
 </style>

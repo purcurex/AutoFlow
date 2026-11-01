@@ -135,7 +135,7 @@ const descriptions = computed(() => ({
   allocation: text('已生成配货单但尚未齐套，可按选中订单查询即时库存，配货操作请在 FOP 完成。', 'Existing allocation documents awaiting stock completion. Query current inventory for selected orders and allocate in FOP.'),
   dispatch: text('跟进发运单制作与 Shopify 同步，重点关注已审核未同步的订单。', 'Track dispatch preparation and Shopify sync, especially approved orders still awaiting sync.'),
   shipping: text('配货单已审核，等待仓库打包及出库，包含尚未全部出库的订单。', 'Approved allocations awaiting packing and outbound completion, including partially shipped orders.'),
-  exceptions: text('尚未发货且存在异常的履约订单。', 'Unshipped fulfillment orders with an active exception.'),
+  exceptions: text('按异常类型跟进履约订单，业务进度仍在对应清单展示。', 'Track fulfillment exceptions by type; workflow progress remains visible in the corresponding lists.'),
 }))
 const search = ref('')
 const data = ref<FopQueuePage>()
@@ -191,7 +191,7 @@ const listColumns = computed(() => {
   if (showDispatchNumbers.value) columns.push({ key: 'dispatch-document', width: 148 })
   if (hasStatus.value) columns.push({ key: 'status', width: 112 })
   columns.push({ key: 'customer', width: 116 }, { key: 'store', width: 116 })
-  if (queue.value === 'exceptions') columns.push({ key: 'exception-age', width: 80 })
+  if (queue.value === 'exceptions') columns.push({ key: 'exception-reason', width: 172 }, { key: 'exception-age', width: 80 })
   columns.push({ key: 'warehouse', width: 72 })
   if (queue.value === 'review' || queue.value === 'unpaid') columns.push({ key: 'channel', width: 144 })
   if (queue.value === 'dispatch') columns.push({ key: 'logistics', width: 184 })
@@ -500,7 +500,7 @@ const formatMoney = (amount: number, currency: string) => formatCurrency(amount,
                 <th v-if="showDispatchNumbers">{{ text('发运单编号', 'Dispatch document number') }}</th>
                 <OrderSortHeader v-if="leadingSortField" :label="statusHeading" :direction="sortDirection(leadingSortField)" :disabled="busy" :hint="leadingSortField === 'dispatchDocumentStatus' ? dispatchSortHint : undefined" @sort="sortStatus(leadingSortField)" /><th v-else-if="hasStatus">{{ statusHeading }}</th>
                 <th>{{ text('客户名称', 'Customer name') }}</th><th>{{ text('店铺', 'Store') }}</th>
-                <th v-if="queue === 'exceptions'">{{ text('异常时长', 'Exception age') }}</th><th>{{ text('发货仓库', 'Shipping warehouse') }}</th>
+                <th v-if="queue === 'exceptions'">{{ text('异常原因', 'Exception reason') }}</th><th v-if="queue === 'exceptions'">{{ text('异常时长', 'Exception age') }}</th><th>{{ text('发货仓库', 'Shipping warehouse') }}</th>
                 <th v-if="queue === 'review'">{{ text('物流渠道', 'Logistics channel') }}</th>
                 <th v-if="queue === 'unpaid'">{{ text('自定义物流渠道', 'Custom logistics channel') }}</th>
                 <th v-if="queue === 'dispatch'">{{ text('物流信息', 'Logistics information') }}</th><th v-if="queue === 'shipping'">{{ text('物流商', 'Carrier') }}</th><th v-if="queue === 'shipping'">{{ text('跟踪号', 'Tracking number') }}</th>
@@ -531,7 +531,7 @@ const formatMoney = (amount: number, currency: string) => formatCurrency(amount,
                 <td v-else-if="hasStatus" :data-label="statusHeading"><WorkbenchStatusBadge class="status-pill pending" tone="info">{{ statusLabel(order) }}</WorkbenchStatusBadge></td>
                 <td :data-label="text('客户名称', 'Customer name')"><button type="button" class="copy-customer" :aria-label="`${text('复制客户名称', 'Copy customer name')} ${order.customerName}`" :title="text('复制客户名称', 'Copy customer name')" @click="copyOrderValue(order, 'customerName')"><span>{{ order.customerName }}</span><Check v-if="copiedValue === `customerName:${order.id}`" :size="14" /><Copy v-else :size="14" /></button></td>
                 <td :data-label="text('店铺', 'Store')">{{ order.storeName }}</td>
-                <td v-if="queue === 'exceptions'" :data-label="text('异常时长', 'Exception age')">{{ order.exception?.hours }}h</td>
+                <td v-if="queue === 'exceptions'" class="exception-reason" :data-label="text('异常原因', 'Exception reason')">{{ order.exception?.reason || '—' }}</td><td v-if="queue === 'exceptions'" :data-label="text('异常时长', 'Exception age')">{{ order.exception?.hours }}h</td>
                 <td :data-label="text('发货仓库', 'Shipping warehouse')">{{ order.warehouse }}</td>
                 <td v-if="queue === 'review'" class="logistics-channel-cell" :data-label="text('物流渠道', 'Logistics channel')"><div v-for="(channel, index) in order.logisticsChannels" :key="index" class="logistics-channel-entry"><span class="logistics-channel-name" :title="channel.name || undefined">{{ channel.name || '—' }}</span><span class="logistics-channel-code" :title="channel.code || undefined">{{ channel.code || '—' }}</span></div><span v-if="!order.logisticsChannels?.length">—</span></td>
                 <td v-if="queue === 'unpaid'" class="logistics-channel-cell" :data-label="text('自定义物流渠道', 'Custom logistics channel')">{{ order.customLogisticsChannelName || '—' }}</td>
@@ -561,6 +561,7 @@ const formatMoney = (amount: number, currency: string) => formatCurrency(amount,
 </template>
 
 <style scoped>
+.exception-reason { white-space: normal; overflow-wrap: anywhere; line-height: 1.6; color: var(--color-text-secondary); }
 
 .export-feedback{margin:0;padding:10px 20px;color:var(--color-text-secondary);font-size:12px;border-bottom:1px solid var(--color-border)}.export-error{color:var(--color-warning,#c69568)}.clear-selection{color:var(--color-chart-link)}input.order-checkbox{width:15px;height:15px;min-width:15px;margin-right:10px;padding:0;vertical-align:middle;accent-color:#8398c9}
 

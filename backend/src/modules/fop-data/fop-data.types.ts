@@ -5,6 +5,8 @@ import type { SupplierFollowUpResult } from './supplier-follow-up'
 import type { FopFreightCandidate } from './fop-freight.types'
 import type { FopProfitCandidate } from './sales-performance.types'
 import type { FopStockOrderCandidate, FopStockInventoryCandidate } from './fop-stock.types'
+export const FOP_EXCEPTION_TYPES = ['procurement_exception', 'dispatch_exception', 'allocation_exception', 'logistics_exception', 'delivery_exception'] as const
+export type FopExceptionType = typeof FOP_EXCEPTION_TYPES[number]
 export const SALES_DEPARTMENTS = [
   { id: 'sales1', name: '业务一部' }, { id: 'sales2', name: '业务二部' },
   { id: 'sales3', name: '业务三部' }, { id: 'sales4', name: '业务四部' },
@@ -199,7 +201,7 @@ export interface FopOrder {
   createdAt: string
   paidAt: string | null
   cancelled: boolean
-  exception: { reason: 'stock' | 'address' | 'tracking'; hours: number } | null
+  exception: { type: FopExceptionType | null; reason: string | null; hours: number } | null
 }
 
 /** Provider-only tenant provenance. It is validated and removed before client output. */
