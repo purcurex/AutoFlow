@@ -3,6 +3,7 @@ import { businessDate } from './fop-business-time'
 import { publicFreight } from './fop-freight'
 import { publicReceipt } from './fop-receipts'
 import { matchesBusinessScope, type BusinessScope } from '../users/business-scope'
+import { kingdeeDepartmentPath } from './fop-kingdee-scope'
 import { FopIntegrationUnavailableError, FopPermissionDeniedError, type FopAnalyticsData, type FopAnalyticsResource, type FopIdentity, type FopOrderCandidate, type FopReceiptCandidate, type FopOrderItem, type SalesDepartmentCode } from './fop-data.types'
 
 type Json = Record<string, unknown>
@@ -70,19 +71,23 @@ export class KingdeeAnalyticsDecoder {
   /** 只按白名单构造事实；组织、本人/部门范围在上游之后再次复核。 */
   append(target: FopAnalyticsData, resource: FopAnalyticsResource, value: unknown, identity: Readonly<FopIdentity>, scope: Readonly<BusinessScope>, organizations: readonly string[]): string {
     const row = analyticsObject(value), organization = ref(row.organization), department = ref(row.department), owner = ref(row.owner)
-    if (!organizations.includes(organization.id) || !matchesBusinessScope(scope, { department, owner })) throw new FopPermissionDeniedError('Analytics row outside authorized scope')
-    const salesDepartmentCode = this.mapped(this.departments, department.id)
+    const departmentPathIds = kingdeeDepartmentPath(row.departmentPathIds, organization.id, department.id)
+    if (!organizations.includes(organization.id) || !matchesBusinessScope(scope, { department, owner, departmentPathIds })) throw new FopPermissionDeniedError('Analytics row outside authorized scope')
+    // 子部门使用可信祖先链中最近的已配置业务部门，不按部门名称或编号猜测归属。
+    const mappedDepartment = [department.id, ...(departmentPathIds ?? []).slice().reverse()].find(id => Object.prototype.hasOwnProperty.call(this.departments, id))
+    const salesDepartmentCode = this.mapped(this.departments, mappedDepartment ?? department.id)
     if (resource === 'registrations') {
       const id = analyticsId(row.id), registeredAt = date(row.registeredAt)
-      target.registrations.push({ id, registeredAt, organization, department, owner, salesDepartmentCode })
+      target.registrations.push({ id, registeredAt, organization, department, departmentPathIds, owner, salesDepartmentCode })
       return id
     }
     const customer = ref(row.customer), warehouse = ref(row.warehouse), warehouseCode = this.mapped(this.warehouses, warehouse.id)
-    const common = { tenantId: identity.tenantId, organization, department, owner, salesDepartmentCode, customerId: customer.id, customerCode: customer.number ?? '', customerName: customer.name, warehouse: warehouse.name, warehouseCode }
+    const common = { tenantId: identity.tenantId, organization, department, departmentPathIds, owner, salesDepartmentCode, customerId: customer.id, customerCode: customer.number ?? '', customerName: customer.name, warehouse: warehouse.name, warehouseCode }
     if (resource === 'orders') {
       const carrier = ref(row.carrier), currency = text(row.currency)
       if (!/^[A-Z]{3}$/.test(currency)) throw new Error('Invalid order currency')
       const result: FopOrderCandidate = { ...common, id: analyticsId(row.id), orderNumber: text(row.orderNumber), shopifyOrderNumber: text(row.shopifyOrderNumber, true),
+        fulfillmentProgress: { allocationCreated: null, shopifySync: 'unknown', supplierShipment: 'unknown', stockReadiness: 'unknown', allocationReview: 'unknown', outbound: 'unknown' },
         storeName: text(row.storeName, true), carrierCode: this.mapped(this.carriers, carrier.id), carrier: carrier.name, trackingNumber: null,
         items: lines(row.items), amount: decimal(row.amount), currency, createdAt: date(row.createdAt), paidAt: date(row.paidAt),
         paymentStatus: 'paid', reviewStatus: 'approved', procurementStatus: 'unknown', allocationStatus: 'unknown', dispatchStatus: 'unknown', shippingStatus: 'unknown',
@@ -100,7 +105,7 @@ export class KingdeeAnalyticsDecoder {
         carrierCode: carrier ? this.mapped(this.carriers, carrier.id) : null, amount: decimal(row.amount), orderAmount: decimal(row.orderAmount), handlingFee: decimal(row.handlingFee),
         currency: text(row.currency), paidAt: date(row.paidAt), reviewStatus: 'approved' as const, receiptReviewStatus: 'approved' as const, paymentStatus: 'paid' as const,
         cancelled: false, items: lines(row.items) }
-      target.receipts.push({ tenantId: identity.tenantId, ...publicReceipt(result) })
+      target.receipts.push({ tenantId: identity.tenantId, ...publicReceipt(result), departmentPathIds })
       return id
     }
     const carrier = ref(row.carrier), id = analyticsId(row.id)
@@ -109,7 +114,7 @@ export class KingdeeAnalyticsDecoder {
       originalAmount: decimal(row.originalAmount), originalCurrency: text(row.originalCurrency), fxRateToUsd: decimal(row.fxRateToUsd), fxRateDate: text(row.fxRateDate), fxRateSource: text(row.fxRateSource),
       amount: decimal(row.amount), currency: 'USD', confirmedAt: date(row.confirmedAt), reviewStatus: 'approved', costStatus: 'confirmed' })
     if (result.fxRateDate !== businessDate(result.confirmedAt!)) throw new Error('Freight FX date mismatch')
-    target.freight.push({ tenantId: identity.tenantId, ...result })
+    target.freight.push({ tenantId: identity.tenantId, ...result, departmentPathIds })
     return id
   }
 }

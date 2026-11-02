@@ -4,6 +4,7 @@ import {
   Get,
   Header,
   Put,
+  Delete,
   Post,
   Body,
   UseGuards,
@@ -28,6 +29,10 @@ import { ListWorkbenchAccountsDto, UpdateWorkbenchRolesDto } from './dto/workben
 import { UpdateBusinessScopeDto } from './dto/business-scope.dto'
 import { UpdateFopBindingDto } from './dto/fop-binding.dto'
 import { UpdateManagementRoleDto } from './dto/management-role.dto'
+import { UpdateChartPermissionsDto } from './dto/chart-permissions.dto'
+import { FopAccountBindingService } from './fop-account-binding.service'
+import { BindFopEmployeeDto, FopEmployeesQueryDto } from '../fop-data/fop-employee-binding'
+import { UpdateAccountAccessDto } from './dto/account-access.dto'
 
 // 确保上传目录存在
 const uploadDir = './uploads/avatars'
@@ -47,7 +52,30 @@ export class UsersController {
   constructor(
     private readonly usersService: UsersService,
     private readonly workbenchAccess: WorkbenchAccessService,
+    private readonly fopAccounts: FopAccountBindingService,
   ) {}
+
+  /** 仅管理员可读取金蝶人员候选，不向普通员工开放全员目录。 */
+  @UseGuards(JwtAuthGuard)
+  @Get('fop-employees')
+  @Header('Cache-Control', 'private, no-store')
+  listFopEmployees(@Request() req: ExpressRequest, @Query() query: FopEmployeesQueryDto) {
+    return this.fopAccounts.listEmployees(req.user!.userId, query, req.user!.sessionVersion ?? 0)
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Put(':id/kingdee-binding')
+  @Header('Cache-Control', 'private, no-store')
+  bindKingdeeEmployee(@Request() req: ExpressRequest, @Param('id', ParseUUIDPipe) id: string, @Body() body: BindFopEmployeeDto) {
+    return this.fopAccounts.bind(req.user!.userId, id, body, req.user!.sessionVersion ?? 0)
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Delete(':id/kingdee-binding')
+  @Header('Cache-Control', 'private, no-store')
+  unbindKingdeeEmployee(@Request() req: ExpressRequest, @Param('id', ParseUUIDPipe) id: string) {
+    return this.fopAccounts.unbind(req.user!.userId, id, req.user!.sessionVersion ?? 0)
+  }
 
   @UseGuards(JwtAuthGuard)
   @Get('workbench-accounts')
@@ -65,6 +93,26 @@ export class UsersController {
     @Body() body: UpdateWorkbenchRolesDto,
   ) {
     return this.workbenchAccess.updateRoles(req.user!.userId, id, body.workbenchRoles)
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Put(':id/account-access')
+  @Header('Cache-Control', 'private, no-store')
+  async updateAccountAccess(@Request() req: ExpressRequest, @Param('id', ParseUUIDPipe) id: string, @Body() body: UpdateAccountAccessDto) {
+    await this.workbenchAccess.requireAdmin(req.user!.userId)
+    return this.usersService.updateAccountAccess(req.user!.userId, id, body)
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Put(':id/chart-permissions')
+  @Header('Cache-Control', 'private, no-store')
+  async updateChartPermissions(
+    @Request() req: ExpressRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: UpdateChartPermissionsDto,
+  ) {
+    await this.workbenchAccess.requireAdmin(req.user!.userId)
+    return this.usersService.updateChartPermissions(req.user!.userId, id, body.chartPermissions)
   }
 
   @UseGuards(JwtAuthGuard)
@@ -92,6 +140,10 @@ export class UsersController {
     @Body() body: UpdateFopBindingDto,
   ) {
     await this.workbenchAccess.requireAdmin(req.user!.userId)
+    if (!body.tenantId && !body.userId) {
+      await this.fopAccounts.unbind(req.user!.userId, id, req.user!.sessionVersion ?? 0)
+      return this.usersService.getWorkbenchAccount(id)
+    }
     return this.usersService.updateFopBinding(id, body.tenantId, body.userId)
   }
 

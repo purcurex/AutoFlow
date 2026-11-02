@@ -80,7 +80,8 @@ export function installSelectDropdowns(root: HTMLElement): () => void {
     popup.setAttribute('role', 'listbox')
     popup.setAttribute('aria-label', select.getAttribute('aria-label') || select.labels?.[0]?.textContent?.trim() || '选项 / Options')
     popup.addEventListener('mousedown', e => e.preventDefault())
-    document.body.append(popup)
+    // A modal dialog makes body siblings inert; keep its options in the same top layer.
+    ;(select.closest('dialog') ?? document.body).append(popup)
     select.setAttribute('aria-expanded', 'true'); select.setAttribute('aria-controls', popup.id)
     activeIndex = enabled(select.options[select.selectedIndex]!) ? select.selectedIndex : [...select.options].findIndex(enabled)
     render()

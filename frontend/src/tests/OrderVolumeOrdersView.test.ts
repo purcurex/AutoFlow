@@ -1,3 +1,4 @@
+vi.mock('@/api/fop-chart-access', async importOriginal => { const { chartAccessFixture } = await import('./chart-access-fixtures'); return { ...await importOriginal<object>(), getChartAccess: vi.fn(async () => chartAccessFixture()) } })
 import { mount, flushPromises } from '@vue/test-utils'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { createI18n } from 'vue-i18n'
@@ -14,7 +15,7 @@ it('retains customer dates in workbench details without inventing a year or time
   const query = vi.mocked(getOrderVolumeDetails).mock.calls.at(-1)![0]
   expect(query).toMatchObject({ from: '2025-12-31', to: '2026-01-02', seriesId: 'other', workbenchRole: 'sales' })
   expect(query).not.toHaveProperty('grain'); expect(query).not.toHaveProperty('year')
-  expect(wrapper.text()).toContain('2025-12-31 — 2026-01-02')
+  expect(wrapper.get('.ov-applied-filters').text()).toContain('2025-12-31 — 2026-01-02')
   expect(wrapper.find('tfoot').text()).toContain('0 笔订单')
   wrapper.unmount()
 })

@@ -9,9 +9,11 @@ import {
   Unique,
 } from 'typeorm'
 import type { BusinessRole } from './business-scope'
+import type { FopEmployeeBindingDetails } from '../fop-data/fop-employee-binding'
 import { Note } from '../notes/note.entity'
 import { Folder } from '../folders/folder.entity'
 import type { WorkbenchRole } from './workbench-role'
+import type { ChartPermissionOverride } from './chart-permissions'
 
 export enum UserRole {
   ADMIN = 'admin',
@@ -19,6 +21,7 @@ export enum UserRole {
 }
 
 @Entity('users')
+@Check('chk_users_chart_permissions', 'autoflow_valid_chart_permissions(chart_permissions)')
 @Check('chk_users_business_role', "business_role IN ('none','admin','department_manager','salesperson')")
 @Check('chk_users_business_ids', "(business_department_id IS NULL OR (char_length(business_department_id) > 0 AND business_department_id = btrim(business_department_id))) AND (business_employee_id IS NULL OR (char_length(business_employee_id) > 0 AND business_employee_id = btrim(business_employee_id)))")
 @Unique('uq_users_fop_identity', ['fopTenantId', 'fopUserId'])
@@ -72,6 +75,11 @@ export class User {
   @Column()
   password: string
 
+  @Column({ name: 'account_disabled', default: false }) accountDisabled: boolean
+  // Explicit server-maintained directory link for non-employee administrators.
+  @Column({ name: 'organization_workspace_owner_id', type: 'uuid', nullable: true }) organizationWorkspaceOwnerId: string | null
+  @Column({ name: 'session_version', type: 'integer', default: 0 }) sessionVersion: number
+
   @Column({ unique: true })
   username: string
 
@@ -88,6 +96,9 @@ export class User {
   @Column({ name: 'workbench_roles', type: 'text', array: true, default: () => "ARRAY['sales']::text[]" })
   workbenchRoles: WorkbenchRole[]
 
+  @Column({ name: 'chart_permissions', type: 'jsonb', default: () => "'[]'::jsonb" })
+  chartPermissions: ChartPermissionOverride[]
+
   @Column({ name: 'business_role', type: 'varchar', length: 24, default: 'salesperson' })
   businessRole: BusinessRole
 
@@ -102,6 +113,10 @@ export class User {
 
   @Column({ name: 'fop_user_id', type: 'varchar', length: 128, nullable: true })
   fopUserId: string | null
+
+  /** 一人一绑定的可信身份及本地/金蝶映射；历史裸ID绑定需重新验证，不推测员工身份。 */
+  @Column({ name: 'fop_binding_details', type: 'jsonb', nullable: true })
+  fopBindingDetails: FopEmployeeBindingDetails | null
 
   @OneToMany(() => Note, (note) => note.user)
   notes: Note[]

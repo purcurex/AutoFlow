@@ -12,3 +12,11 @@ export function formatCurrency(amount: number, currency?: string | null, locale 
 export function formatChartCurrency(amount: number, locale = 'zh-CN'): string {
   return new Intl.NumberFormat(locale, { style: 'currency', currency: DEFAULT_CURRENCY, currencyDisplay: 'narrowSymbol', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount)
 }
+
+/** Display USD as the base currency; keep the original rate unchanged for monetary calculations. */
+export function formatUsdExchangeRate(fxRateToUsd: number, originalCurrency: string): string {
+  const quoteCurrency = originalCurrency?.trim().toUpperCase()
+  if (!/^[A-Z]{3}$/.test(quoteCurrency) || !Number.isFinite(fxRateToUsd) || fxRateToUsd <= 0) return '—'
+  const rate = 1 / fxRateToUsd
+  return Number.isFinite(rate) ? `USD/${quoteCurrency} ${rate.toFixed(4)}` : '—'
+}

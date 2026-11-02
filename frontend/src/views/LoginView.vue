@@ -35,21 +35,21 @@ async function handleLogin() {
 </script>
 
 <template>
-  <main class="grid min-h-screen bg-white dark:bg-[#090b0f] lg:grid-cols-[minmax(0,1fr)_520px]">
-    <section class="relative hidden overflow-hidden border-r border-sky-200 bg-[#eaf4ff] px-12 py-10 text-slate-950 lg:flex lg:flex-col">
+  <main class="grid min-h-screen bg-white dark:bg-[var(--color-background)] lg:grid-cols-[minmax(0,1fr)_520px]">
+    <section class="relative hidden overflow-hidden border-r border-sky-200 bg-[#eaf4ff] px-12 py-10 text-slate-950 dark:border-slate-700 dark:bg-[#172638] dark:text-slate-100 lg:flex lg:flex-col">
       <div class="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-orange-600 via-amber-400 to-emerald-500" />
       <BrandLogo />
       <div class="my-auto max-w-xl">
-        <p class="text-xs font-bold uppercase text-orange-600">HYPERZONE · INTELLIGENT WORKPLACE</p>
+        <p class="text-xs font-bold uppercase text-orange-600 dark:text-orange-400">HYPERZONE · INTELLIGENT WORKPLACE</p>
         <h1 class="mt-5 text-5xl font-bold leading-tight tracking-normal">{{ t('auth.welcome') }}</h1>
-        <p class="mt-5 max-w-lg text-lg leading-8 text-slate-600">{{ t('auth.platformIntro') }}</p><p class="mt-4 max-w-lg text-sm leading-7 text-slate-500">{{ t('auth.audience') }}</p>
+        <p class="mt-5 max-w-lg text-lg leading-8 text-slate-600 dark:text-slate-300">{{ t('auth.platformIntro') }}</p><p class="mt-4 max-w-lg text-sm leading-7 text-slate-500 dark:text-slate-400">{{ t('auth.audience') }}</p>
         <div class="mt-10 grid grid-cols-3 gap-3 text-sm">
-          <div class="border-l-2 border-orange-500 pl-3"><strong class="block text-slate-950">{{ t('auth.discover') }}</strong><span class="text-slate-500">{{ t('auth.discoverCaption') }}</span></div>
-          <div class="border-l-2 border-amber-500 pl-3"><strong class="block text-slate-950">{{ t('auth.qualify') }}</strong><span class="text-slate-500">{{ t('auth.qualifyCaption') }}</span></div>
-          <div class="border-l-2 border-emerald-500 pl-3"><strong class="block text-slate-950">{{ t('auth.connect') }}</strong><span class="text-slate-500">{{ t('auth.connectCaption') }}</span></div>
+          <div class="border-l-2 border-orange-500 pl-3"><strong class="block text-slate-950 dark:text-slate-200">{{ t('auth.discover') }}</strong><span class="text-slate-500 dark:text-slate-400">{{ t('auth.discoverCaption') }}</span></div>
+          <div class="border-l-2 border-amber-500 pl-3"><strong class="block text-slate-950 dark:text-slate-200">{{ t('auth.qualify') }}</strong><span class="text-slate-500 dark:text-slate-400">{{ t('auth.qualifyCaption') }}</span></div>
+          <div class="border-l-2 border-emerald-500 pl-3"><strong class="block text-slate-950 dark:text-slate-200">{{ t('auth.connect') }}</strong><span class="text-slate-500 dark:text-slate-400">{{ t('auth.connectCaption') }}</span></div>
         </div>
       </div>
-      <p class="text-xs text-slate-500">© 2026 HyperZone · {{ t('brand.tagline') }}</p>
+      <p class="text-xs text-slate-500 dark:text-slate-400">© 2026 HyperZone · {{ t('brand.tagline') }}</p>
     </section>
 
     <section class="flex min-h-screen flex-col px-5 py-5 sm:px-10 lg:px-14">

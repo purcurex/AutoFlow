@@ -1,14 +1,21 @@
+import { PurchaseGroupQueryDto, PurchaseGroupExportDto, PurchaseGroupFiltersDto, PurchaseGroupChatQueryDto } from '../fop-data/procurement-groups.dto'
+import { AllocationInventoryQueryDto } from '../fop-data/allocation-inventory.dto'
+import { FopApprovalService } from '../fop-data/fop-approval.service'
+import { ApprovalPreviewDto, ApprovalSubmitDto } from '../fop-data/fop-approval.dto'
+import { SalesPerformanceQueryDto, SalesPerformanceDetailsDto } from '../fop-data/sales-performance.dto'
 import { FreightQueryDto, FreightDetailsDto } from '../fop-data/fop-freight.dto'
 import { AllowWithoutBusinessData } from '../auth/management-access.decorator'
-import { Body, Controller, Get, Header, Param, Post, Query, Request, UseGuards } from '@nestjs/common'
+import { Body, Post, Controller, Get, Header, HttpCode, Param, Query, Request, StreamableFile, UseGuards } from '@nestjs/common'
 import { Request as ExpressRequest } from 'express'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
 import { WorkbenchAccessService } from './workbench-access.service'
-import { ListFulfillmentOrdersDto } from './dto/workbench.dto'
+import { ExportFulfillmentOrdersDto, ListFulfillmentOrdersDto } from './dto/workbench.dto'
+import { exportQueueLabels, FULFILLMENT_EXPORT_MIME } from '../fop-data/fop-order-export'
 import { FopDataService } from '../fop-data/fop-data.service'
+import { StockOrdersQueryDto, StockInventoryQueryDto, StockScopeDto, ExportStockOrdersDto } from '../fop-data/fop-stock.dto'
 import { OrderVolumeQueryDto, OrderVolumeDetailsDto, OrderCustomerSearchDto } from '../fop-data/order-volume.dto'
 import { ReceiptQueryDto } from '../fop-data/fop-receipts.dto'
-import { FopDashboardQueryDto, FopDataAccessQueryDto } from '../fop-data/fop-data.dto'
+import { FopDashboardQueryDto, FopDataAccessQueryDto, SupplierChatQueryDto } from '../fop-data/fop-data.dto'
 import { ConfirmFopConnectionDto } from '../fop-data/fop-connection.dto'
 
 @AllowWithoutBusinessData()
@@ -34,7 +41,74 @@ export class WorkbenchController {
 @Controller('autoflow/integrations/fop')
 @UseGuards(JwtAuthGuard)
 export class FulfillmentOrdersController {
-  constructor(private readonly data: FopDataService) {}
+  constructor(private readonly data: FopDataService, private readonly approvals: FopApprovalService) {}
+
+  @Get('purchase-groups')
+  @Header('Cache-Control', 'private, no-store')
+  getPurchaseGroups(@Request() req: ExpressRequest, @Query() query: PurchaseGroupQueryDto) { return this.data.getPurchaseGroups(req.user!.userId, query) }
+
+  @Get('purchase-groups/:groupId')
+  @Header('Cache-Control', 'private, no-store')
+  getPurchaseGroupDetails(@Request() req: ExpressRequest, @Param('groupId') id: string, @Query() query: PurchaseGroupQueryDto) { return this.data.getPurchaseGroupDetails(req.user!.userId, id, query) }
+
+  @Get('purchase-groups/:groupId/supplier-follow-up')
+  @Header('Cache-Control', 'private, no-store')
+  getPurchaseGroupSupplier(@Request() req: ExpressRequest, @Param('groupId') id: string, @Query() query: PurchaseGroupFiltersDto) { return this.data.getPurchaseGroupSupplier(req.user!.userId, id, query) }
+
+  @Get('purchase-groups/:groupId/supplier-follow-up/launch')
+  @Header('Cache-Control', 'private, no-store')
+  getPurchaseGroupSupplierChat(@Request() req: ExpressRequest, @Param('groupId') id: string, @Query() query: PurchaseGroupChatQueryDto) { return this.data.getPurchaseGroupSupplierChat(req.user!.userId, id, query) }
+
+  @Post('purchase-groups/export')
+  @HttpCode(200)
+  @Header('Cache-Control', 'private, no-store')
+  async exportPurchaseGroups(@Request() req: ExpressRequest, @Body() body: PurchaseGroupExportDto) {
+    const buffer = await this.data.exportPurchaseGroups(req.user!.userId, body, req.user!.sessionVersion ?? 0)
+    return new StreamableFile(buffer, { type: FULFILLMENT_EXPORT_MIME, disposition: 'attachment; filename="purchase-groups.xlsx"' })
+  }
+
+  @Post('allocation-inventory/query')
+  @HttpCode(200)
+  @Header('Cache-Control', 'private, no-store')
+  getAllocationInventory(@Request() req: ExpressRequest, @Body() query: AllocationInventoryQueryDto) { return this.data.getAllocationInventory(req.user!.userId, query) }
+
+  @Get('stock-orders')
+  @Header('Cache-Control', 'private, no-store')
+  getStockOrders(@Request() req: ExpressRequest, @Query() query: StockOrdersQueryDto) { return this.data.getStockOrders(req.user!.userId, query) }
+
+  @Get('stock-customers')
+  @Header('Cache-Control', 'private, no-store')
+  getStockCustomers(@Request() req: ExpressRequest, @Query() query: StockScopeDto) { return this.data.getStockCustomers(req.user!.userId, query) }
+
+  @Get('stock-inventory')
+  @Header('Cache-Control', 'private, no-store')
+  getStockInventory(@Request() req: ExpressRequest, @Query() query: StockInventoryQueryDto) { return this.data.getStockInventory(req.user!.userId, query) }
+
+  @Post('stock-orders/export')
+  @HttpCode(200)
+  @Header('Cache-Control', 'private, no-store')
+  async exportStockOrders(@Request() req: ExpressRequest, @Body() body: ExportStockOrdersDto) {
+    const buffer = await this.data.exportStockOrders(req.user!.userId, body, req.user!.sessionVersion ?? 0)
+    return new StreamableFile(buffer, { type: FULFILLMENT_EXPORT_MIME, disposition: `attachment; filename="stock-orders.xlsx"; filename*=UTF-8''${encodeURIComponent('备货清单.xlsx')}` })
+  }
+
+  @Post('fulfillment-orders/export')
+  @HttpCode(200)
+  @Header('Cache-Control', 'private, no-store')
+  async exportOrders(@Request() req: ExpressRequest, @Body() body: ExportFulfillmentOrdersDto) {
+    const buffer = await this.data.exportOrders(req.user!.userId, body, req.user!.sessionVersion ?? 0)
+    const date = new Date(Date.now() + 8 * 3600_000).toISOString().slice(0, 10)
+    const filename = `${exportQueueLabels[body.queue]}_${date}.xlsx`
+    return new StreamableFile(buffer, { type: FULFILLMENT_EXPORT_MIME, disposition: `attachment; filename="workbench-orders-${date}.xlsx"; filename*=UTF-8''${encodeURIComponent(filename)}` })
+  }
+
+  @Post('fulfillment-orders/approvals/preview')
+  @Header('Cache-Control', 'private, no-store')
+  previewApproval(@Request() req: ExpressRequest, @Body() body: ApprovalPreviewDto) { return this.approvals.preview(req.user!.userId, body, req.user!.sessionVersion ?? 0) }
+
+  @Post('fulfillment-orders/approvals')
+  @Header('Cache-Control', 'private, no-store')
+  submitApproval(@Request() req: ExpressRequest, @Body() body: ApprovalSubmitDto) { return this.approvals.submit(req.user!.userId, body, req.user!.sessionVersion ?? 0) }
 
   /** 无业务账号绑定时也可测试，但服务层仍要求当前账号同时具备系统及业务管理员角色。 */
   @AllowWithoutBusinessData()
@@ -57,11 +131,30 @@ export class FulfillmentOrdersController {
     return this.data.getOrders(req.user!.userId, query)
   }
 
+  @Get('fulfillment-orders/:orderId/supplier-follow-ups')
+  @Header('Cache-Control', 'private, no-store')
+  getSupplierFollowUps(@Request() req: ExpressRequest, @Param('orderId') orderId: string, @Query() _query: FopDataAccessQueryDto) {
+    return this.data.getSupplierFollowUps(req.user!.userId, orderId)
+  }
+
+  @Get('fulfillment-orders/:orderId/supplier-follow-ups/:purchaseOrderId/launch')
+  @Header('Cache-Control', 'private, no-store')
+  getSupplierChat(@Request() req: ExpressRequest, @Param('orderId') orderId: string, @Param('purchaseOrderId') purchaseOrderId: string, @Query() query: SupplierChatQueryDto) {
+    return this.data.getSupplierChat(req.user!.userId, orderId, purchaseOrderId, query.contactVersion)
+  }
+
   @AllowWithoutBusinessData()
   @Get('data-access')
   @Header('Cache-Control', 'private, no-store')
   getDataAccess(@Request() req: ExpressRequest, @Query() _query: FopDataAccessQueryDto) {
     return this.data.getDataAccess(req.user!.userId)
+  }
+
+  @AllowWithoutBusinessData()
+  @Get('chart-access')
+  @Header('Cache-Control', 'private, no-store')
+  getChartAccess(@Request() req: ExpressRequest, @Query() _query: FopDataAccessQueryDto) {
+    return this.data.getChartAccess(req.user!.userId)
   }
 
   @Get('order-volume')
@@ -104,6 +197,18 @@ export class FulfillmentOrdersController {
   @Header('Cache-Control', 'private, no-store')
   getFreightDetails(@Request() req: ExpressRequest, @Query() query: FreightDetailsDto) {
     return this.data.getFreightDetails(req.user!.userId, query)
+  }
+
+  @Get('sales-performance')
+  @Header('Cache-Control', 'private, no-store')
+  getSalesPerformance(@Request() req: ExpressRequest, @Query() query: SalesPerformanceQueryDto) {
+    return this.data.getSalesPerformance(req.user!.userId, query)
+  }
+
+  @Get('sales-performance/details')
+  @Header('Cache-Control', 'private, no-store')
+  getSalesPerformanceDetails(@Request() req: ExpressRequest, @Query() query: SalesPerformanceDetailsDto) {
+    return this.data.getSalesPerformanceDetails(req.user!.userId, query)
   }
 
   @Get('dashboard')

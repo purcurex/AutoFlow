@@ -37,7 +37,8 @@ api.interceptors.response.use(
     if (error.config?.sessionEpoch !== undefined && !isCurrentSession(error.config.sessionEpoch)) {
       return Promise.reject(new StaleSessionError())
     }
-    if (error.response?.status === 401) {
+    // 登录失败的 401 交给登录页展示具体原因，避免整页跳转冲掉错误提示和已填写内容。
+    if (error.response?.status === 401 && error.config?.url !== '/auth/login') {
       const userStore = useUserStore()
       userStore.clearSession()
       window.location.href = '/login'

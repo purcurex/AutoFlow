@@ -5,6 +5,20 @@ import { installSelectDropdowns } from '@/utils/selectDropdowns'
 let dispose: (() => void) | undefined
 afterEach(() => { dispose?.(); document.body.innerHTML = '' })
 describe('global downward selects', () => {
+  it('keeps a modal form menu inside the dialog top layer and preserves selection', async () => {
+    const dialog = document.createElement('dialog'); dialog.open = true
+    dialog.innerHTML = '<form><select aria-label="所属部门"><option value="one">HyperZone / 业务一部</option><option value="two">HyperZone / 业务二部</option></select></form>'
+    document.body.append(dialog)
+    dispose = installSelectDropdowns(dialog.querySelector('form')!)
+    const select = dialog.querySelector('select')!
+    select.click()
+    expect(dialog.querySelector('[role=listbox]')).not.toBeNull()
+    const change = vi.fn(); select.addEventListener('change', change)
+    ;(dialog.querySelector('[role=option][data-index="1"]') as HTMLElement).click()
+    await flushPromises()
+    expect(select.value).toBe('two'); expect(change).toHaveBeenCalledOnce()
+    expect(dialog.querySelector('[role=listbox]')).toBeNull()
+  })
   it('preserves native numeric v-model and change events with keyboard selection and disabled options', async () => {
     const wrapper = mount({ data: () => ({ value: 10, changes: 0 }), template: '<label>数量<select v-model.number="value" @change="changes++"><option :value="10">十个</option><option :value="15" disabled>不可选</option><option :value="20">二十个 · 完整的选项名称</option></select><output>{{ value }} / {{ typeof value }} / {{ changes }}</output></label>' }, { attachTo: document.body })
     dispose = installSelectDropdowns(wrapper.element)

@@ -1,3 +1,4 @@
+vi.mock('@/api/fop-chart-access', async importOriginal => { const { chartAccessFixture } = await import('./chart-access-fixtures'); return { ...await importOriginal<object>(), getChartAccess: vi.fn(async () => chartAccessFixture()) } })
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import { createMemoryHistory, createRouter } from 'vue-router'
@@ -30,6 +31,7 @@ describe('actual freight workbench details', () => {
     expect(wrapper.text()).toContain('TRACK-001')
     expect(wrapper.text()).toContain('2026/10/1')
     expect(wrapper.text()).toContain('FOP daily USD rate')
+    expect(wrapper.find('tbody tr').findAll('td')[6]!.text()).toContain('USD/CNY 7.0000')
     expect(wrapper.find('tfoot').text()).toContain('$600.00')
     expect(wrapper.find('tfoot').text()).toContain('CNY 1,400.00')
     expect(wrapper.find('tfoot').text()).toContain('USD 400.00')
@@ -56,7 +58,7 @@ describe('actual freight workbench details', () => {
     const { wrapper } = await setup()
     get.mockRejectedValueOnce({ code: 'fop_permission_denied' })
     await wrapper.findAll('button').find(button => button.text() === '刷新')!.trigger('click'); await flushPromises()
-    expect(wrapper.find('[role=alert]').text()).toContain('无权读取')
+    expect(wrapper.find('[role=alert]').text()).toContain('无法查看这些数据')
     expect(wrapper.find('tfoot').exists()).toBe(false)
     expect(wrapper.text()).not.toContain('DEL-001')
     let resolve!: (value: typeof freightPage) => void

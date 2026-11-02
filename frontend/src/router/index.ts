@@ -1,4 +1,5 @@
-﻿import { createRouter, createWebHistory } from 'vue-router'
+import { approvalNavigationBlocked } from '@/utils/approvalNavigation'
+import { createRouter, createWebHistory } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
 import { isFopOrderQueue } from '@/api/fop-orders'
 import { isWorkbenchRole, workbenchOrderLocation } from '@/utils/workbench'
@@ -164,6 +165,7 @@ const router = createRouter({
 })
 
 router.beforeEach(async (to, _from, next) => {
+  if (approvalNavigationBlocked()) { next(false); return }
   const hasSession = Boolean(localStorage.getItem('user'))
   if (to.meta.requiresAuth && !hasSession) return next({ name: 'Login', query: { redirect: to.fullPath } })
   if (to.meta.guest && hasSession) return next({ name: 'Dashboard' })
@@ -187,5 +189,9 @@ router.beforeEach(async (to, _from, next) => {
     next({ name: 'WorkbenchAccessDenied' })
   }
 })
+
+// Approval may open while an earlier navigation is awaiting access checks or a lazy route.
+// Recheck after those async steps, immediately before Vue commits the destination.
+router.beforeResolve(() => !approvalNavigationBlocked())
 
 export default router

@@ -1,3 +1,4 @@
+vi.mock('@/api/fop-chart-access', async importOriginal => { const { chartAccessFixture } = await import('./chart-access-fixtures'); return { ...await importOriginal<object>(), getChartAccess: vi.fn(async () => chartAccessFixture()) } })
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import { createMemoryHistory, createRouter } from 'vue-router'
@@ -40,9 +41,9 @@ describe('receipt workbench details', () => {
     expect(wrapper.find('tfoot').text()).toContain('$100.00')
     expect(get).toHaveBeenCalledWith('/autoflow/integrations/fop/receipts', { params: { from: '2026-10-01', to: '2026-10-31', department: 'sales1', ownerId: 'owner-1', warehouse: 'ALL', workbenchRole: 'allocation', page: 1, pageSize: 20 }, timeout: 180000 })
   })
-  it.each([['zh-CN', '业务一部', '全部仓库'], ['en-US', 'Sales I', 'All warehouses']])('shows readable scope labels in %s without internal identifiers', async (locale, department, warehouse) => {
+  it.each([['zh-CN', '业务一部', '全部发货仓库'], ['en-US', 'Sales I', 'All shipping warehouses']])('shows readable scope labels in %s without internal identifiers', async (locale, department, warehouse) => {
     const { wrapper } = await setup(undefined, locale)
-    const summary = wrapper.find('.receipt-list .ov-heading p').text()
+    const summary = wrapper.get('.ov-applied-filters').text() || ''
     expect(summary).toContain(department)
     expect(summary).toContain(warehouse)
     expect(summary).toContain('Alice')
@@ -53,7 +54,7 @@ describe('receipt workbench details', () => {
   it('uses a neutral selected-owner label when rows cannot resolve the owner and identifies fulfillment service providers', async () => {
     get.mockResolvedValue({ ...sample, items: [{ ...sample.items[0], sourceType: 'fulfillment', carrierCode: 'YT' }] })
     const { wrapper } = await setup('from=2026-10-01&to=2026-10-31&department=sales4&ownerId=unavailable-owner&warehouse=HZ')
-    const summary = wrapper.find('.receipt-list .ov-heading p').text()
+    const summary = wrapper.get('.ov-applied-filters').text() || ''
     expect(summary).toContain('业务四部')
     expect(summary).toContain('杭州仓')
     expect(summary).toContain('所选业务员')

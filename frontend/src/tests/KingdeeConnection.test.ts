@@ -1,90 +1,89 @@
-import { createPinia } from 'pinia'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import WorkbenchRoleAdminView from '@/views/WorkbenchRoleAdminView.vue'
-import { getWorkbenchAccounts, testFopConnection, bindCurrentFopConnection } from '@/api/workbench-access'
-import type { FopConnectionContext } from '@/api/fop-access'
-import { useUserStore } from '@/stores/user'
-
-vi.mock('@/components/layout', () => ({ AppLayout: { template: '<div><slot /></div>' } }))
-vi.mock('@/composables/useWorkbenchAccess', () => ({ refreshWorkbenchAccess: vi.fn() }))
-vi.mock('@/api/workbench-access', () => ({ getWorkbenchAccounts: vi.fn(), updateWorkbenchRoles: vi.fn(), updateFopBinding: vi.fn(),
-  updateBusinessScope: vi.fn(), updateManagementRole: vi.fn(), testFopConnection: vi.fn(), bindCurrentFopConnection: vi.fn() }))
-
-const preview: FopConnectionContext = { subject: { tenantId: 'offline', userId: '100' }, username: 'kingdee-admin',
-  currentOrganization: { id: '10', name: '测试公司' }, resources: ['orders'] }
-
-function setup(currentId = 'admin', businessRole: 'admin' | 'none' = 'admin') {
-  const account = { id: 'admin', displayId: '000001', email: 'admin@example.test', username: 'Admin', role: 'admin' as const,
-    workbenchRoles: ['sales' as const], businessScope: { role: businessRole, departmentId: null, employeeId: null }, fopBinding: null }
-  vi.mocked(getWorkbenchAccounts).mockResolvedValue({ items: [account], total: 1 })
-  const pinia = createPinia(), store = useUserStore(pinia)
-  store.$patch({ user: { id: currentId, username: 'Admin', email: 'admin@example.test', role: 'admin' } })
-  const wrapper = mount(WorkbenchRoleAdminView, { global: { plugins: [pinia, createI18n({ legacy: false, locale: 'zh-CN', messages: {} })], stubs: { RouterLink: true } } })
-  return { wrapper, account, store }
+import EmployeeLoginDialog from '@/components/admin/EmployeeLoginDialog.vue'
+import { getEmployeeLogin, updateEmployeeLogin } from '@/api/organization'
+import { bindFopEmployee, unbindFopEmployee, getFopBindingEmployees, type FopBindingEmployeePage } from '@/api/fop-access'
+import { invalidateSession } from '@/utils/session'
+vi.mock('@/api/organization', () => ({ getEmployeeLogin: vi.fn(), updateEmployeeLogin: vi.fn() }))
+vi.mock('@/api/fop-access', async importOriginal => ({ ...await importOriginal<typeof import('@/api/fop-access')>(), bindFopEmployee:vi.fn(),unbindFopEmployee:vi.fn(),getFopBindingEmployees:vi.fn() }))
+const page: FopBindingEmployeePage = { scopeVersion:'a'.repeat(64),nextCursor:null,items:[
+  {id:'11',masterId:'111',membershipId:'201',departmentId:'301',name:'测试职员甲',username:'offline-a',state:'active'},
+  {id:'22',masterId:'222',membershipId:'202',departmentId:'302',name:'测试职员乙',username:'offline-b',state:'disabled'},
+] }
+const account = { id:'local-a',username:'Local A',email:'a@example.test',fopBinding:null }
+const saved = { ...account,fopBinding:{tenantId:'offline',userId:'11'},fopBindingDetails:{name:'测试职员甲',username:'offline-a',employeeRecordId:'11',employeeMasterId:'111',departmentId:'301',organizationId:'100',verifiedAt:'2026-10-29T00:00:00Z'} }
+async function setup() {
+  vi.mocked(getEmployeeLogin).mockResolvedValue(account)
+  vi.mocked(getFopBindingEmployees).mockResolvedValue(page)
+  const wrapper=mount(EmployeeLoginDialog,{props:{accountId:account.id},global:{plugins:[createI18n({legacy:false,locale:'zh-CN',messages:{}})],stubs:{OrganizationModal:{template:'<div><slot/><slot name="footer"/></div>'}}}})
+  await flushPromises();return wrapper
 }
+function button(wrapper: ReturnType<typeof mount>, text:string) {return wrapper.findAll('button').find(item=>item.text()===text)!}
 
-describe('current administrator Kingdee connection', () => {
-  beforeEach(() => vi.clearAllMocks())
-
-  it('previews the company without writing a binding and saves only after explicit confirmation', async () => {
-    vi.mocked(testFopConnection).mockResolvedValue(preview)
-    const { wrapper, account } = setup()
-    vi.mocked(bindCurrentFopConnection).mockResolvedValue({ ...account, fopBinding: preview.subject })
+describe('管理员验证并绑定每个账号对应的金蝶员工',()=>{
+  beforeEach(()=>vi.resetAllMocks())
+  it('真实Teleport在读取目录的忙碌状态切换后保留选择器和响应',async()=>{
+    vi.mocked(getEmployeeLogin).mockResolvedValue(account);vi.mocked(getFopBindingEmployees).mockResolvedValue(page)
+    const wrapper=mount(EmployeeLoginDialog,{attachTo:document.body,props:{accountId:account.id},global:{plugins:[createI18n({legacy:false,locale:'zh-CN',messages:{}})]}})
     await flushPromises()
-    expect(wrapper.find('input[aria-label="Admin · FOP 用户 ID"]').exists()).toBe(false)
-    await wrapper.get('[data-test-connection]').trigger('click'); await flushPromises()
-    expect(wrapper.get('[data-connection-preview]').text()).toContain('测试公司')
-    expect(bindCurrentFopConnection).not.toHaveBeenCalled()
-    await wrapper.get('[data-bind-connection]').trigger('click'); await flushPromises()
-    expect(bindCurrentFopConnection).toHaveBeenCalledExactlyOnceWith(preview)
-    expect(wrapper.get('[role=status]').text()).toContain('当前账号已绑定金蝶')
-    expect(wrapper.find('[data-connection-preview]').exists()).toBe(false)
+    const load=Array.from(document.querySelectorAll('button')).find(item=>item.textContent==='读取金蝶员工')!
+    load.click();await flushPromises()
+    expect(getFopBindingEmployees).toHaveBeenCalledTimes(1)
+    expect(document.querySelector('option[value="11:201"]')).not.toBeNull()
     wrapper.unmount()
   })
-
-  it.each([['another-user', 'admin'], ['admin', 'none']] as const)('keeps automated linking unavailable for %s with business role %s', async (id, role) => {
-    const { wrapper } = setup(id, role)
-    await flushPromises()
-    expect(wrapper.find('[data-test-connection]').exists()).toBe(false)
-    expect(wrapper.find('input[aria-label="Admin · FOP 用户 ID"]').exists()).toBe(true)
+  it('只能选择可用任职行，只提交人员和任职ID，登录资料及权限不随绑定请求提交',async()=>{
+    const wrapper=await setup();vi.mocked(bindFopEmployee).mockResolvedValue(saved)
+    expect(button(wrapper,'验证并绑定金蝶员工').attributes('disabled')).toBeDefined()
+    await button(wrapper,'读取金蝶员工').trigger('click');await flushPromises()
+    expect(wrapper.get('option[value="22:202"]').attributes('disabled')).toBeDefined()
+    await wrapper.get('[aria-label="对应金蝶员工"]').setValue('11:201')
+    await button(wrapper,'验证并绑定金蝶员工').trigger('click');await flushPromises()
+    expect(bindFopEmployee).toHaveBeenCalledExactlyOnceWith('local-a','11','201')
+    expect(updateEmployeeLogin).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('测试职员甲');expect(wrapper.get('[role=status]').text()).toContain('重新登录')
     wrapper.unmount()
   })
-
-  it('shows an actionable token error and does not offer confirmation after a failed test', async () => {
-    vi.mocked(testFopConnection).mockRejectedValue({ code: 'fop_authentication_expired' })
-    const { wrapper } = setup()
-    await flushPromises()
-    await wrapper.get('[data-test-connection]').trigger('click'); await flushPromises()
-    expect(wrapper.get('[role=alert]').text()).toContain('认证已失效')
-    expect(wrapper.find('[data-bind-connection]').exists()).toBe(false)
+  it('代理用户失败显示独立原因，保留可重试选择且不显示绑定成功',async()=>{
+    const wrapper=await setup();vi.mocked(bindFopEmployee).mockRejectedValue({code:'fop_proxy_user_required'})
+    await button(wrapper,'读取金蝶员工').trigger('click');await flushPromises()
+    await wrapper.get('[aria-label="对应金蝶员工"]').setValue('11:201')
+    await button(wrapper,'验证并绑定金蝶员工').trigger('click');await flushPromises()
+    expect(wrapper.get('[role=alert]').text()).toContain('代理用户名单');expect(wrapper.find('[role=status]').exists()).toBe(false)
+    expect(button(wrapper,'验证并绑定金蝶员工').attributes('disabled')).toBeUndefined()
     wrapper.unmount()
   })
-
-  it('discards a connection result after the local account changes', async () => {
-    let resolvePreview!: (value: FopConnectionContext) => void
-    vi.mocked(testFopConnection).mockReturnValue(new Promise(resolve => { resolvePreview = resolve }))
-    const { wrapper, store } = setup()
-    await flushPromises()
-    await wrapper.get('[data-test-connection]').trigger('click')
-    store.$patch({ user: { id: 'another-user' } })
-    resolvePreview(preview); await flushPromises()
-    expect(wrapper.find('[data-connection-preview]').exists()).toBe(false)
-    expect(bindCurrentFopConnection).not.toHaveBeenCalled()
+  it('重复绑定返回冲突原因，不覆盖旧绑定信息',async()=>{
+    const wrapper=await setup();vi.mocked(bindFopEmployee).mockRejectedValue({statusCode:409,message:'该金蝶身份已绑定其他账号'})
+    await button(wrapper,'读取金蝶员工').trigger('click');await flushPromises()
+    await wrapper.get('[aria-label="对应金蝶员工"]').setValue('11:201')
+    await button(wrapper,'验证并绑定金蝶员工').trigger('click');await flushPromises()
+    expect(wrapper.get('[role=alert]').text()).toContain('已绑定其他账号');expect(wrapper.text()).toContain('尚未绑定金蝶员工')
     wrapper.unmount()
   })
-
-  it('preserves an unbound state and requests another test after a binding conflict', async () => {
-    vi.mocked(testFopConnection).mockResolvedValue(preview)
-    vi.mocked(bindCurrentFopConnection).mockRejectedValue({ statusCode: 409 })
-    const { wrapper } = setup()
-    await flushPromises()
-    await wrapper.get('[data-test-connection]').trigger('click'); await flushPromises()
-    await wrapper.get('[data-bind-connection]').trigger('click'); await flushPromises()
-    expect(wrapper.get('[role=alert]').text()).toContain('已绑定其他账号')
-    expect(wrapper.get('[data-kingdee-connection]').text()).toContain('尚未连接金蝶')
-    expect(wrapper.find('[data-bind-connection]').exists()).toBe(false)
+  it('员工目录继续分页时携带原范围版本，并保留已加载的任职行',async()=>{
+    const wrapper=await setup();vi.mocked(getFopBindingEmployees).mockResolvedValueOnce({...page,nextCursor:'11:201'})
+    await button(wrapper,'读取金蝶员工').trigger('click');await flushPromises()
+    vi.mocked(getFopBindingEmployees).mockResolvedValueOnce({...page,items:[{...page.items[0]!,id:'33',membershipId:'203',name:'测试职员丙'}]})
+    await button(wrapper,'加载更多员工').trigger('click');await flushPromises()
+    expect(getFopBindingEmployees).toHaveBeenLastCalledWith({cursor:'11:201',scopeVersion:'a'.repeat(64)})
+    expect(wrapper.find('option[value="11:201"]').exists()).toBe(true);expect(wrapper.find('option[value="33:203"]').exists()).toBe(true)
     wrapper.unmount()
+  })
+  it('切换登录账号后丢弃未返回的旧目录和人员信息',async()=>{
+    const wrapper=await setup();let finish!:(value:FopBindingEmployeePage)=>void
+    vi.mocked(getFopBindingEmployees).mockReturnValueOnce(new Promise(resolve=>{finish=resolve}))
+    await button(wrapper,'读取金蝶员工').trigger('click');invalidateSession();finish(page);await flushPromises()
+    expect(wrapper.emitted('close')).toBeTruthy();expect(wrapper.find('[aria-label="对应金蝶员工"]').exists()).toBe(false)
+    expect(bindFopEmployee).not.toHaveBeenCalled();wrapper.unmount()
+  })
+  it('解绑使用专用接口，保留本地登录资料且要求目标重新登录',async()=>{
+    vi.mocked(getEmployeeLogin).mockResolvedValue(saved)
+    const linked=mount(EmployeeLoginDialog,{props:{accountId:account.id},global:{plugins:[createI18n({legacy:false,locale:'zh-CN',messages:{}})],stubs:{OrganizationModal:{template:'<div><slot/><slot name="footer"/></div>'}}}});await flushPromises()
+    vi.mocked(unbindFopEmployee).mockResolvedValue(account)
+    await button(linked,'解除金蝶绑定').trigger('click');await flushPromises()
+    expect(unbindFopEmployee).toHaveBeenCalledExactlyOnceWith('local-a');expect(updateEmployeeLogin).not.toHaveBeenCalled()
+    expect(linked.text()).toContain('尚未绑定金蝶员工');linked.unmount()
   })
 })

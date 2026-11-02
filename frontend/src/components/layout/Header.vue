@@ -68,7 +68,7 @@ function handleLogout() {
 </script>
 
 <template>
-  <header class="relative z-20 h-[72px] shrink-0 border-b bg-white/95 px-3 backdrop-blur dark:bg-[#0d0f13]/95 sm:px-5" style="border-color: var(--color-border)">
+  <header class="relative z-20 h-[72px] shrink-0 border-b bg-white/95 px-3 backdrop-blur dark:bg-[var(--color-shell)] sm:px-5" style="border-color: var(--color-border)">
     <div class="flex h-full min-w-0 items-center gap-3">
       <button class="icon-btn" :title="sidebarCollapsed ? t('nav.expand') : t('nav.collapse')" @click="emit('toggle-sidebar')"><PanelLeft class="h-5 w-5" /></button>
       <div class="min-w-0">
@@ -81,21 +81,21 @@ function handleLogout() {
         <ThemeToggle />
 
         <div ref="userMenu" class="relative">
-          <button class="flex h-10 items-center gap-2 rounded-md border border-slate-200 bg-white px-1.5 pr-2 text-sm transition hover:bg-slate-50 dark:border-slate-700 dark:bg-[#15181d] dark:hover:bg-[#20242b]" :aria-expanded="showUserMenu" aria-haspopup="menu" @click="showUserMenu = !showUserMenu">
-            <span class="flex h-7 w-7 items-center justify-center overflow-hidden rounded bg-orange-600 text-xs font-bold text-white">
-              <img v-if="userStore.avatarUrl" :src="userStore.avatarUrl" alt="Avatar" class="h-full w-full object-cover" /><span v-else>{{ (userStore.username || 'U').charAt(0).toUpperCase() }}</span>
+          <button class="flex h-10 shrink-0 items-center gap-2 rounded-full px-1.5 pr-2.5 text-sm transition hover:bg-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500 dark:hover:bg-white/5" :aria-label="userStore.displayName" :aria-expanded="showUserMenu" aria-haspopup="menu" @click="showUserMenu = !showUserMenu" @keydown.esc="showUserMenu = false">
+            <span class="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full brand-avatar text-xs font-semibold ring-1 ring-black/5 dark:ring-white/10">
+              <img v-if="userStore.avatarUrl" :src="userStore.avatarUrl" alt="" class="h-full w-full object-cover" /><span v-else>{{ userStore.displayName.charAt(0) }}</span>
             </span>
-            <span class="hidden max-w-28 truncate font-semibold text-slate-700 dark:text-slate-200 xl:block">{{ userStore.username }}</span>
-            <ChevronDown class="hidden h-3.5 w-3.5 text-slate-400 sm:block" />
+            <span class="max-w-24 truncate text-[13px] font-medium leading-none text-slate-700 dark:text-slate-200 sm:max-w-32">{{ userStore.displayName }}</span>
+            <ChevronDown class="h-3 w-3 shrink-0 text-slate-400 transition-transform" :class="{ 'rotate-180': showUserMenu }" />
           </button>
 
           <div v-if="showUserMenu" class="absolute right-0 top-full z-50 mt-2 w-72 rounded-lg border bg-white py-2 shadow-xl dark:bg-[#15181d]" style="border-color: var(--color-border)" role="menu">
             <div class="flex items-center gap-3 border-b px-4 py-3.5" style="border-color: var(--color-border)">
-              <span class="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-orange-600 text-base font-bold text-white">
-                <img v-if="userStore.avatarUrl" :src="userStore.avatarUrl" alt="Avatar" class="h-full w-full object-cover" /><span v-else>{{ (userStore.username || 'U').charAt(0).toUpperCase() }}</span>
+              <span class="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full brand-avatar text-base font-bold">
+                <img v-if="userStore.avatarUrl" :src="userStore.avatarUrl" alt="" class="h-full w-full object-cover" /><span v-else>{{ userStore.displayName.charAt(0) }}</span>
               </span>
               <div class="min-w-0 flex-1">
-                <p class="truncate text-sm font-bold text-slate-950 dark:text-white">{{ userStore.username }}</p>
+                <p class="truncate text-sm font-semibold text-slate-950 dark:text-white">{{ userStore.displayName }}</p>
                 <p class="mt-0.5 truncate text-xs text-slate-500">{{ userStore.user?.email }}</p>
               </div>
             </div>
@@ -112,7 +112,6 @@ function handleLogout() {
               </div>
             </div>
             <RouterLink to="/settings" class="block px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-white/5" @click="showUserMenu = false">{{ t('nav.settings') }}</RouterLink>
-            <RouterLink v-if="userStore.isAdmin" to="/admin" class="block px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-white/5" @click="showUserMenu = false">{{ t('nav.admin') }}</RouterLink>
             <button class="block w-full px-4 py-2.5 text-left text-sm font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-950" @click="handleLogout">{{ t('nav.signOut') }}</button>
           </div>
         </div>

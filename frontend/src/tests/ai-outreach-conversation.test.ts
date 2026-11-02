@@ -117,7 +117,8 @@ describe('AI outreach conversation workspace', () => {
       .toBe('Hi, may I share a sourcing option for your review?')
     expect((messageInputs[2].element as HTMLTextAreaElement).value)
       .toBe('您好，可以向您介绍一份采购方案供评估吗？')
-    expect(wrapper.text()).toContain('人工确认')
+    expect(wrapper.find('.panel-header .info-tip-trigger').exists()).toBe(false)
+    expect(wrapper.text()).toContain('审核提示')
   })
 
   it('uses Facebook as the default channel and supports a manual target for other channels', async () => {

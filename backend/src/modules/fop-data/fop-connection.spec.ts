@@ -5,6 +5,7 @@ import { Repository } from 'typeorm'
 import { UsersService } from '../users/users.service'
 import { User, UserRole } from '../users/user.entity'
 import { FopDataService } from './fop-data.service'
+import { FopApprovalService } from './fop-approval.service'
 import { KingdeeFopDataProvider } from './fop-kingdee.provider'
 import { FOP_DATA_PROVIDER, FopDataProvider, FopPermissionDeniedError } from './fop-data.types'
 import { FulfillmentOrdersController } from '../users/workbench.controller'
@@ -183,7 +184,7 @@ describe('current-admin connection HTTP contract', () => {
 
   beforeAll(async () => {
     const module = await Test.createTestingModule({ controllers: [FulfillmentOrdersController], providers: [FopDataService,
-      { provide: UsersService, useValue: users }, { provide: FOP_DATA_PROVIDER, useValue: provider }] })
+      { provide: UsersService, useValue: users }, { provide: FOP_DATA_PROVIDER, useValue: provider }, { provide: FopApprovalService, useValue: {} }] })
       .overrideGuard(JwtAuthGuard).useValue({ canActivate: (context: { switchToHttp(): { getRequest(): { headers: Record<string, string>; user?: { userId: string } } } }) => {
         const req = context.switchToHttp().getRequest()
         if (req.headers['x-offline-session'] !== 'admin') throw new UnauthorizedException()

@@ -1,3 +1,4 @@
+vi.mock('@/api/fop-chart-access', async importOriginal => { const { chartAccessFixture } = await import('./chart-access-fixtures'); return { ...await importOriginal<object>(), getChartAccess: vi.fn(async () => chartAccessFixture()) } })
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { createI18n } from 'vue-i18n'
@@ -63,7 +64,7 @@ describe('freight analysis', () => {
     get.mockRejectedValueOnce({ code: 'fop_permission_denied' })
     await wrapper.find('select[aria-label="运费仓库"]').setValue('SZ'); await flushPromises()
     resolve(freightData()); await flushPromises()
-    expect(wrapper.find('[role=alert]').text()).toContain('无权读取')
+    expect(wrapper.find('[role=alert]').text()).toContain('无法查看这些数据')
     expect(wrapper.find('table').exists()).toBe(false)
     expect(wrapper.text()).not.toContain('$60.00')
   })

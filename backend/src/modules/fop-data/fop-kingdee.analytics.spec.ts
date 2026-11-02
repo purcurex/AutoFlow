@@ -46,13 +46,35 @@ function setup(options: { records?: Records; grants?: Partial<Record<FopAnalytic
   })
   const config = { ...settings, ...options.config }
   const provider = new KingdeeFopDataProvider({ get: key => config[key] }, request)
-  const user = { id: 'local', role: 'admin', businessRole: 'admin', businessDepartmentId: null, businessEmployeeId: null, fopTenantId: identity.tenantId, fopUserId: identity.userId, workbenchRoles: ['sales'] } as User
+  const user = { id: 'local', role: 'admin', businessRole: 'admin', businessDepartmentId: null, businessEmployeeId: null, fopTenantId: identity.tenantId, fopUserId: identity.userId, workbenchRoles: ['sales'],
+    fopBindingDetails: { username: 'offline-user', name: '测试职员', employeeRecordId: identity.userId, employeeMasterId: identity.userId, departmentId: '10', organizationId: '10', localEmployeeId: null, localDepartmentId: null, verifiedAt: '2026-10-29T00:00:00Z' } } as User
   const users = { findById: jest.fn().mockResolvedValue(user) }
   const service = new FopDataService(users as unknown as UsersService, provider)
   return { provider, service, request, user, users }
 }
 
 describe('Kingdee nine analytics integration, offline transport', () => {
+  it('applies the merged chart denials before requesting live registration or receipt facts', async () => {
+    const { service, user, request } = setup()
+    user.chartPermissions = (['registrations', 'salesperson_receipts'] as const).map(chartId => ({ chartId,
+      visibility: 'deny', dataScope: 'inherit', summaryMode: 'inherit', summaryDepartments: [], details: 'inherit', export: 'inherit' }))
+    const result = await service.getDashboard('local', { from: '2025-10-01', to: '2025-10-04', year: 2025 })
+    expect(result.chartAccess.filter(chart => ['registrations', 'salesperson_receipts'].includes(chart.chartId)).every(chart => !chart.visible)).toBe(true)
+    expect(result.registrations).toEqual([])
+    expect(result.receipts.departments).toEqual([])
+    expect(request.mock.calls.some(call => /"resource":"(?:registrations|receipts)"/.test(String(call[1]?.body)))).toBe(false)
+  })
+
+  it('keeps live receipt totals inside the merged personal chart scope', async () => {
+    const { service, user } = setup({ records: { ...records(), receipts: [receipt, stock, { ...receipt, id: '2003:1', owner: ref('502') }] } })
+    user.businessEmployeeId = '501'
+    user.chartPermissions = [{ chartId: 'salesperson_receipts', visibility: 'inherit', dataScope: 'self', summaryMode: 'inherit', summaryDepartments: [], details: 'inherit', export: 'inherit' }]
+    const result = await service.getDashboard('local', { from: '2025-10-01', to: '2025-10-04', year: 2025 })
+    expect(result.receipts.marketingCenter!.amounts[9]).toBe(147)
+    expect(result.receipts.marketingCenter!.name).toBe('本人回款合计')
+    expect(result.receipts.departments[0].salespeople.map(person => person.id)).toEqual(['501'])
+  })
+
   it('aggregates daily registrations, department and salesperson actual collections, preserving source breakdown', async () => {
     const { service } = setup()
     const dashboard = await service.getDashboard('local', { from: '2025-10-01', to: '2025-10-04', year: 2025 })
@@ -63,7 +85,7 @@ describe('Kingdee nine analytics integration, offline transport', () => {
     expect(dashboard.receipts.departments[0].salespeople[0].amounts[9]).toBe(147)
     expect(dashboard.receipts.marketingCenter!.breakdown.fulfillment[9]).toBe(97)
     expect(dashboard.receipts.marketingCenter!.breakdown.fullPaymentStock[9]).toBe(50)
-    expect(dashboard.queues).toEqual({ review: 7, allocation: null, dispatch: null, shipping: null })
+    expect(dashboard.queues).toEqual({ review: 7, procurement: null, allocation: null, dispatch: null, shipping: null })
   })
 
   it('connects business order volumes, customer ranking, customer search and single customer trend', async () => {
@@ -152,6 +174,15 @@ describe('Kingdee nine analytics integration, offline transport', () => {
     const permission = await provider.resolvePermissions(identity, scope)
     await provider.readAnalytics(identity, permission, scope, 'orders', Object.assign({ from: '2025-01-01', to: '2025-12-31' }, { userId: '999', organizationIds: ['999'], scopeRole: 'none' }))
     expect(JSON.parse(String(request.mock.calls[1][1]?.body))).toMatchObject({ query: { userId: '100', organizationIds: ['10', '20'], scopeRole: 'admin' } })
+  })
+
+  it('retains trusted child ancestry and maps its parent business department', async () => {
+    const selected = setup({ transform: (value, query) => query.resource === 'orders'
+      ? { ...value, items: [{ ...order, department: ref('401'), departmentPathIds: ['10', '400', '401'] }] } : value })
+    const manager = { role: 'department_manager' as const, departmentId: '400', employeeId: '501' }
+    const grant = await selected.provider.resolvePermissions(identity, manager)
+    const result = await selected.provider.readAnalytics(identity, grant, manager, 'orders', { from: '2025-01-01', to: '2025-12-31' })
+    expect(result.orders[0]).toMatchObject({ departmentPathIds: ['10', '400', '401'], salesDepartmentCode: 'sales1' })
   })
 
   it('fails explicitly for an oversized upstream page instead of returning incomplete totals', async () => {

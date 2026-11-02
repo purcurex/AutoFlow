@@ -1,17 +1,21 @@
+import type { FopExceptionType } from './fop-orders'
+import type { EffectiveChartAccess } from './fop-chart-access'
 /** Authenticated backend contract. No client-side mock fallback or scope selection. */
 export interface FopDashboardQuery { from: string; to: string; year: number }
 export interface ReceiptSeries { id: string; name?: string; amounts: number[]; previousAmount?: number | null; breakdown?: { fulfillment: number[]; fullPaymentStock: number[] }; previousBreakdown?: { fulfillment: number; fullPaymentStock: number } }
 export interface FopDashboardData {
+  chartAccess: EffectiveChartAccess[]
+  departmentReceipts: FopDashboardData['receipts']
   source: 'mock' | 'fop'
   updatedAt: string
-  queues: { review: number | null; allocation: number | null; dispatch: number | null; shipping: number | null }
+  queues: { procurement: number | null; review: number | null; allocation: number | null; dispatch: number | null; shipping: number | null }
   integratedQueues?: string[]
   analyticsConfigured?: boolean
   rates: { currency: string; cnyPerUnit: number }[]
   registrations: { date: string; count: number }[]
   registrationDepartments?: { id: string; name: string; counts: number[]; salespeople: { id: string; name: string; counts: number[] }[] }[]
-  exceptions: { id: string; customer: string; reason: 'stock' | 'address' | 'tracking'; hours: number }[]
-  tasks: { id: string; kind: 'review' | 'allocation' | 'shipping'; count: number; time: string; priority: 'high' | 'normal' }[]
+  exceptions: { id: string; customer: string; type: FopExceptionType | null; reason: string | null; hours: number }[]
+  tasks: { id: string; kind: 'review' | 'dispatch' | 'procurement' | 'allocation' | 'shipping'; count: number; time: string; priority: 'high' | 'normal' }[]
   receipts: { timeZone?: 'UTC+8'; basis?: 'actual_received'; currency: 'USD'; months: string[]; previousMonth?: string; marketingCenter?: ReceiptSeries | null; departments: (ReceiptSeries & { salespeople: (ReceiptSeries & { name: string })[] })[] }
 }
 

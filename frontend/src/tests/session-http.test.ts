@@ -2,12 +2,24 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { AxiosError, type AxiosResponse, type InternalAxiosRequestConfig } from 'axios'
 import api from '@/api'
-import { invalidateSession } from '@/utils/session'
+import { captureSession, invalidateSession } from '@/utils/session'
 import { useUserStore } from '@/stores/user'
 
 beforeEach(() => { setActivePinia(createPinia()); localStorage.clear() })
 
 describe('HTTP session boundaries', () => {
+  it('returns a failed login message without resetting the session or reloading the page', async () => {
+    const session = captureSession()
+    const message = '邮箱或密码错误'
+    const request = api.post('/auth/login', {}, { adapter: config => Promise.reject(
+      new AxiosError('Unauthorized', 'ERR_BAD_REQUEST', config, undefined,
+        { config, data: { message }, status: 401, statusText: 'Unauthorized', headers: {} }),
+    ) })
+
+    await expect(request).rejects.toMatchObject({ message })
+    expect(captureSession()).toBe(session)
+  })
+
   it('rejects a previous account response before it reaches a view', async () => {
     let complete!: (value: AxiosResponse) => void
     let requestConfig!: InternalAxiosRequestConfig

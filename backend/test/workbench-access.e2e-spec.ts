@@ -28,6 +28,9 @@ describe('Workbench authorization HTTP API (repository boundary stub)', () => {
   const get = (path: string, id = userId) => request(app.getHttpServer()).get(`/api${path}`).auth(token(id), { type: 'bearer' })
   const put = (roles: unknown, id = adminId) => request(app.getHttpServer())
     .put(`/api/users/${userId}/workbench-roles`).auth(token(id), { type: 'bearer' }).send({ workbenchRoles: roles })
+  const chartOverride = { chartId: 'customer_orders', visibility: 'deny', dataScope: 'inherit', summaryMode: 'inherit', summaryDepartments: [], details: 'inherit', export: 'inherit' }
+  const putCharts = (chartPermissions: unknown, id = adminId) => request(app.getHttpServer())
+    .put(`/api/users/${userId}/chart-permissions`).auth(token(id), { type: 'bearer' }).send({ chartPermissions })
 
   beforeAll(async () => {
     const repository = {
@@ -40,6 +43,9 @@ describe('Workbench authorization HTTP API (repository boundary stub)', () => {
         [...accounts.values()].slice(skip, skip + take), accounts.size,
       ],
     }
+    Object.assign(repository, { manager: { getRepository: () => ({ find: async () => [] }), transaction: async (callback: (manager: any) => Promise<unknown>) => callback({
+      query: async () => undefined, getRepository: () => repository,
+    }) } })
     const module = await Test.createTestingModule({
       imports: [UsersModule, JwtModule.register({ secret })],
       controllers: [AuthController, AutoflowController],
@@ -73,13 +79,49 @@ describe('Workbench authorization HTTP API (repository boundary stub)', () => {
   it('requires authentication and reads effective grants from the current database account', async () => {
     await request(app.getHttpServer()).get('/api/workbench/access').expect(401)
     const response = await get('/workbench/access').expect(200)
-    expect(response.body).toMatchObject({ roles: ['sales'], isAdmin: false })
+    expect(response.body).toMatchObject({ roles: ['sales'], isAdmin: false, defaultProcurementView: 'fulfillment' })
     await get('/workbench/procurement/access').expect(403)
     await get('/workbench/not-a-role/access').expect(400)
     accounts.get(userId).workbenchRoles = []
     await get('/workbench/sales/access').expect(403)
     accounts.delete(userId)
     await get('/workbench/access').expect(401)
+  })
+
+  const accessInput = (accountRole: string) => ({ accountRole, businessScope: { role: accountRole === 'collaboration' || accountRole === 'administrator' ? 'admin' : accountRole, departmentId: 'department-1', employeeId: 'employee-1' }, workbenchRoles: ['sales', 'procurement', 'allocation', 'dispatch', 'warehouse'] })
+  const putAccess = (input: object, actor = adminId, target = userId) => request(app.getHttpServer()).put(`/api/users/${target}/account-access`).auth(token(actor), { type: 'bearer' }).send(input)
+
+  it.each(['administrator', 'department_manager', 'salesperson', 'collaboration'])('saves the unified %s role and exposes only its permitted management access', async role => {
+    const response = await putAccess(accessInput(role)).expect(200)
+    expect(response.body.accountRole).toBe(role)
+    expect(response.body).not.toHaveProperty('password')
+    const access = await get('/workbench/access').expect(200)
+    expect(access.body.isAdmin).toBe(role === 'administrator')
+    expect(access.body.roles).toHaveLength(5)
+    await get('/users/workbench-accounts').expect(role === 'administrator' ? 200 : 403)
+    if (role === 'collaboration') expect(response.body.chartPermissions.every((chart: any) => chart.dataScope === 'none' && chart.details === 'deny')).toBe(true)
+  })
+  it.each(['salesperson', 'department_manager', 'admin', 'none'])('denies management APIs for system users with %s business scope', async businessRole => {
+    accounts.get(userId).businessRole = businessRole
+    await get('/users/workbench-accounts').expect(403)
+    await putAccess(accessInput('administrator'), userId).expect(403)
+    expect(accounts.get(userId).role).toBe(UserRole.USER)
+  })
+  it.each([
+    {}, { ...accessInput('administrator'), accountRole: 'superuser' },
+    { ...accessInput('department_manager'), businessScope: { role: 'department_manager', departmentId: null, employeeId: null } },
+    { ...accessInput('salesperson'), businessScope: { role: 'salesperson', departmentId: null, employeeId: null } },
+    { ...accessInput('collaboration'), businessScope: { role: 'salesperson', departmentId: null, employeeId: 'e1' } },
+    { ...accessInput('administrator'), workbenchRoles: ['admin'] },
+  ])('rejects invalid unified access without partially promoting the account: %j', async payload => {
+    await putAccess(payload).expect(400)
+    expect(accounts.get(userId).role).toBe(UserRole.USER)
+  })
+  it('blocks self-demotion and supports closing business data while retaining system administration', async () => {
+    await putAccess(accessInput('collaboration'), adminId, adminId).expect(409)
+    const result = await putAccess({ ...accessInput('administrator'), businessScope: { role: 'none', departmentId: null, employeeId: null } }, adminId, adminId).expect(200)
+    expect(result.body).toMatchObject({ role: 'admin', businessScope: { role: 'none' } })
+    await get('/users/workbench-accounts', adminId).expect(200)
   })
 
   it('keeps business grants unchanged when system management is revoked', async () => {
@@ -111,6 +153,38 @@ describe('Workbench authorization HTTP API (repository boundary stub)', () => {
     expect(accounts.get(userId).workbenchRoles).toEqual(['sales'])
   })
 
+  it('persists chart policy only for current administrators and exposes it in account listings', async () => {
+    await request(app.getHttpServer()).put(`/api/users/${userId}/chart-permissions`).send({ chartPermissions: [] }).expect(401)
+    await putCharts([chartOverride], userId).expect(403)
+    const response = await putCharts([chartOverride]).expect(200)
+    expect(response.body).toMatchObject({ id: userId, role: 'user', workbenchRoles: ['sales'], chartPermissions: [chartOverride] })
+    expect(response.body).not.toHaveProperty('password')
+    const listing = await get('/users/workbench-accounts', adminId).expect(200)
+    expect(listing.body.items.find((account: any) => account.id === userId).chartPermissions).toEqual([chartOverride])
+    accounts.get(adminId).role = UserRole.USER
+    await putCharts([]).expect(403)
+    expect(accounts.get(userId).chartPermissions).toEqual([chartOverride])
+  })
+
+  it.each([
+    null, {}, [chartOverride, chartOverride], [{ ...chartOverride, chartId: 'future_chart' }],
+    [{ ...chartOverride, dataScope: 'all' }], [{ ...chartOverride, injected: true }],
+    [{ ...chartOverride, chartId: 'registrations', summaryMode: 'selected', summaryDepartments: [] }],
+    [{ ...chartOverride, chartId: 'registrations', summaryMode: 'selected', summaryDepartments: ['sales1', 'sales1'] }],
+    [{ ...chartOverride, chartId: 'freight', summaryMode: 'marketing' }],
+  ])('rejects invalid chart policy %j without changing saved grants', async value => {
+    await putCharts(value).expect(400)
+    expect(accounts.get(userId).chartPermissions ?? []).toEqual([])
+  })
+
+  it('rejects privilege fields beside chart policy and in self profile changes', async () => {
+    await request(app.getHttpServer()).put(`/api/users/${userId}/chart-permissions`).auth(token(adminId), { type: 'bearer' })
+      .send({ chartPermissions: [], role: 'admin', businessRole: 'admin' }).expect(400)
+    await request(app.getHttpServer()).put('/api/users/profile').auth(token(), { type: 'bearer' })
+      .send({ chartPermissions: [chartOverride] }).expect(400)
+    expect(accounts.get(userId).role).toBe('user')
+  })
+
   it('prevents self profile escalation and validates bounded account queries', async () => {
     await request(app.getHttpServer()).put('/api/users/profile').auth(token(), { type: 'bearer' })
       .send({ workbenchRoles: ['warehouse'] }).expect(400)
@@ -130,6 +204,17 @@ describe('Workbench authorization HTTP API (repository boundary stub)', () => {
       const profile = await get(path).expect(200)
       expect(profile.body.workbenchRoles).toEqual(['sales'])
       expect(profile.body).not.toHaveProperty('password')
+    }
+  })
+
+  it('persists supported preset avatars for the current user without changing permissions', async () => {
+    for (const name of ['ocean', 'mint', 'iris', 'rose', 'amber', 'slate']) {
+      await request(app.getHttpServer()).put('/api/users/profile').auth(token(), { type: 'bearer' })
+        .send({ avatarUrl: `/avatars/preset-${name}.svg` }).expect(200)
+      expect((await get('/users/profile').expect(200)).body).toMatchObject({ avatarUrl: `/avatars/preset-${name}.svg`, role: 'user', workbenchRoles: ['sales'] })
+    }
+    for (const avatarUrl of ['/avatars/preset-unknown.svg', '/avatars/preset-mint.svg/../secret', 'javascript:alert(1)']) {
+      await request(app.getHttpServer()).put('/api/users/profile').auth(token(), { type: 'bearer' }).send({ avatarUrl }).expect(400)
     }
   })
 

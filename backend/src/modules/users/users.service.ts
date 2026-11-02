@@ -1,20 +1,30 @@
 import { businessScope } from './business-scope'
 import type { UpdateBusinessScopeDto } from './dto/business-scope.dto'
-import { ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common'
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException, Optional } from '@nestjs/common'
+import { ModuleRef } from '@nestjs/core'
+import { FOP_DATA_PROVIDER, FopDataProvider } from '../fop-data/fop-data.types'
 import { InjectRepository } from '@nestjs/typeorm'
-import { ILike, IsNull, Repository } from 'typeorm'
+import { ILike, In, IsNull, Repository } from 'typeorm'
+import { OrganizationEmployeeEntity } from '../organization/organization-employee.entity'
+import { OrganizationNodeEntity } from '../organization/organization-node.entity'
 import * as bcrypt from 'bcrypt'
 import { User, UserRole } from './user.entity'
 import type { UpdateProfileDto } from './dto/update-profile.dto'
 import type { ListWorkbenchAccountsDto } from './dto/workbench.dto'
 import type { WorkbenchRole } from './workbench-role'
 import type { FopIdentity } from '../fop-data/fop-data.types'
+import { ChartPermissionOverride, collaborationChartPermissions, validateChartPermissions } from './chart-permissions'
+import { accountRole } from './account-role'
+import { UpdateAccountAccessDto } from './dto/account-access.dto'
 
 function workbenchAccount(user: User) {
   return {
     id: user.id, displayId: user.displayId, email: user.email, username: user.username, role: user.role, workbenchRoles: user.workbenchRoles,
     businessScope: businessScope(user),
+    accountRole: accountRole(user),
+    chartPermissions: user.chartPermissions ?? [],
     fopBinding: user.fopTenantId && user.fopUserId ? { tenantId: user.fopTenantId, userId: user.fopUserId } : null,
+    fopBindingDetails: user.fopBindingDetails ?? null,
   }
 }
 
@@ -23,6 +33,7 @@ export class UsersService {
   constructor(
     @InjectRepository(User)
     private usersRepository: Repository<User>,
+    @Optional() private readonly modules?: ModuleRef,
   ) {}
 
   async create(
@@ -40,6 +51,7 @@ export class UsersService {
       role,
       displayId,
       workbenchRoles: ['sales'],
+      chartPermissions: [],
     })
     return this.usersRepository.save(user)
   }
@@ -51,14 +63,20 @@ export class UsersService {
   async listWorkbenchAccounts(query: ListWorkbenchAccountsDto) {
     const search = query.search?.trim()
     const pattern = search ? ILike(`%${search.replace(/[\\%_]/g, '\\$&')}%`) : undefined
+    const roleFilter = query.accountRole === 'administrator' ? { role: UserRole.ADMIN }
+      : query.accountRole ? { role: UserRole.USER, businessRole: query.accountRole === 'collaboration' ? In(['admin', 'none']) : query.accountRole } : {}
     const [users, total] = await this.usersRepository.findAndCount({
-      select: { id: true, displayId: true, email: true, username: true, role: true, workbenchRoles: true, fopTenantId: true, fopUserId: true, businessRole: true, businessDepartmentId: true, businessEmployeeId: true },
-      where: pattern ? [{ username: pattern }, { email: pattern }, { displayId: pattern }] : {},
+      select: { id: true, displayId: true, email: true, username: true, role: true, workbenchRoles: true, chartPermissions: true, fopTenantId: true, fopUserId: true, fopBindingDetails: true, businessRole: true, businessDepartmentId: true, businessEmployeeId: true },
+      where: pattern ? [{ username: pattern, accountDisabled: false, ...roleFilter }, { email: pattern, accountDisabled: false, ...roleFilter }, { displayId: pattern, accountDisabled: false, ...roleFilter }] : { accountDisabled: false, ...roleFilter },
       order: { displayId: 'ASC', id: 'ASC' },
       skip: (query.page - 1) * query.pageSize,
       take: query.pageSize,
     })
-    return { items: users.map(workbenchAccount), total }
+    const employees = users.length ? await this.usersRepository.manager.getRepository(OrganizationEmployeeEntity).find({ where: { accountId: In(users.map(user => user.id)) }, relations: { department: true } }) : []
+    return { items: users.map(user => {
+      const employee = employees.find(row => row.accountId === user.id)
+      return { ...workbenchAccount(user), employee: employee ? { id: employee.id, name: employee.name, code: employee.code, department: { id: employee.departmentId, name: employee.department.name } } : null }
+    }), total }
   }
 
   async updateWorkbenchRoles(id: string, workbenchRoles: WorkbenchRole[]) {
@@ -73,6 +91,87 @@ export class UsersService {
 
   async findById(id: string): Promise<User | null> {
     return this.usersRepository.findOne({ where: { id } })
+  }
+
+  /** 仅通过已绑定租户/认证用户定位当前账号，不按用户名或姓名推测账号归属。 */
+  async findByFopIdentity(identity: FopIdentity): Promise<User | null> {
+    return this.usersRepository.findOne({ where: { fopTenantId: identity.tenantId, fopUserId: identity.userId } })
+  }
+
+  /** 兼容旧解绑入口的响应结构，只返回管理页允许字段，避免返回完整用户实体及密码散列。 */
+  async getWorkbenchAccount(id: string) {
+    const user = await this.findById(id)
+    if (!user) throw new NotFoundException('用户不存在')
+    return workbenchAccount(user)
+  }
+
+  async workbenchDepartment(user: User): Promise<{ id: string; name: string | null } | null> {
+    const scope = businessScope(user)
+    if (scope.role === 'admin' || scope.role === 'none' || !scope.departmentId) return null
+    const employees = await this.usersRepository.manager.getRepository(OrganizationEmployeeEntity).find({
+      where: { accountId: user.id, archivedAt: IsNull() },
+      select: { ownerUserId: true }, take: 2,
+    })
+    const ownerUserId = employees.length === 1 ? employees[0].ownerUserId : user.organizationWorkspaceOwnerId
+    const nodes = ownerUserId ? await this.usersRepository.manager.getRepository(OrganizationNodeEntity).find({
+      where: { ownerUserId }, select: { id: true, name: true },
+    }) : []
+    // External FOP IDs must not be relabelled with an unrelated local employee department.
+    // Match in memory: external IDs need not be valid UUIDs for organization_nodes.id.
+    return { id: scope.departmentId, name: nodes.find(node => node.id === scope.departmentId)?.name ?? null }
+  }
+
+  async defaultProcurementView(user: User): Promise<'fulfillment' | 'purchase'> {
+    // Workbench grants describe navigation access, not the employee's actual job.
+    if (user.role === UserRole.ADMIN || businessScope(user).role !== 'admin') return 'fulfillment'
+    const employees = await this.usersRepository.manager.getRepository(OrganizationEmployeeEntity).find({
+      where: { accountId: user.id, archivedAt: IsNull() },
+      select: { id: true, ownerUserId: true, departmentId: true, jobTitle: true },
+      take: 2,
+    })
+    if (employees.length !== 1) return 'fulfillment'
+    const employee = employees[0]
+    const nodes = await this.usersRepository.manager.getRepository(OrganizationNodeEntity).find({
+      where: { ownerUserId: employee.ownerUserId },
+      select: { id: true, parentId: true, name: true },
+    })
+    const byId = new Map(nodes.map(node => [node.id, node]))
+    const names: string[] = [], visited = new Set<string>()
+    let id: string | null = employee.departmentId
+    while (id && !visited.has(id)) {
+      visited.add(id)
+      const node = byId.get(id)
+      if (!node) break
+      names.push(node.name)
+      id = node.parentId
+    }
+    if (names.includes('营销中心')) return 'fulfillment'
+    return names.some(name => /采购/.test(name)) || /采购/.test(employee.jobTitle) ? 'purchase' : 'fulfillment'
+  }
+
+  async updateAccountAccess(actorId: string, id: string, input: UpdateAccountAccessDto) {
+    const scope = input.businessScope
+    const valid = input.accountRole === 'administrator'
+      || input.accountRole === 'collaboration' && ['admin', 'none'].includes(scope.role)
+      || input.accountRole === scope.role && ['salesperson', 'department_manager'].includes(scope.role)
+    if (!valid) throw new BadRequestException('角色与数据范围不一致')
+    return this.usersRepository.manager.transaction(async manager => {
+      await manager.query("SELECT pg_advisory_xact_lock(hashtextextended('autoflow:management-roles', 0))")
+      const repository = manager.getRepository(User)
+      const actor = await repository.findOne({ where: { id: actorId }, lock: { mode: 'pessimistic_read' } })
+      if (actor?.role !== UserRole.ADMIN) throw new ForbiddenException('Administrator access required')
+      const target = await repository.findOne({ where: { id }, lock: { mode: 'pessimistic_write' } })
+      if (!target) throw new NotFoundException('用户不存在')
+      const role = input.accountRole === 'administrator' ? UserRole.ADMIN : UserRole.USER
+      if (actorId === id && role !== UserRole.ADMIN) throw new ConflictException('不能撤销自己的管理员角色，请由另一位管理员操作')
+      const resetTemplate = accountRole(target) !== input.accountRole || target.businessRole === 'none' && scope.role !== 'none'
+      await repository.update(id, {
+        role, businessRole: scope.role, businessDepartmentId: scope.departmentId, businessEmployeeId: scope.employeeId,
+        workbenchRoles: [...input.workbenchRoles],
+        ...(resetTemplate ? { chartPermissions: input.accountRole === 'collaboration' ? collaborationChartPermissions() : [] } : {}),
+      })
+      return workbenchAccount((await repository.findOne({ where: { id } }))!)
+    })
   }
 
   async updateManagementRole(actorId: string, id: string, role: UserRole) {
@@ -90,6 +189,24 @@ export class UsersService {
     })
   }
 
+  async updateChartPermissions(actorId: string, id: string, chartPermissions: ChartPermissionOverride[]) {
+    if (!validateChartPermissions(chartPermissions)) throw new BadRequestException('Invalid chart permissions')
+    const permissions = chartPermissions.map(row => ({ ...row, summaryDepartments: [...row.summaryDepartments] }))
+    return this.usersRepository.manager.transaction(async (manager) => {
+      // Use the same lock as management-role mutations. A stale controller check
+      // cannot authorize an administrator who was demoted while waiting to save.
+      await manager.query("SELECT pg_advisory_xact_lock(hashtextextended('autoflow:management-roles', 0))")
+      const repository = manager.getRepository(User)
+      const actor = await repository.findOne({ where: { id: actorId }, lock: { mode: 'pessimistic_read' } })
+      if (actor?.role !== UserRole.ADMIN) throw new ForbiddenException('Administrator access required')
+      const target = await repository.findOne({ where: { id }, lock: { mode: 'pessimistic_write' } })
+      if (!target) throw new NotFoundException('用户不存在')
+      // Partial writes preserve business roles, workbench grants and FOP identity.
+      await repository.update(id, { chartPermissions: permissions })
+      return workbenchAccount((await repository.findOne({ where: { id } }))!)
+    })
+  }
+
   async updateBusinessScope(id: string, scope: UpdateBusinessScopeDto) {
     if (!await this.findById(id)) throw new NotFoundException('用户不存在')
     await this.usersRepository.update(id, { businessRole: scope.role, businessDepartmentId: scope.departmentId, businessEmployeeId: scope.employeeId })
@@ -100,8 +217,11 @@ export class UsersService {
 
   async updateFopBinding(id: string, tenantId: string | null, userId: string | null) {
     if (!await this.findById(id)) throw new NotFoundException('用户不存在')
+    if ((tenantId || userId) && this.modules?.get<FopDataProvider>(FOP_DATA_PROVIDER, { strict: false }).supportsEmployeeBinding) {
+      throw new BadRequestException('请从组织架构的账号资料中选择并验证金蝶员工')
+    }
     try {
-      await this.usersRepository.update(id, { fopTenantId: tenantId, fopUserId: userId })
+      await this.usersRepository.update(id, { fopTenantId: tenantId, fopUserId: userId, fopBindingDetails: null })
     } catch (error) {
       if ((error as { driverError?: { code?: string } }).driverError?.code === '23505') {
         throw new ConflictException('This FOP identity is already bound to another account')
