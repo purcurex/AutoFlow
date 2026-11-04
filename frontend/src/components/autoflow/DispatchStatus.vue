@@ -3,11 +3,11 @@ import WorkbenchStatusBadge from './WorkbenchStatusBadge.vue'
 import { computed } from 'vue'
 import { getDispatchTaskStatus, getDispatchCompletionStatus, taskStatusLabel } from '@/utils/workbench-status'
 import { useI18n } from 'vue-i18n'
-import type { DispatchDocument, FulfillmentProgress } from '@/api/fop-orders'
+import type { DispatchDocument, FulfillmentProgress, FopOrder } from '@/api/fop-orders'
 
-const props = defineProps<{ documents?: DispatchDocument[] | null; shopifySync?: FulfillmentProgress['shopifySync']; queue?: string }>()
+const props = defineProps<{ documents?: DispatchDocument[] | null; shopifySync?: FulfillmentProgress['shopifySync']; queue?: string; stage?: FopOrder['dispatchTaskStatus'] }>()
 const { locale } = useI18n()
-const status = computed(() => ['allocation', 'allocation_review'].includes(props.queue ?? '') ? getDispatchCompletionStatus(props.documents) : getDispatchTaskStatus(props.documents, props.shopifySync))
+const status = computed(() => ['allocation', 'allocation_review'].includes(props.queue ?? '') ? getDispatchCompletionStatus(props.documents) : props.stage ?? getDispatchTaskStatus(props.documents, props.shopifySync))
 const tone = computed(() => {
   if (status.value === 'dispatch_approved') return (props.queue ?? 'dispatch') === 'dispatch' ? 'danger' : 'success'
   if (['dispatch_draft', 'dispatch_missing', 'dispatch_incomplete'].includes(status.value)) return 'warning'

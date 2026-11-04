@@ -52,10 +52,10 @@ export function getProcurementTaskStatus(p: ProcurementProgress | undefined, shi
   if (p?.logisticsGate === 'pending_dispatch' || p?.logisticsGate === 'pending_logistics') return 'dispatch_preparation'
   return stage
 }
-export function getTaskStatus(order: Pick<FopOrder, 'dispatchDocuments' | 'procurementProgress' | 'fulfillmentProgress' | 'exception'>, queue: string): TaskStatus {
+export function getTaskStatus(order: Pick<FopOrder, 'dispatchTaskStatus' | 'dispatchDocuments' | 'procurementProgress' | 'fulfillmentProgress' | 'exception'>, queue: string): TaskStatus {
   if (queue === 'procurement' || queue === 'procurement_shipping') return getProcurementTaskStatus(order.procurementProgress, order.fulfillmentProgress.supplierShipment)
   if (queue === 'allocation' || queue === 'allocation_review') return getDispatchCompletionStatus(order.dispatchDocuments)
-  if (queue === 'dispatch') return getDispatchTaskStatus(order.dispatchDocuments, order.fulfillmentProgress.shopifySync)
+  if (queue === 'dispatch') return order.dispatchTaskStatus ?? getDispatchTaskStatus(order.dispatchDocuments, order.fulfillmentProgress.shopifySync)
   if (queue === 'shipping') return order.fulfillmentProgress.outbound === 'partial' ? 'outbound_partial' : order.fulfillmentProgress.outbound === 'pending' ? 'outbound_pending' : 'unknown'
   if (queue === 'exceptions') return order.exception?.type ?? 'unknown'
   return 'unknown'

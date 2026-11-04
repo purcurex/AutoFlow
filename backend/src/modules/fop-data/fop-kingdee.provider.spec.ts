@@ -10,6 +10,7 @@ const settings: Record<string, string> = {
   FOP_KINGDEE_QUERY_URL: 'https://example.test/query', FOP_KINGDEE_SUMMARY_URL: 'https://example.test/summary',
   FOP_KINGDEE_TENANT_ID: 'test-tenant', FOP_KINGDEE_USER_ID: '100', FOP_KINGDEE_ORGANIZATION_IDS: '10,20',
   FOP_KINGDEE_ACCESS_TOKEN: 'unit-test-token', FOP_KINGDEE_IDENTITY: 'unit-test-identity', FOP_KINGDEE_OPENAPI_SIGN: 'unit-test-sign',
+  FOP_KINGDEE_STOCK_WAREHOUSE_CODE_MAP: 'unused-invalid-stock-config',
 }
 const ref = (id: string) => ({ id, name: `name-${id}` })
 const row = (id: string, owner: string, org = '10') => ({
@@ -35,15 +36,50 @@ function setup(transform?: (value: ReturnType<typeof page>, summary: boolean) =>
 }
 
 describe('Kingdee server-paged review integration', () => {
+  it.each(['2026-10-02T01:30:00Z', null])('待审核保留源单付款时间%s，不回退创建或收款日期', async consumerPaidAt => {
+    const { provider } = setup((value, summary) => summary ? value : { ...value,
+      items: [{ ...row('1001', '501'), consumerPaidAt, paidAt: '2026-10-03T00:00:00Z' }] })
+    const grant = await provider.resolvePermissions(identity, scope)
+    const result = await provider.queryOrders(identity, grant, scope, { queue: 'review', page: 1, pageSize: 10 })
+    expect(result.items[0]).toMatchObject({ consumerPaidAt, paidAt: '2026-10-03T00:00:00Z', paymentStatus: 'paid', reviewStatus: 'pending' })
+  })
+
+  it('待审核源单付款时间排序传给金蝶，在分页前执行', async () => {
+    const { provider, request } = setup()
+    const grant = await provider.resolvePermissions(identity, scope)
+    await provider.queryOrders(identity, grant, scope, { queue: 'review', page: 2, pageSize: 10, sortBy: 'consumerPaidAt', sortOrder: 'desc' })
+    expect(JSON.parse(String(request.mock.calls[1][1]?.body)).query).toMatchObject({ sortBy: 'consumerPaidAt', sortOrder: 'desc' })
+  })
+
+  it('待审核页面服务允许源单付款时间排序，并保留金蝶总数与支付审核条件', async () => {
+    const { provider, request } = setup((value, summary) => summary ? value : { ...value,
+      items: [{ ...row('1001', '501'), consumerPaidAt: '2026-10-02T01:30:00Z' }] })
+    const user = { id: 'local-admin', role: 'admin', businessRole: 'admin', workbenchRoles: ['sales'],
+      fopTenantId: identity.tenantId, fopUserId: identity.userId, businessDepartmentId: null, businessEmployeeId: null,
+      fopBindingDetails: { username: 'offline-user', name: '测试职员', employeeRecordId: identity.userId,
+        employeeMasterId: identity.userId, departmentId: '10', organizationId: '10', localEmployeeId: null,
+        localDepartmentId: null, verifiedAt: '2026-10-29T00:00:00Z' } } as User
+    const service = new FopDataService({ findById: jest.fn().mockResolvedValue(user) } as unknown as UsersService, provider)
+    const result = await service.getOrders(user.id, { queue: 'review', page: 1, pageSize: 10, sortBy: 'consumerPaidAt', sortOrder: 'desc' })
+    expect(result.total).toBe(32)
+    expect(result.items[0]).toMatchObject({ consumerPaidAt: '2026-10-02T01:30:00Z', paymentStatus: 'paid', reviewStatus: 'pending' })
+    expect(JSON.parse(String(request.mock.calls[1][1]?.body)).query).toMatchObject({ sortBy: 'consumerPaidAt', sortOrder: 'desc', scopeRole: 'admin' })
+  })
+
   it('reports a bounded shipment-query overflow without treating it as denied permissions', async () => {
     const { provider, request } = setup()
     request.mockResolvedValue(new Response(JSON.stringify({ status: false, errorCode: '', message: 'FOP_RESULT_TOO_LARGE：待履约读取超过上限' })))
     await expect(provider.resolvePermissions(identity, scope)).rejects.toMatchObject({ code: 'fop_result_too_large' })
   })
-  it.each(['A', 'B', 'C'])('reads paid pending Shopify sync without imposing internal audit status %s', async billStatus => {
-    const { provider, request } = setup((value, summary) => ({ ...value, queue: 'dispatch', basis: 'paid_tracking_pending_active',
-      items: summary ? [] : [{ ...row('1001', '501'), billStatus }] }))
+  it.each(['A', 'B', 'C'])('待履约限定履约订单已审核，独立于发运单阶段：%s', async billStatus => {
+    const { provider, request } = setup((value, summary) => ({ ...value, queue: 'dispatch', basis: 'paid_tracking_pending_active', dispatchSchemaVersion: 1,
+      departments: [], salespeople: [], items: summary ? [] : [{ ...row('1001', '501'), billStatus,
+        dispatchTaskStatus: 'dispatch_missing', dispatchDocuments: [], logisticsInfo: [], fulfillmentProgress: { shopifySync: 'pending' } }] }))
     const grant = { subject: identity, allowedOrderIds: [], orderQuery: { queues: ['review', 'dispatch'] as ('review' | 'dispatch')[], organizationIds: ['10', '20'] } }
+    if (billStatus !== 'C') {
+      await expect(provider.queryOrders(identity, grant, scope, { queue: 'dispatch', page: 1, pageSize: 10 })).rejects.toThrow('Unexpected review order status')
+      return
+    }
     const result = await provider.queryOrders(identity, grant, scope, { queue: 'dispatch', page: 1, pageSize: 10 })
     expect(result.items[0]?.fulfillmentProgress?.shopifySync).toBe('pending')
     expect(result.items[0]?.reviewStatus).toBe(billStatus === 'C' ? 'approved' : 'pending')
@@ -146,15 +182,13 @@ describe('Kingdee server-paged review integration', () => {
     await expect(provider.listOrders()).rejects.toBeInstanceOf(FopIntegrationUnavailableError)
   })
 
-  it('accepts an authorized child department from the versioned employee endpoint', async () => {
+  it('经理不能通过部门祖先链读取子部门订单', async () => {
     const { provider } = setup((value, summary) => summary ? value : { ...value, schemaVersion: 1,
       items: [{ ...row('1001', '501'), department: ref('401'), departmentPathIds: ['10', '400', '401'],
         items: [{ ...row('1001', '501').items[0], rowType: null }] }] })
     const manager = { role: 'department_manager' as const, departmentId: '400', employeeId: '501' }
     const grant = await provider.resolvePermissions(identity, manager)
-    const result = await provider.queryOrders(identity, grant, manager, { queue: 'review', page: 2, pageSize: 10 })
-    expect(result.items[0]?.departmentPathIds).toEqual(['10', '400', '401'])
-    expect(result.items[0]?.items[0]?.rowType).toBeUndefined()
+    await expect(provider.queryOrders(identity, grant, manager, { queue: 'review', page: 2, pageSize: 10 })).rejects.toBeInstanceOf(FopPermissionDeniedError)
   })
 
   it.each([
@@ -255,7 +289,9 @@ describe('Kingdee server-paged review integration', () => {
           ? { subject: identity, grants: { orders: ['10', '20'], receipts: [], registrations: [], freight: [] }, orderQueues: ['review', 'dispatch'] }
           : { ...page(String(input).endsWith('/summary') ? [] : [row('1001', '501')], query.queue === 'dispatch' ? 7 : 32),
               page: query.page, pageSize: query.pageSize,
-              ...(query.queue === 'dispatch' ? { queue: 'dispatch', basis: 'paid_tracking_pending_active' } : {}) }
+              ...(query.queue === 'dispatch' ? { queue: 'dispatch', basis: 'paid_tracking_pending_active', dispatchSchemaVersion: 1,
+                departments: [], salespeople: [], items: String(input).endsWith('/summary') ? [] : [{ ...row('1001', '501'), billStatus: 'C',
+                  dispatchTaskStatus: 'dispatch_missing', dispatchDocuments: [], logisticsInfo: [], fulfillmentProgress: { shopifySync: 'pending' } }] } : {}) }
         return new Response(JSON.stringify({ status: true, errorCode: '0', data }))
       })
     const user = { id: 'local-employee', role: 'user', businessRole: 'salesperson', fopTenantId: identity.tenantId, fopUserId: identity.userId,

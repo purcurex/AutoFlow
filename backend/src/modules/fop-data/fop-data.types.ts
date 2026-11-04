@@ -52,6 +52,8 @@ export interface FopPermissionGrant {
   /** Independent stock document and current-customer inventory grants; missing means no access. */
   allowedStockOrderIds?: readonly string[]
   allowedStockInventoryIds?: readonly string[]
+  /** 独立员工备货接口的组织授权，不能由履约订单权限或空逐单白名单推导。 */
+  stockQuery?: { orders: readonly string[]; inventory: readonly string[] }
   allocationInventoryScopes?: readonly AllocationInventoryScope[]
   /** Explicit operation grants; read or system-admin access never implies approval. */
   approvalActions?: readonly ApprovalQueue[]
@@ -65,7 +67,7 @@ export interface FopPermissionGrant {
   allowedProfitIds?: readonly string[]
   analyticsScopes?: readonly FopAnalyticsScope[]
   /** 真实分页模式只授权声明的队列；不把空 allowlist 解释成全部数据。 */
-  orderQuery?: { queues: readonly ('review' | 'dispatch')[]; organizationIds: readonly string[] }
+  orderQuery?: { queues: readonly ('unpaid' | 'review' | 'dispatch')[]; organizationIds: readonly string[] }
   /** 各统计资源的独立组织授权；仅真实查询适配器使用，不扩大订单/收款/成本权限。 */
   analyticsQuery?: Partial<Record<FopAnalyticsResource, readonly string[]>>
   /** Independent aggregate grants; never inferred from record allowlists. */
@@ -74,6 +76,8 @@ export interface FopPermissionGrant {
 
 export type FopAnalyticsScope = 'rates' | 'registrations' | 'receipts' | 'freight' | 'sales_profit'
 export interface FopRegistrationEntry {
+  /** 注册事实的直属部门，用于经理精确鉴权，不能仅凭祖先链推断归属。 */
+  department?: { id: string; name: string }
   departmentPathIds?: string[]
   date: string
   salesDepartmentCode: SalesDepartmentCode
@@ -167,6 +171,8 @@ export interface LogisticsInfo {
 export interface AllocationDocumentReference { id: string; number: string }
 
 export interface FopOrder {
+  /** 服务端按未完成期望包裹聚合，避免缺包裹被已有发运单掩盖。 */
+  dispatchTaskStatus?: 'dispatch_missing' | 'dispatch_draft' | 'dispatch_submitted' | 'dispatch_approved' | 'dispatch_synced' | 'unknown'
   /** Unique effective FOP allocation for this order; null/omitted = unavailable or not yet created. */
   allocationDocument?: AllocationDocumentReference | null
   /** Shopify-selected tracking grouped by shipment/carrier; raw legacy fields do not prove selection. */
@@ -175,9 +181,11 @@ export interface FopOrder {
   customLogisticsChannelName?: string | null
   /** Actual fulfillment channels, never carrier categories or customer-facing custom channels. */
   logisticsChannels?: LogisticsChannel[] | null
-  /** First Shopify consumer payment completion, distinct from FOP createdAt and paidAt; unknown = null. */
+  /** 待支付清单取履约订单源单付款时间，区别于FOP创建时间和收款日期；未知为null。 */
   /** Actual phase completion timestamps supplied by the trusted gateway; no fallbacks. */
   shopifySyncedAt?: string | null
+  /** 已履约清单取当前有效发运单的最大审核时间，不代表Shopify同步完成时间。 */
+  dispatchApprovedAt?: string | null
   procurementCompletedAt?: string | null
   allocationApprovedAt?: string | null
   outboundCompletedAt?: string | null
@@ -269,8 +277,18 @@ export interface FopReceiptCandidate extends FopReceipt { tenantId: string; depa
 
 export const FOP_DATA_PROVIDER = 'FOP_DATA_PROVIDER'
 
-export interface FopOrderPageQuery { queue: string; search?: string; orderNumber?: string; page: number; pageSize: number }
+export interface FopOrderPageQuery {
+  queue: string; search?: string; orderNumber?: string; page: number; pageSize: number
+  /** 仅 dispatch 支持完成清单；省略时保留原待履约语义。 */
+  completed?: boolean
+  timeRange?: 'all' | '1w' | '1m' | '3m'; departmentId?: string; ownerId?: string; warehouseCode?: 'HZ' | 'SZ'
+  sortBy?: string; sortOrder?: 'asc' | 'desc'; paidAtOrder?: 'asc' | 'desc'
+  taskStatus?: string; orderIds?: readonly string[]; exportManifest?: boolean
+}
 export interface FopOrderPage {
+  departments?: { id: string; name: string }[]
+  salespeople?: { id: string; name: string }[]
+  orderIds?: string[]
   source: 'fop'
   items: FopOrder[]
   total: number
@@ -283,6 +301,7 @@ export interface FopOrderPage {
 export abstract class FopDataProvider {
   readonly source: 'mock' | 'fop' = 'fop'
   readonly pagedOrders: boolean = false
+  readonly queriedStock: boolean = false
   readonly supportsEmployeeBinding: boolean = false
   /** 管理员专用目录及验证入口；未接通的适配器不能伪造真实员工绑定。 */
   async listBindingEmployees(_cursor?: string, _scopeVersion?: string): Promise<FopBindingEmployeePage> {
@@ -315,14 +334,18 @@ export abstract class FopDataProvider {
   async approvalTargets(_identity: Readonly<FopIdentity>, _queue: ApprovalQueue, _orderId: string): Promise<ApprovalTarget[]> { throw new Error('FOP approval adapter is not configured') }
   async approveDocument(_identity: Readonly<FopIdentity>, _command: ApprovalCommand): Promise<ApprovalOutcome> { throw new Error('FOP approval adapter is not configured') }
   abstract resolvePermissions(identity: Readonly<FopIdentity>, scope?: Readonly<BusinessScope>): Promise<FopPermissionGrant>
+  /** 备货授权独立解析，配置或发布失败仅影响备货入口。 */
+  async resolveStockPermissions(identity: Readonly<FopIdentity>, scope: Readonly<BusinessScope>): Promise<FopPermissionGrant> {
+    return this.resolvePermissions(identity, scope)
+  }
   /** 默认适配器继续走完整数组契约；真实查询明确使用有权限的服务端分页能力。 */
   async queryOrders(_identity: Readonly<FopIdentity>, _permission: Readonly<FopPermissionGrant>, _scope: Readonly<BusinessScope>, _query: FopOrderPageQuery, _summaryOnly = false): Promise<FopOrderPage> {
     throw new FopIntegrationUnavailableError('fop_feature_not_configured')
   }
   async getAllocationInventory(_identity: Readonly<FopIdentity>, _permission: Readonly<FopPermissionGrant>, _scopes: readonly AllocationInventoryScope[]): Promise<AllocationInventorySnapshot & { subject: FopIdentity }> { throw new Error('Allocation inventory provider is not configured') }
   abstract listOrders(identity: Readonly<FopIdentity>, permission: Readonly<FopPermissionGrant>): Promise<FopOrderCandidate[]>
-  async listStockOrders(_identity: Readonly<FopIdentity>, _permission: Readonly<FopPermissionGrant>): Promise<FopStockOrderCandidate[]> { throw new Error('Stock orders provider is not configured') }
-  async listStockInventory(_identity: Readonly<FopIdentity>, _permission: Readonly<FopPermissionGrant>): Promise<FopStockInventoryCandidate[]> { throw new Error('Stock inventory provider is not configured') }
+  async listStockOrders(_identity: Readonly<FopIdentity>, _permission: Readonly<FopPermissionGrant>, _scope?: Readonly<BusinessScope>): Promise<FopStockOrderCandidate[]> { throw new Error('Stock orders provider is not configured') }
+  async listStockInventory(_identity: Readonly<FopIdentity>, _permission: Readonly<FopPermissionGrant>, _scope?: Readonly<BusinessScope>): Promise<FopStockInventoryCandidate[]> { throw new Error('Stock inventory provider is not configured') }
   async listProfits(_identity: Readonly<FopIdentity>, _permission: Readonly<FopPermissionGrant>): Promise<FopProfitCandidate[]> {
     throw new Error('Profit contribution provider is not configured')
   }

@@ -49,7 +49,7 @@ import { emptyAnalyticsData } from './fop-kingdee.analytics'
 import { ConfirmFopConnectionDto } from './fop-connection.dto'
 
 type Queue = keyof typeof FULFILLMENT_QUEUE_ROLES
-type Scope = { binding: FopIdentity | null; bindingVersion?: string; roles: WorkbenchRole[]; business: BusinessScope; charts: EffectiveChartAccess[]; summaryPolicies: Record<ChartId, ChartSummaryPolicy>; customerAttribution?: { current: number; historical: number; assignments: Map<string, string> } }
+type Scope = { binding: FopIdentity | null; bindingVersion?: string; employeeMasterId?: string; roles: WorkbenchRole[]; business: BusinessScope; charts: EffectiveChartAccess[]; summaryPolicies: Record<ChartId, ChartSummaryPolicy>; customerAttribution?: { current: number; historical: number; assignments: Map<string, string> } }
 type ChartContext = { initial: Scope; permission: FopPermissionGrant; access: EffectiveChartAccess; chartId: ChartId }
 
 function matchesQueue(order: FopOrder, queue: Queue, warehouseStage?: ListFulfillmentOrdersDto['warehouseStage']): boolean {
@@ -156,6 +156,7 @@ function publicOrder(order: FopOrderCandidate): FopOrder {
   return {
     allocationDocument: allocation ? { id: allocation.id, number: allocation.number } : null,
     dispatchDocuments: documents?.map(({ id, number, status }) => ({ id, number, status })) ?? null,
+    dispatchTaskStatus: order.dispatchTaskStatus,
     procurementProgress: { purchaseOrder: procurement?.purchaseOrder ?? 'unknown', supplierPayment: procurement?.supplierPayment ?? 'unknown',
       purchaseApplication: procurement?.purchaseApplication ?? 'unknown', alibabaOrder: procurement?.alibabaOrder ?? 'unknown', logisticsGate: procurement?.logisticsGate ?? 'unknown' },
     ...(order.salesDepartmentCode ? { salesDepartmentCode: order.salesDepartmentCode } : {}),
@@ -163,6 +164,7 @@ function publicOrder(order: FopOrderCandidate): FopOrder {
     id: order.id, orderNumber: order.orderNumber, shopifyOrderNumber: order.shopifyOrderNumber,
     customerId: order.customerId, customerCode: order.customerCode, warehouseCode: order.warehouseCode, carrierCode: order.carrierCode,
     shopifySyncedAt: isStageCompleted(order, 'dispatch') ? normalizeBusinessTimestamp(order.shopifySyncedAt) : null,
+    dispatchApprovedAt: isStageCompleted(order, 'dispatch') ? normalizeBusinessTimestamp(order.dispatchApprovedAt) : null,
     procurementCompletedAt: isStageCompleted(order, 'procurement') ? normalizeBusinessTimestamp(order.procurementCompletedAt) : null,
     allocationApprovedAt: isStageCompleted(order, 'allocation_review') ? normalizeBusinessTimestamp(order.allocationApprovedAt) : null,
     outboundCompletedAt: isStageCompleted(order, 'shipping') ? normalizeBusinessTimestamp(order.outboundCompletedAt) : null,
@@ -241,6 +243,7 @@ export class FopDataService {
     const verified = !this.provider.supportsEmployeeBinding || !!details
     return {
       business,
+      employeeMasterId: details?.employeeMasterId,
       bindingVersion: this.provider.supportsEmployeeBinding ? JSON.stringify(details ?? null) : undefined,
       charts: resolveChartAccess(user),
       summaryPolicies: Object.fromEntries(CHART_IDS.map(chartId => [chartId, resolveChartSummaryPolicy(user, chartId)])) as Record<ChartId, ChartSummaryPolicy>,
@@ -260,13 +263,13 @@ export class FopDataService {
     }
   }
 
-  private async permissions(userId: string, initial: Scope): Promise<FopPermissionGrant> {
+  private async permissions(userId: string, initial: Scope, stock = false): Promise<FopPermissionGrant> {
     if (initial.business.role === 'none') throw new ForbiddenException({ code: 'business_access_disabled', message: 'Business data access is disabled for this account' })
     if (!initial.binding) throw new ForbiddenException({ code: 'fop_binding_required', message: 'Bind this employee account to an FOP user first' })
     if (!await this.providerCall(async () => this.provider.isConfigured())) throw new ServiceUnavailableException({ code: 'fop_not_configured', message: 'FOP data integration is not configured' })
     if ((initial.business.role === 'department_manager' && !initial.business.departmentId) || (initial.business.role === 'salesperson' && !initial.business.employeeId)) throw new ForbiddenException({ code: 'business_scope_required', message: 'Configure this account department or employee data scope first' })
     const identity = Object.freeze({ ...initial.binding })
-    const grant = await this.providerCall(() => this.provider.resolvePermissions(identity, initial.business))
+    const grant = await this.providerCall(() => stock && this.provider.queriedStock ? this.provider.resolveStockPermissions(identity, initial.business) : this.provider.resolvePermissions(identity, initial.business))
     await this.assertUnchanged(userId, initial)
     if (!sameIdentity(grant?.subject, identity) || !Array.isArray(grant?.allowedOrderIds)
       || grant.allowedOrderIds.some((id) => typeof id !== 'string' || !id.trim())) {
@@ -277,6 +280,11 @@ export class FopDataService {
     }
     for (const ids of [grant.allowedStockOrderIds, grant.allowedStockInventoryIds]) {
       if (ids !== undefined && (!Array.isArray(ids) || ids.some(id => typeof id !== 'string' || !id.trim()))) throw new ForbiddenException({ code: 'fop_permission_denied', message: 'Invalid FOP stock permissions' })
+    }
+    if (grant.stockQuery !== undefined && (!this.provider.queriedStock || !grant.stockQuery || typeof grant.stockQuery !== 'object'
+      || Object.keys(grant.stockQuery).some(key => !['orders', 'inventory'].includes(key))
+      || [grant.stockQuery.orders, grant.stockQuery.inventory].some(ids => !Array.isArray(ids) || ids.length > 200 || new Set(ids).size !== ids.length || ids.some(id => typeof id !== 'string' || !/^[1-9]\d{0,18}$/.test(id))))) {
+      throw new ForbiddenException({ code: 'fop_permission_denied', message: 'Invalid FOP stock query grant' })
     }
     if (grant.allowedReceiptIds !== undefined && (!Array.isArray(grant.allowedReceiptIds) || grant.allowedReceiptIds.some(id => typeof id !== 'string' || !id.trim()))) {
       throw new ForbiddenException({ code: 'fop_permission_denied', message: 'Invalid FOP receipt permissions' })
@@ -291,7 +299,7 @@ export class FopDataService {
       throw new ForbiddenException({ code: 'fop_permission_denied', message: 'Invalid FOP analytics permissions' })
     }
     if (grant.orderQuery && (!Array.isArray(grant.orderQuery.queues) || !grant.orderQuery.queues.length
-      || grant.orderQuery.queues.some(queue => queue !== 'review' && queue !== 'dispatch')
+      || grant.orderQuery.queues.some(queue => !['unpaid', 'review', 'dispatch'].includes(queue))
       || new Set(grant.orderQuery.queues).size !== grant.orderQuery.queues.length
       || !Array.isArray(grant.orderQuery.organizationIds) || !grant.orderQuery.organizationIds.length
       || grant.orderQuery.organizationIds.some(id => typeof id !== 'string' || !/^[1-9]\d{0,18}$/.test(id)))) {
@@ -306,6 +314,7 @@ export class FopDataService {
     const summaries = grant.organizationSummaries ?? []
     if (!Array.isArray(summaries) || new Set(summaries.map((s: FopOrganizationSummaryGrant) => s?.chartId)).size !== summaries.length || summaries.some((s: FopOrganizationSummaryGrant) => !s || !['registrations', 'department_receipts', 'order_volume'].includes(s.chartId) || !Array.isArray(s.departments) || new Set(s.departments.map((d: FopOrganizationSummaryGrant['departments'][number]) => d?.code)).size !== s.departments.length || s.departments.some((d: FopOrganizationSummaryGrant['departments'][number]) => !d || !SALES_DEPARTMENTS.some(item => item.id === d.code) || typeof d.departmentId !== 'string' || !d.departmentId.trim() || d.departmentPathIds !== undefined && (!Array.isArray(d.departmentPathIds) || d.departmentPathIds.some((id: unknown) => typeof id !== 'string' || !id.trim()) || new Set(d.departmentPathIds).size !== d.departmentPathIds.length)))) throw new ForbiddenException({ code: 'fop_permission_denied', message: 'Invalid organization summary grant' })
     return { allocationInventoryScopes: grant.allocationInventoryScopes === undefined ? undefined : structuredClone(grant.allocationInventoryScopes), allowedStockOrderIds: [...new Set(grant.allowedStockOrderIds ?? [])], allowedStockInventoryIds: [...new Set(grant.allowedStockInventoryIds ?? [])], approvalActions: [...new Set(grant.approvalActions ?? [])], organizationSummaries: summaries.map((s: FopOrganizationSummaryGrant) => ({ chartId: s.chartId, departments: s.departments.map((d: FopOrganizationSummaryGrant['departments'][number]) => ({ code: d.code, departmentId: d.departmentId, ...(d.departmentPathIds ? { departmentPathIds: [...d.departmentPathIds] } : {}) })) })), subject: { ...identity }, allowedOrderIds: [...new Set(grant.allowedOrderIds)], allowedPurchaseOrderIds: [...new Set(grant.allowedPurchaseOrderIds ?? [])], allowedReceiptIds: [...new Set(grant.allowedReceiptIds ?? [])], allowedFreightIds: [...new Set(grant.allowedFreightIds ?? [])], allowedProfitIds: [...new Set(grant.allowedProfitIds ?? [])], analyticsScopes: [...new Set(grant.analyticsScopes ?? [])],
+      ...(grant.stockQuery ? { stockQuery: { orders: [...grant.stockQuery.orders], inventory: [...grant.stockQuery.inventory] } } : {}),
       ...(grant.analyticsQuery ? { analyticsQuery: Object.fromEntries(Object.entries(grant.analyticsQuery).map(([resource, ids]) => [resource, [...ids]])) } : {}),
       ...(grant.orderQuery ? { orderQuery: { queues: [...grant.orderQuery.queues], organizationIds: [...grant.orderQuery.organizationIds] } } : {}) }
   }
@@ -317,7 +326,7 @@ export class FopDataService {
       const granted = permission.organizationSummaries?.find(g => g.chartId === local.chartId)?.departments ?? []
       const summaryDepartments = !local.visible ? [] : granted.filter(d => policy.mode === 'marketing'
         || policy.mode === 'selected' && policy.departments.includes(d.code)
-        || policy.mode === 'department' && !!initial.business.departmentId && (d.departmentId === initial.business.departmentId || d.departmentPathIds?.includes(initial.business.departmentId))).map(d => d.code)
+        || policy.mode === 'department' && !!initial.business.departmentId && d.departmentId === initial.business.departmentId).map(d => d.code)
       const resourceEnabled = local.chartId === 'registrations' ? permission.analyticsScopes?.includes('registrations')
         : local.chartId === 'salesperson_receipts' ? permission.analyticsScopes?.includes('receipts')
           : local.chartId === 'freight' ? permission.analyticsScopes?.includes('freight')
@@ -355,7 +364,7 @@ export class FopDataService {
     switch (context.access.dataScope) {
       case 'all': return true
       case 'self': return !!context.initial.business.employeeId && record.owner?.id === context.initial.business.employeeId
-      case 'department': return !!context.initial.business.departmentId && (record.department?.id === context.initial.business.departmentId || !!record.departmentPathIds?.includes(context.initial.business.departmentId))
+      case 'department': return !!context.initial.business.departmentId && record.department?.id === context.initial.business.departmentId
       default: return false
     }
   }
@@ -464,7 +473,7 @@ export class FopDataService {
     return result
   }
 
-  private async scopedOrders(userId: string, requiredRole?: WorkbenchRole, context?: ChartContext, range?: FopAnalyticsRange): Promise<{ orders: FopOrder[]; departmentPaths: Map<string, readonly string[]>; roles: WorkbenchRole[]; permission: FopPermissionGrant; initial: Scope; range?: FopAnalyticsRange }> {
+  private async scopedOrders(userId: string, requiredRole?: WorkbenchRole, context?: ChartContext, range?: FopAnalyticsRange, includeManagedDepartments = false): Promise<{ orders: FopOrder[]; departmentPaths: Map<string, readonly string[]>; roles: WorkbenchRole[]; permission: FopPermissionGrant; initial: Scope; range?: FopAnalyticsRange }> {
     const initial = context?.initial ?? await this.scope(userId)
     if (requiredRole ? !initial.roles.includes(requiredRole) : initial.roles.length === 0) {
       throw new ForbiddenException('Workbench access denied')
@@ -487,7 +496,7 @@ export class FopDataService {
       if (!Array.isArray(candidates)) throw new Error('Invalid FOP order response')
       const seen = new Set<string>()
       const orders = candidates.filter((candidate) => {
-        if (!candidate || candidate.tenantId !== identity.tenantId || !allowedIds.has(candidate.id) || seen.has(candidate.id) || !matchesBusinessScope(initial.business, candidate)) return false
+        if (!candidate || candidate.tenantId !== identity.tenantId || !allowedIds.has(candidate.id) || seen.has(candidate.id) || !matchesBusinessScope(initial.business, candidate, includeManagedDepartments)) return false
         this.validateAncestry(candidate.departmentPathIds)
         if (context && !this.matchesChart(context, candidate) || !this.matchesCustomer(context, candidate)) return false
         seen.add(candidate.id)
@@ -748,8 +757,10 @@ export class FopDataService {
     const inTimeRange = query.completed ? completedRange(query.timeRange as '1w' | '1m' | '3m' | undefined) : consumerPaymentRange(query.timeRange)
     const role = FULFILLMENT_QUEUE_ROLES[query.queue]
     if (query.workbenchRole && query.workbenchRole !== role) throw new BadRequestException('workbenchRole does not match the requested queue')
-    const scoped = await this.scopedOrders(userId, role)
-    const { orders, departmentPaths } = scoped
+    const scoped = await this.scopedOrders(userId, role, undefined, undefined, query.queue === 'dispatch')
+    const { departmentPaths } = scoped
+    // 待支付与其他清单复用已验权订单：管理员/总经办全部部门，经理本部门，业务员本人。
+    const orders = scoped.orders
     // Derive filter options from the same permitted records, never the administrator's organization directory.
     const departments = orderDepartments(orders)
     const departmentOrders = orders.filter(order => !query.departmentId || order.department?.id === query.departmentId || departmentPaths.get(order.id)?.includes(query.departmentId))
@@ -780,17 +791,27 @@ export class FopDataService {
       const role = FULFILLMENT_QUEUE_ROLES[query.queue]
       if (!role || query.workbenchRole && query.workbenchRole !== role) throw new BadRequestException('Invalid fulfillment queue or workbench role')
       // 旧金蝶分页契约尚无这些筛选/排序参数，禁止静默忽略后返回错误的清单范围。
-      if (query.departmentId || query.ownerId || query.warehouseStage || query.sortBy && query.sortBy !== 'paidAt'
-        || query.completed || query.timeRange !== undefined || query.shippingCountryCode !== undefined
-        || query.sortOrder === 'desc' || query.paidAtOrder === 'desc') {
+      const unpaid = query.queue === 'unpaid'
+      const dispatch = query.queue === 'dispatch'
+      const sourcePaymentSort = query.queue === 'review' && query.sortBy === 'consumerPaidAt'
+      if (query.warehouseStage || query.completed && !dispatch || query.shippingCountryCode !== undefined
+        || unpaid && (query.taskStatus || query.procurementStage || query.sortBy !== undefined && !['paidAt', 'consumerPaidAt'].includes(query.sortBy))
+        || dispatch && (query.procurementStage || (query.completed
+          ? query.taskStatus !== undefined || query.timeRange !== undefined && !['1w', '1m', '3m'].includes(query.timeRange)
+          : query.timeRange !== undefined || query.taskStatus && !canFilterTaskStatus('dispatch', query.taskStatus))
+          || query.sortBy && !(query.completed ? ['completedAt', 'paidAt', 'consumerPaidAt'] : ['paidAt', 'consumerPaidAt', 'dispatchDocumentStatus']).includes(query.sortBy))
+        || !unpaid && !dispatch && (query.departmentId || query.ownerId || query.sortBy && query.sortBy !== 'paidAt' && !sourcePaymentSort
+          || query.timeRange !== undefined || !sourcePaymentSort && (query.sortOrder === 'desc' || query.paidAtOrder === 'desc'))) {
         throw new ServiceUnavailableException({ code: 'fop_feature_not_configured', message: 'This filter or sort is not integrated with the Kingdee adapter' })
       }
       const initial = await this.scope(userId)
       if (!initial.roles.includes(role)) throw new ForbiddenException('Workbench access denied')
       const permission = await this.permissions(userId, initial)
-      const result = await this.providerCall(() => this.provider.queryOrders(permission.subject, permission, initial.business, query))
+      const business = initial.business
+      if (unpaid && business.role === 'salesperson' && query.ownerId && query.ownerId !== business.employeeId) throw new ForbiddenException('业务员仅允许查看本人订单')
+      const result = await this.providerCall(() => this.provider.queryOrders(permission.subject, permission, business, query))
       await this.assertUnchanged(userId, initial)
-      return { ...result, refreshedAt: new Date().toISOString(), departments: [], salespeople: [] }
+      return { ...result, refreshedAt: new Date().toISOString(), departments: result.departments ?? [], salespeople: result.salespeople ?? [] }
     }
     const { filtered, departments, salespeople, shippingCountries } = await this.filteredOrders(userId, query)
     const start = (query.page - 1) * query.pageSize
@@ -887,19 +908,22 @@ export class FopDataService {
   private async stockContext(userId: string, role: 'sales' | 'procurement' | 'inventory' = 'sales') {
     const initial = await this.scope(userId)
     if (!(role === 'inventory' ? initial.roles.some(r => r === 'sales' || r === 'procurement') : initial.roles.includes(role))) throw new ForbiddenException('Stock workbench access required')
-    return { initial, permission: await this.permissions(userId, initial) }
+    const permission = await this.permissions(userId, initial, true)
+    if (this.provider.queriedStock && !permission.stockQuery) throw new ServiceUnavailableException({ code: 'fop_feature_not_configured', message: 'Stock query integration is not configured' })
+    return { initial, permission }
   }
 
   private async scopedStockOrders(userId: string, role: 'sales' | 'procurement' | 'inventory' = 'sales') {
     const context = await this.stockContext(userId, role)
     const allowed = new Set(context.permission.allowedStockOrderIds ?? [])
-    const rows = allowed.size ? await this.providerCall(() => this.provider.listStockOrders(context.permission.subject, context.permission)) : []
+    const queried = this.provider.queriedStock && !!context.permission.stockQuery?.orders.length
+    const rows = allowed.size || queried ? await this.providerCall(() => this.provider.listStockOrders(context.permission.subject, context.permission, context.initial.business)) : []
     await this.assertUnchanged(userId, context.initial)
     const orders = await this.providerCall(async () => {
       if (!Array.isArray(rows)) throw new Error('Invalid stock response')
       const seen = new Set<string>()
       return rows.filter(row => {
-        if (!row || row.tenantId !== context.permission.subject.tenantId || !allowed.has(row.id) || !matchesBusinessScope(context.initial.business, row)) return false
+        if (!row || row.tenantId !== context.permission.subject.tenantId || !queried && !allowed.has(row.id) || !matchesBusinessScope(context.initial.business, row)) return false
         publicStockOrder(row)
         if (seen.has(row.id)) throw new Error('Duplicate stock document')
         seen.add(row.id)
@@ -912,13 +936,14 @@ export class FopDataService {
   private async scopedStockInventory(userId: string) {
     const context = await this.stockContext(userId, 'inventory')
     const allowed = new Set(context.permission.allowedStockInventoryIds ?? [])
-    const rows = allowed.size ? await this.providerCall(() => this.provider.listStockInventory(context.permission.subject, context.permission)) : []
+    const queried = this.provider.queriedStock && !!context.permission.stockQuery?.inventory.length
+    const rows = allowed.size || queried ? await this.providerCall(() => this.provider.listStockInventory(context.permission.subject, context.permission, context.initial.business)) : []
     await this.assertUnchanged(userId, context.initial)
     const inventory = await this.providerCall(async () => {
       if (!Array.isArray(rows)) throw new Error('Invalid inventory response')
       const ids = new Set<string>(), groups = new Set<string>()
       return rows.filter(row => {
-        if (!row || row.tenantId !== context.permission.subject.tenantId || !allowed.has(row.id) || !matchesBusinessScope(context.initial.business, row)) return false
+        if (!row || row.tenantId !== context.permission.subject.tenantId || !queried && !allowed.has(row.id) || !matchesBusinessScope(context.initial.business, row)) return false
         publicStockInventory(row)
         const group = JSON.stringify([row.customerId, row.sku, row.warehouseCode])
         if (ids.has(row.id) || groups.has(group)) throw new Error('Duplicate inventory snapshot')
@@ -992,7 +1017,7 @@ export class FopDataService {
       await this.assertUnchanged(userId, selected.initial)
       const ids = new Set(query.orderIds)
       const currentAllowed = new Set(permission.allowedStockOrderIds ?? [])
-      const orders = filterStockOrders(selected.orders, { queue: query.queue }).filter(row => ids.has(row.id) && currentAllowed.has(row.id))
+      const orders = filterStockOrders(selected.orders, { queue: query.queue }).filter(row => ids.has(row.id) && (this.provider.queriedStock && !!permission.stockQuery?.orders.length || currentAllowed.has(row.id)))
       if (orders.length !== ids.size) throw new ConflictException({ code: 'stock_inventory_orders_changed', message: 'Selected stock orders changed; refresh and select again' })
       // Keep each customer's SKU set separate; never cross-join customers and SKUs.
       pairs = new Set(orders.flatMap(row => row.items.map(item => JSON.stringify([row.customerId, item.sku]))))
@@ -1036,6 +1061,7 @@ export class FopDataService {
       if (!account || account.accountDisabled || (account.sessionVersion ?? 0) !== sessionVersion) throw new UnauthorizedException('Account disabled or session expired')
     }
     await assertSession()
+    if (this.provider.pagedOrders && query.queue === 'dispatch') return this.exportPagedDispatch(userId, query, assertSession)
     const { filtered, initial } = await this.filteredOrders(userId, query)
     const ids = new Set(query.orderIds)
     const orders = query.mode === 'selected' ? filtered.filter(order => ids.has(order.id)) : filtered
@@ -1050,6 +1076,55 @@ export class FopDataService {
     if (orders.some(order => !current.authorizedOrderIds.has(order.id))) throw new ForbiddenException({ code: 'export_access_changed', message: '订单查看范围已变化，请刷新后重试。' })
     const matchingIds = new Set(current.filtered.map(order => order.id))
     if (orders.some(order => !matchingIds.has(order.id))) throw new ConflictException({ code: 'export_selection_changed', message: '订单状态或筛选结果已变化，请刷新后重新导出。' })
+    await assertSession()
+    return buffer
+  }
+
+  /** 导出固定首次ID清单，再按ID读取；同步移出导致的页码前移不能静默漏单。 */
+  private async exportPagedDispatch(userId: string, query: ExportFulfillmentOrdersDto, assertSession: () => Promise<void>): Promise<Buffer> {
+    if (query.warehouseStage || query.procurementStage || query.shippingCountryCode
+      || (query.completed ? query.taskStatus !== undefined || query.timeRange !== undefined && !['1w', '1m', '3m'].includes(query.timeRange)
+        : query.timeRange !== undefined || query.taskStatus && !canFilterTaskStatus('dispatch', query.taskStatus))
+      || query.sortBy && !(query.completed ? ['completedAt', 'paidAt', 'consumerPaidAt'] : ['paidAt', 'consumerPaidAt', 'dispatchDocumentStatus']).includes(query.sortBy)) throw new BadRequestException('Invalid dispatch export filters')
+    const initial = await this.scope(userId)
+    if (!initial.roles.includes('dispatch') || query.workbenchRole && query.workbenchRole !== 'dispatch') throw new ForbiddenException('Workbench access denied')
+    const permission = await this.permissions(userId, initial)
+    const base = { ...query, page: 1, pageSize: 100, orderIds: undefined }
+    const manifest = async () => {
+      const result = await this.providerCall(() => this.provider.queryOrders(permission.subject, permission, initial.business, { ...base, exportManifest: true }, true))
+      if (!result.orderIds || result.orderIds.length !== result.total) throw new ServiceUnavailableException('Invalid export manifest')
+      return result.orderIds
+    }
+    const ids = query.mode === 'selected' ? [...query.orderIds!] : await manifest()
+    if (!ids.length) throw new ConflictException({ code: 'export_empty', message: '当前筛选下没有可导出的订单。' })
+    const read = async () => {
+      const rows: FopOrder[] = []
+      for (let start = 0; start < ids.length; start += 100) {
+        await assertSession()
+        const batch = ids.slice(start, start + 100)
+        const page = await this.providerCall(() => this.provider.queryOrders(permission.subject, permission, initial.business, { ...base, orderIds: batch }))
+        const returned = new Map(page.items.map(row => [row.id, row]))
+        if (page.total !== batch.length || returned.size !== batch.length || batch.some(id => !returned.has(id))) {
+          throw new ConflictException({ code: 'export_selection_changed', message: '订单状态或权限已变化，请刷新后重新导出。' })
+        }
+        rows.push(...batch.map(id => returned.get(id)!))
+        if (rows.reduce((count, row) => count + row.items.length, 0) > 50000) throw new BadRequestException('单次最多导出50,000行商品，请缩小范围。')
+      }
+      return rows
+    }
+    const rows = await read()
+    const buffer = await buildFulfillmentWorkbook(rows, query, this.provider.source)
+    await this.assertUnchanged(userId, initial)
+    // 返回文件前重新解析平台授权；授权缩减不能沿用最初的grant。
+    const latestPermission = await this.permissions(userId, initial)
+    if (!latestPermission.orderQuery?.queues.includes('dispatch')
+      || JSON.stringify(latestPermission.orderQuery) !== JSON.stringify(permission.orderQuery)) throw new ForbiddenException('Export grants changed')
+    if (query.mode === 'filtered') {
+      const current = await manifest(), original = new Set(ids)
+      if (current.length !== ids.length || current.some(id => !original.has(id))) throw new ConflictException({ code: 'export_selection_changed', message: '待履约清单已变化，请刷新后重新导出。' })
+    }
+    await read()
+    await this.assertUnchanged(userId, initial)
     await assertSession()
     return buffer
   }

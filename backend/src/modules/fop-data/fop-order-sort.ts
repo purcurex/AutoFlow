@@ -40,7 +40,7 @@ export function comparePaymentTime(left: FopOrder, right: FopOrder, direction: '
 function statusRank(order: FopOrder, field: Exclude<FulfillmentSortBy, 'completedAt' | 'paidAt' | 'consumerPaidAt' | 'reviewedAt'>): number {
   if (field === 'dispatchDocumentStatus') {
     const ranks: Record<string, number> = { dispatch_missing: 0, dispatch_draft: 1, dispatch_submitted: 2, dispatch_approved: 3, dispatch_synced: 4 }
-    return ranks[getDispatchTaskStatus(order.dispatchDocuments, order.fulfillmentProgress.shopifySync)] ?? Infinity
+    return ranks[order.dispatchTaskStatus ?? getDispatchTaskStatus(order.dispatchDocuments, order.fulfillmentProgress.shopifySync)] ?? Infinity
   }
   const progress = order.fulfillmentProgress
   if (field === 'stockReadiness') return ({ incomplete: 0, ready: 1, unknown: Infinity })[progress.stockReadiness]

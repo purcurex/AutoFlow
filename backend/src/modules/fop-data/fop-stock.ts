@@ -17,9 +17,10 @@ function ownership(row: StockOwnership) {
   return { customerId: row.customerId, customerCode: row.customerCode, customerName: row.customerName, owner: { id: row.owner.id, name: row.owner.name }, department: { id: row.department.id, name: row.department.name } }
 }
 export function publicStockOrder(row: FopStockOrderCandidate): FopStockOrder {
+  // 历史空明细单保留真实表头；空数组不伪造商品，缺失数组及非法商品仍按原校验拦截。
   if (!string(row.id) || !string(row.stockNumber) || !STOCK_TYPES.includes(row.stockType) || !STOCK_PURCHASE_STATUSES.includes(row.purchaseStatus) || typeof row.cancelled !== 'boolean'
     || !Number.isFinite(row.amount) || row.amount < 0 || row.amount > Number.MAX_SAFE_INTEGER || !/^[A-Z]{3}$/.test(row.currency) || !['HZ', 'SZ'].includes(row.warehouseCode) || !string(row.warehouse)
-    || row.storeName !== null && typeof row.storeName !== 'string' || !Array.isArray(row.items) || !row.items.length) throw new Error('Invalid stock order')
+    || row.storeName !== null && typeof row.storeName !== 'string' || !Array.isArray(row.items)) throw new Error('Invalid stock order')
   if (row.paymentStatus !== undefined && !['paid', 'unpaid', 'unknown'].includes(row.paymentStatus) || row.reviewStatus !== undefined && !['approved', 'pending', 'unknown'].includes(row.reviewStatus)) throw new Error('Invalid stock payment/review status')
   const paidAt = normalizeBusinessTimestamp(row.paidAt)
   if (row.paidAt !== null && !paidAt) throw new Error('Invalid stock payment time')
@@ -78,5 +79,8 @@ export function filterStockOrders(rows: FopStockOrderCandidate[], query: StockFi
 export function stockTotals(rows: FopStockOrder[]) {
   const sums = new Map<string, Decimal>()
   for (const row of rows) sums.set(row.currency, (sums.get(row.currency) ?? new Decimal(0)).plus(row.amount))
-  return { orderCount: rows.length, itemQuantity: rows.reduce((sum, row) => sum + row.items.reduce((n, i) => n + i.quantity, 0), 0), amounts: [...sums].sort(([a], [b]) => a.localeCompare(b)).map(([currency, amount]) => ({ currency, amount: amount.toNumber() })) }
+  // 真实备货允许小数数量，合计沿用金额的Decimal计算，避免0.1+0.2产生浮点尾差。
+  const itemQuantity = rows.reduce((sum, row) => row.items.reduce((quantity, item) => quantity.plus(item.quantity), sum), new Decimal(0))
+  if (itemQuantity.greaterThan(Number.MAX_SAFE_INTEGER)) throw new Error('Stock quantity total overflow')
+  return { orderCount: rows.length, itemQuantity: itemQuantity.toNumber(), amounts: [...sums].sort(([a], [b]) => a.localeCompare(b)).map(([currency, amount]) => ({ currency, amount: amount.toNumber() })) }
 }

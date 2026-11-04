@@ -7,11 +7,11 @@ export const completedNames: Record<WorkbenchRole, readonly [string, string]> = 
   allocation: ['配货完成清单', 'Completed allocations'], warehouse: ['已出库清单', 'Completed outbound'],
 }
 export const completedTimeNames: Record<WorkbenchRole, readonly [string, string]> = {
-  sales: ['订单审核时间', 'Order approval time'], dispatch: ['Shopify同步时间', 'Shopify sync time'], procurement: ['采购完成时间', 'Purchase completion time'],
+  sales: ['订单审核时间', 'Order approval time'], dispatch: ['发运单审核时间', 'Shipment approval time'], procurement: ['采购完成时间', 'Purchase completion time'],
   allocation: ['配货审核时间', 'Allocation approval time'], warehouse: ['出库完成时间', 'Outbound completion time'],
 }
 export function completionTime(order: FopOrder, role: WorkbenchRole): string | null {
-  const value = order[({ sales: 'reviewedAt', dispatch: 'shopifySyncedAt', procurement: 'procurementCompletedAt', allocation: 'allocationApprovedAt', warehouse: 'outboundCompletedAt' } as const)[role]]
+  const value = order[({ sales: 'reviewedAt', dispatch: 'dispatchApprovedAt', procurement: 'procurementCompletedAt', allocation: 'allocationApprovedAt', warehouse: 'outboundCompletedAt' } as const)[role]]
   const at = orderTimestamp(value)
   return at === null ? null : new Date(at).toISOString()
 }

@@ -212,7 +212,7 @@ describe('Workbench department display follows business scope', () => {
     const { service, user, nodes } = setup()
     expect(await service.workbenchDepartment({ ...user, businessRole })).toEqual({ id: 'd1', name: '业务一部' })
     expect(nodes.find).toHaveBeenCalledWith({ where: { ownerUserId: 'company' }, select: { id: true, name: true } })
-    expect(await service.workbenchDepartment({ ...user, role: UserRole.ADMIN, businessDepartmentId: 'd2' })).toEqual({ id: 'd2', name: '业务二部' })
+    expect(await service.workbenchDepartment({ ...user, role: UserRole.ADMIN, businessDepartmentId: 'd2' })).toBeNull()
   })
   it.each([UserRole.ADMIN, UserRole.USER])('uses company-wide display for business admins with system role %s', async role => {
     const { service, user, employees } = setup()

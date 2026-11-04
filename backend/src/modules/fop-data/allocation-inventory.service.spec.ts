@@ -27,7 +27,7 @@ const query: AllocationInventoryQueryDto = { mode: 'selected', orderIds: ['o1'],
 let provider: Provider, user: Record<string, unknown>, service: FopDataService
 beforeEach(() => {
   provider = new Provider()
-  user = { id: 'u', role: 'admin', businessRole: 'salesperson', businessEmployeeId: 'e1', workbenchRoles: ['allocation'], fopTenantId: 't', fopUserId: 'u' }
+  user = { id: 'u', role: 'user', businessRole: 'salesperson', businessEmployeeId: 'e1', workbenchRoles: ['allocation'], fopTenantId: 't', fopUserId: 'u' }
   service = new FopDataService({ findById: async () => user } as unknown as UsersService, provider)
 })
 it('derives targets from current authorized incomplete orders, fills public zero, returns no private grant fields', async () => {

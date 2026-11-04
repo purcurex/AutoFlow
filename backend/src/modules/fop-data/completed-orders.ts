@@ -3,7 +3,7 @@ import { normalizeBusinessTimestamp } from './fop-business-time'
 import { consumerPaymentRange } from './consumer-payment-range'
 
 export const completionFields = {
-  review: 'reviewedAt', dispatch: 'shopifySyncedAt', procurement: 'procurementCompletedAt',
+  review: 'reviewedAt', dispatch: 'dispatchApprovedAt', procurement: 'procurementCompletedAt',
   allocation_review: 'allocationApprovedAt', shipping: 'outboundCompletedAt',
 } as const
 export type CompletionQueue = keyof typeof completionFields
@@ -12,7 +12,7 @@ export const completionLabels: Record<CompletionQueue, readonly [string, string]
   allocation_review: ['配货完成清单', 'Completed allocations'], shipping: ['已出库清单', 'Completed outbound'],
 }
 export const completionTimeLabels: Record<CompletionQueue, readonly [string, string]> = {
-  review: ['订单审核时间', 'Order approval time'], dispatch: ['Shopify同步时间', 'Shopify sync time'], procurement: ['采购完成时间', 'Purchase completion time'],
+  review: ['订单审核时间', 'Order approval time'], dispatch: ['发运单审核时间', 'Shipment approval time'], procurement: ['采购完成时间', 'Purchase completion time'],
   allocation_review: ['配货审核时间', 'Allocation approval time'], shipping: ['出库完成时间', 'Outbound completion time'],
 }
 export function isCompletionQueue(queue: string): queue is CompletionQueue { return Object.prototype.hasOwnProperty.call(completionFields, queue) }

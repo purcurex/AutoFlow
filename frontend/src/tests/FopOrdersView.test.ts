@@ -68,7 +68,7 @@ describe('fulfillment order list', () => {
     ['sales', '已完成清单', 'review'], ['dispatch', '已履约订单', 'dispatch'], ['procurement', '采购完成清单', 'procurement'],
     ['allocation', '配货完成清单', 'allocation_review'], ['warehouse', '已出库清单', 'shipping'],
   ])('reuses the %s list for completed records with a default week and no pending actions', async (role, heading, queue) => {
-    const item: orders.FopOrder = { ...mockFopOrders[0]!, orderNumber: 'COMPLETED-ORDER', reviewedAt: '2026-10-28T00:00:00Z', shopifySyncedAt: '2026-10-28T00:00:00Z', procurementCompletedAt: '2026-10-28T00:00:00Z', allocationApprovedAt: '2026-10-28T00:00:00Z', outboundCompletedAt: '2026-10-28T00:00:00Z', paymentStatus: 'paid', reviewStatus: role === 'procurement' ? 'pending' : 'approved',
+    const item: orders.FopOrder = { ...mockFopOrders[0]!, orderNumber: 'COMPLETED-ORDER', reviewedAt: '2026-10-28T00:00:00Z', dispatchApprovedAt: '2026-10-28T00:00:00Z', shopifySyncedAt: '2026-10-28T00:00:00Z', procurementCompletedAt: '2026-10-28T00:00:00Z', allocationApprovedAt: '2026-10-28T00:00:00Z', outboundCompletedAt: '2026-10-28T00:00:00Z', paymentStatus: 'paid', reviewStatus: role === 'procurement' ? 'pending' : 'approved',
       procurementProgress: { purchaseOrder: 'ordered', supplierPayment: 'paid', alibabaOrder: 'pushed' },
       fulfillmentProgress: { allocationCreated: true, shopifySync: 'synced', supplierShipment: 'shipped', stockReadiness: 'ready', allocationReview: 'approved', outbound: 'completed' } }
     const get = vi.spyOn(orders, 'getFopOrders').mockResolvedValue({ source: 'mock', items: [item], total: 1, page: 1, pageSize: 50, departments: [], refreshedAt: '', totals: { orderCount: 1, itemQuantity: 1, amountsByCurrency: [] } })
@@ -76,11 +76,18 @@ describe('fulfillment order list', () => {
     expect(wrapper.get('tbody').text()).toContain('COMPLETED-ORDER')
     expect(wrapper.get('tbody').text()).toContain('2026/10/28 08:00')
     expect(wrapper.get('h2').text()).toBe(heading)
-    expect(wrapper.get('select[aria-label="完成时间范围"]').element).toHaveProperty('value', '1w')
+    const rangeLabel = role === 'dispatch' ? '发运单审核时间范围' : '完成时间范围'
+    expect(wrapper.get(`select[aria-label="${rangeLabel}"]`).element).toHaveProperty('value', '1w')
+    if (role === 'dispatch') {
+      expect(wrapper.get('thead').text()).toContain('发运单审核时间')
+      expect(wrapper.get('thead').text()).not.toContain('Shopify同步时间')
+      expect(wrapper.get('.sort-consumer').attributes('title')).toContain('最新审核在前')
+      expect(wrapper.get('.sort-consumer').attributes('title')).not.toContain('最新完成在前')
+    }
     expect(wrapper.find('[data-testid="open-approval"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="open-inventory"]').exists()).toBe(false)
     expect(get).toHaveBeenLastCalledWith(expect.objectContaining({ queue, completed: true, timeRange: '1w' }))
-    await wrapper.get('select[aria-label="完成时间范围"]').setValue('1m'); await flushPromises()
+    await wrapper.get(`select[aria-label="${rangeLabel}"]`).setValue('1m'); await flushPromises()
     expect(router.currentRoute.value.query).toMatchObject({ queue: 'completed', timeRange: '1m' })
     expect(get).toHaveBeenLastCalledWith(expect.objectContaining({ completed: true, timeRange: '1m' }))
     await router.push({ query: { ...router.currentRoute.value.query, page: '99' } }); await flushPromises()
@@ -421,6 +428,10 @@ describe('fulfillment order list', () => {
     const { wrapper, router } = await setup(`?queue=${queue}`, role)
     expect(wrapper.findAll('th').map(cell => cell.text())).toContain('C端付款时间')
     expect(wrapper.get('td[data-label="C端付款时间"]').text()).toBe('2026/10/02 05:30')
+    if (queue === 'unpaid') {
+      expect(wrapper.text()).toContain('按账号角色展示待支付平台订单')
+    }
+    if (queue === 'unpaid' || queue === 'review') expect(wrapper.get('thead button[aria-label^="C端付款时间："]').attributes('title')).toContain('订单的源单付款时间')
     expect(wrapper.find('td[data-label="创建时间"]').exists()).toBe(false)
     get.mockResolvedValue({ ...page, items: [{ ...row, consumerPaidAt: undefined }] })
     window.dispatchEvent(new Event('focus')); await flushPromises()

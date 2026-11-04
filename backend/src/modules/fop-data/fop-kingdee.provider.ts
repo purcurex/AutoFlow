@@ -4,7 +4,9 @@ import { Logger } from '@nestjs/common'
 import type { BusinessScope } from '../users/business-scope'
 import { matchesBusinessScope } from '../users/business-scope'
 import { kingdeeDepartmentPath } from './fop-kingdee-scope'
-import { businessDate, validBusinessDay } from './fop-business-time'
+import { KingdeeStockDecoder } from './fop-kingdee.stock'
+import type { FopStockOrderCandidate, FopStockInventoryCandidate } from './fop-stock.types'
+import { businessDate, normalizeBusinessTimestamp, validBusinessDay } from './fop-business-time'
 import { emptyAnalyticsData, KingdeeAnalyticsDecoder } from './fop-kingdee.analytics'
 import type { FopAnalyticsData, FopAnalyticsRange, FopAnalyticsResource, FopAnalyticsScope, FopConnectionContext } from './fop-data.types'
 import { FopDataProvider, FopIdentity, FopIntegrationUnavailableError, FopOrder, FopOrderPage, FopOrderPageQuery, FopPermissionDeniedError, FopPermissionGrant } from './fop-data.types'
@@ -55,6 +57,7 @@ function date(value: unknown, nullable = false): string | null {
 /** 新前端专用查询模块的 HTTPS 适配器；所有凭据只在 Node 服务端读取。 */
 export class KingdeeFopDataProvider extends FopDataProvider {
   readonly pagedOrders = true
+  readonly queriedStock = true
   readonly supportsEmployeeBinding = true
   // 既有金蝶接口提供单据历史归属，明确声明兼容模式；不将其伪装成客户当前归属。
   readonly customerOwnershipMode = 'legacy_historical' as const
@@ -235,9 +238,9 @@ export class KingdeeFopDataProvider extends FopDataProvider {
     const analyticsScopes: FopAnalyticsScope[] = (['receipts', 'registrations', 'freight'] as const).filter(resource => analyticsQuery[resource]!.length > 0)
     // 旧部署未声明能力时仍只开放待审核，防止把尚未更新的接口误当作待履约查询。
     const queues = raw.orderQueues === undefined ? ['review'] : raw.orderQueues
-    if (!Array.isArray(queues) || queues.some(queue => queue !== 'review' && queue !== 'dispatch')) throw new Error('Invalid Kingdee order queues')
+    if (!Array.isArray(queues) || queues.some(queue => !['unpaid', 'review', 'dispatch'].includes(queue))) throw new Error('Invalid Kingdee order queues')
     return { subject: { ...identity }, allowedOrderIds: [], analyticsQuery, analyticsScopes,
-      ...(analyticsQuery.orders!.length ? { orderQuery: { queues: queues as ('review' | 'dispatch')[], organizationIds: analyticsQuery.orders! } } : {}) }
+      ...(analyticsQuery.orders!.length ? { orderQuery: { queues: queues as ('unpaid' | 'review' | 'dispatch')[], organizationIds: analyticsQuery.orders! } } : {}) }
   }
 
   /** 实际读取认证后的汇总响应确认权限；禁止配置文件或本地 admin 单独伪造金蝶授权。 */
@@ -265,6 +268,89 @@ export class KingdeeFopDataProvider extends FopDataProvider {
   }
 
   async listOrders(): Promise<never> { throw new FopIntegrationUnavailableError('fop_feature_not_configured') }
+
+  /** 仅备货入口调用独立授权接口；不让备货发布/配置故障阻塞原履约查询。 */
+  async resolveStockPermissions(identity: Readonly<FopIdentity>, scope: Readonly<BusinessScope>): Promise<FopPermissionGrant> {
+    if (this.resolveBinding) {
+      const binding = await this.resolveBinding(identity), provider = await this.userProvider(identity, binding)
+      if (!binding) throw new FopPermissionDeniedError('Employee binding changed', 'fop_binding_required')
+      await this.requireActiveEmployee(binding)
+      return provider.resolveStockPermissions(identity, scope)
+    }
+    if (!this.config.get('FOP_KINGDEE_STOCK_PERMISSIONS_URL')?.trim()) throw new FopIntegrationUnavailableError('fop_feature_not_configured')
+    if (!this.connection && (!this.config.get('FOP_KINGDEE_TENANT_ID')?.trim() || !this.config.get('FOP_KINGDEE_USER_ID')?.trim() || !this.configuredOrganizations.length)) await this.getConnectionContext()
+    this.assertIdentity(identity)
+    const raw = object(await this.call('FOP_KINGDEE_STOCK_PERMISSIONS_URL', { query: this.analyticsQuery(identity, scope) }))
+    this.analyticsSubject(raw, identity)
+    if (raw.schemaVersion !== 1) throw new Error('Invalid stock permission version')
+    const grants = object(raw.grants)
+    const organizations = (resource: 'orders' | 'inventory') => {
+      const values = grants[resource]
+      if (!Array.isArray(values) || values.length > 200) throw new Error('Invalid stock organizations')
+      const ids = values.map(identifier)
+      if (new Set(ids).size !== ids.length || ids.some(id => !this.organizationIds.includes(id))) throw new FopPermissionDeniedError('Invalid stock organization grant')
+      return ids
+    }
+    return { subject: { ...identity }, allowedOrderIds: [], stockQuery: { orders: organizations('orders'), inventory: organizations('inventory') } }
+  }
+
+  /** 分页收集限制60秒、64MB和十万行，缺页/重复/权限变化均失败，不返回截断合计。 */
+  private async stockRows(identity: Readonly<FopIdentity>, permission: Readonly<FopPermissionGrant>, scope: Readonly<BusinessScope>, resource: 'orders' | 'inventory'): Promise<unknown[]> {
+    this.assertIdentity(identity)
+    if (permission.subject.tenantId !== identity.tenantId || permission.subject.userId !== identity.userId) throw new FopPermissionDeniedError('Stock permission identity mismatch')
+    const organizations = permission.stockQuery?.[resource]
+    if (!organizations?.length) throw new FopPermissionDeniedError('Stock resource not authorized')
+    const key = resource === 'orders' ? 'FOP_KINGDEE_STOCK_ORDERS_URL' : 'FOP_KINGDEE_STOCK_INVENTORY_URL'
+    if (!this.config.get(key)?.trim()) throw new FopIntegrationUnavailableError('fop_feature_not_configured')
+    const rows: unknown[] = [], seen = new Set<string>(), deadline = Date.now() + 60_000
+    let bytes = 0
+    for (let page = 1; page <= 1000; page++) {
+      const raw = object(await this.call(key, { query: { ...this.analyticsQuery(identity, scope), page, pageSize: 100 } }, deadline))
+      this.analyticsSubject(raw, identity)
+      if (raw.schemaVersion !== 1 || raw.resource !== resource || raw.page !== page || raw.pageSize !== 100 || typeof raw.hasMore !== 'boolean'
+        || !Array.isArray(raw.items) || raw.items.length > 100 || raw.hasMore && raw.items.length !== 100
+        || !Array.isArray(raw.organizationIds) || !raw.organizationIds.length) throw new Error('Invalid stock page')
+      const pageOrganizations = raw.organizationIds.map(identifier)
+      if (new Set(pageOrganizations).size !== pageOrganizations.length || pageOrganizations.some(id => !organizations.includes(id) || !this.organizationIds.includes(id))) throw new FopPermissionDeniedError('Stock organization grant changed')
+      bytes += Buffer.byteLength(JSON.stringify(raw))
+      if (bytes > 64 * 1024 * 1024 || rows.length + raw.items.length > 100_000) throw new FopIntegrationUnavailableError('fop_result_too_large')
+      for (const value of raw.items) {
+        const row = object(value), rowId = identifier(row.id), organization = object(row.organization)
+        if (!pageOrganizations.includes(identifier(organization.id))) throw new FopPermissionDeniedError('Stock row outside page organizations')
+        if (seen.has(rowId)) throw new Error('Duplicate stock row across pages')
+        seen.add(rowId); rows.push(value)
+      }
+      if (!raw.hasMore) return rows
+    }
+    throw new FopIntegrationUnavailableError('fop_result_too_large')
+  }
+
+  /** 字段转换复用原页面契约；金蝶与本地分别校验本人及直属部门范围。 */
+  async listStockOrders(identity: Readonly<FopIdentity>, permission: Readonly<FopPermissionGrant>, scope?: Readonly<BusinessScope>): Promise<FopStockOrderCandidate[]> {
+    if (this.resolveBinding) return (await this.userProvider(identity)).listStockOrders(identity, permission, scope)
+    if (!scope) throw new FopPermissionDeniedError('Stock business scope required')
+    const decoder = new KingdeeStockDecoder(this.config)
+    return (await this.stockRows(identity, permission, scope, 'orders')).map(row => decoder.order(row, identity, scope, permission.stockQuery!.orders))
+  }
+
+  /** 允许历史台账存在同客户/SKU/仓库多行；按精确维度合并，余额使用Decimal累加。 */
+  async listStockInventory(identity: Readonly<FopIdentity>, permission: Readonly<FopPermissionGrant>, scope?: Readonly<BusinessScope>): Promise<FopStockInventoryCandidate[]> {
+    if (this.resolveBinding) return (await this.userProvider(identity)).listStockInventory(identity, permission, scope)
+    if (!scope) throw new FopPermissionDeniedError('Stock business scope required')
+    const decoder = new KingdeeStockDecoder(this.config), groups = new Map<string, FopStockInventoryCandidate>()
+    for (const value of await this.stockRows(identity, permission, scope, 'inventory')) {
+      const row = decoder.inventory(value, identity, scope, permission.stockQuery!.inventory)
+      const key = JSON.stringify([row.customerId, row.sku, row.warehouseCode]), previous = groups.get(key)
+      if (!previous) { groups.set(key, { ...row, id: key }); continue }
+      if (previous.owner.id !== row.owner.id || previous.department.id !== row.department.id) throw new Error('Stock customer assignment changed during pagination')
+      for (const type of ['fullPayment', 'deposit'] as const) for (const field of ['available', 'locked'] as const) {
+        const sum = new Decimal(previous[type][field]).plus(row[type][field])
+        if (sum.greaterThan(Number.MAX_SAFE_INTEGER)) throw new Error('Stock inventory quantity overflow')
+        previous[type][field] = sum.toNumber()
+      }
+    }
+    return [...groups.values()]
+  }
 
   private analyticsQuery(identity: Readonly<FopIdentity>, scope: Readonly<BusinessScope>) {
     if (scope.role === 'none' || (scope.role === 'salesperson' && !scope.employeeId) || (scope.role === 'department_manager' && !scope.departmentId)) throw new FopPermissionDeniedError('Incomplete business scope')
@@ -318,7 +404,11 @@ export class KingdeeFopDataProvider extends FopDataProvider {
   async queryOrders(identity: Readonly<FopIdentity>, permission: Readonly<FopPermissionGrant>, scope: Readonly<BusinessScope>, query: FopOrderPageQuery, summaryOnly = false): Promise<FopOrderPage> {
     if (this.resolveBinding) return (await this.userProvider(identity)).queryOrders(identity, permission, scope, query, summaryOnly)
     this.assertIdentity(identity)
-    if (query.queue !== 'review' && query.queue !== 'dispatch' || !permission.orderQuery?.queues.includes(query.queue as 'review' | 'dispatch')) throw new FopIntegrationUnavailableError('fop_feature_not_configured')
+    if (!['unpaid', 'review', 'dispatch'].includes(query.queue) || !permission.orderQuery?.queues.includes(query.queue as 'unpaid' | 'review' | 'dispatch')) throw new FopIntegrationUnavailableError('fop_feature_not_configured')
+    // 待支付沿用服务端解析出的角色范围；业务员不能借筛选切换到其他人。
+    if (query.queue === 'unpaid' && scope.role === 'salesperson') {
+      if (query.ownerId && query.ownerId !== scope.employeeId) throw new FopPermissionDeniedError('Unpaid orders are personal only')
+    }
     if (permission.subject.tenantId !== identity.tenantId || permission.subject.userId !== identity.userId) throw new FopPermissionDeniedError('Permission identity mismatch')
     const { organizationIds, ...page } = await this.read(identity, scope, query, summaryOnly)
     if (organizationIds.some(id => !permission.orderQuery!.organizationIds.includes(id))) throw new FopPermissionDeniedError('Organization grant changed')
@@ -328,17 +418,43 @@ export class KingdeeFopDataProvider extends FopDataProvider {
   private async read(identity: Readonly<FopIdentity>, scope: Readonly<BusinessScope>, query: FopOrderPageQuery, summaryOnly: boolean): Promise<FopOrderPage & { organizationIds: string[] }> {
     if (!Number.isSafeInteger(query.page) || query.page < 1 || query.page > 1_000_000 || !Number.isSafeInteger(query.pageSize) || query.pageSize < 1 || query.pageSize > 100) throw new Error('Invalid page')
     if (scope.role === 'none' || (scope.role === 'salesperson' && !scope.employeeId) || (scope.role === 'department_manager' && !scope.departmentId)) throw new FopPermissionDeniedError('Incomplete business scope')
+    const unpaid = query.queue === 'unpaid'
+    const dispatch = query.queue === 'dispatch'
+    const completed = query.completed === true
+    if (completed && !dispatch) throw new Error('Completed mode requires dispatch')
+    const warehouseMap = unpaid || dispatch ? this.unpaidWarehouses() : {}
+    const warehouseIds = query.warehouseCode ? Object.keys(warehouseMap).filter(id => warehouseMap[id] === query.warehouseCode) : undefined
+    if ((unpaid || dispatch) && warehouseIds && !warehouseIds.length) throw new FopIntegrationUnavailableError('fop_mapping_required')
+    if (dispatch && ((completed
+      ? query.taskStatus !== undefined || query.timeRange !== undefined && !['1w', '1m', '3m'].includes(query.timeRange)
+      : query.timeRange !== undefined || query.taskStatus !== undefined && !['dispatch_missing', 'dispatch_draft', 'dispatch_submitted', 'dispatch_approved'].includes(query.taskStatus))
+      || query.sortBy !== undefined && !(completed ? ['completedAt', 'paidAt', 'consumerPaidAt'] : ['paidAt', 'consumerPaidAt', 'dispatchDocumentStatus']).includes(query.sortBy)
+      || query.orderIds !== undefined && (!query.orderIds.length || query.orderIds.length > 100 || new Set(query.orderIds).size !== query.orderIds.length))) throw new Error('Invalid dispatch filters')
+    if (unpaid && (query.timeRange !== undefined && !['all', '1w', '1m', '3m'].includes(query.timeRange)
+      || query.sortBy !== undefined && !['paidAt', 'consumerPaidAt'].includes(query.sortBy))) throw new Error('Invalid unpaid filters')
     const body = { query: { tenantId: identity.tenantId, userId: identity.userId, organizationIds: this.organizationIds,
       scopeRole: scope.role, employeeId: scope.employeeId, departmentIds: scope.departmentId ? [scope.departmentId] : [],
       search: query.search ?? '', orderNumber: query.orderNumber ?? '', page: query.page, pageSize: query.pageSize,
-      ...(query.queue === 'dispatch' ? { queue: 'dispatch' } : {}) } }
+      ...(dispatch ? { queue: 'dispatch', departmentId: query.departmentId, ownerId: query.ownerId, warehouseIds, taskStatus: query.taskStatus,
+        ...(completed ? { completed: true, timeRange: query.timeRange ?? '1w' } : {}),
+        sortBy: query.sortBy ?? (completed ? 'completedAt' : 'paidAt'), sortOrder: query.sortOrder ?? (completed ? 'desc' : query.paidAtOrder ?? 'asc'),
+        orderIds: query.orderIds, exportManifest: query.exportManifest } : {}),
+      // 待审核已有C端付款时间排序入口，交给金蝶在分页前按源单付款时间执行。
+      ...(query.queue === 'review' && query.sortBy === 'consumerPaidAt'
+        ? { sortBy: 'consumerPaidAt', sortOrder: query.sortOrder ?? 'asc' } : {}),
+      ...(unpaid ? { queue: 'unpaid', timeRange: query.timeRange, departmentId: query.departmentId, ownerId: query.ownerId, warehouseIds,
+        sortBy: query.sortBy ?? 'paidAt', sortOrder: query.sortOrder ?? query.paidAtOrder ?? 'asc' } : {}) } }
     const raw = object(await this.call(summaryOnly ? 'FOP_KINGDEE_SUMMARY_URL' : 'FOP_KINGDEE_QUERY_URL', body))
     if (raw.schemaVersion !== undefined && raw.schemaVersion !== 1) throw new Error('Unsupported employee order schema')
     const subject = object(raw.subject)
     if (subject.tenantId !== identity.tenantId || subject.userId !== identity.userId) throw new FopPermissionDeniedError('Kingdee response identity mismatch')
-    const expectedBasis = query.queue === 'dispatch' ? 'paid_tracking_pending_active' : 'submitted_paid_active'
+    // 完成能力必须由上游显式确认，旧接口即使返回空页也不能冒充已接通。
+    if (completed && (raw.completed !== true || raw.completedSchemaVersion !== 2)) throw new FopIntegrationUnavailableError('fop_feature_not_configured')
+    if (!completed && raw.completed === true) throw new Error('Unexpected completed response')
+    const expectedBasis = unpaid ? 'unpaid_active_self' : dispatch ? completed ? 'paid_tracking_synced_active' : 'paid_tracking_pending_active' : 'submitted_paid_active'
     if (raw.queue !== query.queue || raw.basis !== expectedBasis || !Array.isArray(raw.organizationIds)
       || raw.organizationIds.length === 0 || raw.organizationIds.some(id => !this.organizationIds.includes(String(id)))) throw new FopPermissionDeniedError('Kingdee response scope mismatch')
+    if (dispatch && raw.dispatchSchemaVersion !== 1) throw new FopIntegrationUnavailableError('fop_feature_not_configured')
     const organizationIds = raw.organizationIds.map(identifier)
     const total = integer(raw.total)
     if (raw.page !== query.page || raw.pageSize !== query.pageSize || !Array.isArray(raw.items)
@@ -352,15 +468,21 @@ export class KingdeeFopDataProvider extends FopDataProvider {
       seen.add(id)
       // 待审核包含已支付但尚未审核的草稿，不以“已提交”作为额外门槛。
       const billStatus = string(row.billStatus)
-      if (query.queue === 'review' && billStatus === 'C' || !['2', '3', '4', '5'].includes(string(row.orderStatus))) throw new Error('Unexpected review order status')
+      if (query.queue === 'review' && billStatus === 'C' || dispatch && billStatus !== 'C' || !(unpaid ? ['1'] : ['2', '3', '4', '5']).includes(string(row.orderStatus))) throw new Error('Unexpected review order status')
       const owner = reference(row.owner)
       const department = reference(row.department)
       if (!department) throw new FopPermissionDeniedError('Order department missing')
       const departmentPathIds = kingdeeDepartmentPath(row.departmentPathIds, organization.id, department.id, raw.schemaVersion === 1)
-      if (!matchesBusinessScope(scope, { owner, department, departmentPathIds })) throw new FopPermissionDeniedError('Order outside local business scope')
+      if (!matchesBusinessScope(scope, { owner, department, departmentPathIds }, dispatch)) throw new FopPermissionDeniedError('Order outside local business scope')
       const customer = reference(raw.schemaVersion === 1 ? row.customer ?? null : row.customer)
       const store = reference(raw.schemaVersion === 1 ? row.store ?? null : row.store)
       const warehouse = reference(raw.schemaVersion === 1 ? row.warehouse ?? null : row.warehouse)
+      // 两个清单都消费源单付款时间；旧响应缺值保持空，不借用创建或收款日期。
+      const consumerPaidAt = unpaid || query.queue === 'review' || dispatch ? date(row.consumerPaidAt ?? null, true) : undefined
+      // 时间边界由金蝶用同一时钟过滤和汇总，避免两端毫秒差将合法边界记录误拒绝。
+      if ((unpaid || dispatch) && (query.departmentId && department.id !== query.departmentId && !departmentPathIds?.includes(query.departmentId)
+        || query.ownerId && owner?.id !== query.ownerId
+        || warehouseIds && (!warehouse || !warehouseIds.includes(warehouse.id)))) throw new FopPermissionDeniedError('Unexpected unpaid filter result')
       if (!Array.isArray(row.items)) throw new Error('Invalid order lines')
       const lineIds = new Set<string>()
       const lines = row.items.map(value => {
@@ -379,11 +501,16 @@ export class KingdeeFopDataProvider extends FopDataProvider {
         fulfillmentProgress: { allocationCreated: null, shopifySync: query.queue === 'dispatch' ? 'pending' : 'unknown', supplierShipment: 'unknown', stockReadiness: 'unknown', allocationReview: 'unknown', outbound: 'unknown' },
         id, organization, department, departmentPathIds, owner, customerId: customer?.id, orderNumber: string(row.orderNumber),
         shopifyOrderNumber: string(row.shopifyOrderNumber, true), customerName: customer?.name ?? '', storeName: store?.name ?? '',
-        items: lines, amount: decimal(row.amount), currency, paymentStatus: 'paid', reviewStatus: billStatus === 'C' ? 'approved' : 'pending',
+        items: lines, amount: decimal(row.amount), currency, paymentStatus: unpaid ? 'unpaid' : 'paid', reviewStatus: billStatus === 'C' ? 'approved' : 'pending',
         procurementStatus: 'unknown', allocationStatus: 'unknown', dispatchStatus: 'unknown', shippingStatus: 'unknown',
         warehouse: warehouse?.name ?? '', carrier: null, trackingNumber: null, salesperson: owner?.name ?? '',
-        createdAt: date(row.createdAt)!, paidAt: date(raw.schemaVersion === 1 ? row.paidAt ?? null : row.paidAt, true), cancelled: false, exception: null,
+        createdAt: date(row.createdAt)!, paidAt: unpaid ? null : date(raw.schemaVersion === 1 ? row.paidAt ?? null : row.paidAt, true), cancelled: false, exception: null,
+        ...(unpaid || query.queue === 'review' || dispatch ? { consumerPaidAt } : {}),
+        ...(dispatch && warehouse && warehouseMap[warehouse.id] ? { warehouseCode: warehouseMap[warehouse.id] } : {}),
+        ...(unpaid ? { customLogisticsChannelName: row.customLogisticsChannelName == null ? null : string(row.customLogisticsChannelName, true),
+          ...(warehouse && warehouseMap[warehouse.id] ? { warehouseCode: warehouseMap[warehouse.id] } : {}) } : {}),
       }
+      if (dispatch) this.dispatchFields(order, row, query)
       return order
     })
     const totals = object(raw.totals)
@@ -395,8 +522,71 @@ export class KingdeeFopDataProvider extends FopDataProvider {
       currencies.add(currency)
       return { currency, amount: decimal(entry.amount) }
     })
+    const options = (key: 'departments' | 'salespeople') => {
+      if (!Array.isArray(raw[key])) throw new Error('Invalid dispatch filter options')
+      const values = raw[key].map(value => reference(value)!)
+      if (values.some(value => !value) || new Set(values.map(value => value.id)).size !== values.length) throw new Error('Invalid dispatch filter options')
+      return values
+    }
+    let orderIds: string[] | undefined
+    if (dispatch && query.exportManifest) {
+      if (!summaryOnly || !Array.isArray(raw.orderIds) || raw.orderIds.length !== total || total > 10000) throw new Error('Invalid dispatch export manifest')
+      orderIds = raw.orderIds.map(identifier)
+      if (new Set(orderIds).size !== total) throw new Error('Invalid dispatch export manifest')
+    }
     return { source: 'fop', total, page: query.page, pageSize: query.pageSize, items, organizationIds,
+      ...(dispatch && !summaryOnly ? { departments: options('departments'), salespeople: options('salespeople') } : {}),
+      ...(orderIds ? { orderIds } : {}),
       totals: { orderCount: total, itemQuantity: decimal(totals.itemQuantity), amountsByCurrency } }
+  }
+
+  /** 发运契约独立校验待履约四阶段或全部同步完成事实；旧空字段响应不能伪装接通。 */
+  private dispatchFields(order: FopOrder, row: JsonObject, query: FopOrderPageQuery): void {
+    const stage = string(row.dispatchTaskStatus)
+    const completed = query.completed === true
+    if (!(completed ? ['dispatch_synced'] : ['dispatch_missing', 'dispatch_draft', 'dispatch_submitted', 'dispatch_approved', 'unknown']).includes(stage)
+      || object(row.fulfillmentProgress).shopifySync !== (completed ? 'synced' : 'pending') || !Array.isArray(row.dispatchDocuments) || !Array.isArray(row.logisticsInfo)
+      || completed && row.dispatchDocuments.length === 0
+      || query.taskStatus && stage !== query.taskStatus || query.orderIds && !query.orderIds.includes(order.id)) throw new Error('Invalid dispatch facts')
+    order.dispatchTaskStatus = stage as NonNullable<FopOrder['dispatchTaskStatus']>
+    if (completed) {
+      // 审核日期与平台同步状态分开消费；旧同步时间字段不能替代约定的审核日期。
+      if (!normalizeBusinessTimestamp(row.dispatchApprovedAt)) throw new Error('Invalid shipment approval time')
+      order.dispatchApprovedAt = string(row.dispatchApprovedAt)
+      order.fulfillmentProgress.shopifySync = 'synced'
+    }
+    const seen = new Set<string>()
+    order.dispatchDocuments = row.dispatchDocuments.map(value => {
+      const doc = object(value), id = identifier(doc.id), status = string(doc.status)
+      if (seen.has(id) || !['draft', 'submitted', 'approved', 'unknown'].includes(status)) throw new Error('Invalid dispatch document')
+      seen.add(id)
+      return { id, number: string(doc.number), status: status as NonNullable<FopOrder['dispatchDocuments']>[number]['status'] }
+    })
+    order.logisticsInfo = row.logisticsInfo.map(value => {
+      const group = object(value)
+      const selected = group.shopifyTracking == null ? null : object(group.shopifyTracking)
+      const type = selected ? string(selected.type) : null
+      if (type && !['full', 'first_mile', 'last_mile'].includes(type)) throw new Error('Invalid Shopify tracking type')
+      return { carrierName: group.carrierName == null ? null : string(group.carrierName, true),
+        shopifyTracking: selected ? { type: type as 'full' | 'first_mile' | 'last_mile', number: string(selected.number) } : null }
+    })
+    const recipient = row.shippingRecipient == null ? null : object(row.shippingRecipient)
+    const optionalText = (key: string) => recipient?.[key] == null ? null : string(recipient[key], true)
+    order.shippingRecipient = recipient ? { name: optionalText('name'), phone: optionalText('phone'), email: optionalText('email'),
+      state: optionalText('state'), city: optionalText('city'), postalCode: optionalText('postalCode'), addressLine1: optionalText('addressLine1'), addressLine2: optionalText('addressLine2') } : null
+    order.shippingCountryCode = row.shippingCountryCode == null ? null : string(row.shippingCountryCode)
+    if (order.shippingCountryCode && !/^[A-Z]{2}$/.test(order.shippingCountryCode)) throw new Error('Invalid dispatch destination')
+  }
+
+  /** 沿用已有仓库映射配置，只按稳定主键匹配；缺映射时不能把仓库名称猜成HZ/SZ。 */
+  private unpaidWarehouses(): Record<string, 'HZ' | 'SZ'> {
+    const raw = this.config.get('FOP_KINGDEE_WAREHOUSE_MAP')?.trim()
+    if (!raw) return {}
+    const result = object(JSON.parse(raw))
+    if (Object.keys(result).length > 200 || Object.entries(result).some(([id, code]) => !/^[1-9]\d{0,18}$/.test(id) || !['HZ', 'SZ'].includes(String(code)))) {
+      throw new FopIntegrationUnavailableError('fop_mapping_required')
+    }
+    return result as Record<string, 'HZ' | 'SZ'>
   }
 
   /** 合并并发取Token请求；仅自动认证模式刷新失效令牌，手工Token模式继续明确提示更新。 */

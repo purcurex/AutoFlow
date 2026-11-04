@@ -16,6 +16,7 @@ import { SourcingService } from '../src/modules/sourcing/sourcing.service'
 import { AutoflowService } from '../src/modules/autoflow/autoflow.service'
 import { WorkflowExecutionService } from '../src/modules/discovery/workflow-execution.service'
 import { WorkflowSeedAssetService } from '../src/modules/autoflow/workflow-seed-asset.service'
+import { FOP_DATA_PROVIDER, UnconfiguredFopDataProvider } from '../src/modules/fop-data/fop-data.types'
 
 describe('Workbench authorization HTTP API (repository boundary stub)', () => {
   let app: INestApplication
@@ -58,7 +59,9 @@ describe('Workbench authorization HTTP API (repository boundary stub)', () => {
         { provide: WorkflowExecutionService, useValue: {} },
         { provide: WorkflowSeedAssetService, useValue: {} },
       ],
-    }).overrideProvider(getRepositoryToken(User)).useValue(repository).compile()
+    }).overrideProvider(getRepositoryToken(User)).useValue(repository)
+      // HTTP权限回归只使用仓储桩，不读取本机金蝶配置或发起外部请求。
+      .overrideProvider(FOP_DATA_PROVIDER).useValue(new UnconfiguredFopDataProvider()).compile()
     app = module.createNestApplication()
     app.setGlobalPrefix('api')
     app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }))
@@ -75,6 +78,16 @@ describe('Workbench authorization HTTP API (repository boundary stub)', () => {
   })
 
   afterAll(async () => { await app?.close() })
+
+  it('管理员的历史本人范围不限制全部部门，总经办不取得系统管理权限', async () => {
+    accounts.get(adminId).businessRole = 'salesperson'
+    const admin = await get('/workbench/access', adminId).expect(200)
+    expect(admin.body).toMatchObject({ isAdmin: true, businessRole: 'admin' })
+    accounts.get(userId).businessRole = 'admin'
+    const executive = await get('/workbench/access', userId).expect(200)
+    expect(executive.body).toMatchObject({ isAdmin: false, businessRole: 'admin' })
+    await get('/users/workbench-accounts', userId).expect(403)
+  })
 
   it('requires authentication and reads effective grants from the current database account', async () => {
     await request(app.getHttpServer()).get('/api/workbench/access').expect(401)

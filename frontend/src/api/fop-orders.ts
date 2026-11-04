@@ -71,6 +71,8 @@ export interface LogisticsInfo {
 export interface AllocationDocumentReference { id: string; number: string }
 
 export interface FopOrder {
+  /** 服务端按未完成期望包裹聚合，避免缺包裹被已有发运单掩盖。 */
+  dispatchTaskStatus?: 'dispatch_missing' | 'dispatch_draft' | 'dispatch_submitted' | 'dispatch_approved' | 'dispatch_synced' | 'unknown'
   /** Unique effective FOP allocation for this order; null/omitted = unavailable or not yet created. */
   allocationDocument?: AllocationDocumentReference | null
   /** Shopify-selected tracking grouped by shipment/carrier; raw legacy fields do not prove selection. */
@@ -79,9 +81,11 @@ export interface FopOrder {
   customLogisticsChannelName?: string | null
   /** Actual fulfillment channels, never carrier categories or customer-facing custom channels. */
   logisticsChannels?: LogisticsChannel[] | null
-  /** First Shopify consumer payment completion, distinct from FOP createdAt and paidAt; unknown = null. */
+  /** C端付款时间取履约订单源单付款时间，区别于FOP创建时间和收款日期；未知为null。 */
   /** Actual phase completion timestamps supplied by the trusted gateway; no fallbacks. */
   shopifySyncedAt?: string | null
+  /** 当前有效发运单的最大审核时间，用于已履约清单日期筛选，不代表Shopify同步时间。 */
+  dispatchApprovedAt?: string | null
   procurementCompletedAt?: string | null
   allocationApprovedAt?: string | null
   outboundCompletedAt?: string | null

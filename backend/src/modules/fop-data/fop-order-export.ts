@@ -102,7 +102,7 @@ export async function buildFulfillmentWorkbook(orders: readonly FopOrder[], quer
   const entries = [
     ['清单', query.completed && isCompletionQueue(query.queue) ? completionLabels[query.queue][0] : query.queue === 'dispatch' && query.taskStatus === 'dispatch_synced' ? '已同步清单' : exportQueueLabels[query.queue]], ['导出方式', query.mode === 'selected' ? '导出所选订单' : '当前筛选全部订单（跨分页）'], ['生成时间（UTC+8）', dateText(workbook.created.toISOString())],
     ['数据来源', source === 'mock' ? '演示数据' : 'FOP'], ['搜索条件', query.search?.trim() || '无'], ['指定订单', query.orderNumber || '无'],
-    ...(query.completed ? [['完成时间范围', query.timeRange === '1m' ? '近一月' : query.timeRange === '3m' ? '近三月' : '近一周']] : []),
+    ...(query.completed ? [[query.queue === 'dispatch' ? '发运单审核时间范围' : '完成时间范围', query.timeRange === '1m' ? '近一月' : query.timeRange === '3m' ? '近三月' : '近一周']] : []),
     ...(query.queue === 'unpaid' ? [['C端付款时间范围', query.timeRange === '1w' ? '近一周' : query.timeRange === '1m' ? '近一月' : query.timeRange === '3m' ? '近三月' : '全部']] : []),
     ...(query.queue === 'review' ? [['发货国家', query.shippingCountryCode || '全部']] : []),
     ['发货仓库', query.warehouseCode === 'HZ' ? '杭州仓' : query.warehouseCode === 'SZ' ? '深圳仓' : '全部'],
@@ -110,7 +110,7 @@ export async function buildFulfillmentWorkbook(orders: readonly FopOrder[], quer
     ['清单状态筛选', query.completed ? '已完成' : query.taskStatus ? taskStatusLabel(query.taskStatus, query.queue)[0] : query.queue === 'dispatch' ? '全部待履约' : '全部状态'],
     ['原采购状态筛选', query.procurementStage ? procurementStageLabels[query.procurementStage][0] : '全部状态'],
     ['业务员', query.ownerId ? [...new Set(orders.map(o => o.owner?.name || o.salesperson))].join('、') : '全部业务员'],
-    ['排序', `${({ completedAt: '阶段完成时间', paidAt: '收款日期', reviewedAt: '订单审核时间', consumerPaidAt: 'C端付款时间', dispatchDocumentStatus: '发运单状态', allocationDocumentStatus: '配货单状态', stockReadiness: '配货状态', allocationReviewStatus: '配货单状态', outboundStatus: '出库状态' })[query.sortBy ?? (query.completed ? 'completedAt' : 'paidAt')]} · ${(query.sortOrder ?? (query.completed && !query.sortBy ? 'desc' : query.sortBy && query.sortBy !== 'paidAt' ? 'asc' : query.paidAtOrder) ?? 'asc') === 'asc' ? '升序' : '降序'}`],
+    ['排序', `${({ completedAt: query.queue === 'dispatch' ? '发运单审核时间' : '阶段完成时间', paidAt: '收款日期', reviewedAt: '订单审核时间', consumerPaidAt: 'C端付款时间', dispatchDocumentStatus: '发运单状态', allocationDocumentStatus: '配货单状态', stockReadiness: '配货状态', allocationReviewStatus: '配货单状态', outboundStatus: '出库状态' })[query.sortBy ?? (query.completed ? 'completedAt' : 'paidAt')]} · ${(query.sortOrder ?? (query.completed && !query.sortBy ? 'desc' : query.sortBy && query.sortBy !== 'paidAt' ? 'asc' : query.paidAtOrder) ?? 'asc') === 'asc' ? '升序' : '降序'}`],
     ...(showAmountBreakdown ? [['金额明细', '产品金额、运费、税费、优惠金额为FOP原币独立金额；优惠正数表示扣减，缺失显示—。订单金额以FOP最终金额为准，不按明细重新计算。']] : []),
     ['金额口径', '订单金额按币种分别合计，未换汇；一单多品的订单金额仅计算一次。此表为待办订单金额，不等同于回款业绩。'],
     ['Customer', '订单收货国家二字码；空缺显示—，不使用客户档案国家。'],

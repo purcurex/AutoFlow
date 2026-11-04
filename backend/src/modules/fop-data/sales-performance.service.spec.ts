@@ -79,7 +79,7 @@ describe('independently authorized sales performance', () => {
   })
   it('lets managers select only authorized department owners, defaulting to their binding and never silently selecting a colleague', async () => {
     const rows = [profit('a'), profit('b', { owner: { id: 'bob', name: 'Bob' } }), profit('outside', { department: { id: 'd2', name: 'Private' }, departmentPathIds: ['d2'] })]
-    const { service, account } = setup({ profits: rows, account: { businessRole: 'department_manager', businessDepartmentId: 'sales', businessEmployeeId: 'bob' } })
+    const { service, account } = setup({ profits: rows, account: { businessRole: 'department_manager', businessDepartmentId: 'd1', businessEmployeeId: 'bob' } })
     expect(await service.getSalesPerformance('u', query)).toMatchObject({ canSelectOwner: true, selectedOwner: { id: 'bob' }, totals: { collectionsAmount: 0, estimatedGrossProfit: 60 } })
     expect((await service.getSalesPerformance('u', { ...query, ownerId: 'alice' })).totals.collectionsAmount).toBe(80)
     account.businessEmployeeId = 'not-present'
@@ -95,7 +95,7 @@ describe('independently authorized sales performance', () => {
   it('aggregates all authorized department owners and keeps details within the same independent grants', async () => {
     const all = { ...query, ownerScope: 'all' } as PerformanceQuery
     const bob = { id: 'bob', name: 'Bob' }
-    const { service } = setup({ account: { businessRole: 'department_manager', businessDepartmentId: 'sales' },
+    const { service } = setup({ account: { businessRole: 'department_manager', businessDepartmentId: 'd1' },
       profits: [profit(), profit('b', { owner: bob }), profit('hidden'), profit('outside', { department: { id: 'd2', name: 'Private' }, departmentPathIds: ['d2'] })],
       receipts: [receipt(), receipt('rb', { owner: bob }), receipt('foreign', { tenantId: 't2' })],
       grant: { allowedProfitIds: ['p1', 'b', 'outside'] } })
@@ -112,14 +112,18 @@ describe('independently authorized sales performance', () => {
     }
   })
   it.each([
-    { role: 'admin' },
     { businessRole: 'none' },
     { businessRole: 'admin', chartPermissions: [{ chartId: 'sales_performance', visibility: 'inherit', dataScope: 'self', summaryMode: 'inherit', summaryDepartments: [], details: 'inherit', export: 'inherit' }] },
-  ])('does not grant all-owner access from system role or a restricted chart %j', async account => {
+  ])('未开通业务或图表限制本人时不能读取全部人员%j', async account => {
     const { service } = setup({ account })
     const all = { ...query, ownerScope: 'all' } as PerformanceQuery
     await expect(service.getSalesPerformance('u', all)).rejects.toMatchObject({ status: 403 })
     await expect(service.getSalesPerformanceDetails('u', { ...all, kind: 'profit', page: 1, pageSize: 10 })).rejects.toMatchObject({ status: 403 })
+  })
+  it('管理员可以查看全部已授权业务人员，经理不能从上级部门查看子部门业绩', async () => {
+    expect((await setup({ account: { role: 'admin' } }).service.getSalesPerformance('u', { ...query, ownerScope: 'all' })).totals.collectionsAmount).toBe(80)
+    const manager = setup({ account: { businessRole: 'department_manager', businessDepartmentId: 'sales' } }).service
+    expect((await manager.getSalesPerformance('u', { ...query, ownerScope: 'all' })).owners).toEqual([])
   })
   it('rejects conflicting and invalid all-owner selectors before querying the provider', async () => {
     const { service } = setup({ account: { businessRole: 'admin' } })

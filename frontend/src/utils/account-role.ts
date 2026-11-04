@@ -12,7 +12,7 @@ export const accountRoleNames: Record<AccountRole, [string, string]> = {
 }
 export const accountRoleDescriptions: Record<AccountRole, [string, string]> = {
   administrator: ['系统管理与账号授权', 'System and account management'],
-  department_manager: ['本部门及下级业务', 'Department and team records'],
+  department_manager: ['仅本部门业务', 'Own department records only'],
   salesperson: ['本人负责的业务', 'Own business records'],
   collaboration: ['跨部门待办 · 部门汇总', 'Cross-team tasks · Department summaries'],
 }
@@ -25,8 +25,8 @@ export function getAccountRole(account: WorkbenchAccount): AccountRole {
 export function scopeName(account: Pick<WorkbenchAccount, 'businessScope'>): [string, string] {
   switch (account.businessScope?.role) {
     case 'none': return ['未开通业务数据', 'Business access off']
-    case 'admin': return ['营销中心', 'Marketing Center']
-    case 'department_manager': return ['本部门及下级', 'Department and teams']
+    case 'admin': return ['全部业务部门', 'All business departments']
+    case 'department_manager': return ['本部门', 'Own department']
     default: return ['本人业务', 'Own records']
   }
 }

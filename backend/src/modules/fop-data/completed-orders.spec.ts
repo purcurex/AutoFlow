@@ -3,7 +3,7 @@ import type { FopOrder } from './fop-data.types'
 const now = Date.parse('2026-10-30T12:00:00Z'), day = 86400000
 const base = {
   cancelled: false, paymentStatus: 'paid', reviewStatus: 'approved',
-  reviewedAt: '2026-10-24T12:00:00Z', shopifySyncedAt: '2026-10-25T12:00:00Z', procurementCompletedAt: '2026-10-26T12:00:00Z',
+  reviewedAt: '2026-10-24T12:00:00Z', dispatchApprovedAt: '2026-10-25T12:00:00Z', shopifySyncedAt: '2026-10-25T12:00:00Z', procurementCompletedAt: '2026-10-26T12:00:00Z',
   allocationApprovedAt: '2026-10-27T12:00:00Z', outboundCompletedAt: '2026-10-28T12:00:00Z',
   paidAt: '2025-01-01T00:00:00Z', consumerPaidAt: '2025-01-01T00:00:00Z', createdAt: '2025-01-01T00:00:00Z',
   procurementProgress: { purchaseOrder: 'ordered', supplierPayment: 'paid', alibabaOrder: 'pushed' },
@@ -13,6 +13,11 @@ const phases = ['review', 'dispatch', 'procurement', 'allocation_review', 'shipp
 it.each(phases)('retains completed %s after later stages and uses its own timestamp', queue => {
   expect(isStageCompleted(base, queue)).toBe(true)
   expect(completedRange(undefined, now)(completedAt(base, queue))).toBe(true)
+})
+it('dispatch uses existing shipment approval time and never substitutes Shopify sync time', () => {
+  const audited = { ...base, dispatchApprovedAt: '2026-10-29T12:00:00Z', shopifySyncedAt: '2026-10-01T12:00:00Z' }
+  expect(completedAt(audited, 'dispatch')).toBe('2026-10-29T12:00:00.000Z')
+  expect(completedAt({ ...audited, dispatchApprovedAt: null }, 'dispatch')).toBeNull()
 })
 it.each([true, false])('includes the rolling week boundaries, excluding future and older dates (%s)', explicit => {
   const accepts = completedRange(explicit ? '1w' : undefined, now)

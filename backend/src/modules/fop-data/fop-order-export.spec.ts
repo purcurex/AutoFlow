@@ -21,11 +21,11 @@ const value = (sheet: ExcelJS.Worksheet, row: number, header: string) => sheet.g
 
 describe('fulfillment Excel export', () => {
   it.each([
-    ['review', '订单审核时间（UTC+8）'], ['dispatch', 'Shopify同步时间（UTC+8）'], ['procurement', '采购完成时间（UTC+8）'],
+    ['review', '订单审核时间（UTC+8）'], ['dispatch', '发运单审核时间（UTC+8）'], ['procurement', '采购完成时间（UTC+8）'],
     ['allocation_review', '配货审核时间（UTC+8）'], ['shipping', '出库完成时间（UTC+8）'],
   ] as const)('exports %s completion dates and completed-state metadata consistently with the page', async (queue, dateHeader) => {
     const at = '2026-10-28T00:00:00Z'
-    const done = { ...order, reviewStatus: 'approved' as const, reviewedAt: at, shopifySyncedAt: at, procurementCompletedAt: at, allocationApprovedAt: at, outboundCompletedAt: at,
+    const done = { ...order, reviewStatus: 'approved' as const, reviewedAt: at, dispatchApprovedAt: at, shopifySyncedAt: '2026-10-01T00:00:00Z', procurementCompletedAt: at, allocationApprovedAt: at, outboundCompletedAt: at,
       procurementProgress: { purchaseOrder: 'ordered' as const, supplierPayment: 'paid' as const, alibabaOrder: 'pushed' as const },
       fulfillmentProgress: { ...order.fulfillmentProgress, shopifySync: 'synced' as const, allocationReview: 'approved' as const, outbound: 'completed' as const } }
     const book = new ExcelJS.Workbook()
@@ -35,6 +35,10 @@ describe('fulfillment Excel export', () => {
     if (queue !== 'review') expect(headers(ws)).toContain('完成状态')
     const infoRows = info.getSheetValues() as (string[] | undefined)[]
     expect(infoRows.find(row => row?.[1] === '清单状态筛选')?.[2]).toBe('已完成')
+    if (queue === 'dispatch') {
+      expect(infoRows.find(row => row?.[1] === '发运单审核时间范围')?.[2]).toBe('近一周')
+      expect(infoRows.find(row => row?.[1] === '排序')?.[2]).toBe('发运单审核时间 · 降序')
+    }
   })
   it.each(['unpaid', 'review'] as const)('exports separate numeric amount details in %s without changing the total', async queue => {
     const detailed = { ...order, amount: 109.5, amountBreakdown: { productAmount: 100, shippingFee: 0, taxAmount: 14.5, discountAmount: 5 } }

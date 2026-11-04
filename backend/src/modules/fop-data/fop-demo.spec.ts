@@ -640,8 +640,8 @@ describe('business role data scope', () => {
   const user = (scope: object) => ({ role: UserRole.USER, workbenchRoles: ['sales', 'allocation', 'dispatch', 'warehouse', 'procurement'], ...scope })
   const service = (account: object, provider = new DemoFopDataProvider(organizations, env)) => new FopDataService({ findById: async () => ({ ...account }) } as unknown as UsersService, provider)
   it('filters orders, queues, registrations and receipts before calculating totals', async () => {
-    const admin = service(user({ businessRole: 'admin' }))
-    const manager = service(user({ businessRole: 'department_manager', businessDepartmentId: 'sales-1' }))
+    const admin = service(user({ businessRole: 'admin', businessEmployeeId: 'employee-1' }))
+    const manager = service(user({ businessRole: 'department_manager', businessDepartmentId: 'sales-1', businessEmployeeId: 'employee-1' }))
     const sales = service(user({ businessRole: 'salesperson', businessEmployeeId: 'employee-1' }))
     const all = await admin.getDashboard('alice', query)
     const dept = await manager.getDashboard('alice', query)
@@ -664,7 +664,9 @@ describe('business role data scope', () => {
         const extra = companion ? (await manager.getOrders('alice', { queue: companion, page: 1, pageSize: 100 })).total : 0
         expect(dept.queues[queue as keyof typeof dept.queues]).toBe(scoped.total + extra)
       }
-      const foreign = (await admin.getOrders('alice', { queue, page: 1, pageSize: 100 })).items.find(row => row.owner?.id === 'employee-2')!
+      // 待支付与其他清单同样按角色隔离：管理员可跨人员，经理及业务员不能跨授权范围。
+      const foreignAccount = admin
+      const foreign = (await foreignAccount.getOrders('alice', { queue, page: 1, pageSize: 100 })).items.find(row => row.owner?.id === 'employee-2')!
       expect((await manager.getOrders('alice', { queue, page: 1, pageSize: 1, orderNumber: foreign.orderNumber })).total).toBe(0)
       expect((await sales.getOrders('alice', { queue, page: 1, pageSize: 1, orderNumber: foreign.orderNumber })).total).toBe(0)
     }

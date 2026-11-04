@@ -125,7 +125,7 @@ let provider: Provider, service: FopDataService
 let user: Record<string, unknown>
 beforeEach(() => {
   provider = new Provider()
-  user = { id: 'u', role: 'admin', businessRole: 'salesperson', businessEmployeeId: 'e1', fopTenantId: 't', fopUserId: 'u', workbenchRoles: ['sales'] }
+  user = { id: 'u', role: 'user', businessRole: 'salesperson', businessEmployeeId: 'e1', fopTenantId: 't', fopUserId: 'u', workbenchRoles: ['sales'] }
   service = new FopDataService({ findById: async () => user } as unknown as UsersService, provider)
 })
 const query = { page: 1, pageSize: 50 }

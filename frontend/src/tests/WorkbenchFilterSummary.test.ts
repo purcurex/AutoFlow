@@ -3,6 +3,16 @@ import { createI18n } from 'vue-i18n'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import { expect, it } from 'vitest'
 import WorkbenchFilterSummary from '@/components/WorkbenchFilterSummary.vue'
+it('labels dispatch archive dates as shipment approval time, leaving other archive labels unchanged', async () => {
+  const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/workbench/:role', component: { template: '<div />' } }] })
+  await router.push('/workbench/dispatch?queue=completed&timeRange=1w')
+  const wrapper = mount(WorkbenchFilterSummary, { props: { queue: 'completed' }, global: { plugins: [router, createI18n({ legacy: false, locale: 'zh-CN', messages: {} })] } })
+  expect(wrapper.text()).toContain('发运单审核时间：近一周')
+  expect(wrapper.text()).not.toContain('完成时间：')
+  await router.push('/workbench/sales?queue=completed&timeRange=1m'); await flushPromises()
+  expect(wrapper.text()).toContain('完成时间：近一月')
+  wrapper.unmount()
+})
 it('summarizes applied query values without loading or data-source text and retains its element on navigation', async () => {
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: { template: '<div />' } }] })
   await router.push('/?departmentId=d1&warehouseCode=HZ&taskStatus=dispatch_approved&search=YT')

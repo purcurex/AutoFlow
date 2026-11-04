@@ -251,7 +251,7 @@ export class DemoFopDataProvider extends FopDataProvider {
     if (!Number.isFinite(start) || !Number.isFinite(end) || start > end || end - start > 365 * DAY) throw new Error('Invalid demo analytics range')
     if (permission.analyticsScopes?.includes('registrations')) {
       const workspace = await this.organizations.getWorkspace(identity.userId)
-      const employees = workspace.employees.filter(owner => owner.workbenchRoles.includes('sales') && owner.salesOwner !== false).map(owner => ({ owner, department: salesDepartmentFor(workspace, owner.departmentId) })).filter(item => item.department)
+      const employees = workspace.employees.filter(owner => owner.workbenchRoles.includes('sales') && owner.salesOwner !== false).map(owner => ({ owner, department: salesDepartmentNodeFor(workspace, owner.departmentId) })).filter(item => item.department)
       // One authorized ledger drives totals, departments and salesperson series.
       for (let at = start; at <= end; at += DAY) {
         const date = new Date(at).toISOString().slice(0, 10)
@@ -260,7 +260,9 @@ export class DemoFopDataProvider extends FopDataProvider {
           const seed = createHash('sha256').update(`${identity.tenantId}:registration:${owner.id}:${date}`).digest().readUInt32BE(0)
           const count = seed % 18
           total += count
-          registrationEntries.push({ departmentPathIds: departmentPath(workspace, owner.departmentId), date, salesDepartmentCode: department!, owner: { id: owner.id, name: owner.name }, count })
+          // 与演示订单、收款使用同一业务部门归属；显式提供部门，不能依靠祖先路径授权。
+          registrationEntries.push({ department: { id: department!.node.id, name: department!.node.name },
+            departmentPathIds: departmentPath(workspace, owner.departmentId), date, salesDepartmentCode: department!.code, owner: { id: owner.id, name: owner.name }, count })
         }
         registrations.push({ date, count: total })
       }
@@ -388,6 +390,7 @@ export class DemoFopDataProvider extends FopDataProvider {
         warehouseCode: (index + Math.floor(index / 12)) % 3 === 0 ? 'SZ' : 'HZ', warehouse: (index + Math.floor(index / 12)) % 3 === 0 ? '深圳仓' : '杭州仓', carrierCode: carrier.id, carrier: carrier.label,
         trackingNumber: shipping ? `HZ${accountKey.slice(0, 5).toUpperCase()}${String(800000000 + index)}` : null,
         shopifySyncedAt: completed || stage >= 2 && stage <= 4 ? new Date(createdAt + 90 * 60_000).toISOString() : null,
+        dispatchApprovedAt: completed || stage >= 2 && stage <= 4 ? new Date(createdAt + 75 * 60_000).toISOString() : null,
         procurementCompletedAt: completed || procurementProgress.purchaseOrder === 'ordered' && procurementProgress.supplierPayment === 'paid' ? new Date(createdAt + 60 * 60_000).toISOString() : null,
         allocationApprovedAt: completed || stage === 4 ? new Date(createdAt + 120 * 60_000).toISOString() : null,
         outboundCompletedAt: completed ? new Date(createdAt + 180 * 60_000).toISOString() : null,

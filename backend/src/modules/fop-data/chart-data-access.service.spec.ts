@@ -24,7 +24,7 @@ function setup(changes: object = {}) {
     async resolvePermissions() { return structuredClone(grant) }
     async listOrders() { return orders }
     async listReceipts() { return receipts }
-    async getAnalytics(subject: FopIdentity) { return { subject, rates: [], registrations: [], registrationEntries: orders.map((o, i) => ({ date: `2026-01-${String(i % 12 + 1).padStart(2, '0')}`, salesDepartmentCode: o.salesDepartmentCode!, departmentPathIds: o.departmentPathIds, owner: o.owner!, count: 1 })) } }
+    async getAnalytics(subject: FopIdentity) { return { subject, rates: [], registrations: [], registrationEntries: orders.map((o, i) => ({ date: `2026-01-${String(i % 12 + 1).padStart(2, '0')}`, salesDepartmentCode: o.salesDepartmentCode!, department: o.department, departmentPathIds: o.departmentPathIds, owner: o.owner!, count: 1 })) } }
     async getOrganizationSummary(subject: FopIdentity, _permission: any, query: any): Promise<any> { return { subject, chartId: query.chartId, rows: ['sales1', 'sales2'].map(salesDepartmentCode => ({ date: '2026-01-10', salesDepartmentCode, count: 24, ...(query.chartId === 'department_receipts' ? { amount: 192, currency: 'USD', sourceType: 'fulfillment' } : {}), ...(query.chartId === 'order_volume' ? { warehouseCode: 'HZ' } : {}), owner: { id: 'secret', name: 'secret' }, customerId: 'secret' })) } }
   }
   const provider = new Provider()
@@ -80,8 +80,8 @@ describe('chart authorization and scoped analytics', () => {
     expect(dashboard.registrations).toEqual([]); expect(dashboard.registrationDepartments).toEqual([])
     expect(dashboard.receipts.months).toEqual([]); expect((dashboard as any).departmentReceipts.months).toEqual([])
   })
-  it('uses independent summary grants without domain enumeration or member disclosure', async () => {
-    const { service, provider, grant } = setup({ businessRole: 'salesperson', chartPermissions: [override('department_receipts', { visibility: 'allow', summaryMode: 'selected', summaryDepartments: ['sales2'] }), override('registrations', { summaryMode: 'selected', summaryDepartments: ['sales2'] }), override('order_volume', { summaryMode: 'selected', summaryDepartments: ['sales2'] })] })
+  it('总经办可使用已授权部门汇总，不授予未开放的明细', async () => {
+    const { service, provider, grant } = setup({ businessRole: 'admin', chartPermissions: [override('department_receipts', { visibility: 'allow', summaryMode: 'selected', summaryDepartments: ['sales2'] }), override('registrations', { dataScope: 'none', summaryMode: 'selected', summaryDepartments: ['sales2'] }), override('order_volume', { dataScope: 'none', summaryMode: 'selected', summaryDepartments: ['sales2'] })] })
     grant.allowedOrderIds = []; grant.allowedReceiptIds = []
     provider.listOrders = async () => { throw new Error('No domain rows for summary') }; provider.listReceipts = async () => { throw new Error('No domain rows for summary') }
     const summary = (await service.getDashboard('u', period) as any).departmentReceipts
@@ -92,13 +92,20 @@ describe('chart authorization and scoped analytics', () => {
     expect(organizational).toMatchObject({ total: 24, customerCount: null, options: { objects: [] }, summaryOnly: true })
     await expect(service.getOrderVolumeDetails('u', { ...volume, category: 'organization', view: 'summary', workbenchRole: 'sales', page: 1, pageSize: 10 } as any)).rejects.toMatchObject({ status: 403 })
   })
-  it('resolves manager summary departments using independent FOP ancestry and missing grants fail closed', async () => {
+  it('经理汇总只接受直属本部门，金蝶没有授权时关闭', async () => {
     const { service, grant } = setup()
     let access = await (service as any).getChartAccess('u')
     expect(access.charts.find((c: any) => c.chartId === 'department_receipts')).toMatchObject({ visible: true, summaryOnly: true, summaryDepartments: ['sales1'], dataScope: 'none', canViewDetails: false })
     grant.organizationSummaries = []; access = await (service as any).getChartAccess('u')
     expect(access.charts.find((c: any) => c.chartId === 'department_receipts')).toMatchObject({ visible: false, summaryDepartments: [] })
     expect(JSON.stringify(access)).not.toContain('allowedOrderIds')
+  })
+
+  it('经理不能读取祖先链包含本部门的子部门汇总', async () => {
+    const { service, grant } = setup()
+    for (const summary of grant.organizationSummaries) summary.departments = [{ code: 'sales1', departmentId: 'child', departmentPathIds: ['child', 'd1', 'org'] }]
+    const access = await service.getChartAccess('u')
+    expect(access.charts.find(c => c.chartId === 'department_receipts')).toMatchObject({ visible: false, summaryDepartments: [] })
   })
   it('rejects responses when chart permissions change during provider loading', async () => {
     const { service, provider, account, orders } = setup()
@@ -137,7 +144,7 @@ describe('chart authorization and scoped analytics', () => {
   it('fails closed before a malformed registration ancestry can mimic a manager department', async () => {
     const { service, provider, grant } = setup()
     grant.organizationSummaries = []
-    provider.getAnalytics = async subject => ({ subject, rates: [], registrations: [], registrationEntries: [{ date: '2026-01-10', salesDepartmentCode: 'sales1', owner: { id: 'foreign', name: 'Foreign' }, count: 999, departmentPathIds: 'd10' as any }] })
+    provider.getAnalytics = async subject => ({ subject, rates: [], registrations: [], registrationEntries: [{ date: '2026-01-10', salesDepartmentCode: 'sales1', department: { id: 'd1', name: 'Department' }, owner: { id: 'foreign', name: 'Foreign' }, count: 999, departmentPathIds: 'd10' as any }] })
     await expect(service.getDashboard('u', period)).rejects.toMatchObject({ status: 503 })
   })
   it('reports a granted but unconfigured independent organization summary provider explicitly', async () => {

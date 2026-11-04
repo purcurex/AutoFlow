@@ -27,6 +27,8 @@ export function directoryPolicy(member: DirectoryMember): DirectoryPolicy {
   if (ADMIN_NAMES.has(member.englishName.toLowerCase())) return { role: UserRole.ADMIN, businessRole: 'admin', workbenchRoles: [...WORKBENCH_ROLES], chartPermissions: [] }
   const paths = member.profile.departmentPaths
   if (/\bHR\b|人事|人力资源/i.test(member.jobTitle) || paths.some(path => path.split('/').includes('商品管理'))) return { role: UserRole.USER, businessRole: 'none', workbenchRoles: [], chartPermissions: [] }
+  // 总经办采用全部业务部门的数据角色，保持普通系统账号，不自动授予账号管理权限。
+  if (member.primaryDepartment.split('/').includes('总经办')) return { role: UserRole.USER, businessRole: 'admin', workbenchRoles: [...WORKBENCH_ROLES], chartPermissions: [] }
   if (/\/(订单管理|采购管理|物流管理|仓库管理|杭州仓|深圳仓|信息管理部)(\/|$)/.test(member.primaryDepartment)) {
     return { role: UserRole.USER, businessRole: 'admin', workbenchRoles: [...WORKBENCH_ROLES], chartPermissions: collaborationChartPermissions() }
   }

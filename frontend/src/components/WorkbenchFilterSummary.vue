@@ -49,7 +49,7 @@ const summaryParts = computed(() => {
     if (isProcurementStage(val('procurementStage'))) parts.push(`${text('采购进度', 'Purchase progress')}：${procurementStageLabels[val('procurementStage') as keyof typeof procurementStageLabels][zh.value ? 0 : 1]}`)
     if (val('warehouseStage')) parts.push(`${text('配货单状态', 'Allocation status')}：${val('warehouseStage') === 'pending_review' ? text('未审核', 'Pending approval') : text('已审核', 'Approved')}`)
   }
-  if (props.queue === 'completed') parts.push(`${text('完成时间', 'Completion time')}：${val('timeRange') === '1m' ? text('近一月', 'Last month') : val('timeRange') === '3m' ? text('近三月', 'Last three months') : text('近一周', 'Last week')}`)
+  if (props.queue === 'completed') parts.push(`${route.params.role === 'dispatch' ? text('发运单审核时间', 'Shipment approval time') : text('完成时间', 'Completion time')}：${val('timeRange') === '1m' ? text('近一月', 'Last month') : val('timeRange') === '3m' ? text('近三月', 'Last three months') : text('近一周', 'Last week')}`)
   if (props.queue === 'unpaid') parts.push(`${text('C端付款时间', 'Consumer payment time')}：${val('timeRange') === '1w' ? text('近一周', 'Last week') : val('timeRange') === '1m' ? text('近一月', 'Last month') : val('timeRange') === '3m' ? text('近三月', 'Last three months') : text('全部', 'All')}`)
   if (props.queue === 'review' || props.queue === 'completed' && route.params.role === 'sales') parts.push(`${text('发货国家', 'Shipping country')}：${normalizeShippingCountry(val('shippingCountryCode')) ?? text('全部', 'All')}`)
   if (props.queue === 'procurement' && isPurchaseStage(val('purchaseStage'))) parts.push(`${text('采购进度', 'Purchase progress')}：${purchaseStageLabels[val('purchaseStage') as keyof typeof purchaseStageLabels][zh.value ? 0 : 1]}`)

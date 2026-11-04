@@ -14,6 +14,9 @@ describe('company directory import rules', () => {
   it('recognizes all five explicit admins regardless of their department', () => {
     for (const name of ['Ethan', 'Robin', 'Nora', 'Mason', 'XinKe']) expect(directoryPolicy(parse(row(name, '部门经理', '华智云服/信息管理部'))[0])).toMatchObject({ role: 'admin', businessRole: 'admin', chartPermissions: [] })
   })
+  it('总经办读取全部业务部门，不授予系统管理员身份', () => {
+    expect(directoryPolicy(parse(row('Director', '总经理', '华智云服/总经办'))[0])).toMatchObject({ role: 'user', businessRole: 'admin', chartPermissions: [], workbenchRoles: [...WORKBENCH_ROLES] })
+  })
   it('scopes sales managers to their department, partners to self, and HR/product to no business data', () => {
     expect(directoryPolicy(parse(row('Cici', '部门经理'))[0]).businessRole).toBe('department_manager')
     expect(directoryPolicy(parse(row('Partner', '营销伙伴', '华智云服/合作伙伴'))[0]).businessRole).toBe('salesperson')

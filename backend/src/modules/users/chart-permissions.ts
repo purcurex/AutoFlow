@@ -1,6 +1,7 @@
 import { isWorkbenchRole } from './workbench-role'
 import type { SalesDepartmentCode } from '../fop-data/fop-data.types'
 import type { User } from './user.entity'
+import { businessScope } from './business-scope'
 
 export const CHART_IDS = ['registrations', 'department_receipts', 'salesperson_receipts', 'order_volume', 'customer_orders', 'freight', 'sales_performance'] as const
 export type ChartId = typeof CHART_IDS[number]
@@ -62,22 +63,26 @@ export function validateChartPermissions(value: unknown): value is ChartPermissi
  * authorized department codes and ancestry, independently from record grants. */
 export function resolveChartSummaryPolicy(user: ChartPolicyUser, chartId: ChartId): ChartSummaryPolicy {
   const none: ChartSummaryPolicy = { mode: 'none', departments: [] }
-  if (user.businessRole === 'none' || !SUMMARY_CHARTS.includes(chartId) || !validateChartPermissions(user.chartPermissions ?? [])) return none
+  const scope = businessScope(user)
+  if (scope.role === 'none' || !SUMMARY_CHARTS.includes(chartId) || !validateChartPermissions(user.chartPermissions ?? [])) return none
   const override = user.chartPermissions?.find(row => row.chartId === chartId)
   if (override?.visibility === 'deny' || override?.summaryMode === 'none') return none
+  // 汇总也遵守角色边界：业务员不能借图表授权读取他人汇总，经理不能选择其他部门。
+  if (scope.role === 'salesperson') return none
+  if (scope.role === 'department_manager') return { mode: scope.departmentId ? 'department' : 'none', departments: [] }
   if (override?.summaryMode === 'selected') return { mode: 'selected', departments: [...override.summaryDepartments] }
   if (override?.summaryMode === 'marketing') return { mode: 'marketing', departments: [] }
-  if (user.businessRole === 'admin') return { mode: 'marketing', departments: [] }
-  if (user.businessRole === 'department_manager' && user.businessDepartmentId) return { mode: 'department', departments: [] }
+  if (scope.role === 'admin') return { mode: 'marketing', departments: [] }
   return none
 }
 
 function recordScope(user: ChartPolicyUser, override?: ChartPermissionOverride): EffectiveChartAccess['dataScope'] {
   if (override?.dataScope === 'none') return 'none'
   let scope: EffectiveChartAccess['dataScope'] = 'none'
-  if (user.businessRole === 'admin') scope = 'all'
-  else if (user.businessRole === 'department_manager') scope = user.businessDepartmentId ? 'department' : 'none'
-  else if ((user.businessRole ?? 'salesperson') === 'salesperson') scope = user.businessEmployeeId ? 'self' : 'none'
+  const business = businessScope(user)
+  if (business.role === 'admin') scope = 'all'
+  else if (business.role === 'department_manager') scope = business.departmentId ? 'department' : 'none'
+  else if (business.role === 'salesperson') scope = business.employeeId ? 'self' : 'none'
   if (scope === 'none') return scope
   if (override?.dataScope === 'self') return user.businessEmployeeId ? 'self' : 'none'
   if (override?.dataScope === 'department' && scope === 'all') return user.businessDepartmentId ? 'department' : 'none'
@@ -86,7 +91,7 @@ function recordScope(user: ChartPolicyUser, override?: ChartPermissionOverride):
 
 export function resolveChartAccess(user: ChartPolicyUser): EffectiveChartAccess[] {
   const validPolicy = validateChartPermissions(user.chartPermissions ?? [])
-  const templateEnabled = user.businessRole === 'admin' || !!user.workbenchRoles?.includes('sales')
+  const templateEnabled = businessScope(user).role === 'admin' || !!user.workbenchRoles?.includes('sales')
   return CHART_IDS.map(chartId => {
     const override = validPolicy ? user.chartPermissions?.find(row => row.chartId === chartId) : undefined
     const summary = resolveChartSummaryPolicy(user, chartId)
@@ -100,7 +105,7 @@ export function resolveChartAccess(user: ChartPolicyUser): EffectiveChartAccess[
     const summaryOnly = visible && scope === 'none' && hasSummary
     return {
       chartId, visible, dataScope: visible ? scope : 'none',
-      scopeLabel: !visible ? '暂不可查看' : summaryOnly ? '部门汇总' : scope === 'all' ? '当前统计范围' : scope === 'department' ? '本部门及下级' : '我的业务',
+      scopeLabel: !visible ? '暂不可查看' : summaryOnly ? '部门汇总' : scope === 'all' ? '全部业务部门' : scope === 'department' ? '本部门' : '我的业务',
       canViewDetails: visible && scope !== 'none' && chartId !== 'registrations' && override?.details !== 'deny',
       canExport: visible && override?.export !== 'deny', summaryOnly, summaryDepartments,
     }

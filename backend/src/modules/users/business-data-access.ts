@@ -22,18 +22,12 @@ export async function readBusinessOwners(dataSource: DataSource, actorId: string
   const query = repository.createQueryBuilder('account').select('account.id', 'id')
   if (actor.fopTenantId) query.where('account.fop_tenant_id = :tenant', { tenant: actor.fopTenantId })
   else query.where('account.fop_tenant_id IS NULL')
+  // 全部门范围仍不得跨越当前已验证的金蝶公司组织。
+  if (actor.fopBindingDetails?.organizationId) query.andWhere("account.fop_binding_details ->> 'organizationId' = :organization", { organization: actor.fopBindingDetails.organizationId })
   if (scope.role === 'department_manager') {
     if (!scope.departmentId) return { ids: [], filter: In([]) }
-    // UUID node ancestry is maintained by the organization service. External
-    // department IDs still support exact matching until the FOP directory sync.
-    query.andWhere(`account.business_department_id IN (
-      WITH RECURSIVE departments(id) AS (
-        SELECT :department::text
-        UNION
-        SELECT node.id::text FROM organization_nodes node
-        JOIN departments parent ON node.parent_id::text = parent.id
-      ) SELECT id FROM departments
-    )`, { department: scope.departmentId })
+    // 客户、报价、沟通等本地业务读取使用同一直属部门边界，不递归下级部门。
+    query.andWhere('account.business_department_id = :department', { department: scope.departmentId })
   }
   const rows = await query.getRawMany<{ id: string }>()
   const ids = rows.map(row => row.id)

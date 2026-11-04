@@ -20,6 +20,7 @@ const settings: Record<string, string> = {
   FOP_KINGDEE_ANALYTICS_PERMISSIONS_URL: 'https://offline.test/permissions', FOP_KINGDEE_ANALYTICS_QUERY_URL: 'https://offline.test/read',
   FOP_KINGDEE_TENANT_ID: identity.tenantId, FOP_KINGDEE_USER_ID: identity.userId, FOP_KINGDEE_ORGANIZATION_IDS: '10,20',
   FOP_KINGDEE_ACCESS_TOKEN: 'offline-only', FOP_KINGDEE_IDENTITY: 'offline-only', FOP_KINGDEE_OPENAPI_SIGN: 'offline-only',
+  FOP_KINGDEE_STOCK_WAREHOUSE_CODE_MAP: 'unused-invalid-stock-config',
   FOP_KINGDEE_DEPARTMENT_MAP: '{"400":"sales1"}', FOP_KINGDEE_WAREHOUSE_MAP: '{"600":"HZ"}', FOP_KINGDEE_CARRIER_MAP: '{"700":"YT"}', FOP_KINGDEE_EXRATE_TABLE_ID: '800',
 }
 type Query = { resource: FopAnalyticsResource; from: string; to: string; page: number; pageSize: number; keyword?: string }
@@ -176,13 +177,12 @@ describe('Kingdee nine analytics integration, offline transport', () => {
     expect(JSON.parse(String(request.mock.calls[1][1]?.body))).toMatchObject({ query: { userId: '100', organizationIds: ['10', '20'], scopeRole: 'admin' } })
   })
 
-  it('retains trusted child ancestry and maps its parent business department', async () => {
+  it('经理不能通过祖先链读取子部门分析数据', async () => {
     const selected = setup({ transform: (value, query) => query.resource === 'orders'
       ? { ...value, items: [{ ...order, department: ref('401'), departmentPathIds: ['10', '400', '401'] }] } : value })
     const manager = { role: 'department_manager' as const, departmentId: '400', employeeId: '501' }
     const grant = await selected.provider.resolvePermissions(identity, manager)
-    const result = await selected.provider.readAnalytics(identity, grant, manager, 'orders', { from: '2025-01-01', to: '2025-12-31' })
-    expect(result.orders[0]).toMatchObject({ departmentPathIds: ['10', '400', '401'], salesDepartmentCode: 'sales1' })
+    await expect(selected.provider.readAnalytics(identity, grant, manager, 'orders', { from: '2025-01-01', to: '2025-12-31' })).rejects.toThrow('outside authorized scope')
   })
 
   it('fails explicitly for an oversized upstream page instead of returning incomplete totals', async () => {

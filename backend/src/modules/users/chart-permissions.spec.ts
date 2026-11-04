@@ -23,9 +23,9 @@ describe('account chart policy', () => {
     expect(access(account(), 'registrations')).toMatchObject({ visible: true, dataScope: 'self', summaryOnly: false })
   })
 
-  it('uses independent business grants rather than the system administrator role', () => {
+  it('管理员统一全部部门，业务员仅本人，未开通业务的账号继续关闭', () => {
     for (const role of [UserRole.ADMIN, UserRole.USER]) {
-      expect(access(account({ role }), 'freight')?.dataScope).toBe('self')
+      expect(access(account({ role }), 'freight')?.dataScope).toBe(role === UserRole.ADMIN ? 'all' : 'self')
       expect(resolveChartAccess(account({ role, businessRole: 'none', chartPermissions: [override({ visibility: 'allow' })] })).every(chart => !chart.visible && chart.dataScope === 'none' && !chart.canExport)).toBe(true)
     }
   })
@@ -61,10 +61,19 @@ describe('account chart policy', () => {
     expect(access(user, 'customer_orders')).toMatchObject({ visible: false, dataScope: 'none', canViewDetails: false })
   })
 
-  it('allows independent selected summaries without access to another member or document', () => {
+  it('业务员不能通过指定部门汇总读取其他人员的数据', () => {
     const user = account({ chartPermissions: [override({ chartId: 'department_receipts', summaryMode: 'selected', summaryDepartments: ['sales2', 'sales4'], details: 'allow' })] })
-    expect(access(user, 'department_receipts')).toMatchObject({ visible: true, dataScope: 'none', summaryOnly: true, canViewDetails: false, summaryDepartments: ['sales2', 'sales4'] })
+    expect(access(user, 'department_receipts')).toMatchObject({ visible: false, dataScope: 'none', summaryDepartments: [] })
     expect(access(user, 'customer_orders')?.dataScope).toBe('self')
+  })
+
+  it('经理不能通过全部或指定部门汇总越过本部门', () => {
+    for (const summaryMode of ['selected', 'marketing'] as const) {
+      const user = account({ businessRole: 'department_manager', chartPermissions: [override({ chartId: 'department_receipts', summaryMode,
+        summaryDepartments: summaryMode === 'selected' ? ['sales2', 'sales4'] : [] })] })
+      expect(resolveChartSummaryPolicy(user, 'department_receipts')).toEqual({ mode: 'department', departments: [] })
+      expect(access(user, 'department_receipts')?.summaryDepartments).toEqual(['sales1'])
+    }
   })
 
   it('denies every capability when a chart is disabled', () => {

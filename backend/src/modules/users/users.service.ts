@@ -150,7 +150,9 @@ export class UsersService {
   }
 
   async updateAccountAccess(actorId: string, id: string, input: UpdateAccountAccessDto) {
-    const scope = input.businessScope
+    // 管理员开通业务后固定全部部门，兼容历史客户端提交的本人/部门范围；未开通仍关闭。
+    const scope = input.accountRole === 'administrator' && input.businessScope.role !== 'none'
+      ? { ...input.businessScope, role: 'admin' as const } : input.businessScope
     const valid = input.accountRole === 'administrator'
       || input.accountRole === 'collaboration' && ['admin', 'none'].includes(scope.role)
       || input.accountRole === scope.role && ['salesperson', 'department_manager'].includes(scope.role)
