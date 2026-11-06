@@ -40,6 +40,7 @@ export async function getFopDataAccess(): Promise<FopDataAccess> {
 export function fopAccessError(error: unknown, zh: boolean): string {
   const code = typeof error === 'object' && error !== null && 'code' in error ? error.code : undefined
   const messages: Record<string, [string, string]> = {
+    rma_type_conflict: ['售后类型存在冲突，请在 FOP 核对后刷新。', 'Conflicting after-sales types. Verify the records in FOP and refresh.'],
     stock_inventory_orders_changed: ['所选备货订单已变化或不可查看，请关闭库存窗口，刷新清单后重新勾选。', 'Selected stock orders changed or are unavailable. Close this window, refresh the list and select again.'],
     chart_access_denied: ['暂时无法查看此图表，请联系管理员。', 'This chart is unavailable. Contact an administrator.'],
     chart_details_denied: ['当前仅可查看统计汇总，如需明细请联系管理员。', 'Only summaries are available. Contact an administrator for details.'],

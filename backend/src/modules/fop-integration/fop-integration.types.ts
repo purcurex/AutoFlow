@@ -79,6 +79,8 @@ export interface FopCustomLogisticsChannel {
 }
 
 export interface FopActualLogisticsChannel {
+  customChannelName?: string
+  carrierCode?: string
   customChannelCode: string
   code: string
   name: string
@@ -162,6 +164,19 @@ export interface ShippingRateResult {
   warnings: string[]
 }
 
+export interface FopLogisticsCatalogQuery { search?: string; page: number; pageSize: number }
+export interface FopLogisticsCatalogSearchResult {
+  provider: 'fop'
+  source: 'fop' | 'sandbox'
+  sourceVersion: string
+  effectiveAt: string
+  channels: FopActualLogisticsChannel[]
+  total: number
+  page: number
+  pageSize: number
+  warnings: string[]
+}
+
 export interface ProspectHandoffRequest {
   idempotencyKey: string
   correlationId: string
@@ -186,6 +201,7 @@ export abstract class FopLogisticsRatePort {
 }
 
 export abstract class FopLogisticsCatalogPort {
+  abstract searchActualChannels(query: FopLogisticsCatalogQuery): Promise<FopLogisticsCatalogSearchResult>
   abstract getCustomChannels(): Promise<FopCustomLogisticsChannelResult>
   abstract getActualChannels(customChannelCode: string): Promise<FopActualLogisticsChannelResult>
 }

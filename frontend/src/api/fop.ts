@@ -27,6 +27,8 @@ export interface FopCustomLogisticsChannel {
 }
 
 export interface FopActualLogisticsChannel {
+  customChannelName?: string
+  carrierCode?: string
   customChannelCode: string
   code: string
   name: string
@@ -50,6 +52,19 @@ export interface FopActualLogisticsChannelResult {
   effectiveAt: string
   customChannelCode: string
   channels: FopActualLogisticsChannel[]
+  warnings: string[]
+}
+
+export interface FopLogisticsCatalogQuery { search?: string; page: number; pageSize: number }
+export interface FopLogisticsCatalogSearchResult {
+  provider: 'fop'
+  source: 'fop' | 'sandbox'
+  sourceVersion: string
+  effectiveAt: string
+  channels: FopActualLogisticsChannel[]
+  total: number
+  page: number
+  pageSize: number
   warnings: string[]
 }
 
@@ -98,6 +113,9 @@ export const fopApi = {
     quantityTiers: Array<{ minQuantity: number; maxQuantity?: number }>
   }): Promise<FopProductCostResult> {
     return api.post('/autoflow/integrations/fop/products/purchase-costs', payload)
+  },
+  searchActualLogisticsChannels(query: FopLogisticsCatalogQuery, signal?: AbortSignal): Promise<FopLogisticsCatalogSearchResult> {
+    return api.get('/autoflow/integrations/fop/logistics/actual-channels', { params: query, signal })
   },
   getCustomLogisticsChannels(): Promise<FopCustomLogisticsChannelResult> {
     return api.get('/autoflow/integrations/fop/logistics/custom-channels')

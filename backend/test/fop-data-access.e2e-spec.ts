@@ -54,6 +54,16 @@ describe('FOP user isolation HTTP API (repository and provider boundaries stubbe
     items: [{ sku: 'sku-1', name: 'Product', imageUrl: null, variant: '', quantity: 1 }], ...extra,
   })
 
+  it('searches a SKU without trimming other fulfillment items or admitting another owner', async () => {
+    const products = [{ sku: 'SKU-ONE', name: 'One', imageUrl: null, variant: '', quantity: 2 }, { sku: 'SKU-TWO', name: 'Two', imageUrl: null, variant: '', quantity: 3 }]
+    records = [order('a', { items: products, amount: 25 }), order('shared', { items: products, owner: { id: 'other-owner', name: 'Other' } })]
+    const page = (await list('queue=review&search=sku-one').expect(200)).body
+    expect(page.total).toBe(1)
+    expect(page.items[0].orderNumber).toBe('A')
+    expect(page.items[0].items.map((item: any) => [item.sku, item.quantity])).toEqual([['SKU-ONE', 2], ['SKU-TWO', 3]])
+    expect(page.totals).toMatchObject({ orderCount: 1, itemQuantity: 5, amountsByCurrency: [{ currency: 'USD', amount: 25 }] })
+  })
+
   it('filters exception types, exports reasons and preserves overlapping main queues including post-shipment exceptions', async () => {
     accounts.get(alice).workbenchRoles = ['sales', 'procurement', 'dispatch', 'allocation', 'warehouse']
     const types = ['procurement_exception', 'dispatch_exception', 'allocation_exception', 'logistics_exception', 'delivery_exception']
@@ -79,7 +89,7 @@ describe('FOP user isolation HTTP API (repository and provider boundaries stubbe
     const book = new ExcelJS.Workbook(); await book.xlsx.load(response.body as unknown as ExcelJS.Buffer)
     const sheet = book.getWorksheet('订单清单')!; const headings = sheet.getRow(1).values as string[]
     expect(headings).toContain('异常类型'); expect(headings).toContain('异常原因')
-    expect(sheet.getCell(2, headings.indexOf('异常类型')).text).toBe('配货异常')
+    expect(sheet.getCell(2, headings.indexOf('异常类型')).text).toBe('配货超时')
     expect(sheet.getCell(2, headings.indexOf('异常原因')).text).toBe('配货占用校验失败')
     expect(sheet.rowCount).toBe(5) // Header, two orders, quantity total and currency total.
     expect(JSON.stringify(sheet.getSheetValues())).not.toMatch(/FOREIGN|PRIVATE/)
@@ -289,6 +299,162 @@ describe('FOP user isolation HTTP API (repository and provider boundaries stubbe
     } finally { clock.mockRestore() }
   })
 
+  it('shares physical purchase returns across authorized procurement and warehouse roles with isolated line totals and exports', async () => {
+    accounts.get(alice).workbenchRoles = ['procurement', 'warehouse']
+    records = [order('a', { department: { id: 'd1', name: '业务一部' } }), order('b', { owner: { id: 'bob-owner', name: 'Bob' }, department: { id: 'd1', name: '业务一部' } })]
+    const source = (id: string, owner: string) => ({ id, sku: id, name: '=unsafe formula', variant: '', imageUrl: null, quantity: 5, returnedQuantity: 2, sourceOrder: { id, number: `SO-${id}`, kind: 'fulfillment', customerName: `Customer-${id}`, owner: { id: owner, name: owner }, department: { id: 'd1', name: '业务一部' } } })
+    const row = { id: 'r1', tenantId: 'tenant-1', kind: 'physical_return', number: 'TH-001', status: 'pending_outbound', purchaseOrder: { id: 'p1', number: 'CG-001' }, supplier: { id: 's1', name: 'Supplier' }, warehouseCode: 'HZ', warehouse: '杭州仓', createdAt: '2026-11-01T00:00:00Z', logistics: { carrier: '顺丰', trackingNumber: '0001234567890123456789' }, lines: [source('a', 'alice-owner'), source('b', 'bob-owner')] }
+    provider.resolvePermissions = async (subject: any) => ({ subject, allowedOrderIds: ['a', 'b'], allowedPurchaseOrderIds: ['p1'], allowedPurchaseReturnIds: ['r1', 'refund'] })
+    provider.listPurchaseReturns = async (subject: any) => ({ subject, returns: [row, { ...row, id: 'refund', kind: 'refund_only' }, { ...row, id: 'foreign', tenantId: 'other' }] })
+    const path = '/autoflow/integrations/fop/purchase-returns'
+    for (const workbenchRole of ['procurement', 'warehouse']) {
+      const response = await get(`${path}?workbenchRole=${workbenchRole}`).expect(200)
+      expect(response.headers['cache-control']).toContain('no-store')
+      expect(response.body).toMatchObject({ total: 1, pageSize: 50, totals: { orderCount: 1, returnCount: 1, quantity: 5, returnedQuantity: 2 }, items: [{ id: 'a', orderNumber: 'A', returnQuantity: 5, purchaseReturns: [{ id: 'r1', lines: [{ id: 'a' }] }] }] })
+      expect(JSON.stringify(response.body)).not.toContain('bob-owner')
+    }
+    await get(`${path}?workbenchRole=sales`).expect(400)
+    await get(`${path}?workbenchRole=warehouse&status=refund_only`).expect(400)
+    await get(`${path}?workbenchRole=warehouse&pageSize=0`).expect(400)
+    expect((await get(`${path}?workbenchRole=warehouse&search=bob`).expect(200)).body.total).toBe(0)
+    const exported = await request(app.getHttpServer()).post(`/api${path}/export`).auth(token(alice), { type: 'bearer' }).send({ workbenchRole: 'warehouse', mode: 'selected', orderIds: ['a'] }).buffer(true).parse((res, callback) => {
+      const chunks: Buffer[] = []; res.on('data', chunk => chunks.push(Buffer.from(chunk))); res.on('end', () => callback(null, Buffer.concat(chunks))); res.on('error', callback)
+    }).expect(200)
+    const book = new ExcelJS.Workbook(); await book.xlsx.load(exported.body as unknown as ExcelJS.Buffer)
+    expect(book.getWorksheet('采购退货清单')!.getCell('A1').value).toBe('订单编号')
+    const values = JSON.stringify(book.getWorksheet('退货明细')!.getSheetValues())
+    expect(values).toContain('0001234567890123456789'); expect(values).toContain('=unsafe formula'); expect(values).not.toContain('bob-owner')
+    await request(app.getHttpServer()).post(`/api${path}/export`).auth(token(alice), { type: 'bearer' }).send({ workbenchRole: 'warehouse', mode: 'selected', orderIds: ['other'] }).expect(409)
+    accounts.get(alice).workbenchRoles = ['procurement']
+    await get(`${path}?workbenchRole=warehouse`).expect(403)
+    provider.resolvePermissions = async (subject: any) => ({ subject, allowedOrderIds: ['a'], allowedPurchaseOrderIds: ['p1'] })
+    expect((await get(`${path}?workbenchRole=procurement`).expect(200)).body.total).toBe(0)
+  })
+
+  it('removes a return source transferred to another employee while the return snapshot is loading', async () => {
+    accounts.get(alice).workbenchRoles = ['procurement']
+    records = [order('a', { department: { id: 'd1', name: '业务一部' } })]
+    provider.resolvePermissions = async (subject: any) => ({ subject, allowedOrderIds: ['a'], allowedPurchaseOrderIds: ['p1'], allowedPurchaseReturnIds: ['r1'] })
+    provider.listPurchaseReturns = async (subject: any) => {
+      const sourceOrder = { id: 'a', number: 'SO-a', kind: 'fulfillment', customerName: 'Customer-a', owner: structuredClone(records[0].owner), department: records[0].department }
+      records[0].owner = { id: 'bob-owner', name: 'Bob' }
+      return { subject, returns: [{ id: 'r1', tenantId: 'tenant-1', kind: 'physical_return', number: 'TH-001', status: 'pending_outbound', purchaseOrder: { id: 'p1', number: 'CG-001' }, supplier: { id: 's1', name: 'Supplier' }, warehouseCode: 'HZ', warehouse: '杭州仓', createdAt: null, logistics: {}, lines: [{ id: 'l1', sku: 'SKU', name: 'Product', quantity: 5, returnedQuantity: 0, sourceOrder }] }] }
+    }
+    const response = await get('/autoflow/integrations/fop/purchase-returns?workbenchRole=procurement').expect(200)
+    expect(response.body.total).toBe(0)
+    expect(response.body.totals.quantity).toBe(0)
+  })
+
+  it('groups multiple physical returns under fulfillment orders and preserves current parent-department attribution', async () => {
+    Object.assign(accounts.get(alice), { businessRole: 'department_manager', businessDepartmentId: 'parent', workbenchRoles: ['warehouse'] })
+    const owner = { id: 'child-owner', name: 'Child employee' }, department = { id: 'child', name: '下级部门' }
+    records = [order('a', { owner, department, departmentPathIds: ['parent', 'child'] }), order('b', { owner, department, departmentPathIds: ['parent', 'child'] })]
+    provider.resolvePermissions = async (subject: any) => ({ subject, allowedOrderIds: ['a', 'b'], allowedStockOrderIds: ['st1'], allowedPurchaseOrderIds: ['p1'], allowedPurchaseReturnIds: ['r1', 'r2', 'stock-return'] })
+    const line = (id: string, kind = 'fulfillment', qty = 2) => ({ id, sku: 'SKU', name: 'Product', quantity: qty, returnedQuantity: 0, sourceOrder: { id, number: 'OLD', kind, customerName: 'Old customer', owner, department, departmentPathIds: ['parent', 'child'] } })
+    const base = { tenantId: 'tenant-1', kind: 'physical_return', status: 'pending_outbound', purchaseOrder: { id: 'p1', number: 'CG-001' }, supplier: { id: 's1', name: 'Supplier' }, warehouseCode: 'HZ', warehouse: '杭州仓', createdAt: null, logistics: {} }
+    provider.listPurchaseReturns = async (subject: any) => ({ subject, returns: [{ ...base, id: 'r1', number: 'TH-001', lines: [line('a'), line('b')] }, { ...base, id: 'r2', number: null, status: 'completed', lines: [line('a', 'fulfillment', 1)] }, { ...base, id: 'stock-return', number: 'TH-STOCK', lines: [line('st1', 'stock')] }] })
+    const path = '/autoflow/integrations/fop/purchase-returns?workbenchRole=warehouse&departmentId=parent'
+    const response = await get(path).expect(200)
+    expect(response.body).toMatchObject({ total: 2, totals: { orderCount: 2, returnCount: 1, quantity: 5, amountsByCurrency: [{ currency: 'USD', amount: 20 }] } })
+    expect(response.body.items[0]).toMatchObject({ id: 'a', orderNumber: 'A', customerName: 'Customer a', returnQuantity: 3, purchaseReturns: [{ id: 'r1', quantity: 2 }, { id: 'r2', number: null, quantity: 1 }] })
+    expect(response.body.items[1]).toMatchObject({ id: 'b', returnQuantity: 2, purchaseReturns: [{ id: 'r1', quantity: 2 }] })
+    expect(JSON.stringify(response.body)).not.toContain('TH-STOCK')
+    const completed = await get(path + '&status=completed').expect(200)
+    expect(completed.body.items).toHaveLength(1); expect(completed.body.items[0].purchaseReturns.map((row: any) => row.id)).toEqual(['r2'])
+  })
+
+  it('lists active sales RMA flows independently from fulfillment queues and deduplicates order amounts', async () => {
+    records = [order('a', { department: { id: 'd1', name: '业务一部' }, cancelled: true }), order('shared', { department: { id: 'd1', name: '业务一部' } }), order('outside', { owner: { id: 'bob-owner', name: 'Bob' } })]
+    const flow = (id: string, orderId: string, type: string, isOpen = true) => ({ id, tenantId: 'tenant-1', orderId, type, isOpen, number: `RMA-${id}`, stage: '待处理', reason: '<script>customer reason</script>', createdAt: '2026-11-01T00:00:00Z', updatedAt: '2026-11-02T00:00:00Z', refundAmount: type === 'refund' ? 3 : null, refundCurrency: ['refund', 'return_refund'].includes(type) ? 'USD' : null, requestedAmount: type === 'refund' ? 5 : null, currency: type === 'refund' ? 'USD' : null })
+    const cases = [flow('refund', 'a', 'refund'), flow('return', 'shared', 'return_refund'), flow('reship', 'shared', 'reshipment'), flow('hold', 'shared', 'interception'), flow('cancel', 'shared', 'cancellation'), flow('ended', 'shared', 'interception', false), flow('private', 'shared', 'refund'), flow('other-owner', 'outside', 'refund')]
+    provider.resolvePermissions = async (subject: any) => ({ subject, allowedOrderIds: ['a', 'shared', 'outside'], allowedRmaCaseIds: cases.filter(row => row.id !== 'private').map(row => row.id) })
+    provider.listRmaCases = async (subject: any) => ({ subject, cases })
+    const base = '/autoflow/integrations/fop/rma-orders'
+    const response = await get(base).expect(200)
+    expect(response.headers['cache-control']).toContain('no-store')
+    expect(response.body).toMatchObject({ total: 2, totals: { orderCount: 2, caseCount: 5, amountsByCurrency: [{ currency: 'USD', amount: 20 }] } })
+    expect(response.body.items.find((row: any) => row.id === 'a').rmaCases.map((row: any) => row.id)).toEqual(['refund'])
+    expect(JSON.stringify(response.body)).not.toMatch(/RMA-private|RMA-other-owner|RMA-ended/)
+    expect((await get(`${base}?type=return_refund`).expect(200)).body.items[0].rmaCases.map((row: any) => row.id)).toEqual(['return'])
+    expect((await get(`${base}?type=reshipment`).expect(200)).body.items[0].rmaCases[0].type).toBe('reshipment')
+    expect(response.body.items.find((row: any) => row.id === 'a').refundAmounts).toEqual([{ currency: 'USD', amount: 3 }])
+    await get(`${base}?type=interception`).expect(400)
+    expect((await get(`${base}?flowStatus=closed`).expect(200)).body.items[0].rmaCases.map((row: any) => row.id)).toEqual(['ended'])
+    expect((await get(`${base}?search=RMA-private`).expect(200)).body.total).toBe(0)
+    expect((await list('queue=review').expect(200)).body.items.map((row: any) => row.id)).toEqual(['shared'])
+    await get(`${base}?type=stock`).expect(400); await get(`${base}?flowStatus=other`).expect(400)
+    const exported = await request(app.getHttpServer()).post(`/api${base}/export`).auth(token(alice), { type: 'bearer' }).send({ mode: 'filtered' }).buffer(true).parse((res, callback) => { const chunks: Buffer[] = []; res.on('data', chunk => chunks.push(Buffer.from(chunk))); res.on('end', () => callback(null, Buffer.concat(chunks))); res.on('error', callback) }).expect(200)
+    const book = new ExcelJS.Workbook(); await book.xlsx.load(exported.body as unknown as ExcelJS.Buffer)
+    expect(book.getWorksheet('售后明细')!.rowCount).toBe(6)
+    const refundDetails = book.getWorksheet('售后明细')!
+    expect(refundDetails.getCell('G2').value).toBe(3)
+    expect(refundDetails.getCell('I2').value).toBe(5)
+    expect(book.getWorksheet('RMA售后清单')!.getCell('D1').value).toBe('Shopify 单号')
+    expect(book.getWorksheet('RMA售后清单')!.getCell('H1').value).toBe('RMA单')
+    expect(book.getWorksheet('RMA售后清单')!.getCell('H2').value).toBe('仅退款 · RMA-refund')
+    cases.push(flow('conflict', 'a', 'return_refund'))
+    await get(base).expect(503)
+    expect((await get(`${base}?type=refund`).expect(503)).body.code).toBe('rma_type_conflict')
+    cases.pop()
+    expect(JSON.stringify(book.getWorksheet('售后明细')!.getSheetValues())).not.toMatch(/RMA-private|RMA-other-owner|RMA-ended/)
+    accounts.get(alice).workbenchRoles = ['warehouse']
+    await get(base).expect(403)
+  })
+
+  it('rechecks RMA order ownership and never grants after-sales access from order access alone', async () => {
+    records = [order('a', { department: { id: 'd1', name: '业务一部' } })]
+    const grant = (subject: any) => ({ subject, allowedOrderIds: ['a'], allowedRmaCaseIds: ['r1'] })
+    provider.resolvePermissions = async (subject: any) => grant(subject)
+    provider.listRmaCases = async (subject: any) => {
+      records[0].owner = { id: 'bob-owner', name: 'Bob' }
+      return { subject, cases: [{ id: 'r1', tenantId: 'tenant-1', orderId: 'a', type: 'cancellation', isOpen: true, number: null, stage: null, reason: null, createdAt: null, updatedAt: null, requestedAmount: null, currency: null }] }
+    }
+    const base = '/autoflow/integrations/fop/rma-orders'
+    expect((await get(base).expect(200)).body.total).toBe(0)
+    provider.resolvePermissions = async (subject: any) => ({ subject, allowedOrderIds: ['a'] })
+    expect((await get(base).expect(200)).body.total).toBe(0)
+  })
+
+  it('filters outbound interception across list, totals and export without granting unknown or other-owner records', async () => {
+    accounts.get(alice).workbenchRoles = ['warehouse']
+    const progress = { allocationCreated: true, shopifySync: 'pending', supplierShipment: 'shipped', stockReadiness: 'ready', allocationReview: 'approved', outbound: 'pending' }
+    records = ['intercepted', 'released', null, 'invalid'].map((shipmentInterceptStatus, i) => order(String(i), { reviewStatus: 'approved', fulfillmentProgress: progress, shipmentInterceptStatus }))
+    records.push(order('foreign', { owner: { id: 'other', name: 'Other' }, reviewStatus: 'approved', fulfillmentProgress: progress, shipmentInterceptStatus: 'intercepted' }))
+    provider.resolvePermissions = async (subject: any) => ({ subject, allowedOrderIds: records.map(row => row.id) })
+    for (const [status, id, label] of [['shipment_intercepted', '0', '拦截发货'], ['shipment_released', '1', '取消拦截']]) {
+      const page = (await list(`queue=shipping&taskStatus=${status}`).expect(200)).body
+      expect(page.items.map((row: any) => row.id)).toEqual([id])
+      expect(page.totals).toMatchObject({ orderCount: 1, itemQuantity: 1, amountsByCurrency: [{ currency: 'USD', amount: 10 }] })
+      const exported = await request(app.getHttpServer()).post('/api/autoflow/integrations/fop/fulfillment-orders/export').auth(token(alice), { type: 'bearer' }).send({ queue: 'shipping', taskStatus: status, mode: 'filtered' }).buffer(true).parse((response, callback) => {
+        const chunks: Buffer[] = []
+        response.on('data', chunk => chunks.push(Buffer.from(chunk)))
+        response.on('end', () => callback(null, Buffer.concat(chunks)))
+        response.on('error', callback)
+      }).expect(200)
+      const workbook = new ExcelJS.Workbook()
+      await workbook.xlsx.load(exported.body as unknown as ExcelJS.Buffer)
+      const sheet = workbook.worksheets[0]
+      expect(sheet.getCell('A2').text).toBe(id)
+      expect(sheet.getCell('B2').text).toBe(label)
+      expect(sheet.getCell('A3').text).not.toBe('foreign')
+    }
+    expect((await list('queue=shipping&taskStatus=outbound_pending').expect(200)).body.items.map((row: any) => row.id)).toEqual(['1', '2', '3'])
+    expect((await list('queue=shipping').expect(200)).body.total).toBe(4)
+    await request(app.getHttpServer()).post('/api/autoflow/integrations/fop/fulfillment-orders/export').auth(token(alice), { type: 'bearer' }).send({ queue: 'shipping', taskStatus: 'outbound_pending', mode: 'selected', orderIds: ['0'] }).expect(409)
+    await list('queue=shipping&taskStatus=outbound_partial').expect(400)
+    await list('queue=review&taskStatus=shipment_intercepted').expect(400)
+    await list('queue=shipping&completed=true&taskStatus=shipment_released').expect(400)
+  })
+
+  it('serializes only explicit interception facts and keeps intercepted orders in the outbound queue', async () => {
+    accounts.get(alice).workbenchRoles = ['warehouse']
+    const progress = { allocationCreated: true, shopifySync: 'pending', supplierShipment: 'shipped', stockReadiness: 'ready', allocationReview: 'approved', outbound: 'pending' }
+    records = ['intercepted', 'released', null, 'invalid'].map((shipmentInterceptStatus, i) => order(String(i), { reviewStatus: 'approved', fulfillmentProgress: progress, shipmentInterceptStatus }))
+    provider.resolvePermissions = async (subject: any) => ({ subject, allowedOrderIds: records.map(row => row.id) })
+    const response = (await list('queue=shipping').expect(200)).body
+    expect(response.items.map((row: any) => row.shipmentInterceptStatus)).toEqual(['intercepted', 'released', null, null])
+  })
+
   it('allowlists actual logistics channel names and codes after order authorization', async () => {
     const channels = [{ name: ' 云途标准专线 ', code: ' YT-STD ', privateRate: 99 }, { name: '云途标准专线', code: 'YT-STD' }, { name: '云途带电专线', code: 'YT-BAT' }]
     records = [order('own', { logisticsChannels: channels }), order('legacy'), order('invalid', { logisticsChannels: { name: 'invalid' } }), order('partial', { logisticsChannels: [{ name: ' 渠道名称 ', code: 42 }, { name: null, code: 'CODE-ONLY' }, { name: ' ', code: {} }, null] }), order('foreign', { logisticsChannels: channels, owner: { id: 'other', name: 'Other' } })]
@@ -434,6 +600,8 @@ describe('FOP user isolation HTTP API (repository and provider boundaries stubbe
         getAllocationInventory: (identity: any, grant: any, scopes: any) => provider.getAllocationInventory(identity, grant, scopes),
         resolvePermissions: (identity: any) => provider.resolvePermissions(identity),
         listOrders: (identity: any, grant: any) => provider.listOrders(identity, grant),
+        listPurchaseReturns: (identity: any, grant: any) => provider.listPurchaseReturns(identity, grant),
+        listRmaCases: (identity: any, grant: any) => provider.listRmaCases(identity, grant),
         getPurchaseLinks: (identity: any, grant: any, ids: string[]) => provider.getPurchaseLinks(identity, grant, ids),
         listSupplierFollowUps: (identity: any, grant: any, orderId: string) => provider.listSupplierFollowUps(identity, grant, orderId),
         listReceipts: (identity: any, grant: any) => provider.listReceipts(identity, grant),
@@ -1954,7 +2122,7 @@ describe('FOP user isolation HTTP API (repository and provider boundaries stubbe
     provider.resolvePermissions = async (subject: any) => ({ subject, allowedOrderIds: records.map(r => r.id) })
     for (const [sortBy, asc, desc] of [
       ['allocationDocumentStatus', ['partial', 'outbound', 'null-date'], ['partial', 'outbound', 'null-date']],
-      ['outboundStatus', ['outbound', 'null-date', 'partial'], ['partial', 'outbound', 'null-date']],
+      ['outboundStatus', ['partial', 'outbound', 'null-date'], ['partial', 'outbound', 'null-date']],
     ] as const) {
       expect((await list(`queue=shipping&sortBy=${sortBy}&sortOrder=asc`).expect(200)).body.items.map((r: any) => r.id)).toEqual(asc)
       expect((await list(`queue=shipping&sortBy=${sortBy}&sortOrder=desc`).expect(200)).body.items.map((r: any) => r.id)).toEqual(desc)
@@ -2243,7 +2411,7 @@ describe('FOP user isolation HTTP API (repository and provider boundaries stubbe
 
   it('does not treat order grants as permission for legacy FOP product costs or logistics catalogs', async () => {
     for (const actor of [alice, bob]) {
-      for (const path of ['logistics/custom-channels', 'logistics/custom-channels/standard/actual-channels']) {
+      for (const path of ['logistics/custom-channels', 'logistics/custom-channels/standard/actual-channels', 'logistics/actual-channels?search=YT']) {
         const response = await get(`/autoflow/integrations/fop/${path}`, actor).expect(403)
         expect(response.body.code).toBe('fop_permission_denied')
       }

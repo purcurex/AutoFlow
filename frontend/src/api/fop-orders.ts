@@ -73,6 +73,7 @@ export interface AllocationDocumentReference { id: string; number: string }
 export interface FopOrder {
   /** 服务端按未完成期望包裹聚合，避免缺包裹被已有发运单掩盖。 */
   dispatchTaskStatus?: 'dispatch_missing' | 'dispatch_draft' | 'dispatch_submitted' | 'dispatch_approved' | 'dispatch_synced' | 'unknown'
+  shipmentInterceptStatus?: 'intercepted' | 'released' | null
   /** Unique effective FOP allocation for this order; null/omitted = unavailable or not yet created. */
   allocationDocument?: AllocationDocumentReference | null
   /** Shopify-selected tracking grouped by shipment/carrier; raw legacy fields do not prove selection. */

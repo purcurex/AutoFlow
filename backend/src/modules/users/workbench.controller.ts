@@ -1,3 +1,5 @@
+import { RmaQueryDto, RmaExportDto } from '../fop-data/rma-orders.dto'
+import { PurchaseReturnQueryDto, PurchaseReturnExportDto } from '../fop-data/purchase-returns.dto'
 import { PurchaseGroupQueryDto, PurchaseGroupExportDto, PurchaseGroupFiltersDto, PurchaseGroupChatQueryDto } from '../fop-data/procurement-groups.dto'
 import { AllocationInventoryQueryDto } from '../fop-data/allocation-inventory.dto'
 import { FopApprovalService } from '../fop-data/fop-approval.service'
@@ -42,6 +44,29 @@ export class WorkbenchController {
 @UseGuards(JwtAuthGuard)
 export class FulfillmentOrdersController {
   constructor(private readonly data: FopDataService, private readonly approvals: FopApprovalService) {}
+
+  @Get('rma-orders')
+  @Header('Cache-Control', 'private, no-store')
+  getRmaOrders(@Request() req: ExpressRequest, @Query() query: RmaQueryDto) { return this.data.getRmaOrders(req.user!.userId, query) }
+
+  @Post('rma-orders/export')
+  @HttpCode(200)
+  @Header('Cache-Control', 'private, no-store')
+  async exportRmaOrders(@Request() req: ExpressRequest, @Body() query: RmaExportDto) {
+    return new StreamableFile(await this.data.exportRmaOrders(req.user!.userId, query, req.user!.sessionVersion ?? 0), { type: FULFILLMENT_EXPORT_MIME, disposition: 'attachment; filename="rma-orders.xlsx"' })
+  }
+
+  @Get('purchase-returns')
+  @Header('Cache-Control', 'private, no-store')
+  getPurchaseReturns(@Request() req: ExpressRequest, @Query() query: PurchaseReturnQueryDto) { return this.data.getPurchaseReturns(req.user!.userId, query) }
+
+  @Post('purchase-returns/export')
+  @HttpCode(200)
+  @Header('Cache-Control', 'private, no-store')
+  async exportPurchaseReturns(@Request() req: ExpressRequest, @Body() body: PurchaseReturnExportDto) {
+    const buffer = await this.data.exportPurchaseReturns(req.user!.userId, body, req.user!.sessionVersion ?? 0)
+    return new StreamableFile(buffer, { type: FULFILLMENT_EXPORT_MIME, disposition: 'attachment; filename="purchase-returns.xlsx"' })
+  }
 
   @Get('purchase-groups')
   @Header('Cache-Control', 'private, no-store')

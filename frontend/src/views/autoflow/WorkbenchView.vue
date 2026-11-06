@@ -13,6 +13,8 @@ import FopFreightView from './FopFreightView.vue'
 import SalesPerformanceView from './SalesPerformanceView.vue'
 import FopOrdersView from './FopOrdersView.vue'
 import StockOrdersView from './StockOrdersView.vue'
+import PurchaseReturnsView from './PurchaseReturnsView.vue'
+import RmaOrdersView from './RmaOrdersView.vue'
 import ProcurementOrdersView from './ProcurementOrdersView.vue'
 import WorkbenchFilterSummary from '@/components/WorkbenchFilterSummary.vue'
 import { useWorkbenchAccess } from '@/composables/useWorkbenchAccess'
@@ -60,12 +62,12 @@ watch(() => route.fullPath, path => {
 const role = computed(() => route.name === 'Dashboard' ? 'sales' : isWorkbenchRole(route.params.role) ? route.params.role : undefined)
 const allowed = computed(() => role.value && roles.value.includes(role.value))
 const choice = computed(() => route.name === 'RoleWorkbenchFreight' ? 'freight' : route.name === 'RoleWorkbenchReceipts' ? 'receipts' : route.query.queue ?? (role.value ? defaultWorkbenchQueue(role.value) : undefined))
-const validChoice = computed(() => role.value && (choice.value === 'completed' || role.value === 'sales' && choice.value === 'overview' || workbenchQueues[role.value].some(queue => queue === choice.value)))
+const validChoice = computed(() => role.value && (choice.value === 'completed' || choice.value === 'rma' && role.value === 'sales' || choice.value === 'purchase_returns' && ['procurement', 'warehouse'].includes(role.value) || role.value === 'sales' && choice.value === 'overview' || workbenchQueues[role.value].some(queue => queue === choice.value)))
 const icons = { sales: BriefcaseBusiness, procurement: Boxes, allocation: PackageCheck, dispatch: Send, warehouse: Warehouse }
 const departmentQuery = computed(() => typeof route.query.departmentId === 'string' && route.query.departmentId ? { departmentId: route.query.departmentId } : {})
 const todoScopeQuery = computed(() => ({ ...departmentQuery.value, ...(typeof route.query.ownerId === 'string' && route.query.ownerId ? { ownerId: route.query.ownerId } : {}) }))
 function roleLink(value: WorkbenchRole) { return { name: 'RoleWorkbench', params: { role: value }, query: todoScopeQuery.value } }
-function queueLink(value: string) { return { name: 'RoleWorkbench', params: { role: role.value }, query: { ...(role.value === 'procurement' && ['fulfillment', 'purchase'].includes(String(route.query.view)) ? { view: route.query.view } : {}), ...(['stock', 'stock_procurement', 'completed'].includes(value) || role.value && workbenchQueues[role.value].some(queue => queue === value) ? todoScopeQuery.value : departmentQuery.value), queue: value, ...(value === 'completed' ? { timeRange: '1w' } : {}) } } }
+function queueLink(value: string) { return { name: 'RoleWorkbench', params: { role: role.value }, query: { ...(role.value === 'procurement' && ['fulfillment', 'purchase'].includes(String(route.query.view)) ? { view: route.query.view } : {}), ...(['stock', 'stock_procurement', 'completed', 'purchase_returns', 'rma'].includes(value) || role.value && workbenchQueues[role.value].some(queue => queue === value) ? todoScopeQuery.value : departmentQuery.value), queue: value, ...(value === 'completed' ? { timeRange: '1w' } : {}) } } }
 </script>
 
 <template>
@@ -77,10 +79,12 @@ function queueLink(value: string) { return { name: 'RoleWorkbench', params: { ro
         <WorkbenchFilterSummary :queue="String(choice)" :labels="filterLabels" />
         <nav class="workbench-queues" :aria-label="text('工作台功能', 'Workbench functions')">
           <template v-for="item in workbenchQueues[role]" :key="item">
+            <RouterLink v-if="role === 'sales' && item === 'exceptions'" :to="queueLink('rma')" :class="{ active: choice === 'rma' }">{{ text('RMA售后清单', 'RMA after-sales') }}</RouterLink>
             <RouterLink :to="queueLink(item)" :class="{ active: choice === item }">{{ queueNames[item][zh ? 0 : 1] }}{{ ['procurement_shipping', 'allocation_review'].includes(item) ? '' : text('清单', item === 'exceptions' ? '' : ' orders') }}</RouterLink>
             <RouterLink v-if="role === 'sales' && item === 'review'" :to="queueLink('stock')" :class="{ active: choice === 'stock' }">{{ text('备货清单', 'Stock orders') }}</RouterLink>
             <RouterLink v-if="role === 'procurement' && item === 'procurement_shipping'" :to="queueLink('stock_procurement')" :class="{ active: choice === 'stock_procurement' }">{{ text('备货待采购清单', 'Stock procurement') }}</RouterLink>
           </template>
+          <RouterLink v-if="role === 'procurement' || role === 'warehouse'" :to="queueLink('purchase_returns')" :class="{ active: choice === 'purchase_returns' }">{{ text('采购退货清单', 'Purchase returns') }}</RouterLink>
           <RouterLink :to="queueLink('completed')" :class="{ active: choice === 'completed' }">{{ completedNames[role][zh ? 0 : 1] }}</RouterLink>
           <RouterLink v-if="role === 'sales' && chartVisible('sales_performance')" :to="queueLink('performance')" :class="{ active: choice === 'performance' }">{{ text('个人收款与毛利', 'Personal receipts and profit') }}</RouterLink>
           <RouterLink v-if="chartVisible('order_volume') || chartVisible('customer_orders')" :to="queueLink('order-analysis')" :class="{ active: choice === 'order-analysis' || choice === 'order-volume' || choice === 'receipts' }">{{ text('订单分析', 'Order analysis') }}</RouterLink>
@@ -91,6 +95,8 @@ function queueLink(value: string) { return { name: 'RoleWorkbench', params: { ro
         <SalesOverview v-else-if="choice === 'overview' && role === 'sales'" />
         <SalesPerformanceView v-else-if="choice === 'performance' && role === 'sales'" :key="dataRevision" />
         <StockOrdersView v-else-if="choice === 'stock' && role === 'sales' || choice === 'stock_procurement' && role === 'procurement'" :key="`${dataRevision}-${choice}`" :procurement="role === 'procurement'" @filter-labels="updateFilterLabels" />
+        <RmaOrdersView v-else-if="choice === 'rma' && role === 'sales'" :key="dataRevision" @filter-labels="updateFilterLabels" />
+        <PurchaseReturnsView v-else-if="choice === 'purchase_returns' && (role === 'procurement' || role === 'warehouse')" :key="`${role}-${dataRevision}`" @filter-labels="updateFilterLabels" />
         <FopFreightView v-else-if="choice === 'freight'" :key="dataRevision" />
         <FopReceiptsView v-else-if="choice === 'receipts'" :key="dataRevision" />
         <OrderVolumeOrdersView v-else-if="choice === 'order-volume'" :key="dataRevision" />

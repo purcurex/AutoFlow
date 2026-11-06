@@ -20,6 +20,13 @@ const headers = (sheet: ExcelJS.Worksheet) => sheet.getRow(1).values as string[]
 const value = (sheet: ExcelJS.Worksheet, row: number, header: string) => sheet.getRow(row).getCell(headers(sheet).indexOf(header))
 
 describe('fulfillment Excel export', () => {
+  it('exports explicit outbound interception states and leaves unavailable facts blank', async () => {
+    const rows = ['intercepted', 'released', null].map((shipmentInterceptStatus, index) => ({ ...order, id: String(index), shipmentInterceptStatus })) as FopOrder[]
+    const ws = (await read(rows, 'shipping')).getWorksheet('订单清单')!
+    expect(headers(ws)).toContain('订单拦截状态')
+    expect([2, 3, 4].map(row => value(ws, row, '订单拦截状态').value)).toEqual(['拦截发货', '取消拦截', '—'])
+    expect(headers((await read(rows, 'review')).getWorksheet('订单清单')!)).not.toContain('订单拦截状态')
+  })
   it.each([
     ['review', '订单审核时间（UTC+8）'], ['dispatch', '发运单审核时间（UTC+8）'], ['procurement', '采购完成时间（UTC+8）'],
     ['allocation_review', '配货审核时间（UTC+8）'], ['shipping', '出库完成时间（UTC+8）'],

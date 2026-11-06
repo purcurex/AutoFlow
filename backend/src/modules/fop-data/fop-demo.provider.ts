@@ -1,3 +1,5 @@
+import { demoRmaCases } from './rma-orders-demo'
+import { demoPurchaseReturns } from './purchase-returns-demo'
 import { demoShipmentOrders } from './supplier-shipment-demo'
 import { demoPurchaseLinks } from './procurement-groups-demo'
 import { demoAllocationScopes, demoAllocationBalances } from './allocation-inventory-demo'
@@ -134,7 +136,15 @@ export class DemoFopDataProvider extends FopDataProvider {
       return node ? [{ code: d.id, departmentId: node.id, departmentPathIds: departmentPath(workspace, node.id) }] : []
     })
     const organizationSummaries = (['registrations', 'department_receipts', 'order_volume'] as const).map(chartId => ({ chartId, departments }))
-    return { allocationInventoryScopes: demoAllocationScopes(await this.orders(identity)), approvalActions: ['review', 'allocation_review'], organizationSummaries, subject: { ...identity }, allowedOrderIds: (await this.orders(identity)).map(order => order.id), allowedStockOrderIds: demoStockOrders(await this.orders(identity)).map(row => row.id), allowedStockInventoryIds: demoStockInventory(await this.orders(identity)).map(row => row.id), allowedPurchaseOrderIds: [...(await this.orders(identity)).flatMap(order => demoSupplierFollowUps(order).map(row => row.purchaseOrderId)), ...demoPurchaseLinks(identity, await this.orders(identity)).orders.flatMap(o => o.obligations?.flatMap(link => link.purchase ? [link.purchase.id] : []) ?? [])], allowedReceiptIds: (await this.receipts(identity)).map(receipt => receipt.id), allowedFreightIds: demoFreight(identity, await this.orders(identity)).map(row => row.id), allowedProfitIds: demoProfits(identity, await this.orders(identity)).map(row => row.id), analyticsScopes: ['rates', 'registrations', 'receipts', 'freight', 'sales_profit'] }
+    return { allowedRmaCaseIds: demoRmaCases(identity, await this.orders(identity), this.paymentDemoAnchor).map(row => row.id), allowedPurchaseReturnIds: demoPurchaseReturns(identity, await this.orders(identity)).map(row => row.id), allocationInventoryScopes: demoAllocationScopes(await this.orders(identity)), approvalActions: ['review', 'allocation_review'], organizationSummaries, subject: { ...identity }, allowedOrderIds: (await this.orders(identity)).map(order => order.id), allowedStockOrderIds: demoStockOrders(await this.orders(identity)).map(row => row.id), allowedStockInventoryIds: demoStockInventory(await this.orders(identity)).map(row => row.id), allowedPurchaseOrderIds: [...(await this.orders(identity)).flatMap(order => demoSupplierFollowUps(order).map(row => row.purchaseOrderId)), ...demoPurchaseLinks(identity, await this.orders(identity)).orders.flatMap(o => o.obligations?.flatMap(link => link.purchase ? [link.purchase.id] : []) ?? [])], allowedReceiptIds: (await this.receipts(identity)).map(receipt => receipt.id), allowedFreightIds: demoFreight(identity, await this.orders(identity)).map(row => row.id), allowedProfitIds: demoProfits(identity, await this.orders(identity)).map(row => row.id), analyticsScopes: ['rates', 'registrations', 'receipts', 'freight', 'sales_profit'] }
+  }
+  async listRmaCases(identity: Readonly<FopIdentity>, permission: Readonly<FopPermissionGrant>) {
+    this.assertIdentity(identity, permission)
+    return { subject: { ...identity }, cases: demoRmaCases(identity, await this.orders(identity), this.paymentDemoAnchor) }
+  }
+  async listPurchaseReturns(identity: Readonly<FopIdentity>, permission: Readonly<FopPermissionGrant>) {
+    this.assertIdentity(identity, permission)
+    return { subject: { ...identity }, returns: demoPurchaseReturns(identity, await this.orders(identity)) }
   }
   async getPurchaseLinks(identity: Readonly<FopIdentity>, permission: Readonly<FopPermissionGrant>, orderIds: readonly string[]) {
     this.assertIdentity(identity, permission)
@@ -383,7 +393,7 @@ export class DemoFopDataProvider extends FopDataProvider {
           supplierShipment: completed || stage >= 2 && stage <= 4 ? 'shipped' : stage === 0 ? 'unknown' : index % 8 === 5 ? 'partial' : 'pending',
           stockReadiness: completed || allocated || stage === 2 && Math.floor(index / employees.length) % 2 === 0 ? 'ready' : stage === 0 ? 'unknown' : 'incomplete',
           allocationReview: completed || allocated ? 'approved' : 'pending',
-          outbound: completed ? 'completed' : stage === 4 && index % 4 === 0 ? 'partial' : 'pending',
+          outbound: completed ? 'completed' : 'pending',
         },
         procurementStatus: completed || stage >= 2 ? 'purchased' : 'pending', allocationStatus: allocated ? 'allocated' : stage === 2 ? 'pending' : 'not_ready',
         dispatchStatus: shipping ? 'dispatched' : stage === 3 ? 'pending' : 'not_ready', shippingStatus: completed ? 'shipped' : stage === 4 ? 'pending' : 'not_ready',
@@ -422,6 +432,7 @@ export class DemoFopDataProvider extends FopDataProvider {
       customerId: `${accountKey}:prepaid-customer`, customerCode: 'PRE001', customerName: 'Prepaid Demo Customer', exception: null })
     orders.push(...demoShipmentOrders(orders, this.paymentDemoAnchor))
     for (const [allocationIndex, order] of orders.entries()) {
+      order.shipmentInterceptStatus = allocationIndex % 4 === 0 ? 'intercepted' : allocationIndex % 4 === 1 ? 'released' : null
       if (this.approved.has(this.documentKey(identity.tenantId, 'hzkj_orders', order.id))) {
         order.reviewStatus = 'approved'
         order.reviewedAt = this.reviewedTimes.get(this.documentKey(identity.tenantId, 'hzkj_orders', order.id)) ?? order.reviewedAt ?? null

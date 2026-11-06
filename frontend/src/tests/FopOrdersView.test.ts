@@ -1,5 +1,5 @@
 import { useWorkbenchAccess, clearWorkbenchAccess } from '@/composables/useWorkbenchAccess'
-import { getTaskStatus } from '@/utils/workbench-status'
+import { matchesTaskStatus } from '@/utils/workbench-status'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import { createMemoryHistory, createRouter } from 'vue-router'
@@ -39,17 +39,41 @@ async function setup(query = '?queue=allocation', role = 'allocation') {
 
 vi.mock('@/api/index', () => ({ default: { get: vi.fn(async (_path, { params: query }) => {
   const search = query.search?.toLowerCase() || ''
-  const filtered = mockFopOrders.filter(order => orders.matchesFopQueue(order, query.queue, query.warehouseStage) && (!query.taskStatus || getTaskStatus(order, query.queue) === query.taskStatus) && (!search || order.orderNumber.toLowerCase().includes(search)))
+  const filtered = mockFopOrders.filter(order => orders.matchesFopQueue(order, query.queue, query.warehouseStage) && (!query.taskStatus || matchesTaskStatus(order, query.queue, query.taskStatus)) && (!search || order.orderNumber.toLowerCase().includes(search)))
   return { source: 'fop', departments: [{ id: 'd1', name: '业务一部' }, { id: 'd2', name: '业务二部' }], items: filtered.slice((query.page - 1) * query.pageSize, query.page * query.pageSize), total: filtered.length, page: query.page, pageSize: query.pageSize }
 }) } }))
 
 describe('fulfillment order list', () => {
+  it('offers interception filters, accepts matching server rows and migrates retired partial-outbound links', async () => {
+    const row = { ...mockFopOrders[0]!, id: 'intercepted', orderNumber: 'OUT-TEST', shipmentInterceptStatus: 'intercepted', paymentStatus: 'paid', reviewStatus: 'approved', cancelled: false, fulfillmentProgress: { allocationCreated: true, shopifySync: 'pending', supplierShipment: 'shipped', stockReadiness: 'ready', allocationReview: 'approved', outbound: 'pending' } } as orders.FopOrder
+    vi.spyOn(orders, 'getFopOrders').mockResolvedValue({ source: 'mock', items: [row], total: 1, page: 1, pageSize: 50, departments: [], refreshedAt: '', totals: { orderCount: 1, itemQuantity: 1, amountsByCurrency: [] } })
+    const { wrapper, router } = await setup('?queue=shipping&taskStatus=shipment_intercepted', 'warehouse')
+    expect(wrapper.get('select[aria-label="出库进度筛选"]').findAll('option').map(option => option.text())).toEqual(['全部状态', '待出库', '拦截发货', '取消拦截'])
+    expect(wrapper.get('tbody .order-cell').text()).toContain('OUT-TEST')
+    await router.replace('/workbench/warehouse?queue=shipping&taskStatus=outbound_partial'); await flushPromises()
+    expect(router.currentRoute.value.query.taskStatus).toBe('outbound_pending')
+    expect(wrapper.text()).not.toContain('部分出库')
+  })
+
+  it('shows explicit interception facts below outbound order numbers without treating missing facts as released', async () => {
+    const items = ['intercepted', 'released', null].map((shipmentInterceptStatus, index) => ({ ...mockFopOrders[0]!, id: `intercept-${index}`, orderNumber: `OUT-${index}`, shipmentInterceptStatus, paymentStatus: 'paid', reviewStatus: 'approved', cancelled: false, fulfillmentProgress: { allocationCreated: true, shopifySync: 'pending', supplierShipment: 'shipped', stockReadiness: 'ready', allocationReview: 'approved', outbound: 'pending' } })) as orders.FopOrder[]
+    vi.spyOn(orders, 'getFopOrders').mockResolvedValue({ source: 'mock', items, total: 3, page: 1, pageSize: 50, departments: [], refreshedAt: '', totals: { orderCount: 3, itemQuantity: 3, amountsByCurrency: [] } })
+    const { wrapper, router } = await setup('?queue=shipping', 'warehouse')
+    const cells = wrapper.findAll('tbody .order-cell')
+    expect(cells[0]!.get('.shipment-intercept-status').text()).toBe('拦截发货')
+    expect(cells[0]!.get('.shipment-intercept-status .workbench-status-badge').attributes('data-tone')).toBe('danger')
+    expect(cells[1]!.get('.shipment-intercept-status').text()).toBe('取消拦截')
+    expect(cells[1]!.get('.shipment-intercept-status .workbench-status-badge').attributes('data-tone')).toBe('success')
+    expect(cells[2]!.find('.shipment-intercept-status').exists()).toBe(false)
+    await router.push('/workbench/sales?queue=review'); await flushPromises()
+    expect(wrapper.find('.shipment-intercept-status').exists()).toBe(false)
+  })
   it('filters exceptions by business type and renders the independent reason as plain text', async () => {
     const source = { ...mockFopOrders[0]!, exception: { type: 'logistics_exception', reason: '<img src=x onerror=alert(1)> 轨迹连续三日未更新', hours: 28 } } as unknown as orders.FopOrder
     const get = vi.spyOn(orders, 'getFopOrders').mockResolvedValue({ source: 'mock', items: [source], total: 1, page: 1, pageSize: 50, departments: [], refreshedAt: '', totals: { orderCount: 1, itemQuantity: 1, amountsByCurrency: [] } })
     const { wrapper, router } = await setup('?queue=exceptions', 'sales')
     const select = wrapper.get('select[aria-label="异常类型筛选"]')
-    expect(select.findAll('option').map(option => option.text())).toEqual(['全部状态', '采购异常', '发运异常', '配货异常', '物流异常', '妥投异常'])
+    expect(select.findAll('option').map(option => option.text())).toEqual(['全部状态', '采购退货', '订单取消', '配货超时', '物流异常', '妥投异常'])
     expect(wrapper.get('td[data-label="异常类型"]').text()).toBe('物流异常')
     expect(wrapper.get('td[data-label="异常原因"]').text()).toBe('<img src=x onerror=alert(1)> 轨迹连续三日未更新')
     expect(wrapper.get('td[data-label="异常原因"]').find('img').exists()).toBe(false)
@@ -993,7 +1017,7 @@ describe('fulfillment order list', () => {
     expect(wrapper.findAll('tfoot th, tfoot td').reduce((sum, cell) => sum + Number(cell.attributes('colspan') || 1), 0)).toBe(warehouseHeaders.length)
     for (const row of wrapper.findAll('tbody tr')) {
       expect(row.findAll('td')).toHaveLength(warehouseHeaders.length)
-      expect(['待出库', '部分出库']).toContain(row.findAll('td')[warehouseHeaders.indexOf('出库进度')]!.text())
+      expect(row.findAll('td')[warehouseHeaders.indexOf('出库进度')]!.text()).toBe('待出库')
     }
     expect(wrapper.find('tbody').text()).not.toContain('已齐套未审核')
     expect(wrapper.find('thead').text()).not.toContain('配货单状态')

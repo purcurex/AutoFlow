@@ -33,6 +33,26 @@ describe('role workbench content', () => {
     return { wrapper, router }
   }
 
+  it('offers the same physical purchase returns page only in procurement and warehouse workbenches', async () => {
+    for (const role of ['procurement', 'warehouse']) {
+      const { wrapper } = await setup(`/workbench/${role}`)
+      expect(wrapper.get('.workbench-queues').text()).toContain('采购退货清单')
+      wrapper.unmount()
+    }
+    const { wrapper } = await setup('/workbench/sales')
+    expect(wrapper.get('.workbench-queues').text()).not.toContain('采购退货清单')
+    wrapper.unmount()
+  })
+
+  it('exposes RMA after-sales only in the sales workbench', async () => {
+    const { wrapper } = await setup('/workbench/sales')
+    expect(wrapper.get('.workbench-queues').text()).toContain('RMA售后清单')
+    wrapper.unmount()
+    const other = await setup('/workbench/procurement')
+    expect(other.wrapper.get('.workbench-queues').text()).not.toContain('RMA售后清单')
+    other.wrapper.unmount()
+  })
+
   it('hides private analytics and prevents direct queue links from mounting denied views', async () => {
     const { wrapper, router } = await setup('/workbench/sales', undefined, { order_volume: true, customer_orders: false, sales_performance: false, salesperson_receipts: false, freight: false })
     expect(wrapper.find('.workbench-queues').text()).toContain('订单分析')
@@ -65,7 +85,7 @@ describe('role workbench content', () => {
     const { wrapper, router } = await setup('/workbench/sales', ['sales'])
     expect(wrapper.find('h1').text()).toBe('销售工作台')
     expect(wrapper.find('h2').text()).toContain('待审核清单')
-    expect(wrapper.findAll('.workbench-queues a').slice(0, 4).map(a => a.text())).toEqual(['待支付清单', '待审核清单', '备货清单', '异常订单清单'])
+    expect(wrapper.findAll('.workbench-queues a').slice(0, 6).map(a => a.text())).toEqual(['待支付清单', '待审核清单', '备货清单', 'RMA售后清单', '异常订单清单', '已完成清单'])
     expect(wrapper.find('.workbench-queues a.active').text()).toBe('待审核清单')
     expect(wrapper.findAll('.role-tabs a')).toHaveLength(1)
     expect(wrapper.find('.workbench-queues').text()).toContain('待审核清单')

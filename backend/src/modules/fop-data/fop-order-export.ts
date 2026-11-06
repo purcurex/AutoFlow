@@ -63,6 +63,7 @@ export async function buildFulfillmentWorkbook(orders: readonly FopOrder[], quer
   workbook.created = new Date()
   const showAmountBreakdown = query.queue === 'unpaid' || query.queue === 'review'
   const columns: Column[] = [column('订单编号', 'orderNumber', 30), column('商品信息', 'products', 44), column('Shopify 单号', 'shopifyOrderNumber'), { ...column('订单金额', 'amount', 18), money: true }, ...(showAmountBreakdown ? ['产品金额', '运费', '税费', '优惠金额'].map((header, i) => ({ ...column(header, ['productAmount', 'shippingFee', 'taxAmount', 'discountAmount'][i], 18), money: true })) : []), column('Customer', 'shippingCountryCode', 14), column('收款日期（UTC+8）', 'paidAt', 24), ...queueColumns(query.queue), column('客户名称', 'customerName', 28), column('店铺', 'storeName'), column('币种', 'currency', 10)]
+  if (query.queue === 'shipping' && !query.completed) columns.splice(1, 0, column('订单拦截状态', 'shipmentInterceptStatus', 20))
   if (query.queue === 'exceptions') columns.push(column('异常原因', 'exceptionReason', 36), { ...column('异常时长（小时）', 'exceptionHours', 20), number: true })
   columns.push(column('发货仓库', 'warehouse'))
   if (query.queue === 'unpaid') columns.push(column('自定义物流渠道', 'customLogisticsChannelName', 32))
@@ -82,6 +83,7 @@ export async function buildFulfillmentWorkbook(orders: readonly FopOrder[], quer
     const detail = normalizeOrderAmountBreakdown(order.amountBreakdown)
     const detailMoney = (value: number | null | undefined) => value == null ? '—' : moneyToCents(value) / 100
     addRow(list, {
+      shipmentInterceptStatus: order.shipmentInterceptStatus === 'intercepted' ? '拦截发货' : order.shipmentInterceptStatus === 'released' ? '取消拦截' : '—',
       completedAt: dateText(completedAt(order, query.queue)), orderNumber: order.orderNumber, products: itemSummary(order.items.map(item => `${item.name}\nSKU · ${item.sku} × ${item.quantity}${item.variant ? `\n${item.variant}` : ''}`)), shopifyOrderNumber: order.shopifyOrderNumber,
       customerName: order.customerName, shippingCountryCode: normalizeShippingCountry(order.shippingCountryCode) ?? '—', paidAt: dateText(order.paidAt), primaryStatus, allocationNumber: order.allocationDocument?.number || '—', dispatchNumbers: order.dispatchDocuments?.map(doc => doc.number).join('\n') || '—', storeName: order.storeName,
       amount: moneyToCents(order.amount) / 100, productAmount: detailMoney(detail?.productAmount), shippingFee: detailMoney(detail?.shippingFee), taxAmount: detailMoney(detail?.taxAmount), discountAmount: detailMoney(detail?.discountAmount), currency: order.currency?.trim().toUpperCase() || 'USD', exceptionReason: order.exception?.reason || '—', exceptionHours: order.exception?.hours ?? '', warehouse: order.warehouse,

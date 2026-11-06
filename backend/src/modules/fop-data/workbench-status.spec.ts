@@ -1,6 +1,6 @@
 import { compareFulfillmentOrders } from './fop-order-sort'
 import type { FopOrder } from './fop-data.types'
-import { canFilterTaskStatus, getDispatchTaskStatus, getProcurementTaskStatus, getTaskStatus, taskStatusOptions } from './workbench-status'
+import { canFilterTaskStatus, matchesTaskStatus, getDispatchTaskStatus, getProcurementTaskStatus, getTaskStatus, taskStatusOptions } from './workbench-status'
 
 describe('compact workbench statuses', () => {
   it.each(['allocation', 'allocation_review'])('classifies %s by audited dispatches without waiting for Shopify', queue => {
@@ -49,10 +49,20 @@ describe('compact workbench statuses', () => {
     rows.sort((a, b) => compareFulfillmentOrders(a, b, { queue: 'dispatch', sortBy: 'dispatchDocumentStatus', sortOrder: 'desc' }))
     expect(rows.map(row => row.id)).toEqual(['synced', 'approved', 'submitted', 'draft', 'unknown'])
   })
+  it('excludes active interception from pending outbound while keeping released and unmarked orders', () => {
+    for (const [shipmentInterceptStatus, expected] of [['intercepted', false], ['released', true], [null, true], [undefined, true]] as const) {
+      const row = { fulfillmentProgress: { outbound: 'pending' }, shipmentInterceptStatus } as FopOrder
+      expect(matchesTaskStatus(row, 'shipping', 'outbound_pending')).toBe(expected)
+    }
+  })
+  it('keeps legacy incomplete outbound in the whole-order pending state', () => {
+    for (const outbound of ['pending', 'partial'] as const) expect(getTaskStatus({ fulfillmentProgress: { outbound } } as FopOrder, 'shipping')).toBe('outbound_pending')
+    expect(canFilterTaskStatus('shipping', 'outbound_partial')).toBe(false)
+  })
   it('offers only meaningful queue-specific filters, independently of the current page', () => {
     expect(taskStatusOptions('review')).toEqual([])
     expect(taskStatusOptions('unpaid')).toEqual([])
-    expect(taskStatusOptions('shipping')).toEqual(['outbound_pending', 'outbound_partial'])
+    expect(taskStatusOptions('shipping')).toEqual(['outbound_pending', 'shipment_intercepted', 'shipment_released'])
     expect(taskStatusOptions('procurement_shipping')).toEqual(['supplier_pending', 'supplier_partial'])
     expect(canFilterTaskStatus('review', 'payment_pending')).toBe(false)
     expect(canFilterTaskStatus('dispatch', 'dispatch_draft')).toBe(true)

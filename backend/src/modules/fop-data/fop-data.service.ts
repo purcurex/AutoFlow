@@ -1,3 +1,9 @@
+import { buildRmaOrders, RmaTypeConflictError, type RmaOrder } from './rma-orders'
+import { RmaFiltersDto, RmaQueryDto, RmaExportDto } from './rma-orders.dto'
+import { buildRmaWorkbook } from './rma-orders-export'
+import { buildPurchaseReturns, groupPurchaseReturnOrders, summarizePurchaseReturnOrders, type PurchaseReturnOrder, type PurchaseReturnSource } from './purchase-returns'
+import { PurchaseReturnQueryDto, PurchaseReturnExportDto, PurchaseReturnFiltersDto } from './purchase-returns.dto'
+import { buildPurchaseReturnWorkbook } from './purchase-returns-export'
 import { completedAt, completedRange, isCompletionQueue, isStageCompleted } from './completed-orders'
 import { normalizeOrderAmountBreakdown } from './order-amount-breakdown'
 import { createHash } from 'crypto'
@@ -16,7 +22,7 @@ import { normalizeBusinessTimestamp } from './fop-business-time'
 import { normalizeCustomLogisticsChannelName, normalizeLogisticsChannels } from './logistics-channels'
 import { normalizeShippingCountry } from './shipping-country'
 import { consumerPaymentRange } from './consumer-payment-range'
-import { canFilterTaskStatus, getTaskStatus } from './workbench-status'
+import { canFilterTaskStatus, matchesTaskStatus } from './workbench-status'
 import { canFilterProcurementStage, getProcurementStage } from './procurement-stage'
 import type { ApprovalQueue } from './fop-approval.types'
 import { supplierFollowUps } from './supplier-follow-up'
@@ -155,6 +161,7 @@ function publicOrder(order: FopOrderCandidate): FopOrder {
   }
   return {
     allocationDocument: allocation ? { id: allocation.id, number: allocation.number } : null,
+    shipmentInterceptStatus: order.shipmentInterceptStatus === 'intercepted' || order.shipmentInterceptStatus === 'released' ? order.shipmentInterceptStatus : null,
     dispatchDocuments: documents?.map(({ id, number, status }) => ({ id, number, status })) ?? null,
     dispatchTaskStatus: order.dispatchTaskStatus,
     procurementProgress: { purchaseOrder: procurement?.purchaseOrder ?? 'unknown', supplierPayment: procurement?.supplierPayment ?? 'unknown',
@@ -278,7 +285,7 @@ export class FopDataService {
     if (grant.allowedPurchaseOrderIds !== undefined && (!Array.isArray(grant.allowedPurchaseOrderIds) || grant.allowedPurchaseOrderIds.some(id => typeof id !== 'string' || !id.trim()))) {
       throw new ForbiddenException('Invalid FOP purchase permissions')
     }
-    for (const ids of [grant.allowedStockOrderIds, grant.allowedStockInventoryIds]) {
+    for (const ids of [grant.allowedStockOrderIds, grant.allowedStockInventoryIds, grant.allowedPurchaseReturnIds, grant.allowedRmaCaseIds]) {
       if (ids !== undefined && (!Array.isArray(ids) || ids.some(id => typeof id !== 'string' || !id.trim()))) throw new ForbiddenException({ code: 'fop_permission_denied', message: 'Invalid FOP stock permissions' })
     }
     if (grant.stockQuery !== undefined && (!this.provider.queriedStock || !grant.stockQuery || typeof grant.stockQuery !== 'object'
@@ -313,7 +320,7 @@ export class FopDataService {
     if (grant.approvalActions !== undefined && (!Array.isArray(grant.approvalActions) || grant.approvalActions.some(action => !['review', 'allocation_review'].includes(action)))) throw new ForbiddenException('Invalid FOP operation permissions')
     const summaries = grant.organizationSummaries ?? []
     if (!Array.isArray(summaries) || new Set(summaries.map((s: FopOrganizationSummaryGrant) => s?.chartId)).size !== summaries.length || summaries.some((s: FopOrganizationSummaryGrant) => !s || !['registrations', 'department_receipts', 'order_volume'].includes(s.chartId) || !Array.isArray(s.departments) || new Set(s.departments.map((d: FopOrganizationSummaryGrant['departments'][number]) => d?.code)).size !== s.departments.length || s.departments.some((d: FopOrganizationSummaryGrant['departments'][number]) => !d || !SALES_DEPARTMENTS.some(item => item.id === d.code) || typeof d.departmentId !== 'string' || !d.departmentId.trim() || d.departmentPathIds !== undefined && (!Array.isArray(d.departmentPathIds) || d.departmentPathIds.some((id: unknown) => typeof id !== 'string' || !id.trim()) || new Set(d.departmentPathIds).size !== d.departmentPathIds.length)))) throw new ForbiddenException({ code: 'fop_permission_denied', message: 'Invalid organization summary grant' })
-    return { allocationInventoryScopes: grant.allocationInventoryScopes === undefined ? undefined : structuredClone(grant.allocationInventoryScopes), allowedStockOrderIds: [...new Set(grant.allowedStockOrderIds ?? [])], allowedStockInventoryIds: [...new Set(grant.allowedStockInventoryIds ?? [])], approvalActions: [...new Set(grant.approvalActions ?? [])], organizationSummaries: summaries.map((s: FopOrganizationSummaryGrant) => ({ chartId: s.chartId, departments: s.departments.map((d: FopOrganizationSummaryGrant['departments'][number]) => ({ code: d.code, departmentId: d.departmentId, ...(d.departmentPathIds ? { departmentPathIds: [...d.departmentPathIds] } : {}) })) })), subject: { ...identity }, allowedOrderIds: [...new Set(grant.allowedOrderIds)], allowedPurchaseOrderIds: [...new Set(grant.allowedPurchaseOrderIds ?? [])], allowedReceiptIds: [...new Set(grant.allowedReceiptIds ?? [])], allowedFreightIds: [...new Set(grant.allowedFreightIds ?? [])], allowedProfitIds: [...new Set(grant.allowedProfitIds ?? [])], analyticsScopes: [...new Set(grant.analyticsScopes ?? [])],
+    return { allocationInventoryScopes: grant.allocationInventoryScopes === undefined ? undefined : structuredClone(grant.allocationInventoryScopes), allowedStockOrderIds: [...new Set(grant.allowedStockOrderIds ?? [])], allowedStockInventoryIds: [...new Set(grant.allowedStockInventoryIds ?? [])], approvalActions: [...new Set(grant.approvalActions ?? [])], organizationSummaries: summaries.map((s: FopOrganizationSummaryGrant) => ({ chartId: s.chartId, departments: s.departments.map((d: FopOrganizationSummaryGrant['departments'][number]) => ({ code: d.code, departmentId: d.departmentId, ...(d.departmentPathIds ? { departmentPathIds: [...d.departmentPathIds] } : {}) })) })), subject: { ...identity }, allowedOrderIds: [...new Set(grant.allowedOrderIds)], allowedPurchaseOrderIds: [...new Set(grant.allowedPurchaseOrderIds ?? [])], allowedPurchaseReturnIds: [...new Set(grant.allowedPurchaseReturnIds ?? [])], allowedRmaCaseIds: [...new Set(grant.allowedRmaCaseIds ?? [])], allowedReceiptIds: [...new Set(grant.allowedReceiptIds ?? [])], allowedFreightIds: [...new Set(grant.allowedFreightIds ?? [])], allowedProfitIds: [...new Set(grant.allowedProfitIds ?? [])], analyticsScopes: [...new Set(grant.analyticsScopes ?? [])],
       ...(grant.stockQuery ? { stockQuery: { orders: [...grant.stockQuery.orders], inventory: [...grant.stockQuery.inventory] } } : {}),
       ...(grant.analyticsQuery ? { analyticsQuery: Object.fromEntries(Object.entries(grant.analyticsQuery).map(([resource, ids]) => [resource, [...ids]])) } : {}),
       ...(grant.orderQuery ? { orderQuery: { queues: [...grant.orderQuery.queues], organizationIds: [...grant.orderQuery.organizationIds] } } : {}) }
@@ -420,6 +427,7 @@ export class FopDataService {
 
   private async providerCall<T>(operation: () => Promise<T>): Promise<T> {
     try { return await operation() } catch (error) {
+      if (error instanceof RmaTypeConflictError) throw new ServiceUnavailableException({ code: 'rma_type_conflict', message: 'Conflicting RMA after-sales types; verify the source records' })
       if (error instanceof FopOrganizationSummaryNotConfiguredError) throw new ServiceUnavailableException({ code: 'fop_summary_not_configured', message: 'FOP organization summary integration is not configured' })
       if (error instanceof FopPermissionDeniedError) throw new ForbiddenException({ code: error.code, message: 'FOP denied access to this employee account' })
       if (error instanceof FopIntegrationUnavailableError) throw new ServiceUnavailableException({ code: error.code, message: 'FOP query endpoint is not available' })
@@ -435,6 +443,80 @@ export class FopDataService {
     // Product-cost and catalog permissions need their own upstream resource contract.
     // An order allowlist (including an administrator's) cannot grant these capabilities.
     throw new ForbiddenException({ code: 'fop_permission_denied', message: 'FOP resource permissions are not configured for this operation' })
+  }
+
+  private async rmaOrders(userId: string, query: RmaFiltersDto) {
+    const initial = await this.scope(userId)
+    if (!initial.roles.includes('sales')) throw new ForbiddenException('Sales workbench access required')
+    const permission = await this.permissions(userId, initial)
+    const snapshot = permission.allowedRmaCaseIds?.length ? await this.providerCall(() => this.provider.listRmaCases(permission.subject, permission)) : { subject: permission.subject, cases: [] }
+    // Current source ownership is authoritative, including cancelled / unpaid orders.
+    const current = permission.allowedRmaCaseIds?.length ? await this.scopedOrders(userId, 'sales') : { orders: [], departmentPaths: new Map<string, readonly string[]>() }
+    const latest = await this.permissions(userId, initial)
+    const all = await this.providerCall(async () => buildRmaOrders(snapshot, latest, current.orders, { flowStatus: 'all' }, current.departmentPaths))
+    const rows = await this.providerCall(async () => buildRmaOrders(snapshot, latest, current.orders, query, current.departmentPaths))
+    await this.assertUnchanged(userId, initial)
+    return { initial, rows, departments: [...new Map(all.flatMap(row => row.department ? [[row.department.id, row.department] as const] : [])).values()] }
+  }
+
+  async getRmaOrders(userId: string, query: RmaQueryDto) {
+    const data = await this.rmaOrders(userId, query)
+    return { source: this.provider.source, refreshedAt: new Date().toISOString(), items: data.rows.slice((query.page - 1) * query.pageSize, query.page * query.pageSize), total: data.rows.length, page: query.page, pageSize: query.pageSize, departments: data.departments, totals: { ...summarizeFopOrders(data.rows), caseCount: data.rows.reduce((sum, row) => sum + row.rmaCases.length, 0) } }
+  }
+
+  async exportRmaOrders(userId: string, query: RmaExportDto, sessionVersion = 0) {
+    if (query.mode === 'selected' ? !query.orderIds?.length || new Set(query.orderIds).size !== query.orderIds.length : query.mode !== 'filtered' || query.orderIds !== undefined) throw new BadRequestException('Invalid RMA selection')
+    const session = async () => { const user = await this.users.findById(userId); if (!user || user.accountDisabled || (user.sessionVersion ?? 0) !== sessionVersion) throw new UnauthorizedException('Session expired') }
+    await session()
+    const first = await this.rmaOrders(userId, query), ids = new Set(query.orderIds)
+    const choose = (rows: RmaOrder[]) => rows.filter(row => query.mode === 'filtered' || ids.has(row.id))
+    const chosen = choose(first.rows)
+    if (!chosen.length || query.mode === 'selected' && chosen.length !== ids.size) throw new ConflictException({ code: 'export_selection_changed' })
+    const buffer = await buildRmaWorkbook(chosen, query, this.provider.source)
+    await session(); await this.assertUnchanged(userId, first.initial)
+    const latest = await this.rmaOrders(userId, query)
+    if (JSON.stringify(choose(latest.rows)) !== JSON.stringify(chosen)) throw new ConflictException({ code: 'export_access_changed' })
+    await session(); return buffer
+  }
+
+  private async purchaseReturns(userId: string, query: PurchaseReturnFiltersDto) {
+    const initial = await this.scope(userId)
+    if (!['procurement', 'warehouse'].includes(query.workbenchRole) || !initial.roles.includes(query.workbenchRole)) throw new ForbiddenException('Purchase return workbench access required')
+    const permission = await this.permissions(userId, initial)
+    const candidates = permission.allowedPurchaseReturnIds?.length ? await this.providerCall(() => this.provider.listPurchaseReturns(permission.subject, permission)) : { subject: permission.subject, returns: [] }
+    const sources: PurchaseReturnSource[] = []
+    let orders: FopOrder[] = []
+    if (permission.allowedPurchaseReturnIds?.length) {
+      const current = await this.scopedOrders(userId, query.workbenchRole)
+      orders = current.orders
+      for (const order of orders) if (order.owner && order.department) sources.push({ id: order.id, number: order.orderNumber, kind: 'fulfillment', customerName: order.customerName, owner: order.owner, department: order.department, departmentPathIds: [...(current.departmentPaths.get(order.id) ?? [])] })
+    }
+    const latestPermission = await this.permissions(userId, initial)
+    const all = await this.providerCall(async () => buildPurchaseReturns(candidates, latestPermission, initial.business, sources))
+    await this.assertUnchanged(userId, initial)
+    return { initial, rows: groupPurchaseReturnOrders(all, orders, query), departments: [...new Map(all.flatMap(row => row.lines.map(line => [line.sourceOrder.department.id, line.sourceOrder.department] as const))).values()] }
+  }
+
+  async getPurchaseReturns(userId: string, query: PurchaseReturnQueryDto) {
+    const { rows, departments } = await this.purchaseReturns(userId, query)
+    return { source: this.provider.source, refreshedAt: new Date().toISOString(), items: rows.slice((query.page - 1) * query.pageSize, query.page * query.pageSize), total: rows.length, page: query.page, pageSize: query.pageSize, departments,
+      totals: summarizePurchaseReturnOrders(rows) }
+  }
+
+  async exportPurchaseReturns(userId: string, query: PurchaseReturnExportDto, sessionVersion = 0) {
+    if (query.mode === 'selected' ? !query.orderIds?.length || new Set(query.orderIds).size !== query.orderIds.length : query.mode !== 'filtered' || query.orderIds !== undefined) throw new BadRequestException('Invalid return selection')
+    const session = async () => { const user = await this.users.findById(userId); if (!user || user.accountDisabled || (user.sessionVersion ?? 0) !== sessionVersion) throw new UnauthorizedException('Session expired') }
+    await session()
+    const first = await this.purchaseReturns(userId, query), ids = new Set(query.orderIds)
+    const choose = (rows: PurchaseReturnOrder[]) => rows.filter(row => query.mode === 'filtered' || ids.has(row.id))
+    const chosen = choose(first.rows)
+    if (!chosen.length || query.mode === 'selected' && chosen.length !== ids.size) throw new ConflictException({ code: 'export_selection_changed', message: 'Return selection changed' })
+    const buffer = await buildPurchaseReturnWorkbook(chosen, query, this.provider.source)
+    await session(); await this.assertUnchanged(userId, first.initial)
+    const current = await this.purchaseReturns(userId, query)
+    if (JSON.stringify(choose(current.rows)) !== JSON.stringify(chosen)) throw new ConflictException({ code: 'export_access_changed', message: 'Return data or access changed' })
+    await session()
+    return buffer
   }
 
   async getDataAccess(userId: string) {
@@ -771,7 +853,7 @@ export class FopDataService {
     const search = query.search?.trim().toLowerCase()
     const candidates = departmentOrders.filter((order) => (query.completed ? isStageCompleted(order, query.queue) : matchesQueue(order, query.queue, query.warehouseStage))
       && inTimeRange(query.completed ? completedAt(order, query.queue) : order.consumerPaidAt)
-      && (!query.taskStatus || getTaskStatus(order, query.queue) === query.taskStatus)
+      && (!query.taskStatus || matchesTaskStatus(order, query.queue, query.taskStatus))
       && (!query.procurementStage || getProcurementStage(order.procurementProgress, order.fulfillmentProgress.supplierShipment) === query.procurementStage)
       && (!query.warehouseCode || order.warehouseCode === query.warehouseCode)
       && (!query.ownerId || order.owner?.id === query.ownerId)

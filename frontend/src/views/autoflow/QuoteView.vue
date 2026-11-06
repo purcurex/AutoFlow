@@ -2,7 +2,7 @@
 import { DEFAULT_CURRENCY, formatCurrency } from '@/utils/currency'
 import { sumCompleteMoney } from '@/utils/tableTotals'
 import TableTotals from '@/components/ui/TableTotals.vue'
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import {
   Calculator,
@@ -14,6 +14,7 @@ import {
   Percent,
   Plus,
   RefreshCcw,
+  Search,
   Save,
   Trash2,
   Truck,
@@ -25,13 +26,13 @@ import {
   fopApi,
   type FopActualLogisticsChannel,
   type FopCapabilities,
-  type FopCustomLogisticsChannel,
 } from '@/api/fop'
 import {
   quotationApi,
   type Quotation,
   type QuoteDraftPayload,
 } from '@/api/quotation'
+import { captureSession, isCurrentSession, onSessionReset } from '@/utils/session'
 import { downloadBlob } from '@/utils/export'
 import {
   QUOTE_COUNTRIES,
@@ -74,13 +75,27 @@ const packageData = reactive({
   height: 10,
   dimensionUnit: 'cm',
 })
-const customChannels = ref<FopCustomLogisticsChannel[]>([])
 const actualChannels = ref<FopActualLogisticsChannel[]>([])
-const selectedCustomChannelCode = ref('')
 const selectedLogisticsChannels = ref<SelectedLogisticsChannelDraft[]>([])
 const defaultLogisticsProfitMarginRate = ref(20)
 const channelLoading = ref(false)
 const channelError = ref('')
+const channelSearch = ref('')
+const appliedChannelSearch = ref('')
+const channelPage = ref(1)
+const channelTotal = ref(0)
+const channelPageSize = 24
+const catalogSource = ref<'fop' | 'sandbox'>()
+const channelPages = computed(() => Math.max(1, Math.ceil(channelTotal.value / channelPageSize)))
+let catalogRequest = 0, capabilitiesRequest = 0, disposed = false
+let catalogController: AbortController | undefined
+const offCatalogSession = onSessionReset(() => {
+  catalogRequest++; capabilitiesRequest++; catalogController?.abort(); capabilities.value = null
+  actualChannels.value = []; selectedLogisticsChannels.value = []; channelTotal.value = 0; channelLoading.value = false
+  appliedChannelSearch.value = ''; channelSearch.value = ''; channelPage.value = 1; channelError.value = ''; catalogSource.value = undefined
+})
+onBeforeUnmount(() => { disposed = true; catalogRequest++; capabilitiesRequest++; catalogController?.abort(); offCatalogSession() })
+
 
 const leadId = computed(() => typeof route.query.leadId === 'string' ? route.query.leadId : '')
 const quoteAvailable = computed(() => Boolean(
@@ -88,8 +103,6 @@ const quoteAvailable = computed(() => Boolean(
   && capabilities.value?.logisticsCatalog.available
   && capabilities.value?.logisticsRate.available,
 ))
-const selectedCustomChannel = computed(() =>
-  customChannels.value.find((channel) => channel.code === selectedCustomChannelCode.value))
 const resultMatrix = computed<Array<Record<string, unknown>>>(() => {
   const result = latestQuotation.value?.versions[0]?.resultSnapshot
   return Array.isArray(result?.combinedMatrix) ? result.combinedMatrix as Array<Record<string, unknown>> : []
@@ -149,49 +162,47 @@ watch(productProfitMarginRate, () => {
   }))
 })
 
-watch(selectedCustomChannelCode, loadActualChannels)
+watch(channelSearch, value => {
+  if (!value.trim() && appliedChannelSearch.value) { appliedChannelSearch.value = ''; void loadChannels(1) }
+})
 
 async function loadCapabilities() {
+  const ticket = ++capabilitiesRequest, session = captureSession()
   capabilityError.value = ''
-  channelError.value = ''
   try {
-    capabilities.value = await fopApi.getCapabilities()
-    if (capabilities.value.logisticsCatalog.available) await loadCustomChannels()
+    const next = await fopApi.getCapabilities()
+    if (disposed || ticket !== capabilitiesRequest || !isCurrentSession(session)) return
+    capabilities.value = next
+    if (next.logisticsCatalog.available) await loadChannels(1)
+    else { catalogRequest++; catalogController?.abort(); actualChannels.value = []; channelTotal.value = 0; channelLoading.value = false; channelError.value = '' }
   } catch {
-    capabilityError.value = t('quotes.statusError')
-  }
-}
-
-async function loadCustomChannels() {
-  channelLoading.value = true
-  channelError.value = ''
-  try {
-    const result = await fopApi.getCustomLogisticsChannels()
-    customChannels.value = result.channels
-      .filter((channel) => channel.enabled)
-      .sort((left, right) => (left.sortOrder || 0) - (right.sortOrder || 0))
-    if (!selectedCustomChannelCode.value && customChannels.value.length) {
-      selectedCustomChannelCode.value = customChannels.value[0].code
+    if (!disposed && ticket === capabilitiesRequest && isCurrentSession(session)) {
+      capabilityError.value = t('quotes.statusError'); capabilities.value = null
+      catalogRequest++; catalogController?.abort(); actualChannels.value = []; channelTotal.value = 0; channelLoading.value = false
     }
-  } catch {
-    channelError.value = t('quotes.channelLoadFailed')
-  } finally {
-    channelLoading.value = false
   }
 }
 
-async function loadActualChannels() {
-  actualChannels.value = []
-  if (!selectedCustomChannelCode.value) return
-  channelLoading.value = true
-  channelError.value = ''
+function searchChannels() {
+  appliedChannelSearch.value = channelSearch.value.trim()
+  void loadChannels(1)
+}
+
+async function loadChannels(page = 1) {
+  if (!capabilities.value?.logisticsCatalog.available) return
+  const ticket = ++catalogRequest, session = captureSession()
+  catalogController?.abort()
+  const controller = new AbortController(); catalogController = controller
+  channelLoading.value = true; channelError.value = ''; actualChannels.value = []
   try {
-    const result = await fopApi.getActualLogisticsChannels(selectedCustomChannelCode.value)
-    actualChannels.value = result.channels.filter((channel) => channel.enabled)
+    const result = await fopApi.searchActualLogisticsChannels({ ...(appliedChannelSearch.value ? { search: appliedChannelSearch.value } : {}), page, pageSize: channelPageSize }, controller.signal)
+    if (disposed || ticket !== catalogRequest || !isCurrentSession(session)) return
+    actualChannels.value = result.channels.filter(channel => channel.enabled)
+    channelTotal.value = result.total; channelPage.value = result.page; catalogSource.value = result.source
   } catch {
-    channelError.value = t('quotes.actualChannelLoadFailed')
+    if (!disposed && ticket === catalogRequest && isCurrentSession(session)) { channelTotal.value = 0; channelError.value = t('quotes.channelLoadFailed') }
   } finally {
-    channelLoading.value = false
+    if (!disposed && ticket === catalogRequest && isCurrentSession(session)) channelLoading.value = false
   }
 }
 
@@ -235,7 +246,7 @@ function toggleActualChannel(channel: FopActualLogisticsChannel) {
   }
   selectedLogisticsChannels.value.push({
     customChannelCode: channel.customChannelCode,
-    customChannelName: selectedCustomChannel.value?.name || channel.customChannelCode,
+    customChannelName: channel.customChannelName || channel.customChannelCode,
     actualChannelCode: channel.code,
     actualChannelName: channel.name,
     ...(channel.carrierName ? { carrierName: channel.carrierName } : {}),
@@ -540,13 +551,13 @@ onMounted(loadCapabilities)
             </div>
           </div>
           <div class="grid gap-4 lg:grid-cols-2">
-            <label>
-              <span class="field-label">{{ t('quotes.customLogisticsChannel') }}</span>
-              <select v-model="selectedCustomChannelCode" class="input" :disabled="channelLoading || !customChannels.length">
-                <option value="">{{ t('quotes.selectCustomChannel') }}</option>
-                <option v-for="channel in customChannels" :key="channel.code" :value="channel.code">{{ channel.name }} · {{ channel.code }}</option>
-              </select>
-            </label>
+            <form data-testid="actual-channel-search" @submit.prevent="searchChannels">
+              <label class="field-label" for="actual-channel-search">{{ t('quotes.actualChannel') }}</label>
+              <div class="flex gap-2">
+                <input id="actual-channel-search" v-model="channelSearch" type="search" maxlength="120" class="input min-w-0 flex-1" :aria-label="text('搜索实际物流渠道', 'Search actual logistics channels')" :placeholder="t('quotes.channelSearchPlaceholder')" />
+                <button class="btn btn-primary shrink-0" type="submit" :disabled="!capabilities?.logisticsCatalog.available"><Search class="h-4 w-4" />{{ t('common.search') }}</button>
+              </div>
+            </form>
             <label>
               <span class="field-label">{{ t('quotes.defaultLogisticsMargin') }}</span>
               <span class="relative block">
@@ -560,8 +571,9 @@ onMounted(loadCapabilities)
             <LoaderCircle class="h-4 w-4 animate-spin" />{{ t('quotes.loadingChannels') }}
           </div>
           <div v-else-if="channelError" class="notice mt-4 border-red-300 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300">{{ channelError }}</div>
-          <div v-else-if="selectedCustomChannelCode" class="mt-4">
-            <p class="field-label">{{ t('quotes.actualLogisticsChannels') }}</p>
+          <p v-else-if="!capabilities?.logisticsCatalog.available" class="mt-4 text-sm text-slate-500">{{ t('quotes.channelCatalogPending') }}</p>
+          <div v-else class="mt-4">
+            <div class="mb-2 flex items-center justify-between text-xs text-slate-500"><span>{{ t('quotes.actualLogisticsChannels') }} · {{ channelTotal }}</span><span v-if="catalogSource === 'sandbox'">{{ text('测试渠道', 'Sandbox channels') }}</span></div>
             <div class="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
               <label
                 v-for="channel in actualChannels"
@@ -571,7 +583,7 @@ onMounted(loadCapabilities)
                   ? 'selection-active'
                   : 'border-slate-200 hover:border-slate-300 dark:border-slate-700'"
               >
-                <input type="checkbox" class="mt-1 h-4 w-4 accent-orange-600 dark:accent-[#a38a72]" :checked="isChannelSelected(channel)" @change="toggleActualChannel(channel)" />
+                <input type="checkbox" :aria-label="`${text('选择实际物流渠道', 'Select actual logistics channel')} ${channel.code}`" class="mt-1 h-4 w-4 accent-orange-600 dark:accent-[#a38a72]" :checked="isChannelSelected(channel)" @change="toggleActualChannel(channel)" />
                 <span class="min-w-0">
                   <strong class="block text-sm text-slate-950 dark:text-white">{{ channel.name }}</strong>
                   <span class="mt-0.5 block text-xs text-slate-500">{{ channel.code }}<template v-if="channel.carrierName"> · {{ channel.carrierName }}</template></span>
@@ -579,16 +591,21 @@ onMounted(loadCapabilities)
               </label>
             </div>
             <p v-if="!actualChannels.length" class="mt-3 text-sm text-slate-500">{{ t('quotes.noActualChannels') }}</p>
+            <div v-if="channelTotal > channelPageSize" class="mt-3 flex items-center justify-end gap-3 text-xs text-slate-500">
+              <button type="button" class="btn btn-secondary" :disabled="channelPage <= 1" :aria-label="text('上一页物流渠道', 'Previous channel page')" @click="loadChannels(channelPage - 1)">{{ text('上一页', 'Previous') }}</button>
+              <span>{{ channelPage }} / {{ channelPages }}</span>
+              <button type="button" class="btn btn-secondary" :disabled="channelPage >= channelPages" :aria-label="text('下一页物流渠道', 'Next channel page')" @click="loadChannels(channelPage + 1)">{{ text('下一页', 'Next') }}</button>
+            </div>
           </div>
 
-          <div v-if="selectedLogisticsChannels.length" class="mt-5 overflow-x-auto rounded-md border" style="border-color: var(--color-border)">
+          <div v-if="selectedLogisticsChannels.length" data-testid="selected-logistics-channels" class="mt-5 overflow-x-auto rounded-md border" style="border-color: var(--color-border)">
             <table class="data-table">
-              <thead><tr><th>{{ t('quotes.customChannel') }}</th><th>{{ t('quotes.actualChannel') }}</th><th>{{ t('quotes.logisticsProfitMargin') }}</th><th class="w-16" /></tr></thead>
+              <thead><tr><th>{{ t('quotes.logisticsProvider') }}</th><th>{{ t('quotes.actualChannel') }}</th><th>{{ t('quotes.logisticsProfitMargin') }}</th><th class="w-16" /></tr></thead>
               <tbody>
                 <tr v-for="channel in selectedLogisticsChannels" :key="`${channel.customChannelCode}:${channel.actualChannelCode}`">
-                  <td><strong>{{ channel.customChannelName }}</strong><p class="text-xs text-slate-500">{{ channel.customChannelCode }}</p></td>
+                  <td>{{ channel.carrierName || '—' }}</td>
                   <td><strong>{{ channel.actualChannelName }}</strong><p class="text-xs text-slate-500">{{ channel.actualChannelCode }}</p></td>
-                  <td><div class="relative max-w-40"><input v-model.number="channel.logisticsProfitMarginRate" type="number" min="0" max="99.99" step="0.01" class="input pr-10" /><Percent class="pointer-events-none absolute right-3 top-3 h-4 w-4 text-slate-400" /></div></td>
+                  <td><div class="relative max-w-40"><input v-model.number="channel.logisticsProfitMarginRate" :aria-label="`${text('物流毛利率', 'Logistics gross margin')} ${channel.actualChannelCode}`" type="number" min="0" max="99.99" step="0.01" class="input pr-10" /><Percent class="pointer-events-none absolute right-3 top-3 h-4 w-4 text-slate-400" /></div></td>
                   <td><button class="icon-btn text-slate-400 hover:text-red-600" :title="t('common.delete')" @click="removeSelectedChannel(channel)"><Trash2 class="h-4 w-4" /></button></td>
                 </tr>
               </tbody>
@@ -637,7 +654,7 @@ onMounted(loadCapabilities)
               <tr>
                 <th>{{ t('quotes.quantityTier') }}</th>
                 <th>{{ t('quotes.destination') }}</th>
-                <th>{{ t('quotes.customChannel') }}</th>
+                <th>{{ t('quotes.logisticsProvider') }}</th>
                 <th>{{ t('quotes.actualChannel') }}</th>
                 <th>{{ t('quotes.product') }}</th>
                 <th>{{ t('quotes.baseFreight') }}</th>
@@ -649,7 +666,7 @@ onMounted(loadCapabilities)
               <tr v-for="row in matrixRows" :key="`${row.tier.id}-${row.country?.code}-${row.channel.customChannelCode}-${row.channel.actualChannelCode}`">
                 <td>{{ row.tier.minQuantity }} - {{ row.tier.maxQuantity || '∞' }} {{ t(`quotes.${unit}`) }}</td>
                 <td><span v-if="row.country" class="inline-flex items-center gap-2 font-semibold"><img :src="row.country.flagUrl" alt="" class="h-4 w-5 rounded-[2px] object-cover shadow-sm ring-1 ring-black/10" />{{ row.country.code }}</span></td>
-                <td><strong>{{ row.channel.customChannelName }}</strong><p class="text-xs text-slate-500">{{ row.channel.customChannelCode }}</p></td>
+                <td>{{ row.channel.carrierName || '—' }}</td>
                 <td><strong>{{ row.channel.actualChannelName }}</strong><p class="text-xs text-slate-500">{{ row.channel.actualChannelCode }} · {{ row.channel.logisticsProfitMarginRate }}%</p></td>
                 <td>{{ quoteMoney(resultFor(row)?.customerProductUnitPrice ?? row.tier.customerUnitPrice) }}</td>
                 <td>{{ quoteMoney(resultFor(row)?.baseFreightAmount) }}</td>

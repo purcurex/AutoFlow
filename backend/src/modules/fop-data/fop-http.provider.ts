@@ -1,3 +1,5 @@
+import type { RmaSnapshot } from './rma-orders'
+import type { PurchaseReturnSnapshot } from './purchase-returns'
 import type { PurchaseLinkSnapshot } from './procurement-groups.types'
 import type { AllocationInventoryScope, AllocationInventorySnapshot } from './allocation-inventory'
 import { FopDataProvider, FopIdentity, FopPermissionGrant, FopOrderCandidate, FopPermissionDeniedError } from './fop-data.types'
@@ -22,6 +24,8 @@ export class HttpFopDataProvider extends FopDataProvider {
     if (!response.ok) throw new Error('FOP employee API request failed')
     return response.json() as Promise<T>
   }
+  listRmaCases(identity: Readonly<FopIdentity>, _permission: Readonly<FopPermissionGrant>): Promise<RmaSnapshot> { return this.call('/rma-cases', identity, {}) }
+  listPurchaseReturns(identity: Readonly<FopIdentity>, _permission: Readonly<FopPermissionGrant>): Promise<PurchaseReturnSnapshot> { return this.call('/purchase-returns', identity, {}) }
   getPurchaseLinks(identity: Readonly<FopIdentity>, _permission: Readonly<FopPermissionGrant>, orderIds: readonly string[]): Promise<PurchaseLinkSnapshot> { return this.call('/purchase-links', identity, { orderIds }) }
   resolvePermissions(identity: Readonly<FopIdentity>): Promise<FopPermissionGrant> { return this.call('/permissions', identity, {}) }
   listOrders(identity: Readonly<FopIdentity>, _permission: Readonly<FopPermissionGrant>): Promise<FopOrderCandidate[]> { return this.call('/fulfillment-orders', identity, {}) }

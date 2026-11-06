@@ -1,3 +1,5 @@
+import type { RmaSnapshot } from './rma-orders'
+import type { PurchaseReturnSnapshot } from './purchase-returns'
 import type { PurchaseLinkSnapshot } from './procurement-groups.types'
 import type { AllocationInventoryScope, AllocationInventorySnapshot } from './allocation-inventory'
 import type { ApprovalCommand, ApprovalOutcome, ApprovalQueue, ApprovalTarget } from './fop-approval.types'
@@ -59,6 +61,10 @@ export interface FopPermissionGrant {
   approvalActions?: readonly ApprovalQueue[]
   /** Independent purchase document/contact visibility; absent means no access. */
   allowedPurchaseOrderIds?: readonly string[]
+  /** Independent physical return resource allowlist; absent grants no access. */
+  allowedPurchaseReturnIds?: readonly string[]
+  /** Separate customer after-sales resource authorization. */
+  allowedRmaCaseIds?: readonly string[]
   /** Independent receipt-line authorization; missing/empty grants no collections. */
   allowedReceiptIds?: readonly string[]
   /** Independent actual freight-cost resource grant; never inferred from orders. */
@@ -173,6 +179,8 @@ export interface AllocationDocumentReference { id: string; number: string }
 export interface FopOrder {
   /** 服务端按未完成期望包裹聚合，避免缺包裹被已有发运单掩盖。 */
   dispatchTaskStatus?: 'dispatch_missing' | 'dispatch_draft' | 'dispatch_submitted' | 'dispatch_approved' | 'dispatch_synced' | 'unknown'
+  /** Explicit latest FOP interception fact; absent is unknown, never an inferred release. */
+  shipmentInterceptStatus?: 'intercepted' | 'released' | null
   /** Unique effective FOP allocation for this order; null/omitted = unavailable or not yet created. */
   allocationDocument?: AllocationDocumentReference | null
   /** Shopify-selected tracking grouped by shipment/carrier; raw legacy fields do not prove selection. */
@@ -330,6 +338,8 @@ export abstract class FopDataProvider {
     throw new Error('Supplier follow-up provider is not configured')
   }
   async getPurchaseLinks(_identity: Readonly<FopIdentity>, _permission: Readonly<FopPermissionGrant>, _orderIds: readonly string[]): Promise<PurchaseLinkSnapshot> { throw new Error('Purchase linkage provider is not configured') }
+  async listPurchaseReturns(_identity: Readonly<FopIdentity>, _permission: Readonly<FopPermissionGrant>): Promise<PurchaseReturnSnapshot> { throw new Error('Purchase returns provider is not configured') }
+  async listRmaCases(_identity: Readonly<FopIdentity>, _permission: Readonly<FopPermissionGrant>): Promise<RmaSnapshot> { throw new Error('RMA provider is not configured') }
   abstract isConfigured(): boolean
   async approvalTargets(_identity: Readonly<FopIdentity>, _queue: ApprovalQueue, _orderId: string): Promise<ApprovalTarget[]> { throw new Error('FOP approval adapter is not configured') }
   async approveDocument(_identity: Readonly<FopIdentity>, _command: ApprovalCommand): Promise<ApprovalOutcome> { throw new Error('FOP approval adapter is not configured') }

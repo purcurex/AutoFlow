@@ -2,6 +2,8 @@ import { ServiceUnavailableException } from '@nestjs/common'
 import {
   FopCrmHandoffPort,
   FopLogisticsCatalogPort,
+  type FopLogisticsCatalogQuery,
+  type FopLogisticsCatalogSearchResult,
   FopLogisticsRatePort,
   FopProductCostPort,
   type ProductCostRequest,
@@ -49,6 +51,20 @@ export class SandboxFopProductCostAdapter extends FopProductCostPort {
 }
 
 export class SandboxFopLogisticsCatalogAdapter extends FopLogisticsCatalogPort {
+  async searchActualChannels(query: FopLogisticsCatalogQuery): Promise<FopLogisticsCatalogSearchResult> {
+    const groups = await this.getCustomChannels()
+    const entries = await Promise.all(groups.channels.filter(group => group.enabled).map(async group => {
+      const result = await this.getActualChannels(group.code)
+      return result.channels.filter(channel => channel.enabled).map(channel => ({ ...channel, customChannelName: group.name, carrierCode: channel.code }))
+    }))
+    const terms = (query.search ?? '').normalize('NFKC').trim().toLocaleLowerCase().split(/\s+/).filter(Boolean)
+    const channels = entries.flat().filter(channel => {
+      const fields = [channel.code, channel.name, channel.carrierCode, channel.carrierName ?? ''].map(value => value.normalize('NFKC').toLocaleLowerCase())
+      return terms.every(term => fields.some(value => value.includes(term)))
+    }).sort((left, right) => left.code.localeCompare(right.code) || left.customChannelCode.localeCompare(right.customChannelCode))
+    return { provider: 'fop', source: 'sandbox', sourceVersion: groups.sourceVersion, effectiveAt: groups.effectiveAt, channels: channels.slice((query.page - 1) * query.pageSize, query.page * query.pageSize), total: channels.length, page: query.page, pageSize: query.pageSize, warnings: groups.warnings }
+  }
+
   async getCustomChannels(): Promise<FopCustomLogisticsChannelResult> {
     return {
       provider: 'fop',
@@ -165,6 +181,10 @@ export class UnavailableFopLogisticsRateAdapter extends FopLogisticsRatePort {
 }
 
 export class UnavailableFopLogisticsCatalogAdapter extends FopLogisticsCatalogPort {
+  async searchActualChannels(_query: FopLogisticsCatalogQuery): Promise<FopLogisticsCatalogSearchResult> {
+    throw new ServiceUnavailableException('FOP logistics-channel catalog is unavailable')
+  }
+
   async getCustomChannels(): Promise<FopCustomLogisticsChannelResult> {
     throw new ServiceUnavailableException('FOP logistics-channel catalog is unavailable')
   }

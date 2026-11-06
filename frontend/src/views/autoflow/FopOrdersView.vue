@@ -15,7 +15,7 @@ import WorkbenchTaskHeading from '@/components/autoflow/WorkbenchTaskHeading.vue
 import OrderSortHeader from '@/components/autoflow/OrderSortHeader.vue'
 import SupplierShipmentStatus from '@/components/autoflow/SupplierShipmentStatus.vue'
 import ProcurementStatus from '@/components/autoflow/ProcurementStatus.vue'
-import { canFilterTaskStatus, getTaskStatus, taskStatusHeading, taskStatusLabel, taskStatusOptions } from '@/utils/workbench-status'
+import { canFilterTaskStatus, getTaskStatus, matchesTaskStatus, taskStatusHeading, taskStatusLabel, taskStatusOptions } from '@/utils/workbench-status'
 import { canFilterProcurementStage, getProcurementStage, procurementStageLabels } from '@/utils/procurement-stage'
 import OrderProductImage from '@/components/autoflow/OrderProductImage.vue'
 import RecipientDetailsDialog from '@/components/autoflow/RecipientDetailsDialog.vue'
@@ -134,7 +134,7 @@ const descriptions = computed(() => ({
   review: text('等待审核的履约订单，可勾选后单笔或批量审核。', 'Fulfillment orders awaiting review. Select orders for individual or batch approval.'),
   allocation: text('已生成配货单但尚未齐套，可按选中订单查询即时库存，配货操作请在 FOP 完成。', 'Existing allocation documents awaiting stock completion. Query current inventory for selected orders and allocate in FOP.'),
   dispatch: text('客户已支付、物流跟踪号尚未同步成功到 Shopify 的履约订单。', 'Paid fulfillment orders whose tracking numbers have not yet been successfully synced to Shopify.'),
-  shipping: text('配货单已审核，等待仓库打包及出库，包含尚未全部出库的订单。', 'Approved allocations awaiting packing and outbound completion, including partially shipped orders.'),
+  shipping: text('配货单已审核，按履约订单整单跟进打包及出库。', 'Approved allocations awaiting packing and whole-order outbound completion.'),
   exceptions: text('按异常类型跟进履约订单，业务进度仍在对应清单展示。', 'Track fulfillment exceptions by type; workflow progress remains visible in the corresponding lists.'),
 }))
 const search = ref('')
@@ -228,6 +228,11 @@ async function load(reset = false) {
     error.value = text('无效的清单类型，请在当前工作台重新选择。', 'Invalid list type. Select a list in this workbench.')
     return
   }
+  if (queue.value === 'shipping' && !completed.value && route.query.taskStatus === 'outbound_partial') {
+    busy.value = false
+    await router.replace({ query: { ...route.query, taskStatus: 'outbound_pending', page: '1' } })
+    return
+  }
   if (queue.value === 'dispatch' && route.query.taskStatus === 'dispatch_synced') {
     busy.value = false
     await router.replace({ query: { ...route.query, taskStatus: undefined, page: '1' } })
@@ -303,7 +308,7 @@ async function load(reset = false) {
   try {
     const result = await getFopOrders({ ...currentFilters(), page: page.value, pageSize: pageSize.value })
     if (currentRequest !== requestId) return
-    if (!result.items.every(order => matchesFopQueue(order, selectedQueue, warehouseStage.value, completed.value) && (!taskStatus.value || getTaskStatus(order, selectedQueue) === taskStatus.value) && (!procurementStage.value || getProcurementStage(order.procurementProgress, order.fulfillmentProgress.supplierShipment) === procurementStage.value))) throw new Error('Unexpected queue data')
+    if (!result.items.every(order => matchesFopQueue(order, selectedQueue, warehouseStage.value, completed.value) && (!taskStatus.value || matchesTaskStatus(order, selectedQueue, taskStatus.value)) && (!procurementStage.value || getProcurementStage(order.procurementProgress, order.fulfillmentProgress.supplierShipment) === procurementStage.value))) throw new Error('Unexpected queue data')
     const lastPage = Math.max(1, Math.ceil(result.total / pageSize.value))
     if (page.value > lastPage) {
       recoveringPage = true
@@ -519,6 +524,7 @@ const formatMoney = (amount: number, currency: string) => formatCurrency(amount,
                 <td class="order-cell" :data-label="text('订单编号', 'Order number')">
                   <input v-model="selectedOrders" type="checkbox" class="order-checkbox" :value="order.id" :disabled="busy" :aria-label="`${text('选择订单', 'Select order')} ${order.orderNumber}`" />
                   <button type="button" class="copy-order" :aria-label="`${text('复制订单编号', 'Copy order number')} ${order.orderNumber}`" :title="order.orderNumber" @click="copyOrderValue(order, 'orderNumber')"><strong>{{ order.orderNumber }}</strong><Check v-if="copiedValue === `orderNumber:${order.id}`" :size="14" /><Copy v-else :size="14" /></button>
+                  <span v-if="queue === 'shipping' && !completed && (order.shipmentInterceptStatus === 'intercepted' || order.shipmentInterceptStatus === 'released')" class="shipment-intercept-status"><WorkbenchStatusBadge :tone="order.shipmentInterceptStatus === 'intercepted' ? 'danger' : 'success'" current>{{ order.shipmentInterceptStatus === 'intercepted' ? text('拦截发货', 'Shipment intercepted') : text('取消拦截', 'Interception released') }}</WorkbenchStatusBadge></span>
                   <span v-if="order.items.length > 1" class="multi-item-badge">{{ text(`${order.items.length} 款商品 · ${order.items.reduce((sum, item) => sum + item.quantity, 0)} 件`, `${order.items.length} products · ${order.items.reduce((sum, item) => sum + item.quantity, 0)} units`) }}</span>
                 </td>
                 <td class="product-cell" :data-label="text('商品图片 / 商品信息', 'Product image / details')"><div v-for="(item, index) in order.items" :key="index" class="product">
@@ -710,4 +716,9 @@ a.salesperson-department:hover { color: var(--color-chart-link); }
   .pagination > div { flex-wrap: wrap; }
 }
 .order-recipient{display:flex;flex-direction:column;align-items:flex-start;gap:8px;min-width:0}.recipient-name{border:0;padding:0;background:none;color:var(--color-chart-link);font:inherit;text-align:left;line-height:1.5;white-space:normal;overflow-wrap:anywhere;max-width:100%;cursor:pointer;text-decoration:underline;text-decoration-color:transparent;text-underline-offset:3px}.recipient-name:hover,.recipient-name:focus-visible{text-decoration-color:currentColor}.recipient-empty{color:var(--color-text-secondary)}
+</style>
+
+<style scoped>
+.shipment-intercept-status { display: block; margin-top: 8px; }
+@media(max-width:700px) { .order-cell .shipment-intercept-status { flex-basis: 100%; margin-top: 0; } }
 </style>

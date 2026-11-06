@@ -1,4 +1,5 @@
-import { Body, Controller, Get, Param, Post, Request, UseGuards } from '@nestjs/common'
+import { FopLogisticsCatalogQueryDto } from './dto/fop-logistics-catalog.dto'
+import { Body, Controller, Get, Param, Post, Query, Request, UseGuards } from '@nestjs/common'
 import { randomUUID } from 'crypto'
 import { Request as ExpressRequest } from 'express'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
@@ -41,6 +42,12 @@ export class FopIntegrationController {
         quantityTiers: body.quantityTiers,
       }],
     })
+  }
+
+  @Get('logistics/actual-channels')
+  async searchActualLogisticsChannels(@Request() request: ExpressRequest, @Query() query: FopLogisticsCatalogQueryDto) {
+    await this.dataAccess.requireResourcePermission(request.user!.userId)
+    return this.logisticsCatalogPort.searchActualChannels(query)
   }
 
   @Get('logistics/custom-channels')
