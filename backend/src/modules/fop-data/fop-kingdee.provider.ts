@@ -1,20 +1,30 @@
+import type { ApprovalCommand, ApprovalOutcome, ApprovalQueue, ApprovalTarget } from './fop-approval.types'
+import type { AllocationInventoryQueryDto } from './allocation-inventory.dto'
+import type { AllocationInventoryPage } from './allocation-inventory'
 import Decimal from 'decimal.js'
 import { randomUUID } from 'crypto'
 import { Logger } from '@nestjs/common'
 import type { BusinessScope } from '../users/business-scope'
 import { matchesBusinessScope } from '../users/business-scope'
 import { kingdeeDepartmentPath } from './fop-kingdee-scope'
+import type { PurchaseHeader, PurchaseLinkSnapshot, PurchaseObligation } from './procurement-groups.types'
+import { validatedPurchaseHeader } from './procurement-groups'
+import { summarizeFopOrders } from './fop-order-totals'
 import { KingdeeStockDecoder } from './fop-kingdee.stock'
 import type { FopStockOrderCandidate, FopStockInventoryCandidate } from './fop-stock.types'
 import { businessDate, normalizeBusinessTimestamp, validBusinessDay } from './fop-business-time'
 import { emptyAnalyticsData, KingdeeAnalyticsDecoder } from './fop-kingdee.analytics'
 import type { FopAnalyticsData, FopAnalyticsRange, FopAnalyticsResource, FopAnalyticsScope, FopConnectionContext } from './fop-data.types'
-import { FopDataProvider, FopIdentity, FopIntegrationUnavailableError, FopOrder, FopOrderPage, FopOrderPageQuery, FopPermissionDeniedError, FopPermissionGrant } from './fop-data.types'
+import { FopDataProvider, FopIdentity, FopIntegrationUnavailableError, FopOrder, FopOrderPage, FopOrderPageQuery, FopPermissionDeniedError, FopPermissionGrant, FopWorkbenchOrders } from './fop-data.types'
 import type { FopBindingEmployee, FopBindingEmployeePage, FopEmployeeBindingDetails, VerifiedFopEmployeeBinding } from './fop-employee-binding'
+import { parseKingdeeEnvelope } from './fop-kingdee-json'
+import { projectWorkbenchFacts } from './workbench-facts-projector'
 
 type Configuration = { get(key: string): string | undefined }
 type JsonObject = Record<string, unknown>
 type BindingResolver = (identity: Readonly<FopIdentity>) => Promise<FopEmployeeBindingDetails | null>
+// 原始数量最多60字符，保留多包裹累计所需余量；独立精度不影响其他业务的Decimal配置。
+const AllocationQuantity = Decimal.clone({ precision: 80 })
 
 function object(value: unknown): JsonObject {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Invalid Kingdee response')
@@ -57,6 +67,7 @@ function date(value: unknown, nullable = false): string | null {
 /** 新前端专用查询模块的 HTTPS 适配器；所有凭据只在 Node 服务端读取。 */
 export class KingdeeFopDataProvider extends FopDataProvider {
   readonly pagedOrders = true
+  readonly workbenchFacts: boolean
   readonly queriedStock = true
   readonly supportsEmployeeBinding = true
   // 既有金蝶接口提供单据历史归属，明确声明兼容模式；不将其伪装成客户当前归属。
@@ -69,6 +80,7 @@ export class KingdeeFopDataProvider extends FopDataProvider {
   private readonly userProviders = new Map<string, { fingerprint: string; provider: KingdeeFopDataProvider }>()
   constructor(private readonly config: Configuration, private readonly request: typeof fetch = fetch, private readonly resolveBinding?: BindingResolver) {
     super()
+    this.workbenchFacts = config.get('FOP_KINGDEE_WORKBENCH_FACTS_MODE') === 'raw'
     this.configuredOrganizations = (config.get('FOP_KINGDEE_ORGANIZATION_IDS') ?? '').split(',').map(value => value.trim()).filter(Boolean)
   }
 
@@ -118,6 +130,7 @@ export class KingdeeFopDataProvider extends FopDataProvider {
       || !/^[a-f0-9]{64}$/.test(String(raw.scopeVersion)) || (scopeVersion && raw.scopeVersion !== scopeVersion)
       || (raw.nextCursor !== null && (typeof raw.nextCursor !== 'string' || !/^[1-9]\d{0,18}:[1-9]\d{0,18}$/.test(raw.nextCursor)))) throw new Error('Invalid employee directory page')
     const seen = new Set<string>()
+    const links: PurchaseLinkSnapshot['orders'] = []
     const items = raw.items.map(value => {
       const row = object(value), id = identifier(row.id), membershipId = identifier(row.membershipId)
       const rowKey = `${id}:${membershipId}`
@@ -239,7 +252,9 @@ export class KingdeeFopDataProvider extends FopDataProvider {
     // 旧部署未声明能力时仍只开放待审核，防止把尚未更新的接口误当作待履约查询。
     const queues = raw.orderQueues === undefined ? ['review'] : raw.orderQueues
     if (!Array.isArray(queues) || queues.some(queue => !['unpaid', 'review', 'dispatch'].includes(queue))) throw new Error('Invalid Kingdee order queues')
-    return { subject: { ...identity }, allowedOrderIds: [], analyticsQuery, analyticsScopes,
+    const actions = raw.approvalActions ?? []
+    if (!Array.isArray(actions) || actions.some(action => action !== 'allocation_review')) throw new Error('Invalid approval actions')
+    return { subject: { ...identity }, allowedOrderIds: [], analyticsQuery, analyticsScopes, approvalActions: actions as ApprovalQueue[],
       ...(analyticsQuery.orders!.length ? { orderQuery: { queues: queues as ('unpaid' | 'review' | 'dispatch')[], organizationIds: analyticsQuery.orders! } } : {}) }
   }
 
@@ -415,16 +430,221 @@ export class KingdeeFopDataProvider extends FopDataProvider {
     return page
   }
 
-  private async read(identity: Readonly<FopIdentity>, scope: Readonly<BusinessScope>, query: FopOrderPageQuery, summaryOnly: boolean): Promise<FopOrderPage & { organizationIds: string[] }> {
+  /** 共用已登记的员工订单page入口。游标按金蝶主键前进，超过限额整次失败，禁止返回截断的采购组。 */
+  async readPendingProcurement(identity: Readonly<FopIdentity>, permission: Readonly<FopPermissionGrant>, scope: Readonly<BusinessScope>, warehouseCode?: string, queue: 'procurement' | 'procurement_shipping' = 'procurement'): Promise<{ orders: FopOrder[]; snapshot: PurchaseLinkSnapshot; purchaseIds: string[] }> {
+    if (this.resolveBinding) return (await this.userProvider(identity)).readPendingProcurement(identity, permission, scope, warehouseCode, queue)
+    if (this.workbenchFacts) {
+      const result = await this.workbenchSnapshot(identity, permission, scope, { queue, page: 1, pageSize: 100 })
+      return { orders: result.orders, snapshot: { subject: { ...identity }, exactSourceLines: true, orders: result.links }, purchaseIds: result.purchaseIds }
+    }
+    if (warehouseCode !== undefined && warehouseCode !== 'HZ' && warehouseCode !== 'SZ') throw new Error('Invalid procurement warehouse')
+    this.assertIdentity(identity)
+    if (permission.subject.tenantId !== identity.tenantId || permission.subject.userId !== identity.userId || !permission.orderQuery?.organizationIds.length)
+      throw new FopPermissionDeniedError('Missing procurement order grant')
+    const snapshot: PurchaseLinkSnapshot = { subject: { ...identity }, exactSourceLines: true, orders: [] }
+    const orders: FopOrder[] = [], purchaseIds = new Set<string>(), started = Date.now()
+    let afterOrderId: string | undefined, bytes = 0
+    for (let page = 1; page <= 100; page++) {
+      const result = await this.read(identity, scope, { queue, page, pageSize: 100, warehouseCode }, false, afterOrderId)
+      if (result.organizationIds.some(id => !permission.orderQuery!.organizationIds.includes(id))) throw new FopPermissionDeniedError('Organization grant changed')
+      if (!result.procurement) throw new FopIntegrationUnavailableError('fop_feature_not_configured')
+      bytes += result.procurement.bytes
+      if (bytes > 64 * 1024 * 1024 || Date.now() - started > 60000) throw new FopIntegrationUnavailableError('fop_result_too_large')
+      for (const order of result.items) {
+        if (afterOrderId && new Decimal(order.id).lte(afterOrderId)) throw new Error('Invalid procurement cursor')
+        afterOrderId = order.id
+      }
+      for (const link of result.procurement.links) {
+        for (const obligation of link.obligations ?? []) if (obligation.purchase) purchaseIds.add(obligation.purchase.id)
+        if (link.obligations?.length) snapshot.orders.push(link)
+      }
+      const pending = new Set(result.procurement.links.filter(link => link.obligations?.length).map(link => link.orderId))
+      orders.push(...result.items.filter(order => pending.has(order.id)))
+      if (!result.procurement.more) return { orders, snapshot, purchaseIds: [...purchaseIds] }
+      afterOrderId = result.procurement.next
+    }
+    throw new FopIntegrationUnavailableError('fop_result_too_large')
+  }
+
+  private approvalQuery(identity: Readonly<FopIdentity>, orderId: string, scope?: Readonly<BusinessScope>) {
+    this.assertIdentity(identity); identifier(orderId)
+    if (!scope || scope.role === 'none') throw new FopPermissionDeniedError('Missing approval business scope')
+    return { tenantId: identity.tenantId, userId: identity.userId, organizationIds: this.organizationIds, scopeRole: scope.role,
+      employeeId: scope.employeeId, departmentIds: scope.departmentId ? [scope.departmentId] : [],
+      queue: 'allocation_review', orderIds: [orderId], page: 1, pageSize: 100 }
+  }
+
+  async approvalTargets(identity: Readonly<FopIdentity>, queue: ApprovalQueue, orderId: string, scope?: Readonly<BusinessScope>): Promise<ApprovalTarget[]> {
+    if (this.resolveBinding) return (await this.userProvider(identity)).approvalTargets(identity, queue, orderId, scope)
+    if (queue !== 'allocation_review') throw new FopIntegrationUnavailableError('fop_feature_not_configured')
+    const raw = object(await this.call('FOP_KINGDEE_ALLOCATION_APPROVAL_TARGETS_URL', { query: this.approvalQuery(identity, orderId, scope) }))
+    const subject = object(raw.subject)
+    if (subject.tenantId !== identity.tenantId || subject.userId !== identity.userId) throw new FopPermissionDeniedError('Approval identity mismatch')
+    if (!Array.isArray(raw.items) || raw.items.length > 100) throw new Error('Invalid approval targets')
+    return raw.items.map(value => object(value) as unknown as ApprovalTarget)
+  }
+
+  async approveDocument(identity: Readonly<FopIdentity>, command: ApprovalCommand, scope?: Readonly<BusinessScope>): Promise<ApprovalOutcome> {
+    if (this.resolveBinding) return (await this.userProvider(identity)).approveDocument(identity, command, scope)
+    if (command.entity !== 'hzkj_alloc_bill' || command.operation !== 'audit' || command.tenantId !== identity.tenantId) throw new Error('Invalid allocation command')
+    identifier(command.id)
+    // 审核可能已在上游提交成功；断网、超时和5xx均不能自动重复提交。
+    const raw = object(await this.call('FOP_KINGDEE_ALLOCATION_APPROVE_URL', {
+      query: this.approvalQuery(identity, command.orderId, scope), command: { orderId: command.orderId, id: command.id, version: command.version },
+    }, undefined, false))
+    return raw as unknown as ApprovalOutcome
+  }
+
+  /** 独立即时库存入口在金蝶核对库存、客户和仓库权限，不能从订单可见性推导库存授权。 */
+  async queryAllocationInventory(identity: Readonly<FopIdentity>, permission: Readonly<FopPermissionGrant>, scope: Readonly<BusinessScope>, query: AllocationInventoryQueryDto): Promise<AllocationInventoryPage> {
+    if (this.resolveBinding) return (await this.userProvider(identity)).queryAllocationInventory(identity, permission, scope, query)
+    this.assertIdentity(identity)
+    if (scope.role === 'none' || permission.subject.tenantId !== identity.tenantId || permission.subject.userId !== identity.userId) throw new FopPermissionDeniedError('Invalid inventory identity')
+    const warehouses = this.unpaidWarehouses(), warehouseIds = query.warehouseCode ? Object.keys(warehouses).filter(id => warehouses[id] === query.warehouseCode) : undefined
+    if (warehouseIds && !warehouseIds.length) throw new FopIntegrationUnavailableError('fop_mapping_required')
+    const raw = object(await this.call('FOP_KINGDEE_ALLOCATION_INVENTORY_URL', { query: {
+      tenantId: identity.tenantId, userId: identity.userId, organizationIds: this.organizationIds, scopeRole: scope.role,
+      employeeId: scope.employeeId, departmentIds: scope.departmentId ? [scope.departmentId] : [], queue: query.queue ?? 'allocation',
+      orderIds: query.mode === 'selected' ? query.orderIds : undefined, search: query.mode === 'search' ? query.search : undefined,
+      warehouseIds, page: query.page, pageSize: query.pageSize,
+    } }))
+    const subject = object(raw.subject)
+    if (subject.tenantId !== identity.tenantId || subject.userId !== identity.userId || !Array.isArray(raw.organizationIds) || !raw.organizationIds.length
+      || raw.organizationIds.some(id => !this.organizationIds.includes(String(id)))) throw new FopPermissionDeniedError('Inventory response identity mismatch')
+    if (raw.schemaVersion !== 1 || raw.complete !== true || !Array.isArray(raw.items) || raw.page !== query.page || raw.pageSize !== query.pageSize || raw.items.length > query.pageSize) throw new Error('Incomplete inventory response')
+    const ids = new Set<string>()
+    const items = raw.items.map(value => {
+      const row = object(value), id = string(row.id), warehouseCode = warehouses[identifier(row.warehouseKey)], customer = reference(row.customer)
+      if (!warehouseCode || ids.has(id) || query.warehouseCode && warehouseCode !== query.warehouseCode) throw new Error('Invalid inventory pool')
+      ids.add(id)
+      const onHand = decimal(row.onHand), occupied = decimal(row.occupied)
+      if (onHand < 0 || occupied < 0) throw new Error('Invalid inventory quantity')
+      return { id, sku: string(row.sku), name: string(row.name), warehouseCode, warehouse: string(row.warehouse), customer: customer ?? null,
+        onHand, occupied, free: Decimal.max(0, new Decimal(row.onHand as string).minus(row.occupied as string)).toNumber() }
+    })
+    const total = integer(raw.total)
+    if (total < items.length) throw new Error('Invalid inventory total')
+    return { items, total, page: query.page, pageSize: query.pageSize, asOf: date(raw.asOf)!, source: this.source }
+  }
+
+  /** 各页游标只向前推进；空候选页不能提前终止，超时或超过限额不能返回截断清单。 */
+  async readAllocationOrders(identity: Readonly<FopIdentity>, permission: Readonly<FopPermissionGrant>, scope: Readonly<BusinessScope>, queue: 'allocation' | 'allocation_review' | 'shipping', completed = false, timeRange?: '1w' | '1m' | '3m'): Promise<FopOrder[]> {
+    if (this.resolveBinding) return (await this.userProvider(identity)).readAllocationOrders(identity, permission, scope, queue, completed, timeRange)
+    if (this.workbenchFacts) return (await this.workbenchSnapshot(identity, permission, scope, { queue, completed, timeRange, page: 1, pageSize: 100 })).orders
+    this.assertIdentity(identity)
+    if (permission.subject.tenantId !== identity.tenantId || permission.subject.userId !== identity.userId || !permission.orderQuery?.organizationIds.length) throw new FopPermissionDeniedError('Missing order grant')
+    const result: FopOrder[] = [], seen = new Set<string>(), started = Date.now()
+    let afterOrderId: string | undefined, bytes = 0
+    for (let page = 1; page <= 100; page++) {
+      const response = await this.read(identity, scope, { queue, page, pageSize: 100, ...(completed ? { completed: true, timeRange: timeRange ?? '1w' } : {}) }, false, afterOrderId)
+      if (response.organizationIds.some(id => !permission.orderQuery!.organizationIds.includes(id))) throw new FopPermissionDeniedError('Organization grant changed')
+      if (!response.allocation) throw new FopIntegrationUnavailableError('fop_feature_not_configured')
+      bytes += response.allocation.bytes
+      if (bytes > 64 * 1024 * 1024 || Date.now() - started > 60000) throw new FopIntegrationUnavailableError('fop_result_too_large')
+      for (const row of response.items) {
+        if (seen.has(row.id) || afterOrderId && new Decimal(row.id).lte(afterOrderId)) throw new Error('Repeated allocation order')
+        seen.add(row.id); result.push(row)
+      }
+      if (!response.allocation.more) return result
+      afterOrderId = response.allocation.next
+    }
+    throw new FopIntegrationUnavailableError('fop_result_too_large')
+  }
+
+  /** 新模式统一读取完整候选；Java只应用认证、组织/数据权限及稳定主键分页。 */
+  async readWorkbenchOrders(identity: Readonly<FopIdentity>, permission: Readonly<FopPermissionGrant>, scope: Readonly<BusinessScope>, query: FopOrderPageQuery): Promise<FopWorkbenchOrders> {
+    if (this.resolveBinding) return (await this.userProvider(identity)).readWorkbenchOrders(identity, permission, scope, query)
+    if (!this.workbenchFacts) throw new FopIntegrationUnavailableError('fop_feature_not_configured')
+    return this.workbenchSnapshot(identity, permission, scope, query)
+  }
+
+  private async workbenchSnapshot(identity: Readonly<FopIdentity>, permission: Readonly<FopPermissionGrant>, scope: Readonly<BusinessScope>, query: FopOrderPageQuery) {
+    this.assertIdentity(identity)
+    if (permission.subject.tenantId !== identity.tenantId || permission.subject.userId !== identity.userId || !permission.orderQuery?.organizationIds.length
+      || scope.role === 'none' || scope.role === 'salesperson' && !scope.employeeId || scope.role === 'department_manager' && !scope.departmentId) throw new FopPermissionDeniedError('Missing workbench scope')
+    const orders: FopOrder[] = [], links: PurchaseLinkSnapshot['orders'] = [], purchases = new Set<string>(), seen = new Set<string>()
+    let departments: { id: string; name: string }[] = []
+    const deadline = Date.now() + 60_000
+    let afterOrderId: string | undefined, bytes = 0
+    const warehouseMap = this.unpaidWarehouses()
+    for (let page = 1; page <= 100; page++) {
+      const raw = object(await this.call('FOP_KINGDEE_QUERY_URL', { query: { tenantId: identity.tenantId, userId: identity.userId,
+        organizationIds: this.organizationIds, scopeRole: scope.role, employeeId: scope.employeeId, departmentIds: scope.departmentId ? [scope.departmentId] : [],
+        queue: query.queue, rawWorkbenchFacts: true, page, pageSize: 100, afterOrderId } }, deadline))
+      this.analyticsSubject(raw, identity)
+      if (raw.workbenchFactsSchemaVersion !== 1) throw new FopIntegrationUnavailableError('fop_feature_not_configured')
+      if (raw.queue !== query.queue || raw.page !== page || raw.pageSize !== 100 || typeof raw.hasMore !== 'boolean' || !Array.isArray(raw.items) || raw.items.length > 100
+        || !Array.isArray(raw.organizationIds) || !raw.organizationIds.length) throw new Error('Invalid workbench facts page')
+      const organizations = raw.organizationIds.map(identifier)
+      if (page === 1) {
+        if (!Array.isArray(raw.departments) || raw.departments.length > 2000) throw new Error('Invalid workbench department options')
+        departments = raw.departments.map(value => { const row = object(value); return { id: identifier(row.id), name: string(row.name, true) } })
+        if (new Set(departments.map(row => row.id)).size !== departments.length) throw new Error('Duplicate workbench department option')
+      }
+      if (organizations.some(id => !this.organizationIds.includes(id) || !permission.orderQuery!.organizationIds.includes(id))) throw new FopPermissionDeniedError('Workbench organization changed')
+      bytes += Buffer.byteLength(JSON.stringify(raw))
+      if (bytes > 64 * 1024 * 1024 || Date.now() > deadline) throw new FopIntegrationUnavailableError('fop_result_too_large')
+      let last = afterOrderId
+      for (const value of raw.items) {
+        const id = identifier(object(value).id)
+        if (seen.has(id) || last && BigInt(id) <= BigInt(last)) throw new Error('Invalid workbench order cursor')
+        seen.add(id); last = id
+      }
+      const projected = projectWorkbenchFacts(raw.items, raw.facts, organizations, scope, query, warehouseMap)
+      orders.push(...projected.orders); links.push(...projected.links); projected.purchaseIds.forEach(id => purchases.add(identifier(id)))
+      if (Date.now() > deadline) throw new FopIntegrationUnavailableError('fop_result_too_large')
+      if (!raw.hasMore) return { orders, links, purchaseIds: [...purchases], departments }
+      const next = identifier(raw.nextAfterOrderId)
+      if (!raw.items.length || next !== last) throw new Error('Invalid workbench continuation')
+      afterOrderId = next
+    }
+    throw new FopIntegrationUnavailableError('fop_result_too_large')
+  }
+
+  /** 按授权履约行解码。同一采购单关联多个履约行时合并一次；线下未知值贯穿展示与导出。 */
+  private purchaseObligations(raw: unknown, order: FopOrder): PurchaseObligation[] {
+    if (!Array.isArray(raw)) throw new Error('Missing procurement facts')
+    const groups = new Map<string, PurchaseObligation>()
+    const items = new Map(order.items.map(item => [item.id, item.sku]))
+    for (const value of raw) {
+      const record = object(value)
+      const po = record.purchase == null ? null : object(record.purchase)
+      const supplier = po ? reference(po.supplier == null || object(po.supplier).id == null ? null : po.supplier) : undefined
+      const purchase = po ? validatedPurchaseHeader({
+        ...po, supplier: { id: supplier?.id ?? '', name: supplier?.name || '—' }, platform: po.platform ?? null, paidAt: po.paidAt ?? null, platformOrderNumber: po.platformOrderNumber ?? null,
+      } as PurchaseHeader, true) : null
+      if (purchase) identifier(purchase.id)
+      if (!Array.isArray(record.lines) || !record.lines.length) throw new Error('Missing procurement lines')
+      const key = purchase?.id ?? 'uncreated', group = groups.get(key) ?? { purchase, lines: [] }
+      if (JSON.stringify(purchase) !== JSON.stringify(group.purchase)) throw new Error('Inconsistent linked purchase')
+      for (const value of record.lines) {
+        const row = object(value), id = identifier(row.fulfillmentLineId), sku = string(row.sku)
+        const demandStage = row.demandStage
+        if (items.get(id) !== sku || (!purchase && demandStage !== 'application_pending' && demandStage !== 'purchase_order_pending')
+          || purchase && demandStage != null || !purchase && row.purchaseLineId != null) throw new Error('Invalid procurement source')
+        if (purchase && purchase.platform !== '1688' && row.shippedQuantity != null) throw new Error('Unverified shipment quantity')
+        group.lines.push({ fulfillmentLineId: id, purchaseLineId: purchase ? identifier(row.purchaseLineId) : null,
+          sku, quantity: decimal(row.quantity), shippedQuantity: row.shippedQuantity == null ? null : decimal(row.shippedQuantity),
+          ...(!purchase ? { demandStage: demandStage as 'application_pending' | 'purchase_order_pending' } : {}) })
+      }
+      groups.set(key, group)
+    }
+    return [...groups.values()]
+  }
+
+  private async read(identity: Readonly<FopIdentity>, scope: Readonly<BusinessScope>, query: FopOrderPageQuery, summaryOnly: boolean, afterOrderId?: string): Promise<FopOrderPage & { organizationIds: string[]; allocation?: { more: boolean; next?: string; bytes: number }; procurement?: { links: PurchaseLinkSnapshot['orders']; more: boolean; next?: string; bytes: number } }> {
     if (!Number.isSafeInteger(query.page) || query.page < 1 || query.page > 1_000_000 || !Number.isSafeInteger(query.pageSize) || query.pageSize < 1 || query.pageSize > 100) throw new Error('Invalid page')
     if (scope.role === 'none' || (scope.role === 'salesperson' && !scope.employeeId) || (scope.role === 'department_manager' && !scope.departmentId)) throw new FopPermissionDeniedError('Incomplete business scope')
+    const procurement = query.queue === 'procurement' || query.queue === 'procurement_shipping'
+    const allocation = ['allocation', 'allocation_review', 'shipping'].includes(query.queue)
     const unpaid = query.queue === 'unpaid'
     const dispatch = query.queue === 'dispatch'
     const completed = query.completed === true
-    if (completed && !dispatch) throw new Error('Completed mode requires dispatch')
-    const warehouseMap = unpaid || dispatch ? this.unpaidWarehouses() : {}
+    if (completed && !dispatch && query.queue !== 'shipping') throw new Error('Unsupported completed queue')
+    if (allocation && (completed && query.timeRange !== undefined && !['1w', '1m', '3m'].includes(query.timeRange) || !completed && query.timeRange !== undefined)) throw new Error('Invalid allocation completion range')
+    const warehouseMap = unpaid || dispatch || procurement || allocation ? this.unpaidWarehouses() : {}
     const warehouseIds = query.warehouseCode ? Object.keys(warehouseMap).filter(id => warehouseMap[id] === query.warehouseCode) : undefined
-    if ((unpaid || dispatch) && warehouseIds && !warehouseIds.length) throw new FopIntegrationUnavailableError('fop_mapping_required')
+    if ((unpaid || dispatch || procurement || allocation) && warehouseIds && !warehouseIds.length) throw new FopIntegrationUnavailableError('fop_mapping_required')
     if (dispatch && ((completed
       ? query.taskStatus !== undefined || query.timeRange !== undefined && !['1w', '1m', '3m'].includes(query.timeRange)
       : query.timeRange !== undefined || query.taskStatus !== undefined && !['dispatch_missing', 'dispatch_draft', 'dispatch_submitted', 'dispatch_approved'].includes(query.taskStatus))
@@ -435,6 +655,9 @@ export class KingdeeFopDataProvider extends FopDataProvider {
     const body = { query: { tenantId: identity.tenantId, userId: identity.userId, organizationIds: this.organizationIds,
       scopeRole: scope.role, employeeId: scope.employeeId, departmentIds: scope.departmentId ? [scope.departmentId] : [],
       search: query.search ?? '', orderNumber: query.orderNumber ?? '', page: query.page, pageSize: query.pageSize,
+      ...(procurement || allocation ? { queue: query.queue, afterOrderId, warehouseIds,
+        ...(allocation ? { rawAllocationQuantities: true } : {}),
+        ...(allocation && completed ? { completed: true, timeRange: query.timeRange ?? '1w' } : {}) } : {}),
       ...(dispatch ? { queue: 'dispatch', departmentId: query.departmentId, ownerId: query.ownerId, warehouseIds, taskStatus: query.taskStatus,
         ...(completed ? { completed: true, timeRange: query.timeRange ?? '1w' } : {}),
         sortBy: query.sortBy ?? (completed ? 'completedAt' : 'paidAt'), sortOrder: query.sortOrder ?? (completed ? 'desc' : query.paidAtOrder ?? 'asc'),
@@ -449,17 +672,22 @@ export class KingdeeFopDataProvider extends FopDataProvider {
     const subject = object(raw.subject)
     if (subject.tenantId !== identity.tenantId || subject.userId !== identity.userId) throw new FopPermissionDeniedError('Kingdee response identity mismatch')
     // 完成能力必须由上游显式确认，旧接口即使返回空页也不能冒充已接通。
-    if (completed && (raw.completed !== true || raw.completedSchemaVersion !== 2)) throw new FopIntegrationUnavailableError('fop_feature_not_configured')
+    if (completed && (raw.completed !== true || (allocation ? raw.outboundCompletedSchemaVersion !== 1 : raw.completedSchemaVersion !== 2))) throw new FopIntegrationUnavailableError('fop_feature_not_configured')
     if (!completed && raw.completed === true) throw new Error('Unexpected completed response')
-    const expectedBasis = unpaid ? 'unpaid_active_self' : dispatch ? completed ? 'paid_tracking_synced_active' : 'paid_tracking_pending_active' : 'submitted_paid_active'
+    if (procurement && (raw.procurementSchemaVersion !== 1 || typeof raw.hasMore !== 'boolean')) throw new FopIntegrationUnavailableError('fop_feature_not_configured')
+    if (query.queue === 'procurement_shipping' && raw.procurementShippingSchemaVersion !== 1) throw new FopIntegrationUnavailableError('fop_feature_not_configured')
+    if (allocation && (raw.allocationSchemaVersion !== 1 && raw.allocationSchemaVersion !== 2
+      || typeof raw.hasMore !== 'boolean')) throw new FopIntegrationUnavailableError('fop_feature_not_configured')
+    const expectedBasis = allocation ? 'paid_approved_allocation_packages' : procurement ? 'paid_approved_procurement' : unpaid ? 'unpaid_active_self' : dispatch ? completed ? 'paid_tracking_synced_active' : 'paid_tracking_pending_active' : 'submitted_paid_active'
     if (raw.queue !== query.queue || raw.basis !== expectedBasis || !Array.isArray(raw.organizationIds)
       || raw.organizationIds.length === 0 || raw.organizationIds.some(id => !this.organizationIds.includes(String(id)))) throw new FopPermissionDeniedError('Kingdee response scope mismatch')
     if (dispatch && raw.dispatchSchemaVersion !== 1) throw new FopIntegrationUnavailableError('fop_feature_not_configured')
     const organizationIds = raw.organizationIds.map(identifier)
-    const total = integer(raw.total)
+    const total = (procurement || allocation) && Array.isArray(raw.items) ? raw.items.length : integer(raw.total)
     if (raw.page !== query.page || raw.pageSize !== query.pageSize || !Array.isArray(raw.items)
       || raw.items.length > (summaryOnly ? 0 : query.pageSize) || total < raw.items.length) throw new Error('Invalid Kingdee page')
     const seen = new Set<string>()
+    const links: PurchaseLinkSnapshot['orders'] = []
     const items = raw.items.map(value => {
       const row = object(value)
       const id = identifier(row.id)
@@ -468,19 +696,19 @@ export class KingdeeFopDataProvider extends FopDataProvider {
       seen.add(id)
       // 待审核包含已支付但尚未审核的草稿，不以“已提交”作为额外门槛。
       const billStatus = string(row.billStatus)
-      if (query.queue === 'review' && billStatus === 'C' || dispatch && billStatus !== 'C' || !(unpaid ? ['1'] : ['2', '3', '4', '5']).includes(string(row.orderStatus))) throw new Error('Unexpected review order status')
+      if (query.queue === 'review' && billStatus === 'C' || procurement && (billStatus !== 'C' || !['2', '3', '5'].includes(string(row.orderStatus))) || (dispatch || allocation) && billStatus !== 'C' || !(unpaid ? ['1'] : ['2', '3', '4', '5']).includes(string(row.orderStatus))) throw new Error('Unexpected review order status')
       const owner = reference(row.owner)
       const department = reference(row.department)
       if (!department) throw new FopPermissionDeniedError('Order department missing')
       const departmentPathIds = kingdeeDepartmentPath(row.departmentPathIds, organization.id, department.id, raw.schemaVersion === 1)
-      if (!matchesBusinessScope(scope, { owner, department, departmentPathIds }, dispatch)) throw new FopPermissionDeniedError('Order outside local business scope')
+      if (!matchesBusinessScope(scope, { owner, department, departmentPathIds }, dispatch || procurement || allocation)) throw new FopPermissionDeniedError('Order outside local business scope')
       const customer = reference(raw.schemaVersion === 1 ? row.customer ?? null : row.customer)
       const store = reference(raw.schemaVersion === 1 ? row.store ?? null : row.store)
       const warehouse = reference(raw.schemaVersion === 1 ? row.warehouse ?? null : row.warehouse)
       // 两个清单都消费源单付款时间；旧响应缺值保持空，不借用创建或收款日期。
-      const consumerPaidAt = unpaid || query.queue === 'review' || dispatch ? date(row.consumerPaidAt ?? null, true) : undefined
+      const consumerPaidAt = unpaid || query.queue === 'review' || dispatch || allocation ? date(row.consumerPaidAt ?? null, true) : undefined
       // 时间边界由金蝶用同一时钟过滤和汇总，避免两端毫秒差将合法边界记录误拒绝。
-      if ((unpaid || dispatch) && (query.departmentId && department.id !== query.departmentId && !departmentPathIds?.includes(query.departmentId)
+      if ((unpaid || dispatch || procurement || allocation) && (query.departmentId && department.id !== query.departmentId && !departmentPathIds?.includes(query.departmentId)
         || query.ownerId && owner?.id !== query.ownerId
         || warehouseIds && (!warehouse || !warehouseIds.includes(warehouse.id)))) throw new FopPermissionDeniedError('Unexpected unpaid filter result')
       if (!Array.isArray(row.items)) throw new Error('Invalid order lines')
@@ -505,14 +733,40 @@ export class KingdeeFopDataProvider extends FopDataProvider {
         procurementStatus: 'unknown', allocationStatus: 'unknown', dispatchStatus: 'unknown', shippingStatus: 'unknown',
         warehouse: warehouse?.name ?? '', carrier: null, trackingNumber: null, salesperson: owner?.name ?? '',
         createdAt: date(row.createdAt)!, paidAt: unpaid ? null : date(raw.schemaVersion === 1 ? row.paidAt ?? null : row.paidAt, true), cancelled: false, exception: null,
-        ...(unpaid || query.queue === 'review' || dispatch ? { consumerPaidAt } : {}),
-        ...(dispatch && warehouse && warehouseMap[warehouse.id] ? { warehouseCode: warehouseMap[warehouse.id] } : {}),
+        ...(unpaid || query.queue === 'review' || dispatch || allocation ? { consumerPaidAt } : {}),
+        ...((dispatch || procurement || allocation) && warehouse && warehouseMap[warehouse.id] ? { warehouseCode: warehouseMap[warehouse.id] } : {}),
         ...(unpaid ? { customLogisticsChannelName: row.customLogisticsChannelName == null ? null : string(row.customLogisticsChannelName, true),
           ...(warehouse && warehouseMap[warehouse.id] ? { warehouseCode: warehouseMap[warehouse.id] } : {}) } : {}),
       }
+      if (procurement) {
+        order.reviewedAt = date(row.reviewedAt ?? null, true)
+        links.push({ orderId: id, obligations: this.purchaseObligations(row.obligations, order) })
+      }
+      if (allocation && row.allocationIssues !== undefined) {
+        // 诊断行先完成与正常行相同的身份、组织和业务范围校验；保持进度未知，不伪造待办事实。
+        if (!Array.isArray(row.allocationIssues) || !row.allocationIssues.length || row.allocationDocuments !== undefined)
+          throw new Error('Invalid allocation diagnostics')
+        order.allocationIssues = row.allocationIssues.map(value => {
+          const issue = object(value), code = issue.code
+          if (code !== 'ALLOCATION_SKU_MISMATCH' && code !== 'ALLOCATION_SOURCE_UNRESOLVED') throw new Error('Invalid allocation source diagnostic')
+          const unresolved = code === 'ALLOCATION_SOURCE_UNRESOLVED'
+          const sourceEntryId = unresolved ? string(issue.sourceEntryId, true) : identifier(issue.sourceEntryId)
+          const allocationSku = string(issue.allocationSku, unresolved), orderSku = unresolved ? null : string(issue.orderSku)
+          if (unresolved ? issue.orderSku != null : allocationSku === orderSku
+            || !order.items.some(line => line.id === sourceEntryId && line.sku === orderSku)) throw new Error('Invalid allocation source diagnostic')
+          return { code, allocationId: identifier(issue.allocationId), allocationNumber: string(issue.allocationNumber), sourceEntryId, allocationSku, orderSku }
+        })
+      } else if (allocation) this.allocationFields(order, row, query.queue, completed, raw.allocationSchemaVersion === 2)
       if (dispatch) this.dispatchFields(order, row, query)
       return order
     })
+    if (procurement || allocation) {
+      const next = raw.hasMore ? identifier(raw.nextAfterOrderId) : undefined
+      if (next && (afterOrderId && new Decimal(next).lte(afterOrderId) || items.some(item => new Decimal(item.id).gt(next))))
+        throw new Error('Invalid procurement continuation')
+      return { source: 'fop', total, page: query.page, pageSize: query.pageSize, items, organizationIds, totals: summarizeFopOrders(items),
+        ...(allocation ? { allocation: { next, more: raw.hasMore === true, bytes: Buffer.byteLength(JSON.stringify(raw)) } } : { procurement: { links, next, more: raw.hasMore === true, bytes: Buffer.byteLength(JSON.stringify(raw)) } }) }
+    }
     const totals = object(raw.totals)
     if (integer(totals.orderCount) !== total || !Array.isArray(totals.amountsByCurrency)) throw new Error('Invalid Kingdee totals')
     const currencies = new Set<string>()
@@ -538,6 +792,69 @@ export class KingdeeFopDataProvider extends FopDataProvider {
       ...(dispatch && !summaryOnly ? { departments: options('departments'), salespeople: options('salespeople') } : {}),
       ...(orderIds ? { orderIds } : {}),
       totals: { orderCount: total, itemQuantity: decimal(totals.itemQuantity), amountsByCurrency } }
+  }
+
+  /** 阶段、包裹、来源商品和发运完成证据必须显式返回；空值不能推断完成。 */
+  private allocationFields(order: FopOrder, row: JsonObject, queue: string, completed: boolean, rawQuantities: boolean): void {
+    const progress = object(row.fulfillmentProgress)
+    const readiness = queue === 'allocation' ? 'incomplete' : 'ready', review = queue === 'shipping' ? 'approved' : 'pending'
+    if (progress.allocationCreated !== true || progress.stockReadiness !== readiness || progress.allocationReview !== review
+      || !(completed ? ['completed'] : ['pending', 'partial']).includes(String(progress.outbound)) || !Array.isArray(row.allocationDocuments) || !row.allocationDocuments.length
+      || typeof row.dispatchDocumentsComplete !== 'boolean' || !Array.isArray(row.dispatchDocuments)) throw new Error('Invalid allocation facts')
+    const ids = new Set<string>(), packages = new Set<string>(), quantities = new Map<string, Decimal>()
+    order.allocationDocuments = row.allocationDocuments.map(value => {
+      const doc = object(value), id = identifier(doc.id), packageNo = string(doc.packageNo), lines = object(doc.lineQuantities)
+      if (ids.has(id) || packages.has(packageNo) || typeof doc.dispatchComplete !== 'boolean') throw new Error('Invalid allocation package')
+      if (!Object.keys(lines).length) throw new Error('Invalid allocation source quantities')
+      ids.add(id); packages.add(packageNo)
+      for (const [lineId, qty] of Object.entries(lines)) {
+        // 先校验十进制契约，再直接以原始字符串计算，避免小数经Number转换后损失精度。
+        decimal(qty)
+        const quantity = new AllocationQuantity(qty as string)
+        if (quantity.lte(0)) throw new Error('Invalid allocation source quantities')
+        quantities.set(identifier(lineId), (quantities.get(lineId) ?? new AllocationQuantity(0)).plus(quantity))
+      }
+      const outboundCompletedAt = completed ? date(doc.outboundCompletedAt)! : undefined
+      if (completed && doc.outbound !== 'completed') throw new Error('Invalid completed outbound package')
+      return { id, number: string(doc.number), packageNo, ...(completed ? { outboundCompletedAt } : {}), readyAt: date(doc.readyAt ?? null, true), wmsCreatedAt: date(doc.wmsCreatedAt ?? null, true), dispatchComplete: doc.dispatchComplete, carrier: string(doc.carrier ?? '', true), trackingNumber: string(doc.trackingNumber ?? '', true) }
+    })
+    if (rawQuantities) {
+      // v2保留整单原始数量；按来源行合并本清单包裹后，才用于筛选、分页、展示及全范围汇总。
+      // 未关联行不参与本任务，未知来源或超量整页拒绝，不能截断或伪造数量。
+      const source = new Map((row.items as unknown[]).map(value => {
+        const line = object(value)
+        return [identifier(line.id), new AllocationQuantity(string(line.quantity))] as const
+      }))
+      for (const [lineId, quantity] of quantities) {
+        if (!source.has(lineId) || quantity.gt(source.get(lineId)!)) throw new Error('Invalid allocation source quantities')
+      }
+      order.items = order.items.filter(line => line.id && quantities.has(line.id))
+        .map(line => ({ ...line, quantity: quantities.get(line.id!)!.toNumber() }))
+    } else if (quantities.size !== order.items.length || order.items.some(line => !line.id || !quantities.get(line.id)?.eq(line.quantity))) {
+      throw new Error('Invalid allocation source quantities')
+    }
+    order.carrier = [...new Set(row.allocationDocuments.map(value => string(object(value).carrier ?? '', true)).filter(Boolean))].join(' / ') || null
+    order.trackingNumber = [...new Set(row.allocationDocuments.map(value => string(object(value).trackingNumber ?? '', true)).filter(Boolean))].join(' / ') || null
+    order.shippingCountryCode = row.shippingCountryCode == null ? null : string(row.shippingCountryCode)
+    const recipient = row.shippingRecipient == null ? null : object(row.shippingRecipient)
+    if (recipient) order.shippingRecipient = Object.fromEntries(['name', 'phone', 'email', 'state', 'city', 'postalCode', 'addressLine1', 'addressLine2'].map(key => [key, recipient[key] == null ? null : string(recipient[key], true)])) as unknown as FopOrder['shippingRecipient']
+    order.allocationDocument = order.allocationDocuments.length === 1 ? order.allocationDocuments[0] : null
+    order.dispatchDocuments = row.dispatchDocuments.map(value => {
+      const doc = object(value), status = string(doc.status)
+      if (!['draft', 'submitted', 'approved', 'unknown'].includes(status)) throw new Error('Invalid dispatch status')
+      return { id: identifier(doc.id), number: string(doc.number), status: status as 'draft' | 'submitted' | 'approved' | 'unknown' }
+    })
+    order.dispatchDocumentsComplete = row.dispatchDocumentsComplete
+    if (order.dispatchDocumentsComplete && (!order.dispatchDocuments.length || order.dispatchDocuments.some(doc => doc.status !== 'approved') || order.allocationDocuments.some(doc => !doc.dispatchComplete))) throw new Error('Incomplete dispatch packages')
+    order.fulfillmentProgress = { ...order.fulfillmentProgress, allocationCreated: true, stockReadiness: readiness, allocationReview: review, outbound: progress.outbound as 'pending' | 'partial' | 'completed' }
+    if (completed) {
+      order.outboundCompletedAt = date(row.outboundCompletedAt)!
+      const latest = Math.max(...order.allocationDocuments.map(doc => Date.parse(doc.outboundCompletedAt!)))
+      if (Date.parse(order.outboundCompletedAt) !== latest) throw new Error('Inconsistent outbound completion time')
+    }
+    order.allocationStatus = readiness === 'ready' ? 'allocated' : 'not_ready'
+    order.wmsCreatedAt = order.allocationDocuments.length === 1 ? order.allocationDocuments[0].wmsCreatedAt : null
+    order.allocationReadyAt = order.allocationDocuments.map(doc => doc.readyAt).filter((value): value is string => !!value).sort().slice(-1)[0] ?? null
   }
 
   /** 发运契约独立校验待履约四阶段或全部同步完成事实；旧空字段响应不能伪装接通。 */
@@ -646,11 +963,11 @@ export class KingdeeFopDataProvider extends FopDataProvider {
         chunks.push(part.value)
       }
     } finally { await reader.cancel(); reader.releaseLock() }
-    return object(JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown)
+    return object(parseKingdeeEnvelope(Buffer.concat(chunks).toString('utf8')))
   }
 
   /** 只读网络/5xx失败至多重试一次；认证失效至多重取一次，不能形成循环或重放业务写入。 */
-  private async call(key: string, body: unknown, deadline?: number): Promise<unknown> {
+  private async call(key: string, body: unknown, deadline?: number, retryable = true): Promise<unknown> {
     const endpoint = this.endpoint(key), timeout = this.requestTimeout()
     let token = await this.accessToken(), retries = 0, refreshed = false
     while (true) {
@@ -663,12 +980,12 @@ export class KingdeeFopDataProvider extends FopDataProvider {
             'x-acgw-identity': this.config.get('FOP_KINGDEE_IDENTITY')! }, body: JSON.stringify(body) })
       } catch {
         if (deadline !== undefined && Date.now() >= deadline) throw new FopIntegrationUnavailableError('fop_result_too_large')
-        if (retries++ === 0) continue
+        if (retryable && retries++ === 0) continue
         throw new Error('Kingdee query transport unavailable')
       }
       if (response.status === 401) {
         await response.body?.cancel()
-        if (!refreshed && this.automaticTokenConfigured()) { refreshed = true; token = await this.accessToken(token); continue }
+        if (retryable && !refreshed && this.automaticTokenConfigured()) { refreshed = true; token = await this.accessToken(token); continue }
         throw new FopPermissionDeniedError('Kingdee authentication expired', 'fop_authentication_expired')
       }
       if (response.status === 403) throw new FopPermissionDeniedError('Kingdee authentication denied')
@@ -680,19 +997,25 @@ export class KingdeeFopDataProvider extends FopDataProvider {
         if (String(gateway.errorCode) === '2530') throw new FopIntegrationUnavailableError('fop_endpoint_not_published')
         throw new Error('Kingdee gateway unavailable')
       }
-      if (response.status >= 500 && retries++ === 0) { await response.body?.cancel(); continue }
+      if (retryable && response.status >= 500 && retries++ === 0) { await response.body?.cancel(); continue }
       if (!response.ok || !response.body) throw new Error('Kingdee query unavailable')
       const envelope = await this.responseEnvelope(response, 4 * 1024 * 1024)
       if (envelope.status !== true || String(envelope.errorCode) !== '0') {
         if (['2504', '2505'].includes(String(envelope.errorCode))) throw new FopPermissionDeniedError('金蝶应用尚未授权当前接口，请核对自建API授权', 'fop_api_not_authorized')
         // 金蝶可能以HTTP 200返回认证失败，不能把这种响应当作取数成功或普通业务异常。
         if (String(envelope.errorCode) === '401' || String(envelope.errorCode) === '612') {
-          if (!refreshed && this.automaticTokenConfigured()) { refreshed = true; token = await this.accessToken(token); continue }
+          if (retryable && !refreshed && this.automaticTokenConfigured()) { refreshed = true; token = await this.accessToken(token); continue }
           throw new FopPermissionDeniedError('Kingdee authentication expired', 'fop_authentication_expired')
         }
         const message = typeof envelope.message === 'string' ? envelope.message : ''
-        // 只记录操作配置名和可识别错误分类，不输出URL、令牌、响应正文或客户信息。
-        this.logger.warn(`Kingdee query failed: operation=${key}, category=${message.match(/FOP_[A-Z_]+/)?.[0] ?? 'UPSTREAM_ERROR'}`)
+        // 仅提取受限标识用于关联金蝶日志；绝不记录响应正文、URL、令牌或客户信息。
+        const query = body && typeof body === 'object' && 'query' in body ? (body as { query?: unknown }).query : undefined
+        const queue = query && typeof query === 'object' && 'queue' in query ? String(query.queue) : ''
+        const safeQueue = ['unpaid', 'review', 'dispatch', 'procurement', 'procurement_shipping', 'allocation', 'allocation_review', 'shipping'].includes(queue) ? queue : 'none'
+        const code = /^[A-Za-z0-9_-]{1,32}$/.test(String(envelope.errorCode)) ? String(envelope.errorCode) : 'unknown'
+        const traceId = message.match(/TraceId\s*[:：]\s*([a-f0-9-]{8,64})\b/i)?.[1] ?? 'unknown'
+        const category = message.match(/FOP_[A-Z_]+/)?.[0] ?? (/ORMDesignException/.test(message) ? 'ORM_DESIGN_ERROR' : 'UPSTREAM_ERROR')
+        this.logger.warn(`Kingdee query failed: operation=${key}, queue=${safeQueue}, code=${code}, traceId=${traceId}, category=${category}`)
         if (/FOP_(?:IDENTITY_MISMATCH|PERMISSION_DENIED)/.test(message)) throw new FopPermissionDeniedError('Kingdee permission denied')
         if (/FOP_FX_MISSING/.test(message)) throw new FopIntegrationUnavailableError('fop_fx_missing')
         if (/FOP_RESULT_TOO_LARGE/.test(message)) throw new FopIntegrationUnavailableError('fop_result_too_large')

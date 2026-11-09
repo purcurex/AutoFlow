@@ -11,11 +11,27 @@ describe('待履约包裹聚合阶段', () => {
     expect(view.text()).toBe('未创建')
     view.unmount()
   })
-  it('配货清单仍使用原发运单审核完成规则', () => {
-    const view = mount(DispatchStatus, { props: { queue: 'allocation', stage: 'dispatch_missing',
+  /** 未传完整性参数时兼容旧调用，明确传入时同时检查包裹完整性与发运单审核状态。 */
+  it.each([
+    ['allocation', undefined, '已完成'],
+    ['allocation', true, '已完成'],
+    ['allocation', false, '未完成'],
+    ['allocation_review', undefined, '已完成'],
+    ['allocation_review', true, '已完成'],
+    ['allocation_review', false, '未完成'],
+  ] as const)('%s清单在complete=%s时显示%s', (queue, complete, expectedLabel) => {
+    const view = mount(DispatchStatus, { props: { queue, stage: 'dispatch_missing',
+      ...(complete === undefined ? {} : { complete }),
       documents: [{ id: '1', number: 'FY1', status: 'approved' }] },
       global: { plugins: [createI18n({ legacy: false, locale: 'zh-CN', messages: {} })] } })
-    expect(view.text()).toBe('已完成')
+    expect(view.text()).toBe(expectedLabel)
+    view.unmount()
+  })
+  it.each(['allocation', 'allocation_review'])('%s清单即使包裹完整，发运单未审核仍显示未完成', queue => {
+    const view = mount(DispatchStatus, { props: { queue, complete: true,
+      documents: [{ id: '1', number: 'FY1', status: 'draft' }] },
+      global: { plugins: [createI18n({ legacy: false, locale: 'zh-CN', messages: {} })] } })
+    expect(view.text()).toBe('未完成')
     view.unmount()
   })
 })

@@ -5,9 +5,10 @@ import { getDispatchTaskStatus, getDispatchCompletionStatus, taskStatusLabel } f
 import { useI18n } from 'vue-i18n'
 import type { DispatchDocument, FulfillmentProgress, FopOrder } from '@/api/fop-orders'
 
-const props = defineProps<{ documents?: DispatchDocument[] | null; shopifySync?: FulfillmentProgress['shopifySync']; queue?: string; stage?: FopOrder['dispatchTaskStatus'] }>()
+// 完整性参数未提供时保留未知状态，兼容旧调用；避免Vue将可选布尔值默认为false，误判为包裹不完整。
+const props = withDefaults(defineProps<{ documents?: DispatchDocument[] | null; complete?: boolean; shopifySync?: FulfillmentProgress['shopifySync']; queue?: string; stage?: FopOrder['dispatchTaskStatus'] }>(), { complete: undefined })
 const { locale } = useI18n()
-const status = computed(() => ['allocation', 'allocation_review'].includes(props.queue ?? '') ? getDispatchCompletionStatus(props.documents) : props.stage ?? getDispatchTaskStatus(props.documents, props.shopifySync))
+const status = computed(() => ['allocation', 'allocation_review'].includes(props.queue ?? '') ? getDispatchCompletionStatus(props.documents, props.complete) : props.stage ?? getDispatchTaskStatus(props.documents, props.shopifySync))
 const tone = computed(() => {
   if (status.value === 'dispatch_approved') return (props.queue ?? 'dispatch') === 'dispatch' ? 'danger' : 'success'
   if (['dispatch_draft', 'dispatch_missing', 'dispatch_incomplete'].includes(status.value)) return 'warning'

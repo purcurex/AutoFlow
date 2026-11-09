@@ -32,6 +32,16 @@ it('renders merged header with only linked source items and lazily paginates sou
   expect(api.get).toHaveBeenLastCalledWith(expect.stringContaining('purchase%3Ap1'), expect.objectContaining({ params: expect.objectContaining({ page: 2, pageSize: 20 }) }))
   await wrapper.get('.group-expand').trigger('click'); expect(wrapper.find('tbody').exists()).toBe(false)
 })
+it('线下采购组和展开行均显示未知已发与待发数量', async () => {
+  const offline = { ...group, purchase: { ...group.purchase, purchaseType: 'offline', platform: null }, shippedQuantity: null, pendingQuantity: null }
+  vi.mocked(api.get).mockImplementation(async url => String(url).endsWith('/purchase-groups')
+    ? { ...page, items: [offline] }
+    : { ...detail, group: offline, items: [{ ...row, lines: [{ ...row.lines[0], shippedQuantity: null }] }] })
+  const { wrapper } = await setup('/workbench/procurement?queue=procurement')
+  expect(wrapper.get('.group-counts').text()).toMatch(/已发\s*—.*待发\s*—/)
+  await wrapper.get('.group-expand').trigger('click'); await flushPromises()
+  expect(wrapper.get('tbody').text()).toMatch(/已发\s*—.*未发\s*—/)
+})
 it('defaults to fulfillment first, opts into purchases, and retains scope while clearing incompatible filters', async () => {
   const { wrapper, router } = await setup('/workbench/procurement?queue=procurement&departmentId=d1&search=Lamp&taskStatus=pending', true)
   expect(wrapper.text()).toContain('original fulfillment view')

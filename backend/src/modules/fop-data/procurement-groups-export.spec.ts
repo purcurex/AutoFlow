@@ -33,6 +33,15 @@ it('separates uncreated demand from purchase and shipment quantities in mixed ex
   expect(cell(sheet, 3, '发货时效').value).toBe('超过48小时')
   expect(sheet.autoFilter).toBe('A1:Z3')
 })
+it('线下供应商已发和待发写入破折号，保留已知的采购数量', async () => {
+  const offline: PurchaseGroup = { ...group, purchase: { ...group.purchase!, purchaseType: 'offline', platform: null, platformOrderNumber: null },
+    shippedQuantity: null, pendingQuantity: null, shipment: 'unknown',
+    rows: group.rows.map(row => ({ ...row, lines: row.lines.map(line => ({ ...line, shippedQuantity: null })) })) }
+  const sheet = (await read([offline])).getWorksheet('采购关联明细')!
+  expect(cell(sheet, 2, '供应商已发数量').value).toBe('—')
+  expect(cell(sheet, 2, '供应商待发数量').value).toBe('—')
+  expect(cell(sheet, 2, '采购数量').value).toBe(4)
+})
 it('preserves long identifiers, literal text, receipt time, store and variants and records export filters', async () => {
   const book = await read([group]), sheet = book.getWorksheet('采购关联明细')!
   expect(cell(sheet, 2, '平台订单号').value).toBe('5127833916176022434')

@@ -103,4 +103,25 @@ describe('workbench approval', () => {
     await service.submit('account', request()); await service.submit('account', request())
     expect(provider.approveDocument.mock.calls[0][1].idempotencyKey).toBe(provider.approveDocument.mock.calls[1][1].idempotencyKey)
   })
+  it('按包裹审核，同一订单只提交发运完成的配货单', async () => {
+    const second = { ...doc, id: 'd2', number: 'AO2' }
+    data.approvalContext.mockResolvedValue({ identity, order: { ...order, allocationDocuments: [
+      { id: doc.id, number: doc.number, dispatchComplete: true },
+      { id: second.id, number: second.number, dispatchComplete: false },
+    ], dispatchDocumentsComplete: false }, inQueue: true })
+    provider.approvalTargets.mockResolvedValue([doc, second])
+    const preview = await service.preview('account', { queue: 'allocation_review', orderIds: ['o'] })
+    expect(preview.items[0].documents.map(target => target.eligible)).toEqual([true, false])
+    const result = await service.submit('account', { ...request(), items: [{ orderId: 'o', version: preview.items[0].version }] })
+    expect(result.items[0].status).toBe('partial')
+    expect(provider.approveDocument).toHaveBeenCalledTimes(1)
+    expect(provider.approveDocument.mock.calls[0][1].id).toBe('d')
+  })
+  it('同包裹的发运状态在预检查后变化时禁止提交', async () => {
+    const current = { identity, order: { ...order, allocationDocuments: [{ id: doc.id, number: doc.number, dispatchComplete: true }] }, inQueue: true }
+    data.approvalContext.mockResolvedValueOnce(current).mockResolvedValueOnce(current)
+      .mockResolvedValue({ ...current, order: { ...current.order, allocationDocuments: [{ id: doc.id, number: doc.number, dispatchComplete: false }] } })
+    expect((await service.submit('account', request())).items[0].status).toBe('blocked')
+    expect(provider.approveDocument).not.toHaveBeenCalled()
+  })
 })

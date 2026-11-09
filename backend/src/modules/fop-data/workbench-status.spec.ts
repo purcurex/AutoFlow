@@ -64,8 +64,8 @@ describe('compact workbench statuses', () => {
 
 describe('current procurement filter business states', () => {
   it('excludes obsolete filter states but keeps remaining payment and push tasks visible', () => {
-    expect(taskStatusOptions('procurement')).toEqual(['purchase_order_pending', 'dispatch_preparation', 'alibaba_pending', 'payment_pending', 'refund_pending'])
-    for (const state of ['unknown', 'application_pending', 'dispatch_missing', 'logistics_pending', 'supplier_pending']) expect(canFilterTaskStatus('procurement', state)).toBe(false)
+    expect(taskStatusOptions('procurement')).toEqual(['application_pending', 'purchase_order_pending', 'placement_pending', 'dispatch_preparation', 'alibaba_pending', 'payment_pending', 'refund_pending'])
+    for (const state of ['unknown', 'dispatch_missing', 'logistics_pending', 'supplier_pending']) expect(canFilterTaskStatus('procurement', state)).toBe(false)
     expect(taskStatusOptions('procurement')).not.toContain('logistics_unknown')
     expect(taskStatusOptions('procurement')).not.toContain('partially_paid')
     expect(canFilterTaskStatus('procurement', 'logistics_unknown')).toBe(false)

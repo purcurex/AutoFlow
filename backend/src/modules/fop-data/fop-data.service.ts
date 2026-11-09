@@ -54,7 +54,11 @@ type ChartContext = { initial: Scope; permission: FopPermissionGrant; access: Ef
 
 function matchesQueue(order: FopOrder, queue: Queue, warehouseStage?: ListFulfillmentOrdersDto['warehouseStage']): boolean {
   if (order.cancelled) return false
-  if (queue === 'exceptions') return order.exception != null
+  // 异常清单只接收已付款且明确尚未全部发货的订单；残留异常不能把已完成单据带回待办。
+  // 业务判断放在AutoFlow后端，并在最终分页和汇总前应用同一过滤条件。
+  if (queue === 'exceptions') return order.exception != null && order.paymentStatus === 'paid'
+    && order.shippingStatus !== 'shipped'
+    && (order.fulfillmentProgress?.outbound === 'pending' || order.fulfillmentProgress?.outbound === 'partial')
   if (queue === 'unpaid') return order.paymentStatus === 'unpaid'
   if (order.paymentStatus !== 'paid') return false
   if (queue === 'review') return order.reviewStatus === 'pending'
@@ -65,9 +69,10 @@ function matchesQueue(order: FopOrder, queue: Queue, warehouseStage?: ListFulfil
   if (queue === 'procurement' || queue === 'procurement_shipping') {
     const purchase = order.procurementProgress
     if (!purchase) return false
+    if (queue === 'procurement' && purchase.pendingStage) return true
     const pendingPush = purchase.alibabaOrder === 'not_pushed' || purchase.alibabaOrder === 'partial'
     if (queue === 'procurement_shipping') return !pendingPush && purchase.purchaseOrder === 'ordered' && purchase.supplierPayment === 'paid'
-      && (progress.supplierShipment === 'pending' || progress.supplierShipment === 'partial')
+      && (progress.supplierShipment === 'pending' || progress.supplierShipment === 'partial' || progress.supplierShipment === 'unknown' && purchase.pendingStage === 'unknown')
     // Remaining unplaced demand is not fully paid; unknown facts are not unpaid facts.
     return purchase.purchaseOrder === 'not_ordered' || purchase.purchaseOrder === 'partial'
       || purchase.purchaseOrder === 'ordered' && (pendingPush || ['unpaid', 'partial', 'refunded'].includes(purchase.supplierPayment))
@@ -188,7 +193,10 @@ function publicOrder(order: FopOrderCandidate): FopOrder {
     allocationStatus: order.allocationStatus, dispatchStatus: order.dispatchStatus, shippingStatus: order.shippingStatus,
     warehouse: order.warehouse, carrier: order.carrier, trackingNumber: order.trackingNumber,
     salesperson: order.salesperson, createdAt: order.createdAt, paidAt: order.paidAt && Number.isFinite(Date.parse(order.paidAt)) ? order.paidAt : null, cancelled: order.cancelled,
-    exception: order.exception ? { type: order.exception.type !== null && FOP_EXCEPTION_TYPES.includes(order.exception.type) ? order.exception.type : null, reason: typeof order.exception.reason === 'string' ? order.exception.reason.trim() || null : null, hours: order.exception.hours } : null,
+    exception: order.exception ? { type: order.exception.type !== null && FOP_EXCEPTION_TYPES.includes(order.exception.type) ? order.exception.type : null,
+      ...(order.exception.types ? { types: order.exception.types.filter(type => FOP_EXCEPTION_TYPES.includes(type)) } : {}),
+      ...(order.exception.affectedSkus ? { affectedSkus: order.exception.affectedSkus.filter(sku => typeof sku === 'string') } : {}),
+      reason: typeof order.exception.reason === 'string' ? order.exception.reason.trim() || null : null, hours: order.exception.hours } : null,
   }
 }
 
@@ -514,13 +522,13 @@ export class FopDataService {
   }
 
   async approvalContext(userId: string, queue: ApprovalQueue, orderId: string, sessionVersion = 0) {
-    const scoped = await this.scopedOrders(userId, queue === 'review' ? 'sales' : 'allocation')
+    const scoped = this.provider.pagedOrders && queue === 'allocation_review' ? await this.allocationOrders(userId, queue) : await this.scopedOrders(userId, queue === 'review' ? 'sales' : 'allocation')
     const account = await this.users.findById(userId)
     if (!account || account.accountDisabled || (account.sessionVersion ?? 0) !== sessionVersion) throw new UnauthorizedException('Account disabled or session expired')
     if (!scoped.permission.approvalActions?.includes(queue)) throw new ForbiddenException('当前 FOP 账号无此审核操作权限')
     const order = scoped.orders.find(row => row.id === orderId)
     if (!order) throw new NotFoundException('订单不存在或无权访问')
-    return { identity: { ...scoped.permission.subject }, order, inQueue: matchesQueue(order, queue) }
+    return { identity: { ...scoped.permission.subject }, business: scoped.initial.business, order, inQueue: matchesQueue(order, queue) }
   }
 
   private async scopedReceipts(userId: string, scoped: { permission: FopPermissionGrant; initial: Scope; range?: FopAnalyticsRange }, context?: ChartContext): Promise<FopReceipt[]> {
@@ -744,6 +752,78 @@ export class FopDataService {
     return { source: this.provider.source ?? 'fop', mode: this.provider.source === 'mock' ? 'demo' : 'live', orderId, purchaseOrderId, wangwangAccount: contact.supplier.wangwangAccount, url: this.provider.source === 'mock' ? null : contact.url }
   }
 
+  /** 两种查看方式、展开及导出统一由同一授权采购快照生成，避免将作废单或已转待发货的单据算作待办。 */
+  private async pendingProcurement(userId: string, query: PurchaseGroupFiltersDto) {
+    const initial = await this.scope(userId)
+    if (!initial.roles.includes('procurement')) throw new ForbiddenException('Workbench access denied')
+    const permission = await this.permissions(userId, initial)
+    const raw = this.provider.workbenchFacts ? await this.providerCall(() => this.provider.readWorkbenchOrders(permission.subject, permission, initial.business, { queue: query.queue, page: 1, pageSize: 100 })) : null
+    const data = raw ? { orders: raw.orders, purchaseIds: raw.purchaseIds, snapshot: { subject: permission.subject, exactSourceLines: true, orders: raw.links } }
+      : await this.providerCall(() => this.provider.readPendingProcurement(permission.subject, permission, initial.business, query.warehouseCode, query.queue))
+    const departmentPaths = new Map(data.orders.map(order => [order.id, order.departmentPathIds ?? []]))
+    const groups = await this.providerCall(async () => buildPurchaseGroups(data.orders, departmentPaths,
+      { ...permission, allowedPurchaseOrderIds: data.purchaseIds }, data.snapshot, query))
+    await this.assertUnchanged(userId, initial)
+    const departments = raw?.departments ?? [...new Map(data.orders.filter(o => o.department).map(o => [o.department!.id, o.department!])).values()]
+    return { initial, orders: data.orders, departmentPaths, departments, groups }
+  }
+
+  /** 履约单有多张采购单时只展示一个当前动作。其余动作、数量及来源行可在采购单视图逐项展开。 */
+  private async pendingProcurementOrders(userId: string, warehouseCode?: string, queue: 'procurement' | 'procurement_shipping' = 'procurement') {
+    const scoped = await this.pendingProcurement(userId, { queue, warehouseCode })
+    if (queue === 'procurement_shipping') {
+      // 一张履约单可能同时关联线上部分发货和线下未知；未知不得伪装成零发货。
+      const included = new Set(scoped.groups.flatMap(group => group.rows.map(row => row.orderId)))
+      scoped.orders = scoped.orders.filter(order => included.has(order.id))
+      for (const order of scoped.orders) {
+        const groups = scoped.groups.filter(group => group.rows.some(row => row.orderId === order.id))
+        order.procurementStatus = 'purchased'
+        order.procurementProgress = { purchaseOrder: 'ordered', purchaseApplication: 'created', alibabaOrder: 'unknown', supplierPayment: 'paid' }
+        const lines = groups.flatMap(group => group.rows.filter(row => row.orderId === order.id).flatMap(row => row.lines))
+        order.fulfillmentProgress.supplierShipment = lines.some(line => line.shippedQuantity === null) ? 'unknown' : lines.some(line => line.shippedQuantity! > 0) ? 'partial' : 'pending'
+        order.procurementPaidAt = groups.map(group => group.purchase?.paidAt).filter((value): value is string => !!value).sort()[0] ?? null
+        if (order.fulfillmentProgress.supplierShipment === 'unknown') order.procurementProgress.pendingStage = 'unknown'
+      }
+      return scoped
+    }
+    const ordersById = new Map(scoped.orders.map(order => [order.id, order]))
+    const priority = ['refund_pending', 'application_pending', 'purchase_order_pending', 'alibaba_pending', 'placement_pending', 'payment_pending', 'unknown']
+    for (const group of scoped.groups) for (const row of group.rows) {
+      const order = ordersById.get(row.orderId)!, po = group.purchase
+      const stage = !po ? row.lines.some(l => l.demandStage === 'application_pending') ? 'application_pending' : 'purchase_order_pending'
+        : (po.payment === 'refunded' || po.payment === 'partially_refunded') ? 'refund_pending' : po.placement === 'pending' ? po.platform === '1688' ? 'alibaba_pending' : 'placement_pending'
+        : po.payment === 'unpaid' || po.payment === 'partial' ? 'payment_pending' : 'unknown'
+      const current = order.procurementProgress?.pendingStage
+      if (current && priority.indexOf(current) <= priority.indexOf(stage)) continue
+      order.procurementStatus = 'pending'
+      order.procurementProgress = { pendingStage: stage, purchaseOrder: po ? 'ordered' : 'not_ordered',
+        purchaseApplication: !po && stage === 'application_pending' ? 'not_created' : 'created',
+        alibabaOrder: po?.platform === '1688' ? po.placement === 'placed' ? 'pushed' : 'not_pushed' : 'unknown',
+        supplierPayment: po?.payment === 'partially_refunded' ? 'refunded' : po?.payment ?? 'not_required' }
+    }
+    return scoped
+  }
+
+  private async allocationOrders(userId: string, queue: 'allocation' | 'allocation_review' | 'shipping', completed = false, timeRange?: '1w' | '1m' | '3m') {
+    const initial = await this.scope(userId), role = queue === 'shipping' ? 'warehouse' : 'allocation'
+    if (!initial.roles.includes(role)) throw new ForbiddenException('Workbench access denied')
+    const permission = await this.permissions(userId, initial)
+    const orders = await this.providerCall(() => this.provider.readAllocationOrders(permission.subject, permission, initial.business, queue, completed, timeRange))
+    await this.assertUnchanged(userId, initial)
+    return { initial, permission, orders, roles: initial.roles, departmentPaths: new Map(orders.map(order => [order.id, order.departmentPathIds ?? []])) }
+  }
+
+  /** 原始模式统一在AutoFlow中筛选，角色授权及绑定变更校验继续复用已有入口。 */
+  private async workbenchOrders(userId: string, query: FulfillmentOrderFiltersDto) {
+    const initial = await this.scope(userId), role = FULFILLMENT_QUEUE_ROLES[query.queue]
+    if (!initial.roles.includes(role)) throw new ForbiddenException('Workbench access denied')
+    const permission = await this.permissions(userId, initial)
+    const result = await this.providerCall(() => this.provider.readWorkbenchOrders(permission.subject, permission, initial.business, { ...query, page: 1, pageSize: 100 }))
+    const orders = result.orders
+    await this.assertUnchanged(userId, initial)
+    return { initial, permission, orders, departments: result.departments, roles: initial.roles, departmentPaths: new Map(orders.map(order => [order.id, order.departmentPathIds ?? []])) }
+  }
+
   private async filteredOrders(userId: string, query: FulfillmentOrderFiltersDto) {
     if (!Object.prototype.hasOwnProperty.call(FULFILLMENT_QUEUE_ROLES, query.queue)) throw new BadRequestException('Invalid fulfillment queue')
     if (query.completed && (!isCompletionQueue(query.queue) || query.timeRange === 'all' || query.taskStatus || query.procurementStage || query.warehouseStage)) throw new BadRequestException('Invalid completed-list filters')
@@ -757,21 +837,35 @@ export class FopDataService {
     const inTimeRange = query.completed ? completedRange(query.timeRange as '1w' | '1m' | '3m' | undefined) : consumerPaymentRange(query.timeRange)
     const role = FULFILLMENT_QUEUE_ROLES[query.queue]
     if (query.workbenchRole && query.workbenchRole !== role) throw new BadRequestException('workbenchRole does not match the requested queue')
-    const scoped = await this.scopedOrders(userId, role, undefined, undefined, query.queue === 'dispatch')
+    const liveProcurement = this.provider.pagedOrders && (query.queue === 'procurement' || query.queue === 'procurement_shipping') && !query.completed
+    const scoped = liveProcurement ? await this.pendingProcurementOrders(userId, query.warehouseCode, query.queue as 'procurement' | 'procurement_shipping') : this.provider.workbenchFacts ? await this.workbenchOrders(userId, query) : this.provider.pagedOrders && ['allocation', 'allocation_review', 'shipping'].includes(query.queue) && (!query.completed || query.queue === 'shipping')
+      ? await this.allocationOrders(userId, query.queue as 'allocation' | 'allocation_review' | 'shipping', query.completed, query.timeRange as '1w' | '1m' | '3m' | undefined)
+      : await this.scopedOrders(userId, role, undefined, undefined, query.queue === 'dispatch')
     const { departmentPaths } = scoped
     // 待支付与其他清单复用已验权订单：管理员/总经办全部部门，经理本部门，业务员本人。
     const orders = scoped.orders
     // Derive filter options from the same permitted records, never the administrator's organization directory.
-    const departments = orderDepartments(orders)
+    const departments = 'departments' in scoped ? scoped.departments : orderDepartments(orders)
     const departmentOrders = orders.filter(order => !query.departmentId || order.department?.id === query.departmentId || departmentPaths.get(order.id)?.includes(query.departmentId))
     // Owner IDs are filters, never identity or permission grants. Options share the
     // authorized department scope and stay stable across queue/search/page changes.
     const salespeople = [...new Map(departmentOrders.filter(order => order.owner?.id).map(order => [order.owner!.id, order.owner!])).values()]
       .sort((a, b) => a.name.localeCompare(b.name, 'zh-CN') || a.id.localeCompare(b.id))
     const search = query.search?.trim().toLowerCase()
+    // 异常信息沿用授权、部门、仓库、业务员和搜索范围；不按无法确认的进度伪装正常订单。
+    const allocationIssues = departmentOrders.filter(order => order.allocationIssues?.length
+      && (!query.warehouseCode || order.warehouseCode === query.warehouseCode)
+      && (!query.ownerId || order.owner?.id === query.ownerId)
+      && (!query.orderNumber || order.orderNumber === query.orderNumber)
+      && (!search || [order.orderNumber, order.shopifyOrderNumber, order.customerName, order.storeName, order.owner?.name || order.salesperson,
+        ...order.items.map(item => item.sku), ...order.allocationIssues!.flatMap(issue => [issue.allocationNumber, issue.allocationSku, issue.orderSku ?? ''])]
+        .some(value => value.toLowerCase().includes(search))))
+      .flatMap(order => order.allocationIssues!.map(issue => ({ ...issue, orderId: order.id, orderNumber: order.orderNumber })))
     const candidates = departmentOrders.filter((order) => (query.completed ? isStageCompleted(order, query.queue) : matchesQueue(order, query.queue, query.warehouseStage))
+      && !order.allocationIssues?.length
       && inTimeRange(query.completed ? completedAt(order, query.queue) : order.consumerPaidAt)
-      && (!query.taskStatus || getTaskStatus(order, query.queue) === query.taskStatus)
+      && (!query.taskStatus || getTaskStatus(order, query.queue) === query.taskStatus
+        || query.queue === 'exceptions' && order.exception?.types?.some(type => type === query.taskStatus))
       && (!query.procurementStage || getProcurementStage(order.procurementProgress, order.fulfillmentProgress.supplierShipment) === query.procurementStage)
       && (!query.warehouseCode || order.warehouseCode === query.warehouseCode)
       && (!query.ownerId || order.owner?.id === query.ownerId)
@@ -782,12 +876,12 @@ export class FopDataService {
     const shippingCountries = query.queue === 'review' ? [...new Set(candidates.map(o => normalizeShippingCountry(o.shippingCountryCode)).filter((code): code is string => code !== null))].sort() : undefined
     const filtered = candidates.filter(order => !query.shippingCountryCode || order.shippingCountryCode === query.shippingCountryCode)
       .sort((left, right) => compareFulfillmentOrders(left, right, query))
-    return { filtered, departments, salespeople, shippingCountries, authorizedOrderIds: new Set(orders.map(order => order.id)), initial: scoped.initial }
+    return { filtered, departments, salespeople, shippingCountries, allocationIssues, authorizedOrderIds: new Set(orders.map(order => order.id)), initial: scoped.initial }
   }
 
   async getOrders(userId: string, query: ListFulfillmentOrdersDto) {
     // 金蝶原有分页入口继续由上游先验权再分页，不转成仅当前页的本地汇总。
-    if (this.provider.pagedOrders) {
+    if (this.provider.pagedOrders && !this.provider.workbenchFacts && (!['procurement', 'procurement_shipping', 'allocation', 'allocation_review', 'shipping'].includes(query.queue) || query.completed && query.queue !== 'shipping')) {
       const role = FULFILLMENT_QUEUE_ROLES[query.queue]
       if (!role || query.workbenchRole && query.workbenchRole !== role) throw new BadRequestException('Invalid fulfillment queue or workbench role')
       // 旧金蝶分页契约尚无这些筛选/排序参数，禁止静默忽略后返回错误的清单范围。
@@ -813,15 +907,16 @@ export class FopDataService {
       await this.assertUnchanged(userId, initial)
       return { ...result, refreshedAt: new Date().toISOString(), departments: result.departments ?? [], salespeople: result.salespeople ?? [] }
     }
-    const { filtered, departments, salespeople, shippingCountries } = await this.filteredOrders(userId, query)
+    const { filtered, departments, salespeople, shippingCountries, allocationIssues } = await this.filteredOrders(userId, query)
     const start = (query.page - 1) * query.pageSize
-    return { source: this.provider.source ?? 'fop', refreshedAt: new Date().toISOString(), departments, salespeople, ...(shippingCountries ? { shippingCountries } : {}), items: filtered.slice(start, start + query.pageSize), total: filtered.length, totals: summarizeFopOrders(filtered), page: query.page, pageSize: query.pageSize }
+    return { source: this.provider.source ?? 'fop', refreshedAt: new Date().toISOString(), departments, salespeople, ...(shippingCountries ? { shippingCountries } : {}), allocationIssues, items: filtered.slice(start, start + query.pageSize), total: filtered.length, totals: summarizeFopOrders(filtered), page: query.page, pageSize: query.pageSize }
   }
 
   private async purchaseGroups(userId: string, query: PurchaseGroupFiltersDto) {
     if (query.completed && (query.purchaseStage || query.queue !== 'procurement' || query.timeRange && !['1w', '1m', '3m'].includes(query.timeRange))) throw new BadRequestException('Invalid completed purchase filters')
     if (!query.completed && query.timeRange) throw new BadRequestException('timeRange requires completed purchases')
     if (query.purchaseStage !== undefined && query.queue !== 'procurement') throw new BadRequestException('purchaseStage requires the procurement queue')
+    if (this.provider.pagedOrders && ['procurement', 'procurement_shipping'].includes(query.queue) && !query.completed) return this.pendingProcurement(userId, query)
     const scoped = await this.scopedOrders(userId, 'procurement')
     const inRange = completedRange(query.timeRange as '1w' | '1m' | '3m' | undefined)
     const orders = scoped.orders.filter(o => !o.cancelled && o.paymentStatus === 'paid' && (!query.completed || isStageCompleted(o, 'procurement') && inRange(completedAt(o, 'procurement'))))
@@ -962,6 +1057,11 @@ export class FopDataService {
     const initial = await this.scope(userId)
     if (!initial.roles.includes(role)) throw new ForbiddenException('Inventory workbench access required')
     let permission = await this.permissions(userId, initial)
+    if (this.provider.pagedOrders) {
+      const result = await this.providerCall(() => this.provider.queryAllocationInventory(permission.subject, permission, initial.business, query))
+      await this.assertUnchanged(userId, initial)
+      return result
+    }
     let selected: { sku: string; warehouseCode: string; customerId: string }[] | undefined
     if (query.mode === 'selected') {
       const current = await this.scopedOrders(userId, role, undefined)
@@ -1061,7 +1161,7 @@ export class FopDataService {
       if (!account || account.accountDisabled || (account.sessionVersion ?? 0) !== sessionVersion) throw new UnauthorizedException('Account disabled or session expired')
     }
     await assertSession()
-    if (this.provider.pagedOrders && query.queue === 'dispatch') return this.exportPagedDispatch(userId, query, assertSession)
+    if (this.provider.pagedOrders && !this.provider.workbenchFacts && query.queue === 'dispatch') return this.exportPagedDispatch(userId, query, assertSession)
     const { filtered, initial } = await this.filteredOrders(userId, query)
     const ids = new Set(query.orderIds)
     const orders = query.mode === 'selected' ? filtered.filter(order => ids.has(order.id)) : filtered

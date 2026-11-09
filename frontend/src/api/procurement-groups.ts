@@ -1,8 +1,8 @@
 import api from './index'
 export interface PurchaseHeader {
-  purchaseType: 'offline' | 'online'; platform: '1688' | 'other' | null
+  purchaseType: 'offline' | 'online' | 'unknown'; platform: '1688' | 'other' | null
   id: string; number: string; supplier: { id: string; name: string }; platformOrderNumber: string | null
-  payment: 'unpaid' | 'partial' | 'paid' | 'refunded' | 'unknown'; placement: 'pending' | 'placed' | 'unknown'; paidAt: string | null
+  payment: 'unpaid' | 'partial' | 'paid' | 'refunded' | 'partially_refunded' | 'unknown'; placement: 'pending' | 'placed' | 'unknown'; paidAt: string | null
 }
 export interface PurchaseGroup {
   id: string; kind: 'purchase' | 'uncreated'; purchase: PurchaseHeader | null
@@ -11,7 +11,7 @@ export interface PurchaseGroup {
 }
 export interface PurchaseGroupRow {
   orderId: string; orderNumber: string; shopifyOrderNumber: string; customerName: string; storeName: string; ownerName: string; departmentName: string; warehouse: string; paidAt: string | null; completedAt?: string | null
-  lines: { fulfillmentLineId: string; purchaseLineId: string | null; sku: string; name: string; imageUrl: string | null; variant: string; quantity: number; shippedQuantity: number }[]
+  lines: { fulfillmentLineId: string; purchaseLineId: string | null; sku: string; name: string; imageUrl: string | null; variant: string; quantity: number; shippedQuantity: number | null; demandStage?: 'application_pending' | 'purchase_order_pending' }[]
 }
 export const purchaseStageLabels = {
   uncreated: ['待创建采购单', 'Purchase not created'],
@@ -25,7 +25,7 @@ export function isPurchaseStage(value: unknown): value is PurchaseStage {
 }
 export interface PurchaseFilters { completed?: boolean; timeRange?: '1w' | '1m' | '3m'; purchaseStage?: PurchaseStage; queue: 'procurement' | 'procurement_shipping'; search?: string; departmentId?: string; ownerId?: string; warehouseCode?: string; sortOrder?: 'asc' | 'desc' }
 export interface PurchaseQuery extends PurchaseFilters { page: number; pageSize: number }
-export interface PurchasePage { items: PurchaseGroup[]; total: number; page: number; pageSize: number; refreshedAt: string; source: 'mock' | 'fop'; departments: { id: string; name: string }[]; totals: { groupCount: number; purchaseCount: number; orderCount: number; uncreatedCount: number; pendingQuantity: number } }
+export interface PurchasePage { items: PurchaseGroup[]; total: number; page: number; pageSize: number; refreshedAt: string; source: 'mock' | 'fop'; departments: { id: string; name: string }[]; totals: { groupCount: number; purchaseCount: number; orderCount: number; uncreatedCount: number; pendingQuantity: number | null } }
 export interface PurchaseDetails { group: PurchaseGroup; items: PurchaseGroupRow[]; total: number; page: number; pageSize: number }
 const base = '/autoflow/integrations/fop/purchase-groups'
 export const getPurchaseGroups = (params: PurchaseQuery) => api.get<PurchasePage, PurchasePage>(base, { params })

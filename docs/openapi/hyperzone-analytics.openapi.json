@@ -3,8 +3,8 @@
   "jsonSchemaDialect": "https://spec.openapis.org/oas/3.1/dialect/base",
   "info": {
     "title": "HyperZone 智能办公平台分析与工作台接口契约",
-    "version": "2026-11-02-merged-workbench-employee-binding",
-    "description": "HyperZone 智能办公平台现行字段级合同，需求9.40为交付入口。50项平台HTTP操作、186个模型；servers=/api，响应为裸JSON。FOP为金蝶云苍穹自研应用，源码核对不代表员工网关已发布或生产已联调。\n权限：岗位/逐图许可、FOP资源许可和本地本人/部门/业务全量范围取交集，先授权后筛选、统计、排序、分页及导出；组织汇总、收款、运费、利润、备货与库存分别授权。\n工作台：九类履约队列加销售备货、采购待备货，共十一类清单；备货独立接口，不计入五类履约看板。采购物流条件仅限制FOP推1688动作；配货按未齐套/齐套未审划分，仓库仅已审未全部出库，不以WMS已建作为可见门槛。Shopify只有待同步/已同步，已同步退出待履约。\n审核：销售review和配货allocation_review开放单笔/批量审核，独立approvalActions、版本、幂等与逐笔结果；一履约一配货，配货写前复核发运制作完成。实际业务审核必须走FOP原生操作，不直接改状态字段；生产网关未配置不得假成功。\n查询：部门仅营销中心直属业务一至四部；业务员通过search搜索，保留ownerId兼容。默认收款最早在前；前端50条，可选20/50/100；API兼容默认20。所选和跨页筛选导出同权限与顺序。前端30秒刷新不等于FOP端到端时效承诺。\n时间：UTC+8显示，ISO时间戳带明确时区；consumerPaidAt、reviewedAt、procurementPaidAt、allocationReadyAt、wmsCreatedAt各按真实事件取值，缺失null不回退createdAt。实际字段与持久化见源码映射待确认清单。\n财务：履约实收加全款备货实收按支付期间归属，押金备货不计业绩；使用库存不重复计款。已审毛利月结用净差额，预计按已知事件及预估运费；日周历史事件和权威日分配待FOP补齐。运费按已确认实际成本及确认时间统计，最终结算/后续补退费仍须财务核对。USD/CNY显示四位小数，计算保留原币折USD的完整精度。\n展示：所有页签保留固定摘要；十一类清单共用标题加文字说明，无问号tips；查询和单号沿用履约页蓝色，刷新浅蓝。纯视觉统一不新增接口或放宽权限。"
+    "version": "2026-11-08-workbench-raw-facts",
+    "description": "HyperZone 智能办公平台现行字段级合同，需求9.40为交付入口。50项平台HTTP操作、186个模型；servers=/api，响应为裸JSON。FOP为金蝶云苍穹自研应用，源码核对不代表员工网关已发布或生产已联调。\n权限：岗位/逐图许可、FOP资源许可和本地本人/部门/业务全量范围取交集，先授权后筛选、统计、排序、分页及导出；组织汇总、收款、运费、利润、备货与库存分别授权。\n工作台：本轮九类履约队列加发运已履约、仓库已出库，共十一项履约清单；销售/采购备货保留独立接口，不计入本轮十一项。采购物流条件仅限制FOP推1688动作；配货按未齐套/齐套未审划分，仓库仅已审未全部出库，不以WMS已建作为可见门槛。Shopify只有待同步/已同步，已同步退出待履约。\n审核：销售review和配货allocation_review开放单笔/批量审核，独立approvalActions、版本、幂等与逐笔结果；一履约一配货，配货写前复核发运制作完成。实际业务审核必须走FOP原生操作，不直接改状态字段；生产网关未配置不得假成功。\n查询：原始模式部门来自授权部门树，经理覆盖管理部门及下级，其他独立分析保留各自范围；业务员通过search搜索，保留ownerId兼容。默认收款最早在前；前端50条，可选20/50/100；API兼容默认20。所选和跨页筛选导出同权限与顺序。前端30秒刷新不等于FOP端到端时效承诺。\n时间：UTC+8显示，ISO时间戳带明确时区；consumerPaidAt、reviewedAt、procurementPaidAt、allocationReadyAt、wmsCreatedAt各按真实事件取值，缺失null不回退createdAt。实际字段与持久化见源码映射待确认清单。\n财务：履约实收加全款备货实收按支付期间归属，押金备货不计业绩；使用库存不重复计款。已审毛利月结用净差额，预计按已知事件及预估运费；日周历史事件和权威日分配待FOP补齐。运费按已确认实际成本及确认时间统计，最终结算/后续补退费仍须财务核对。USD/CNY显示四位小数，计算保留原币折USD的完整精度。\n展示：所有页签保留固定摘要；十一类清单共用标题加文字说明，无问号tips；查询和单号沿用履约页蓝色，刷新浅蓝。纯视觉统一不新增接口或放宽权限。"
   },
   "servers": [
     {
@@ -869,7 +869,7 @@
         "tags": [
           "履约"
         ],
-        "description": "履约待办查询，现行需求9.40；审核写操作使用独立审核接口。销售unpaid/review/exceptions；发运dispatch；采购procurement/procurement_shipping；配货allocation/allocation_review；仓库shipping。全部排除取消，unpaid只取明确未支付，异常清单按独立异常标记纳入，其余均要求paid。\nreview=未审核；dispatch=履约已审核且Shopify有效跟踪号上传及履约标记pending（待同步，无部分同步场景），已出库也不能替代平台同步成功。exceptions纳入exception非null的全部有效授权订单，不以支付或发货状态排除，支持发货后的物流/妥投异常；exception.type为五类分类筛选、reason为独立原因文本，异常标记不改变其它待办或完成清单归属。\nprocurement=有效FOP采购单未创建/部分创建，或全部创建但采购款unpaid/partial/refunded，或明确alibabaOrder=not_pushed/partial（包含付款unknown/not_required/paid）；申请和采购准备不受物流或Shopify状态门槛限制，不额外要求履约已审核。procurement_shipping=ordered+paid且供应商pending/partial且没有明确未完成的1688推送；供应商全发但款未付仍待采购。未知不能当未付，取消重采归一有效剩余需求。purchaseApplication和logisticsGate只展示；alibabaOrder明确待推是独立未完成任务依据，不能先从两个采购页签消失。\nallocation/allocation_review/shipping要求reviewStatus=approved且实际allocationCreated=true。allocation=incomplete+pending且outbound!=completed；allocation_review=ready+pending且outbound!=completed。只按结果，不分自动/人工；发运未审仍保留已齐套未审核。人工释放后可回未齐套。\nshipping只取ready+approved+outbound pending/partial，不再包含未审配货；无需以WMS/通知已生成额外过滤。warehouseStage省略/all/pending_outbound等价；pending_review兼容返回空，UI提供重置。非法、重复或非shipping传入400。\n统一先服务端会话/FOP身份/白名单与本人、管理部门、业务全量权限交集，再队列、部门、ownerId、search、orderNumber筛选，再排序/全量合计/分页。同订单ID去重，系统管理权不扩业务范围。部门支持可信祖先路径；业务员owner.id精确匹配。search包含owner.name（空时salesperson）和订单、Shopify单号、客户、店铺、SKU，忽略英文大小写/首尾空格。无权筛选为空，缺必需或非法事实503，不静默回退Mock。\n默认paidAt升序/id升序，空日期最后；sortBy/sortOrder及旧paidAtOrder优先级和可用队列见参数；全量排序后分页。departments来自完整授权订单，salespeople另受所选部门限制，均独立于队列/搜索/分页。\nDashboard卡片与tasks复用同谓词：review、dispatch、procurement并procurement_shipping、allocation并allocation_review、shipping；任务时间取对应集合最早收款时间。前端临时筛选不改看板基数；跨岗位可重叠，不能相加成公司唯一单数。\n销售review与配货allocation_review支持单选/多选审核，通过独立审核接口调用FOP原生操作；配货须发运制作完成。其他业务操作在FOP执行。勾选同时用于Excel导出；保留复制、旺旺跟进、刷新。每页20/50/100默认前端显式50，API默认20兼容；仅外层滚动。销售默认review、配货默认allocation_review。手动/可见在线30秒刷新、恢复可见或网络立即刷新；refreshedAt为BFF完成时间，不是FOP同步水位。响应private,no-store。\n需求9.16：支持procurementStage表头筛选（先筛选后合计/排序/分页）。FOP没有采购单部分创建的正常场景，旧partial只兼容待建采购单；Demo不再生成部分创建或未推1688先付款的订单。 最新9.32：销售unpaid/review/exceptions及待履约dispatch列表、所选/全筛选Excel使用consumerPaidAt展示C端下单时间。真实Shopify首次付清事实仍需FOP网关映射；缺失为null，无createdAt/paidAt替代。采购alibaba_pending显示待推1688采购，payment_pending显示待支付采购款；枚举、筛选、权限与统计不变。 最新9.33：销售unpaid/review/exceptions及待履约dispatch支持sortBy=consumerPaidAt、sortOrder=asc/desc。默认仍paidAt升序；同C端时间按paidAt升序/id升序，缺失或非法时间双向均置后，不回退其他日期。先授权/筛选后对完整结果排序再分页；所选及全筛选Excel同顺序。其他队列使用该排序返回400。单号及SKU复制仅客户端原值操作，不新增API或改变权限。 最新9.34：procurement_shipping列表及两种Excel以procurementPaidAt展示采购付款时间，替换创建时间；其他队列不变。供应商pending/partial按当前电脑时间减真实采购付款时间，>24h橙色、>48h红色（已确认48不是487）；等于24h正常、等于48h橙色；缺失/非法/未来日期不标超时，每30秒及重获焦点更新。仅展示提醒，不改业务状态、筛选、权限、计数或默认paidAt升序。 最新9.35：全待办业务员单元格固定两行（姓名、业务部门），不再单列业务部门；原owner/department字段和筛选权限保留。allocation_review时间列为齐套时间allocationReadyAt，allocation未齐套时间列为consumerPaidAt且允许同字段排序；其余队列时间列不变。默认paidAt升序。清空已提交搜索仅移除search并回第1页，保留其余筛选/排序/分页条数；发货仓库空选项显示全部。Excel同步姓名/部门两行及时间字段。 9.35覆盖原四队列限制：allocation未齐套也允许consumerPaidAt；allocation_review仍不允许，使用独立齐套时间展示。\n现行时间列：unpaid/review/exceptions/dispatch/allocation用consumerPaidAt；procurement用reviewedAt；procurement_shipping用procurementPaidAt；allocation_review用allocationReadyAt；shipping用wmsCreatedAt。shipping的WMS创建时间指发货通知成功推送WMS出库指令，缺失为null且不隐藏任务。时间列与两种Excel同源，createdAt保持原单据创建语义。",
+        "description": "履约待办查询，现行需求9.40；审核写操作使用独立审核接口。销售unpaid/review/exceptions；发运dispatch；采购procurement/procurement_shipping；配货allocation/allocation_review；仓库shipping。全部排除取消，unpaid只取明确未支付，异常清单要求已付款且尚未全部发货，其余均要求paid。\nreview=未审核；dispatch=履约已审核且Shopify有效跟踪号上传及履约标记pending（待同步，无部分同步场景），已出库也不能替代平台同步成功。exceptions要求exception非null、paid、未取消、shippingStatus!=shipped、outbound为pending/partial；支持库存不足、地址核验及既有异常分类，并支持按types中的次级异常筛选。hours没有真实首次时间时为null。异常标记不改变其它待办或完成清单归属。\nprocurement=有效FOP采购单未创建/部分创建，或全部创建但采购款unpaid/partial/refunded，或明确alibabaOrder=not_pushed/partial（包含付款unknown/not_required/paid）；申请和采购准备不受物流或Shopify状态门槛限制，不额外要求履约已审核。procurement_shipping=ordered+paid且供应商pending/partial且没有明确未完成的1688推送；供应商全发但款未付仍待采购。未知不能当未付，取消重采归一有效剩余需求。purchaseApplication和logisticsGate只展示；alibabaOrder明确待推是独立未完成任务依据，不能先从两个采购页签消失。\nallocation/allocation_review/shipping要求reviewStatus=approved且实际allocationCreated=true。allocation=incomplete+pending且outbound!=completed；allocation_review=ready+pending且outbound!=completed。只按结果，不分自动/人工；发运未审仍保留已齐套未审核。人工释放后可回未齐套。\nshipping只取ready+approved+outbound pending/partial，不再包含未审配货；无需以WMS/通知已生成额外过滤。warehouseStage省略/all/pending_outbound等价；pending_review兼容返回空，UI提供重置。非法、重复或非shipping传入400。\n统一先服务端会话/FOP身份/白名单与本人、管理部门、业务全量权限交集，再队列、部门、ownerId、search、orderNumber筛选，再排序/全量合计/分页。同订单ID去重，系统管理权不扩业务范围。部门支持可信祖先路径；业务员owner.id精确匹配。search包含owner.name（空时salesperson）和订单、Shopify单号、客户、店铺、SKU，忽略英文大小写/首尾空格。无权筛选为空，缺必需或非法事实503，不静默回退Mock。\n默认paidAt升序/id升序，空日期最后；sortBy/sortOrder及旧paidAtOrder优先级和可用队列见参数；全量排序后分页。departments来自完整授权订单，salespeople另受所选部门限制，均独立于队列/搜索/分页。\nDashboard卡片与tasks复用同谓词：review、dispatch、procurement并procurement_shipping、allocation并allocation_review、shipping；任务时间取对应集合最早收款时间。前端临时筛选不改看板基数；跨岗位可重叠，不能相加成公司唯一单数。\n销售review与配货allocation_review支持单选/多选审核，通过独立审核接口调用FOP原生操作；配货须发运制作完成。其他业务操作在FOP执行。勾选同时用于Excel导出；保留复制、旺旺跟进、刷新。每页20/50/100默认前端显式50，API默认20兼容；仅外层滚动。销售默认review、配货默认allocation_review。手动/可见在线30秒刷新、恢复可见或网络立即刷新；refreshedAt为BFF完成时间，不是FOP同步水位。响应private,no-store。\n需求9.16：支持procurementStage表头筛选（先筛选后合计/排序/分页）。FOP没有采购单部分创建的正常场景，旧partial只兼容待建采购单；Demo不再生成部分创建或未推1688先付款的订单。 最新9.32：销售unpaid/review/exceptions及待履约dispatch列表、所选/全筛选Excel使用consumerPaidAt展示C端下单时间。真实Shopify首次付清事实仍需FOP网关映射；缺失为null，无createdAt/paidAt替代。采购alibaba_pending显示待推1688采购，payment_pending显示待支付采购款；枚举、筛选、权限与统计不变。 最新9.33：销售unpaid/review/exceptions及待履约dispatch支持sortBy=consumerPaidAt、sortOrder=asc/desc。默认仍paidAt升序；同C端时间按paidAt升序/id升序，缺失或非法时间双向均置后，不回退其他日期。先授权/筛选后对完整结果排序再分页；所选及全筛选Excel同顺序。其他队列使用该排序返回400。单号及SKU复制仅客户端原值操作，不新增API或改变权限。 最新9.34：procurement_shipping列表及两种Excel以procurementPaidAt展示采购付款时间，替换创建时间；其他队列不变。供应商pending/partial按当前电脑时间减真实采购付款时间，>24h橙色、>48h红色（已确认48不是487）；等于24h正常、等于48h橙色；缺失/非法/未来日期不标超时，每30秒及重获焦点更新。仅展示提醒，不改业务状态、筛选、权限、计数或默认paidAt升序。 最新9.35：全待办业务员单元格固定两行（姓名、业务部门），不再单列业务部门；原owner/department字段和筛选权限保留。allocation_review时间列为齐套时间allocationReadyAt，allocation未齐套时间列为consumerPaidAt且允许同字段排序；其余队列时间列不变。默认paidAt升序。清空已提交搜索仅移除search并回第1页，保留其余筛选/排序/分页条数；发货仓库空选项显示全部。Excel同步姓名/部门两行及时间字段。 9.35覆盖原四队列限制：allocation未齐套也允许consumerPaidAt；allocation_review仍不允许，使用独立齐套时间展示。\n现行时间列：unpaid/review/exceptions/dispatch/allocation用consumerPaidAt；procurement用reviewedAt；procurement_shipping用procurementPaidAt；allocation_review用allocationReadyAt；shipping用wmsCreatedAt。shipping的WMS创建时间指发货通知成功推送WMS出库指令，缺失为null且不隐藏任务。时间列与两种Excel同源，createdAt保持原单据创建语义。\n2026-11-08原始模式：FOP_KINGDEE_WORKBENCH_FACTS_MODE=raw时，通过Java原始单据事实在AutoFlow后端归类、筛选、排序、分页及汇总11个履约工作台清单，含已履约及已出库；备货/财务/统计和审核写入保持原独立契约。分页读取有界且非跨单据事务快照，业务变化应刷新。",
         "responses": {
           "200": {
             "description": "成功，裸JSON响应。",
@@ -1136,7 +1136,9 @@
                 "dispatch_exception",
                 "allocation_exception",
                 "logistics_exception",
-                "delivery_exception"
+                "delivery_exception",
+                "stock_exception",
+                "address_exception"
               ],
               "description": "清单顶部状态筛选，与业务员、所属部门同级。省略为全部；按需求9.17派生单一协同进度。procurement：待建申请、待建采购单、待建发运单、待获取物流单号、待推1688采购、待付款、退款跟进、待确认；procurement_shipping：供应商待发/部分发；dispatch：未创建/暂存/已提交/已审核未同步；allocation/allocation_review：未创建/暂存/已提交/已审核/已同步（不提供待确认筛选）；shipping：待出库/部分出库；exceptions：库存/地址/物流异常。销售unpaid/review不允许状态筛选。多发运单最早阶段、任一未知优先unknown；未完成采购准备不因缺物流号显示阻断。先授权再与部门、业务员、搜索、兼容procurementStage求交集，合计/分页/两种Excel同范围。非法队列组合、未知值、重复参数400；不改变Dashboard统计基数。 按最新需求9.26：dispatch始终仅paid+履约approved+shopifySync=pending，状态四项为未创建/暂存/已提交/已审核未同步；dispatch_approved复用为全部关联发运单已审且明确未同步。dispatch_synced在dispatch队列及导出拒绝400；前端旧链接清除该筛选。配货两队列保留已审核/已同步协同状态，不改变配货入列条件。同步成功退出待履约清单、看板及导出；临时异步等待不自动标为失败。原始DispatchDocument.status不变。"
             }
@@ -7029,8 +7031,12 @@
             "description": "FOP提供的具体异常原因文本，暂不作原因分类筛选；尚未提供时为null。"
           },
           "hours": {
-            "type": "number",
-            "description": "异常持续小时。"
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "异常持续小时数；真实首次发生时间未确认时为null，不以订单创建、通知发送或最近重试时间代替。",
+            "minimum": 0
           },
           "type": {
             "type": [
@@ -7043,9 +7049,34 @@
               "allocation_exception",
               "logistics_exception",
               "delivery_exception",
+              "stock_exception",
+              "address_exception",
               null
             ],
-            "description": "异常类型：采购、发运、配货、物流、妥投。未提供类型时为null，不从库存不足或原因文本推断。"
+            "description": "主异常分类，来源于已核验事实。库存不足、地址失败、配货错误、发运失败和轨迹异常可并存；不推测缺少来源的分类。"
+          },
+          "types": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "procurement_exception",
+                "dispatch_exception",
+                "allocation_exception",
+                "logistics_exception",
+                "delivery_exception",
+                "stock_exception",
+                "address_exception"
+              ]
+            },
+            "description": "可选的全部当前异常分类，筛选支持次级原因。"
+          },
+          "affectedSkus": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "实际受影响SKU；库存不足按同物料合并需求后定位SKU。"
           }
         },
         "required": [
@@ -7054,7 +7085,7 @@
           "hours"
         ],
         "additionalProperties": false,
-        "description": "异常为独立标记，不改变业务主流程进度或其它待办归属；包含发货后的物流及妥投异常。"
+        "description": "当前异常事实；清单仅展示已付款、尚未全部发货的有效授权订单。地址失败C纳入，待处理A、通过B、人工放行D排除；历史通知不当作未解决。"
       },
       "FopOrder": {
         "type": "object",
@@ -8512,8 +8543,12 @@
             "description": "FOP提供的具体异常原因文本，暂不作原因分类筛选；尚未提供时为null。"
           },
           "hours": {
-            "type": "number",
-            "description": "异常持续小时数，来自授权订单exception.hours。"
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "异常持续小时数；真实首次发生时间未确认时为null，不以订单创建、通知发送或最近重试时间代替。",
+            "minimum": 0
           },
           "type": {
             "type": [
@@ -8526,9 +8561,11 @@
               "allocation_exception",
               "logistics_exception",
               "delivery_exception",
+              "stock_exception",
+              "address_exception",
               null
             ],
-            "description": "异常类型：采购、发运、配货、物流、妥投。未提供类型时为null，不从库存不足或原因文本推断。"
+            "description": "主异常分类，来源于已核验事实。库存不足、地址失败、配货错误、发运失败和轨迹异常可并存；不推测缺少来源的分类。"
           }
         },
         "required": [
@@ -8539,7 +8576,7 @@
           "hours"
         ],
         "additionalProperties": false,
-        "description": "异常为独立标记，不改变业务主流程进度或其它待办归属；包含发货后的物流及妥投异常。"
+        "description": "当前异常事实；清单仅展示已付款、尚未全部发货的有效授权订单。地址失败C纳入，待处理A、通过B、人工放行D排除；历史通知不当作未解决。"
       },
       "DashboardTask": {
         "type": "object",
@@ -17318,7 +17355,9 @@
               "dispatch_exception",
               "allocation_exception",
               "logistics_exception",
-              "delivery_exception"
+              "delivery_exception",
+              "stock_exception",
+              "address_exception"
             ],
             "description": "清单顶部状态筛选，省略为全部。需求9.29：procurement仅purchase_order_pending待建采购订单、dispatch_preparation待制作发运单（采购单已建且1688未推完，logisticsGate=pending_dispatch或pending_logistics）、alibaba_pending待推1688采购、payment_pending待支付采购款、refund_pending采购退款待跟进。无待建采购申请、待确认或已付款未发货选项，后者使用独立procurement_shipping清单。procurement_shipping仅supplier_pending/supplier_partial；dispatch仅dispatch_missing/dispatch_draft/dispatch_submitted/dispatch_approved（已审核未同步），不能查询dispatch_synced；allocation保留五种发运状态含dispatch_synced；shipping仅outbound_pending/outbound_partial；exceptions仅procurement_exception/dispatch_exception/allocation_exception/logistics_exception/delivery_exception；销售unpaid/review不允许状态筛选。先授权再与部门、业务员、仓库、搜索和兼容procurementStage求交集；合计、分页与两种Excel共用。多发运单取最早阶段，未知事实不推断为完成。非法组合、已移除值、重复参数400。筛选不改变Dashboard基数。 需求9.30：allocation与allocation_review均仅dispatch_incomplete未完成和dispatch_complete已完成。已完成=非空关联有效发运单全部已审核，与Shopify同步无关；缺失、未知或任一未审归未完成。未完成保留队列，不改变Dashboard总数。状态排序未完成→已完成，同组收款日期/id。旧细分状态在该队列查询/导出返回400，旧前端书签迁移到对应分类。allocation未齐套页同样采用上述两态，dispatch待履约清单保留原四种。"
           },
@@ -17595,7 +17634,9 @@
                         "dispatch_exception",
                         "allocation_exception",
                         "logistics_exception",
-                        "delivery_exception"
+                        "delivery_exception",
+                        "stock_exception",
+                        "address_exception"
                       ]
                     }
                   },

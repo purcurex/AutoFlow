@@ -10,13 +10,14 @@ const sum = (values: number[]) => {
   if (!qty(n)) throw new Error('Purchase quantity overflow')
   return n
 }
-function header(value: PurchaseHeader): PurchaseHeader {
-  if (!text(value.id) || !text(value.number) || !text(value.supplier?.id) || !text(value.supplier?.name)
-    || !['paid', 'unpaid', 'partial', 'refunded', 'unknown'].includes(value.payment) || !['pending', 'placed', 'unknown'].includes(value.placement)
+export function validatedPurchaseHeader(value: PurchaseHeader, nullableSupplier = false): PurchaseHeader {
+  const missingSupplier = nullableSupplier && value.supplier?.id === '' && value.supplier.name === '—'
+  if (!text(value.id) || !text(value.number) || (!missingSupplier && (!text(value.supplier?.id) || !text(value.supplier?.name)))
+    || !['paid', 'unpaid', 'partial', 'refunded', 'partially_refunded', 'unknown'].includes(value.payment) || !['pending', 'placed', 'unknown'].includes(value.placement)
     || value.platformOrderNumber !== null && !text(value.platformOrderNumber)) throw new Error('Invalid purchase header')
-  if (value.purchaseType !== 'offline' && value.purchaseType !== 'online'
-    || value.purchaseType === 'offline' && (value.platform !== null || value.platformOrderNumber !== null)
-    || value.purchaseType === 'online' && value.platform !== '1688' && value.platform !== 'other') throw new Error('Invalid purchase channel')
+  if (!['offline', 'online', 'unknown'].includes(value.purchaseType)
+    || value.purchaseType !== 'online' && (value.platform !== null || value.platformOrderNumber !== null)
+    || value.purchaseType === 'online' && value.platform !== '1688' && value.platform !== 'other' && value.platform !== null) throw new Error('Invalid purchase channel')
   const paidAt = normalizeBusinessTimestamp(value.paidAt)
   if (value.paidAt !== null && !paidAt) throw new Error('Invalid purchase payment time')
   return { purchaseType: value.purchaseType, platform: value.platform, id: value.id, number: value.number, supplier: { id: value.supplier.id, name: value.supplier.name }, platformOrderNumber: value.platformOrderNumber, payment: value.payment, placement: value.placement, paidAt: value.payment === 'paid' ? paidAt : null }
@@ -66,7 +67,7 @@ export function buildPurchaseGroups(orders: FopOrder[], paths: Map<string, reado
     for (const obligation of obligations) {
       if (!obligation || obligation.purchase !== null && !text(obligation.purchase?.id)) throw new Error('Invalid purchase obligation')
       if (obligation.purchase && !allowed.has(obligation.purchase.id)) continue
-      const purchase = obligation.purchase ? header(obligation.purchase) : null
+      const purchase = obligation.purchase ? validatedPurchaseHeader(obligation.purchase, snapshot.exactSourceLines) : null
       const id = purchase ? `purchase:${purchase.id}` : 'uncreated'
       if (seenPurchases.has(id)) throw new Error('Duplicate purchase source group')
       seenPurchases.add(id)
@@ -78,22 +79,23 @@ export function buildPurchaseGroups(orders: FopOrder[], paths: Map<string, reado
       if (!Array.isArray(obligation.lines) || !obligation.lines.length) throw new Error('Missing source lines')
       const seen = new Set<string>(), row = rowFor(order)
       for (const line of obligation.lines) {
-        const key = JSON.stringify([line?.fulfillmentLineId, line?.purchaseLineId])
-        const item = order.items.find(i => i.sku === line?.sku)
+        const key = JSON.stringify([line?.fulfillmentLineId, line?.purchaseLineId, line?.demandStage])
+        const item = order.items.find(i => i.sku === line?.sku && (!snapshot.exactSourceLines || i.id === line.fulfillmentLineId))
         if (!line || !text(line.fulfillmentLineId) || purchase && !text(line.purchaseLineId) || !purchase && line.purchaseLineId !== null
-          || !item || !qty(line.quantity) || line.quantity === 0 || !qty(line.shippedQuantity) || line.shippedQuantity > line.quantity
+          || !item || !qty(line.quantity) || line.quantity === 0 || line.shippedQuantity !== null && (!qty(line.shippedQuantity) || line.shippedQuantity > line.quantity)
           || !purchase && line.shippedQuantity !== 0 || seen.has(key)) throw new Error('Invalid purchase source quantities')
         seen.add(key)
-        const total = sum([sourceTotals.get(line.sku) ?? 0, line.quantity])
-        if (total > sum(order.items.filter(i => i.sku === line.sku).map(i => i.quantity))) throw new Error('Source purchase exceeds fulfillment quantity')
-        sourceTotals.set(line.sku, total)
-        row.lines.push({ fulfillmentLineId: line.fulfillmentLineId, purchaseLineId: line.purchaseLineId, sku: line.sku, quantity: line.quantity, shippedQuantity: line.shippedQuantity, name: item.name, imageUrl: item.imageUrl, variant: item.variant })
+        const sourceKey = snapshot.exactSourceLines ? line.fulfillmentLineId : line.sku
+        const total = sum([sourceTotals.get(sourceKey) ?? 0, line.quantity])
+        if (total > (snapshot.exactSourceLines ? item.quantity : sum(order.items.filter(i => i.sku === line.sku).map(i => i.quantity)))) throw new Error('Source purchase exceeds fulfillment quantity')
+        sourceTotals.set(sourceKey, total)
+        row.lines.push({ fulfillmentLineId: line.fulfillmentLineId, purchaseLineId: line.purchaseLineId, sku: line.sku, quantity: line.quantity, shippedQuantity: !query.completed && purchase?.purchaseType === 'offline' ? null : line.shippedQuantity, demandStage: line.demandStage, name: item.name, imageUrl: item.imageUrl, variant: item.variant })
       }
-      const awaitingShipment = purchase?.payment === 'paid' && purchase.placement === 'placed'
+      const awaitingShipment = purchase?.payment === 'paid' && (purchase.placement === 'placed' || !query.completed && purchase.purchaseType === 'offline')
       if (query.completed) {
         if (!awaitingShipment || !isStageCompleted(order, 'procurement') || !matchesCompletionRange(completedAt(order, 'procurement'))) continue
       } else if (query.queue === 'procurement_shipping') {
-        if (!awaitingShipment || !row.lines.some(l => l.shippedQuantity < l.quantity)) continue
+        if (!awaitingShipment || !row.lines.some(l => l.shippedQuantity === null || l.shippedQuantity < l.quantity)) continue
       } else if (awaitingShipment) continue
       add(id, purchase ? 'purchase' : 'uncreated', purchase, row)
     }
@@ -105,16 +107,18 @@ export function buildPurchaseGroups(orders: FopOrder[], paths: Map<string, reado
     group.earliestReceiptAt = group.rows[0]?.paidAt ?? null
     const lines = group.rows.flatMap(r => r.lines)
     group.skuCount = new Set(lines.map(l => l.sku)).size
-    group.quantity = sum(lines.map(l => l.quantity)); group.shippedQuantity = sum(lines.map(l => l.shippedQuantity))
+    group.quantity = sum(lines.map(l => l.quantity))
+    if (lines.some(l => l.shippedQuantity === null)) continue
+    group.shippedQuantity = sum(lines.map(l => l.shippedQuantity!))
     group.pendingQuantity = new Decimal(group.quantity).minus(group.shippedQuantity).toNumber()
     group.shipment = group.pendingQuantity === 0 ? 'shipped' : group.shippedQuantity > 0 ? 'partial' : 'pending'
   }
   const matchesStage = (group: PurchaseGroup) => {
     if (!query.purchaseStage) return true
     const purchase = group.purchase
-    const stage = !purchase ? 'uncreated' : purchase.payment === 'refunded' ? 'refund_pending'
+    const stage = !purchase ? 'uncreated' : (purchase.payment === 'refunded' || purchase.payment === 'partially_refunded') ? 'refund_pending'
       : purchase.placement === 'pending' ? 'placement_pending'
-      : purchase.placement === 'placed' && (purchase.payment === 'unpaid' || purchase.payment === 'partial') ? 'payment_pending' : undefined
+      : (purchase.placement === 'placed' || snapshot.exactSourceLines) && (purchase.payment === 'unpaid' || purchase.payment === 'partial') ? 'payment_pending' : undefined
     return stage === query.purchaseStage
   }
   return [...groups.values()].filter(matchesStage).sort((a, b) => Number(b.kind === 'uncreated') - Number(a.kind === 'uncreated')
@@ -124,5 +128,5 @@ export function purchaseGroupSummary({ rows: _rows, ...group }: PurchaseGroup) {
 export function purchaseGroupTotals(groups: PurchaseGroup[]) {
   return { groupCount: groups.length, purchaseCount: groups.filter(g => g.kind === 'purchase').length, orderCount: new Set(groups.flatMap(g => g.rows.map(r => r.orderId))).size,
     uncreatedCount: groups.filter(g => g.kind === 'uncreated').reduce((n, g) => n + g.orderCount, 0),
-    pendingQuantity: sum(groups.map(g => g.pendingQuantity ?? 0)) }
+    pendingQuantity: groups.some(g => g.pendingQuantity === null) ? null : sum(groups.map(g => g.pendingQuantity!)) }
 }

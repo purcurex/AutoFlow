@@ -48,3 +48,7 @@ export function inventorySnapshot(scopes: readonly AllocationInventoryScope[], s
       onHand: row.onHand, occupied: row.occupied, free: Math.max(0, row.onHand - row.occupied) }
   })
 }
+
+export interface AllocationInventoryPage {
+  items: ReturnType<typeof inventorySnapshot>; total: number; page: number; pageSize: number; asOf: string; source: string
+}

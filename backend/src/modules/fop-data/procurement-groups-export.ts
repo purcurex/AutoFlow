@@ -8,7 +8,7 @@ const dateText = (value: string | null) => {
   const normalized = normalizeBusinessTimestamp(value)
   return normalized ? new Date(Date.parse(normalized) + 8 * 3600000).toISOString().slice(0, 19).replace('T', ' ') : ''
 }
-const payments = { paid: '已付款', unpaid: '待付款', partial: '部分付款', refunded: '已退款待处理', unknown: '付款待确认' }
+const payments = { paid: '已付款', unpaid: '待付款', partial: '部分付款', refunded: '已退款待处理', partially_refunded: '部分退款待处理', unknown: '付款待确认' }
 const shipments = { pending: '供应商待发货', partial: '供应商部分发货', shipped: '供应商已发货', unknown: '发货待确认' }
 const stages = { uncreated: '待创建采购单', placement_pending: '待下单 / 推单', payment_pending: '待支付采购款', refund_pending: '采购退款待跟进' }
 function shipmentAging(group: PurchaseGroup, now: Date) {
@@ -30,8 +30,8 @@ export async function buildPurchaseGroupWorkbook(groups: PurchaseGroup[], query?
     const purchase = group.purchase
     sheet.addRow([purchase?.number ?? '', purchase?.supplier.name ?? '', purchase?.platformOrderNumber ?? '', purchase ? payments[purchase.payment] : '', dateText(purchase?.paidAt ?? null),
       row.orderNumber, row.shopifyOrderNumber, row.customerName, row.ownerName, row.departmentName, row.warehouse, line?.sku ?? '', line?.name ?? '',
-      purchase ? line?.quantity ?? '' : '', purchase ? line?.shippedQuantity ?? '' : '', purchase && line ? Number((line.quantity - line.shippedQuantity).toFixed(8)) : '',
-      group.kind === 'uncreated' ? '待创建采购单' : '已创建', purchase ? purchase.purchaseType === 'offline' ? '线下' : '线上' : '', purchase?.platform === '1688' ? '1688' : purchase?.platform === 'other' ? '其他平台' : '',
+      purchase ? line?.quantity ?? '' : '', purchase ? line?.shippedQuantity ?? '—' : '', purchase && line ? line.shippedQuantity === null ? '—' : Number((line.quantity - line.shippedQuantity).toFixed(8)) : '',
+      group.kind === 'uncreated' ? line?.demandStage === 'application_pending' ? '待建采购申请' : '待创建采购单' : '已创建', purchase ? purchase.purchaseType === 'offline' ? '线下' : purchase.purchaseType === 'online' ? '线上' : '—' : '', purchase?.platform === '1688' ? '1688' : purchase?.platform === 'other' ? '其他平台' : '',
       !purchase ? line?.quantity ?? '' : '', purchase ? purchase.placement === 'placed' ? '已下单' : purchase.placement === 'unknown' ? '下单待确认' : purchase.platform === '1688' ? '待推1688采购' : '待下单' : '',
       purchase ? shipments[group.shipment] : '', row.storeName, line?.variant ?? '', dateText(row.paidAt), shipmentAging(group, now), ...(query?.completed ? [dateText(row.completedAt ?? null)] : [])])
   }

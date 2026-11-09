@@ -1,7 +1,7 @@
 import { matchesCompletedQueue } from '@/utils/completed-orders'
 import { canFilterTaskStatus, type TaskStatus } from '@/utils/workbench-status'
 import { canFilterProcurementStage, type ProcurementStage } from '@/utils/procurement-stage'
-export const FOP_EXCEPTION_TYPES = ['procurement_exception', 'dispatch_exception', 'allocation_exception', 'logistics_exception', 'delivery_exception'] as const
+export const FOP_EXCEPTION_TYPES = ['procurement_exception', 'dispatch_exception', 'allocation_exception', 'logistics_exception', 'delivery_exception', 'stock_exception', 'address_exception'] as const
 export type FopExceptionType = typeof FOP_EXCEPTION_TYPES[number]
 export const fopOrderQueues = ['unpaid', 'review', 'procurement', 'procurement_shipping', 'allocation', 'allocation_review', 'dispatch', 'shipping', 'exceptions'] as const
 export type FopOrderQueue = typeof fopOrderQueues[number]
@@ -29,6 +29,8 @@ export interface FulfillmentProgress {
 
 /** Aggregated over effective linked purchases; independent of customer payment. */
 export interface ProcurementProgress {
+  /** 金蝶待采购清单按有效分录确认的当前待办，历史数据继续使用原进度字段。 */
+  pendingStage?: 'application_pending' | 'purchase_order_pending' | 'alibaba_pending' | 'placement_pending' | 'refund_pending' | 'payment_pending' | 'unknown'
   /** Missing on older adapters means unknown; a known unfinished 1688 push remains a procurement task. */
   purchaseApplication?: 'not_created' | 'partial' | 'created' | 'not_required' | 'unknown'
   alibabaOrder?: 'not_pushed' | 'partial' | 'pushed' | 'not_required' | 'unknown'
@@ -75,6 +77,8 @@ export interface FopOrder {
   dispatchTaskStatus?: 'dispatch_missing' | 'dispatch_draft' | 'dispatch_submitted' | 'dispatch_approved' | 'dispatch_synced' | 'unknown'
   /** Unique effective FOP allocation for this order; null/omitted = unavailable or not yet created. */
   allocationDocument?: AllocationDocumentReference | null
+  allocationDocuments?: (AllocationDocumentReference & { packageNo: string; readyAt: string | null; wmsCreatedAt: string | null; dispatchComplete: boolean })[]
+  dispatchDocumentsComplete?: boolean
   /** Shopify-selected tracking grouped by shipment/carrier; raw legacy fields do not prove selection. */
   logisticsInfo?: LogisticsInfo[] | null
   /** FOP-maintained English custom channel name, independent of UI language; never actual channels or carriers. */
@@ -137,7 +141,7 @@ export interface FopOrder {
   createdAt: string
   paidAt: string | null
   cancelled: boolean
-  exception: { type: FopExceptionType | null; reason: string | null; hours: number } | null
+  exception: { type: FopExceptionType | null; types?: FopExceptionType[]; affectedSkus?: string[]; reason: string | null; hours: number | null } | null
 }
 export const warehouseStages = ['all', 'pending_review', 'pending_outbound'] as const
 export type WarehouseStage = typeof warehouseStages[number]
@@ -197,6 +201,7 @@ export interface FopOrderPage {
 }
 
 export interface FopQueuePage extends FopOrderPage {
+  allocationIssues?: { code: 'ALLOCATION_SKU_MISMATCH' | 'ALLOCATION_SOURCE_UNRESOLVED'; orderId: string; orderNumber: string; allocationId: string; allocationNumber: string; sourceEntryId: string; allocationSku: string; orderSku: string | null }[]
   /** Authorized review destinations after other filters, before country selection and pagination. */
   shippingCountries?: string[]
   /** BFF query completion time, not an upstream FOP synchronization watermark. */
@@ -233,7 +238,8 @@ function validateQuery(query: FopOrderQuery) {
 export function matchesFopQueue(order: FopOrder, queue: FopOrderQueue, warehouseStage?: WarehouseStage, completed = false): boolean {
   if (completed) return matchesCompletedQueue(order, queue)
   if (order.cancelled) return false
-  if (queue === 'exceptions') return order.exception != null
+  if (queue === 'exceptions') return order.exception != null && order.paymentStatus === 'paid' && order.shippingStatus !== 'shipped'
+    && ['pending', 'partial'].includes(order.fulfillmentProgress.outbound)
   if (queue === 'unpaid') return order.paymentStatus === 'unpaid'
   if (order.paymentStatus !== 'paid') return false
   if (queue === 'review') return order.reviewStatus === 'pending'
@@ -244,9 +250,10 @@ export function matchesFopQueue(order: FopOrder, queue: FopOrderQueue, warehouse
   if (queue === 'procurement' || queue === 'procurement_shipping') {
     const purchase = order.procurementProgress
     if (!purchase) return false
+    if (queue === 'procurement' && purchase.pendingStage) return true
     const pendingPush = purchase.alibabaOrder === 'not_pushed' || purchase.alibabaOrder === 'partial'
     if (queue === 'procurement_shipping') return !pendingPush && purchase.purchaseOrder === 'ordered' && purchase.supplierPayment === 'paid'
-      && (progress.supplierShipment === 'pending' || progress.supplierShipment === 'partial')
+      && (progress.supplierShipment === 'pending' || progress.supplierShipment === 'partial' || progress.supplierShipment === 'unknown' && purchase.pendingStage === 'unknown')
     // Remaining unplaced demand is not fully paid; unknown facts are not unpaid facts.
     return purchase.purchaseOrder === 'not_ordered' || purchase.purchaseOrder === 'partial'
       || purchase.purchaseOrder === 'ordered' && (pendingPush || ['unpaid', 'partial', 'refunded'].includes(purchase.supplierPayment))

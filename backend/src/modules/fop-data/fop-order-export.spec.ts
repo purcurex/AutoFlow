@@ -20,6 +20,17 @@ const headers = (sheet: ExcelJS.Worksheet) => sheet.getRow(1).values as string[]
 const value = (sheet: ExcelJS.Worksheet, row: number, header: string) => sheet.getRow(row).getCell(headers(sheet).indexOf(header))
 
 describe('fulfillment Excel export', () => {
+  it('多包裹导出保留每张配货单及各自时间，缺失时间不取其他包裹值', async () => {
+    const split = { ...order, allocationDocuments: [
+      { id: 'a1', number: 'AO1', packageNo: '1', readyAt: '2026-11-06T01:00:00Z', wmsCreatedAt: '2026-11-06T02:00:00Z', dispatchComplete: true },
+      { id: 'a2', number: 'AO2', packageNo: '2', readyAt: null, wmsCreatedAt: null, dispatchComplete: false },
+    ] }
+    const allocation = (await read([split], 'allocation_review')).getWorksheet('订单清单')!
+    expect(value(allocation, 2, '配货单号').value).toBe('AO1\nAO2')
+    expect(value(allocation, 2, '齐套时间（UTC+8）').value).toBe('包裹1：2026-11-06 09:00:00\n包裹2：—')
+    const warehouse = (await read([split], 'shipping')).getWorksheet('订单清单')!
+    expect(value(warehouse, 2, 'WMS创建时间（UTC+8）').value).toBe('包裹1：2026-11-06 10:00:00\n包裹2：—')
+  })
   it.each([
     ['review', '订单审核时间（UTC+8）'], ['dispatch', '发运单审核时间（UTC+8）'], ['procurement', '采购完成时间（UTC+8）'],
     ['allocation_review', '配货审核时间（UTC+8）'], ['shipping', '出库完成时间（UTC+8）'],

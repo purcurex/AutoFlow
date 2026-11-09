@@ -14,6 +14,13 @@ it('merges purchases across orders, splits one order across queues, and counts o
   expect(run(snapshot(), undefined, undefined, 'procurement')[0].rows.map(r => r.orderId)).toEqual(['o1'])
   expect(purchaseGroupTotals([...groups, ...run(snapshot(), undefined, undefined, 'procurement')])).toMatchObject({ purchaseCount: 2, orderCount: 2 })
 })
+it('同采购单已发完一行、另一行尚未发时按部分发货计算', () => {
+  const s: PurchaseLinkSnapshot = { subject, orders: [{ orderId: 'o1', obligations: [{ purchase: header('p1'), lines: [
+    { fulfillmentLineId: 'A', purchaseLineId: 'p1-A', sku: 'A', quantity: 5, shippedQuantity: 5 },
+    { fulfillmentLineId: 'B', purchaseLineId: 'p1-B', sku: 'B', quantity: 5, shippedQuantity: 0 },
+  ] }] }] }
+  expect(run(s, [order('o1')])[0]).toMatchObject({ shipment: 'partial', quantity: 10, shippedQuantity: 5, pendingQuantity: 5 })
+})
 it('never leaks siblings or an independently denied purchase, and filters before group totals', () => {
   expect(run(snapshot(), [order('o1')])[0]).toMatchObject({ orderCount: 1, quantity: 5 })
   expect(JSON.stringify(run(snapshot(), [order('o1')]))).not.toContain('o2')
@@ -21,6 +28,14 @@ it('never leaks siblings or an independently denied purchase, and filters before
   expect(run(snapshot(), undefined, undefined, 'procurement_shipping', 'o1')[0].orderCount).toBe(1)
   expect(run(snapshot(), undefined, undefined, 'procurement_shipping', 'p1')[0].orderCount).toBe(2)
   expect(run(snapshot(), undefined, undefined, 'procurement_shipping', 'B')).toEqual([])
+})
+it('金蝶相同SKU按履约行校验上限和商品描述，另一行的数量不能覆盖本行', () => {
+  const items = ['first', 'second'].map((id, i) => ({ id, name: id, sku: 'same', quantity: i + 1, imageUrl: null, variant: '' }))
+  const lines = [{ fulfillmentLineId: 'first', sku: 'same', purchaseLineId: null, shippedQuantity: 0, quantity: 1 }]
+  const s: PurchaseLinkSnapshot = { subject, exactSourceLines: true, orders: [{ orderId: 'o1', obligations: [{ purchase: null, lines }] }] }
+  expect(run(s, [order('o1', { items })], [], 'procurement')[0].rows[0].lines[0].name).toBe('first')
+  lines[0].quantity = 2
+  expect(() => run(s, [order('o1', { items })], [], 'procurement')).toThrow('Source purchase exceeds')
 })
 it('keeps explicit uncreated procurement but rejects incomplete linkage as an integration failure', () => {
   const s: PurchaseLinkSnapshot = { subject, orders: [{ orderId: 'o1', obligations: [{ purchase: null, lines: [{ fulfillmentLineId: 'A', purchaseLineId: null, sku: 'A', quantity: 4, shippedQuantity: 0 }] }] }, { orderId: 'o2', obligations: null }, { orderId: 'o3', obligations: [] }] }
@@ -38,7 +53,7 @@ it.each([
   expect(run(s)[0].purchase).toMatchObject({ purchaseType, platform })
 })
 it('rejects missing or contradictory purchase classification', () => {
-  for (const fields of [{ purchaseType: undefined }, { purchaseType: 'offline', platform: '1688' }, { purchaseType: 'online', platform: null }]) {
+  for (const fields of [{ purchaseType: undefined }, { purchaseType: 'offline', platform: '1688' }, { purchaseType: 'unknown', platform: '1688' }]) {
     const s = snapshot(); Object.assign(s.orders[0].obligations![0].purchase!, fields)
     expect(() => run(s)).toThrow('Invalid purchase channel')
   }
@@ -61,7 +76,7 @@ it('keeps Demo supplier follow-up IDs and pending quantities consistent with pur
   const obligation = demoPurchaseLinks(subject, [o]).orders[0].obligations!.find(o => o.purchase?.payment === 'paid')!
   const followUp = demoSupplierFollowUps(o).find(c => c.purchaseOrderId === obligation.purchase!.id)
   expect(followUp).toBeDefined()
-  expect(followUp!.lines[0].pendingQuantity).toBe(obligation.lines[0].quantity - obligation.lines[0].shippedQuantity)
+  expect(followUp!.lines[0].pendingQuantity).toBe(obligation.lines[0].quantity - obligation.lines[0].shippedQuantity!)
 })
 it('sorts unknown receipt last in both directions and keeps export strings literal and channel columns explicit', async () => {
   const s: PurchaseLinkSnapshot = { subject, orders: [{ orderId: 'o1', obligations: [link('p1', 'A', 'unpaid')] }, { orderId: 'o2', obligations: [link('p2', 'B', 'unpaid')] }] }
@@ -128,4 +143,20 @@ it('filters completed purchase groups by actual completion time, retaining only 
   const quarter = buildPurchaseGroups(rows, new Map(), grant, links, { queue: 'procurement', completed: true, timeRange: '3m' })
   expect(quarter[0].rows.map(row => row.orderId)).toEqual(['o1', 'o2'])
   expect(buildPurchaseGroups(rows, new Map(), { ...grant, allowedPurchaseOrderIds: [] }, links, { queue: 'procurement', completed: true })).toEqual([])
+})
+
+
+it('已付款线下采购进入待发货，数量未知且退出待采购', () => {
+  const s = snapshot()
+  s.orders = [s.orders[0]]
+  s.orders[0].obligations = [s.orders[0].obligations![0]]
+  Object.assign(s.orders[0].obligations[0].purchase!, { purchaseType: 'offline', platform: null, platformOrderNumber: null, placement: 'unknown' })
+  s.orders[0].obligations[0].lines[0].shippedQuantity = null
+  expect(run(s, [order('o1')])).toEqual([expect.objectContaining({ shipment: 'unknown', shippedQuantity: null, pendingQuantity: null })])
+  expect(run(s, [order('o1')], undefined, 'procurement')).toEqual([])
+})
+it('已全部发货的线上采购移出待发货', () => {
+  const s = snapshot()
+  s.orders.forEach(order => order.obligations!.forEach(group => group.lines.forEach(line => { line.shippedQuantity = line.quantity })))
+  expect(run(s)).toEqual([])
 })

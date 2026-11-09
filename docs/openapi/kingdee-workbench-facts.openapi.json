@@ -1,0 +1,359 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "金蝶工作台原始事实接口（本地待发布契约）",
+    "version": "2026-11-08",
+    "description": "复用EmployeeOrderController /employee-orders/page。servers沿用历史已登记命名空间，实际完整地址以后台QUERY_URL和发布登记为准；本文件不是租户重新导出证明。"
+  },
+  "servers": [
+    {
+      "url": "https://hyperzone.test.kdgalaxy.com/kapi/v2/hzkj/ocbsoc"
+    }
+  ],
+  "paths": {
+    "/employee-orders/page": {
+      "post": {
+        "operationId": "employeeWorkbenchRawFacts",
+        "summary": "按权限和游标读取原始单据事实",
+        "x-deployment-state": "local-source-not-deployed",
+        "description": "只读，无工作台业务计算，无保存/审核。hasMore=true时以nextAfterOrderId继续；/summary不接受rawWorkbenchFacts=true。上限100批、10000候选订单由AutoFlow控制；单类关联最多20000。",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "query"
+                ],
+                "properties": {
+                  "query": {
+                    "type": "object",
+                    "required": [
+                      "scopeRole",
+                      "queue",
+                      "rawWorkbenchFacts"
+                    ],
+                    "properties": {
+                      "tenantId": {
+                        "type": "string"
+                      },
+                      "userId": {
+                        "type": "string",
+                        "pattern": "^[1-9][0-9]{0,18}$"
+                      },
+                      "organizationIds": {
+                        "type": "array",
+                        "maxItems": 200,
+                        "items": {
+                          "type": "string",
+                          "pattern": "^[1-9][0-9]{0,18}$"
+                        }
+                      },
+                      "scopeRole": {
+                        "type": "string",
+                        "enum": [
+                          "admin",
+                          "department_manager",
+                          "salesperson"
+                        ]
+                      },
+                      "employeeId": {
+                        "type": "string",
+                        "pattern": "^[1-9][0-9]{0,18}$"
+                      },
+                      "departmentIds": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "pattern": "^[1-9][0-9]{0,18}$"
+                        }
+                      },
+                      "queue": {
+                        "type": "string",
+                        "enum": [
+                          "unpaid",
+                          "review",
+                          "exceptions",
+                          "procurement",
+                          "procurement_shipping",
+                          "allocation",
+                          "allocation_review",
+                          "dispatch",
+                          "shipping"
+                        ]
+                      },
+                      "rawWorkbenchFacts": {
+                        "type": "boolean",
+                        "enum": [
+                          true
+                        ]
+                      },
+                      "page": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "default": 1
+                      },
+                      "pageSize": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 100,
+                        "default": 100
+                      },
+                      "afterOrderId": {
+                        "type": "string",
+                        "pattern": "^[1-9][0-9]{0,18}$"
+                      }
+                    },
+                    "description": "身份取已认证Context，入参只能收窄范围。业务筛选、completed、timeRange、排序不传至原始Java入口，由AutoFlow处理。"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "平台CustomApiResult；必须同时校验业务成功与契约版本",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "boolean"
+                    },
+                    "errorCode": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": "object",
+                      "required": [
+                        "subject",
+                        "organizationIds",
+                        "workbenchFactsSchemaVersion",
+                        "queue",
+                        "page",
+                        "pageSize",
+                        "hasMore",
+                        "items",
+                        "facts"
+                      ],
+                      "properties": {
+                        "subject": {
+                          "type": "object",
+                          "required": [
+                            "tenantId",
+                            "userId"
+                          ],
+                          "properties": {
+                            "tenantId": {
+                              "type": "string"
+                            },
+                            "userId": {
+                              "type": "string",
+                              "pattern": "^[1-9][0-9]{0,18}$"
+                            }
+                          }
+                        },
+                        "organizationIds": {
+                          "type": "array",
+                          "minItems": 1,
+                          "items": {
+                            "type": "string",
+                            "pattern": "^[1-9][0-9]{0,18}$"
+                          }
+                        },
+                        "workbenchFactsSchemaVersion": {
+                          "type": "integer",
+                          "enum": [
+                            1
+                          ]
+                        },
+                        "queue": {
+                          "type": "string",
+                          "enum": [
+                            "unpaid",
+                            "review",
+                            "exceptions",
+                            "procurement",
+                            "procurement_shipping",
+                            "allocation",
+                            "allocation_review",
+                            "dispatch",
+                            "shipping"
+                          ]
+                        },
+                        "page": {
+                          "type": "integer"
+                        },
+                        "pageSize": {
+                          "type": "integer",
+                          "maximum": 100
+                        },
+                        "hasMore": {
+                          "type": "boolean"
+                        },
+                        "nextAfterOrderId": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "departments": {
+                          "type": "array",
+                          "description": "首批必有，平台授权范围的部门及祖先选项",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": true,
+                            "description": "字段白名单及关联见零代码返回字段配置清单与Java Reader；基础资料为嵌套对象，数量和内码为字符串。"
+                          }
+                        },
+                        "items": {
+                          "type": "array",
+                          "maxItems": 100,
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": true,
+                            "description": "字段白名单及关联见零代码返回字段配置清单与Java Reader；基础资料为嵌套对象，数量和内码为字符串。"
+                          }
+                        },
+                        "facts": {
+                          "type": "object",
+                          "properties": {
+                            "dispatches": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": true,
+                                "description": "字段白名单及关联见零代码返回字段配置清单与Java Reader；基础资料为嵌套对象，数量和内码为字符串。"
+                              }
+                            },
+                            "allocations": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": true,
+                                "description": "字段白名单及关联见零代码返回字段配置清单与Java Reader；基础资料为嵌套对象，数量和内码为字符串。"
+                              }
+                            },
+                            "deliveryNotices": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": true,
+                                "description": "字段白名单及关联见零代码返回字段配置清单与Java Reader；基础资料为嵌套对象，数量和内码为字符串。"
+                              }
+                            },
+                            "outbounds": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": true,
+                                "description": "字段白名单及关联见零代码返回字段配置清单与Java Reader；基础资料为嵌套对象，数量和内码为字符串。"
+                              }
+                            },
+                            "applications": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": true,
+                                "description": "字段白名单及关联见零代码返回字段配置清单与Java Reader；基础资料为嵌套对象，数量和内码为字符串。"
+                              }
+                            },
+                            "purchases": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": true,
+                                "description": "字段白名单及关联见零代码返回字段配置清单与Java Reader；基础资料为嵌套对象，数量和内码为字符串。"
+                              }
+                            },
+                            "receiptNotices": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": true,
+                                "description": "字段白名单及关联见零代码返回字段配置清单与Java Reader；基础资料为嵌套对象，数量和内码为字符串。"
+                              }
+                            },
+                            "products": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": true,
+                                "description": "字段白名单及关联见零代码返回字段配置清单与Java Reader；基础资料为嵌套对象，数量和内码为字符串。"
+                              }
+                            },
+                            "freightIssues": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": true,
+                                "description": "字段白名单及关联见零代码返回字段配置清单与Java Reader；基础资料为嵌套对象，数量和内码为字符串。"
+                              }
+                            },
+                            "inventoryPools": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": true,
+                                "description": "字段白名单及关联见零代码返回字段配置清单与Java Reader；基础资料为嵌套对象，数量和内码为字符串。"
+                              }
+                            },
+                            "applicationLinks": {
+                              "type": "object",
+                              "additionalProperties": {
+                                "type": "string"
+                              }
+                            },
+                            "purchaseLinks": {
+                              "type": "object",
+                              "additionalProperties": {
+                                "type": "string"
+                              }
+                            },
+                            "receiptLinks": {
+                              "type": "object",
+                              "additionalProperties": {
+                                "type": "string"
+                              }
+                            },
+                            "packingGroupType": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "combinationGroupType": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "fpxCarrierCode": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "shenzhenWarehouseCode": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

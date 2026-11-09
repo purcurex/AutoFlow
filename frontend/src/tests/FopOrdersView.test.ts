@@ -22,6 +22,12 @@ async function exportNow(wrapper: Pick<VueWrapper, 'get'>) {
   await wrapper.get('[data-testid="export-orders"]').trigger('click'); await flushPromises()
 }
 const mounted: VueWrapper[] = []
+/** 异常UI用例只接收符合BFF业务范围的夹具，未付款/已完成样例留给范围排除用例。 */
+function fixtureFor(queue: orders.FopOrderQueue): orders.FopOrder {
+  if (queue !== 'exceptions') return mockFopOrders.find(order => orders.matchesFopQueue(order, queue))!
+  const source = mockFopOrders.find(order => order.exception != null)!
+  return { ...source, paymentStatus: 'paid', shippingStatus: 'pending', fulfillmentProgress: { ...source.fulfillmentProgress, outbound: 'pending' } }
+}
 
 async function setup(query = '?queue=allocation', role = 'allocation') {
   const router = createRouter({ history: createMemoryHistory(), routes: [
@@ -44,12 +50,36 @@ vi.mock('@/api/index', () => ({ default: { get: vi.fn(async (_path, { params: qu
 }) } }))
 
 describe('fulfillment order list', () => {
+  it.each([false, true])('正常表格与异常配货提示分别展示，只有异常时也保留提示：%s', async onlyIssues => {
+    const source = mockFopOrders.find(o => orders.matchesFopQueue(o, 'allocation'))!
+    vi.spyOn(orders, 'getFopOrders').mockResolvedValue({ source: 'fop', items: onlyIssues ? [] : [source], total: onlyIssues ? 0 : 1,
+      page: 1, pageSize: 50, departments: [], refreshedAt: '', totals: { orderCount: onlyIssues ? 0 : 1, itemQuantity: 1, amountsByCurrency: [] },
+      allocationIssues: [{ code: 'ALLOCATION_SKU_MISMATCH', allocationId: '902', allocationNumber: 'AO902', orderId: '1002', orderNumber: 'SO1002', sourceEntryId: '10021', allocationSku: '<b>OLD-SKU</b>', orderSku: 'NEW-SKU' }] })
+    const { wrapper } = await setup()
+    const warning = wrapper.get('[data-testid="allocation-query-issues"]')
+    expect(warning.text()).toContain('AO902')
+    expect(warning.text()).toContain('SO1002')
+    expect(warning.text()).toContain('<b>OLD-SKU</b>')
+    expect(warning.text()).toContain('NEW-SKU')
+    expect(warning.find('b').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('刷新未成功')
+    if (!onlyIssues) expect(wrapper.get('tbody').text()).toContain(source.orderNumber)
+  })
+  it('来源行失效时明确提示无法确认，不猜测订单SKU', async () => {
+    vi.spyOn(orders, 'getFopOrders').mockResolvedValue({ source: 'fop', items: [], total: 0, page: 1, pageSize: 50, departments: [], refreshedAt: '',
+      totals: { orderCount: 0, itemQuantity: 0, amountsByCurrency: [] }, allocationIssues: [{ code: 'ALLOCATION_SOURCE_UNRESOLVED', allocationId: '902', allocationNumber: 'AO902',
+        orderId: '1002', orderNumber: 'SO1002', sourceEntryId: 'old-reference', allocationSku: 'OLD-SKU', orderSku: null }] })
+    const { wrapper } = await setup()
+    expect(wrapper.get('[data-testid="allocation-query-issues"]').text()).toContain('来源行无法唯一确认')
+    expect(wrapper.get('[data-testid="allocation-query-issues"]').text()).toContain('old-reference')
+    expect(wrapper.text()).not.toContain('刷新未成功')
+  })
   it('filters exceptions by business type and renders the independent reason as plain text', async () => {
-    const source = { ...mockFopOrders[0]!, exception: { type: 'logistics_exception', reason: '<img src=x onerror=alert(1)> 轨迹连续三日未更新', hours: 28 } } as unknown as orders.FopOrder
+    const source = { ...fixtureFor('exceptions'), exception: { type: 'logistics_exception', reason: '<img src=x onerror=alert(1)> 轨迹连续三日未更新', hours: 28 } } as unknown as orders.FopOrder
     const get = vi.spyOn(orders, 'getFopOrders').mockResolvedValue({ source: 'mock', items: [source], total: 1, page: 1, pageSize: 50, departments: [], refreshedAt: '', totals: { orderCount: 1, itemQuantity: 1, amountsByCurrency: [] } })
     const { wrapper, router } = await setup('?queue=exceptions', 'sales')
     const select = wrapper.get('select[aria-label="异常类型筛选"]')
-    expect(select.findAll('option').map(option => option.text())).toEqual(['全部状态', '采购异常', '发运异常', '配货异常', '物流异常', '妥投异常'])
+    expect(select.findAll('option').map(option => option.text())).toEqual(['全部状态', '库存不足', '地址待核验', '采购异常', '发运异常', '配货异常', '物流异常', '妥投异常'])
     expect(wrapper.get('td[data-label="异常类型"]').text()).toBe('物流异常')
     expect(wrapper.get('td[data-label="异常原因"]').text()).toBe('<img src=x onerror=alert(1)> 轨迹连续三日未更新')
     expect(wrapper.get('td[data-label="异常原因"]').find('img').exists()).toBe(false)
@@ -57,11 +87,19 @@ describe('fulfillment order list', () => {
     expect(router.currentRoute.value.query.taskStatus).toBe('logistics_exception')
     expect(get).toHaveBeenLastCalledWith(expect.objectContaining({ queue: 'exceptions', taskStatus: 'logistics_exception' }))
   })
-  it('keeps shipped delivery exceptions in the exception list without changing their main workflow', () => {
+  it('排除已全部发货的残留异常，进行中的异常不改变其他工作台归类', () => {
     const source = { ...mockFopOrders[0]!, paymentStatus: 'paid', reviewStatus: 'approved', shippingStatus: 'shipped', exception: { type: 'delivery_exception', reason: null, hours: 3 } } as unknown as orders.FopOrder
-    expect(orders.matchesFopQueue(source, 'exceptions')).toBe(true)
+    expect(orders.matchesFopQueue(source, 'exceptions')).toBe(false)
     const main = { ...source, shippingStatus: 'pending', procurementProgress: { purchaseOrder: 'not_ordered', supplierPayment: 'unpaid', alibabaOrder: 'not_required' }, fulfillmentProgress: { allocationCreated: true, shopifySync: 'pending', supplierShipment: 'pending', stockReadiness: 'incomplete', allocationReview: 'pending', outbound: 'pending' } } as orders.FopOrder
     for (const queue of ['exceptions', 'procurement', 'dispatch', 'allocation'] as const) expect(orders.matchesFopQueue(main, queue)).toBe(true)
+  })
+  it('首次异常时间未确认时显示破折号，不把null显示成0h', async () => {
+    const source = { ...fixtureFor('exceptions'), exception: { type: 'address_exception' as const, reason: '地址校验失败', hours: null } }
+    vi.spyOn(orders, 'getFopOrders').mockResolvedValue({ source: 'fop', items: [source], total: 1, page: 1, pageSize: 50, departments: [], refreshedAt: '',
+      totals: { orderCount: 1, itemQuantity: 1, amountsByCurrency: [] } })
+    const { wrapper } = await setup('?queue=exceptions', 'sales')
+    expect(wrapper.get('td[data-label="异常时长"]').text()).toBe('—')
+    expect(wrapper.get('td[data-label="异常类型"]').text()).toBe('地址待核验')
   })
 
   it.each([
@@ -115,7 +153,8 @@ describe('fulfillment order list', () => {
     await vi.waitFor(() => expect(document.querySelector('[role="tooltip"]')).toBeNull())
   })
   it('distinguishes zero and missing detail amounts without adding the sales detail layout to other queues', async () => {
-    const source = mockFopOrders.find(o => orders.matchesFopQueue(o, 'review'))!
+    const source = { ...fixtureFor('review'), exception: { type: 'logistics_exception' as const, reason: null, hours: null },
+      fulfillmentProgress: { ...fixtureFor('review').fulfillmentProgress, outbound: 'pending' as const } }
     vi.spyOn(orders, 'getFopOrders').mockResolvedValue({ source: 'mock', items: [{ ...source, amount: 25, currency: 'EUR', amountBreakdown: { productAmount: null, shippingFee: 0, taxAmount: 0, discountAmount: 0 } }], total: 1, page: 1, pageSize: 50, departments: [], refreshedAt: '', totals: { orderCount: 1, itemQuantity: source.items.reduce((sum, item) => sum + item.quantity, 0), amountsByCurrency: [{ currency: 'EUR', amount: 25 }] } })
     const { wrapper, router } = await setup('?queue=review', 'sales')
     expect(wrapper.get('tbody .amount-cell').text()).toBe('€25.00')
@@ -234,7 +273,7 @@ describe('fulfillment order list', () => {
   it.each([['unpaid', 'sales'], ['review', 'sales'], ['exceptions', 'sales'], ['dispatch', 'dispatch'], ['procurement', 'procurement'], ['procurement_shipping', 'procurement'], ['allocation', 'allocation'], ['allocation_review', 'allocation'], ['shipping', 'warehouse']] as const)('copies raw identifiers and each SKU in %s without selecting the order', async (queue, role) => {
     const copy = vi.fn().mockResolvedValue(undefined)
     Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: copy } })
-    const base = mockFopOrders.find(o => orders.matchesFopQueue(o, queue))!
+    const base = fixtureFor(queue)
     const row = { ...base, shopifyOrderNumber: '#000123', allocationDocument: { id: 'ao-1', number: 'AO261028000404' },
       dispatchDocuments: [{ id: 'fy-1', number: 'FY000123', status: 'draft' as const }, { id: 'fy-2', number: 'FY000456', status: 'submitted' as const }],
       items: [{ ...base.items[0]!, sku: '000SKU-A', quantity: 3 }, { ...base.items[0]!, sku: '000SKU-B', quantity: 7 }] }
@@ -303,6 +342,24 @@ describe('fulfillment order list', () => {
     await filter.setValue('dispatch_incomplete'); await flushPromises()
     expect(router.currentRoute.value.query.taskStatus).toBe('dispatch_incomplete')
   })
+  it('同订单混合包裹允许打开逐包裹审核，且分别显示配货单号', async () => {
+    const source = mockFopOrders.find(o => orders.matchesFopQueue(o, 'allocation_review'))!
+    const item = { ...source, id: 'split', dispatchDocumentsComplete: false, allocationDocuments: [
+      { id: 'a1', number: 'AO-READY', packageNo: '1', readyAt: null, wmsCreatedAt: null, dispatchComplete: true },
+      { id: 'a2', number: 'AO-WAIT', packageNo: '2', readyAt: null, wmsCreatedAt: null, dispatchComplete: false },
+    ], dispatchDocuments: [{ id: 'fy', number: 'FY', status: 'approved' as const }] }
+    vi.spyOn(orders, 'getFopOrders').mockResolvedValue({ source: 'mock', items: [item], total: 1, page: 1, pageSize: 50, departments: [], refreshedAt: new Date().toISOString(), totals: { orderCount: 1, itemQuantity: 2, amountsByCurrency: [] } })
+    vi.mocked(previewOrderApproval).mockResolvedValue({ source: 'mock', queue: 'allocation_review', items: [] })
+    const { wrapper } = await setup('?queue=allocation_review', 'allocation')
+    expect(wrapper.get('td[data-label="配货单号"]').text()).toContain('AO-READY')
+    expect(wrapper.get('td[data-label="配货单号"]').text()).toContain('AO-WAIT')
+    expect(wrapper.get('.dispatch-stage').text()).toBe('未完成')
+    await wrapper.get('tbody input.order-checkbox').setValue(true)
+    const button = wrapper.get('[data-testid="open-approval"]')
+    expect(button.attributes('disabled')).toBeUndefined()
+    await button.trigger('click'); await flushPromises()
+    expect(previewOrderApproval).toHaveBeenLastCalledWith('allocation_review', ['split'])
+  })
   it('shows allocation document numbers, binary dispatch filters and enables approval for completed selections', async () => {
     const source = mockFopOrders.find(o => orders.matchesFopQueue(o, 'allocation_review'))!
     const items = [
@@ -326,9 +383,7 @@ describe('fulfillment order list', () => {
   it.each([
     ['taskStatus=dispatch_missing', 'taskStatus', 'dispatch_preparation'],
     ['taskStatus=logistics_pending', 'taskStatus', 'dispatch_preparation'],
-    ['taskStatus=application_pending', 'taskStatus', 'purchase_order_pending'],
     ['taskStatus=unknown', 'taskStatus', undefined],
-    ['procurementStage=application_pending', 'procurementStage', 'purchase_order_pending'],
     ['procurementStage=unknown', 'procurementStage', undefined],
   ])('updates an obsolete bookmarked filter %s without losing department scope', async (query, key, expected) => {
     const { router, wrapper } = await setup(`?queue=procurement&departmentId=d1&page=2&${query}`, 'procurement')
@@ -336,6 +391,10 @@ describe('fulfillment order list', () => {
     expect(router.currentRoute.value.query.departmentId).toBe('d1')
     expect(router.currentRoute.value.query.page).toBe('1')
     expect(wrapper.text()).not.toContain('筛选无效')
+  })
+  it.each(['taskStatus', 'procurementStage'])('保留金蝶已确认的待建采购申请筛选 %s', async key => {
+    const { router } = await setup(`?queue=procurement&departmentId=d1&${key}=application_pending`, 'procurement')
+    expect(router.currentRoute.value.query[key]).toBe('application_pending')
   })
   it('places sales approval first in the action bar and previews selected orders', async () => {
     vi.mocked(previewOrderApproval).mockResolvedValue({ source: 'mock', queue: 'review', items: [] })
@@ -421,7 +480,7 @@ describe('fulfillment order list', () => {
     expect(wrapper.find('td[data-label="物流渠道"]').exists()).toBe(false)
   })
   it.each([['unpaid', 'sales'], ['review', 'sales'], ['exceptions', 'sales'], ['dispatch', 'dispatch']] as const)('shows consumer checkout payment time in %s with no creation/receipt fallback', async (queue, role) => {
-    const fixture = mockFopOrders.find(order => orders.matchesFopQueue(order, queue))!
+    const fixture = fixtureFor(queue)
     const row = { ...fixture, createdAt: '2026-09-10T00:00:00Z', paidAt: fixture.paidAt, consumerPaidAt: '2026-10-01T21:30:00.000Z' }
     const page = { source: 'mock' as const, refreshedAt: new Date().toISOString(), items: [row], total: 1, page: 1, pageSize: 50, totals: { orderCount: 1, itemQuantity: 1, amountsByCurrency: [] }, departments: [], salespeople: [] }
     const get = vi.spyOn(orders, 'getFopOrders').mockResolvedValue(page)
@@ -445,7 +504,7 @@ describe('fulfillment order list', () => {
     const { wrapper } = await setup('?queue=procurement', 'procurement')
     const filter = wrapper.get('select[aria-label="采购进度筛选"]')
     const labels = filter.findAll('option').map(o => o.text())
-    expect(labels).toEqual(['全部状态', '待建采购订单', '待制作发运单', '待推1688采购', '待支付采购款', '采购退款待跟进'])
+    expect(labels).toEqual(['全部状态', '待建采购申请', '待建采购订单', '待下单', '待制作发运单', '待推1688采购', '待支付采购款', '采购退款待跟进'])
     expect(labels.join(' ')).not.toContain('物流条件待确认')
     expect(labels.join(' ')).not.toContain('采购款部分支付')
     expect(wrapper.findAll('th').map(cell => cell.text())).toContain('采购进度')

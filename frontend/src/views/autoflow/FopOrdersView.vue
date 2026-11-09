@@ -65,7 +65,9 @@ const inventoryOrderIds = ref<string[]>()
 const approvalOrderIds = ref<string[]>()
 const approvalQueue = computed(() => !completed.value && (queue.value === 'review' || queue.value === 'allocation_review') ? queue.value : undefined)
 const hasApprovableSelection = computed(() => selectedOrders.value.some(id => data.value?.items.some(row => row.id === id
-  && (approvalQueue.value === 'review' || approvalQueue.value === 'allocation_review' && getTaskStatus(row, 'allocation_review') === 'dispatch_complete'))))
+  && (approvalQueue.value === 'review' || approvalQueue.value === 'allocation_review' && (row.allocationDocuments
+    ? row.allocationDocuments.some(document => document.dispatchComplete)
+    : getTaskStatus(row, 'allocation_review') === 'dispatch_complete')))))
 let unlockApproval: (() => void) | undefined
 let approvalNeedsRefresh = false
 function openApproval() {
@@ -234,8 +236,8 @@ async function load(reset = false) {
     return
   }
   if (queue.value === 'procurement') {
-    const retired: Record<string, string | undefined> = { application_pending: 'purchase_order_pending', dispatch_missing: 'dispatch_preparation', logistics_pending: 'dispatch_preparation', unknown: undefined }
-    const legacy: Record<string, string | undefined> = { application_pending: 'purchase_order_pending', unknown: undefined }
+    const retired: Record<string, string | undefined> = { dispatch_missing: 'dispatch_preparation', logistics_pending: 'dispatch_preparation', unknown: undefined }
+    const legacy: Record<string, string | undefined> = { unknown: undefined }
     const changes: Record<string, string | undefined> = {}
     if (typeof route.query.taskStatus === 'string' && Object.hasOwn(retired, route.query.taskStatus)) changes.taskStatus = retired[route.query.taskStatus]
     if (typeof route.query.procurementStage === 'string' && Object.hasOwn(legacy, route.query.procurementStage)) changes.procurementStage = legacy[route.query.procurementStage]
@@ -488,6 +490,12 @@ const formatMoney = (amount: number, currency: string) => formatCurrency(amount,
         <p v-if="error" class="state-message error-message" role="alert">{{ text('刷新未成功，当前进度暂不可用。', 'Refresh failed; current progress is unavailable.') }} {{ error }} <button v-if="queue" @click="load()">{{ text('重试', 'Retry') }}</button></p>
         <div v-else-if="busy && !data" class="state-message" role="status"><RefreshCw class="animate-spin" :size="22" />{{ text('正在加载订单…', 'Loading orders…') }}</div>
         <template v-else-if="data && queue">
+          <div v-if="data.allocationIssues?.length" class="allocation-query-issues" role="alert" data-testid="allocation-query-issues">
+            <p>{{ text('以下配货单存在 SKU 或来源行异常，相关订单暂不计入正常清单和合计；其他订单可正常查询。请在 FOP 核对后处理。', 'These allocations have SKU or source-line issues. Affected orders are excluded from the list and totals; other orders remain available. Please review them in FOP.') }}</p>
+            <ul><li v-for="issue in data.allocationIssues" :key="`${issue.allocationId}:${issue.sourceEntryId}`">
+              {{ text('配货单', 'Allocation') }} {{ issue.allocationNumber }} · {{ text('订单', 'Order') }} {{ issue.orderNumber }} · {{ text('来源行', 'Source line') }} {{ issue.sourceEntryId || '—' }}：{{ text('配货 SKU', 'Allocation SKU') }} {{ issue.allocationSku || '—' }} / {{ text('订单 SKU', 'Order SKU') }} {{ issue.orderSku ?? text('来源行无法唯一确认', 'Source line cannot be uniquely identified') }}
+            </li></ul>
+          </div>
           <div class="compact-list-controls">
             <label><input type="checkbox" class="order-checkbox" :checked="pageSelected" :indeterminate="!!selectedOrders.length && !pageSelected" :disabled="busy || !data.items.length" :aria-label="text('选择本页全部订单', 'Select current page')" @change="togglePage(($event.target as HTMLInputElement).checked)" />{{ text('全选本页', 'Select page') }}</label>
             <button class="compact-payment-sort" :disabled="busy" :aria-label="`${text('按收款日期排序', 'Sort payment date')}：${sortHint}`" @click="sortPayment()">{{ text('收款日期', 'Payment date') }}<component :is="sortBy !== 'paidAt' ? ArrowUpDown : paidAtOrder === 'asc' ? ArrowUp : ArrowDown" :size="13" /></button>
@@ -529,16 +537,16 @@ const formatMoney = (amount: number, currency: string) => formatCurrency(amount,
                 <td class="money amount-cell" :data-label="text('订单金额', 'Order amount')"><OrderAmountBreakdown v-if="queue === 'unpaid' || queue === 'review'" :amount="order.amount" :currency="order.currency" :breakdown="order.amountBreakdown" /><template v-else>{{ formatMoney(order.amount, order.currency) }}</template></td>
                 <td class="country-cell" data-label="Customer"><div class="order-recipient"><ShippingCountryBadge :code="order.shippingCountryCode" /><button v-if="order.shippingRecipient" type="button" class="recipient-name" :aria-label="`${text('查看收件人信息', 'View recipient details')} · ${order.shippingRecipient.name || order.orderNumber}`" @click="recipientOrderId = order.id">{{ order.shippingRecipient.name || text('查看收件人', 'View recipient') }}</button><span v-else class="recipient-empty">—</span></div></td>
                 <td :data-label="text('收款日期', 'Payment date')">{{ formatDate(order.paidAt) }}</td>
-                <td v-if="queue === 'allocation_review'" class="dispatch-numbers mono" :data-label="text('配货单号', 'Allocation document number')"><button v-if="order.allocationDocument?.number?.trim()" type="button" class="copy-value" :title="order.allocationDocument.number" :aria-label="`${text('复制配货单号', 'Copy allocation number')} ${order.allocationDocument.number}`" @click="copyValue(order.allocationDocument.number, `allocation:${order.id}`, text('配货单号', 'Allocation number'))"><span>{{ order.allocationDocument.number }}</span><Check v-if="copiedValue === `allocation:${order.id}`" :size="12" /><Copy v-else :size="12" /></button><span v-else>—</span></td>
+                <td v-if="queue === 'allocation_review'" class="dispatch-numbers mono" :data-label="text('配货单号', 'Allocation document number')"><div v-for="document in order.allocationDocuments ?? (order.allocationDocument ? [order.allocationDocument] : [])" :key="document.id"><button type="button" class="copy-value" :title="document.number" :aria-label="`${text('复制配货单号', 'Copy allocation number')} ${document.number}`" @click="copyValue(document.number, `allocation:${order.id}:${document.id}`, text('配货单号', 'Allocation number'))"><span>{{ document.number }}</span><Check v-if="copiedValue === `allocation:${order.id}:${document.id}`" :size="12" /><Copy v-else :size="12" /></button></div><span v-if="!order.allocationDocuments?.length && !order.allocationDocument">—</span></td>
                 <td v-if="showDispatchNumbers" class="dispatch-numbers mono" :data-label="text('发运单编号', 'Dispatch document number')"><div v-for="document in order.dispatchDocuments" :key="document.id"><button v-if="document.number?.trim()" type="button" class="copy-value" :title="document.number" :aria-label="`${text('复制发运单编号', 'Copy dispatch number')} ${document.number}`" @click="copyValue(document.number, `dispatch:${order.id}:${document.id}`, text('发运单编号', 'Dispatch number'))"><span>{{ document.number }}</span><Check v-if="copiedValue === `dispatch:${order.id}:${document.id}`" :size="12" /><Copy v-else :size="12" /></button><span v-else>—</span></div><span v-if="!order.dispatchDocuments?.length">—</span></td>
                 <td v-if="completed && hasStatus" :data-label="statusHeading"><WorkbenchStatusBadge tone="success">{{ role === 'warehouse' ? text('已出库', 'Outbound completed') : role === 'dispatch' ? text('已同步', 'Synced') : text('已完成', 'Completed') }}</WorkbenchStatusBadge></td>
                 <td v-else-if="queue === 'procurement'" :data-label="statusHeading"><ProcurementStatus :paid-at="order.procurementPaidAt" :now="currentTime" :progress="order.procurementProgress" :shipment="order.fulfillmentProgress.supplierShipment" /></td>
-                <td v-else-if="queue === 'dispatch' || isAllocation" :data-label="statusHeading"><DispatchStatus :queue="queue ?? undefined" :stage="order.dispatchTaskStatus" :documents="order.dispatchDocuments" :shopify-sync="order.fulfillmentProgress.shopifySync" /></td>
-                <td v-else-if="queue === 'procurement_shipping'" :data-label="statusHeading"><SupplierShipmentStatus class="status-pill" :paid-at="order.procurementPaidAt" :now="currentTime" :shipment="order.fulfillmentProgress.supplierShipment === 'partial' ? 'partial' : 'pending'" /></td>
+                <td v-else-if="queue === 'dispatch' || isAllocation" :data-label="statusHeading"><DispatchStatus :queue="queue ?? undefined" :stage="order.dispatchTaskStatus" :documents="order.dispatchDocuments" :complete="order.dispatchDocumentsComplete" :shopify-sync="order.fulfillmentProgress.shopifySync" /></td>
+                <td v-else-if="queue === 'procurement_shipping'" :data-label="statusHeading"><WorkbenchStatusBadge v-if="order.fulfillmentProgress.supplierShipment === 'unknown'" tone="neutral">{{ text('发货状态未知', 'Shipment unknown') }}</WorkbenchStatusBadge><SupplierShipmentStatus v-else class="status-pill" :paid-at="order.procurementPaidAt" :now="currentTime" :shipment="order.fulfillmentProgress.supplierShipment === 'partial' ? 'partial' : 'pending'" /></td>
                 <td v-else-if="hasStatus" :data-label="statusHeading"><WorkbenchStatusBadge class="status-pill pending" tone="info">{{ statusLabel(order) }}</WorkbenchStatusBadge></td>
                 <td :data-label="text('客户名称', 'Customer name')"><button type="button" class="copy-customer" :aria-label="`${text('复制客户名称', 'Copy customer name')} ${order.customerName}`" :title="text('复制客户名称', 'Copy customer name')" @click="copyOrderValue(order, 'customerName')"><span>{{ order.customerName }}</span><Check v-if="copiedValue === `customerName:${order.id}`" :size="14" /><Copy v-else :size="14" /></button></td>
                 <td :data-label="text('店铺', 'Store')">{{ order.storeName }}</td>
-                <td v-if="queue === 'exceptions'" class="exception-reason" :data-label="text('异常原因', 'Exception reason')">{{ order.exception?.reason || '—' }}</td><td v-if="queue === 'exceptions'" :data-label="text('异常时长', 'Exception age')">{{ order.exception?.hours }}h</td>
+                <td v-if="queue === 'exceptions'" class="exception-reason" :data-label="text('异常原因', 'Exception reason')">{{ order.exception?.reason || '—' }}</td><td v-if="queue === 'exceptions'" :data-label="text('异常时长', 'Exception age')">{{ order.exception?.hours == null ? '—' : `${order.exception.hours}h` }}</td>
                 <td :data-label="text('发货仓库', 'Shipping warehouse')">{{ order.warehouse }}</td>
                 <td v-if="queue === 'review'" class="logistics-channel-cell" :data-label="text('物流渠道', 'Logistics channel')"><div v-for="(channel, index) in order.logisticsChannels" :key="index" class="logistics-channel-entry"><span class="logistics-channel-name" :title="channel.name || undefined">{{ channel.name || '—' }}</span><span class="logistics-channel-code" :title="channel.code || undefined">{{ channel.code || '—' }}</span></div><span v-if="!order.logisticsChannels?.length">—</span></td>
                 <td v-if="queue === 'unpaid'" class="logistics-channel-cell" :data-label="text('自定义物流渠道', 'Custom logistics channel')">{{ order.customLogisticsChannelName || '—' }}</td>
@@ -546,7 +554,7 @@ const formatMoney = (amount: number, currency: string) => formatCurrency(amount,
                 <td v-if="queue === 'shipping'" :data-label="text('物流商', 'Carrier')">{{ order.carrier || '—' }}</td>
                 <td v-if="queue === 'shipping'" class="mono tracking-cell" :data-label="text('跟踪号', 'Tracking number')"><TrackingNumberCopy v-if="order.trackingNumber" :number="order.trackingNumber" /><span v-else>—</span></td>
                 <td class="salesperson-cell" :data-label="text('业务员', 'Salesperson')"><span class="salesperson-name" :title="order.owner?.name || order.salesperson">{{ order.owner?.name || order.salesperson || '—' }}</span><RouterLink v-if="order.department" class="salesperson-department" :title="order.department.name" :to="{ name: 'Organization', query: { node: order.department.id } }">{{ order.department.name }}</RouterLink><span v-else class="salesperson-department">—</span></td>
-                <td :data-label="createdTimeLabel" :title="createdTimeHint">{{ formatDate(orderTime(order)) }}</td>
+                <td :data-label="createdTimeLabel" :title="createdTimeHint"><template v-if="order.allocationDocuments && order.allocationDocuments.length > 1"><div v-for="document in order.allocationDocuments" :key="document.id">{{ text('包裹', 'Package') }} {{ document.packageNo }} · {{ formatDate(queue === 'shipping' ? document.wmsCreatedAt : document.readyAt) }}</div></template><template v-else>{{ formatDate(orderTime(order)) }}</template></td>
                 <td v-if="queue === 'procurement_shipping'" class="follow-up-cell" :data-label="text('操作', 'Action')"><button type="button" class="follow-up-order" :disabled="!online" :aria-label="`${text('催办', 'Follow up')} ${order.orderNumber}`" @click="followUpOrder = { id: order.id, orderNumber: order.orderNumber }"><MessageCircle :size="14" />{{ text('催办', 'Follow up') }}</button></td>
               </tr><tr v-if="!data.items.length"><td :colspan="columnCount"><div class="state-message" role="status"><PackageSearch :size="36" /><strong>{{ text('暂无符合条件的订单', 'No matching orders') }}</strong><span>{{ text('请调整搜索条件，或切换上方清单。', 'Adjust your search or select another queue.') }}</span></div></td></tr></tbody>
               <TableTotals>
@@ -568,6 +576,9 @@ const formatMoney = (amount: number, currency: string) => formatCurrency(amount,
 </template>
 
 <style scoped>
+.allocation-query-issues { padding: 14px 20px; color: var(--color-warning, #c69568); border-bottom: 1px solid var(--color-border); font-size: 13px; overflow-wrap: anywhere; }
+.allocation-query-issues p { margin: 0 0 8px; }
+.allocation-query-issues ul { margin: 0; padding-left: 20px; }
 .exception-reason { white-space: normal; overflow-wrap: anywhere; line-height: 1.6; color: var(--color-text-secondary); }
 
 .export-feedback{margin:0;padding:10px 20px;color:var(--color-text-secondary);font-size:12px;border-bottom:1px solid var(--color-border)}.export-error{color:var(--color-warning,#c69568)}.clear-selection{color:var(--color-chart-link)}input.order-checkbox{width:15px;height:15px;min-width:15px;margin-right:10px;padding:0;vertical-align:middle;accent-color:#8398c9}

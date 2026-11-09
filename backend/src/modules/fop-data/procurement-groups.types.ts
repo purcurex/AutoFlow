@@ -1,18 +1,19 @@
 import type { FopIdentity } from './fop-data.types'
 export type PurchaseQueue = 'procurement' | 'procurement_shipping'
 export interface PurchaseHeader {
-  purchaseType: 'offline' | 'online'; platform: '1688' | 'other' | null
+  purchaseType: 'offline' | 'online' | 'unknown'; platform: '1688' | 'other' | null
   id: string; number: string; supplier: { id: string; name: string }; platformOrderNumber: string | null
-  payment: 'unpaid' | 'partial' | 'paid' | 'refunded' | 'unknown'
+  payment: 'unpaid' | 'partial' | 'paid' | 'refunded' | 'partially_refunded' | 'unknown'
   placement: 'pending' | 'placed' | 'unknown'; paidAt: string | null
 }
 export interface PurchaseSourceLine {
   fulfillmentLineId: string; purchaseLineId: string | null; sku: string
   /** Effective quantities in the source fulfillment SKU unit, excluding cancelled/refunded obligations. */
-  quantity: number; shippedQuantity: number
+  quantity: number; shippedQuantity: number | null; demandStage?: 'application_pending' | 'purchase_order_pending'
 }
 export interface PurchaseObligation { purchase: PurchaseHeader | null; lines: PurchaseSourceLine[] }
 export interface PurchaseLinkSnapshot {
+  exactSourceLines?: boolean
   subject: FopIdentity
   /** One entry for every requested order. null=integration failure (never a business task), []=confirmed no outstanding procurement. */
   orders: { orderId: string; obligations: PurchaseObligation[] | null }[]
