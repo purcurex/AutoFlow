@@ -1,0 +1,4556 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hyperzone.local/contracts/fop-replica-domain.schema.json",
+  "title": "Proposed FOP service-feed domain commit group",
+  "description": "拟议未部署的服务身份变更源业务域契约；不是已上线 FOP HTTP 接口。源字段必须有明确来源，现有分页接口不自动满足此契约。FOP访问继续暂停，只允许Mock验证。远端不得提交本地SQL表/列/UUID/投影就绪或队列判定。",
+  "x-status": "proposed_not_deployed",
+  "x-boundaries": {
+    "sourceVersion": "单调可比较的十进制字符串，覆盖完整主单、分录与关联；不使用JS number。",
+    "fullSnapshots": "upsert提供全部当前分录与holder关系；履约/备货packages、发运trackingNumbers、采购platformOrders必须显式完整数组（允许[]）。省略分录/关系拒绝发布，不将未知入库量视为0。",
+    "receiptNotices": "同单投影要求完整逐行quantity/inboundQuantity及当前全部ownerEmployeeIds、ownershipVersion/ownershipVerifiedAt；供应商发货事实缺失保留unknown，不按WMS状态推定。",
+    "orderProjections": "下游变化影响的原/新订单都须提供当前完整订单域快照与依赖版本；发布器复核旧依赖、统一事务和版本栅栏。",
+    "unknown": "缺少适用业务阶段/金额币种/当前归属时readiness=incomplete；不使用创建时间替代付款或发货时间。未提供relatedDocuments时RMA membership unknown；提供完整当前依赖集合（含[]）后本地分类。采购实物退货实体/API待提供；hzkj_purrefundapplybill为采购退款申请，不能映射物理退货。purchase_returns与exception membership尚未提供。",
+    "identity": "本地UUID由connection/company/dataset/entity/source/entry稳定派生；不接受远端本地UUID。"
+  },
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "const": "fop-replica-domain/1"
+    },
+    "groupKey": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160
+    },
+    "afterCursor": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "endCursor": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2000
+    },
+    "committedAt": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "T.*(?:Z|[+-]\\d\\d:\\d\\d)$"
+    },
+    "expectedCount": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1000
+    },
+    "documents": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 1000,
+      "items": {
+        "$ref": "#/$defs/document"
+      }
+    },
+    "orderProjections": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "order": {
+            "$ref": "#/$defs/document"
+          },
+          "dependencies": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/dependency"
+            },
+            "maxItems": 100000
+          }
+        },
+        "required": [
+          "order",
+          "dependencies"
+        ]
+      },
+      "maxItems": 100000
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "groupKey",
+    "afterCursor",
+    "endCursor",
+    "committedAt",
+    "expectedCount",
+    "documents"
+  ],
+  "$defs": {
+    "sourceRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "entityCode": {
+          "enum": [
+            "hzkj_orders",
+            "hzkj_stock_order_new",
+            "hzkj_purapplybill",
+            "hzkj_purorderbill",
+            "hzkj_receiptnotice",
+            "im_purinbill",
+            "hzkj_alloc_bill",
+            "hzkj_deliver_bill",
+            "im_saloutbill",
+            "hzkj_receive_bill",
+            "hzkj_pay_cost_bill",
+            "hzkj_adjust_bill",
+            "hzkj_after_sale_orders",
+            "hzkj_deliver_order"
+          ]
+        },
+        "sourceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "required": [
+        "entityCode",
+        "sourceId"
+      ]
+    },
+    "lineRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "entityCode": {
+          "enum": [
+            "hzkj_orders",
+            "hzkj_stock_order_new",
+            "hzkj_purapplybill",
+            "hzkj_purorderbill",
+            "hzkj_receiptnotice",
+            "im_purinbill",
+            "hzkj_alloc_bill",
+            "hzkj_deliver_bill",
+            "im_saloutbill",
+            "hzkj_receive_bill",
+            "hzkj_pay_cost_bill",
+            "hzkj_adjust_bill",
+            "hzkj_after_sale_orders",
+            "hzkj_deliver_order"
+          ]
+        },
+        "sourceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "entryEntity": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "sourceEntryId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "required": [
+        "entityCode",
+        "sourceId",
+        "entryEntity",
+        "sourceEntryId"
+      ]
+    },
+    "dependency": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "entityCode": {
+          "enum": [
+            "hzkj_orders",
+            "hzkj_stock_order_new",
+            "hzkj_purapplybill",
+            "hzkj_purorderbill",
+            "hzkj_receiptnotice",
+            "im_purinbill",
+            "hzkj_alloc_bill",
+            "hzkj_deliver_bill",
+            "im_saloutbill",
+            "hzkj_receive_bill",
+            "hzkj_pay_cost_bill",
+            "hzkj_adjust_bill",
+            "hzkj_after_sale_orders",
+            "hzkj_deliver_order"
+          ]
+        },
+        "sourceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "sourceVersion": {
+          "type": "string",
+          "pattern": "^\\d{1,30}$"
+        },
+        "relationRevision": {
+          "type": "string",
+          "pattern": "^\\d{1,18}$"
+        }
+      },
+      "required": [
+        "entityCode",
+        "sourceId",
+        "sourceVersion",
+        "relationRevision"
+      ]
+    },
+    "entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "rowType": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "skuSourceId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "skuMasterId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "skuCode": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "productName": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "variant": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "imageUrl": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "quantity": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^-?\\d{1,20}(?:\\.\\d{1,8})?$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "unitCode": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "unitPrice": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^-?\\d{1,20}(?:\\.\\d{1,8})?$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "lineAmount": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^-?\\d{1,20}(?:\\.\\d{1,8})?$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "currencyCode": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "rawStatus": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "inboundQuantity": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^-?\\d{1,20}(?:\\.\\d{1,8})?$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "entryEntity": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "sourceEntryId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "orderDetails": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "sourceQuantity": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^-?\\d{1,20}(?:\\.\\d{1,8})?$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "stockConsumedQuantity": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^-?\\d{1,20}(?:\\.\\d{1,8})?$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "purchasedQuantity": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^-?\\d{1,20}(?:\\.\\d{1,8})?$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "inboundQuantity": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^-?\\d{1,20}(?:\\.\\d{1,8})?$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "discountAmount": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^-?\\d{1,20}(?:\\.\\d{1,8})?$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "taxAmount": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^-?\\d{1,20}(?:\\.\\d{1,8})?$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "grossAmount": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^-?\\d{1,20}(?:\\.\\d{1,8})?$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "rawPurchaseStatus": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2000
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "shopifyLineId": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2000
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": []
+        },
+        "procurementDetails": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "salesOrderNumber": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2000
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "supplierId": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2000
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "orderedQuantity": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^-?\\d{1,20}(?:\\.\\d{1,8})?$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "supplierShippedQuantity": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^-?\\d{1,20}(?:\\.\\d{1,8})?$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "receivedQuantity": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^-?\\d{1,20}(?:\\.\\d{1,8})?$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "inboundQuantity": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^-?\\d{1,20}(?:\\.\\d{1,8})?$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "cancelledQuantity": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^-?\\d{1,20}(?:\\.\\d{1,8})?$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "rawCloseStatus": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2000
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "rawPlatformStatus": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2000
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": []
+        },
+        "allocationDetails": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "sourceOrderEntryId": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2000
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "requiredQuantity": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^-?\\d{1,20}(?:\\.\\d{1,8})?$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "newlyReservedQuantity": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^-?\\d{1,20}(?:\\.\\d{1,8})?$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "allocatedQuantity": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^-?\\d{1,20}(?:\\.\\d{1,8})?$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "shortQuantity": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^-?\\d{1,20}(?:\\.\\d{1,8})?$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "customerReservedQuantity": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^-?\\d{1,20}(?:\\.\\d{1,8})?$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "commonReservedQuantity": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^-?\\d{1,20}(?:\\.\\d{1,8})?$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "protectedQuantity": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^-?\\d{1,20}(?:\\.\\d{1,8})?$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": []
+        },
+        "inventoryDetails": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "warehouseId": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2000
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "stockOwnerId": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2000
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "lotNumber": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2000
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "baseQuantity": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^-?\\d{1,20}(?:\\.\\d{1,8})?$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "baseUnitCode": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2000
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "direction": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2000
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "rawLineStatus": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2000
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": []
+        },
+        "financialDetails": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "sourceDocumentType": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2000
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "sourceDocumentNumber": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2000
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "orderAmount": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^-?\\d{1,20}(?:\\.\\d{1,8})?$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "receivedAmount": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^-?\\d{1,20}(?:\\.\\d{1,8})?$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "refundAmount": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^-?\\d{1,20}(?:\\.\\d{1,8})?$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "feeAmount": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^-?\\d{1,20}(?:\\.\\d{1,8})?$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "productAmount": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^-?\\d{1,20}(?:\\.\\d{1,8})?$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "freightAmount": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^-?\\d{1,20}(?:\\.\\d{1,8})?$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "taxAmount": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^-?\\d{1,20}(?:\\.\\d{1,8})?$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "adjustAmount": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^-?\\d{1,20}(?:\\.\\d{1,8})?$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "currencyCode": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2000
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": []
+        },
+        "returnDetails": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "sourceOrderEntryId": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2000
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "purchaseEntryId": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2000
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "requestedQuantity": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^-?\\d{1,20}(?:\\.\\d{1,8})?$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "returnedQuantity": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^-?\\d{1,20}(?:\\.\\d{1,8})?$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "requestedAmount": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^-?\\d{1,20}(?:\\.\\d{1,8})?$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "refundedAmount": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^-?\\d{1,20}(?:\\.\\d{1,8})?$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "currencyCode": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2000
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": []
+        }
+      },
+      "required": [
+        "entryEntity",
+        "sourceEntryId"
+      ]
+    },
+    "workbench": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "customerPaymentState": {
+          "anyOf": [
+            {
+              "enum": [
+                "unpaid",
+                "paid",
+                "refunded",
+                "unknown"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "purchaseApplicationState": {
+          "anyOf": [
+            {
+              "enum": [
+                "not_created",
+                "partial",
+                "created",
+                "not_required",
+                "unknown"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "purchaseCoverageState": {
+          "anyOf": [
+            {
+              "enum": [
+                "not_ordered",
+                "partial",
+                "ordered",
+                "cancelled",
+                "not_required",
+                "unknown"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "platformOrderState": {
+          "anyOf": [
+            {
+              "enum": [
+                "not_pushed",
+                "partial",
+                "pushed",
+                "not_required",
+                "unknown"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "supplierPaymentState": {
+          "anyOf": [
+            {
+              "enum": [
+                "unpaid",
+                "partial",
+                "paid",
+                "refunded",
+                "not_required",
+                "unknown"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "supplierShipmentState": {
+          "anyOf": [
+            {
+              "enum": [
+                "pending",
+                "partial",
+                "shipped",
+                "not_required",
+                "unknown"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "stockReadinessState": {
+          "anyOf": [
+            {
+              "enum": [
+                "incomplete",
+                "ready",
+                "unknown"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "allocationReviewState": {
+          "anyOf": [
+            {
+              "enum": [
+                "pending",
+                "approved",
+                "unknown"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "shopifySyncState": {
+          "anyOf": [
+            {
+              "enum": [
+                "pending",
+                "synced",
+                "not_required",
+                "unknown"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "dispatchTaskState": {
+          "anyOf": [
+            {
+              "enum": [
+                "dispatch_missing",
+                "dispatch_draft",
+                "dispatch_submitted",
+                "dispatch_approved",
+                "dispatch_synced",
+                "unknown"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "outboundState": {
+          "anyOf": [
+            {
+              "enum": [
+                "pending",
+                "completed",
+                "unknown"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "shipmentState": {
+          "anyOf": [
+            {
+              "enum": [
+                "pending",
+                "shipped",
+                "unknown"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ownershipVersion": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "customerName": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "warehouseName": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "storeName": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "currentCustomerOwnerId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "stockLifecycle": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "carrierName": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ownershipVerifiedAt": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "T.*(?:Z|[+-]\\d\\d:\\d\\d)$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "procurementCompletedAt": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "T.*(?:Z|[+-]\\d\\d:\\d\\d)$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "allocationApprovedAt": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "T.*(?:Z|[+-]\\d\\d:\\d\\d)$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "dispatchApprovedAt": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "T.*(?:Z|[+-]\\d\\d:\\d\\d)$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "outboundCompletedAt": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "T.*(?:Z|[+-]\\d\\d:\\d\\d)$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ownerEmployeeIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "maxItems": 100000
+        },
+        "cancelled": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "allocationCreated": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "interceptStatus": {
+          "anyOf": [
+            {
+              "enum": [
+                "intercepted",
+                "released"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "recipientSnapshot": {
+          "anyOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "name": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2000
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "phone": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2000
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "email": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2000
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "countryCode": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2000
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "state": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2000
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "city": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2000
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "postalCode": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2000
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "addressLine1": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2000
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "addressLine2": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2000
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": []
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "relatedDocuments": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/dependency"
+          },
+          "maxItems": 100000
+        },
+        "procurementDemands": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "line": {
+                "$ref": "#/$defs/lineRef"
+              },
+              "effectiveOrderQuantity": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^-?\\d{1,20}(?:\\.\\d{1,8})?$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "stockCoveredQuantity": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^-?\\d{1,20}(?:\\.\\d{1,8})?$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "requiredQuantity": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^-?\\d{1,20}(?:\\.\\d{1,8})?$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "allocatedQuantity": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^-?\\d{1,20}(?:\\.\\d{1,8})?$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "unassignedQuantity": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^-?\\d{1,20}(?:\\.\\d{1,8})?$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "unitCode": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "line"
+            ]
+          },
+          "maxItems": 100000
+        },
+        "purchaseAllocations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "sourceAllocationId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "line": {
+                "$ref": "#/$defs/lineRef"
+              },
+              "purchaseLine": {
+                "$ref": "#/$defs/lineRef"
+              },
+              "purchaseSourceVersion": {
+                "type": "string",
+                "pattern": "^\\d{1,30}$"
+              },
+              "purchaseRelationRevision": {
+                "type": "string",
+                "pattern": "^\\d{1,18}$"
+              },
+              "allocatedRequirementQuantity": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^-?\\d{1,20}(?:\\.\\d{1,8})?$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "purchasedQuantity": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^-?\\d{1,20}(?:\\.\\d{1,8})?$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "supplierShippedQuantity": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^-?\\d{1,20}(?:\\.\\d{1,8})?$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "inboundQuantity": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^-?\\d{1,20}(?:\\.\\d{1,8})?$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "allocatedAmount": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^-?\\d{1,20}(?:\\.\\d{1,8})?$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "cancelledQuantity": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^-?\\d{1,20}(?:\\.\\d{1,8})?$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "returnedQuantity": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^-?\\d{1,20}(?:\\.\\d{1,8})?$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "remainingSupplyQuantity": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^-?\\d{1,20}(?:\\.\\d{1,8})?$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "currencyCode": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 3
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "sourceAllocationId",
+              "line",
+              "purchaseLine"
+            ]
+          },
+          "maxItems": 100000
+        }
+      },
+      "required": []
+    },
+    "package": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "sourcePackageKey": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "packageNumber": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "warehouseId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "providerId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "channelId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "trackingNumber": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "expectedActive": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "lines": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "line": {
+                "$ref": "#/$defs/lineRef"
+              },
+              "quantity": {
+                "type": "string",
+                "pattern": "^-?\\d{1,20}(?:\\.\\d{1,8})?$"
+              }
+            },
+            "required": [
+              "line",
+              "quantity"
+            ]
+          },
+          "maxItems": 100000
+        }
+      },
+      "required": [
+        "sourcePackageKey",
+        "lines"
+      ]
+    },
+    "packageRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "order": {
+          "$ref": "#/$defs/sourceRef"
+        },
+        "sourcePackageKey": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "required": [
+        "order",
+        "sourcePackageKey"
+      ]
+    },
+    "tracking": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "sourceTrackingId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "trackingType": {
+          "enum": [
+            "full",
+            "first_mile",
+            "last_mile",
+            "unknown"
+          ]
+        },
+        "number": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "providerId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "shopifySelected": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "package": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/packageRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "sourceTrackingId",
+        "trackingType",
+        "number"
+      ]
+    },
+    "platformOrder": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "sourcePlatformOrderId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "platformCode": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "purchasingAccountId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "externalOrderId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "externalSuborderId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "rawStatus": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "paidAt": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "T.*(?:Z|[+-]\\d\\d:\\d\\d)$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "shippedAt": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "T.*(?:Z|[+-]\\d\\d:\\d\\d)$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "paidAmount": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^-?\\d{1,20}(?:\\.\\d{1,8})?$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "currencyCode": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "sourcePlatformOrderId"
+      ]
+    },
+    "relation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "sourceRelationId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "relationType": {
+          "enum": [
+            "demand_purchase",
+            "purchase_receipt",
+            "inbound",
+            "outbound",
+            "allocation",
+            "dispatch",
+            "delivery_notice",
+            "receipt",
+            "payment",
+            "rma",
+            "purchase_return",
+            "adjustment"
+          ]
+        },
+        "from": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/sourceRef"
+            },
+            {
+              "$ref": "#/$defs/lineRef"
+            }
+          ]
+        },
+        "to": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/sourceRef"
+            },
+            {
+              "$ref": "#/$defs/lineRef"
+            }
+          ]
+        },
+        "allocatedQuantity": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^-?\\d{1,20}(?:\\.\\d{1,8})?$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "allocatedAmount": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^-?\\d{1,20}(?:\\.\\d{1,8})?$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "currencyCode": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 3
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "sourceRelationId",
+        "relationType",
+        "from",
+        "to"
+      ]
+    },
+    "document": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "eventId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "entityCode": {
+          "enum": [
+            "hzkj_orders",
+            "hzkj_stock_order_new",
+            "hzkj_purapplybill",
+            "hzkj_purorderbill",
+            "hzkj_receiptnotice",
+            "im_purinbill",
+            "hzkj_alloc_bill",
+            "hzkj_deliver_bill",
+            "im_saloutbill",
+            "hzkj_receive_bill",
+            "hzkj_pay_cost_bill",
+            "hzkj_adjust_bill",
+            "hzkj_after_sale_orders",
+            "hzkj_deliver_order"
+          ]
+        },
+        "sourceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "sourceVersion": {
+          "type": "string",
+          "pattern": "^\\d{1,30}$"
+        },
+        "operation": {
+          "enum": [
+            "upsert",
+            "delete"
+          ]
+        },
+        "documentNumber": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "linesComplete": {
+          "const": true
+        },
+        "relationsComplete": {
+          "const": true
+        },
+        "sourceFields": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "rawBillStatus": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 64
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "createdAt": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "T.*(?:Z|[+-]\\d\\d:\\d\\d)$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "modifiedAt": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "T.*(?:Z|[+-]\\d\\d:\\d\\d)$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "auditedAt": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "T.*(?:Z|[+-]\\d\\d:\\d\\d)$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "relationRevision": {
+              "type": "string",
+              "pattern": "^\\d{1,18}$"
+            }
+          },
+          "required": []
+        },
+        "header": {
+          "type": "object"
+        },
+        "entries": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/entry"
+          },
+          "maxItems": 100000
+        },
+        "relations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/relation"
+          },
+          "maxItems": 100000
+        },
+        "affectedOrders": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/sourceRef"
+          },
+          "maxItems": 100000
+        },
+        "workbench": {
+          "$ref": "#/$defs/workbench"
+        },
+        "packages": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/package"
+          },
+          "maxItems": 100000
+        },
+        "trackingNumbers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/tracking"
+          },
+          "maxItems": 100000
+        },
+        "platformOrders": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/platformOrder"
+          },
+          "maxItems": 100000
+        }
+      },
+      "required": [
+        "eventId",
+        "entityCode",
+        "sourceId",
+        "sourceVersion",
+        "operation",
+        "documentNumber",
+        "linesComplete",
+        "relationsComplete",
+        "entries",
+        "relations"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "entityCode": {
+                "const": "hzkj_orders"
+              },
+              "operation": {
+                "const": "upsert"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "header": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "customChannelId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "customChannelName": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "customerId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "payingCustomerId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "receivingCustomerId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "ownerEmployeeId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "storeId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "warehouseId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "rawOrderStatus": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "rawPaymentStatus": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "customerPaidAt": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "date-time",
+                        "pattern": "T.*(?:Z|[+-]\\d\\d:\\d\\d)$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "settlementCurrency": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "rawPurchaseStatus": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "shopifyOrderNumber": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "shopifyOrderId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "consumerPaidAt": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "date-time",
+                        "pattern": "T.*(?:Z|[+-]\\d\\d:\\d\\d)$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "productAmount": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^-?\\d{1,20}(?:\\.\\d{1,8})?$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "freightAmount": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^-?\\d{1,20}(?:\\.\\d{1,8})?$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "taxAmount": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^-?\\d{1,20}(?:\\.\\d{1,8})?$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "discountAmount": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^-?\\d{1,20}(?:\\.\\d{1,8})?$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "totalAmount": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^-?\\d{1,20}(?:\\.\\d{1,8})?$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "rawStockUsage": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "rawDeliveryStatus": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "outboundAt": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "date-time",
+                        "pattern": "T.*(?:Z|[+-]\\d\\d:\\d\\d)$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "rawRefundStatus": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "rawAddressCheck": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "recipientName": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "recipientPhone": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "recipientEmail": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "countryCode": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "stateName": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "cityName": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "postalCode": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "addressLine1": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "addressLine2": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": []
+              }
+            },
+            "required": [
+              "header",
+              "packages"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "entityCode": {
+                "const": "hzkj_stock_order_new"
+              },
+              "operation": {
+                "const": "upsert"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "header": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "procurementPaidAt": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "date-time",
+                        "pattern": "T.*(?:Z|[+-]\\d\\d:\\d\\d)$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "customerId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "payingCustomerId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "receivingCustomerId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "ownerEmployeeId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "storeId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "rawOrderStatus": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "rawPaymentStatus": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "customerPaidAt": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "date-time",
+                        "pattern": "T.*(?:Z|[+-]\\d\\d:\\d\\d)$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "settlementCurrency": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "rawPurchaseStatus": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "warehouseId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "stockType": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "businessCreatedAt": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "date-time",
+                        "pattern": "T.*(?:Z|[+-]\\d\\d:\\d\\d)$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "totalAmount": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^-?\\d{1,20}(?:\\.\\d{1,8})?$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "receivableAmount": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^-?\\d{1,20}(?:\\.\\d{1,8})?$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "receivedAmount": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^-?\\d{1,20}(?:\\.\\d{1,8})?$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "depositAmount": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^-?\\d{1,20}(?:\\.\\d{1,8})?$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "rawRefundStatus": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": []
+              }
+            },
+            "required": [
+              "header",
+              "packages"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "entityCode": {
+                "const": "hzkj_purapplybill"
+              },
+              "operation": {
+                "const": "upsert"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "header": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "requestingOrgId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "businessAt": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "date-time",
+                        "pattern": "T.*(?:Z|[+-]\\d\\d:\\d\\d)$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "rawProcurementStatus": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "rawCloseStatus": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "rawCancelStatus": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": []
+              }
+            },
+            "required": [
+              "header"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "entityCode": {
+                "const": "hzkj_purorderbill"
+              },
+              "operation": {
+                "const": "upsert"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "header": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "paidAt": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "date-time",
+                        "pattern": "T.*(?:Z|[+-]\\d\\d:\\d\\d)$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "supplierId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "buyerId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "purchasingAccountId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "purchaseType": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "platformCode": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "totalAmount": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^-?\\d{1,20}(?:\\.\\d{1,8})?$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "settlementCurrency": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "paidAmount": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^-?\\d{1,20}(?:\\.\\d{1,8})?$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "unpaidAmount": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^-?\\d{1,20}(?:\\.\\d{1,8})?$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "rawTradeStatus": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "rawPlatformStatus": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "rawCancelStatus": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "businessAt": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "date-time",
+                        "pattern": "T.*(?:Z|[+-]\\d\\d:\\d\\d)$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": []
+              }
+            },
+            "required": [
+              "header",
+              "platformOrders"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "entityCode": {
+                "const": "hzkj_receiptnotice"
+              },
+              "operation": {
+                "const": "upsert"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "header": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "supplierId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "warehouseId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "businessAt": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "date-time",
+                        "pattern": "T.*(?:Z|[+-]\\d\\d:\\d\\d)$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "supplierShippedAt": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "date-time",
+                        "pattern": "T.*(?:Z|[+-]\\d\\d:\\d\\d)$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "trackingNumber": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "rawWmsStatus": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "rawShippingStatus": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": []
+              }
+            },
+            "required": [
+              "header"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "entityCode": {
+                "const": "im_purinbill"
+              },
+              "operation": {
+                "const": "upsert"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "header": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "warehouseId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "supplierId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "businessAt": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "date-time",
+                        "pattern": "T.*(?:Z|[+-]\\d\\d:\\d\\d)$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "rawCancelStatus": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": []
+              }
+            },
+            "required": [
+              "header"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "entityCode": {
+                "const": "hzkj_alloc_bill"
+              },
+              "operation": {
+                "const": "upsert"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "header": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "sourceOrderId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "sourceOrderNumber": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "packageNumber": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "warehouseId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "customerId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "ownerEmployeeId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "rawAllocationStatus": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "rawOperationStatus": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "readyAt": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "date-time",
+                        "pattern": "T.*(?:Z|[+-]\\d\\d:\\d\\d)$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "idempotencyKey": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": []
+              }
+            },
+            "required": [
+              "header"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "entityCode": {
+                "const": "hzkj_deliver_bill"
+              },
+              "operation": {
+                "const": "upsert"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "header": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "customerId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "ownerEmployeeId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "warehouseId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "providerId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "actualChannelId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "sourcePackage": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "rawFulfillmentStatus": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "rawDeliveryStatus": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "rawShopifySyncStatus": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "shopifySyncedAt": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "date-time",
+                        "pattern": "T.*(?:Z|[+-]\\d\\d:\\d\\d)$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "deliveryNoticePushedAt": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "date-time",
+                        "pattern": "T.*(?:Z|[+-]\\d\\d:\\d\\d)$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": []
+              }
+            },
+            "required": [
+              "header",
+              "trackingNumbers"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "entityCode": {
+                "const": "im_saloutbill"
+              },
+              "operation": {
+                "const": "upsert"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "header": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "warehouseId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "customerId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "businessAt": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "date-time",
+                        "pattern": "T.*(?:Z|[+-]\\d\\d:\\d\\d)$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "rawCancelStatus": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "movementKind": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": []
+              }
+            },
+            "required": [
+              "header"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "entityCode": {
+                "const": "hzkj_receive_bill"
+              },
+              "operation": {
+                "const": "upsert"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "header": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "payingCustomerId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "ownerEmployeeId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "receiptType": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "rawReceiveStatus": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "rawArrivalStatus": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "receivedAt": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "date-time",
+                        "pattern": "T.*(?:Z|[+-]\\d\\d:\\d\\d)$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "receivedAmount": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^-?\\d{1,20}(?:\\.\\d{1,8})?$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "orderAmount": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^-?\\d{1,20}(?:\\.\\d{1,8})?$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "currencyCode": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "externalTransactionId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": []
+              }
+            },
+            "required": [
+              "header"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "entityCode": {
+                "const": "hzkj_pay_cost_bill"
+              },
+              "operation": {
+                "const": "upsert"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "header": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "purchaseSourceId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "purchaseNumber": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "platformOrderNumber": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "amount": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^-?\\d{1,20}(?:\\.\\d{1,8})?$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "dueAmount": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^-?\\d{1,20}(?:\\.\\d{1,8})?$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "refundAmount": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^-?\\d{1,20}(?:\\.\\d{1,8})?$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "currencyCode": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "rawPaymentStatus": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "paidAt": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "date-time",
+                        "pattern": "T.*(?:Z|[+-]\\d\\d:\\d\\d)$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "confirmedAt": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "date-time",
+                        "pattern": "T.*(?:Z|[+-]\\d\\d:\\d\\d)$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": []
+              }
+            },
+            "required": [
+              "header"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "entityCode": {
+                "const": "hzkj_adjust_bill"
+              },
+              "operation": {
+                "const": "upsert"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "header": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "customerId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "ownerEmployeeId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "currencyCode": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "adjustAmount": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^-?\\d{1,20}(?:\\.\\d{1,8})?$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "feeAmount": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^-?\\d{1,20}(?:\\.\\d{1,8})?$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "reason": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": []
+              }
+            },
+            "required": [
+              "header"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "entityCode": {
+                "const": "hzkj_after_sale_orders"
+              },
+              "operation": {
+                "const": "upsert"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "header": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "sourceDocumentNumber": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "afterSaleType": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "rawFlowStatus": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "isOpen": {
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "reason": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "requestedAmount": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^-?\\d{1,20}(?:\\.\\d{1,8})?$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "requestedCurrency": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "refundAmount": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^-?\\d{1,20}(?:\\.\\d{1,8})?$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "refundCurrency": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "customerId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "storeId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": []
+              }
+            },
+            "required": [
+              "header"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "entityCode": {
+                "const": "hzkj_deliver_order"
+              },
+              "operation": {
+                "const": "upsert"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "header": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "warehouseId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "customerId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "rawOrderStatus": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "rawWmsStatus": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "logisticsBillNumber": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "wmsCreatedAt": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "date-time",
+                        "pattern": "T.*(?:Z|[+-]\\d\\d:\\d\\d)$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "businessAt": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "date-time",
+                        "pattern": "T.*(?:Z|[+-]\\d\\d:\\d\\d)$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": []
+              }
+            },
+            "required": [
+              "header"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "operation": {
+                "const": "delete"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "entries": {
+                "maxItems": 0
+              },
+              "relations": {
+                "maxItems": 0
+              },
+              "packages": {
+                "maxItems": 0
+              },
+              "trackingNumbers": {
+                "maxItems": 0
+              },
+              "platformOrders": {
+                "maxItems": 0
+              }
+            },
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "header"
+                  ]
+                },
+                {
+                  "required": [
+                    "workbench"
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  }
+}

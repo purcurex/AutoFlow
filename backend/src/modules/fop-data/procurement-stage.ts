@@ -1,3 +1,4 @@
+import { isProcurementReady } from './workbench-queue-rules'
 import type { FulfillmentProgress, ProcurementProgress } from './fop-data.types'
 
 export const procurementStages = ['application_pending', 'purchase_order_pending', 'alibaba_pending', 'payment_pending', 'refund_pending', 'supplier_pending', 'supplier_partial', 'shipped', 'cancelled', 'not_required', 'unknown'] as const
@@ -33,7 +34,7 @@ export function getProcurementStage(p: ProcurementProgress | undefined, shipment
   if (p.alibabaOrder === 'not_pushed' || p.alibabaOrder === 'partial') return 'alibaba_pending'
   if (p.supplierPayment === 'unpaid') return 'payment_pending'
   if (p.supplierPayment === 'partial') return 'payment_pending' // Legacy incomplete payment remains actionable.
-  if (p.supplierPayment !== 'paid') return 'unknown'
+  if (!isProcurementReady(p)) return 'unknown'
   if (shipment === 'pending') return 'supplier_pending'
   if (shipment === 'partial') return 'supplier_partial'
   if (shipment === 'shipped') return 'shipped'

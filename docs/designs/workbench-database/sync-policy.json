@@ -1,0 +1,35 @@
+{
+  "version": "2.2",
+  "timezone": "Asia/Shanghai",
+  "morning_at": "08:30",
+  "business_window": {
+    "start": "09:00",
+    "end": "18:30",
+    "end_inclusive": true,
+    "interval_minutes": 30
+  },
+  "off_hours": {
+    "slots": [
+      "20:30",
+      "22:30",
+      "00:30",
+      "02:30",
+      "04:30",
+      "06:30"
+    ],
+    "interval_minutes": 120
+  },
+  "navigation": {
+    "after_local_load": true,
+    "min_interval_seconds": 60,
+    "coalesce_across_users": true,
+    "filters_trigger_sync": false
+  },
+  "manual": {
+    "capture_new_barrier_after_request": true,
+    "coalesce_unstarted": true
+  },
+  "scope": "all_authorized_companies_and_resources_changes",
+  "migration": "1794402000000",
+  "runtime_phase": "mock_only_real_fop_paused"
+}

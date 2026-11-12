@@ -211,9 +211,9 @@ export class OrganizationService {
       const employee = await manager.getRepository(OrganizationEmployeeEntity).findOneBy({ accountId: id, archivedAt: IsNull() })
       const details = { ...verified.details, localEmployeeId: employee?.id ?? null, localDepartmentId: employee?.departmentId ?? null }
       const changes = { fopTenantId: verified.tenantId, fopUserId: verified.userId, fopBindingDetails: details,
-        // 注册后尚无员工范围的账号，绑定本人时补齐本人身份；不改变角色或其他已配置范围。
-        businessEmployeeId: account.businessEmployeeId ?? details.employeeMasterId,
-        businessDepartmentId: account.businessDepartmentId ?? details.departmentId,
+        // 本地业务范围只来自本地成员；FOP任职部门仅作验证记录，不推导组织归属。
+        businessEmployeeId: account.businessEmployeeId ?? employee?.id ?? null,
+        businessDepartmentId: account.businessDepartmentId ?? employee?.departmentId ?? null,
         sessionVersion: account.sessionVersion + 1 }
       await manager.getRepository(User).update(id, changes)
       result = this.accountDetails({ ...account, ...changes })

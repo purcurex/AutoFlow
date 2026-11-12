@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="hyperzone-html-style" content="1.1">
+<title>HyperZone FOP 数据同步与查询方案</title>
+<style>/* HyperZone HTML Standard v1.1 — shared canonical stylesheet */
+
+:root{--ink:#172b43;--muted:#5b6e80;--blue:#165a9b;--teal:#087f8c;--line:#dbe5ed;--bg:#f3f6fa;--nav:274px}
+*{box-sizing:border-box}html{scroll-behavior:smooth;scroll-padding-top:24px}
+body{margin:0;color:var(--ink);background:var(--bg);font:15px/1.85 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
+a{color:var(--blue);text-underline-offset:3px;overflow-wrap:anywhere}a:hover{color:var(--teal)}
+.sidebar{position:fixed;inset:0 auto 0 0;width:var(--nav);padding:32px 24px;background:#13283f;color:#dae5ef;overflow-y:auto}
+.brand{font-size:12px;letter-spacing:2px;color:#8ebedb;font-weight:700}.sidebar h2{font-size:22px;line-height:1.5;margin:16px 0 5px;color:#fff}
+.sidebar .subtitle{font-size:12px;color:#a9bfce}.toc ul{padding:0;list-style:none}.toc a{display:block;padding:9px 10px;margin:3px 0;text-decoration:none;border-radius:6px;font-size:13px;line-height:1.5;color:#cfdae7}.toc a:hover{background:#24445f;color:white}
+.sidebar-foot{font-size:11px;color:#96aebf;border-top:1px solid #365066;margin-top:22px;padding-top:18px}
+.page{margin-left:var(--nav);padding:40px 48px 64px;max-width:1470px}
+.toolbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:22px;gap:12px;font-size:12px;color:var(--muted)}
+.toolbar button{background:white;border:1px solid #cbd8e4;border-radius:7px;padding:9px 16px;color:var(--ink);cursor:pointer;font:inherit}
+.hero{background:linear-gradient(120deg,#123e68,#087b88);color:white;padding:42px 44px;border-radius:14px;box-shadow:0 14px 40px #173a5515}
+.eyebrow{font-size:11px;letter-spacing:2.5px;color:#c0e4ef;font-weight:700}.hero h1{font-size:34px;line-height:1.4;letter-spacing:-.5px;margin:15px 0 10px}.hero p{color:#dfedf3;max-width:740px;margin:0;font-size:15px}.badges{display:flex;flex-wrap:wrap;gap:8px;margin-top:22px}.badges span{font-size:11px;border:1px solid #ffffff45;background:#ffffff0e;padding:4px 11px;border-radius:30px}
+.highlights{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:20px 0 28px}.highlight{background:white;border:1px solid var(--line);border-radius:10px;padding:19px 22px}.highlight b{display:block;font-size:18px;color:var(--blue)}.highlight small{color:var(--muted);font-size:12px}
+article{background:white;border:1px solid var(--line);border-radius:12px;padding:30px 40px 40px}
+article h2{font-size:24px;line-height:1.5;padding-top:28px;margin:30px 0 20px;border-top:1px solid var(--line);color:#133f69}article h3{font-size:17px;margin:28px 0 12px;color:#27566e}article p{margin:12px 0}article strong{font-weight:650}article ul,article ol{padding-left:25px}article li{padding:3px 0}
+blockquote{margin:8px 0 20px;padding:10px 18px;background:#edf6f9;border-left:4px solid var(--teal);color:#315d71}blockquote p{margin:4px 0!important}
+.table-wrap{overflow-x:auto;margin:18px 0 24px;border:1px solid var(--line);border-radius:8px}table{border-collapse:collapse;width:100%;font-size:13px;line-height:1.7}th,td{padding:12px 14px;vertical-align:top;text-align:left;border-bottom:1px solid var(--line);min-width:100px}th{background:#eaf1f7;color:#234867;font-weight:650}tr:last-child td{border-bottom:0}tbody tr:nth-child(even){background:#f8fafc}td a{word-break:break-word}
+code{font:12px/1.7 ui-monospace,SFMono-Regular,Consolas,monospace;background:#eef2f6;padding:2px 5px;border-radius:4px;overflow-wrap:anywhere}pre{background:#142c42;color:#e3f0f7;border-radius:8px;padding:20px;overflow:auto;line-height:1.8}pre code{padding:0;background:none;color:inherit;white-space:pre-wrap;word-break:break-word}
+.footer{margin-top:24px;font-size:12px;color:var(--muted);text-align:center}.skip{position:absolute;left:-9999px}.skip:focus{left:20px;top:10px;background:white;padding:10px;z-index:9}
+@media(min-width:1600px){.page{margin-right:auto;margin-left:calc(var(--nav) + (100vw - 1600px)/2)}}
+@media(max-width:1100px){:root{--nav:230px}.sidebar{padding:24px 16px}.page{padding:25px}article{padding:22px}.hero{padding:30px}.hero h1{font-size:29px}}
+@media(max-width:760px){.sidebar{position:relative;width:auto;padding:22px}.sidebar h2{font-size:18px;margin:8px 0}.sidebar .toc{max-height:190px;overflow:auto}.sidebar-foot{display:none}.page{margin:0;padding:16px}.hero{padding:25px}.hero h1{font-size:26px}.highlights{grid-template-columns:1fr;gap:8px}.highlight{padding:13px 18px}.highlight b{font-size:16px}article{padding:18px}article h2{font-size:21px}th,td{padding:10px;min-width:120px}.toolbar{font-size:11px}}
+@media print{@page{size:A4;margin:16mm 14mm}html{scroll-behavior:auto}body{background:white;font-size:10pt;line-height:1.65}.sidebar,.toolbar,.skip{display:none}.page{margin:0;padding:0;max-width:none}.hero{background:#eef5fa!important;color:#163f62;padding:22px;border:1px solid #cbdde9;box-shadow:none;border-radius:0}.hero p,.eyebrow{color:#315773}.hero h1{font-size:25pt}.badges span{border-color:#bccfdc;color:#315773}.highlights{gap:10px;margin:14px 0}.highlight{padding:12px}.highlight b{font-size:12pt}.highlight small{font-size:9pt}article{padding:0;border:0}article h2{font-size:17pt;break-after:avoid;padding-top:15px;margin-top:22px}article h3{font-size:12pt;break-after:avoid}.table-wrap{overflow:visible;border-radius:0}table{font-size:8.4pt}th,td{padding:7px;min-width:0}tr{break-inside:avoid}thead{display:table-header-group}pre,blockquote,.highlight{break-inside:avoid}a{color:#184f78}pre{color:#172b43;background:#f0f4f7}code{font-size:9pt}.footer{font-size:8pt}}
+
+article h2:target{color:#087f8c} .hero h1{font-size:32px} .table-wrap td{overflow-wrap:anywhere} @media print{pre{white-space:pre-wrap}.table-wrap{break-inside:auto}}
+
+/* Chinese prose: indent only the first line; headings stay flush left. */
+html[lang^="zh"] article p{text-indent:2em}
+html[lang^="zh"] article :is(h1,h2,h3,h4,h5,h6,.paragraph-title){text-indent:0}
+html[lang^="zh"] article :is(li,td,th,figcaption) p{text-indent:0}
+
+.brand-logo{display:block;width:180px;max-width:100%;height:auto;margin:0 0 20px}.hero-brand{display:inline-block;background:transparent;padding:0;border-radius:0;margin-bottom:18px}.hero-brand img{display:block;width:220px;max-width:100%;height:auto}@media(max-width:760px){.brand-logo{width:160px;margin-bottom:14px}.hero-brand img{width:190px}}@media print{.hero{background:#123e68!important;color:#fff;print-color-adjust:exact;-webkit-print-color-adjust:exact}.hero p,.hero .eyebrow,.hero .badges span{color:#dfedf3}.hero-brand{background:transparent!important}.hero-brand img{width:180px}}
+</style>
+</head>
+<body>
+<a class="skip" href="#report">跳至正文</a>
+<aside class="sidebar">
+  <img class="brand-logo" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHhtbG5zOnhsaW5rPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5L3hsaW5rIiB2ZXJzaW9uPSIxLjAiIHg9IjAiIHk9IjAiIHdpZHRoPSIyNDAwIiBoZWlnaHQ9IjU1My4yMzk1OTE5NTE5NTg2IiB2aWV3Qm94PSI2Ni43NTA1MDE1NTYzOTY0OSAxMDEuMTk5MjkzMDYwMzAyNzQgMjA2LjQ5ODk5Njg4NzIwNzAzIDQ3LjYwMTQyNTMyMzQ4NjMyNSIgcHJlc2VydmVBc3BlY3RSYXRpbz0ieE1pZFlNaWQgbWVldCIgY29sb3ItaW50ZXJwb2xhdGlvbi1maWx0ZXJzPSJzUkdCIj48Zz48ZGVmcz48bGluZWFyR3JhZGllbnQgaWQ9IjkyIiB4MT0iMCUiIHkxPSIwJSIgeDI9IjEwMCUiIHkyPSIwJSI+PHN0b3Agb2Zmc2V0PSIwJSIgc3RvcC1jb2xvcj0iI2ZhNzFjZCI+PC9zdG9wPiA8c3RvcCBvZmZzZXQ9IjEwMCUiIHN0b3AtY29sb3I9IiM5YjU5YjYiPjwvc3RvcD48L2xpbmVhckdyYWRpZW50PjxsaW5lYXJHcmFkaWVudCBpZD0iOTMiIHgxPSIwJSIgeTE9IjAlIiB4Mj0iMTAwJSIgeTI9IjAlIj48c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjZjlkNDIzIj48L3N0b3A+IDxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iI2Y4MzYwMCI+PC9zdG9wPjwvbGluZWFyR3JhZGllbnQ+PGxpbmVhckdyYWRpZW50IGlkPSI5NCIgeDE9IjAlIiB5MT0iMCUiIHgyPSIxMDAlIiB5Mj0iMCUiPjxzdG9wIG9mZnNldD0iMCUiIHN0b3AtY29sb3I9IiMwMDY0ZDIiPjwvc3RvcD4gPHN0b3Agb2Zmc2V0PSIxMDAlIiBzdG9wLWNvbG9yPSIjMWNiMGY2Ij48L3N0b3A+PC9saW5lYXJHcmFkaWVudD48bGluZWFyR3JhZGllbnQgaWQ9Ijk1IiB4MT0iMCUiIHkxPSIwJSIgeDI9IjEwMCUiIHkyPSIwJSI+PHN0b3Agb2Zmc2V0PSIwJSIgc3RvcC1jb2xvcj0iI2YwMDk3OCI+PC9zdG9wPiA8c3RvcCBvZmZzZXQ9IjEwMCUiIHN0b3AtY29sb3I9IiMzZjUxYjEiPjwvc3RvcD48L2xpbmVhckdyYWRpZW50PjxsaW5lYXJHcmFkaWVudCBpZD0iOTYiIHgxPSIwJSIgeTE9IjAlIiB4Mj0iMTAwJSIgeTI9IjAlIj48c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjNzg3M2Y1Ij48L3N0b3A+IDxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iI2VjNzdhYiI+PC9zdG9wPjwvbGluZWFyR3JhZGllbnQ+PGxpbmVhckdyYWRpZW50IGlkPSI5NyIgeDE9IjAlIiB5MT0iMCUiIHgyPSIxMDAlIiB5Mj0iMCUiPjxzdG9wIG9mZnNldD0iMCUiIHN0b3AtY29sb3I9IiNmOWQ0MjMiPjwvc3RvcD4gPHN0b3Agb2Zmc2V0PSIxMDAlIiBzdG9wLWNvbG9yPSIjZTE0ZmFkIj48L3N0b3A+PC9saW5lYXJHcmFkaWVudD48bGluZWFyR3JhZGllbnQgaWQ9Ijk4IiB4MT0iMCUiIHkxPSIwJSIgeDI9IjEwMCUiIHkyPSIwJSI+PHN0b3Agb2Zmc2V0PSIwJSIgc3RvcC1jb2xvcj0iIzAwOWVmZCI+PC9zdG9wPiA8c3RvcCBvZmZzZXQ9IjEwMCUiIHN0b3AtY29sb3I9IiMyYWY1OTgiPjwvc3RvcD48L2xpbmVhckdyYWRpZW50PjxsaW5lYXJHcmFkaWVudCBpZD0iOTkiIHgxPSIwJSIgeTE9IjAlIiB4Mj0iMTAwJSIgeTI9IjAlIj48c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjZmZjYzAwIj48L3N0b3A+IDxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iIzAwYjE0MCI+PC9zdG9wPjwvbGluZWFyR3JhZGllbnQ+PGxpbmVhckdyYWRpZW50IGlkPSIxMDAiIHgxPSIwJSIgeTE9IjAlIiB4Mj0iMTAwJSIgeTI9IjAlIj48c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjZDUxMDA3Ij48L3N0b3A+IDxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iI2ZmODE3NyI+PC9zdG9wPjwvbGluZWFyR3JhZGllbnQ+PGxpbmVhckdyYWRpZW50IGlkPSIxMDIiIHgxPSIwJSIgeTE9IjAlIiB4Mj0iMTAwJSIgeTI9IjAlIj48c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjYTJiNmRmIj48L3N0b3A+IDxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iIzBjMzQ4MyI+PC9zdG9wPjwvbGluZWFyR3JhZGllbnQ+PGxpbmVhckdyYWRpZW50IGlkPSIxMDMiIHgxPSIwJSIgeTE9IjAlIiB4Mj0iMTAwJSIgeTI9IjAlIj48c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjN2FjNWQ4Ij48L3N0b3A+IDxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iI2VlYTJhMiI+PC9zdG9wPjwvbGluZWFyR3JhZGllbnQ+PGxpbmVhckdyYWRpZW50IGlkPSIxMDQiIHgxPSIwJSIgeTE9IjAlIiB4Mj0iMTAwJSIgeTI9IjAlIj48c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjMDBlY2JjIj48L3N0b3A+IDxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iIzAwN2FkZiI+PC9zdG9wPjwvbGluZWFyR3JhZGllbnQ+PGxpbmVhckdyYWRpZW50IGlkPSIxMDUiIHgxPSIwJSIgeTE9IjAlIiB4Mj0iMTAwJSIgeTI9IjAlIj48c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjYjg4NzQ2Ij48L3N0b3A+IDxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iI2ZkZjVhNiI+PC9zdG9wPjwvbGluZWFyR3JhZGllbnQ+PC9kZWZzPjxnIGZpbGw9IiNmZmZmZmYiIGNsYXNzPSJpY29uLXRleHQtd3JhcHBlciBpY29uLXN2Zy1ncm91cCBpY29uc3ZnIiB0cmFuc2Zvcm09InRyYW5zbGF0ZSg2OC43NzUwMDE1MjcwOTAyNCwxMDMuMjIzNzg3MzA3NzM5MjYpIj48ZyBjbGFzcz0iaWNvbnN2Zy1pbWFnZXN2ZyIgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMCwwKSI+PGc+PHJlY3QgZmlsbD0iI2ZmZmZmZiIgZmlsbC1vcGFjaXR5PSIwIiBzdHJva2Utd2lkdGg9IjIiIHg9IjAiIHk9IjAiIHdpZHRoPSI2MCIgaGVpZ2h0PSI0My41NTI0MjYyMzMwNzgwNjYiIGNsYXNzPSJpbWFnZS1yZWN0Ij48L3JlY3Q+IDxzdmcgeD0iMCIgeT0iMCIgd2lkdGg9IjYwIiBoZWlnaHQ9IjQzLjU1MjQyNjIzMzA3ODA2NiIgZmlsdGVyc2VjPSJjb2xvcnNiMTQ2MjY1MDgxNCIgY2xhc3M9ImltYWdlLXN2Zy1zdmcgcHJpbWFyeSIgc3R5bGU9Im92ZXJmbG93OiB2aXNpYmxlOyI+PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAuMDUwMjAwNDYyMzQxMzA4NTk0IC0wLjAxNjg5MDA0ODk4MDcxMjg5IDE4NC41MjE2ODI3MzkyNTc4IDEzMy45Mzk0MjI2MDc0MjE4OCI+PHBhdGggZD0iTTg4LjU5IDU0LjIxYzE4LjkyIDAgMzcuODUtLjMxIDU2Ljc1LjE4IDcuMjMuMTggMTEuNTctMS41MSAxMi42MS05LjE3LjMyLTIuMzMuNzctNS41OSAzLjctNiAyLjM5LS4zNiAzLjc3IDIuMjggNS4xMSA0IDUuMzkgNyAxMC41OSAxNC4xMiAxNiAyMS4xIDIuNzEgMy41MSAyLjQ3IDYuMDgtMS4zMyA4Ljc1LTEwLjcyIDcuNTMtMjEuMjYgMTUuMzMtMzEuOSAyMy0xLjU2IDEuMTItMy4yNyAzLjEyLTUuMzEgMS41NXMtLjU4LTMuNjktLjM0LTUuNjVjLjM0LTIuNzggMy45NC02LjctMS43LTcuODMtNC40Mi0uODktOC41MS0uMjgtMTAgNS4zNC0zIDExLjQ1LTYuNjMgMjIuNzQtOS41MiAzNC4yMi0xLjc5IDcuMTUtNS4xOSAxMC43NS0xMy4xNCAxMC4xNi04LjUzLS42My0xNy4xNC0uMDgtMjUuNzItLjE3cy05LjE5LTEtNi43Mi05LjQycTQuNzEtMTUuOTQgOS42NC0zMS44MmMyLjI1LTcuMjQgMS41MS04LjY0LTYuMTItOC41My0yNy4wOC4zNy0yMS4xNy00LjA3LTI4LjU1IDIxLTIuMiA3LjQ5LTQuNjIgMTQuOTItNi43NyAyMi40Mi0xLjE5IDQuMTctMy40MyA2LjQyLTggNi4zNS0xMC41OS0uMTUtMjEuMTktLjA5LTMxLjc4IDAtNC44NiAwLTYuMjktMi4zMi01LTYuNzdDNy4wNiAxMDQuNDMgMTMuNyA4MiAyMC4yMyA1OS40NmMxLjMyLTQuNTQgNC4yNi01LjM4IDguNTgtNS4zMyAxOS45Mi4xOCAzOS44NS4wOCA1OS43OC4wOHoiIGZpbGw9IiNmYWJlMDAiPjwvcGF0aD48cGF0aCBkPSJNMTIzLjE2IDQ1Ljg5aC0xNS44NWMtNC42LjA1LTYuNDItMS40OC00LjktNi40NCAzLjI1LTEwLjU3IDYuMTgtMjEuMjMgOS0zMS45MiAxLjMzLTUuMDcgMy44NS03LjcgOS40Ny03LjU0IDEwLjA2LjMgMjAuMTIuMjEgMzAuMTkuMDEgNS4zOC0uMDkgNy40NiAxLjc5IDUuNzQgNy4yNnEtNS4zMyAxNi44OC0xMC4zMyAzMy44N2MtMSAzLjU0LTMuMzMgNC43NS02LjcxIDQuNzMtNS41NC4wMS0xMS4wOC4wMy0xNi42MS4wM3pNNDcuODMgNDUuODloLTE2LjZjLTQuMDUgMC02LjE2LTEuMjYtNC43NC02UTMxLjUgMjMuMzEgMzYgNi41NkMzNy4yIDEuOTIgMzkuODYgMCA0NC42MSAwYzEwLjMxLjE1IDIwLjYzLjEyIDMwLjk0IDAgNC44NCAwIDcuMTkgMS41NyA1LjU2IDYuNzlxLTUuMzUgMTcuMjctMTAuNTIgMzQuNmMtMS4wOCAzLjYzLTMuNjMgNC40Ni02LjkxIDQuNDQtNS4yOC4wNS0xMC41Ny4wNy0xNS44NS4wNnoiIGZpbGw9IiNlYTU1MDQiPjwvcGF0aD48L3N2Zz48L3N2Zz4gPC9nPjwvZz4gPGcgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoNjgsNy4zMjYyMTI4ODI5OTU2MDU1KSI+PGcgZmlsbC1ydWxlPSIiIGNsYXNzPSJ0cC1uYW1lIGljb25zdmctbmFtZXN2ZyI+PGcgdHJhbnNmb3JtPSJzY2FsZSgxKSI+PGc+PHBhdGggZD0iTTUuNzcgMEwyLjk3IDAgMi45Ny0yMS45IDUuNzctMjEuOSA1Ljc3LTEyLjcxIDE1Ljk4LTEyLjcxIDE1Ljk4LTIxLjkgMTguNzItMjEuOSAxOC43MiAwIDE1Ljk4IDAgMTUuOTgtMTAuMzIgNS43Ny0xMC4zMiA1Ljc3IDBaTTIyLjcyIDdMMjIuNzIgN1EyMS42NyA3IDIwLjgzIDYuNjVMMjAuODMgNi42NSAyMS4zNSA0LjQ5UTIyLjA4IDQuNzUgMjIuNTggNC43NUwyMi41OCA0Ljc1UTI1LjA5IDQuNjkgMjYuMjUgMS4yNUwyNi4yNSAxLjI1IDI2LjYzIDAuMDMgMjAuMS0xNi4yMSAyMi45Ni0xNi4yMSAyNi4yNS03LjJRMjYuNTEtNi40MSAyNy4xMy00LjY5TDI3LjEzLTQuNjlRMjcuNjItMy4yOSAyNy44My0yLjY1TDI3LjgzLTIuNjUgMjcuOTctMi42NVEyOS4wNS02LjI3IDI5LjM0LTcuMkwyOS4zNC03LjIgMzIuMjMtMTYuMjEgMzQuODgtMTYuMjEgMjguNzYgMS4zNFEyNy4xNiA1LjgzIDI0LjQ0IDYuNzRMMjQuNDQgNi43NFEyMy42MyA3IDIyLjcyIDdaTTM4LjcxIDYuODJMMzYgNi44MiAzNi0xNi4yMSAzOC4yNS0xNi4yMSAzOC40OC0xNC4zNyAzOC41Ny0xNC4zN1E0MS4zMS0xNi41OSA0My43My0xNi42Mkw0My43My0xNi42MlE0Ny42NC0xNi42MiA0OS4yNy0xMy4xMkw0OS4yNy0xMy4xMlE1MC4yLTExLjE3IDUwLjItOC4zN0w1MC4yLTguMzdRNTAuMi0zLjczIDQ3LjQzLTEuMjhMNDcuNDMtMS4yOFE0NS41NyAwLjM4IDQzLjE1IDAuMzhMNDMuMTUgMC4zOFE0MC45MyAwLjM1IDM4LjY2LTEuNDlMMzguNjYtMS40OSAzOC43MSAxLjM0IDM4LjcxIDYuODJaTTQyLjcxLTEuOUw0Mi43MS0xLjlRNDUuMTktMS45IDQ2LjQ3LTQuMzJMNDYuNDctNC4zMlE0Ny4zNC01Ljk4IDQ3LjM0LTguMzRMNDcuMzQtOC4zNFE0Ny4yOS0xNC4zMiA0My4wOS0xNC4zNEw0My4wOS0xNC4zNFE0MS4xLTE0LjMyIDM4LjcxLTEyLjFMMzguNzEtMTIuMSAzOC43MS0zLjU5UTQwLjctMS45IDQyLjcxLTEuOVpNNTkuMDIgMC4zOEw1OS4wMiAwLjM4UTU1LjM3IDAuMzggNTMuMTktMi4yNUw1My4xOS0yLjI1UTUxLjI2LTQuNTggNTEuMjYtOC4xMUw1MS4yNi04LjExUTUxLjI2LTEyLjMgNTMuOTQtMTQuNzVMNTMuOTQtMTQuNzVRNTUuOTktMTYuNjIgNTguNTgtMTYuNjJMNTguNTgtMTYuNjJRNjIuNTItMTYuNjIgNjQuMTUtMTMuMzJMNjQuMTUtMTMuMzJRNjUuMDItMTEuNDkgNjUuMDItOS4wMUw2NS4wMi05LjAxUTY1LjAyLTguMjIgNjQuOTEtNy40Nkw2NC45MS03LjQ2IDUzLjk3LTcuNDZRNTQuMTUtNC4wOCA1Ni40OC0yLjU5TDU2LjQ4LTIuNTlRNTcuNzMtMS43OCA1OS4zNy0xLjc4TDU5LjM3LTEuNzhRNjEuNTUtMS44MSA2My40Mi0zLjA2TDYzLjQyLTMuMDYgNjQuNDEtMS4yOFE2MS44NSAwLjM4IDU5LjAyIDAuMzhaTTUzLjk0LTkuNDJMNTMuOTQtOS40MiA2Mi42My05LjQyUTYyLjYzLTEzLjQ3IDU5Ljg5LTE0LjI5TDU5Ljg5LTE0LjI5UTU5LjI4LTE0LjQ2IDU4LjYxLTE0LjQ2TDU4LjYxLTE0LjQ2UTU2LjMxLTE0LjQ2IDU0Ljk3LTEyLjQyTDU0Ljk3LTEyLjQyUTU0LjEyLTExLjE0IDUzLjk0LTkuNDJaTTY5LjczIDBMNjcuMDIgMCA2Ny4wMi0xNi4yMSA2OS4yNi0xNi4yMSA2OS41LTEzLjI3IDY5LjU4LTEzLjI3UTcxLjE5LTE2LjE1IDczLjU1LTE2LjU2TDczLjU1LTE2LjU2UTczLjg3LTE2LjYyIDc0LjE5LTE2LjYyTDc0LjE5LTE2LjYyUTc1LjI3LTE2LjYyIDc1LjkxLTE2LjI3TDc1LjkxLTE2LjI3IDc1LjQyLTEzLjg4UTc0LjcyLTE0LjE0IDczLjg0LTE0LjE0TDczLjg0LTE0LjE0UTcxLjg2LTE0LjE0IDcwLjQzLTExLjg0TDcwLjQzLTExLjg0UTcwLjA1LTExLjIgNjkuNzMtMTAuNDFMNjkuNzMtMTAuNDEgNjkuNzMgMFpNOTAuNDEgMEw3NS4zNCAwIDc1LjM0LTEuNjMgODYuODktMTkuNTYgNzYuMzktMTkuNTYgNzYuMzktMjEuOSA5MC4zLTIxLjkgOTAuMy0yMC4yNiA3OC43NS0yLjM2IDkwLjQxLTIuMzYgOTAuNDEgMFpNOTguODggMC4zOEw5OC44OCAwLjM4UTk1LjYxIDAuMzggOTMuNDYtMi4wNEw5My40Ni0yLjA0UTkxLjM2LTQuNDMgOTEuMzYtOC4xMUw5MS4zNi04LjExUTkxLjM2LTEyLjU0IDk0LjIyLTE0Ljk2TDk0LjIyLTE0Ljk2UTk2LjI2LTE2LjYyIDk4Ljg4LTE2LjYyTDk4Ljg4LTE2LjYyUTEwMi4xNy0xNi42MiAxMDQuMzMtMTQuMTdMMTA0LjMzLTE0LjE3UTEwNi40LTExLjc4IDEwNi40LTguMTFMMTA2LjQtOC4xMVExMDYuNC0zLjcgMTAzLjU1LTEuMzFMMTAzLjU1LTEuMzFRMTAxLjUzIDAuMzggOTguODggMC4zOFpNOTguODgtMS45TDk4Ljg4LTEuOVExMDEuNDUtMS45IDEwMi43Ni00LjMyTDEwMi43Ni00LjMyUTEwMy42LTUuOTIgMTAzLjYtOC4xMUwxMDMuNi04LjExUTEwMy42LTExLjY5IDEwMS41Ni0xMy40MUwxMDEuNTYtMTMuNDFRMTAwLjQtMTQuMzcgOTguODgtMTQuMzdMOTguODgtMTQuMzdROTYuMzQtMTQuMzcgOTUuMDYtMTEuOTJMOTUuMDYtMTEuOTJROTQuMjItMTAuMzIgOTQuMjItOC4xMUw5NC4yMi04LjExUTk0LjIyLTQuNCA5Ni4zMS0yLjc3TDk2LjMxLTIuNzdROTcuNDItMS45IDk4Ljg4LTEuOVpNMTExLjM3IDBMMTA4LjY2IDAgMTA4LjY2LTE2LjIxIDExMC45LTE2LjIxIDExMS4xNC0xMy44OCAxMTEuMjItMTMuODhRMTEzLjg4LTE2LjQ3IDExNi4zNi0xNi42MkwxMTYuMzYtMTYuNjJRMTE2LjUzLTE2LjYyIDExNi42OC0xNi42MkwxMTYuNjgtMTYuNjJRMTIxLjYtMTYuNTYgMTIxLjYzLTEwLjI2TDEyMS42My0xMC4yNiAxMjEuNjMgMCAxMTguODkgMCAxMTguODktOS45MVExMTguODktMTMuMzggMTE3LjA2LTE0LjA1TDExNy4wNi0xNC4wNVExMTYuNS0xNC4yMyAxMTUuODMtMTQuMjNMMTE1LjgzLTE0LjIzUTExNC4wOC0xNC4yMyAxMTIuMjctMTIuNjJMMTEyLjI3LTEyLjYyUTExMS44Ny0xMi4yNSAxMTEuMzctMTEuNzVMMTExLjM3LTExLjc1IDExMS4zNyAwWk0xMzEuNDEgMC4zOEwxMzEuNDEgMC4zOFExMjcuNzcgMC4zOCAxMjUuNTgtMi4yNUwxMjUuNTgtMi4yNVExMjMuNjYtNC41OCAxMjMuNjYtOC4xMUwxMjMuNjYtOC4xMVExMjMuNjYtMTIuMyAxMjYuMzQtMTQuNzVMMTI2LjM0LTE0Ljc1UTEyOC4zOC0xNi42MiAxMzAuOTgtMTYuNjJMMTMwLjk4LTE2LjYyUTEzNC45MS0xNi42MiAxMzYuNTQtMTMuMzJMMTM2LjU0LTEzLjMyUTEzNy40Mi0xMS40OSAxMzcuNDItOS4wMUwxMzcuNDItOS4wMVExMzcuNDItOC4yMiAxMzcuMy03LjQ2TDEzNy4zLTcuNDYgMTI2LjM3LTcuNDZRMTI2LjU0LTQuMDggMTI4Ljg4LTIuNTlMMTI4Ljg4LTIuNTlRMTMwLjEzLTEuNzggMTMxLjc2LTEuNzhMMTMxLjc2LTEuNzhRMTMzLjk1LTEuODEgMTM1LjgyLTMuMDZMMTM1LjgyLTMuMDYgMTM2LjgxLTEuMjhRMTM0LjI0IDAuMzggMTMxLjQxIDAuMzhaTTEyNi4zNC05LjQyTDEyNi4zNC05LjQyIDEzNS4wMy05LjQyUTEzNS4wMy0xMy40NyAxMzIuMjktMTQuMjlMMTMyLjI5LTE0LjI5UTEzMS42Ny0xNC40NiAxMzEtMTQuNDZMMTMxLTE0LjQ2UTEyOC43LTE0LjQ2IDEyNy4zNi0xMi40MkwxMjcuMzYtMTIuNDJRMTI2LjUxLTExLjE0IDEyNi4zNC05LjQyWiIgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoLTIuOTcwMDAwMDI4NjEwMjI5NSwgMjEuODk5OTk5NjE4NTMwMjczKSI+PC9wYXRoPjwvZz4gPC9nPjwvZz4gPC9nPjwvZz48ZGVmcyB2LWdyYT0ib2QiPjwvZGVmcz48L2c+PC9zdmc+" alt="HyperZone 品牌 Logo" width="2400" height="553">
+  <div class="brand">HYPERZONE</div>
+  <h2>HyperZone FOP 数据同步与查询方案</h2>
+  <nav aria-label="文档目录"><div class="toc"><ul><li><a href="#implementation">00 · 实现状态</a></li><li><a href="#decision">01 · 方案结论</a></li><li><a href="#comparison">02 · 方案对比</a></li><li><a href="#effort">03 · 开发量对比</a></li><li><a href="#scope">04 · 数据与权限</a></li><li><a href="#synchronization">05 · 同步与初始化</a></li><li><a href="#freshness">06 · 时效与容量</a></li><li><a href="#query">07 · 本地查询</a></li><li><a href="#contract">08 · 接口约定</a></li><li><a href="#recovery">09 · 故障与恢复</a></li><li><a href="#deployment">10 · 部署与运维</a></li><li><a href="#rollout">11 · 实施与验收</a></li><li><a href="#evidence">12 · 依据与待确认</a></li></ul></div></nav>
+  <div class="sidebar-foot">2026-11-12 V2.5</div>
+</aside>
+<main class="page">
+  <div class="toolbar"><span>HyperZone · HyperZone FOP 数据同步与查询方案</span><button type="button" onclick="window.print()">打印 / 保存 PDF</button></div>
+  <header class="hero">
+    <div class="hero-brand"><img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHhtbG5zOnhsaW5rPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5L3hsaW5rIiB2ZXJzaW9uPSIxLjAiIHg9IjAiIHk9IjAiIHdpZHRoPSIyNDAwIiBoZWlnaHQ9IjU1My4yMzk1OTE5NTE5NTg2IiB2aWV3Qm94PSI2Ni43NTA1MDE1NTYzOTY0OSAxMDEuMTk5MjkzMDYwMzAyNzQgMjA2LjQ5ODk5Njg4NzIwNzAzIDQ3LjYwMTQyNTMyMzQ4NjMyNSIgcHJlc2VydmVBc3BlY3RSYXRpbz0ieE1pZFlNaWQgbWVldCIgY29sb3ItaW50ZXJwb2xhdGlvbi1maWx0ZXJzPSJzUkdCIj48Zz48ZGVmcz48bGluZWFyR3JhZGllbnQgaWQ9IjkyIiB4MT0iMCUiIHkxPSIwJSIgeDI9IjEwMCUiIHkyPSIwJSI+PHN0b3Agb2Zmc2V0PSIwJSIgc3RvcC1jb2xvcj0iI2ZhNzFjZCI+PC9zdG9wPiA8c3RvcCBvZmZzZXQ9IjEwMCUiIHN0b3AtY29sb3I9IiM5YjU5YjYiPjwvc3RvcD48L2xpbmVhckdyYWRpZW50PjxsaW5lYXJHcmFkaWVudCBpZD0iOTMiIHgxPSIwJSIgeTE9IjAlIiB4Mj0iMTAwJSIgeTI9IjAlIj48c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjZjlkNDIzIj48L3N0b3A+IDxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iI2Y4MzYwMCI+PC9zdG9wPjwvbGluZWFyR3JhZGllbnQ+PGxpbmVhckdyYWRpZW50IGlkPSI5NCIgeDE9IjAlIiB5MT0iMCUiIHgyPSIxMDAlIiB5Mj0iMCUiPjxzdG9wIG9mZnNldD0iMCUiIHN0b3AtY29sb3I9IiMwMDY0ZDIiPjwvc3RvcD4gPHN0b3Agb2Zmc2V0PSIxMDAlIiBzdG9wLWNvbG9yPSIjMWNiMGY2Ij48L3N0b3A+PC9saW5lYXJHcmFkaWVudD48bGluZWFyR3JhZGllbnQgaWQ9Ijk1IiB4MT0iMCUiIHkxPSIwJSIgeDI9IjEwMCUiIHkyPSIwJSI+PHN0b3Agb2Zmc2V0PSIwJSIgc3RvcC1jb2xvcj0iI2YwMDk3OCI+PC9zdG9wPiA8c3RvcCBvZmZzZXQ9IjEwMCUiIHN0b3AtY29sb3I9IiMzZjUxYjEiPjwvc3RvcD48L2xpbmVhckdyYWRpZW50PjxsaW5lYXJHcmFkaWVudCBpZD0iOTYiIHgxPSIwJSIgeTE9IjAlIiB4Mj0iMTAwJSIgeTI9IjAlIj48c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjNzg3M2Y1Ij48L3N0b3A+IDxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iI2VjNzdhYiI+PC9zdG9wPjwvbGluZWFyR3JhZGllbnQ+PGxpbmVhckdyYWRpZW50IGlkPSI5NyIgeDE9IjAlIiB5MT0iMCUiIHgyPSIxMDAlIiB5Mj0iMCUiPjxzdG9wIG9mZnNldD0iMCUiIHN0b3AtY29sb3I9IiNmOWQ0MjMiPjwvc3RvcD4gPHN0b3Agb2Zmc2V0PSIxMDAlIiBzdG9wLWNvbG9yPSIjZTE0ZmFkIj48L3N0b3A+PC9saW5lYXJHcmFkaWVudD48bGluZWFyR3JhZGllbnQgaWQ9Ijk4IiB4MT0iMCUiIHkxPSIwJSIgeDI9IjEwMCUiIHkyPSIwJSI+PHN0b3Agb2Zmc2V0PSIwJSIgc3RvcC1jb2xvcj0iIzAwOWVmZCI+PC9zdG9wPiA8c3RvcCBvZmZzZXQ9IjEwMCUiIHN0b3AtY29sb3I9IiMyYWY1OTgiPjwvc3RvcD48L2xpbmVhckdyYWRpZW50PjxsaW5lYXJHcmFkaWVudCBpZD0iOTkiIHgxPSIwJSIgeTE9IjAlIiB4Mj0iMTAwJSIgeTI9IjAlIj48c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjZmZjYzAwIj48L3N0b3A+IDxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iIzAwYjE0MCI+PC9zdG9wPjwvbGluZWFyR3JhZGllbnQ+PGxpbmVhckdyYWRpZW50IGlkPSIxMDAiIHgxPSIwJSIgeTE9IjAlIiB4Mj0iMTAwJSIgeTI9IjAlIj48c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjZDUxMDA3Ij48L3N0b3A+IDxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iI2ZmODE3NyI+PC9zdG9wPjwvbGluZWFyR3JhZGllbnQ+PGxpbmVhckdyYWRpZW50IGlkPSIxMDIiIHgxPSIwJSIgeTE9IjAlIiB4Mj0iMTAwJSIgeTI9IjAlIj48c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjYTJiNmRmIj48L3N0b3A+IDxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iIzBjMzQ4MyI+PC9zdG9wPjwvbGluZWFyR3JhZGllbnQ+PGxpbmVhckdyYWRpZW50IGlkPSIxMDMiIHgxPSIwJSIgeTE9IjAlIiB4Mj0iMTAwJSIgeTI9IjAlIj48c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjN2FjNWQ4Ij48L3N0b3A+IDxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iI2VlYTJhMiI+PC9zdG9wPjwvbGluZWFyR3JhZGllbnQ+PGxpbmVhckdyYWRpZW50IGlkPSIxMDQiIHgxPSIwJSIgeTE9IjAlIiB4Mj0iMTAwJSIgeTI9IjAlIj48c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjMDBlY2JjIj48L3N0b3A+IDxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iIzAwN2FkZiI+PC9zdG9wPjwvbGluZWFyR3JhZGllbnQ+PGxpbmVhckdyYWRpZW50IGlkPSIxMDUiIHgxPSIwJSIgeTE9IjAlIiB4Mj0iMTAwJSIgeTI9IjAlIj48c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjYjg4NzQ2Ij48L3N0b3A+IDxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iI2ZkZjVhNiI+PC9zdG9wPjwvbGluZWFyR3JhZGllbnQ+PC9kZWZzPjxnIGZpbGw9IiNmZmZmZmYiIGNsYXNzPSJpY29uLXRleHQtd3JhcHBlciBpY29uLXN2Zy1ncm91cCBpY29uc3ZnIiB0cmFuc2Zvcm09InRyYW5zbGF0ZSg2OC43NzUwMDE1MjcwOTAyNCwxMDMuMjIzNzg3MzA3NzM5MjYpIj48ZyBjbGFzcz0iaWNvbnN2Zy1pbWFnZXN2ZyIgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMCwwKSI+PGc+PHJlY3QgZmlsbD0iI2ZmZmZmZiIgZmlsbC1vcGFjaXR5PSIwIiBzdHJva2Utd2lkdGg9IjIiIHg9IjAiIHk9IjAiIHdpZHRoPSI2MCIgaGVpZ2h0PSI0My41NTI0MjYyMzMwNzgwNjYiIGNsYXNzPSJpbWFnZS1yZWN0Ij48L3JlY3Q+IDxzdmcgeD0iMCIgeT0iMCIgd2lkdGg9IjYwIiBoZWlnaHQ9IjQzLjU1MjQyNjIzMzA3ODA2NiIgZmlsdGVyc2VjPSJjb2xvcnNiMTQ2MjY1MDgxNCIgY2xhc3M9ImltYWdlLXN2Zy1zdmcgcHJpbWFyeSIgc3R5bGU9Im92ZXJmbG93OiB2aXNpYmxlOyI+PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAuMDUwMjAwNDYyMzQxMzA4NTk0IC0wLjAxNjg5MDA0ODk4MDcxMjg5IDE4NC41MjE2ODI3MzkyNTc4IDEzMy45Mzk0MjI2MDc0MjE4OCI+PHBhdGggZD0iTTg4LjU5IDU0LjIxYzE4LjkyIDAgMzcuODUtLjMxIDU2Ljc1LjE4IDcuMjMuMTggMTEuNTctMS41MSAxMi42MS05LjE3LjMyLTIuMzMuNzctNS41OSAzLjctNiAyLjM5LS4zNiAzLjc3IDIuMjggNS4xMSA0IDUuMzkgNyAxMC41OSAxNC4xMiAxNiAyMS4xIDIuNzEgMy41MSAyLjQ3IDYuMDgtMS4zMyA4Ljc1LTEwLjcyIDcuNTMtMjEuMjYgMTUuMzMtMzEuOSAyMy0xLjU2IDEuMTItMy4yNyAzLjEyLTUuMzEgMS41NXMtLjU4LTMuNjktLjM0LTUuNjVjLjM0LTIuNzggMy45NC02LjctMS43LTcuODMtNC40Mi0uODktOC41MS0uMjgtMTAgNS4zNC0zIDExLjQ1LTYuNjMgMjIuNzQtOS41MiAzNC4yMi0xLjc5IDcuMTUtNS4xOSAxMC43NS0xMy4xNCAxMC4xNi04LjUzLS42My0xNy4xNC0uMDgtMjUuNzItLjE3cy05LjE5LTEtNi43Mi05LjQycTQuNzEtMTUuOTQgOS42NC0zMS44MmMyLjI1LTcuMjQgMS41MS04LjY0LTYuMTItOC41My0yNy4wOC4zNy0yMS4xNy00LjA3LTI4LjU1IDIxLTIuMiA3LjQ5LTQuNjIgMTQuOTItNi43NyAyMi40Mi0xLjE5IDQuMTctMy40MyA2LjQyLTggNi4zNS0xMC41OS0uMTUtMjEuMTktLjA5LTMxLjc4IDAtNC44NiAwLTYuMjktMi4zMi01LTYuNzdDNy4wNiAxMDQuNDMgMTMuNyA4MiAyMC4yMyA1OS40NmMxLjMyLTQuNTQgNC4yNi01LjM4IDguNTgtNS4zMyAxOS45Mi4xOCAzOS44NS4wOCA1OS43OC4wOHoiIGZpbGw9IiNmYWJlMDAiPjwvcGF0aD48cGF0aCBkPSJNMTIzLjE2IDQ1Ljg5aC0xNS44NWMtNC42LjA1LTYuNDItMS40OC00LjktNi40NCAzLjI1LTEwLjU3IDYuMTgtMjEuMjMgOS0zMS45MiAxLjMzLTUuMDcgMy44NS03LjcgOS40Ny03LjU0IDEwLjA2LjMgMjAuMTIuMjEgMzAuMTkuMDEgNS4zOC0uMDkgNy40NiAxLjc5IDUuNzQgNy4yNnEtNS4zMyAxNi44OC0xMC4zMyAzMy44N2MtMSAzLjU0LTMuMzMgNC43NS02LjcxIDQuNzMtNS41NC4wMS0xMS4wOC4wMy0xNi42MS4wM3pNNDcuODMgNDUuODloLTE2LjZjLTQuMDUgMC02LjE2LTEuMjYtNC43NC02UTMxLjUgMjMuMzEgMzYgNi41NkMzNy4yIDEuOTIgMzkuODYgMCA0NC42MSAwYzEwLjMxLjE1IDIwLjYzLjEyIDMwLjk0IDAgNC44NCAwIDcuMTkgMS41NyA1LjU2IDYuNzlxLTUuMzUgMTcuMjctMTAuNTIgMzQuNmMtMS4wOCAzLjYzLTMuNjMgNC40Ni02LjkxIDQuNDQtNS4yOC4wNS0xMC41Ny4wNy0xNS44NS4wNnoiIGZpbGw9IiNlYTU1MDQiPjwvcGF0aD48L3N2Zz48L3N2Zz4gPC9nPjwvZz4gPGcgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoNjgsNy4zMjYyMTI4ODI5OTU2MDU1KSI+PGcgZmlsbC1ydWxlPSIiIGNsYXNzPSJ0cC1uYW1lIGljb25zdmctbmFtZXN2ZyI+PGcgdHJhbnNmb3JtPSJzY2FsZSgxKSI+PGc+PHBhdGggZD0iTTUuNzcgMEwyLjk3IDAgMi45Ny0yMS45IDUuNzctMjEuOSA1Ljc3LTEyLjcxIDE1Ljk4LTEyLjcxIDE1Ljk4LTIxLjkgMTguNzItMjEuOSAxOC43MiAwIDE1Ljk4IDAgMTUuOTgtMTAuMzIgNS43Ny0xMC4zMiA1Ljc3IDBaTTIyLjcyIDdMMjIuNzIgN1EyMS42NyA3IDIwLjgzIDYuNjVMMjAuODMgNi42NSAyMS4zNSA0LjQ5UTIyLjA4IDQuNzUgMjIuNTggNC43NUwyMi41OCA0Ljc1UTI1LjA5IDQuNjkgMjYuMjUgMS4yNUwyNi4yNSAxLjI1IDI2LjYzIDAuMDMgMjAuMS0xNi4yMSAyMi45Ni0xNi4yMSAyNi4yNS03LjJRMjYuNTEtNi40MSAyNy4xMy00LjY5TDI3LjEzLTQuNjlRMjcuNjItMy4yOSAyNy44My0yLjY1TDI3LjgzLTIuNjUgMjcuOTctMi42NVEyOS4wNS02LjI3IDI5LjM0LTcuMkwyOS4zNC03LjIgMzIuMjMtMTYuMjEgMzQuODgtMTYuMjEgMjguNzYgMS4zNFEyNy4xNiA1LjgzIDI0LjQ0IDYuNzRMMjQuNDQgNi43NFEyMy42MyA3IDIyLjcyIDdaTTM4LjcxIDYuODJMMzYgNi44MiAzNi0xNi4yMSAzOC4yNS0xNi4yMSAzOC40OC0xNC4zNyAzOC41Ny0xNC4zN1E0MS4zMS0xNi41OSA0My43My0xNi42Mkw0My43My0xNi42MlE0Ny42NC0xNi42MiA0OS4yNy0xMy4xMkw0OS4yNy0xMy4xMlE1MC4yLTExLjE3IDUwLjItOC4zN0w1MC4yLTguMzdRNTAuMi0zLjczIDQ3LjQzLTEuMjhMNDcuNDMtMS4yOFE0NS41NyAwLjM4IDQzLjE1IDAuMzhMNDMuMTUgMC4zOFE0MC45MyAwLjM1IDM4LjY2LTEuNDlMMzguNjYtMS40OSAzOC43MSAxLjM0IDM4LjcxIDYuODJaTTQyLjcxLTEuOUw0Mi43MS0xLjlRNDUuMTktMS45IDQ2LjQ3LTQuMzJMNDYuNDctNC4zMlE0Ny4zNC01Ljk4IDQ3LjM0LTguMzRMNDcuMzQtOC4zNFE0Ny4yOS0xNC4zMiA0My4wOS0xNC4zNEw0My4wOS0xNC4zNFE0MS4xLTE0LjMyIDM4LjcxLTEyLjFMMzguNzEtMTIuMSAzOC43MS0zLjU5UTQwLjctMS45IDQyLjcxLTEuOVpNNTkuMDIgMC4zOEw1OS4wMiAwLjM4UTU1LjM3IDAuMzggNTMuMTktMi4yNUw1My4xOS0yLjI1UTUxLjI2LTQuNTggNTEuMjYtOC4xMUw1MS4yNi04LjExUTUxLjI2LTEyLjMgNTMuOTQtMTQuNzVMNTMuOTQtMTQuNzVRNTUuOTktMTYuNjIgNTguNTgtMTYuNjJMNTguNTgtMTYuNjJRNjIuNTItMTYuNjIgNjQuMTUtMTMuMzJMNjQuMTUtMTMuMzJRNjUuMDItMTEuNDkgNjUuMDItOS4wMUw2NS4wMi05LjAxUTY1LjAyLTguMjIgNjQuOTEtNy40Nkw2NC45MS03LjQ2IDUzLjk3LTcuNDZRNTQuMTUtNC4wOCA1Ni40OC0yLjU5TDU2LjQ4LTIuNTlRNTcuNzMtMS43OCA1OS4zNy0xLjc4TDU5LjM3LTEuNzhRNjEuNTUtMS44MSA2My40Mi0zLjA2TDYzLjQyLTMuMDYgNjQuNDEtMS4yOFE2MS44NSAwLjM4IDU5LjAyIDAuMzhaTTUzLjk0LTkuNDJMNTMuOTQtOS40MiA2Mi42My05LjQyUTYyLjYzLTEzLjQ3IDU5Ljg5LTE0LjI5TDU5Ljg5LTE0LjI5UTU5LjI4LTE0LjQ2IDU4LjYxLTE0LjQ2TDU4LjYxLTE0LjQ2UTU2LjMxLTE0LjQ2IDU0Ljk3LTEyLjQyTDU0Ljk3LTEyLjQyUTU0LjEyLTExLjE0IDUzLjk0LTkuNDJaTTY5LjczIDBMNjcuMDIgMCA2Ny4wMi0xNi4yMSA2OS4yNi0xNi4yMSA2OS41LTEzLjI3IDY5LjU4LTEzLjI3UTcxLjE5LTE2LjE1IDczLjU1LTE2LjU2TDczLjU1LTE2LjU2UTczLjg3LTE2LjYyIDc0LjE5LTE2LjYyTDc0LjE5LTE2LjYyUTc1LjI3LTE2LjYyIDc1LjkxLTE2LjI3TDc1LjkxLTE2LjI3IDc1LjQyLTEzLjg4UTc0LjcyLTE0LjE0IDczLjg0LTE0LjE0TDczLjg0LTE0LjE0UTcxLjg2LTE0LjE0IDcwLjQzLTExLjg0TDcwLjQzLTExLjg0UTcwLjA1LTExLjIgNjkuNzMtMTAuNDFMNjkuNzMtMTAuNDEgNjkuNzMgMFpNOTAuNDEgMEw3NS4zNCAwIDc1LjM0LTEuNjMgODYuODktMTkuNTYgNzYuMzktMTkuNTYgNzYuMzktMjEuOSA5MC4zLTIxLjkgOTAuMy0yMC4yNiA3OC43NS0yLjM2IDkwLjQxLTIuMzYgOTAuNDEgMFpNOTguODggMC4zOEw5OC44OCAwLjM4UTk1LjYxIDAuMzggOTMuNDYtMi4wNEw5My40Ni0yLjA0UTkxLjM2LTQuNDMgOTEuMzYtOC4xMUw5MS4zNi04LjExUTkxLjM2LTEyLjU0IDk0LjIyLTE0Ljk2TDk0LjIyLTE0Ljk2UTk2LjI2LTE2LjYyIDk4Ljg4LTE2LjYyTDk4Ljg4LTE2LjYyUTEwMi4xNy0xNi42MiAxMDQuMzMtMTQuMTdMMTA0LjMzLTE0LjE3UTEwNi40LTExLjc4IDEwNi40LTguMTFMMTA2LjQtOC4xMVExMDYuNC0zLjcgMTAzLjU1LTEuMzFMMTAzLjU1LTEuMzFRMTAxLjUzIDAuMzggOTguODggMC4zOFpNOTguODgtMS45TDk4Ljg4LTEuOVExMDEuNDUtMS45IDEwMi43Ni00LjMyTDEwMi43Ni00LjMyUTEwMy42LTUuOTIgMTAzLjYtOC4xMUwxMDMuNi04LjExUTEwMy42LTExLjY5IDEwMS41Ni0xMy40MUwxMDEuNTYtMTMuNDFRMTAwLjQtMTQuMzcgOTguODgtMTQuMzdMOTguODgtMTQuMzdROTYuMzQtMTQuMzcgOTUuMDYtMTEuOTJMOTUuMDYtMTEuOTJROTQuMjItMTAuMzIgOTQuMjItOC4xMUw5NC4yMi04LjExUTk0LjIyLTQuNCA5Ni4zMS0yLjc3TDk2LjMxLTIuNzdROTcuNDItMS45IDk4Ljg4LTEuOVpNMTExLjM3IDBMMTA4LjY2IDAgMTA4LjY2LTE2LjIxIDExMC45LTE2LjIxIDExMS4xNC0xMy44OCAxMTEuMjItMTMuODhRMTEzLjg4LTE2LjQ3IDExNi4zNi0xNi42MkwxMTYuMzYtMTYuNjJRMTE2LjUzLTE2LjYyIDExNi42OC0xNi42MkwxMTYuNjgtMTYuNjJRMTIxLjYtMTYuNTYgMTIxLjYzLTEwLjI2TDEyMS42My0xMC4yNiAxMjEuNjMgMCAxMTguODkgMCAxMTguODktOS45MVExMTguODktMTMuMzggMTE3LjA2LTE0LjA1TDExNy4wNi0xNC4wNVExMTYuNS0xNC4yMyAxMTUuODMtMTQuMjNMMTE1LjgzLTE0LjIzUTExNC4wOC0xNC4yMyAxMTIuMjctMTIuNjJMMTEyLjI3LTEyLjYyUTExMS44Ny0xMi4yNSAxMTEuMzctMTEuNzVMMTExLjM3LTExLjc1IDExMS4zNyAwWk0xMzEuNDEgMC4zOEwxMzEuNDEgMC4zOFExMjcuNzcgMC4zOCAxMjUuNTgtMi4yNUwxMjUuNTgtMi4yNVExMjMuNjYtNC41OCAxMjMuNjYtOC4xMUwxMjMuNjYtOC4xMVExMjMuNjYtMTIuMyAxMjYuMzQtMTQuNzVMMTI2LjM0LTE0Ljc1UTEyOC4zOC0xNi42MiAxMzAuOTgtMTYuNjJMMTMwLjk4LTE2LjYyUTEzNC45MS0xNi42MiAxMzYuNTQtMTMuMzJMMTM2LjU0LTEzLjMyUTEzNy40Mi0xMS40OSAxMzcuNDItOS4wMUwxMzcuNDItOS4wMVExMzcuNDItOC4yMiAxMzcuMy03LjQ2TDEzNy4zLTcuNDYgMTI2LjM3LTcuNDZRMTI2LjU0LTQuMDggMTI4Ljg4LTIuNTlMMTI4Ljg4LTIuNTlRMTMwLjEzLTEuNzggMTMxLjc2LTEuNzhMMTMxLjc2LTEuNzhRMTMzLjk1LTEuODEgMTM1LjgyLTMuMDZMMTM1LjgyLTMuMDYgMTM2LjgxLTEuMjhRMTM0LjI0IDAuMzggMTMxLjQxIDAuMzhaTTEyNi4zNC05LjQyTDEyNi4zNC05LjQyIDEzNS4wMy05LjQyUTEzNS4wMy0xMy40NyAxMzIuMjktMTQuMjlMMTMyLjI5LTE0LjI5UTEzMS42Ny0xNC40NiAxMzEtMTQuNDZMMTMxLTE0LjQ2UTEyOC43LTE0LjQ2IDEyNy4zNi0xMi40MkwxMjcuMzYtMTIuNDJRMTI2LjUxLTExLjE0IDEyNi4zNC05LjQyWiIgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoLTIuOTcwMDAwMDI4NjEwMjI5NSwgMjEuODk5OTk5NjE4NTMwMjczKSI+PC9wYXRoPjwvZz4gPC9nPjwvZz4gPC9nPjwvZz48ZGVmcyB2LWdyYT0ib2QiPjwvZGVmcz48L2c+PC9zdmc+" alt="HyperZone 品牌 Logo" width="2400" height="553"></div>
+    <h1>HyperZone FOP 数据同步与查询方案</h1>
+    <p>本地业务副本 · 独立授权 · 专用实时操作</p>
+    <div class="badges"><span>2026-11-12 V2.5</span></div>
+  </header>
+  <article id="report" style="margin-top:28px"><style>
+.architecture{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin:20px 0}.architecture .node{position:relative;border:1px solid var(--line);background:#f3f8fc;border-radius:8px;padding:15px 12px;text-align:center;font-size:13px}.architecture .node strong{display:block;color:var(--blue);margin-bottom:7px}.architecture .node small{display:block;line-height:1.7;color:var(--muted)}.architecture .node:not(:last-child)::after{content:'→';position:absolute;right:-10px;top:40%;z-index:1;color:var(--teal);font-weight:700;background:white}.architecture .node:nth-child(3){background:#eaf6f6;border-color:#b5d9da}.architecture-caption{font-size:12px;color:var(--muted);text-align:center}.decision{border-left:4px solid var(--teal);padding:12px 18px;background:#edf6f9;margin:18px 0}.decision p{margin:6px 0}.comparison th:first-child{width:18%}.comparison th:nth-child(2),.comparison th:nth-child(3){width:41%}.effort th:first-child{width:19%}.effort th:last-child{width:35%}.level{display:inline-block;font-weight:650;color:#165a9b}.tag{display:inline-block;border:1px solid #b6d3df;background:#edf6f9;color:#14576c;font-size:12px;padding:1px 8px;border-radius:5px;white-space:nowrap}.compact-note{font-size:13px;color:var(--muted)}.toc a{white-space:nowrap}.metric-list{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:18px 0}.metric-list div{border:1px solid var(--line);border-radius:8px;padding:14px 16px;background:#f8fafc}.metric-list strong{display:block;font-size:20px;color:var(--blue)}.metric-list small{color:var(--muted);font-size:12px}.source-list{font-size:13px}.table-wrap table{table-layout:fixed}.table-wrap th,.table-wrap td{overflow-wrap:anywhere}.sidebar h2{font-size:21px}
+@media(max-width:1100px){.architecture{grid-template-columns:1fr}.architecture .node:not(:last-child)::after{content:'↓';right:calc(50% - 6px);top:auto;bottom:-16px;background:white}.metric-list{grid-template-columns:1fr}.table-wrap table{min-width:640px}}
+@media print{.architecture{grid-template-columns:repeat(5,minmax(0,1fr));gap:7px;break-inside:avoid}.architecture .node{padding:9px 6px;font-size:9pt}.architecture .node:not(:last-child)::after{content:'→';right:-8px;top:38%;bottom:auto}.architecture .node small{font-size:8pt}.metric-list{grid-template-columns:repeat(3,minmax(0,1fr));break-inside:avoid}.metric-list strong{font-size:13pt}.table-wrap table{min-width:0}.decision{break-inside:avoid}.compact-note{font-size:9pt}.source-list{font-size:9pt}.table-wrap th,.table-wrap td{overflow-wrap:anywhere}}
+
+.verdict{display:inline-flex;align-items:center;justify-content:center;min-width:30px;padding:1px 8px;margin:0 8px 3px 0;border:1px solid;border-radius:5px;font-size:12px;line-height:1.65;font-weight:750;white-space:nowrap;vertical-align:baseline}.verdict-good{color:#0d6743;background:#edf8f1;border-color:#a4cfb6}.verdict-bad{color:#a72b27;background:#fff1f0;border-color:#e4b2af}.verdict-neutral{color:#3d5675;background:#eef3f8;border-color:#c0cddd}.verdict-legend{display:flex;flex-wrap:wrap;align-items:center;gap:8px 20px;padding:12px 16px;margin:16px 0;background:#f8fafc;border:1px solid var(--line);border-radius:8px;font-size:13px}.verdict-legend>span{display:inline-flex;align-items:center}.verdict-legend .verdict{margin-bottom:0}.comparison .verdict{float:left;margin-top:1px}.effort .level{font-weight:500;color:var(--ink)}
+@media print{.verdict,.verdict-legend{print-color-adjust:exact;-webkit-print-color-adjust:exact}.verdict{font-size:8.5pt;min-width:22px;margin-right:5px;padding:0 5px}.comparison .verdict{float:none}}
+</style>
+
+<h2 id="implementation">00 · 实现状态</h2>
+<p><strong>当前结论：</strong>本项目新适配器及初始化执行链已完成代码实现与隔离数据库验证；2026-11-12已按授权完成单次真实原始订单采集；自动调用继续暂停，源端新同步接口待提供，业务初始化尚未发布。代码能力与真实数据接通分别验收。</p>
+<div class="table-wrap"><table><thead><tr><th>能力</th><th>实现状态</th><th>执行边界</th></tr></thead><tbody>
+<tr><td>本地查询与导出</td><td>已实现</td><td>生产清单与Excel仅本地；完整分页、固定版本、当前权限和交付前复验；无历史穿透回退。</td></tr>
+<tr><td>服务身份同步</td><td>ReplicaHttpSource已注册</td><td>六项显式HTTPS服务，严格版本／公司回显、限额、暂停检查；远端地址及契约待提供。</td></tr>
+<tr><td>领域归一化与发布</td><td>已实现</td><td>领域事实白名单、稳定ID、主单/分录/关系、物流生命周期、订单及收货通知投影；缺关键事实阻断。</td></tr>
+<tr><td>历史初始化</td><td>管理API及CLI已实现</td><td>稳定快照暂存、跨页关联准备、续传、变更追平、数量金额校验、原子切换；未覆盖实体明确不可用。</td></tr>
+<tr><td>独立授权／实时能力</td><td>已实现</td><td>完整归属向量续验；审核、即时库存、备货库存专用API；供应商催办尚无正式接口。</td></tr>
+<tr><td>运行环境</td><td>真实模式，自动调用暂停</td><td>真实库63表／980字段、51项迁移全部应用；已采集44,855条原始订单，正式副本仍0单。六项源契约缺地址及关键事实缺失，待FOP补齐后另行初始化。</td></tr></tbody></table></div>
+<p>具体交付、验证及启动步骤见《HyperZone FOP 集成核查与初始化条件》；FOP工作项见《HyperZone FOP 后台改造需求与联调交接》；字段状态以三列对照表为准。</p>
+<h2 id="decision">01 · 方案结论</h2>
+<p>采用<strong>统一集成账号、后台增量同步、本地查询库、本地组织权限</strong>方案，服务五个工作台的待办、完成记录、详情、库存查询、催办关联和 Excel 导出。FOP 保留业务办理与单据事实，本项目负责关联计算、查询展示与本地账号数据隔离；本轮不纳入数据分析建设。</p>
+<div class="architecture" role="img" aria-label="FOP产生业务变更，集成账号后台同步，本项目数据库形成工作台查询数据，后端按当前账号权限查询，页面展示结果">
+  <div class="node"><strong>FOP</strong><small>业务单据<br>持久变更记录</small></div>
+  <div class="node"><strong>后台同步</strong><small>统一集成账号<br>增量读取与补偿</small></div>
+  <div class="node"><strong>本项目数据库</strong><small>来源事实与关系<br>工作台查询数据</small></div>
+  <div class="node"><strong>后端权限查询</strong><small>本地角色与组织<br>筛选、合计、分页</small></div>
+  <div class="node"><strong>页面展示</strong><small>授权数据<br>更新时间与导出</small></div>
+</div>
+<div class="decision"><p><strong>实施定位：</strong>列表查询使用本地同步数据；审核、拦截、出库及其他实际执行仍由 FOP 校验最新状态。单据办理不直接修改本地同步副本。</p></div>
+<p>本项目已按本方案切换清单与同步代码，真实API原始采集已验证；正式副本同步尚未接通。同步使用专用集成服务凭据，终端用户查询按本地组织与有效员工绑定取交集，不逐人为只读清单申请代理Token。审核与实时库存仍独立校验当前身份、范围和资源授权；服务身份不自动赋予用户业务权限。</p>
+<p>当前接口包未见覆盖全部业务单据的通用变更游标或更新时间增量查询；现有接口授权成功不等于具备可靠增量同步能力。FOP 需补齐变更采集、初始化衔接和完整事实读取，前端业务范围筛选由本项目执行。</p>
+
+<h2 id="comparison">02 · 方案对比</h2>
+<p>对比前提统一为：集成账号调用 FOP，本地组织和角色为账号权限依据。<strong>实时穿透查询</strong>指本项目后端计算允许的业务员范围，将条件交给 FOP，由 FOP 完成关联、筛选、排序、统计及分页，再返回结果；并不必然要求复制一套 FOP 组织。</p>
+<div class="verdict-legend" aria-label="对比结论图例"><span><span class="verdict verdict-good">优</span>相对更有利</span><span><span class="verdict verdict-bad">劣</span>相对受限或成本更高</span><span><span class="verdict verdict-neutral">平</span>接近或暂无明确差距</span></div>
+<p class="compact-note">结论按本项目五工作台场景作相对评价，不是性能实测排名；开发量以投入较少、维护较简为优。</p>
+<div class="table-wrap"><table class="comparison"><thead><tr><th>维度</th><th>方案 A：本地同步后查询（推荐）</th><th>方案 B：实时穿透查询，FOP 筛选</th></tr></thead><tbody>
+<tr><td>数据时效</td><td><span class="verdict verdict-bad">劣</span>存在同步延迟；按需触发、手工刷新和低频兜底分别验收，以实际同步水位说明数据时间。</td><td><span class="verdict verdict-good">优</span>读取请求时 FOP 可提供的当前数据；仍受其缓存、处理耗时和多接口读取时间差影响。</td></tr>
+<tr><td>页面响应</td><td><span class="verdict verdict-good">优</span>查询本地索引与预先关联结果，减少远程往返；性能主要由本项目控制。</td><td><span class="verdict verdict-bad">劣</span>取决于 FOP 查询、关联、统计及网络耗时；正确索引和合理接口同样可获得良好性能。</td></tr>
+<tr><td>用户并发</td><td><span class="verdict verdict-good">优</span>同步任务供多人共用；用户数增长主要增加本项目查询负载。</td><td><span class="verdict verdict-bad">劣</span>用户查询直接增加 FOP 读负载，可用缓存和限流缓解，但需要协调缓存时效。</td></tr>
+<tr><td>FOP 系统负载</td><td><span class="verdict verdict-good">优</span>以业务变化量、初始化和核对量为主；初始化、补偿仍需控制负载。</td><td><span class="verdict verdict-bad">劣</span>以查询次数和复杂度为主；工作台刷新、导出可能重复执行关联与合计。</td></tr>
+<tr><td>日增数千至数万</td><td><span class="verdict verdict-neutral">平</span>按变更量批量同步，适合持续积累历史数据；需按高峰和多单据变化压测。</td><td><span class="verdict verdict-neutral">平</span>数据量增长后依赖 FOP 的索引、查询计划及聚合设计，不必然比同步方案慢。</td></tr>
+<tr><td>复杂待办分类</td><td><span class="verdict verdict-good">优</span>在本项目集中组合采购、发运、配货等事实，复用现有业务规则。</td><td><span class="verdict verdict-bad">劣</span>通常需 FOP 实现相应查询口径；也可本项目补算，但必须保证分页与合计正确。</td></tr>
+<tr><td>组织权限</td><td><span class="verdict verdict-neutral">平</span>本项目将本地成员范围直接用于数据库查询，员工调动和角色变更可在下次请求生效。</td><td><span class="verdict verdict-neutral">平</span>本项目计算成员范围，FOP 按受信任条件在分页前过滤；两端共同校验范围。</td></tr>
+<tr><td>FOP 归属与撤权</td><td><span class="verdict verdict-bad">劣</span>归属变化受同步延迟影响；集成资源授权需独立复验或即时撤权通知，不能依赖旧副本永久放行。</td><td><span class="verdict verdict-good">优</span>可在请求时校验最新 FOP 归属和资源授权；是否即时取决于接口实际实现。</td></tr>
+<tr><td>数据一致性</td><td><span class="verdict verdict-bad">劣</span>最终一致；需版本、防乱序、跨单据依赖及完整结果发布机制。</td><td><span class="verdict verdict-good">优</span>单次数据库查询可读取一致视图；多接口拼接也可能出现中间状态，需快照或版本约定。</td></tr>
+<tr><td>搜索、筛选扩展</td><td><span class="verdict verdict-good">优</span>已有事实足够时主要修改本项目；缺失源字段仍需 FOP 补充。</td><td><span class="verdict verdict-bad">劣</span>新筛选涉及 FOP 查询参数、谓词、统计和分页契约时，两端联动修改。</td></tr>
+<tr><td>列表与导出一致</td><td><span class="verdict verdict-neutral">平</span>复用本地授权查询与数据版本；导出开始及交付前复验账号权限。</td><td><span class="verdict verdict-neutral">平</span>FOP 需为列表、汇总、全量导出提供一致条件和范围，避免只导出当前页。</td></tr>
+<tr><td>FOP 短时故障</td><td><span class="verdict verdict-good">优</span>在约定的授权与数据时效内可查询上一完整结果，并显示同步状态；超限停止相关查询。</td><td><span class="verdict verdict-bad">劣</span>未命中有效缓存的查询通常不可用；故障影响直接传到页面。</td></tr>
+<tr><td>历史重算</td><td><span class="verdict verdict-good">优</span>可从已同步事实重建查询结果，便于修正规则；原始事实缺失时需要回源。</td><td><span class="verdict verdict-bad">劣</span>修改规则后需重新读取或由 FOP 重算；本项目不承担持久副本维护。</td></tr>
+<tr><td>数据存储与保护</td><td><span class="verdict verdict-bad">劣</span>增加一份公司业务副本，需访问控制、备份、删除传播与保留期限管理。</td><td><span class="verdict verdict-good">优</span>本项目可少存业务数据，副本治理负担较小；日志和缓存仍需受控。</td></tr>
+<tr><td>运维复杂度</td><td><span class="verdict verdict-bad">劣</span>需管理同步进度、积压、失败重试、校准、存储和重建。</td><td><span class="verdict verdict-good">优</span>主要管理接口性能、授权、限流和可用性；无完整同步管道。</td></tr>
+<tr><td>初次交付</td><td><span class="verdict verdict-neutral">平</span>需要查询库和可靠同步基础；不能仅删除现有权限校验就上线。</td><td><span class="verdict verdict-neutral">平</span>若 FOP 已具备完整工作台接口，首次交付可能更快；目前字段与范围契约尚未全部具备。</td></tr>
+<tr><td>本项目适配度</td><td><span class="verdict verdict-good">优</span>多工作台、多角色、高频查询、复杂关联及持续演进的展示规则。</td><td><span class="verdict verdict-bad">劣</span>对读取时状态要求严格、查询量适中、FOP 已有成熟查询能力的页面和操作校验。</td></tr>
+</tbody></table></div>
+<p>每次请求先从 FOP 拉取全部历史、再在本项目内存中过滤，既不是高效的穿透查询，也不是本方案。此前管理员读取约 31,900 行、约 91 秒触发完整性上限，是这一读取路径的历史联调证据，不能直接用于推算增量方案或优化后 FOP 查询的性能。</p>
+
+<h2 id="effort">03 · 开发量对比</h2>
+<p>以下为基于当前接口与工程基础的<strong>相对新增工作量</strong>，保留低、中、高投入级别，并逐项标明优／劣／平；两种方案都需要补齐单据事实、来源关系及真实业务验证。</p>
+<div class="table-wrap"><table class="effort"><thead><tr><th>工作项</th><th>方案 A</th><th>方案 B</th><th>主要工作内容</th></tr></thead><tbody>
+<tr><td>浏览器端 Vue</td><td><span class="verdict verdict-bad">劣</span><span class="level">低—中</span></td><td><span class="verdict verdict-good">优</span><span class="level">低</span></td><td>A 尽量保留既有页面，增加同步时间、延迟提示和更新通知；B 保留接口查询、加载及错误状态。</td></tr>
+<tr><td>本项目 NestJS 后端</td><td><span class="verdict verdict-bad">劣</span><span class="level">高</span></td><td><span class="verdict verdict-good">优</span><span class="level">中</span></td><td>A 新增同步任务、来源归一化、关联重算、本地授权查询与重建；B 实现条件转发、返回范围校验、接口适配及导出协调。</td></tr>
+<tr><td>FOP Java／苍穹后端</td><td><span class="verdict verdict-neutral">平</span><span class="level">中—高</span></td><td><span class="verdict verdict-neutral">平</span><span class="level">中—高</span></td><td>A 覆盖相关单据的可靠变更采集、版本、批量详情和初始化；B 实现成员过滤、付款时间关联、待办分类、合计分页及导出。已有能力越完整，对应新增量越低。</td></tr>
+<tr><td>本项目数据库</td><td><span class="verdict verdict-bad">劣</span><span class="level">高</span></td><td><span class="verdict verdict-good">优</span><span class="level">低</span></td><td>A 增加来源、关系、查询数据、游标及任务表与索引；B 主要保存账号、配置与必要缓存。</td></tr>
+<tr><td>业务规则维护</td><td><span class="verdict verdict-good">优</span><span class="level">本项目为主</span></td><td><span class="verdict verdict-bad">劣</span><span class="level">两端协同</span></td><td>A 的待办派生规则集中在本项目；B 涉及筛选与分页的派生规则通常需在 FOP 查询侧落地。</td></tr>
+<tr><td>联调与自动化验证</td><td><span class="verdict verdict-neutral">平</span><span class="level">高</span></td><td><span class="verdict verdict-neutral">平</span><span class="level">高</span></td><td>A 重点验证增量不漏、重放、删除、依赖、恢复；B 重点验证条件、范围、分页、合计与并发。两者均验证角色、详情及导出权限。</td></tr>
+<tr><td>部署与持续运维</td><td><span class="verdict verdict-bad">劣</span><span class="level">中—高</span></td><td><span class="verdict verdict-good">优</span><span class="level">中</span></td><td>A 增加同步进程、积压监控、备份与核对；B 重点保障 FOP 查询服务和网络稳定。</td></tr>
+</tbody></table></div>
+<p><strong>工作量判断：</strong>同步方案将更多建设与维护责任放在本项目，换取查询性能、界面演进和规则维护的自主性；不能预设其总开发量一定更少。FOP 可靠变更采集是方案 A 的主要前置工作，FOP 完整工作台查询能力是方案 B 的主要前置工作。</p>
+
+<h2 id="scope">04 · 数据与权限</h2>
+<h3>4.1 同步范围</h3>
+<div class="table-wrap"><table><thead><tr><th>数据组</th><th>来源单据／资料</th><th>本地用途</th></tr></thead><tbody>
+<tr><td>订单主线</td><td>履约订单、独立备货订单及商品分录</td><td>履约订单为主行，保留整单全部商品；备货单独立展示。</td></tr>
+<tr><td>采购执行</td><td>采购申请单、采购订单、付款单，平台下单及供应商发货事实</td><td>待采购按履约单查看时，主单编号为履约订单号；按采购单查看时，组头编号为采购订单号，展开明细显示关联履约订单号。1688 订单号另列。“待创建采购单”仅为汇总分组，组内编号、查询及明细展示仍以履约订单为主体；付款事实不从金额或订单存在推定。</td></tr>
+<tr><td>收货与库存</td><td>收货通知单、入库单、授权库存及占用事实</td><td>采购入库、备货阶段、客户／公共库存查询；需要实时可用库存时回源核验。</td></tr>
+<tr><td>配货与发运</td><td>配货单、发运单、发货通知单、出库单及 Shopify 同步结果</td><td>配货、发运、整单出库待办及完成记录。</td></tr>
+<tr><td>客户收款</td><td>收款单、收款调整单及来源分录</td><td>关联实际客户付款时间与退款事实，避免以供应商付款时间替代。</td></tr>
+<tr><td>售后与异常</td><td>RMA、拦截与取消、异常分类及采购实物退货事实</td><td>保留独立资源授权和来源关系；采购退货真实实体及关联仍需 FOP 确认。</td></tr>
+<tr><td>人员与资源授权</td><td>工号、人员记录 ID、业务员 masterId、启用状态，公司／资源授权</td><td>核验本地账号映射，不用 FOP 部门覆盖本地组织。</td></tr>
+</tbody></table></div>
+<p>同步“工作台所需公司数据”，不默认复制整个 FOP 的所有模块。来源数据保留公司、实体、主键、分录主键、版本与来源关系；多币种金额使用精确数值。商品图片主要保存授权可访问的图片引用，不反复同步图片二进制。</p>
+<h3>4.2 账号权限</h3>
+<div class="table-wrap"><table><thead><tr><th>角色</th><th>业务范围</th><th>执行要求</th></tr></thead><tbody>
+<tr><td>管理员</td><td>集成账号获授权的公司业务范围；选择部门后收窄。</td><td>可见系统管理、五工作台；全量不突破公司与资源授权。</td></tr>
+<tr><td>部门经理</td><td>本地所属部门及后代部门；按个人／部门展示设置确定当前范围。</td><td>个人模式仅本人；部门模式按当前本地成员的有效 FOP 映射查询。</td></tr>
+<tr><td>外贸业务员</td><td>本人业务员 masterId 对应的业务数据。</td><td>五工作台可用，跨人明细不可查询；无有效映射不回退全量。</td></tr>
+<tr><td>协同管理岗</td><td>按已授予岗位及业务范围查看工作台数据。</td><td>延续现有协同权限；HR／商品管理未开放业务数据的账号仍不开放。本轮不扩大分析明细权限。</td></tr>
+</tbody></table></div>
+<p>每次请求由后端读取当前账号和本地组织，计算有效业务员集合，并在数据库查询阶段限制范围。浏览器不能提交可扩大权限的业务员集合。部门选择、单据详情、复制关联、库存、催办和导出均受同一当前范围约束；不能仅在页面隐藏无权数据。<a href="https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html" target="_blank" rel="noopener noreferrer">依据：服务端逐请求授权</a>。</p>
+<p>本地角色、停用和组织调整在下次请求生效；FOP 单据归属变化在增量应用后生效，存在同步窗口。集成公司／资源授权独立复验，建议有效期不超过 60 秒，无法确认时停止相关查询；需要更快撤权的资源须提供即时通知或实时鉴权。RMA、采购退货和库存的独立资源权限不能从履约订单权限自动推导。</p>
+<p>人员绑定按工号核验人员 ID、业务员 masterId、公司与启用状态；将“目录已验证”与“FOP 本人登录已验证”分开记录，不能伪造本人 Token 验证结果。历史未映射订单仅在管理员或明确获权的协同全量范围展示，不能归入某位业务员或任意部门。</p>
+
+<h2 id="synchronization">05 · 同步与初始化</h2>
+<h3>5.1 初始化衔接（本项目已实现，源服务待提供）</h3>
+<ol>
+<li>FOP 开始可靠保留变更，取得可续传起点 <code>C0</code>，并确认保留期限覆盖初始化全过程。</li>
+<li>导出与水位可衔接的公司数据快照，导入本项目暂存区域，校验单据、分录及关联完整性。</li>
+<li>从对应水位回放初始化期间的变化，按单据版本避免旧快照或旧事件覆盖新数据。</li>
+<li>追平增量，核对来源数量、关键状态及抽样金额，建立工作台查询数据。</li>
+<li>验证通过后发布完整查询版本，切换页面读取；后续持续增量更新。</li>
+</ol>
+<p>已有备份只有在<strong>备份时点有匹配水位、后续变更完整保留</strong>时才能直接恢复后续传。没有匹配水位，需要重新生成可衔接快照或执行全量重建。FOP 数据库备份不能直接假定与本项目 PostgreSQL 查询表兼容，应通过受控导出和映射导入。</p>
+<h3>5.2 增量处理</h3><p>现有发布器接收已归一化提交组，在一个事务内完成单据、分录、关联、清单投影及游标更新；不是 FOP 接口解析器。待入库同单投影的发布、主数据及独立授权写入器仍须补齐。以下为源端接入后的处理要求。</p>
+<ol>
+<li><strong>产生：</strong>所有受支持的新增、修改、审核／反审核、作废、删除及归属变化产生持久变更；覆盖人工、API 和后台任务。</li>
+<li><strong>拉取：</strong>同步进程按公司和实体流读取游标之后的已提交变更；有积压连续追赶，空闲时等待下一轮。</li>
+<li><strong>落地：</strong>整页变更可靠写入本地收件表后，提交“已接收游标”；按事件 ID 去重。</li>
+<li><strong>应用：</strong>按来源版本更新主表、分录和关系，合并受影响履约订单的重算任务；同一订单的任务串行或受版本约束执行。</li>
+<li><strong>发布：</strong>关联事实具备后，事务更新订单查询数据及待办分类；推进连续已处理的“已应用水位”，通知页面重新查询。</li>
+</ol>
+<p>已接收不代表页面已更新。监控和页面时效以<strong>已应用水位</strong>为准；失败事件保留重试任务，不能跳过后把后续游标表述为全部应用完成。跨单据暂未齐备时保留明确的待补状态，不把 unknown 推定为未采购、未付款或已完成。</p>
+<p>同一源事务涉及多张单据时，应提供变更组标识及组完成边界，或可验证的依赖版本／一致快照；本地收到所需版本后再发布该组结果。跨源事务的业务链采用最终一致，不承诺瞬时一致。FOP 暂不能提供完整边界时，明确允许短暂中间态，缺少可确认依赖时不发布新的完成判断，不能仅凭关联记录已存在认定全部变化已追平。</p>
+<h3>5.3 采集方式</h3>
+<p>优先使用 FOP 可可靠落地的事务变更记录或受支持的 CDC，提交后对外提供稳定游标。若使用事务发件箱，应由 FOP 开发核实苍穹事务扩展点，保证业务保存与变更登记原子性；不能仅在页面按钮或 HTTP 控制器回调中发送通知。<a href="https://learn.microsoft.com/en-us/azure/architecture/databases/guide/transactional-out-box-cosmos" target="_blank" rel="noopener noreferrer">参考：事务发件箱模式</a>。</p>
+<p>对外游标必须保证不漏掉晚提交事务，不能直接将最大单据 ID、最大预分配事件 ID 或客户付款时间当成同步水位。仅具备更新时间接口时，可用“固定扫描上界＋更新时间与 ID 排序＋重叠窗口＋版本去重＋周期核对”过渡，但必须验证分录更新是否更新主表时间、物理删除是否可发现；该方式不等价于可靠提交日志。</p>
+
+<h2 id="freshness">06 · 时效与容量</h2>
+<p>以下是建议验收目标及初始参数，不是现有系统已经达到的指标。页面可见延迟从 FOP 业务提交开始计算，包含采集、拉取、依赖补齐、本地发布及页面刷新全过程。</p>
+<p>同步按已确认的导航触发、手工触发及低频兜底计划执行；前台列表先读本地。源端追赶耗时、列表延迟和历史导入吞吐须在恢复测试后测量，不将本地 Mock 耗时作为 FOP 性能指标。</p>
+<div class="table-wrap"><table><thead><tr><th>场景</th><th>处理策略</th><th>边界</th></tr></thead><tbody>
+<tr><td>收款、审核、采购、配货、出库变化</td><td>同一增量流持续接收；按业务紧急性调度处理，监控最老未应用事件。</td><td>高优先级事件可先处理，但不能把连续已应用水位跨过未完成事件。</td></tr>
+<tr><td>拦截、取消及仓库执行</td><td>优先同步展示；若提供通知，唤醒拉取；实际执行回 FOP 校验最新状态。</td><td>不以同步页面代替 FOP 出库拦截。要求更短展示延迟时需专项压测和事件通知。</td></tr>
+<tr><td>商品名称、图片及其他基础资料</td><td>按变化同步，低优先级处理；相同资料合并更新。</td><td>不允许业务员归属、资源撤权作为普通低优先级资料长期排队。</td></tr>
+<tr><td>页面刷新</td><td>SSE 发送授权范围内的版本提醒，页面重新查询；定时刷新作为补偿。</td><td>不推送公司全量业务载荷；断线后重新查询，避免遗漏提醒导致页面不更新。</td></tr>
+<tr><td>历史核对与重建</td><td>低峰、分批、限速运行，与实时增量使用独立任务优先级。</td><td>不能让初始化、导出或修复挤占实时处理能力。</td></tr>
+</tbody></table></div>
+<p>每天 10 万条变更平均约 1.16 条／秒，但这不是 10 万张订单：一张订单可引起多种单据和多次状态变化。容量评估以实测峰值事件量、平均载荷、关系扇出、重算耗时与保留天数为依据，不能仅按日均数选型。</p>
+<p>同步消费能力应持续高于峰值产生速率并留有追赶余量。中断期间积压为 B、恢复消费速率为 μ、同期新增速率为 λ 时，理想追赶耗时约为 <code>B ÷ (μ − λ)</code>，仅在 <code>μ &gt; λ</code> 时成立，还需计入限流及失败重试。批量大小、并发和限速以 FOP 实测配额为准，不预设其支持无限并发。</p>
+
+<h2 id="query">07 · 本地查询</h2>
+<h3>7.1 查询数据结构</h3>
+<div class="table-wrap"><table><thead><tr><th>逻辑数据</th><th>保存内容</th><th>职责</th></tr></thead><tbody>
+<tr><td>来源单据与分录</td><td>公司、实体、源 ID、版本、业务字段、删除标记</td><td>保留可追溯事实；主分录一并替换或按明确版本更新，避免遗留已删商品。</td></tr>
+<tr><td>来源关系</td><td>履约／备货单、来源行、采购行及关联数量</td><td>维护一对多、多对多，支持反向定位受影响订单。</td></tr>
+<tr><td>工作台查询数据</td><td>订单主行、商品检索、业务员、付款时间、仓库、阶段与关联摘要</td><td>支撑五工作台、卡片、筛选、合计、分页及导出。</td></tr>
+<tr><td>同步与修复任务</td><td>接收／应用进度、事件去重、重算任务、失败原因和重试状态</td><td>恢复、校准、监控；生产备份需与已接收事件一起保持一致。</td></tr>
+</tbody></table></div>
+<p>基于既有 NestJS、TypeORM 和 PostgreSQL 实现，先用独立同步进程与持久任务表；达到实测瓶颈后再引入消息平台。按公司、业务员、待办阶段、客户付款时间和来源关系建立必要索引；SKU 命中采用订单级查询，展示整单全部商品。</p>
+<h3>7.2 业务口径</h3>
+<ul>
+<li>履约订单为主要展示视角；一张采购单影响多笔履约订单时，按来源行分摊并重算相关订单，不复制整张采购单数量或金额。</li>
+<li>待办与完成分类复用本项目已确认的业务事实规则，异常／RMA 标记不擅自改变主流程。销售已审核清单按履约单单据状态已审核，不以已支付、已发货等业务状态排除。</li>
+<li>近一周／近一月／近三月统一按关联成功客户收款的实际支付时间。当前已核对来源为 <code>hzkj_receive_bill.hzkj_receive_time</code>，来源分录 A 对履约、C 对备货；公司、来源类型、来源单号精确关联，排除作废及不符合业务口径的收款，多笔符合条件的取最近一笔。</li>
+<li>缺实际付款时间不使用创建、审核、采购付款或旧源单时间补齐。UTC+8 统一归属；履约默认客户付款倒序，独立备货保留已确认的创建时间默认排序。</li>
+<li>金额、退款币种、物流渠道、Shopify 同步结果和采购完成事实缺失时，保留未知或未接通，不以同步架构补造业务事实。</li>
+</ul>
+<p><strong>采购阶段完成：</strong>供应商全部已发货。履约单视角按本单采购需求全部发出判断；采购单视角按整张采购单全部有效 SKU 已发出、未发数量为 0 判断。部分发货不算完成，不等待收货或入库。本地采购单组头已按全部有效采购分录汇总，展开履约明细独立分页；销售订单编号去重统计履约笔数。缺少整单来源、数量或完整授权时明确不可用，未知发货事实不推定完成。</p>
+<p><strong>配货完成清单：</strong>“审核状态”直接采用有效关联配货单的审核状态，审核时间采用配货单 <code>auditdate</code>，两项来源已确认；不使用固定“已完成”标签或阶段完成时间替代。多张配货单须全部已审核，展示最近审核时间；任一时间缺失保留空值，撤销审核后移出本清单。</p>
+<p>待入库按收货通知单展示：收货仓库取表头 <code>hzkj_ware_house</code>，供应商取采购信息页 <code>hzkj_providersupplier</code>，物流信息取本单 <code>hzkj_logistics_company</code>＋<code>hzkj_waybill_number</code>，表示供应商发往国内仓库的快递包裹。同步落入通知单及同单投影，页面查询本地数据；不复用履约发货仓、渠道或跟踪号。上述来源已核对，真实同步写入待接通。</p>
+<p>待出库与已出库清单保持履约订单视角，一单一行。物流信息读取有效关联、未删除且已审核（<code>billstatus=C</code>）的发运单：实际渠道、全程及尾程跟踪号按发运单逐组展示；撤审、删除或解除关联立即移除对应物流，不回退履约包裹渠道或旧号码。分页、计数、SKU 整单搜索和导出仍以履约订单为单位。</p>
+<p><strong>履约订单原生状态：</strong>履约订单视角的采购状态直接读取本地 <code>hz_fop_fulfillment_orders.raw_purchase_status</code>（FOP 表头 hzkj_purchase_status）：0 未采购、1 部分采购、2 已采购、3 已入库、4 已发货。已采购不等于采购款已付或1688下单成功，具体采购进度仍使用独立付款／下单事实。待采购与已采购待发货限0／1／2；采购完成取4并保留后续3，排除无需新采购的备货库存订单。仓库出库状态读取 <code>raw_delivery_status</code>（表头 hzkj_delivery_status）：0 未出库、1 部分出库、2 已出库，不能使用分录 hzkj_outbound_status 替代；历史部分出库如实展示，不新增部分出库操作。待出库筛选含0／1并排除拦截发货，完成取2；缺失原生状态提示数据未就绪，不默认未采购／未出库。列表、导出与本地查询口径一致；采购单、收货通知单视角保持各自主单来源。真实同步写入仍未接通。</p>
+<h3>7.3 物流渠道与取号</h3>
+<div class="table-wrap"><table><thead><tr><th>阶段／动作</th><th>业务事实</th><th>本地展示与更新</th></tr></thead><tbody>
+<tr><td>待支付</td><td>履约单物流决策中的自定义物流渠道</td><td>展示自定义物流渠道名称。</td></tr>
+<tr><td>待审核</td><td>客户运费报价可设置默认实际渠道，订单同步时写入包裹实际渠道；审核时确认后续发货渠道，尚未取号。</td><td>Customer 后依次为物流信息、发货仓库；直接分行展示英文自定义渠道、中文实际渠道，无类型前缀，不显示跟踪号。Excel 同口径；缺实际渠道保留空值。</td></tr>
+<tr><td>已审核清单</td><td>履约订单已完成审核操作，后续采购、发运、出库不影响其归属。</td><td>沿用待审核列顺序与渠道展示；有有效跟踪号则显示，无号显示“尚未获取”。</td></tr>
+<tr><td>制作发运单</td><td>获取物流跟踪号并回写订单；实际发运渠道可与审核时渠道不同。</td><td>同步发运单渠道、号码及对应关系；发运清单取发运单渠道，全程号标 QC、尾程号标 WC。</td></tr>
+<tr><td>删除发运单</td><td>清空对应物流跟踪号。</td><td>同批变更撤销旧发运关联和号码，清空包裹号码镜像，重算受影响订单；空值覆盖旧值。</td></tr>
+<tr><td>重建发运单</td><td>重新取号并更新对应订单。</td><td>按新发运单及包裹关联写入新号码，不复用旧号码，不按数组位置猜配。</td></tr>
+</tbody></table></div>
+<p>查询仅读取本地已发布数据；跟踪号须关联有效且未删除的发运单，不从旧包裹镜像回退。验收覆盖“默认渠道已有、待审核无号码”“删除后无旧号码”“重建后仅新号码”；真实同步适配尚未接通，目前以隔离 Mock 和本地回归验证。</p>
+<h3>7.4 列表、库存与导出</h3>
+<p>执行顺序统一为<strong>当前授权范围 → 业务分类与查询条件 → 合计与排序 → 分页</strong>。库存同时校验客户、SKU、仓库及独立库存资源；选中订单只查选中客户和 SKU，未选订单按现有业务规则查询。催办联系人和发起动作仍校验当前订单、采购关系与权限。</p>
+<p>导出默认使用全部符合筛选且获授权的数据，选中导出重新核验全部选中订单。导出使用同一数据版本或一致快照，结果记录数据截至时间；交付前复验当前账号、组织和资源授权。权限收窄、来源关系变化导致选择失效时重新查询，不静默导出无权或部分数据。</p>
+<p>来源事实用于形成只读查询数据，实际办理保留 FOP 链接或单号入口。对单条记录回源刷新时先本地授权，再按确定的公司和 ID 读取；不允许因本地缺数或权限失败，自动改成不受范围限制的全量透传。<a href="https://learn.microsoft.com/en-us/azure/architecture/patterns/materialized-view" target="_blank" rel="noopener noreferrer">参考：可重建查询视图</a>。</p>
+
+<h2 id="contract">08 · 接口约定</h2>
+<p>下表为<strong>建议新增或扩展的能力</strong>，不是已经发布的 API 路径。现有人员目录和资源授权接口优先复用；新增接口只对受信任的后端集成应用开放。</p>
+<div class="table-wrap"><table><thead><tr><th>接口能力</th><th>必要内容</th><th>交付方</th></tr></thead><tbody>
+<tr><td>初始化快照</td><td>公司、实体范围、快照标识、可衔接水位、稳定分批读取、完成核验信息。</td><td>FOP 导出或接口；本项目导入与发布。</td></tr>
+<tr><td>统一变更查询</td><td>输入 afterCursor、公司／实体范围和 limit；输出事件、nextCursor、hasMore、服务端时间、保留边界、源端提交／采集覆盖进度、已发布流头及采集健康。空批次同样返回健康与进度；游标与范围绑定，过期明确返回重建要求。</td><td>FOP。</td></tr>
+<tr><td>批量单据快照</td><td>按实体与 ID 集合读取主表、完整分录、版本、来源关系；逐项区分存在、删除、无权及失败。变更事件已携带完整版本快照时可减少回查。</td><td>FOP 扩展现有查询；本项目按版本应用。</td></tr>
+<tr><td>核对与补读</td><td>按公司、实体和稳定分段返回 ID／版本或摘要，支持定位缺失与删除；不能只比较总条数。</td><td>FOP 提供可核对入口；本项目修复。</td></tr>
+<tr><td>人员及资源授权</td><td>工号、记录 ID、masterId、启用状态、当前公司与资源授权；权限变更可识别。</td><td>复用并核验现有 FOP 接口。</td></tr>
+</tbody></table></div>
+<div class="table-wrap"><table><thead><tr><th>变更字段</th><th>约定</th></tr></thead><tbody>
+<tr><td>eventId／streamCursor</td><td>事件唯一，游标不透明且可续传；由 FOP 保证遍历已提交变更不遗漏。跨实体流各自记录进度。</td></tr>
+<tr><td>companyId／entityType／entityId</td><td>稳定来源标识，不能把单号、工号、人员 ID 与单据 ID 混用。</td></tr>
+<tr><td>operation／sourceVersion</td><td>operation 固定为 upsert 或 delete；作废是带明确业务状态的 upsert。版本单调可比较，或提供等价的可靠先后关系。</td></tr>
+<tr><td>committedAt／schemaVersion</td><td>明确时区的提交时间与数据结构版本；采集落后也应计入时效，不能只测 API 返回速度。</td></tr>
+<tr><td>changeGroup／依赖版本</td><td>同一事务的变更组标识与完整边界，或可验证的依赖版本／一致快照；不以单据存在替代跨单据完整性确认。跨事务链路保留最终一致边界。</td></tr>
+<tr><td>payload／关联线索</td><td>完整版本快照或批量回查依据；删除和解除关联需保留可定位旧关系的线索，使原关联订单重新计算。</td></tr>
+</tbody></table></div>
+<p>建议变更日志保留至少 7 天，最终期限按可接受的最长停机、初始化耗时和源端容量确认；若初始化或停机可能超过 7 天，必须延长。超过保留边界进入重新校准／初始化流程，不从当前时刻静默续跑。推送通知仅用于唤醒拉取，可靠恢复仍以持久日志和游标为准。</p>
+<p>空列表、<code>hasMore=false</code> 或最新服务端时间，只能说明当前已发布流的读取结果，不能证明上游采集器没有故障。时效与过期判定须联合源端采集覆盖进度、采集健康和本地应用进度；正常无业务变化时，有效健康证明可确认数据仍新鲜，不按最后一笔业务发生时间误判过期。</p>
+
+<h2 id="recovery">09 · 故障与恢复</h2>
+<div class="table-wrap"><table><thead><tr><th>情况</th><th>处理结果</th></tr></thead><tbody>
+<tr><td>Token 失效、接口超时、限流</td><td>统一刷新令牌或退避重试；不丢任务、不推进失败页面的接收进度，限制并发避免重试放大。</td></tr>
+<tr><td>重复、乱序或批量部分失败</td><td>事件去重、版本检查、逐项持久重试；不把部分成功标为整页或整条业务链成功。</td></tr>
+<tr><td>进程崩溃或数据库恢复</td><td>用同一备份中的游标、收件表和来源数据恢复；重复回放安全。查询数据可重建，备份水位过期则重新初始化。</td></tr>
+<tr><td>删除、作废、来源解除</td><td>更新来源事实与关系，并重算所有原关联订单；不能只新增记录、不移出已失效待办。</td></tr>
+<tr><td>依赖缺失或字段无法映射</td><td>建立待补任务和明确原因；未完整接通的清单不返回伪造的 0 或错误完成状态。</td></tr>
+<tr><td>授权变更或账号停用</td><td>本地权限立即重算；公司／资源授权不再有效时停止相关查询。无法确定新归属的记录不分配给普通业务账号。</td></tr>
+<tr><td>持续积压或 FOP 故障</td><td>显示最近完整数据与延迟；来源恢复后追赶。按最近满足的源水位显示已确认截至时间，未取得来源证明时不伪造新鲜度；资源授权执行独立短有效期。</td></tr>
+<tr><td>核对发现差异</td><td>按公司、实体和分段定位缺失 ID／版本，补读后重算；差异修复不触发用户页面全量回源。</td></tr>
+</tbody></table></div>
+<p>正常运行时周期核对近期变化及未完成业务链，低峰分段核对历史；核对频率和范围按源端能力设置。不能只核对“近期付款订单”，否则会遗漏旧单的新采购、出库或售后变化。变更表、来源表与工作台结果均保留可追溯版本，不在普通日志中记录 Token、密钥或整份收件人信息。</p>
+
+<h2 id="deployment">10 · 部署与运维</h2>
+<p>首期部署为现有 Web／API 服务、独立同步 Worker、PostgreSQL 三部分。查询与同步使用有界连接池和独立任务优先级；多个 Worker 使用租约与任务领取锁，避免重复扫描和同时推进同一游标。事件可重复投递，但实际应用必须幂等。</p>
+<div class="table-wrap"><table><thead><tr><th>运维项</th><th>关注内容</th></tr></thead><tbody>
+<tr><td>同步健康</td><td>源端最新已提交／已发布水位、本地已接收与已应用水位、端到端延迟、最老未处理事件、积压数量。</td></tr>
+<tr><td>处理能力</td><td>事件接收／应用速率、来源关联扇出、重算耗时、失败与重试量、源端限流、数据库写入与查询耗时。</td></tr>
+<tr><td>数据完整性</td><td>核对差异、待补依赖、来源缺字段、日志剩余保留时间及快照版本。</td></tr>
+<tr><td>权限与会话</td><td>账号停用、组织／角色版本、资源授权有效期、当前消费者范围；切换身份清除旧缓存并废弃旧请求。</td></tr>
+</tbody></table></div>
+<p>生产由统一后端同步一次，所有员工共用查询服务。协同开发优先连接共享测试后端；需要独立本地同步时使用独立消费者 ID、明确测试范围和限速，避免每台开发电脑反复扫描同一份全量数据。</p>
+<p>Git 仅同步代码、迁移与配置示例。业务副本、数据库备份、密钥和 Token 不入仓库；生产业务副本使用受控数据库权限和备份。查询数据可按批准期限归档，FOP 的删除与脱敏要求同步传递到本地副本及对应备份管理。</p>
+
+<h2 id="rollout">11 · 实施与验收</h2>
+<div class="table-wrap"><table><thead><tr><th>阶段</th><th>主要工作</th><th>通过条件</th></tr></thead><tbody>
+<tr><td>1．契约确认</td><td>确认变更采集扩展点、稳定游标、单据版本、来源关系、资源授权和日志保留；梳理现有字段缺口。</td><td>FOP 与本项目可演示新增、修改、反审核、删除及归属变更，包含晚提交与失败恢复。</td></tr>
+<tr><td>2．最小业务链</td><td>以履约订单＋客户收款＋销售待办／完成记录跑通初始化、增量、权限和导出。</td><td>按当前客户付款时间口径，与 FOP 来源事实逐单核对；无跨人、跨部门及跨公司泄露。</td></tr>
+<tr><td>3．五台扩展</td><td>接入采购、收货、库存、配货、发运、出库、备货、RMA 和采购退货的已确认事实。</td><td>覆盖一单多品、多采购单、采购合并、异常并存、取消拦截及来源变更。</td></tr>
+<tr><td>4．并行核对</td><td>原查询和同步查询后台对照；差异逐项归因，不将两份不同时刻结果直接判错。</td><td>相同范围、口径与数据时点下，订单集合、金额、分类、总数、分页和导出一致。</td></tr>
+<tr><td>5．压测切换</td><td>按实测日增、高峰、并发和积压场景压测；管理员验证全部工作台，其他角色用后端权限用例覆盖。</td><td>达到约定时效、查询和追赶目标；故障演练通过，按工作台或公司受控切换。</td></tr>
+</tbody></table></div>
+<p>切换采用显式数据源开关和可回滚迁移。只有原接口能保证同一权限、完整范围及业务口径时才允许回退；不能回退到逐请求全量扫描或不同时间口径。历史文档中的“普通员工必须本人 Token”和“必须 FOP 员工集合筛选”要求，在同步模式上线后由新验证链路替代，原有路径继续保留对应校验直到停用。</p>
+<div class="table-wrap"><table><thead><tr><th>验收维度</th><th>必要场景</th></tr></thead><tbody>
+<tr><td>时效与性能</td><td>分别测量导航触发、手工刷新、低频兜底的端到端可见延迟及列表 API 延迟；覆盖高峰和中断追赶，记录 FOP 请求量与数据库资源，实测后确定指标。</td></tr>
+<tr><td>完整性与恢复</td><td>初始化期间新增／修改／删除、事务晚提交、分录独立变化、重复乱序、接口部分失败、Worker 重启、备份恢复及游标过期。</td></tr>
+<tr><td>权限与范围</td><td>管理员、经理个人／部门、业务员、协同、HR／商品管理；组织调动、停用、归属变更、未映射历史单、资源撤权、详情／库存／导出绕过尝试。</td></tr>
+<tr><td>业务一致</td><td>一单多品 SKU 命中仍整单展示；采购合并与拆分；关联付款变更时间窗口；RMA／异常与主流程并存；删除或解除关联后待办正确移出。</td></tr>
+</tbody></table></div>
+
+<h2 id="evidence">12 · 依据与待确认</h2>
+<h3>12.1 当前核对依据</h3>
+<ul class="source-list">
+<li>接口包：<code>金蝶测试环境完整接口文档-20261110.zip</code>。常规订单、采购和收款查询主要声明 ID、单号、公司和分页；工作台原始事实游标 <code>afterOrderId</code> 不等于覆盖所有实体修改、删除的提交变更游标。</li>
+<li>本项目：<code>agent.md</code>、Kingdee 适配器、本地组织范围实现及现有工作台业务约定。清单仅本地；旧工作台路径只保留未注册诊断测试。新同步源、历史初始化及授权刷新已实现，远端契约待提供和联调。</li>
+<li>FOP 源码：已核对 <code>/Library/VSCode/dtr5b</code> 中履约订单业务员字段 <code>hzkj_operator</code> 及权限上下文实现。事务采集扩展点、统一变更 API 和可靠版本仍需后台开发确认，不能由已有报表代码推定支持。</li>
+</ul>
+<h3>12.2 联合确认项</h3>
+<div class="table-wrap"><table><thead><tr><th>事项</th><th>确认结果要求</th></tr></thead><tbody>
+<tr><td>变更采集与批量读取</td><td>苍穹可用的事务／CDC 能力，所有写入入口覆盖、稳定游标与版本、删除处理、批量详情、初始化水位及日志保留。</td></tr>
+<tr><td>真实业务字段</td><td>采购平台下单／付款／退款／发货、来源行分摊、Shopify 同步、RMA 与采购退货独立资源及关系、退款币种和实际金额等现有缺口逐项确认。</td></tr>
+<tr><td>容量与服务目标</td><td>日订单量与事件量分别统计；峰值、并发、源端 API 配额、历史规模和图片规模。按实际数据量验证查询延迟、按需同步及低频兜底时效，明确故障数据过期策略。</td></tr>
+<tr><td>授权与数据保留</td><td>专用集成账号公司／资源范围、归属变更可接受延迟、授权复验／即时撤权、查询副本及备份保留期限。</td></tr>
+</tbody></table></div>
+<p>文中新增接口、数据结构、同步频率及性能指标均为实施建议；源字段缺失、独立资源未授权或相关接口未发布时，保持明确的待对接状态，不以架构设计代替真实联调验收。</p>
+</article>
+  <footer class="footer">HyperZone · HyperZone FOP 数据同步与查询方案</footer>
+</main>
+</body>
+</html>

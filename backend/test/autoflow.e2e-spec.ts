@@ -1,3 +1,4 @@
+import { configureReplicaTestRuntime, isolateReplicaProviders } from './replica-test-boundary'
 import { OrganizationService } from '../src/modules/organization/organization.service'
 import { ValidationPipe } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
@@ -25,6 +26,7 @@ import { join } from 'path'
 
 jest.setTimeout(30000)
 
+configureReplicaTestRuntime()
 describe('AutoFlow persistence API', () => {
   let app: NestExpressApplication
   let dataSource: DataSource
@@ -48,7 +50,7 @@ describe('AutoFlow persistence API', () => {
     await migrationDataSource.destroy()
 
     const { AppModule } = await import('../src/app.module')
-    const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
+    const moduleRef = await isolateReplicaProviders(Test.createTestingModule({ imports: [AppModule] }))
       .overrideProvider(AiService)
       .useValue({
         generateSalesOutreach: jest.fn().mockResolvedValue('Approved test draft'),
@@ -1041,7 +1043,7 @@ describe('AutoFlow persistence API', () => {
       .post(`/api/autoflow/quotes/${created.body.id}/request-fop`)
       .set('Cookie', ownerCookie)
       .expect(403)
-    expect(unavailableFopResult.body.code).toBe('fop_binding_required')
+    expect(unavailableFopResult.body.code).toBe('fop_permission_denied')
     const unchangedQuote = await request(app.getHttpServer())
       .get(`/api/autoflow/quotes/${created.body.id}`)
       .set('Cookie', ownerCookie).expect(200)
@@ -1056,7 +1058,7 @@ describe('AutoFlow persistence API', () => {
     expect(revised.body.versions.map((version: { version: number }) => version.version)).toEqual([2, 1])
   })
 
-  it('rejects unbound external handoffs before persisting a pending claim while preserving local reads', async () => {
+  it('rejects unauthorized fixture external handoffs before persisting a pending claim while preserving local reads', async () => {
     await request(app.getHttpServer())
       .post(`/api/autoflow/leads/${leadId}/fop-handoff`)
       .set('Cookie', otherCookie)
@@ -1068,14 +1070,14 @@ describe('AutoFlow persistence API', () => {
       .set('Cookie', ownerCookie)
       .send({ reason: 'Qualified for FOP follow-up' })
       .expect(403)
-    expect(first.body.code).toBe('fop_binding_required')
+    expect(first.body.code).toBe('fop_permission_denied')
 
     const second = await request(app.getHttpServer())
       .post(`/api/autoflow/leads/${leadId}/fop-handoff`)
       .set('Cookie', ownerCookie)
       .send({ reason: 'Retry after integration check' })
       .expect(403)
-    expect(second.body.code).toBe('fop_binding_required')
+    expect(second.body.code).toBe('fop_permission_denied')
     expect(await dataSource.getRepository(FopHandoffEntity).countBy({ leadId })).toBe(0)
     await request(app.getHttpServer()).get(`/api/autoflow/leads/${leadId}/fop-handoff`)
       .set('Cookie', ownerCookie).expect(200)
@@ -1203,7 +1205,7 @@ describe('AutoFlow persistence API', () => {
     const directory = await app.get(OrganizationService).getWorkspace(ownerUserId)
     const parent = directory.nodes.find(node => node.name === '业务一部')
     if (!parent) throw new Error('Missing sales department fixture')
-    // A custom nested department exercises descendant scope without depending on demo regional groups.
+    // Local customer/workflow reads use the directly assigned department, without descendant expansion.
     const [child] = await dataSource.query('INSERT INTO organization_nodes (owner_user_id, parent_id, name, kind, sort_order) VALUES ($1, $2, $3, $4, 0) RETURNING id', [ownerUserId, parent.id, 'Scope test child', 'department'])
     await dataSource.query('UPDATE users SET business_department_id = $1 WHERE id = $2', [child.id, ownerUserId])
     const workflow = (await request(app.getHttpServer()).post('/api/autoflow/workflows').set('Cookie', ownerCookie).send({ name: 'Scope proof', seedType: 'keyword', seedValue: 'scope-proof', targetMarket: 'US' }).expect(201)).body
@@ -1218,10 +1220,13 @@ describe('AutoFlow persistence API', () => {
     const conversationId = conversations[0].id
     const detailPaths = [`/autoflow/workflows/${workflow.id}`, `/autoflow/workflows/${workflow.id}/sourcing`, `/autoflow/leads/${leadId}`, `/autoflow/quotes/${quote.id}`, `/autoflow/quotes/${quote.id}/versions/1/export.xlsx`, `/ai/outreach-conversations/${conversationId}`]
     for (const path of detailPaths) await getAsActor(path).expect(404)
+    await dataSource.query("UPDATE users SET business_role='department_manager', business_department_id=$1, data_display_scope='department' WHERE id=$2", [parent.id, actor.id])
+    for (const path of detailPaths) await getAsActor(path).expect(404)
     for (const role of ['department_manager', 'admin']) {
-      await dataSource.query('UPDATE users SET business_role = $1, business_department_id = $2 WHERE id = $3', [role, parent.id, actor.id])
+      await dataSource.query("UPDATE users SET business_role = $1, business_department_id = $2, data_display_scope = 'department' WHERE id = $3", [role, child.id, actor.id])
       for (const path of detailPaths) {
-        const response = await getAsActor(path).expect(200)
+        const response = await getAsActor(path)
+        expect({ role, path, status: response.status, body: response.status === 200 ? null : response.body }).toEqual({ role, path, status: 200, body: null })
         expect(response.headers['cache-control']).toBe('private, no-store')
       }
       expect((await getAsActor('/autoflow/workflows').expect(200)).body.items.some((row: any) => row.id === workflow.id)).toBe(true)

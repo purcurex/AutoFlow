@@ -1,3 +1,4 @@
+import { configureReplicaTestRuntime, isolateReplicaProviders } from './replica-test-boundary'
 import { INestApplication, ValidationPipe } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
 import { JwtService } from '@nestjs/jwt'
@@ -9,9 +10,10 @@ import { UsersService } from '../src/modules/users/users.service'
 
 jest.setTimeout(30000)
 const verified = (id = '11'): VerifiedFopEmployeeBinding => ({ tenantId: 'offline-tenant', userId: id, details: {
-  username: `offline-employee-${id}`, name: '测试职员', employeeRecordId: id, employeeMasterId: `${id}1`, departmentId: '301', organizationId: '100',
+  employeeNumber: `ID-${id}`, username: `offline-employee-${id}`, name: '测试职员', employeeRecordId: id, employeeMasterId: `${id}1`, departmentId: '301', organizationId: '100',
   localEmployeeId: null, localDepartmentId: null, verifiedAt: '2026-10-29T00:00:00.000Z' } })
 
+configureReplicaTestRuntime()
 describe('管理员绑定金蝶员工及业务查询身份（测试数据库，平台调用全部模拟）', () => {
   let app: INestApplication, db: DataSource, jwt: JwtService, adminId: string, otherId: string, targetId: string, duplicateId: string, crossId: string, departmentId: string
   const provider = { source: 'fop', supportsEmployeeBinding: true, pagedOrders: false, isConfigured: () => true, demoIdentity: () => null,
@@ -19,7 +21,7 @@ describe('管理员绑定金蝶员工及业务查询身份（测试数据库，�
     verifyEmployeeBinding: jest.fn(async (id: string) => verified(id)),
     resolvePermissions: jest.fn(async (identity: object) => ({ subject: identity, allowedOrderIds: [] })) }
   const auth = (id: string, sessionVersion = 0) => jwt.sign({ userId: id, sessionVersion })
-  const bind = (id: string, body: object = { employeeId: '11', membershipId: '201' }, actor = adminId) => request(app.getHttpServer()).put(`/api/users/${id}/kingdee-binding`).auth(auth(actor), { type: 'bearer' }).send(body)
+  const bind = (id: string, body: object = { employeeId: '11', membershipId: '201' }, actor = adminId) => request(app.getHttpServer()).put(`/api/users/${id}/kingdee-binding`).auth(auth(actor), { type: 'bearer' }).send({ employeeNumber: `ID-${(body as { employeeId?: string }).employeeId ?? '11'}`, ...body })
 
   beforeAll(async () => {
     process.env.NODE_ENV = 'test'; process.env.DB_DATABASE = 'autoflow_test'; process.env.ENABLE_ADMIN_BOOTSTRAP = 'false'
@@ -27,7 +29,7 @@ describe('管理员绑定金蝶员工及业务查询身份（测试数据库，�
     if (source.options.database !== 'autoflow_test') throw new Error('Refusing to use a non-test database')
     await source.initialize(); await source.runMigrations(); await source.destroy()
     const { AppModule } = await import('../src/app.module')
-    const module = await Test.createTestingModule({ imports: [AppModule] }).overrideProvider(FOP_DATA_PROVIDER).useValue(provider).compile()
+    const module = await isolateReplicaProviders(Test.createTestingModule({ imports: [AppModule] })).overrideProvider(FOP_DATA_PROVIDER).useValue(provider).compile()
     app = module.createNestApplication(); app.setGlobalPrefix('api'); app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }))
     await app.init(); db = app.get(DataSource); jwt = app.get(JwtService)
     const users = app.get(UsersService)
@@ -109,7 +111,7 @@ describe('管理员绑定金蝶员工及业务查询身份（测试数据库，�
 
   it('创建账号与可信绑定同事务完成，验证失败不留下半个账号', async () => {
     const body = {name:'新测试职员',code:'binding-test-create',email:'binding-test-create@autoflow.test',departmentId,workbenchRoles:['sales'],
-      account:{username:'binding-test-create',password:'OfflinePassword123',kingdeeEmployee:{employeeId:'22',membershipId:'202'}}}
+      account:{username:'binding-test-create',password:'OfflinePassword123',kingdeeEmployee:{employeeNumber:'ID-22',employeeId:'22',membershipId:'202'}}}
     provider.verifyEmployeeBinding.mockRejectedValueOnce(new FopPermissionDeniedError('不可用','fop_employee_unavailable'))
     await request(app.getHttpServer()).post('/api/organization/employees').auth(auth(adminId),{type:'bearer'}).send(body).expect(403)
     expect(await app.get(UsersService).findByEmail(body.email)).toBeNull()

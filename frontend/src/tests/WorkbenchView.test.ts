@@ -1,3 +1,4 @@
+vi.mock('@/api/workbench-replica', () => ({ getWorkbenchReplicaStatus: vi.fn().mockResolvedValue({ readMode: 'live' }), requestWorkbenchReplicaSync: vi.fn(), getWorkbenchReplicaJob: vi.fn() }))
 import { flushPromises, mount } from '@vue/test-utils'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { createI18n } from 'vue-i18n'
@@ -85,7 +86,7 @@ describe('role workbench content', () => {
     const { wrapper, router } = await setup('/workbench/sales', ['sales'])
     expect(wrapper.find('h1').text()).toBe('销售工作台')
     expect(wrapper.find('h2').text()).toContain('待审核清单')
-    expect(wrapper.findAll('.workbench-queues a').slice(0, 6).map(a => a.text())).toEqual(['待支付清单', '待审核清单', '备货清单', 'RMA售后清单', '异常订单清单', '已完成清单'])
+    expect(wrapper.findAll('.workbench-queues a').slice(0, 6).map(a => a.text())).toEqual(['待支付清单', '待审核清单', '备货清单', 'RMA售后清单', '异常订单清单', '已审核清单'])
     expect(wrapper.find('.workbench-queues a.active').text()).toBe('待审核清单')
     expect(wrapper.findAll('.role-tabs a')).toHaveLength(1)
     expect(wrapper.find('.workbench-queues').text()).toContain('待审核清单')
@@ -110,7 +111,7 @@ describe('role workbench content', () => {
     expect(wrapper.find('h1').text()).toBe('采购工作台')
     expect(wrapper.find('.workbench-queues a').text()).toBe('待采购清单')
     expect(wrapper.find('.workbench-queues a').classes()).toContain('active')
-    expect(wrapper.find('thead').text()).toContain('采购进度')
+    expect(wrapper.find('thead').text()).toContain('采购状态')
     expect(wrapper.find('thead').text()).not.toContain('配货单状态')
     expect(wrapper.findAll('tbody tr')).toHaveLength(5)
     await router.push('/workbench/procurement?queue=shipping')
@@ -160,7 +161,7 @@ describe('role workbench content', () => {
   })
 })
 
-it.each([['sales', '已完成清单'], ['dispatch', '已履约订单'], ['procurement', '采购完成清单'], ['allocation', '配货完成清单'], ['warehouse', '已出库清单']])('offers the %s completed tab with its default week', async (role, title) => {
+it.each([['sales', '已审核清单'], ['dispatch', '已履约订单'], ['procurement', '采购完成清单'], ['allocation', '配货完成清单'], ['warehouse', '已出库清单']])('offers the %s completed tab with its default week', async (role, title) => {
   vi.mocked(getWorkbenchAccess).mockResolvedValue({ roles: [role as import('@/utils/workbench').WorkbenchRole], isAdmin: false })
   await refreshWorkbenchAccess()
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/workbench/:role', name: 'RoleWorkbench', component: WorkbenchView }, { path: '/dashboard', name: 'FopDashboard', component: { template: '<div />' } }] })

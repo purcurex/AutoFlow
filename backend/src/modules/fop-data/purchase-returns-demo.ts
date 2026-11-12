@@ -11,7 +11,7 @@ export function demoPurchaseReturns(identity: FopIdentity, orders: FopOrderCandi
       const purchase = obligation.purchase
       if (!purchase || !obligation.lines.length) continue
       const i = rows.length, status = purchaseReturnStatuses[i % purchaseReturnStatuses.length]
-      rows.push({ id: `${order.id}:return:${n}`, tenantId: identity.tenantId, kind: 'physical_return', number: `TH${order.createdAt.slice(0, 10).replaceAll('-', '')}${String(i + 1).padStart(6, '0')}`, status, purchaseOrder: { id: purchase.id, number: purchase.number }, supplier: { ...purchase.supplier }, warehouseCode: order.warehouseCode || '', warehouse: order.warehouse, createdAt: order.createdAt,
+      rows.push({ id: `${order.id}:return:${n}`, tenantId: identity.tenantId, kind: 'physical_return', number: `TH${order.createdAt.slice(0, 10).replaceAll('-', '')}${String(i + 1).padStart(6, '0')}`, status, purchaseOrder: { id: purchase.id, number: purchase.number }, supplier: { ...purchase.supplier, wangwangAccount: i % 3 === 0 ? null : 'hyperzone_demo_supplier' }, supplierChatUrl: i % 3 === 0 ? null : 'aliim:sendmsg?touid=cnalichnhyperzone_demo_supplier', warehouseCode: order.warehouseCode || '', warehouse: order.warehouse, createdAt: order.createdAt,
         logistics: { carrier: status === 'pending_outbound' || status === 'cancelled' ? null : '顺丰速运', trackingNumber: status === 'pending_outbound' || status === 'cancelled' ? null : `SF000${String(i + 1).padStart(12, '0')}` },
         lines: obligation.lines.map((line, index) => {
           const item = order.items.find(item => item.sku === line.sku)!, quantity = Math.min(item.quantity, 1 + i % 3)

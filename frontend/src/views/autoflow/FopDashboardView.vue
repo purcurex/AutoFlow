@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import type { DashboardPending } from '@/api/workbench-dashboard'
+import { clearWorkbenchCounts } from '@/utils/workbench-counts'
 import { taskStatusLabels } from '@/utils/workbench-status'
 import type { ChartId } from '@/api/fop-chart-access'
 import { onSessionReset } from '@/utils/session'
@@ -11,8 +13,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { AlertCircle, ClipboardCheck, Clock3, PackageCheck, ShoppingCart, Send, Truck, Users, Wallet } from 'lucide-vue-next'
 import { refreshWorkbenchAccess } from '@/composables/useWorkbenchAccess'
 import { RouterLink, useRouter } from 'vue-router'
-import { workbenchOrderLocation } from '@/utils/workbench'
-import type { FopOrderQueue } from '@/api/fop-orders'
+import { workbenchOrderLocation, queueNames } from '@/utils/workbench'
 import { useI18n } from 'vue-i18n'
 import { AppLayout } from '@/components/layout'
 import OrderVolumeAnalysis from '@/components/order-volume/OrderVolumeAnalysis.vue'
@@ -22,7 +23,7 @@ import WorkCalendar from '@/components/WorkCalendar.vue'
 import FopDataAccessNotice from '@/components/FopDataAccessNotice.vue'
 import { fopAccessError } from '@/api/fop-access'
 import { useTheme } from '@/composables/useTheme'
-import { getFopDashboard, localDate, type FopDashboardData, type ReceiptSeries } from '@/api/fop-dashboard'
+import { getFopDashboard, localDate, type FopDashboardData, type ReceiptSeries, type DashboardQueueState } from '@/api/fop-dashboard'
 
 const { locale } = useI18n()
 const router = useRouter()
@@ -37,6 +38,8 @@ const currentYear = Number(localDate(today).slice(0, 4))
 const year = ref(currentYear)
 const years = Array.from({ length: 5 }, (_, index) => currentYear - index)
 const data = ref<FopDashboardData>()
+const pendingData = ref<DashboardPending>()
+const pending = computed(() => pendingData.value ?? data.value)
 const chart = (id: ChartId) => data.value?.chartAccess?.find(item => item.chartId === id)
 const visible = (id: ChartId) => chart(id)?.visible === true
 const canDetails = (id: ChartId) => visible(id) && chart(id)?.canViewDetails === true && !chart(id)?.summaryOnly
@@ -104,27 +107,34 @@ const latestDepartmentChange = computed(() => selectedDepartment.value ? changes
 const momHint = computed(() => text('差额 = 本月 − 上月；比例 = 差额 ÷ 上月。1 月对比上年 12 月；本月为截至目前数据。', 'Change = this month − prior month; rate = change ÷ prior month. January compares with December; the current month is to date.'))
 
 const taskNames = computed(() => ({ review: text('审核履约订单', 'Review fulfillment orders'), dispatch: text('同步 Shopify 发货', 'Sync Shopify fulfillment'), procurement: text('跟进采购付款与供应商发货', 'Follow up purchase payment and supplier shipment'), allocation: text('跟进配货与配货单审核', 'Follow up allocation and approval'), shipping: text('跟进仓库打包与出库', 'Follow up warehouse packing and outbound') }))
-const cards = computed(() => [
-  { id: 'review', label: text('待审核', 'Pending review'), hint: text('履约订单待审核', 'Fulfillment orders awaiting review'), value: data.value?.queues.review, icon: ClipboardCheck, color: 'review' },
-  { id: 'dispatch', label: text('待履约', 'Pending fulfillment'), hint: text('已审核 · Shopify 待履约', 'Reviewed · Shopify fulfillment pending'), value: data.value?.queues.dispatch, icon: Send, color: 'fulfillment' },
-  { id: 'procurement', label: text('待采购', 'Pending procurement'), hint: text('采购未完成付款 / 已采购未发货', 'Purchase payment / supplier shipment pending'), value: data.value?.queues.procurement, icon: ShoppingCart, color: 'procurement' },
-  { id: 'allocation', label: text('待配货', 'Pending allocation'), hint: text('配货单未审核 · 未齐套 / 已齐套', 'Incomplete allocation / approval pending'), value: data.value?.queues.allocation, icon: PackageCheck, color: 'allocation' },
-  { id: 'shipping', label: text('待出库', 'Pending outbound'), hint: text('配货已审核 · 待打包出库', 'Allocation approved · packing / outbound pending'), value: data.value?.queues.shipping, icon: Truck, color: 'shipping' },
-])
+const queueStateLabel = (state?: DashboardQueueState) => state === 'forbidden' ? text('无权限', 'No access') : state === 'unavailable' ? text('加载失败', 'Load failed') : text('未接入', 'Not connected')
+const cards = computed(() => ([
+  { id: 'review', label: text('待审核', 'Pending review'), hint: text('履约订单待审核', 'Fulfillment orders awaiting review'), value: pending.value?.queues.review, icon: ClipboardCheck, color: 'review' },
+  { id: 'dispatch', label: text('待履约', 'Pending fulfillment'), hint: text('已支付 · Shopify 待履约', 'Paid · Shopify fulfillment pending'), value: pending.value?.queues.dispatch, icon: Send, color: 'fulfillment' },
+  { id: 'procurement', label: text('待采购', 'Pending procurement'), hint: text('采购未完成 / 已采购待发货', 'Purchase incomplete / supplier shipment pending'), value: pending.value?.queues.procurement, icon: ShoppingCart, color: 'procurement' },
+  { id: 'allocation', label: text('待配货', 'Pending allocation'), hint: text('配货单未审核 · 未齐套 / 已齐套', 'Incomplete allocation / approval pending'), value: pending.value?.queues.allocation, icon: PackageCheck, color: 'allocation' },
+  { id: 'shipping', label: text('待出库', 'Pending outbound'), hint: text('配货已审核 · 待打包出库', 'Allocation approved · packing / outbound pending'), value: pending.value?.queues.shipping, icon: Truck, color: 'shipping' },
+] as const).map(card => ({ ...card,
+  state: pending.value?.queueStates?.[card.id] ?? (typeof card.value === 'number' ? 'ready' : 'not_configured'),
+  parts: pending.value?.queueBreakdown?.[card.id] ?? [],
+})))
+const pendingIncomplete = computed(() => !!pending.value && cards.value.some(card => card.state === 'not_configured' || card.state === 'unavailable'))
 
 const orderVolumeRevision = ref(0)
 let requestId = 0
-async function refresh() {
+async function refresh(force = false) {
   if (busy.value) return
+  if (force) clearWorkbenchCounts()
   busy.value = true
   if (requestId > 0) orderVolumeRevision.value++
   error.value = ''
   data.value = undefined
+  pendingData.value = undefined
   appliedRange.value = ''
   const id = ++requestId
   const submitted = { from: from.value, to: to.value, year: year.value }
   try {
-    const result = await getFopDashboard(submitted)
+    const result = await getFopDashboard(submitted, undefined, counts => { if (id === requestId) pendingData.value = counts })
     if (id !== requestId) return
     data.value = result
     if (!result.receipts.departments.some(department => department.id === selectedDepartmentId.value)) selectedDepartmentId.value = result.receipts.departments[0]?.id ?? 'sales1'
@@ -132,12 +142,12 @@ async function refresh() {
     appliedRange.value = `${submitted.from} — ${submitted.to}`
     appliedYear.value = submitted.year
   } catch (cause) {
-    if (id === requestId) error.value = fopAccessError(cause, zh.value)
+    if (id === requestId) { pendingData.value = undefined; error.value = fopAccessError(cause, zh.value) }
   } finally { if (id === requestId) busy.value = false }
 }
-const offSession = onSessionReset(() => { requestId++; data.value = undefined; busy.value = false; error.value = ''; appliedRange.value = ''; registrationScope.value = 'marketing'; selectedDepartmentId.value = 'sales1' })
+const offSession = onSessionReset(() => { requestId++; data.value = undefined; pendingData.value = undefined; busy.value = false; error.value = ''; appliedRange.value = ''; registrationScope.value = 'marketing'; selectedDepartmentId.value = 'sales1' })
 onBeforeUnmount(() => { requestId++; offSession() })
-onMounted(refresh)
+onMounted(() => refresh())
 const axisColor = computed(() => isDark.value ? '#94a3b8' : '#8793a7')
 const gridColor = computed(() => isDark.value ? '#293241' : '#edf0f7')
 // Use one aggregate color in every chart; detail colors retain their order across views.
@@ -235,7 +245,7 @@ async function openReceipts(month: string, department?: string, ownerId?: string
     const to = monthEnd < today ? monthEnd : today
     if (from > to) return
     await router.push({ name: 'RoleWorkbenchReceipts', params: { role }, query: { from, to, warehouse: 'ALL', chartId: 'salesperson_receipts', ...(department ? { department } : {}), ...(ownerId ? { ownerId } : {}) } })
-  } catch (cause) { if (id === requestId) error.value = fopAccessError(cause, zh.value) }
+  } catch (cause) { if (id === requestId) { pendingData.value = undefined; error.value = fopAccessError(cause, zh.value) } }
 }
 function selectReceipt(event: ChartClick, employees: boolean) {
   if (!employees || !canDetails('salesperson_receipts')) return
@@ -254,15 +264,24 @@ const salespersonOption = computed(() => collectionsOption(salespersonSeries.val
       <header class="dashboard-heading">
         <div><p class="eyebrow">HYPERZONE · DASHBOARD</p><h1>Dashboard <span class="mock-badge">{{ data?.source === 'mock' ? 'MOCK · DEMO' : text('业务概览', 'BUSINESS OVERVIEW') }}</span></h1></div>
       </header>
-      <FopDataAccessNotice :busy="busy" @recheck="refresh" />
-      <p v-if="data?.analyticsConfigured === false" class="dashboard-footnote">{{ text('本期仅接入待审核履约订单，其他统计尚未接入。', 'Only pending review orders are connected in this phase.') }}</p>
+      <FopDataAccessNotice :busy="busy" @recheck="refresh(true)" />
+      <p v-if="data?.analyticsUnavailable" class="dashboard-footnote" role="alert">{{ text('统计图表加载失败，待办统计以各卡片显示为准。', 'Analytics failed to load. Pending counts are shown on each card.') }}</p>
+      <p v-if="data?.analyticsConfigured === false" class="dashboard-footnote">{{ text('分析图表尚未接入，待办统计以各卡片显示为准。', 'Analytics are not connected. Pending counts are shown on each card.') }}</p>
       <p v-if="error" class="error-message" role="alert">{{ error }}</p>
 
       <section class="summary-grid" :aria-label="text('履约概览', 'Fulfillment overview')">
-        <RouterLink v-for="card in cards" :key="card.id" :to="workbenchOrderLocation(card.id as FopOrderQueue)" class="summary-card" :class="card.color" :aria-label="text(`查看${card.label}清单`, `View ${card.label} orders`)">
-          <div class="card-top"><span>{{ card.label }}</span><component :is="card.icon" :size="21" :stroke-width="1.6" /></div>
-          <strong>{{ card.value === null ? text('未接入', 'Not connected') : card.value === undefined ? '—' : number(card.value) }}</strong><p>{{ card.hint }}</p><span class="card-decoration" />
-        </RouterLink>
+        <article v-for="card in cards" :key="card.id" class="summary-card" :class="card.color" :aria-label="card.label">
+          <component :is="card.parts.length <= 1 && card.state === 'ready' ? RouterLink : 'div'" v-bind="card.parts.length <= 1 && card.state === 'ready' ? { to: workbenchOrderLocation(card.id), 'aria-label': text(`查看${card.label}清单`, `View ${card.label} orders`) } : {}" class="card-content">
+            <div class="card-top"><span>{{ card.label }}</span><component :is="card.icon" :size="21" :stroke-width="1.6" /></div>
+            <strong>{{ card.value === undefined ? '—' : card.state !== 'ready' ? queueStateLabel(card.state) : number(card.value ?? 0) }}</strong><p>{{ card.hint }}</p>
+          </component>
+          <div v-if="card.parts.length > 1" class="card-queues">
+            <component :is="part.state === 'ready' ? RouterLink : 'span'" v-for="part in card.parts" :key="part.queue" v-bind="part.state === 'ready' ? { to: workbenchOrderLocation(part.queue) } : {}">
+              {{ queueNames[part.queue][zh ? 0 : 1] }} {{ part.state === 'ready' ? number(part.count ?? 0) : queueStateLabel(part.state) }}
+            </component>
+          </div>
+          <span class="card-decoration" aria-hidden="true" />
+        </article>
         <WorkCalendar />
       </section>
 
@@ -271,7 +290,7 @@ const salespersonOption = computed(() => collectionsOption(salespersonSeries.val
           <div class="panel-top statistics-heading"><h2><Users :size="17" />{{ text('每日注册会员统计', 'Daily registrations') }}</h2><div class="statistics-filters">
             <label class="year-filter">{{ text('统计维度', 'Dimension') }}<select v-model="registrationScope" :disabled="busy" :aria-label="text('注册统计维度', 'Registration dimension')"><option value="marketing">{{ text('营销中心', 'Marketing center') }}</option><option v-for="department in data?.registrationDepartments" :key="department.id" :value="department.id">{{ department.name }}</option></select></label>
           </div></div>
-          <form class="date-filter" @submit.prevent="refresh">
+          <form class="date-filter" @submit.prevent="refresh()">
             <label><span>{{ text('开始日期', 'Start date') }}</span><input v-model="from" type="date" required :max="to || localDate(today)" :aria-label="text('开始日期', 'Start date')" /></label><span class="date-dash">—</span>
             <label><span>{{ text('结束日期', 'End date') }}</span><input v-model="to" type="date" required :min="from" :max="localDate(today)" :aria-label="text('结束日期', 'End date')" /></label>
             <button class="query-button" :disabled="busy" type="submit">{{ text('查询', 'Apply') }}</button>
@@ -293,14 +312,24 @@ const salespersonOption = computed(() => collectionsOption(salespersonSeries.val
           </section>
           <section class="dashboard-panel task-panel">
             <div class="panel-top"><h2><Clock3 :size="17" />{{ text('履约待办', 'Fulfillment Tasks') }}</h2><span class="subtle-label">{{ text('按优先级处理', 'PRIORITY QUEUE') }}</span></div>
-            <div class="activity-list"><RouterLink v-for="task in data?.tasks" :key="task.id" :to="workbenchOrderLocation(task.kind)" class="task-row"><span class="task-time">{{ task.time }}</span><div><p class="row-heading">{{ taskNames[task.kind] }}</p><p class="row-description">{{ task.count }} {{ text('单待处理', 'orders pending') }}</p></div><span class="priority" :class="task.priority">{{ task.priority === 'high' ? text('优先', 'Priority') : text('常规', 'Normal') }}</span></RouterLink><p v-if="data && !data.tasks.length" class="empty-message">{{ text('暂无待办任务', 'No pending tasks') }}</p></div>
+            <div class="activity-list">
+              <component :is="(pending?.queueBreakdown?.[task.kind]?.length ?? 0) > 1 ? 'div' : RouterLink" v-for="task in pending?.tasks" :key="task.id" v-bind="(pending?.queueBreakdown?.[task.kind]?.length ?? 0) > 1 ? {} : { to: workbenchOrderLocation(task.kind) }" class="task-row">
+                <span class="task-time">{{ task.time }}</span><div><p class="row-heading">{{ taskNames[task.kind] }}</p><p class="row-description">{{ task.count }} {{ text('单待处理', 'orders pending') }}</p>
+                  <div v-if="(pending?.queueBreakdown?.[task.kind]?.length ?? 0) > 1" class="task-queues">
+                    <RouterLink v-for="part in pending?.queueBreakdown?.[task.kind]?.filter(part => part.state === 'ready')" :key="part.queue" :to="workbenchOrderLocation(part.queue)">{{ queueNames[part.queue][zh ? 0 : 1] }} {{ number(part.count ?? 0) }}</RouterLink>
+                  </div>
+                </div><span class="priority" :class="task.priority">{{ task.priority === 'high' ? text('优先', 'Priority') : text('常规', 'Normal') }}</span>
+              </component>
+              <p v-if="pendingIncomplete" class="empty-message">{{ text('待办统计尚不完整，请查看上方卡片状态。', 'Pending counts are incomplete. Check the cards above.') }}</p>
+              <p v-else-if="pending && !pending.tasks.length" class="empty-message">{{ text('暂无待办任务', 'No pending tasks') }}</p>
+            </div>
             <footer>{{ text('点击任务查看对应履约订单清单。', 'Select a task to view its fulfillment orders.') }}</footer>
           </section>
         </div>
       </div>
 
       <section v-if="visible('department_receipts')" class="dashboard-panel receipts-panel">
-        <div class="panel-top receipts-heading statistics-heading"><div><h2><Wallet :size="17" />{{ text('部门月度回款分析', 'Monthly collections by department') }}</h2></div><div class="statistics-filters"><label class="year-filter">{{ text('年份', 'Year') }}<select v-model.number="year" :aria-label="text('回款年份', 'Collections year')" :disabled="busy" @change="refresh"><option v-for="item in years" :key="item" :value="item">{{ item }}</option></select></label><label class="mom-filter"><input v-model="departmentMom" type="checkbox" aria-label="部门回款上月环比">{{ text('上月环比', 'Month-over-month') }}</label></div></div>
+        <div class="panel-top receipts-heading statistics-heading"><div><h2><Wallet :size="17" />{{ text('部门月度回款分析', 'Monthly collections by department') }}</h2></div><div class="statistics-filters"><label class="year-filter">{{ text('年份', 'Year') }}<select v-model.number="year" :aria-label="text('回款年份', 'Collections year')" :disabled="busy" @change="refresh()"><option v-for="item in years" :key="item" :value="item">{{ item }}</option></select></label><label class="mom-filter"><input v-model="departmentMom" type="checkbox" aria-label="部门回款上月环比">{{ text('上月环比', 'Month-over-month') }}</label></div></div>
         <div v-if="departmentMom" class="receipt-summary mom-summary"><span>{{ latestReceiptMonth }} · {{ text('营销中心较上月', 'Marketing center change') }}</span><ReceiptChangeValue :value="latestMarketingChange" /><small>{{ momHint }}</small></div>
         <div v-else class="receipt-summary"><span>{{ appliedYear }} {{ text('年部门回款合计', 'department collections total') }}</span><strong>{{ data?.departmentReceipts.departments.length ? money(receiptTotal) : '—' }}</strong><small>{{ marketingBreakdown }}{{ marketingBreakdown ? ' · ' : '' }}{{ text('默认展示最近 6 个月，可向左拖动查看历史；全年合计不重复累加。', 'Latest 6 months shown; drag left for earlier months. Annual totals are counted once.') }}</small></div>
         <div class="receipts-chart"><p v-if="!data?.departmentReceipts.departments.length" class="empty-message">{{ text('暂无可查看的回款统计', 'No collections statistics available') }}</p><EChart v-else :option="receiptOption" :can-export="chart('department_receipts')?.canExport === true" :label="text('各部门月度回款对比柱状图', 'Monthly collections by department')" /></div>
@@ -309,7 +338,7 @@ const salespersonOption = computed(() => collectionsOption(salespersonSeries.val
       <section v-if="visible('salesperson_receipts')" class="dashboard-panel receipts-panel salesperson-panel">
         <div class="panel-top receipts-heading statistics-heading">
           <div><h2><Users :size="17" />{{ text('业务员月度回款分析', 'Monthly collections by salesperson') }}</h2></div>
-          <div class="statistics-filters"><label v-if="!visible('department_receipts')" class="year-filter">{{ text('年份', 'Year') }}<select v-model.number="year" aria-label="回款年份" :disabled="busy" @change="refresh"><option v-for="item in years" :key="item" :value="item">{{ item }}</option></select></label><label class="year-filter">{{ text('部门', 'Department') }}<select v-model="selectedDepartmentId" :disabled="busy || !data?.receipts.departments.length" :aria-label="text('业务员回款部门', 'Salesperson collections department')"><option v-for="department in data?.receipts.departments" :key="department.id" :value="department.id">{{ department.name || departments[department.id] || department.id }}</option></select></label><label class="mom-filter"><input v-model="salespersonMom" type="checkbox" aria-label="业务员回款上月环比">{{ text('上月环比', 'Month-over-month') }}</label></div>
+          <div class="statistics-filters"><label v-if="!visible('department_receipts')" class="year-filter">{{ text('年份', 'Year') }}<select v-model.number="year" aria-label="回款年份" :disabled="busy" @change="refresh()"><option v-for="item in years" :key="item" :value="item">{{ item }}</option></select></label><label class="year-filter">{{ text('部门', 'Department') }}<select v-model="selectedDepartmentId" :disabled="busy || !data?.receipts.departments.length" :aria-label="text('业务员回款部门', 'Salesperson collections department')"><option v-for="department in data?.receipts.departments" :key="department.id" :value="department.id">{{ department.name || departments[department.id] || department.id }}</option></select></label><label class="mom-filter"><input v-model="salespersonMom" type="checkbox" aria-label="业务员回款上月环比">{{ text('上月环比', 'Month-over-month') }}</label></div>
         </div>
         <div v-if="salespersonMom" class="receipt-summary mom-summary"><span>{{ latestReceiptMonth }} · {{ selectedDepartment?.name }} · {{ text('较上月', 'Change from prior month') }}</span><ReceiptChangeValue :value="latestDepartmentChange" /><small>{{ momHint }}</small></div>
         <div v-else class="receipt-summary"><span>{{ selectedDepartment?.name || text('所选部门', 'Selected department') }} · {{ text('所选年份回款合计', 'selected year total') }}</span><strong>{{ selectedDepartment ? money(selectedDepartmentTotal) : '—' }}</strong><small>{{ receiptBreakdown(selectedDepartment) }}{{ selectedDepartment?.breakdown ? ' · ' : '' }}{{ text('蓝紫色为当前成员合计，不与个人数据重复累加；年份与上方同步。', 'Periwinkle indicates the current members total, counted once; year follows the chart above.') }}</small></div>
@@ -322,7 +351,7 @@ const salespersonOption = computed(() => collectionsOption(salespersonSeries.val
         <OrderVolumeAnalysis v-if="visible('customer_orders')" customer :revision="orderVolumeRevision" />
         <FreightAnalysis v-if="visible('freight')" :revision="orderVolumeRevision" />
       </template>
-      <p v-else class="dashboard-footnote">{{ text('本期已接入待审核履约订单；注册、回款、订单分析及运费统计尚未接入。', 'Pending review orders are connected. Registrations, collections, order analytics and freight are not connected yet.') }}</p>
+      <p v-else class="dashboard-footnote">{{ text('分析图表尚未接入，待办统计以各卡片显示为准。', 'Analytics are not connected. Pending counts are shown on each card.') }}</p>
       <p v-if="data?.source === 'mock'" class="dashboard-footnote">{{ text('MOCK 演示数据 · 组织、员工与订单相互关联 · 日期筛选用于注册趋势，年份筛选用于回款分析。', 'MOCK demo data · Linked organization, employees and orders · Dates filter registrations; year filters collections.') }}</p>
       <p v-else class="dashboard-footnote">{{ text('日期筛选用于注册趋势，年份筛选用于回款分析。', 'Dates filter registrations; year filters collections.') }}</p>
     </main>
@@ -360,6 +389,8 @@ button:disabled { opacity: .5; cursor: wait; }
 .review { background: linear-gradient(115deg, #099fdd, #32b7df); }.allocation { background: linear-gradient(115deg, #19b8c8, #70cbd5); }.fulfillment { background: linear-gradient(115deg, #37ac47, #36cd58); }.procurement { background: linear-gradient(115deg, #7c82d3, #a29bdf); }.shipping { background: linear-gradient(115deg, #f0a535, #dfce56); }
 .card-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; font-weight: 600; }.card-top svg { opacity: .85; }
 .summary-card strong { display: block; font-size: 33px; line-height: 1.2; margin: 10px 0 5px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.card-content { display: block; color: inherit; }.card-queues { display: flex; flex-wrap: wrap; gap: 5px 10px; margin-top: 8px; font-size: 11px; position: relative; z-index: 1; }.card-queues a { color: inherit; text-decoration: underline; text-underline-offset: 3px; }.card-queues span { opacity: .8; }.card-content:focus-visible, .card-queues a:focus-visible { outline: 2px solid white; outline-offset: 3px; border-radius: 3px; }.card-decoration { pointer-events: none; }
+.task-queues { display: flex; flex-wrap: wrap; gap: 6px 12px; margin-top: 6px; font-size: 11px; }.task-queues a { color: #6366f1; text-decoration: underline; text-underline-offset: 3px; }
 .summary-card p { font-size: 11px; line-height: 1.65; min-height: 36px; opacity: .95; }.card-decoration { position: absolute; width: 100px; height: 100px; border: 18px solid #ffffff12; border-radius: 50%; right: -29px; bottom: -40px; }
 
 .insights-grid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 20px; align-items: stretch; }.dashboard-panel { min-width: 0; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 8px; box-shadow: 0 2px 6px #27395004; overflow: hidden; }.panel-top { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 19px 20px; border-bottom: 1px solid var(--color-border); }.panel-top h2 { display: flex; align-items: center; gap: 8px; color: #576bd3; font-size: 13px; font-weight: 650; }.subtle-label { font-size: 9px; color: #97a1b1; letter-spacing: .04em; }.date-filter { display: flex; align-items: end; gap: 8px; padding: 18px 20px 0; flex-wrap: wrap; }.date-filter label > span { display: block; font-size: 10px; color: #8a95a7; margin-bottom: 5px; }.date-filter input, .year-filter select { color: inherit; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 5px; padding: 7px 9px; font-size: 11px; }.date-dash { padding-bottom: 7px; color: #b7c0ce; }.query-button { color: #fff; background: #5873d4; padding: 8px 16px; }.chart-summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; padding: 20px 22px 0; }.chart-summary strong { font-size: 28px; font-weight: 700; letter-spacing: -.04em; }.chart-summary span { font-size: 11px; color: #8490a3; }.chart-summary small { margin-left: auto; font-size: 10px; color: #9aa4b4; }.registration-chart { height: 285px; padding: 0 10px; }.activity-column { display: grid; gap: 18px; }.activity-list { padding: 0 20px; max-height: 260px; overflow-y: auto; }.exception-row, .task-row { display: flex; align-items: center; gap: 10px; padding: 15px 0; border-bottom: 1px solid var(--color-border); }.exception-row:last-child, .task-row:last-child { border-bottom: 0; }.exception-row > div, .task-row > div { flex: 1; min-width: 0; }.row-heading { font-size: 11px; font-weight: 600; }.row-heading span { display: block; color: #8d98a9; font-weight: 400; font-size: 10px; margin-top: 3px; }.row-description { color: #8b95a6; font-size: 10px; margin-top: 5px; }.status-dot { width: 6px; height: 6px; border-radius: 50%; background: #f2a24c; flex-shrink: 0; }.age-badge { padding: 3px 7px; font-size: 10px; color: #d68b2e; background: #fff7e8; border-radius: 4px; }.count-badge { font-size: 10px; color: #e1a041; background: #fff5e4; border-radius: 4px; padding: 2px 6px; }.dashboard-panel footer { border-top: 1px solid var(--color-border); padding: 10px 20px; font-size: 9px; color: #9aa4b4; }.task-time { color: #8c97a9; font-size: 11px; width: 42px; font-variant-numeric: tabular-nums; }.priority { font-size: 9px; padding: 3px 7px; border-radius: 4px; }.priority.high { color: #e48858; background: #fff2ea; }.priority.normal { color: #7c8caa; background: #eff3fa; }

@@ -1,0 +1,330 @@
+{
+  "checkedAt": "2026-11-12T09:23:44.583125+00:00",
+  "auditDate": "2026-11-12",
+  "codeCapability": "implemented_and_isolated_tests_passed",
+  "historicalImportReady": false,
+  "fopContacted": true,
+  "fopPausePreserved": true,
+  "realDatabase": {
+    "checkedAt": "2026-11-12T07:10:26.295Z",
+    "database": "autoflow_local_demo",
+    "readOnly": true,
+    "fopContacted": false,
+    "tables": 63,
+    "columns": 980,
+    "appliedMigrations": 51,
+    "pendingMigrations": [],
+    "missingColumns": [],
+    "documents": 0,
+    "datasets": [],
+    "capabilities": {
+      "historicalImport": {
+        "implemented": true,
+        "executable": false,
+        "blockers": [
+          "fop_queries_paused",
+          "source_adapter_not_configured"
+        ]
+      },
+      "incrementalSync": {
+        "configured": false,
+        "executable": false,
+        "blockers": [
+          "fop_queries_paused",
+          "source_adapter_not_configured",
+          "dataset_not_initialized"
+        ]
+      }
+    },
+    "historicalImportReady": false,
+    "implementationGaps": [],
+    "externalRequirements": [
+      "FOP stable snapshot/change feed and reconciliation APIs must be provided",
+      "Current service authorization and domain facts must be verified",
+      "Explicit FOP access restoration required while paused"
+    ],
+    "historicalEvidence": true,
+    "supersededBy": "collected-integration-20261112.json"
+  },
+  "mockDatabase": {
+    "checkedAt": "2026-11-12T06:35:10.362Z",
+    "database": "autoflow_workbench_mock",
+    "readOnly": true,
+    "fopContacted": false,
+    "tables": 62,
+    "columns": 964,
+    "appliedMigrations": 50,
+    "pendingMigrations": [
+      "WorkbenchSnapshotStaging1794410000000"
+    ],
+    "missingColumns": [
+      "hz_fop_bootstrap_pages.id",
+      "hz_fop_bootstrap_pages.connection_id",
+      "hz_fop_bootstrap_pages.company_id",
+      "hz_fop_bootstrap_pages.dataset_id",
+      "hz_fop_bootstrap_pages.batch_id",
+      "hz_fop_bootstrap_pages.stream_id",
+      "hz_fop_bootstrap_pages.snapshot_id",
+      "hz_fop_bootstrap_pages.page_index",
+      "hz_fop_bootstrap_pages.after_cursor",
+      "hz_fop_bootstrap_pages.end_cursor",
+      "hz_fop_bootstrap_pages.complete",
+      "hz_fop_bootstrap_pages.groups",
+      "hz_fop_bootstrap_pages.payload_hash",
+      "hz_fop_bootstrap_pages.state",
+      "hz_fop_bootstrap_pages.collected_at",
+      "hz_fop_bootstrap_pages.applied_at"
+    ],
+    "documents": 960,
+    "datasets": [
+      {
+        "state": "active",
+        "count": 1
+      }
+    ],
+    "capabilities": {
+      "historicalImport": {
+        "implemented": true,
+        "executable": false,
+        "blockers": [
+          "mock_dataset",
+          "fop_queries_paused",
+          "source_adapter_not_configured"
+        ]
+      },
+      "incrementalSync": {
+        "configured": false,
+        "executable": false,
+        "blockers": [
+          "mock_dataset",
+          "fop_queries_paused",
+          "source_adapter_not_configured"
+        ]
+      }
+    },
+    "historicalImportReady": false,
+    "implementationGaps": [],
+    "externalRequirements": [
+      "FOP stable snapshot/change feed and reconciliation APIs must be provided",
+      "Current service authorization and domain facts must be verified",
+      "Explicit FOP access restoration required while paused"
+    ]
+  },
+  "validationDatabase": "hz_ddl_validation_1794392169018",
+  "sourceContract": "fop-replica/1",
+  "domainContract": "fop-replica-domain/1",
+  "productionListPassthrough": false,
+  "capabilities": {
+    "serviceIdentitySource": "implemented_awaiting_upstream",
+    "historicalBootstrap": "implemented_awaiting_upstream",
+    "crossPageSnapshotStaging": "implemented",
+    "independentAuthorization": "implemented",
+    "realtimeAudit": "implemented_awaiting_upstream",
+    "currentInventory": "implemented_awaiting_upstream",
+    "reservedInventory": "implemented_awaiting_upstream",
+    "realLocalExport": "implemented_with_delivery_revalidation",
+    "physicalPurchaseReturns": "blocked_source_entity_and_api_not_provided",
+    "supplierFollowUps": "blocked_dedicated_api_not_provided",
+    "exceptions": "blocked_source_classification_contract_missing",
+    "inventoryUsageFacts": "partial_source_contract_pending"
+  },
+  "verification": {
+    "backend": {
+      "suites": 123,
+      "tests": 1529,
+      "passed": true
+    },
+    "frontend": {
+      "files": 83,
+      "tests": 670,
+      "passed": true
+    },
+    "httpE2E": {
+      "suites": 8,
+      "tests": 325,
+      "passed": true
+    },
+    "bootstrapPostgres": {
+      "scenarios": 5,
+      "passed": true
+    },
+    "publisherPostgres": "passed",
+    "lint": "passed",
+    "build": "passed",
+    "matrix": {
+      "lists": 23,
+      "displayFields": 287,
+      "mappingRows": 348,
+      "apiDefinedMappingRows": 262,
+      "apiMissingMappingRows": 36,
+      "apiConfirmMappingRows": 25,
+      "offlineValidated": true
+    },
+    "documentVisualBrowserReview": false,
+    "previousCodeRegression": true,
+    "oneShot": {
+      "backendBuild": "passed",
+      "rawPageHashes": "passed",
+      "uniqueMonotonicIds": "passed",
+      "sameTenantUserAndCompany": "passed",
+      "finalHasMore": false,
+      "localServicePreflight": "passed",
+      "authenticatedUi": "not_verified_existing_saved_login_returned_401",
+      "browserUi": "not_verified_computer_use_permission_unavailable",
+      "pauseAndBootstrapTests": {
+        "suites": 4,
+        "tests": 24,
+        "passed": true
+      },
+      "fieldMatrix": "passed_23_lists_287_fields_348_mappings",
+      "handoffTable": "passed_six_missing_services_and_concise_first_columns"
+    }
+  },
+  "fopHandoff": {
+    "confirm": [
+      "C01",
+      "C02",
+      "C03",
+      "C04",
+      "C05",
+      "C06",
+      "C07",
+      "C08",
+      "C09",
+      "C10",
+      "C11"
+    ],
+    "extend": [
+      "E01",
+      "E02",
+      "E03",
+      "E04",
+      "E05",
+      "E06",
+      "E07",
+      "E08",
+      "E09",
+      "E10",
+      "E11",
+      "E12"
+    ],
+    "document": "HyperZone智能办公平台项目FOP扩展开发需求.html",
+    "missingServiceUrls": [
+      "FOP_REPLICA_SNAPSHOT_BEGIN_URL",
+      "FOP_REPLICA_SNAPSHOT_PAGE_URL",
+      "FOP_REPLICA_CHANGES_URL",
+      "FOP_REPLICA_BARRIER_URL",
+      "FOP_REPLICA_AUTHORIZATION_URL",
+      "FOP_REPLICA_RECONCILE_URL"
+    ],
+    "frontendBff": [
+      "B01",
+      "B02",
+      "B03",
+      "B04",
+      "B05",
+      "B06",
+      "B07",
+      "B08"
+    ],
+    "acceptance": [
+      "T01",
+      "T02",
+      "T03",
+      "T04",
+      "T05",
+      "T06",
+      "T07",
+      "T08",
+      "T09",
+      "T10",
+      "T11",
+      "T12",
+      "T13",
+      "T14",
+      "T15",
+      "T16",
+      "T17",
+      "T18",
+      "T19"
+    ],
+    "requirementsStatus": "documented_pending_implementation_and_full_integration",
+    "index": "fop-extension-requirements-index.json"
+  },
+  "limitations": [
+    "One authorized real API capture completed; all automatic FOP calls remain paused.",
+    "Six replica service addresses and dedicated realtime contracts must be supplied and verified.",
+    "Real database has all 51 migrations; formal source documents remain zero and dataset is not initialized.",
+    "44,855 raw orders were captured from 449 pages; no consistent snapshot/version/reconciliation proof and all facts objects were empty.",
+    "Raw files are private evidence, not published business data."
+  ],
+  "automaticCallsPaused": true,
+  "oneShotEvidence": "fop-one-shot-20261112.json",
+  "oneShot": {
+    "rows": 44855,
+    "pages": 449,
+    "cursorExhausted": true,
+    "stableSnapshot": false,
+    "businessDatabaseImported": false,
+    "published": false
+  },
+  "currentRuntime": {
+    "database": "autoflow_local_demo",
+    "dataMode": "kingdee",
+    "readMode": "local",
+    "mockEnabled": false,
+    "fopQueriesPaused": true,
+    "scheduledSyncEnabled": false,
+    "activeSyncJobs": 0,
+    "initialized": false,
+    "publishedDocuments": 0,
+    "backendPort": 3000
+  },
+  "latestCoverageAudit": {
+    "checkedAt": "2026-11-12T08:28:41.835648+00:00",
+    "document": "HyperZone工作台初始化与业务待办覆盖诊断.html",
+    "evidence": "workbench-coverage-20261112.json",
+    "initialized": false,
+    "fopContacted": false,
+    "automaticCallsEnabled": false,
+    "actualAllListGapCount": null,
+    "logicalCoverageGapsProven": false,
+    "validation": {
+      "backend": {
+        "suites": 124,
+        "tests": 1594,
+        "evidenceSha256": "7b6d4d9d2d2fb6b05dd619d40bc6ebb5bcb64f437c497813b1000613d6ceeff1"
+      },
+      "frontend": {
+        "suites": 83,
+        "tests": 679,
+        "evidenceSha256": "894dd223209aefd5cea95d19b8ce62c23d48649af151214b6e6804cf27ca726d"
+      },
+      "bootstrapHttp": {
+        "suites": 1,
+        "tests": 5,
+        "evidenceSha256": "f6fbf3716c97c5ff7d8ea3f0b208533dd0990d0392b2bc49ec2ef761be5e5110"
+      },
+      "lint": "passed",
+      "build": "passed",
+      "independentReview": "passed_after_three_fixes",
+      "realFopIntegration": "blocked_missing_services",
+      "browserVisualCheck": "not_performed"
+    },
+    "businessRuleRevision": "allocation-business-rules-20261112.json",
+    "interpretation": "Current stock-backed ready orders belong to allocation_review; impossible normal-state hypotheses withdrawn; interception pending; actual gap count remains unmeasured."
+  },
+  "collectedMode": {
+    "initialized": true,
+    "readable": true,
+    "orders": 44855,
+    "itemLines": 80188,
+    "activeBatchId": "ce79b730-2b01-4f12-8cce-8696c538285b",
+    "readOnly": true,
+    "missingFieldsRemainNull": true,
+    "automaticCallsEnabled": false,
+    "report": "collected-integration-20261112.json",
+    "coverageReport": "collected-coverage-20261112.json"
+  },
+  "historicalImportReadyMeaning": "完整一致快照协议仍待FOP；独立旧API采集初始化已完成并可读"
+}

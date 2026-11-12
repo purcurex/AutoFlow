@@ -1,0 +1,473 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-11-12T09:19:31.459Z",
+  "source": {
+    "batchId": "ce79b730-2b01-4f12-8cce-8696c538285b",
+    "sourceAsOf": "2026-11-12T09:11:26.523Z",
+    "completedAt": "2026-11-12T09:13:28.895Z",
+    "rowCount": 44855,
+    "pageCount": 449,
+    "sha256": "8a4e805f179560d6efb22396b92195cd6c707baf6cc42854eabda6a90e8ca65a",
+    "mode": "collected",
+    "readOnly": true,
+    "consistentSnapshot": false,
+    "sourceTimeMeaning": "capture_started_at_not_source_watermark"
+  },
+  "method": {
+    "networkCalls": 0,
+    "databaseTransaction": "REPEATABLE READ READ ONLY",
+    "targetPredicate": "raw_delivery_status IS DISTINCT FROM '2'",
+    "queues": [
+      "unpaid",
+      "review(completed=false)",
+      "exceptions"
+    ],
+    "scope": "管理员无部门/个人/时间/搜索筛选的当前已采集批次；非所有员工可见范围",
+    "querySource": "backend/src/modules/workbench-replica/collected-workbench-query.ts",
+    "querySourceSha256": "0487f4cae4b9b5894f890304495c240344dad6ae5e555e0ec7f5115f9ae47b41",
+    "sqlPredicates": {
+      "unpaid": "(batch_id = $1) AND (raw_order_status IN ('1','2','3','4','5','no') AND raw_payment_status = '0')",
+      "review": "(batch_id = $1) AND (raw_order_status IN ('1','2','3','4','5','no') AND raw_payment_status = '1' AND raw_bill_status = 'B')",
+      "exceptions": "(batch_id = $1) AND ((raw_delivery_status IS DISTINCT FROM '2' AND (raw_payment_status IS DISTINCT FROM '0' OR raw_order_status IS NULL OR raw_order_status NOT IN ('1','2','3','4','5','no'))))"
+    },
+    "nullSemantics": "目标使用IS DISTINCT FROM；队列布尔值使用COALESCE(predicate,false)。独立JS按null显式判定，对全部订单逐项交叉核验。",
+    "sqlJsMismatches": 0
+  },
+  "coverage": {
+    "allCollected": {
+      "orders": 44855,
+      "unpaid": 29038,
+      "review": 35,
+      "exceptions": 2061,
+      "distinctCovered": 31099,
+      "uncovered": 13756,
+      "reviewExceptionOverlap": 35
+    },
+    "target": {
+      "orders": 31094,
+      "unpaid": 29033,
+      "review": 35,
+      "exceptions": 2061,
+      "distinctCovered": 31094,
+      "uncovered": 0,
+      "reviewExceptionOverlap": 35
+    },
+    "byOrderState": {
+      "active_not_cancelled": {
+        "orders": 30574,
+        "unpaid": 29033,
+        "review": 35,
+        "exceptions": 1541,
+        "distinctCovered": 30574,
+        "uncovered": 0,
+        "reviewExceptionOverlap": 35
+      },
+      "cancelled": {
+        "orders": 520,
+        "unpaid": 0,
+        "review": 0,
+        "exceptions": 520,
+        "distinctCovered": 520,
+        "uncovered": 0,
+        "reviewExceptionOverlap": 0
+      },
+      "unknown_order_status": {
+        "orders": 0,
+        "unpaid": 0,
+        "review": 0,
+        "exceptions": 0,
+        "distinctCovered": 0,
+        "uncovered": 0,
+        "reviewExceptionOverlap": 0
+      }
+    },
+    "zeroOmissionsWithinCollectedTarget": true,
+    "allCollectedUncoveredAreFullyOutbound": true,
+    "targetUnknownDelivery": 52,
+    "excludedFullyOutbound": 13761
+  },
+  "statusGroups": {
+    "allCollected": [
+      {
+        "raw_bill_status": "A",
+        "raw_payment_status": "0",
+        "raw_delivery_status": "0",
+        "orders": 29077
+      },
+      {
+        "raw_bill_status": "A",
+        "raw_payment_status": "0",
+        "raw_delivery_status": null,
+        "orders": 49
+      },
+      {
+        "raw_bill_status": "A",
+        "raw_payment_status": "1",
+        "raw_delivery_status": "0",
+        "orders": 50
+      },
+      {
+        "raw_bill_status": "B",
+        "raw_payment_status": "0",
+        "raw_delivery_status": "0",
+        "orders": 323
+      },
+      {
+        "raw_bill_status": "B",
+        "raw_payment_status": "1",
+        "raw_delivery_status": "0",
+        "orders": 35
+      },
+      {
+        "raw_bill_status": "C",
+        "raw_payment_status": "0",
+        "raw_delivery_status": "0",
+        "orders": 98
+      },
+      {
+        "raw_bill_status": "C",
+        "raw_payment_status": "0",
+        "raw_delivery_status": "1",
+        "orders": 4
+      },
+      {
+        "raw_bill_status": "C",
+        "raw_payment_status": "0",
+        "raw_delivery_status": "2",
+        "orders": 5
+      },
+      {
+        "raw_bill_status": "C",
+        "raw_payment_status": "0",
+        "raw_delivery_status": null,
+        "orders": 2
+      },
+      {
+        "raw_bill_status": "C",
+        "raw_payment_status": "1",
+        "raw_delivery_status": "0",
+        "orders": 1300
+      },
+      {
+        "raw_bill_status": "C",
+        "raw_payment_status": "1",
+        "raw_delivery_status": "1",
+        "orders": 155
+      },
+      {
+        "raw_bill_status": "C",
+        "raw_payment_status": "1",
+        "raw_delivery_status": "2",
+        "orders": 13756
+      },
+      {
+        "raw_bill_status": "C",
+        "raw_payment_status": "1",
+        "raw_delivery_status": null,
+        "orders": 1
+      }
+    ],
+    "target": [
+      {
+        "raw_bill_status": "A",
+        "raw_payment_status": "0",
+        "raw_delivery_status": "0",
+        "orders": 29077
+      },
+      {
+        "raw_bill_status": "A",
+        "raw_payment_status": "0",
+        "raw_delivery_status": null,
+        "orders": 49
+      },
+      {
+        "raw_bill_status": "A",
+        "raw_payment_status": "1",
+        "raw_delivery_status": "0",
+        "orders": 50
+      },
+      {
+        "raw_bill_status": "B",
+        "raw_payment_status": "0",
+        "raw_delivery_status": "0",
+        "orders": 323
+      },
+      {
+        "raw_bill_status": "B",
+        "raw_payment_status": "1",
+        "raw_delivery_status": "0",
+        "orders": 35
+      },
+      {
+        "raw_bill_status": "C",
+        "raw_payment_status": "0",
+        "raw_delivery_status": "0",
+        "orders": 98
+      },
+      {
+        "raw_bill_status": "C",
+        "raw_payment_status": "0",
+        "raw_delivery_status": "1",
+        "orders": 4
+      },
+      {
+        "raw_bill_status": "C",
+        "raw_payment_status": "0",
+        "raw_delivery_status": null,
+        "orders": 2
+      },
+      {
+        "raw_bill_status": "C",
+        "raw_payment_status": "1",
+        "raw_delivery_status": "0",
+        "orders": 1300
+      },
+      {
+        "raw_bill_status": "C",
+        "raw_payment_status": "1",
+        "raw_delivery_status": "1",
+        "orders": 155
+      },
+      {
+        "raw_bill_status": "C",
+        "raw_payment_status": "1",
+        "raw_delivery_status": null,
+        "orders": 1
+      }
+    ],
+    "targetOrderStates": [
+      {
+        "raw_order_status": "0",
+        "orders": 520
+      },
+      {
+        "raw_order_status": "1",
+        "orders": 17533
+      },
+      {
+        "raw_order_status": "2",
+        "orders": 227
+      },
+      {
+        "raw_order_status": "3",
+        "orders": 62
+      },
+      {
+        "raw_order_status": "4",
+        "orders": 1254
+      },
+      {
+        "raw_order_status": "no",
+        "orders": 11498
+      }
+    ]
+  },
+  "missingFields": {
+    "amount": 44855,
+    "currency": 44855,
+    "paidAt": 29675,
+    "fulfillmentProgress": 44855,
+    "dispatchDocuments": 44855,
+    "allocationDocument": 44855,
+    "procurementProgress": 44855,
+    "shipmentInterceptStatus": 44855,
+    "totalQuantity": 2
+  },
+  "additionalMissingFields": {
+    "sourceOrderPaidAt": 2863,
+    "createdAt": 0
+  },
+  "ownership": {
+    "verifiedCurrentDirectoryMembers": 14,
+    "allCollected": {
+      "orders": 44855,
+      "mappedOwnerOrders": 30332,
+      "unmappedNonNullOwnerOrders": 14523,
+      "emptyOwnerOrders": 0,
+      "distinctUnmappedNonNullOwners": 10
+    },
+    "target": {
+      "orders": 31094,
+      "mappedOwnerOrders": 18479,
+      "unmappedNonNullOwnerOrders": 12615,
+      "emptyOwnerOrders": 0,
+      "distinctUnmappedNonNullOwners": 10
+    },
+    "activeTarget": {
+      "orders": 30574,
+      "mappedOwnerOrders": 18092,
+      "unmappedNonNullOwnerOrders": 12482,
+      "emptyOwnerOrders": 0,
+      "distinctUnmappedNonNullOwners": 10
+    },
+    "visibilityNote": "管理员未筛选可查看历史未映射单；经理/业务员只可查看当前授权成员交集。管理员零遗漏不等于每名员工可见全部目标单。"
+  },
+  "items": {
+    "allCollected": {
+      "orders": 44855,
+      "itemLines": 80188,
+      "emptyItemsOrders": 2,
+      "anyMissingSkuOrders": 11506,
+      "missingSkuLines": 24489,
+      "nullQuantityOrders": 2
+    },
+    "target": {
+      "orders": 31094,
+      "itemLines": 61846,
+      "emptyItemsOrders": 2,
+      "anyMissingSkuOrders": 11506,
+      "missingSkuLines": 24489,
+      "nullQuantityOrders": 2
+    }
+  },
+  "billTypes": {
+    "allCollected": [
+      {
+        "bill_type": "hzkj_orders_BT_Sample",
+        "orders": 14
+      },
+      {
+        "bill_type": "hzkj_orders_BT",
+        "orders": 44841
+      }
+    ],
+    "target": [
+      {
+        "bill_type": "hzkj_orders_BT_Sample",
+        "orders": 7
+      },
+      {
+        "bill_type": "hzkj_orders_BT",
+        "orders": 31087
+      }
+    ]
+  },
+  "manualReview": [
+    {
+      "id": "owner_unmapped",
+      "priority": "high",
+      "count": 12615,
+      "population": "target",
+      "recommendation": "管理员核对历史业务员与当前有效本地目录的映射；确认归属后按独立授权变更，不向普通员工放开全量。"
+    },
+    {
+      "id": "owner_missing",
+      "priority": "high",
+      "count": 0,
+      "population": "target",
+      "recommendation": "由FOP补回明确业务归属；来源为空时不按客户或当前登录人猜配。"
+    },
+    {
+      "id": "paid_unfinished_downstream_unknown",
+      "priority": "high",
+      "count": 1541,
+      "population": "active_not_cancelled_target",
+      "recommendation": "逐单核对配货、采购、发运及出库关联；此数量为待核查候选，不代表存在流程缺陷或应重复建单。"
+    },
+    {
+      "id": "native_shipped_not_fully_outbound",
+      "priority": "high",
+      "count": 1254,
+      "population": "active_not_cancelled_target",
+      "recommendation": "对原生订单状态4/5且未全出库的候选核对状态口径、异步更新和历史记录；不能据此认定无配货单、已履约或缺库存。"
+    },
+    {
+      "id": "unknown_delivery",
+      "priority": "high",
+      "count": 52,
+      "population": "target",
+      "recommendation": "核对缺失原生出库状态的记录；NULL使用IS DISTINCT FROM纳入未明确全出库目标，不能以SQL不等于过滤而静默遗漏。"
+    },
+    {
+      "id": "fully_outbound_unpaid",
+      "priority": "medium",
+      "count": 5,
+      "population": "outside_target",
+      "recommendation": "核对已全出库但仍未支付的历史状态；该组仍在未支付清单，未计入本次未全出库目标。"
+    },
+    {
+      "id": "paid_draft",
+      "priority": "medium",
+      "count": 50,
+      "population": "active_not_cancelled_target",
+      "recommendation": "核对支付后未提交审核的草稿原因；保留异常入口，不绕过FOP审核门禁。"
+    },
+    {
+      "id": "approved_unpaid",
+      "priority": "medium",
+      "count": 79,
+      "population": "active_not_cancelled_target",
+      "recommendation": "核对原生收款状态、撤销/历史业务及单据生命周期；不得将审核状态推定为已收款。"
+    },
+    {
+      "id": "cancelled_not_fully_outbound",
+      "priority": "medium",
+      "count": 520,
+      "population": "target",
+      "recommendation": "单列取消历史记录，核对退款/售后/实物退货与义务终止；取消不直接证明所有履约义务结束。"
+    },
+    {
+      "id": "unknown_order_status",
+      "priority": "high",
+      "count": 0,
+      "population": "target",
+      "recommendation": "核对空值或不在已知枚举的原生状态；未知必须保留异常入口，不默认取消或已完成。"
+    },
+    {
+      "id": "empty_items",
+      "priority": "high",
+      "count": 2,
+      "population": "all_collected",
+      "recommendation": "请FOP核对空商品明细的来源记录和接口完整性；不补造数量0。"
+    },
+    {
+      "id": "missing_sku",
+      "priority": "medium",
+      "count": 11506,
+      "population": "all_collected",
+      "recommendation": "核对有明细但缺SKU的商品映射；整单搜索不能作为源端全量商品已完整提供的证明。"
+    },
+    {
+      "id": "missing_total_or_settlement_currency",
+      "priority": "high",
+      "count": 44855,
+      "population": "all_collected",
+      "recommendation": "FOP提供真实总金额和结算币种后再验证金额统计；不可用产品金额或本位币兜底。"
+    }
+  ],
+  "limitations": [
+    {
+      "code": "outside_capture_unknown",
+      "count": null,
+      "detail": "旧API仅证明此次认证公司/资源范围内返回的履约表头集合；没有一致快照、水位或源端总账核对，无法量化权限外、未返回、后续新增/删除/归属变动数据。"
+    },
+    {
+      "code": "uncollected_entities",
+      "count": null,
+      "entities": [
+        "stock_orders",
+        "procurement",
+        "allocation",
+        "dispatch",
+        "receipt_notices",
+        "rma",
+        "physical_returns",
+        "inventory",
+        "interception",
+        "obligation_termination"
+      ],
+      "detail": "未采集实体的单据总数、待办数量及与履约订单的差集不可测，不能将未接入清单零行解释为源端没有业务。"
+    },
+    {
+      "code": "facts_not_provided",
+      "count": 44855,
+      "detail": "所有采集订单缺独立下游事实；异常入口只保证不隐藏已采集候选，不证明已识别具体业务异常。"
+    },
+    {
+      "code": "filter_scope",
+      "count": null,
+      "detail": "时间、部门、个人、搜索和清单筛选会缩小结果；当前零遗漏结论只适用于所述无筛选管理员视角。"
+    }
+  ],
+  "conclusion": "已采集批次内，所有未明确全出库的订单都至少属于未支付、待审核或异常待核查之一。该集合覆盖结论不代表所有业务实体已采集、源端全量已核对、各员工可见范围相同或下游异常已被证实。"
+}

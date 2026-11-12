@@ -3,6 +3,7 @@ import { FopDataService } from './fop-data.service'
 import { FopPermissionDeniedError, type FopAnalyticsResource } from './fop-data.types'
 import type { User } from '../users/user.entity'
 import type { UsersService } from '../users/users.service'
+import { ServiceUnavailableException } from '@nestjs/common'
 
 const identity = { tenantId: 'offline-test', userId: '100' }
 const scope = { role: 'admin' as const, departmentId: null, employeeId: null }
@@ -57,6 +58,7 @@ function setup(options: { records?: Records; grants?: Partial<Record<FopAnalytic
 describe('Kingdee nine analytics integration, offline transport', () => {
   it('applies the merged chart denials before requesting live registration or receipt facts', async () => {
     const { service, user, request } = setup()
+    user.role = 'user' as User['role']
     user.chartPermissions = (['registrations', 'salesperson_receipts'] as const).map(chartId => ({ chartId,
       visibility: 'deny', dataScope: 'inherit', summaryMode: 'inherit', summaryDepartments: [], details: 'inherit', export: 'inherit' }))
     const result = await service.getDashboard('local', { from: '2025-10-01', to: '2025-10-04', year: 2025 })
@@ -68,6 +70,7 @@ describe('Kingdee nine analytics integration, offline transport', () => {
 
   it('keeps live receipt totals inside the merged personal chart scope', async () => {
     const { service, user } = setup({ records: { ...records(), receipts: [receipt, stock, { ...receipt, id: '2003:1', owner: ref('502') }] } })
+    user.role = 'user' as User['role']
     user.businessEmployeeId = '501'
     user.chartPermissions = [{ chartId: 'salesperson_receipts', visibility: 'inherit', dataScope: 'self', summaryMode: 'inherit', summaryDepartments: [], details: 'inherit', export: 'inherit' }]
     const result = await service.getDashboard('local', { from: '2025-10-01', to: '2025-10-04', year: 2025 })
@@ -77,16 +80,27 @@ describe('Kingdee nine analytics integration, offline transport', () => {
   })
 
   it('aggregates daily registrations, department and salesperson actual collections, preserving source breakdown', async () => {
-    const { service } = setup()
-    const dashboard = await service.getDashboard('local', { from: '2025-10-01', to: '2025-10-04', year: 2025 })
+    const { service, request } = setup()
+    const local = { enabled: true, getOrders: jest.fn(async (_id: string, query: { queue: string }) => { if (query.queue !== 'review') throw new ServiceUnavailableException({ code: 'fop_feature_not_configured' }); return { total: 11 } }) }
+    const dashboard = await (service.getDashboard as any)('local', { from: '2025-10-01', to: '2025-10-04', year: 2025 }, local)
     expect('analyticsConfigured' in dashboard && dashboard.analyticsConfigured).toBe(true)
-    expect(dashboard.registrations.map(row => row.count)).toEqual([0, 0, 2, 0])
+    expect(dashboard.registrations.map((row: { count: number }) => row.count)).toEqual([0, 0, 2, 0])
     expect(dashboard.registrationDepartments[0].salespeople[0].counts).toEqual([0, 0, 2, 0])
     expect(dashboard.receipts.marketingCenter!.amounts[9]).toBe(147)
     expect(dashboard.receipts.departments[0].salespeople[0].amounts[9]).toBe(147)
     expect(dashboard.receipts.marketingCenter!.breakdown.fulfillment[9]).toBe(97)
     expect(dashboard.receipts.marketingCenter!.breakdown.fullPaymentStock[9]).toBe(50)
-    expect(dashboard.queues).toEqual({ review: 7, procurement: null, allocation: null, dispatch: null, shipping: null })
+    expect(dashboard.queues).toEqual({ review: 11, procurement: null, allocation: null, dispatch: null, shipping: null })
+    expect(local.getOrders).toHaveBeenCalledWith('local', { queue: 'review', projection: 'count', page: 1, pageSize: 1 })
+    expect(request.mock.calls.some(call => [settings.FOP_KINGDEE_QUERY_URL, settings.FOP_KINGDEE_SUMMARY_URL].includes(String(call[0])))).toBe(false)
+  })
+
+  it('leaves queues unconfigured without the local replica and never probes historical lists', async () => {
+    const { service, request } = setup()
+    const dashboard = await service.getDashboard('local', { from: '2025-10-01', to: '2025-10-04', year: 2025 })
+    expect(dashboard.queues).toEqual({ review: null, procurement: null, allocation: null, dispatch: null, shipping: null })
+    expect(dashboard.queueStates.review).toBe('not_configured')
+    expect(request.mock.calls.some(call => [settings.FOP_KINGDEE_QUERY_URL, settings.FOP_KINGDEE_SUMMARY_URL].includes(String(call[0])))).toBe(false)
   })
 
   it('connects business order volumes, customer ranking, customer search and single customer trend', async () => {

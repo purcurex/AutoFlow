@@ -1,3 +1,4 @@
+import { configureReplicaTestRuntime, isolateReplicaProviders } from './replica-test-boundary'
 import { INestApplication, ValidationPipe } from '@nestjs/common'
 import { JwtService } from '@nestjs/jwt'
 import { Test } from '@nestjs/testing'
@@ -9,6 +10,7 @@ import { DemoFopDataProvider } from '../src/modules/fop-data/fop-demo.provider'
 import { FopDataService } from '../src/modules/fop-data/fop-data.service'
 
 jest.setTimeout(30000)
+configureReplicaTestRuntime()
 describe('Administrator employee account provisioning', () => {
   let app: INestApplication, db: DataSource, jwt: JwtService, adminId: string, otherId: string, staffId: string
   let departmentId: string, otherDepartmentId: string
@@ -24,7 +26,7 @@ describe('Administrator employee account provisioning', () => {
     const { default: source } = await import('../src/database/data-source')
     await source.initialize(); await source.runMigrations(); await source.destroy()
     const { AppModule } = await import('../src/app.module')
-    const module = await Test.createTestingModule({ imports: [AppModule] }).compile()
+    const module = await isolateReplicaProviders(Test.createTestingModule({ imports: [AppModule] })).compile()
     app = module.createNestApplication(); app.setGlobalPrefix('api')
     app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }))
     await app.init(); db = app.get(DataSource); jwt = app.get(JwtService)
@@ -81,7 +83,7 @@ describe('Administrator employee account provisioning', () => {
     await create({ ...employee('owner'), ownerUserId: otherId }).expect(400)
     const root = (await get().expect(200)).body.nodes.find((row: any) => row.parentId === null)
     await create({ ...employee('root'), departmentId: root.id }).expect(409)
-    const existing = (await get().expect(200)).body.employees.find((row: any) => row.code === 'EMP001')
+    const existing = (await get().expect(200)).body.employees.find((row: any) => row.code === 'EMP013')
     await open(existing.id, account('cross'), otherId).expect(404)
   })
   it('rolls back duplicate and invalid provisioning without orphan employees or accounts', async () => {

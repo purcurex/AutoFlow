@@ -64,3 +64,22 @@ describe('fulfillment-primary purchase return grouping', () => {
     expect(groupPurchaseReturnOrders(docs, sourceOrders, { paidAtOrder: 'desc' }).map(row => row.id)).toEqual(['a', 'b'])
   })
 })
+
+it('defaults return orders to newest consumer payment first and allows an explicit ascending override', () => {
+  const orders = [{ id: 'a', consumerPaidAt: '2026-10-01T00:00:00Z', paidAt: '2026-10-03T00:00:00Z' }, { id: 'b', consumerPaidAt: '2026-10-02T00:00:00Z', paidAt: '2026-10-01T00:00:00Z' }] as FopOrder[]
+  const docs = build(snapshot(physical('r1')), grant, { ...scope, role: 'admin' })
+  expect(groupPurchaseReturnOrders(docs, orders, {}).map(row => row.id)).toEqual(['b', 'a'])
+  expect(groupPurchaseReturnOrders(docs, orders, { paidAtOrder: 'asc' }).map(row => row.id)).toEqual(['a', 'b'])
+})
+
+it('preserves a return supplier contact from its own document even after shipment, with a safe launch URL', () => {
+  const row = physical('r1', { status: 'received', supplier: { id: 's1', name: 'Supplier', wangwangAccount: 'seller' }, supplierChatUrl: 'aliim:sendmsg?touid=cnalichnseller' })
+  expect(build(snapshot(row), grant, scope)[0]).toMatchObject({ supplier: { wangwangAccount: 'seller' }, supplierChatUrl: 'aliim:sendmsg?touid=cnalichnseller' })
+  expect(build(snapshot(row), { ...grant, allowedPurchaseOrderIds: [] }, scope)).toEqual([])
+})
+it('discards unsafe or mismatched return-supplier links', () => {
+  for (const supplierChatUrl of ['https://evil.test/', 'aliim:sendmsg?touid=cnalichnother']) {
+    const row = physical('r1', { supplier: { id: 's1', name: 'Supplier', wangwangAccount: 'seller' }, supplierChatUrl })
+    expect(build(snapshot(row), grant, scope)[0]).toMatchObject({ supplier: { wangwangAccount: 'seller' }, supplierChatUrl: null })
+  }
+})

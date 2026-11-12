@@ -13,7 +13,7 @@ const receipt = (id = 'r1', extra: Partial<FopReceiptCandidate> = {}): FopReceip
 function setup(options: { profits?: FopProfitCandidate[]; receipts?: FopReceiptCandidate[]; account?: object; grant?: object } = {}) {
   const account = { businessRole: 'salesperson', businessEmployeeId: 'alice', businessDepartmentId: 'd1', workbenchRoles: ['sales'], fopTenantId: 't1', fopUserId: 'u1', role: 'user', ...options.account }
   const rows = options.profits ?? [profit()], receipts = options.receipts ?? [receipt()]
-  const provider = { isConfigured: () => true, resolvePermissions: async (subject: any) => ({ subject, allowedOrderIds: [], allowedProfitIds: rows.map(r => r.id), allowedReceiptIds: receipts.map(r => r.id), analyticsScopes: ['receipts', 'sales_profit'], ...options.grant }), listOrders: async () => { throw new Error('Sales performance must never enumerate orders') }, listProfits: async () => rows, listReceipts: async () => receipts } as unknown as FopDataProvider
+  const provider = { isConfigured: () => true, administratorIdentity: async () => null, resolvePermissions: async (subject: any) => ({ subject, allowedOrderIds: [], allowedProfitIds: rows.map(r => r.id), allowedReceiptIds: receipts.map(r => r.id), analyticsScopes: ['receipts', 'sales_profit'], ...options.grant }), listOrders: async () => { throw new Error('Sales performance must never enumerate orders') }, listProfits: async () => rows, listReceipts: async () => receipts } as unknown as FopDataProvider
   const service = new FopDataService({ findById: async () => structuredClone(account) } as unknown as UsersService, provider)
   return { service, provider, account }
 }
@@ -63,7 +63,16 @@ describe('independently authorized sales performance', () => {
     expect(await service.getSalesPerformance('u', query)).toMatchObject({ owners: [], selectedOwner: null, totals: { receiptCount: 0, profitCount: 0 } })
     await expect(service.getSalesPerformance('u', { ...query, ownerId: 'other' })).rejects.toMatchObject({ status: 403 })
   })
-  it.each([{ workbenchRoles: ['dispatch'] }, { role: 'admin', businessRole: 'none' }, { businessEmployeeId: null }])('requires sales workbench and business identity %j', async account => await expect(setup({ account }).service.getSalesPerformance('u', query)).rejects.toMatchObject({ status: 403 }))
+  it.each([{ workbenchRoles: ['dispatch'] }, { role: 'user', businessRole: 'none' }, { businessEmployeeId: null }])('requires sales workbench and business identity %j', async account => await expect(setup({ account }).service.getSalesPerformance('u', query)).rejects.toMatchObject({ status: 403 }))
+  it('gives system administrators all authorized owners while preserving independent receipt and profit grants', async () => {
+    const account = { role: 'admin', businessRole: 'none', workbenchRoles: [] }
+    const profits = [profit(), profit('bob', { owner: { id: 'bob', name: 'Bob' } }), profit('not-granted'), profit('foreign', { tenantId: 't2' })]
+    const grant = { allowedProfitIds: ['p1', 'bob', 'foreign'] }
+    const result = await setup({ account, profits, grant }).service.getSalesPerformance('u', { ...query, ownerScope: 'all' })
+    expect(result.owners.map(owner => owner.id)).toEqual(['alice', 'bob'])
+    expect(result.totals.estimatedGrossProfit).toBe(120)
+    await expect(setup({ account, grant: { analyticsScopes: ['receipts'] } }).service.getSalesPerformance('u', query)).rejects.toMatchObject({ status: 403 })
+  })
   it('intersects tenant, allowlist and business owner before validating or enumerating owners', async () => {
     const { service } = setup({ profits: [profit(), profit('other', { owner: { id: 'bob', name: 'Private' }, amount: NaN }), profit('foreign', { tenantId: 't2', amount: NaN }), profit('outside', { amount: NaN })], grant: { allowedProfitIds: ['p1', 'other', 'foreign'] } })
     const result = await service.getSalesPerformance('u', query)
@@ -79,7 +88,7 @@ describe('independently authorized sales performance', () => {
   })
   it('lets managers select only authorized department owners, defaulting to their binding and never silently selecting a colleague', async () => {
     const rows = [profit('a'), profit('b', { owner: { id: 'bob', name: 'Bob' } }), profit('outside', { department: { id: 'd2', name: 'Private' }, departmentPathIds: ['d2'] })]
-    const { service, account } = setup({ profits: rows, account: { businessRole: 'department_manager', businessDepartmentId: 'd1', businessEmployeeId: 'bob' } })
+    const { service, account } = setup({ profits: rows, account: { businessRole: 'department_manager', dataDisplayScope: 'department' as const, businessDepartmentId: 'd1', businessEmployeeId: 'bob' } })
     expect(await service.getSalesPerformance('u', query)).toMatchObject({ canSelectOwner: true, selectedOwner: { id: 'bob' }, totals: { collectionsAmount: 0, estimatedGrossProfit: 60 } })
     expect((await service.getSalesPerformance('u', { ...query, ownerId: 'alice' })).totals.collectionsAmount).toBe(80)
     account.businessEmployeeId = 'not-present'
@@ -95,7 +104,7 @@ describe('independently authorized sales performance', () => {
   it('aggregates all authorized department owners and keeps details within the same independent grants', async () => {
     const all = { ...query, ownerScope: 'all' } as PerformanceQuery
     const bob = { id: 'bob', name: 'Bob' }
-    const { service } = setup({ account: { businessRole: 'department_manager', businessDepartmentId: 'd1' },
+    const { service } = setup({ account: { businessRole: 'department_manager', dataDisplayScope: 'department' as const, businessDepartmentId: 'd1' },
       profits: [profit(), profit('b', { owner: bob }), profit('hidden'), profit('outside', { department: { id: 'd2', name: 'Private' }, departmentPathIds: ['d2'] })],
       receipts: [receipt(), receipt('rb', { owner: bob }), receipt('foreign', { tenantId: 't2' })],
       grant: { allowedProfitIds: ['p1', 'b', 'outside'] } })
@@ -122,7 +131,7 @@ describe('independently authorized sales performance', () => {
   })
   it('管理员可以查看全部已授权业务人员，经理不能从上级部门查看子部门业绩', async () => {
     expect((await setup({ account: { role: 'admin' } }).service.getSalesPerformance('u', { ...query, ownerScope: 'all' })).totals.collectionsAmount).toBe(80)
-    const manager = setup({ account: { businessRole: 'department_manager', businessDepartmentId: 'sales' } }).service
+    const manager = setup({ account: { businessRole: 'department_manager', dataDisplayScope: 'department' as const, businessDepartmentId: 'sales' } }).service
     expect((await manager.getSalesPerformance('u', { ...query, ownerScope: 'all' })).owners).toEqual([])
   })
   it('rejects conflicting and invalid all-owner selectors before querying the provider', async () => {

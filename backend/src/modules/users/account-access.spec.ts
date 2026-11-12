@@ -13,6 +13,8 @@ function setup() {
   let locked = false
   const repository = {
     findOne: jest.fn(async ({ where }: any) => { if (!locked) throw Error('Read outside lock'); return where.id === actor.id ? actor : where.id === target.id ? target : null }),
+    findOneBy: jest.fn(async ({ id }: { id: string }) => { if (!locked) throw Error('Read outside lock'); return id === actor.id ? actor : id === target.id ? target : null }),
+    existsBy: jest.fn(async ({ id }: { id: string }) => id === actor.id || id === target.id),
     update: jest.fn(async (_id, changes) => { Object.assign(target, changes) }),
     manager: { transaction: async (callback: (manager: any) => Promise<unknown>) => callback({ query: async () => { locked = true }, getRepository: () => repository }) },
   }
@@ -36,13 +38,31 @@ it('applies the existing collaboration summary-only chart policy on role changes
   expect(charts.filter(chart => chart.visible).map(chart => chart.chartId)).toEqual(['registrations', 'department_receipts', 'order_volume'])
   expect(charts.every(chart => !chart.canViewDetails && chart.dataScope === 'none')).toBe(true)
 })
-it('preserves current chart overrides on same-role edits and closed business access', async () => {
+it('canonicalizes administrator assignment even when an older client submits closed business and no workbenches', async () => {
   const { service, target } = setup()
   target.role = UserRole.ADMIN; target.businessRole = 'none'; target.chartPermissions = collaborationChartPermissions()
-  const result = await service.updateAccountAccess('admin', 'target', { ...input('administrator'), businessScope: { role: 'none', departmentId: null, employeeId: null } })
-  expect(result.businessScope.role).toBe('none')
+  const result = await service.updateAccountAccess('admin', 'target', { ...input('administrator'), businessScope: { role: 'none', departmentId: 'd1', employeeId: 'e1' }, workbenchRoles: [] })
+  expect(result.businessScope).toEqual({ role: 'admin', departmentId: null, employeeId: null })
   expect(target.role).toBe(UserRole.ADMIN)
-  expect(target.chartPermissions).toEqual(collaborationChartPermissions())
+  expect(target.businessRole).toBe('admin')
+  expect(target.workbenchRoles).toEqual(['sales', 'procurement', 'allocation', 'dispatch', 'warehouse'])
+  expect(target).toMatchObject({ businessDepartmentId: 'd1', businessEmployeeId: 'e1', fopTenantId: 'tenant', fopUserId: 'fop-user' })
+})
+it('promotes through the legacy management endpoint and closes business scope on a role-only demotion', async () => {
+  const { service, target } = setup()
+  await service.updateManagementRole('admin', 'target', UserRole.ADMIN)
+  expect(target).toMatchObject({ role: 'admin', businessRole: 'admin', workbenchRoles: ['sales', 'procurement', 'allocation', 'dispatch', 'warehouse'], businessDepartmentId: 'd1', businessEmployeeId: 'e1', fopUserId: 'fop-user' })
+  await service.updateManagementRole('admin', 'target', UserRole.USER)
+  expect(target).toMatchObject({ role: 'user', businessRole: 'none', workbenchRoles: [], businessDepartmentId: 'd1', businessEmployeeId: 'e1', fopUserId: 'fop-user' })
+  expect(resolveChartAccess(target).every(chart => !chart.visible)).toBe(true)
+})
+it('demotes an administrator to the selected employee scope and restores ordinary chart restrictions', async () => {
+  const { service, target } = setup()
+  await service.updateAccountAccess('admin', 'target', input('administrator'))
+  const result = await service.updateAccountAccess('admin', 'target', input('salesperson'))
+  expect(result.businessScope).toEqual({ role: 'salesperson', departmentId: 'd1', employeeId: 'e1' })
+  expect(target.role).toBe(UserRole.USER)
+  expect(resolveChartAccess(target).find(chart => chart.chartId === 'customer_orders')?.dataScope).toBe('self')
 })
 it('rejects nonadmins, self-demotion, missing targets and inconsistent role/scope', async () => {
   const { service, actor, repository } = setup()

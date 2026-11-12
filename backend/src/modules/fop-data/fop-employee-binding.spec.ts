@@ -16,7 +16,7 @@ function setup() {
     FOP_KINGDEE_USERNAME: 'directory-reader', FOP_KINGDEE_IDENTITY: 'offline-gateway', FOP_KINGDEE_ORGANIZATION_IDS: '100' }
   const bindings = new Map([['11', details()], ['22', details('employee-b', '22')]])
   const tokenUsers = new Map<string,string>(), issued = new Map<string,number>()
-  const controls = { refreshA: false, disabled: false, rejectedUser: '', wrongSubject: false, foreignDirectory: false, gatewayDenied: false }
+  const controls = { refreshA: false, disabled: false, rejectedUser: '', wrongSubject: false, foreignDirectory: false, gatewayDenied: false, employeeNumber: 'ID-000007', duplicateNumber: false }
   const request = jest.fn(async (input: string | URL | Request, init?: RequestInit) => {
     const path = new URL(String(input)).pathname, body = JSON.parse(String(init?.body))
     if (path === '/token') {
@@ -36,8 +36,8 @@ function setup() {
     }
     expect(username).toBe('directory-reader')
     if (path === '/directory') return envelope({ schemaVersion: 1, subject: identity('30'), organizationId: controls.foreignDirectory ? '200' : '100', resource: 'employees',
-      scopeVersion: 'a'.repeat(64), nextCursor: null, items: [{ id: '11', masterId: '111', membershipId: '201', departmentId: '301',
-        name: '测试职员', username: 'employee-a', state: controls.disabled ? 'disabled' : 'active' }] })
+      scopeVersion: 'a'.repeat(64), nextCursor: controls.duplicateNumber && !body.query.cursor ? '11:201' : null, items: [{ id: body.query.cursor ? '22' : '11', masterId: '111', membershipId: '201', departmentId: '301',
+        number: controls.employeeNumber, name: '测试职员', username: 'employee-a', state: controls.disabled ? 'disabled' : 'active' }] })
     if (path === '/states') return envelope({ schemaVersion: 1, subject: identity('30'), organizationId: '100',
       items: body.query.employeeIds.map((id: string) => ({ id, state: controls.disabled ? 'disabled' : 'active' })) })
     throw new Error('Unexpected test route')
@@ -75,7 +75,9 @@ describe('一人一绑定的真实金蝶身份隔离', () => {
   it('网关519未订阅API明确归类为授权缺失，不作为5xx重复请求', async () => {
     const { provider, controls, request } = setup();controls.gatewayDenied=true
     await expect(provider.resolvePermissions(identity('11'),scope)).rejects.toMatchObject({code:'fop_api_not_authorized'})
-    expect(request.mock.calls.filter(call=>String(call[0]).endsWith('/permissions'))).toHaveLength(1)
+    const calls = request.mock.calls.filter(call=>String(call[0]).endsWith('/permissions'))
+    expect(calls).toHaveLength(2)
+    expect(new Set(calls.map(call => (call[1]!.headers as Record<string,string>).access_token)).size).toBe(2)
   })
 
   it('解绑、代理用户未配置、平台返回他人身份均拒绝，不回退目录管理员Token', async () => {
@@ -98,18 +100,64 @@ describe('一人一绑定的真实金蝶身份隔离', () => {
 
   it('绑定从可信目录派生用户名并核验Context身份，保留记录ID与masterId差异', async () => {
     const { provider } = setup()
-    const binding = await provider.verifyEmployeeBinding('11','201')
-    expect(binding).toMatchObject({ tenantId: 'offline-tenant', userId: '11', details: { username: 'employee-a', employeeRecordId: '11', employeeMasterId: '111', departmentId: '301' } })
+    const binding = await provider.verifyEmployeeBinding('11','201', 'ID-000007')
+    expect(binding).toMatchObject({ tenantId: 'offline-tenant', userId: '11', details: { username: 'employee-a', employeeRecordId: '11', employeeMasterId: '111', employeeNumber: 'ID-000007', departmentId: '301' } })
     expect(JSON.stringify(binding)).not.toMatch(/offline-secret|token-/)
-    await expect(provider.verifyEmployeeBinding('11','999')).rejects.toMatchObject({ code: 'fop_permission_denied' })
+    await expect(provider.verifyEmployeeBinding('11','999', 'ID-000007')).rejects.toMatchObject({ code: 'fop_permission_denied' })
   })
 
   it('目录跨公司、账号禁用或认证主体不匹配不能写成已验证绑定', async () => {
     const a = setup(); a.controls.foreignDirectory = true
-    await expect(a.provider.verifyEmployeeBinding('11','201')).rejects.toMatchObject({ code: 'fop_permission_denied' })
+    await expect(a.provider.verifyEmployeeBinding('11','201', 'ID-000007')).rejects.toMatchObject({ code: 'fop_permission_denied' })
     const b = setup(); b.controls.disabled = true
-    await expect(b.provider.verifyEmployeeBinding('11','201')).rejects.toMatchObject({ code: 'fop_employee_unavailable' })
+    await expect(b.provider.verifyEmployeeBinding('11','201', 'ID-000007')).rejects.toMatchObject({ code: 'fop_employee_unavailable' })
     const c = setup(); c.controls.wrongSubject = true
-    await expect(c.provider.verifyEmployeeBinding('11','201')).rejects.toMatchObject({ code: 'fop_permission_denied' })
+    await expect(c.provider.verifyEmployeeBinding('11','201', 'ID-000007')).rejects.toMatchObject({ code: 'fop_permission_denied' })
   })
+  it('工号与所选人员不一致时拒绝，不因姓名或用户名匹配而绑定', async () => {
+    const { provider, issued } = setup()
+    await expect(provider.verifyEmployeeBinding('11', '201', 'ID-000015')).rejects.toMatchObject({ code: 'fop_employee_number_mismatch' })
+    expect(issued.has('employee-a')).toBe(false)
+  })
+  it('目录缺少工号时不得用用户名或内部ID代替', async () => {
+    const { provider, controls } = setup(); controls.employeeNumber = ''
+    await expect(provider.verifyEmployeeBinding('11', '201', 'ID-000007')).rejects.toMatchObject({ code: 'fop_employee_number_mismatch' })
+  })
+  it('跨页存在不同人员的重复工号时拒绝绑定', async () => {
+    const { provider, controls, issued } = setup(); controls.duplicateNumber = true
+    await expect(provider.verifyEmployeeBinding('11', '201', 'ID-000007')).rejects.toMatchObject({ code: 'fop_employee_number_ambiguous' })
+    expect(issued.has('employee-a')).toBe(false)
+  })
+
+})
+
+it('overlaps fresh employee permissions with account checks, coalesces only pending reads and rejects disabled accounts', async () => {
+  const { provider, request, controls } = setup()
+  await provider.resolvePermissions(identity('11'), scope)
+  const original = request.getMockImplementation()!
+  let release!: () => void
+  const gate = new Promise<void>(resolve => { release = resolve })
+  let waiting = false
+  request.mockClear()
+  request.mockImplementation(async (input, init) => {
+    if (new URL(String(input)).pathname === '/states' && !waiting) {
+      waiting = true
+      await gate
+    }
+    return original(input, init)
+  })
+  controls.disabled = true
+  let finished = false
+  const both = Promise.allSettled([provider.resolvePermissions(identity('11'), scope), provider.resolvePermissions(identity('11'), scope)]).then(value => { finished = true; return value })
+  try {
+    for (let i = 0; i < 20; i++) await new Promise<void>(resolve => setImmediate(resolve))
+    const paths = request.mock.calls.map(([url]) => new URL(String(url)).pathname)
+    expect(paths.filter((path, index) => path === '/permissions' && (request.mock.calls[index][1]!.headers as Record<string,string>).access_token.startsWith('employee-a'))).toHaveLength(1)
+    expect(paths.filter(path => path === '/states')).toHaveLength(1)
+    expect(finished).toBe(false)
+  } finally { release() }
+  expect((await both).every(result => result.status === 'rejected' && result.reason.code === 'fop_employee_unavailable')).toBe(true)
+  controls.disabled = false
+  await expect(provider.resolvePermissions(identity('11'), scope)).resolves.toMatchObject({ subject: identity('11') })
+  expect(request.mock.calls.filter(([url]) => new URL(String(url)).pathname === '/states')).toHaveLength(2)
 })

@@ -9,9 +9,9 @@ export async function buildStockWorkbook(rows: readonly FopStockOrder[], source:
   book.creator = 'HyperZone'
   const sheet = book.addWorksheet('备货清单', { views: [{ state: 'frozen', ySplit: 1 }] })
   sheet.columns = [
-    ['备货单号', 'stockNumber', 26], ['商品信息', 'products', 48], ['备货类型', 'type', 18], ['订单金额', 'amount', 18], ['币种', 'currency', 10], ...(showOrderStatus ? [['创建时间（UTC+8）', 'createdAt', 25]] : []), ['收款时间（UTC+8）', 'paidAt', 25],
+    ['备货单号', 'stockNumber', 26], ['商品信息', 'products', 48], ['备货类型', 'type', 18], ['订单金额', 'amount', 18], ['币种', 'currency', 10], ['创建时间（UTC+8）', 'createdAt', 25], ['收款时间（UTC+8）', 'paidAt', 25],
     ...(showOrderStatus ? [['备货订单状态', 'orderStatus', 18]] : []),
-    ['客户名称', 'customerName', 26], ['店铺', 'storeName', 24], ['采购状态', 'status', 18], ['收货仓库', 'warehouse', 18], ['业务员', 'salesperson', 26],
+    ['客户名称', 'customerName', 26], ...(!showOrderStatus ? [['店铺', 'storeName', 24]] : []), ['采购状态', 'status', 18], ['收货仓库', 'warehouse', 18], ['业务员', 'salesperson', 26],
   ].map(([header, key, width]) => ({ header: String(header), key: String(key), width: Number(width) }))
   sheet.columns.forEach(column => { column.numFmt = column.key === 'amount' ? '#,##0.00' : '@' })
   const details = book.addWorksheet('商品明细', { views: [{ state: 'frozen', ySplit: 1, xSplit: 1 }] })
@@ -39,7 +39,7 @@ export async function buildStockWorkbook(rows: readonly FopStockOrder[], source:
     })
   })
   book.addWorksheet('说明').addRows([['数据来源', source === 'mock' ? '演示数据' : 'FOP'], ['口径', `${showOrderStatus ? '全部有效备货单' : '备货待采购清单：客户已支付且已审核，未采购、部分采购或已采购待发货'}；全款与押金分列类型；订单金额按币种合计，不代表已收金额或回款业绩。`], ['时间', 'UTC+8'],
-    ...(showOrderStatus ? [['备货阶段', filters.lifecycle ? STOCK_LIFECYCLE_LABELS[filters.lifecycle] : '全部'], ['创建时间范围', ({ all: '全部', '1w': '近一周', '1m': '近一月', '3m': '近三月' } as const)[filters.timeRange ?? 'all']]] : []),
+    ...(showOrderStatus ? [['备货阶段', filters.lifecycle ? STOCK_LIFECYCLE_LABELS[filters.lifecycle] : '全部'], ['客户付款时间范围', ({ all: '全部', '1w': '近一周', '1m': '近一月', '3m': '近三月' } as const)[filters.timeRange ?? 'all']]] : []),
   ])
   return Buffer.from(await book.xlsx.writeBuffer())
 }

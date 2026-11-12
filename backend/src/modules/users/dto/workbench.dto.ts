@@ -97,7 +97,7 @@ export class FulfillmentOrderFiltersDto extends CompletionFiltersDto {
 
   @IsOptional()
   @IsIn(['asc', 'desc'])
-  paidAtOrder?: 'asc' | 'desc' = 'asc'
+  paidAtOrder?: 'asc' | 'desc' = 'desc'
 
   @IsOptional()
   @IsIn(['all', 'pending_review', 'pending_outbound'])
@@ -127,6 +127,10 @@ export class FulfillmentOrderFiltersDto extends CompletionFiltersDto {
 }
 
 export class ListFulfillmentOrdersDto extends FulfillmentOrderFiltersDto {
+  @IsOptional()
+  @IsIn(['count'])
+  projection?: 'count'
+
   @IsOptional()
   @Type(() => Number)
   @IsInt()

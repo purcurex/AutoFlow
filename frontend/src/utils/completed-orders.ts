@@ -1,9 +1,10 @@
+import { isProcurementCompleted } from './workbench-queue-rules'
 import type { FopOrder, FopOrderQueue } from '@/api/fop-orders'
 import type { WorkbenchRole } from './workbench'
 import { orderTimestamp } from './order-timestamp'
 export const completedQueues: Record<WorkbenchRole, FopOrderQueue> = { sales: 'review', dispatch: 'dispatch', procurement: 'procurement', allocation: 'allocation_review', warehouse: 'shipping' }
 export const completedNames: Record<WorkbenchRole, readonly [string, string]> = {
-  sales: ['已完成清单', 'Completed orders'], dispatch: ['已履约订单', 'Fulfilled orders'], procurement: ['采购完成清单', 'Completed purchases'],
+  sales: ['已审核清单', 'Approved orders'], dispatch: ['已履约订单', 'Fulfilled orders'], procurement: ['采购完成清单', 'Completed purchases'],
   allocation: ['配货完成清单', 'Completed allocations'], warehouse: ['已出库清单', 'Completed outbound'],
 }
 export const completedTimeNames: Record<WorkbenchRole, readonly [string, string]> = {
@@ -17,15 +18,12 @@ export function completionTime(order: FopOrder, role: WorkbenchRole): string | n
 }
 /** Validate archive responses against completion facts, independently of pending queue rules. */
 export function matchesCompletedQueue(order: FopOrder, queue: FopOrderQueue): boolean {
+  if (queue === 'review') return order.reviewStatus === 'approved'
   if (order.cancelled || order.paymentStatus !== 'paid') return false
   if (queue !== 'procurement' && order.reviewStatus !== 'approved') return false
-  if (queue === 'review') return true
   const progress = order.fulfillmentProgress
   if (queue === 'dispatch') return progress.shopifySync === 'synced'
-  if (queue === 'procurement') {
-    const purchase = order.procurementProgress
-    return purchase?.purchaseOrder === 'ordered' && purchase.supplierPayment === 'paid' && (purchase.alibabaOrder === 'pushed' || purchase.alibabaOrder === 'not_required')
-  }
+  if (queue === 'procurement') return order.sourcePurchaseStatus !== undefined ? order.procurementProgress?.purchaseOrder !== 'not_required' && ['3','4'].includes(order.sourcePurchaseStatus ?? '') : isProcurementCompleted(order.procurementProgress, progress.supplierShipment)
   return progress.allocationCreated === true && progress.allocationReview === 'approved'
     && (queue === 'allocation_review' || queue === 'shipping' && progress.outbound === 'completed')
 }

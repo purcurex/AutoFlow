@@ -43,4 +43,21 @@ describe('approval confirmation', () => {
     expect(wrapper.text()).toContain('勿重复提交'); expect(wrapper.find('[data-testid="confirm-approval"]').exists()).toBe(false)
     expect(submitOrderApproval).toHaveBeenCalledTimes(1)
   })
+  it('distinguishes source approval from the local replica awaiting synchronization', async () => {
+    vi.mocked(submitOrderApproval).mockResolvedValue({ source: 'fop', requestId: 'r', completedAt: '', items: [{ orderId: 'o', orderNumber: 'SO-1', status: 'approved', message: '审核完成', documents: [] }] })
+    const wrapper = setup(); await flushPromises(); await wrapper.get('[data-testid="confirm-approval"]').trigger('click'); await flushPromises()
+    expect(wrapper.text()).toContain('FOP 已确认审核')
+    expect(wrapper.text()).toContain('本地清单待同步')
+    expect(wrapper.text()).toContain('同步数据')
+    expect(wrapper.text()).not.toContain('清单将刷新已确认的最新状态')
+    expect(wrapper.find('[data-testid="confirm-approval"]').exists()).toBe(false)
+  })
+
+  it('does not represent simulated approval as an FOP confirmation', async () => {
+    vi.mocked(submitOrderApproval).mockResolvedValue({ source: 'mock', requestId: 'r', completedAt: '', items: [{ orderId: 'o', orderNumber: 'SO-1', status: 'approved', message: '模拟审核完成', documents: [] }] })
+    const wrapper = setup(); await flushPromises(); await wrapper.get('[data-testid="confirm-approval"]').trigger('click'); await flushPromises()
+    expect(wrapper.text()).toContain('模拟审核结果')
+    expect(wrapper.text()).not.toContain('FOP 已确认审核')
+  })
+
 })

@@ -8,11 +8,11 @@ import { invalidateSession } from '@/utils/session'
 vi.mock('@/api/organization', () => ({ getEmployeeLogin: vi.fn(), updateEmployeeLogin: vi.fn() }))
 vi.mock('@/api/fop-access', async importOriginal => ({ ...await importOriginal<typeof import('@/api/fop-access')>(), bindFopEmployee:vi.fn(),unbindFopEmployee:vi.fn(),getFopBindingEmployees:vi.fn() }))
 const page: FopBindingEmployeePage = { scopeVersion:'a'.repeat(64),nextCursor:null,items:[
-  {id:'11',masterId:'111',membershipId:'201',departmentId:'301',name:'测试职员甲',username:'offline-a',state:'active'},
-  {id:'22',masterId:'222',membershipId:'202',departmentId:'302',name:'测试职员乙',username:'offline-b',state:'disabled'},
+  {id:'11',masterId:'111',membershipId:'201',departmentId:'301',employeeNumber:'ID-000007',name:'测试职员甲',username:'offline-a',state:'active'},
+  {id:'22',masterId:'222',membershipId:'202',departmentId:'302',employeeNumber:'ID-000008',name:'测试职员乙',username:'offline-b',state:'disabled'},
 ] }
 const account = { id:'local-a',username:'Local A',email:'a@example.test',fopBinding:null }
-const saved = { ...account,fopBinding:{tenantId:'offline',userId:'11'},fopBindingDetails:{name:'测试职员甲',username:'offline-a',employeeRecordId:'11',employeeMasterId:'111',departmentId:'301',organizationId:'100',verifiedAt:'2026-10-29T00:00:00Z'} }
+const saved = { ...account,fopBinding:{tenantId:'offline',userId:'11'},fopBindingDetails:{employeeNumber:'ID-000007',name:'测试职员甲',username:'offline-a',employeeRecordId:'11',employeeMasterId:'111',departmentId:'301',organizationId:'100',verifiedAt:'2026-10-29T00:00:00Z'} }
 async function setup() {
   vi.mocked(getEmployeeLogin).mockResolvedValue(account)
   vi.mocked(getFopBindingEmployees).mockResolvedValue(page)
@@ -33,14 +33,14 @@ describe('管理员验证并绑定每个账号对应的金蝶员工',()=>{
     expect(document.querySelector('option[value="11:201"]')).not.toBeNull()
     wrapper.unmount()
   })
-  it('只能选择可用任职行，只提交人员和任职ID，登录资料及权限不随绑定请求提交',async()=>{
+  it('只能选择可用任职行，提交工号与人员任职ID供服务端复验，登录资料及权限不随绑定请求提交',async()=>{
     const wrapper=await setup();vi.mocked(bindFopEmployee).mockResolvedValue(saved)
     expect(button(wrapper,'验证并绑定金蝶员工').attributes('disabled')).toBeDefined()
     await button(wrapper,'读取金蝶员工').trigger('click');await flushPromises()
     expect(wrapper.get('option[value="22:202"]').attributes('disabled')).toBeDefined()
     await wrapper.get('[aria-label="对应金蝶员工"]').setValue('11:201')
     await button(wrapper,'验证并绑定金蝶员工').trigger('click');await flushPromises()
-    expect(bindFopEmployee).toHaveBeenCalledExactlyOnceWith('local-a','11','201')
+    expect(bindFopEmployee).toHaveBeenCalledExactlyOnceWith('local-a','11','201','ID-000007')
     expect(updateEmployeeLogin).not.toHaveBeenCalled()
     expect(wrapper.text()).toContain('测试职员甲');expect(wrapper.get('[role=status]').text()).toContain('重新登录')
     wrapper.unmount()
@@ -86,4 +86,24 @@ describe('管理员验证并绑定每个账号对应的金蝶员工',()=>{
     expect(unbindFopEmployee).toHaveBeenCalledExactlyOnceWith('local-a');expect(updateEmployeeLogin).not.toHaveBeenCalled()
     expect(linked.text()).toContain('尚未绑定金蝶员工');linked.unmount()
   })
+  it('按工号查找人员，缺少工号的记录不可绑定', async () => {
+    const wrapper=await setup()
+    vi.mocked(getFopBindingEmployees).mockResolvedValueOnce({...page,items:[...page.items,{...page.items[0]!,id:'33',membershipId:'203',employeeNumber:null}]})
+    await button(wrapper,'读取金蝶员工').trigger('click');await flushPromises()
+    expect(wrapper.get('option[value="33:203"]').attributes('disabled')).toBeDefined()
+    await wrapper.get('[aria-label="筛选已加载员工"]').setValue('ID-000007')
+    expect(wrapper.get('option[value="11:201"]').text()).toContain('ID-000007')
+    expect(wrapper.find('option[value="22:202"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('相同工号的多任职仍显示可区分的部门与任职信息', async () => {
+    const wrapper=await setup()
+    vi.mocked(getFopBindingEmployees).mockResolvedValueOnce({...page,items:[page.items[0]!,{...page.items[0]!,membershipId:'203',departmentId:'303'}]})
+    await button(wrapper,'读取金蝶员工').trigger('click');await flushPromises()
+    const a=wrapper.get('option[value="11:201"]').text(),b=wrapper.get('option[value="11:203"]').text()
+    expect(a).not.toBe(b);expect(a).toContain('301');expect(b).toContain('303')
+    wrapper.unmount()
+  })
+
 })

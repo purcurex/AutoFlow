@@ -6,7 +6,7 @@ const now = new Date('2026-10-30T00:00:00Z')
 const group: PurchaseGroup = {
   id: 'purchase:p1', kind: 'purchase', purchase: { id: 'p1', number: 'CG20261030000006', supplier: { id: 's1', name: 'Supplier' }, purchaseType: 'online', platform: '1688', platformOrderNumber: '5127833916176022434', payment: 'paid', placement: 'placed', paidAt: '2026-10-27T12:00:00Z' },
   orderCount: 1, skuCount: 1, quantity: 4, shippedQuantity: 1, pendingQuantity: 3, shipment: 'partial', earliestReceiptAt: '2026-10-26T23:00:00Z',
-  rows: [{ orderId: 'o1', orderNumber: 'SO-001', shopifyOrderNumber: '#0001', customerName: '=CMD()', storeName: 'Store', ownerName: 'Wendy', departmentName: '业务一部', warehouse: '杭州仓', paidAt: '2026-10-26T23:00:00Z', lines: [{ fulfillmentLineId: 'f1', purchaseLineId: 'p1', sku: '00001', name: 'Lamp', imageUrl: null, variant: 'Blue', quantity: 4, shippedQuantity: 1 }] }],
+  rows: [{ orderId: 'o1', orderNumber: 'SO-001', shopifyOrderNumber: '#0001', customerName: '=CMD()', storeName: 'Store', ownerName: 'Wendy', departmentName: '业务一部', warehouse: '杭州仓', paidAt: '2026-10-26T23:00:00Z', consumerPaidAt: '2026-10-25T23:00:00Z', lines: [{ fulfillmentLineId: 'f1', purchaseLineId: 'p1', sku: '00001', name: 'Lamp', imageUrl: null, variant: 'Blue', quantity: 4, shippedQuantity: 1 }] }],
 }
 const pending = (): PurchaseGroup => ({ ...group, id: 'uncreated', kind: 'uncreated', purchase: null, shippedQuantity: 0, pendingQuantity: 4, rows: group.rows.map(row => ({ ...row, lines: row.lines.map(line => ({ ...line, purchaseLineId: null, shippedQuantity: 0 })) })) })
 async function read(groups: PurchaseGroup[]) {
@@ -33,7 +33,7 @@ it('separates uncreated demand from purchase and shipment quantities in mixed ex
   expect(cell(sheet, 3, '发货时效').value).toBe('超过48小时')
   expect(sheet.autoFilter).toBe('A1:Z3')
 })
-it('preserves long identifiers, literal text, receipt time, store and variants and records export filters', async () => {
+it('preserves long identifiers, literal text, consumer payment time, store and variants and records export filters', async () => {
   const book = await read([group]), sheet = book.getWorksheet('采购关联明细')!
   expect(cell(sheet, 2, '平台订单号').value).toBe('5127833916176022434')
   expect(cell(sheet, 2, '平台订单号').type).toBe(ExcelJS.ValueType.String)
@@ -42,7 +42,7 @@ it('preserves long identifiers, literal text, receipt time, store and variants a
   expect(cell(sheet, 2, 'SKU').value).toBe('00001')
   expect(cell(sheet, 2, '店铺').value).toBe('Store')
   expect(cell(sheet, 2, '规格').value).toBe('Blue')
-  expect(cell(sheet, 2, '收款时间（UTC+8）').value).toBe('2026-10-27 07:00:00')
+  expect(cell(sheet, 2, '客户付款时间（UTC+8）').value).toBe('2026-10-26 07:00:00')
   const notes = JSON.stringify(book.getWorksheet('说明')!.getSheetValues())
   for (const text of ['演示数据', '待创建采购单', 'Lamp', '降序', '杭州仓', '跨分页']) expect(notes).toContain(text)
 })
@@ -52,4 +52,27 @@ it.each([[24, '正常'], [24.01, '超过24小时'], [48, '超过24小时'], [48.
 })
 it('enforces the order cap even when over 10000 fulfillment orders share a single purchase', async () => {
   await expect(buildPurchaseGroupWorkbook([{ ...group, rows: Array.from({ length: 10001 }, (_, i) => ({ ...group.rows[0], orderId: String(i) })) }])).rejects.toMatchObject({ status: 413 })
+})
+
+it('exports customer-payment range and sort metadata while retaining purchase completion dates', async () => {
+  const book = new ExcelJS.Workbook()
+  const completed = { ...group, completedAt: '2026-10-29T00:00:00Z', rows: group.rows.map(row => ({ ...row, completedAt: '2026-10-29T00:00:00Z' })) }
+  await book.xlsx.load(await buildPurchaseGroupWorkbook([completed], { queue: 'procurement', completed: true, timeRange: '1m', sortOrder: 'desc', mode: 'filtered' }, 'mock', now) as never)
+  const sheet = book.getWorksheet('采购关联明细')!
+  expect(cell(sheet, 2, '客户付款时间（UTC+8）').value).toBe('2026-10-26 07:00:00')
+  expect(cell(sheet, 2, '采购完成时间（UTC+8）').value).toBe('2026-10-29 08:00:00')
+  const notes = book.getWorksheet('说明')!.getSheetValues() as (string[] | undefined)[]
+  expect(notes.find(row => row?.[1] === '客户付款时间范围')?.[2]).toBe('近一月')
+  expect(notes.find(row => row?.[1] === '排序')?.[2]).toBe('客户付款时间 · 降序')
+})
+
+it('exports the authoritative whole-purchase summary independently of filtered fulfillment detail rows', async () => {
+  const book=await read([{...group,orderCount:3,skuCount:2,quantity:10,shippedQuantity:7,pendingQuantity:3}])
+  const summary=book.getWorksheet('采购单汇总')
+  expect(summary).toBeDefined()
+  expect(cell(summary!,2,'履约笔数').value).toBe(3)
+  expect(cell(summary!,2,'SKU种数').value).toBe(2)
+  expect(cell(summary!,2,'采购数量').value).toBe(10)
+  expect(cell(summary!,2,'供应商已发数量').value).toBe(7)
+  expect(cell(summary!,2,'供应商待发数量').value).toBe(3)
 })

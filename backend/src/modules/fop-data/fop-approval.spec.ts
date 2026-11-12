@@ -1,5 +1,7 @@
 import { FopApprovalService } from './fop-approval.service'
 import { approvalVersion } from './fop-approval.types'
+import { ServiceUnavailableException } from '@nestjs/common'
+import { FopIntegrationUnavailableError } from './fop-data.types'
 
 describe('workbench approval', () => {
   const identity = { tenantId: 't', userId: 'u' }
@@ -102,5 +104,16 @@ describe('workbench approval', () => {
   it('uses a stable key for same actor, request and document', async () => {
     await service.submit('account', request()); await service.submit('account', request())
     expect(provider.approveDocument.mock.calls[0][1].idempotencyKey).toBe(provider.approveDocument.mock.calls[1][1].idempotencyKey)
+  })
+  it('reports an unconfigured operation before implying a submitted or uncertain audit', async () => {
+    provider.approveDocument.mockRejectedValue(new FopIntegrationUnavailableError('fop_approval_not_configured'))
+    expect((await service.submit('account', request())).items[0]).toMatchObject({ status: 'blocked', code: 'fop_approval_not_configured' })
+  })
+  it('preserves not_configured and pause errors from current approval context', async () => {
+    for (const code of ['fop_approval_not_configured', 'fop_queries_paused']) {
+      data.approvalContext.mockRejectedValue(new ServiceUnavailableException({ code }))
+      expect((await service.submit('account', request())).items[0]).toMatchObject({ status: 'blocked', code })
+    }
+    expect(provider.approveDocument).not.toHaveBeenCalled()
   })
 })

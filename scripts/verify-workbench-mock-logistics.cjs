@@ -1,0 +1,25 @@
+require('reflect-metadata')
+require('ts-node').register({project:'backend/tsconfig.json',transpileOnly:true})
+const assert=require('node:assert/strict'),fs=require('node:fs'),{DataSource}=require('typeorm'),{ConfigService}=require('@nestjs/config'),dotenv=require('dotenv')
+const {localLogisticsSql}=require('../backend/src/modules/workbench-replica/local-workbench-logistics')
+const {localOrder}=require('../backend/src/modules/workbench-replica/local-workbench-mapping')
+const {LocalWorkbenchService}=require('../backend/src/modules/workbench-replica/local-workbench.service')
+const {assertMockDatabase}=require('../backend/src/modules/workbench-replica/workbench-mock')
+global.fetch=()=>{throw new Error('External access forbidden during local verification')}
+;(async()=>{
+ const values={...dotenv.parse(fs.readFileSync('backend/.env.workbench.local')),NODE_ENV:'test',FOP_QUERIES_PAUSED:'true'}
+ const db=await new DataSource({type:'postgres',host:values.DB_HOST,port:Number(values.DB_PORT),username:values.DB_USERNAME,password:values.DB_PASSWORD,database:values.DB_DATABASE,logging:false}).initialize()
+ try{
+  assertMockDatabase(db)
+  const rows=await db.query(`SELECT o.*, ${localLogisticsSql} AS logistics_packages FROM hz_fop_workbench_orders o WHERE o.order_kind='fulfillment'`)
+  let paid=0,synced=0,approvedPending=0
+  for(const row of rows){const order=localOrder(row,[]);assert.ok(order.carrier);assert.ok(order.logisticsChannels.length);assert.ok(order.logisticsChannels.every(c=>c.name&&c.code));if(order.paymentStatus==='paid')paid++;if(order.fulfillmentProgress.shopifySync==='synced'){synced++;assert.equal(order.paymentStatus,'paid');assert.ok(order.trackingNumber, JSON.stringify({id:row.document_id,packages:row.logistics_packages,tracking:await db.query('SELECT tracking_type,shopify_selected,provider_id,dispatch_document_id FROM hz_fop_tracking_numbers WHERE package_id IN (SELECT id FROM hz_fop_order_packages WHERE order_document_id=$1)',[row.document_id]),dispatch:await db.query('SELECT d.document_id,s.validation_state,s.deleted_at,r.relation_type,r.resolution_state,r.removed_at,r.connection_id,r.company_id,r.dataset_id FROM hz_fop_dispatches d JOIN hz_fop_source_documents s ON s.id=d.document_id JOIN hz_fop_document_relations r ON r.to_document_id=d.document_id WHERE r.from_document_id=$1',[row.document_id])}))} const documents=await db.query("SELECT d.raw_bill_status FROM hz_fop_document_relations r JOIN hz_fop_source_documents d ON d.id=r.to_document_id WHERE r.from_document_id=$1 AND r.relation_type='dispatch' AND r.removed_at IS NULL AND r.resolution_state='resolved'",[row.document_id]); if(documents.some(d=>d.raw_bill_status==='C')) {if(order.fulfillmentProgress.shopifySync!=='synced')approvedPending++;assert.ok(order.trackingNumber,row.order_number);assert.ok(order.logisticsInfo.every(g=>g.channelName&&g.shopifyTracking?.number));assert.equal(row.dispatch_task_state,order.fulfillmentProgress.shopifySync==='synced'?'dispatch_synced':'dispatch_approved')} else assert.equal(order.trackingNumber,null); assert.equal(Math.round((Number(row.product_amount)+Number(row.freight_amount)+Number(row.tax_amount)-Number(row.discount_amount))*100),Math.round(Number(row.total_amount)*100))}
+  const [{invalid}]=await db.query(`SELECT count(*)::int AS invalid FROM hz_fop_order_packages p JOIN hz_fop_workbench_orders o ON o.document_id=p.order_document_id WHERE o.order_review_state='pending' AND p.tracking_number IS NOT NULL`);assert.equal(invalid,0)
+  const users={findById:async id=>{const [u]=await db.query('SELECT * FROM users WHERE id=$1',[id]);if(!u)return null;return {...u,organizationWorkspaceOwnerId:u.organization_workspace_owner_id,accountDisabled:u.account_disabled,businessRole:u.business_role,businessDepartmentId:u.business_department_id,businessEmployeeId:u.business_employee_id,workbenchRoles:u.workbench_roles,dataDisplayScope:u.data_display_scope,sessionVersion:u.session_version}}}
+  const local=new LocalWorkbenchService(db,users,new ConfigService(values))
+  const [admin]=await db.query("SELECT id FROM users WHERE email='admin@hzdrop.com'")
+  const queues=[]
+  for(const query of [{queue:'review'},{queue:'dispatch'},{queue:'dispatch',completed:true,timeRange:'1w'},{queue:'shipping'}]){const page=await local.getOrders(admin.id,{...query,page:1,pageSize:100});assert.ok(page.items.length);for(const order of page.items){if(query.queue!=='dispatch'||order.dispatchDocuments?.length)assert.ok(order.logisticsChannels.length,`${query.queue}:${order.orderNumber}`);if(query.queue==='review'){assert.ok(order.customLogisticsChannelName);assert.equal(order.trackingNumber,null);assert.ok(!order.logisticsInfo.some(g=>g.shopifyTracking?.number||g.trackingNumbers?.length));}}queues.push({queue:query.queue,completed:query.completed??false,total:page.total,checked:page.items.length})}
+  console.log(JSON.stringify({orders:rows.length,paid,synced,approvedPending,missingLogistics:0,queues}))
+ }finally{await db.destroy()}
+})().catch(e=>{console.error(e.message);process.exitCode=1})

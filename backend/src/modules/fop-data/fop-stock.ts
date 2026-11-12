@@ -53,27 +53,28 @@ export function stockDepartments(rows: StockOwnership[]) {
 }
 export function filterStockOrders(rows: FopStockOrderCandidate[], query: StockFilters, now = Date.now()): FopStockOrder[] {
   const search = query.search?.trim().toLowerCase()
-  const inCreationRange = consumerPaymentRange(query.timeRange, now)
-  return rows.filter(row => !row.cancelled && (query.queue !== 'procurement' || row.paymentStatus === 'paid' && row.reviewStatus === 'approved' && ['unpurchased', 'partial', 'purchased'].includes(row.purchaseStatus)) && stockScopeMatches(row, query) && (!query.stockType || row.stockType === query.stockType) && (!query.purchaseStatus || row.purchaseStatus === query.purchaseStatus)
+  const inPaymentRange = consumerPaymentRange(query.timeRange, now)
+  return rows.filter(row => !row.cancelled && (query.queue !== 'procurement' || row.paymentStatus === 'paid' && row.reviewStatus === 'approved' && ['unpurchased', 'partial', 'in_progress', 'purchased'].includes(row.purchaseStatus)) && stockScopeMatches(row, query) && (!query.stockType || row.stockType === query.stockType) && (!query.purchaseStatus || row.purchaseStatus === query.purchaseStatus)
     && (!search || [row.stockNumber, row.customerCode, row.customerName, row.storeName ?? '', row.owner.name, ...row.items.flatMap(i => [i.sku, i.name])].some(v => v.toLowerCase().includes(search))))
-    .map(publicStockOrder).filter(row => (!query.orderStatus || row.orderStatus === query.orderStatus) && inCreationRange(row.createdAt)
+    .map(publicStockOrder).filter(row => (!query.orderStatus || row.orderStatus === query.orderStatus) && inPaymentRange(row.paidAt)
       && (!query.lifecycle || (query.lifecycle === 'unpaid' ? row.orderStatus === 'unpaid'
-        : query.lifecycle === 'pending_procurement' ? row.paymentStatus === 'paid' && ['unpurchased', 'partial', 'purchased'].includes(row.purchaseStatus)
+        : query.lifecycle === 'pending_procurement' ? row.paymentStatus === 'paid' && ['unpurchased', 'partial', 'in_progress', 'purchased'].includes(row.purchaseStatus)
           : row.orderStatus === 'approved' && row.purchaseStatus === 'received'))).sort((a, b) => {
-      const direction = query.sortOrder === 'desc' ? -1 : 1
       const statusSort = query.sortBy === 'orderStatus' || query.sortBy === 'purchaseStatus'
-      const field = query.sortBy
+      const direction = query.sortOrder === 'asc' || query.sortOrder === undefined && statusSort ? 1 : -1
+      const field = query.sortBy ?? 'createdAt'
       if (field === 'orderStatus' || field === 'purchaseStatus') {
         const stages: readonly (string | null)[] = field === 'orderStatus'
-          ? ['unpaid', 'paid', 'approved'] : ['unpurchased', 'partial', 'purchased', 'shipped', 'received']
+          ? ['unpaid', 'paid', 'approved'] : ['unpurchased', 'partial', 'in_progress', 'purchased', 'shipped', 'received']
         const left = stages.indexOf(a[field]), right = stages.indexOf(b[field])
         // Unknown facts remain last in either direction, never a business stage.
         if (left < 0 || right < 0) {
           if (left !== right) return left < 0 ? 1 : -1
         } else if (left !== right) return (left - right) * direction
       }
-      if (!a.paidAt || !b.paidAt) return a.paidAt ? -1 : b.paidAt ? 1 : a.id.localeCompare(b.id)
-      return (Date.parse(a.paidAt) - Date.parse(b.paidAt)) * (statusSort ? 1 : direction) || a.id.localeCompare(b.id)
+      const leftTime = field === 'createdAt' ? a.createdAt : a.paidAt, rightTime = field === 'createdAt' ? b.createdAt : b.paidAt
+      if (!leftTime || !rightTime) return leftTime ? -1 : rightTime ? 1 : a.id.localeCompare(b.id)
+      return (Date.parse(leftTime) - Date.parse(rightTime)) * (statusSort ? 1 : direction) || a.id.localeCompare(b.id)
     })
 }
 export function stockTotals(rows: FopStockOrder[]) {

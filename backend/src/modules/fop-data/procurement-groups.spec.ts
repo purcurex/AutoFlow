@@ -2,11 +2,39 @@ import { buildPurchaseGroups, purchaseGroupTotals } from './procurement-groups'
 import type { PurchaseLinkSnapshot, PurchaseHeader } from './procurement-groups.types'
 import type { FopOrder } from './fop-data.types'
 const subject = { tenantId: 't', userId: 'u' }
-const order = (id: string, extra = {}): FopOrder => ({ id, orderNumber: id, customerName: id, storeName: 'Store', shopifyOrderNumber: '#1', items: [{ sku: 'A', name: 'Alpha', imageUrl: null, variant: '', quantity: 10 }, { sku: 'B', name: 'Beta', imageUrl: null, variant: '', quantity: 5 }], owner: { id, name: id }, department: { id: 'd', name: 'Dept' }, warehouseCode: 'HZ', warehouse: 'HZ', paymentStatus: 'paid', cancelled: false, paidAt: '2026-10-01T00:00:00Z', ...extra } as FopOrder)
+const order = (id: string, extra = {}): FopOrder => ({ id, orderNumber: id, customerName: id, storeName: 'Store', shopifyOrderNumber: '#1', items: [{ sku: 'A', name: 'Alpha', imageUrl: null, variant: '', quantity: 10 }, { sku: 'B', name: 'Beta', imageUrl: null, variant: '', quantity: 5 }], owner: { id, name: id }, department: { id: 'd', name: 'Dept' }, warehouseCode: 'HZ', warehouse: 'HZ', paymentStatus: 'paid', cancelled: false, paidAt: '2026-10-01T00:00:00Z', consumerPaidAt: '2026-10-01T00:00:00Z', ...extra } as FopOrder)
 const header = (id: string, payment: PurchaseHeader['payment'] = 'paid'): PurchaseHeader => ({ id, number: id, supplier: { id: 's', name: 'Supplier' }, purchaseType: 'online', platform: '1688', platformOrderNumber: null, payment, placement: 'placed', paidAt: payment === 'paid' ? '2026-10-02T00:00:00Z' : null })
 const link = (id: string, sku = 'A', payment: PurchaseHeader['payment'] = 'paid') => ({ purchase: header(id, payment), lines: [{ fulfillmentLineId: sku, purchaseLineId: `${id}-${sku}`, sku, quantity: 5, shippedQuantity: 1 }] })
 const snapshot = (): PurchaseLinkSnapshot => ({ subject, orders: [{ orderId: 'o1', obligations: [link('p1'), link('p2', 'B', 'unpaid')] }, { orderId: 'o2', obligations: [link('p1')] }] })
 const run = (s = snapshot(), orders = [order('o1'), order('o2')], allowed = ['p1', 'p2'], queue: 'procurement' | 'procurement_shipping' = 'procurement_shipping', search?: string) => buildPurchaseGroups(orders, new Map(), { subject, allowedOrderIds: orders.map(o => o.id), allowedPurchaseOrderIds: allowed }, s, { queue, search })
+it.each([
+  ['unknown', 'unknown', false, false], ['unknown', 'placed', false, false], ['paid', 'unknown', false, false],
+  ['unknown', 'pending', true, false], ['paid', 'pending', true, false], ['paid', 'placed', false, true],
+  ['unpaid', 'unknown', true, false], ['partial', 'unknown', true, false], ['refunded', 'unknown', true, false],
+  ['unpaid', 'pending', true, false], ['partial', 'pending', true, false], ['refunded', 'pending', true, false],
+  ['unpaid', 'placed', true, false], ['partial', 'placed', true, false], ['refunded', 'placed', true, false],
+] as const)('classifies payment=%s placement=%s from explicit facts only', (payment, placement, procurement, shipping) => {
+  const obligation = link('p1', 'A', payment)
+  obligation.purchase.placement = placement
+  const s: PurchaseLinkSnapshot = { subject, orders: [{ orderId: 'o1', obligations: [obligation] }] }
+  for (const [queue, expected] of [['procurement', procurement], ['procurement_shipping', shipping]] as const) {
+    const groups = run(s, [order('o1')], ['p1'], queue)
+    expect(groups.map(group => group.id)).toEqual(expected ? ['purchase:p1'] : [])
+    expect(purchaseGroupTotals(groups)).toMatchObject({ orderCount: expected ? 1 : 0, pendingQuantity: expected ? 4 : 0 })
+  }
+})
+
+it('retains uncreated and known unpaid demand when the same SKU also has an unknown purchase', () => {
+  const s: PurchaseLinkSnapshot = { subject, orders: [{ orderId: 'o1', obligations: [
+    { purchase: null, lines: [{ fulfillmentLineId: 'A', purchaseLineId: null, sku: 'A', quantity: 2, shippedQuantity: 0 }] },
+    { purchase: header('unknown', 'unknown'), lines: [{ fulfillmentLineId: 'A', purchaseLineId: 'unknown-A', sku: 'A', quantity: 3, shippedQuantity: 0 }] },
+    link('unpaid', 'A', 'unpaid'),
+  ] }] }
+  const groups = run(s, [order('o1')], ['unknown', 'unpaid'], 'procurement')
+  expect(groups.map(group => group.id)).toEqual(['uncreated', 'purchase:unpaid'])
+  expect(purchaseGroupTotals(groups)).toMatchObject({ orderCount: 1, purchaseCount: 1, uncreatedCount: 1, pendingQuantity: 6 })
+})
+
 it('merges purchases across orders, splits one order across queues, and counts only linked quantities', () => {
   const groups = run(); expect(groups).toHaveLength(1)
   expect(groups[0]).toMatchObject({ id: 'purchase:p1', orderCount: 2, skuCount: 1, quantity: 10, shippedQuantity: 2, pendingQuantity: 8 })
@@ -63,9 +91,9 @@ it('keeps Demo supplier follow-up IDs and pending quantities consistent with pur
   expect(followUp).toBeDefined()
   expect(followUp!.lines[0].pendingQuantity).toBe(obligation.lines[0].quantity - obligation.lines[0].shippedQuantity)
 })
-it('sorts unknown receipt last in both directions and keeps export strings literal and channel columns explicit', async () => {
+it('sorts unknown customer payment last in both directions and keeps export strings literal and channel columns explicit', async () => {
   const s: PurchaseLinkSnapshot = { subject, orders: [{ orderId: 'o1', obligations: [link('p1', 'A', 'unpaid')] }, { orderId: 'o2', obligations: [link('p2', 'B', 'unpaid')] }] }
-  const orders = [order('o1', { orderNumber: '=CMD()', paidAt: '2026-10-03T00:00:00Z' }), order('o2', { paidAt: null })]
+  const orders = [order('o1', { orderNumber: '=CMD()', paidAt: '2026-10-03T00:00:00Z', consumerPaidAt: '2026-10-03T00:00:00Z' }), order('o2', { paidAt: null, consumerPaidAt: null })]
   for (const sortOrder of ['asc', 'desc'] as const) {
     const groups = buildPurchaseGroups(orders, new Map(), { subject, allowedOrderIds: ['o1', 'o2'], allowedPurchaseOrderIds: ['p1', 'p2'] }, s, { queue: 'procurement', sortOrder })
     expect(groups.map(g => g.id)).toEqual(['purchase:p1', 'purchase:p2'])
@@ -90,14 +118,14 @@ it('merges every uncreated obligation into one group with one row per fulfillmen
   expect(() => run(s, undefined, [], 'procurement')).toThrow('Invalid purchase source quantities')
 })
 
-it('pins uncreated demand before purchases in either receipt sort direction', () => {
+it('pins uncreated demand before purchases in either customer payment sort direction', () => {
   const s: PurchaseLinkSnapshot = { subject, orders: [
     { orderId: 'old', obligations: [link('old-purchase', 'A', 'unpaid')] },
     { orderId: 'pending', obligations: [{ purchase: null, lines: [{ fulfillmentLineId: 'A', purchaseLineId: null, sku: 'A', quantity: 1, shippedQuantity: 0 }] }] },
     { orderId: 'new', obligations: [link('new-purchase', 'A', 'unpaid')] },
   ] }
-  const orders = [order('old', { paidAt: '2026-10-01T00:00:00Z' }), order('pending', { paidAt: null }), order('new', { paidAt: '2026-10-20T00:00:00Z' })]
-  for (const sortOrder of ['asc', 'desc'] as const) {
+  const orders = [order('old', { paidAt: '2026-10-01T00:00:00Z', consumerPaidAt: '2026-10-01T00:00:00Z' }), order('pending', { paidAt: null, consumerPaidAt: null }), order('new', { paidAt: '2026-10-20T00:00:00Z', consumerPaidAt: '2026-10-20T00:00:00Z' })]
+  for (const sortOrder of [undefined, 'asc', 'desc'] as const) {
     const groups = buildPurchaseGroups(orders, new Map(), { subject, allowedOrderIds: orders.map(o => o.id), allowedPurchaseOrderIds: ['old-purchase', 'new-purchase'] }, s, { queue: 'procurement', sortOrder })
     expect(groups.map(g => g.id)).toEqual(['uncreated', ...(sortOrder === 'asc' ? ['purchase:old-purchase', 'purchase:new-purchase'] : ['purchase:new-purchase', 'purchase:old-purchase'])])
   }
@@ -115,17 +143,58 @@ it('filters current purchase progress before totals and retains platform-neutral
   }
 })
 
-it('filters completed purchase groups by actual completion time, retaining only fully completed authorized orders', () => {
-  const recent = new Date(Date.now() - 2 * 86400000).toISOString(), old = new Date(Date.now() - 40 * 86400000).toISOString()
-  const facts = { reviewStatus: 'approved', procurementProgress: { purchaseOrder: 'ordered', supplierPayment: 'paid', alibabaOrder: 'pushed' }, fulfillmentProgress: { shopifySync: 'synced' } }
-  const rows = [order('o1', { ...facts, procurementCompletedAt: recent }), order('o2', { ...facts, procurementCompletedAt: old })]
-  const links = snapshot(); links.orders[0].obligations = [link('p1')]
-  const grant = { subject, allowedOrderIds: ['o1', 'o2'], allowedPurchaseOrderIds: ['p1'] }
-  const groups = buildPurchaseGroups(rows, new Map(), grant, links, { queue: 'procurement', completed: true })
-  expect(groups).toHaveLength(1)
-  expect(groups[0].rows.map(row => row.orderId)).toEqual(['o1'])
-  expect(groups[0].completedAt).toBe(recent)
-  const quarter = buildPurchaseGroups(rows, new Map(), grant, links, { queue: 'procurement', completed: true, timeRange: '3m' })
-  expect(quarter[0].rows.map(row => row.orderId)).toEqual(['o1', 'o2'])
-  expect(buildPurchaseGroups(rows, new Map(), { ...grant, allowedPurchaseOrderIds: [] }, links, { queue: 'procurement', completed: true })).toEqual([])
+it('filters completed purchases by customer payment without substituting receipt, creation or completion dates', () => {
+  const clock = jest.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-10-30T12:00:00Z'))
+  try {
+    const recent = '2026-10-28T12:00:00.000Z', older = '2026-09-20T12:00:00.000Z'
+    const facts = { reviewStatus: 'approved', procurementProgress: { purchaseOrder: 'ordered', supplierPayment: 'paid', alibabaOrder: 'pushed' }, fulfillmentProgress: { shopifySync: 'synced', supplierShipment: 'shipped' } }
+    const rows = [
+      order('old-stage-recent-payment', { ...facts, procurementCompletedAt: older, consumerPaidAt: recent }),
+      order('recent-stage-old-payment', { ...facts, procurementCompletedAt: recent, consumerPaidAt: older }),
+      order('missing-payment', { ...facts, procurementCompletedAt: recent, consumerPaidAt: null, paidAt: recent, createdAt: recent }),
+      order('missing-stage-time', { ...facts, procurementCompletedAt: null, consumerPaidAt: '2026-10-29T12:00:00.000Z' }),
+      order('incomplete', { ...facts, procurementCompletedAt: recent, consumerPaidAt: recent, procurementProgress: { purchaseOrder: 'ordered', supplierPayment: 'unpaid', alibabaOrder: 'pushed' }, fulfillmentProgress: { supplierShipment: 'pending' } }),
+    ]
+    const links: PurchaseLinkSnapshot = { subject, orders: rows.map(row => ({ orderId: row.id, obligations: [{ ...link('p1'), lines: [{ ...link('p1').lines[0], shippedQuantity: 5 }] }] })) }
+    const grant = { subject, allowedOrderIds: rows.map(row => row.id), allowedPurchaseOrderIds: ['p1'] }
+    const groups = buildPurchaseGroups(rows, new Map(), grant, links, { queue: 'procurement', completed: true })
+    expect(groups).toHaveLength(1)
+    expect(groups[0].rows.map(row => row.orderId)).toEqual(['missing-stage-time', 'old-stage-recent-payment'])
+    expect(groups[0].completedAt).toBe(older)
+    expect(groups[0].rows[0].completedAt).toBeNull()
+    expect(purchaseGroupTotals(groups)).toMatchObject({ orderCount: 2, groupCount: 1, pendingQuantity: 0 })
+    const quarter = buildPurchaseGroups(rows, new Map(), grant, links, { queue: 'procurement', completed: true, timeRange: '3m' })
+    expect(quarter[0].rows.map(row => row.orderId)).toEqual(['missing-stage-time', 'old-stage-recent-payment', 'recent-stage-old-payment'])
+    expect(buildPurchaseGroups(rows, new Map(), { ...grant, allowedPurchaseOrderIds: [] }, links, { queue: 'procurement', completed: true })).toEqual([])
+  } finally { clock.mockRestore() }
+})
+
+it('sorts completed purchase groups by customer payment while keeping independent phase timestamps', () => {
+  const clock = jest.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-10-30T12:00:00Z'))
+  try {
+    const facts = { reviewStatus: 'approved', procurementProgress: { purchaseOrder: 'ordered', supplierPayment: 'paid', alibabaOrder: 'pushed' }, fulfillmentProgress: { shopifySync: 'synced', supplierShipment: 'shipped' } }
+    const rows = [
+      order('new-payment', { ...facts, consumerPaidAt: '2026-10-29T12:00:00Z', procurementCompletedAt: '2026-08-01T12:00:00Z' }),
+      order('old-payment', { ...facts, consumerPaidAt: '2026-10-28T12:00:00Z', procurementCompletedAt: '2026-10-30T12:00:00Z' }),
+    ]
+    const links: PurchaseLinkSnapshot = { subject, orders: rows.map(row => ({ orderId: row.id, obligations: [{ ...link(row.id), lines: [{ ...link(row.id).lines[0], shippedQuantity: 5 }] }] })) }
+    const grant = { subject, allowedOrderIds: rows.map(row => row.id), allowedPurchaseOrderIds: rows.map(row => row.id) }
+    for (const sortOrder of [undefined, 'desc', 'asc'] as const) {
+      const groups = buildPurchaseGroups(rows, new Map(), grant, links, { queue: 'procurement', completed: true, sortOrder })
+      expect(groups.map(group => group.id)).toEqual(sortOrder === 'asc' ? ['purchase:old-payment', 'purchase:new-payment'] : ['purchase:new-payment', 'purchase:old-payment'])
+    }
+  } finally { clock.mockRestore() }
+})
+
+it('keeps the earliest receipt aggregate unchanged when group details display newest first', () => {
+  const group = run(snapshot(), [order('o1', { paidAt: '2026-10-01T00:00:00Z', consumerPaidAt: '2026-10-01T00:00:00Z' }), order('o2', { paidAt: '2026-10-03T00:00:00Z', consumerPaidAt: '2026-10-03T00:00:00Z' })])[0]
+  expect(group.rows.map(row => row.orderId)).toEqual(['o2', 'o1'])
+  expect(group.earliestReceiptAt).toBe('2026-10-01T00:00:00.000Z')
+})
+
+it('sorts purchase groups and details by consumer payment, independently of receipt time', () => {
+  const orders = [order('o1', { consumerPaidAt: '2026-10-01T00:00:00Z', paidAt: '2026-10-04T00:00:00Z' }), order('o2', { consumerPaidAt: '2026-10-03T00:00:00Z', paidAt: '2026-10-01T00:00:00Z' })]
+  const group = run(snapshot(), orders)[0]
+  expect(group.rows.map(row => row.orderId)).toEqual(['o2', 'o1'])
+  expect(group).toMatchObject({ latestConsumerPaidAt: '2026-10-03T00:00:00.000Z', earliestReceiptAt: '2026-10-01T00:00:00.000Z' })
 })

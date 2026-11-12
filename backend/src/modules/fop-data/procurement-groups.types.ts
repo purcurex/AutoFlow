@@ -28,12 +28,12 @@ export interface PurchaseGroupFilters {
 export interface PurchaseGroupQuery extends PurchaseGroupFilters { page: number; pageSize: number }
 export interface PurchaseGroupRow {
   orderId: string; orderNumber: string; shopifyOrderNumber: string; customerName: string; storeName: string
-  ownerName: string; departmentName: string; warehouse: string; paidAt: string | null; completedAt?: string | null
+  ownerName: string; departmentName: string; warehouse: string; paidAt: string | null; consumerPaidAt?: string | null; completedAt?: string | null
   lines: (PurchaseSourceLine & { name: string; imageUrl: string | null; variant: string })[]
 }
 export interface PurchaseGroup {
   id: string; kind: 'purchase' | 'uncreated'; purchase: PurchaseHeader | null
   orderCount: number; skuCount: number; quantity: number | null; shippedQuantity: number | null; pendingQuantity: number | null
-  shipment: 'pending' | 'partial' | 'shipped' | 'unknown'; earliestReceiptAt: string | null; completedAt?: string | null
+  shipment: 'pending' | 'partial' | 'shipped' | 'unknown'; earliestReceiptAt: string | null; latestConsumerPaidAt?: string | null; completedAt?: string | null
   rows: PurchaseGroupRow[]
 }

@@ -1,0 +1,229 @@
+{
+  "title": "HyperZone智能办公平台项目FOP扩展开发需求",
+  "document": "HyperZone智能办公平台项目FOP扩展开发需求.html",
+  "version": "1.4",
+  "date": "2026-11-12",
+  "timezone": "America/Los_Angeles",
+  "scope": "fop_development_only",
+  "status": "requirements_pending_fop_delivery_and_integration",
+  "sections": [
+    {
+      "anchor": "scope",
+      "title": "01 · 开发目标与当前联调结论"
+    },
+    {
+      "anchor": "coverage",
+      "title": "02 · 工作台与操作覆盖范围"
+    },
+    {
+      "anchor": "architecture",
+      "title": "03 · 建议改造方案与职责边界"
+    },
+    {
+      "anchor": "entities",
+      "title": "04 · 落地目标单据与关系"
+    },
+    {
+      "anchor": "fields",
+      "title": "05 · 字段级开发要求与业务口径"
+    },
+    {
+      "anchor": "sync-api",
+      "title": "06 · 六项同步 API 交付契约"
+    },
+    {
+      "anchor": "audit",
+      "title": "07 · 履约审核与配货审核"
+    },
+    {
+      "anchor": "inventory",
+      "title": "08 · 即时库存与备货库存"
+    },
+    {
+      "anchor": "contacts",
+      "title": "09 · 供应商联系与旺旺启动"
+    },
+    {
+      "anchor": "interception",
+      "title": "10 · 当前订单拦截与异常闭环"
+    },
+    {
+      "anchor": "backlog",
+      "title": "11 · FOP 开发待办与待确认清单"
+    },
+    {
+      "anchor": "future",
+      "title": "12 · 未来智能配货与订单变更"
+    },
+    {
+      "anchor": "acceptance",
+      "title": "13 · 完整联调与功能验收清单"
+    },
+    {
+      "anchor": "delivery",
+      "title": "14 · 联调顺序、交付物与变更管理"
+    }
+  ],
+  "confirm": [
+    "C01",
+    "C02",
+    "C03",
+    "C04",
+    "C05",
+    "C06",
+    "C07",
+    "C08",
+    "C09",
+    "C10",
+    "C11",
+    "C12"
+  ],
+  "fopDevelopment": [
+    "E01",
+    "E02",
+    "E03",
+    "E04",
+    "E05",
+    "E06",
+    "E07",
+    "E08",
+    "E09",
+    "E10",
+    "E11",
+    "E12",
+    "E13",
+    "E14",
+    "E15"
+  ],
+  "synchronizationApis": [
+    "S01",
+    "S02",
+    "S03",
+    "S04",
+    "S05",
+    "S06"
+  ],
+  "auditCapabilities": [
+    "A01",
+    "A02",
+    "A03",
+    "A04",
+    "A05"
+  ],
+  "contactCapabilities": [
+    "L01",
+    "L02",
+    "L03",
+    "L04",
+    "L05"
+  ],
+  "acceptance": [
+    "T01",
+    "T02",
+    "T03",
+    "T04",
+    "T05",
+    "T06",
+    "T07",
+    "T08",
+    "T09",
+    "T10",
+    "T11",
+    "T12",
+    "T13",
+    "T14",
+    "T15",
+    "T16"
+  ],
+  "currentRelease": {
+    "fopDevelopment": [
+      "E01",
+      "E02",
+      "E03",
+      "E04",
+      "E05",
+      "E06",
+      "E07",
+      "E08",
+      "E09",
+      "E10",
+      "E11",
+      "E12",
+      "E14"
+    ],
+    "acceptance": [
+      "T01",
+      "T02",
+      "T03",
+      "T04",
+      "T05",
+      "T06",
+      "T07",
+      "T08",
+      "T09",
+      "T10",
+      "T11",
+      "T12",
+      "T13",
+      "T14"
+    ]
+  },
+  "futureReleaseOnly": {
+    "fopDevelopment": [
+      "E13",
+      "E15"
+    ],
+    "acceptance": [
+      "T15",
+      "T16"
+    ]
+  },
+  "fopEntityRequirementCount": 19,
+  "fopFieldRequirementCount": 27,
+  "fopSourceCodes": [
+    "hzkj_adjust_bill",
+    "hzkj_after_sale_orders",
+    "hzkj_alloc_bill",
+    "hzkj_bizdate",
+    "hzkj_channel",
+    "hzkj_currency",
+    "hzkj_customer_channel",
+    "hzkj_datetimefield",
+    "hzkj_deliver_bill",
+    "hzkj_deliver_order",
+    "hzkj_delivery_status",
+    "hzkj_discount_cost",
+    "hzkj_fixed_tax_fee",
+    "hzkj_fre_quo_amount",
+    "hzkj_logistics_channel1",
+    "hzkj_logistics_orderno",
+    "hzkj_logistics_trackno",
+    "hzkj_order_amount",
+    "hzkj_orders",
+    "hzkj_outbound_status",
+    "hzkj_pay_cost_bill",
+    "hzkj_pay_time",
+    "hzkj_paystatus",
+    "hzkj_providersupplier",
+    "hzkj_purapplybill",
+    "hzkj_purchase_status",
+    "hzkj_purorderbill",
+    "hzkj_purrefundapplybill",
+    "hzkj_receipt_date",
+    "hzkj_receiptnotice",
+    "hzkj_receive_bill",
+    "hzkj_salbillnumber",
+    "hzkj_settlecurrency",
+    "hzkj_shipping_tim",
+    "hzkj_state",
+    "hzkj_status_changed",
+    "hzkj_stock_order_new",
+    "hzkj_tocurr",
+    "hzkj_total_amount",
+    "hzkj_ware_house",
+    "im_purinbill",
+    "im_saloutbill"
+  ],
+  "coreSha256": "fb8e48387ea7e5f8796d1d7217b93d34bae1a0d359b37dcd887c26e6e70cb04b",
+  "fopCalledDuringDocumentBuild": false
+}

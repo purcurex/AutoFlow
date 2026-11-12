@@ -1,0 +1,66 @@
+{
+  "checkedAt": "2026-11-11T11:00:50.717Z",
+  "schemaCreated": true,
+  "tables": 61,
+  "users": 37,
+  "organizations": 19,
+  "employees": 36,
+  "migrations": 43,
+  "documents": 0,
+  "initialized": false,
+  "readMode": "local",
+  "fopPaused": true,
+  "automaticSourceSync": false,
+  "adminLoginVerified": true,
+  "reads": [
+    {
+      "queue": "review",
+      "status": 503,
+      "code": "workbench_replica_not_initialized",
+      "milliseconds": 35
+    },
+    {
+      "queue": "dispatch",
+      "status": 503,
+      "code": "workbench_replica_not_initialized",
+      "milliseconds": 5
+    },
+    {
+      "queue": "procurement",
+      "status": 503,
+      "code": "workbench_replica_not_initialized",
+      "milliseconds": 5
+    },
+    {
+      "queue": "allocation",
+      "status": 503,
+      "code": "workbench_replica_not_initialized",
+      "milliseconds": 3
+    },
+    {
+      "queue": "shipping",
+      "status": 503,
+      "code": "workbench_replica_not_initialized",
+      "milliseconds": 4
+    }
+  ],
+  "verification": {
+    "frontendTests": 637,
+    "backendTests": 1377,
+    "explicitPostgresQueryTests": 7,
+    "postgresSyncScenarios": 15,
+    "schemaColumns": 948,
+    "foreignKeys": 252,
+    "uniqueIndexes": 107,
+    "queryIndexes": 42,
+    "checkConstraints": 110,
+    "standardRestorePassed": true,
+    "migrationRoundTripPassed": true,
+    "buildAndLintPassed": true
+  },
+  "realDataReady": false,
+  "sourceAdapter": "unconfigured",
+  "nextScheduledAt": null,
+  "historicalSnapshot": true,
+  "currentStatus": "../../integrations/workbench-integration-status.json"
+}

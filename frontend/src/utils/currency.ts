@@ -20,3 +20,12 @@ export function formatUsdExchangeRate(fxRateToUsd: number, originalCurrency: str
   const rate = 1 / fxRateToUsd
   return Number.isFinite(rate) ? `USD/${quoteCurrency} ${rate.toFixed(4)}` : '—'
 }
+
+/** Source monetary fields never acquire a default currency or a fabricated zero. */
+export function formatKnownCurrency(amount: number | null | undefined, currency?: string | null, locale = 'zh-CN'): string {
+  if (typeof amount !== 'number' || !Number.isFinite(amount)) return '—'
+  if (!currency || !/^[A-Z]{3}$/i.test(currency.trim()) || currency === 'XXX') {
+    return new Intl.NumberFormat(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount)
+  }
+  return formatCurrency(amount, currency, locale)
+}

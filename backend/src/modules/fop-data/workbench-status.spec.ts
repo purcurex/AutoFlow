@@ -27,27 +27,25 @@ describe('compact workbench statuses', () => {
   it.each([['pending_dispatch', 'dispatch_preparation'], ['pending_logistics', 'dispatch_preparation'], ['unknown', 'alibaba_pending'], ['satisfied', 'alibaba_pending']] as const)('shows only the relevant prerequisite %s', (logisticsGate, expected) => {
     expect(getProcurementTaskStatus({ purchaseOrder: 'ordered', supplierPayment: 'unpaid', alibabaOrder: 'not_pushed', logisticsGate }, 'pending')).toBe(expected)
   })
-  it('does not claim completion when one of several dispatches is unfinished or unknown', () => {
-    expect(getDispatchTaskStatus([{ id: 'a', number: 'A', status: 'approved' }, { id: 'b', number: 'B', status: 'draft' }])).toBe('dispatch_draft')
-    expect(getDispatchTaskStatus([{ id: 'a', number: 'A', status: 'unknown' }, { id: 'b', number: 'B', status: 'draft' }])).toBe('unknown')
+  it('uses delivery status across every dispatch, keeping missing facts unknown', () => {
+    expect(getDispatchTaskStatus([{id:'a',number:'A',status:'approved',deliveryStatus:'FULFILLED'},{id:'b',number:'B',status:'approved',deliveryStatus:'PENDING'}])).toBe('dispatch_pending')
+    expect(getDispatchTaskStatus([{id:'a',number:'A',status:'approved'}], 'synced')).toBe('unknown')
     expect(getDispatchTaskStatus([])).toBe('dispatch_missing')
     expect(getDispatchTaskStatus(null)).toBe('unknown')
   })
-  it('uses confirmed sync as the terminal stage only after every dispatch is approved', () => {
-    const approved = [{ id: 'a', number: 'FY-A', status: 'approved' as const }]
-    expect(getDispatchTaskStatus(approved, 'synced')).toBe('dispatch_synced')
-    expect(getDispatchTaskStatus(approved, 'pending')).toBe('dispatch_approved')
-    expect(getDispatchTaskStatus(approved, 'unknown')).toBe('dispatch_approved')
-    expect(getDispatchTaskStatus([...approved, { id: 'b', number: 'FY-B', status: 'draft' }], 'synced')).toBe('dispatch_draft')
-    expect(getDispatchTaskStatus(null, 'synced')).toBe('unknown')
+  it('uses all FULFILLED delivery statuses, not an independent Shopify or audit flag', () => {
+    const fulfilled = [{ id:'a',number:'FY-A',status:'approved' as const,deliveryStatus:'FULFILLED' }]
+    for(const sync of ['synced','pending','unknown'] as const) expect(getDispatchTaskStatus(fulfilled,sync)).toBe('dispatch_synced')
+    expect(getDispatchTaskStatus([...fulfilled,{id:'b',number:'FY-B',status:'approved',deliveryStatus:'TRACKING_OBTAINED'}],'synced')).toBe('dispatch_tracking')
+    expect(getDispatchTaskStatus([...fulfilled,{id:'b',number:'FY-B',status:'approved',deliveryStatus:'UPDATING'}],'synced')).toBe('dispatch_updating')
   })
-  it('sorts the sequential dispatch result and keeps unknown last', () => {
-    const make = (id: string, status: 'draft' | 'submitted' | 'approved' | 'unknown', synced = false) => ({ id, paidAt: '2026-10-01T00:00:00Z', dispatchDocuments: [{ id, number: id, status }], fulfillmentProgress: { shopifySync: synced ? 'synced' : 'pending' } } as FopOrder)
-    const rows = [make('synced', 'approved', true), make('unknown', 'unknown'), make('approved', 'approved'), make('draft', 'draft'), make('submitted', 'submitted')]
-    rows.sort((a, b) => compareFulfillmentOrders(a, b, { queue: 'dispatch', sortBy: 'dispatchDocumentStatus', sortOrder: 'asc' }))
-    expect(rows.map(row => row.id)).toEqual(['draft', 'submitted', 'approved', 'synced', 'unknown'])
-    rows.sort((a, b) => compareFulfillmentOrders(a, b, { queue: 'dispatch', sortBy: 'dispatchDocumentStatus', sortOrder: 'desc' }))
-    expect(rows.map(row => row.id)).toEqual(['synced', 'approved', 'submitted', 'draft', 'unknown'])
+  it('sorts delivery stages and keeps unknown last in either direction', () => {
+    const make=(id:string,deliveryStatus?:string)=>({id,paidAt:'2026-10-01T00:00:00Z',dispatchDocuments:[{id,number:id,status:'approved',deliveryStatus}],fulfillmentProgress:{shopifySync:'pending'}} as FopOrder)
+    const rows=[make('synced','FULFILLED'),make('unknown'),make('updating','UPDATING'),make('pending','PENDING'),make('tracking','TRACKING_OBTAINED'),make('cancelled','CANCELLED')]
+    rows.sort((a,b)=>compareFulfillmentOrders(a,b,{queue:'dispatch',sortBy:'dispatchDocumentStatus',sortOrder:'asc'}))
+    expect(rows.map(r=>r.id)).toEqual(['pending','tracking','updating','cancelled','synced','unknown'])
+    rows.sort((a,b)=>compareFulfillmentOrders(a,b,{queue:'dispatch',sortBy:'dispatchDocumentStatus',sortOrder:'desc'}))
+    expect(rows.map(r=>r.id)).toEqual(['synced','cancelled','updating','tracking','pending','unknown'])
   })
   it('excludes active interception from pending outbound while keeping released and unmarked orders', () => {
     for (const [shipmentInterceptStatus, expected] of [['intercepted', false], ['released', true], [null, true], [undefined, true]] as const) {
@@ -65,7 +63,8 @@ describe('compact workbench statuses', () => {
     expect(taskStatusOptions('shipping')).toEqual(['outbound_pending', 'shipment_intercepted', 'shipment_released'])
     expect(taskStatusOptions('procurement_shipping')).toEqual(['supplier_pending', 'supplier_partial'])
     expect(canFilterTaskStatus('review', 'payment_pending')).toBe(false)
-    expect(canFilterTaskStatus('dispatch', 'dispatch_draft')).toBe(true)
+    expect(canFilterTaskStatus('dispatch', 'dispatch_draft')).toBe(false)
+    expect(canFilterTaskStatus('dispatch', 'dispatch_tracking')).toBe(true)
     for (const queue of ['dispatch', 'allocation', 'allocation_review']) expect(canFilterTaskStatus(queue, 'unknown')).toBe(false)
     expect(canFilterTaskStatus('procurement', ['payment_pending'])).toBe(false)
   })

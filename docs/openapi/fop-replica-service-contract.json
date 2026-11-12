@@ -1,0 +1,176 @@
+{
+  "contract": "fop-replica/1",
+  "status": "proposed-awaiting-fop",
+  "description": "本项目已实现的接收契约；FOP正式地址与发布版本待提供。所有操作POST，access_token为专用服务凭据。",
+  "commonRequest": {
+    "schemaVersion": "fop-replica/1",
+    "tenantId": "source tenant string",
+    "companyId": "source company string"
+  },
+  "commonResponse": {
+    "success": true,
+    "data": {
+      "schemaVersion": "fop-replica/1",
+      "tenantId": "same source tenant",
+      "companyId": "same source company"
+    }
+  },
+  "domainSchema": "fop-replica-domain.schema.json",
+  "limits": {
+    "responseBytes": 8388608,
+    "timeoutMs": 15000,
+    "groupsPerPage": 100,
+    "eventsPerGroup": 1000
+  },
+  "operations": {
+    "SNAPSHOT_BEGIN": {
+      "request": {
+        "requestKey": "idempotent key"
+      },
+      "data": {
+        "snapshotId": "string",
+        "scopeVersion": "string",
+        "sourceAsOf": "ISO8601 with zone",
+        "expiresAt": "ISO8601 with zone",
+        "entityCodes": [
+          "hzkj_orders"
+        ],
+        "streams": [
+          {
+            "key": "business",
+            "endCursor": "opaque C0 cursor"
+          }
+        ]
+      }
+    },
+    "SNAPSHOT_PAGE": {
+      "request": {
+        "snapshotId": "string",
+        "streamKey": "string",
+        "afterCursor": null,
+        "limit": 100
+      },
+      "data": {
+        "snapshotId": "same",
+        "streamKey": "same",
+        "afterCursor": "same or null",
+        "complete": true,
+        "groups": "array of domain groups; cursor chain ends exactly at manifest endCursor on final page"
+      }
+    },
+    "BARRIER": {
+      "request": {},
+      "data": {
+        "id": "barrierId",
+        "scopeVersion": "same source scope version",
+        "sourceAsOf": "proven capture time",
+        "expiresAt": "future time",
+        "targetVector": {
+          "business": "opaque cursor"
+        },
+        "proof": {
+          "captureHealth": "nonempty source coverage evidence"
+        }
+      }
+    },
+    "CHANGES": {
+      "request": {
+        "streamKey": "string",
+        "afterCursor": "opaque or null",
+        "untilCursor": "target barrier cursor",
+        "limit": 100
+      },
+      "data": {
+        "streamKey": "same",
+        "afterCursor": "same",
+        "untilCursor": "same",
+        "groups": "array of complete domain groups in contiguous cursor order"
+      }
+    },
+    "AUTHORIZATION": {
+      "request": {},
+      "data": {
+        "scopeVersion": "string",
+        "sourceAsOf": "not more than 60s old",
+        "expiresAt": "not more than 60s in future",
+        "companyAllowed": true,
+        "ownershipVector": {
+          "business": "exact current complete ownership barrier"
+        },
+        "resources": [
+          {
+            "resource": "each of the 10 mandatory resources",
+            "grants": [
+              {
+                "target": "* or resource source id",
+                "decision": "allow or deny"
+              }
+            ]
+          }
+        ],
+        "employees": [
+          {
+            "authUserId": "source authentication ID",
+            "personRecordId": "positive decimal string",
+            "masterId": "positive decimal string",
+            "number": "employee number",
+            "enabled": true
+          }
+        ],
+        "references": [
+          {
+            "resource": "customer/supplier/sku/store/warehouse/logistics_provider/actual_channel/currency",
+            "sourceId": "string",
+            "masterId": "optional string",
+            "code": "optional string",
+            "name": "string",
+            "version": "decimal string",
+            "deleted": false
+          }
+        ]
+      }
+    },
+    "RECONCILE": {
+      "request": {
+        "barrierId": "string",
+        "targetVector": {
+          "business": "opaque cursor"
+        }
+      },
+      "data": {
+        "barrierId": "same",
+        "scopeVersion": "same",
+        "targetVector": "exact same vector",
+        "entities": [
+          {
+            "entityCode": "each initialized entity",
+            "count": 1,
+            "amounts": {
+              "USD": "10.00"
+            }
+          }
+        ]
+      }
+    }
+  },
+  "requiredResources": [
+    "orders",
+    "stock_orders",
+    "purchases",
+    "rma",
+    "purchase_returns",
+    "receipt_notices",
+    "stock_inventory",
+    "allocation_inventory",
+    "contacts",
+    "channels"
+  ],
+  "requirements": [
+    "Do not use pageNo/afterOrderId as a commit-feed guarantee.",
+    "ownershipVector must atomically cover every stream able to mutate ownership and share scopeVersion; omitted or unapplied streams forbid proof renewal.",
+    "domain events contain complete current entries and relations, delete tombstones, all affected order versions in their commit group; do not send local SQL rows/table names/UUIDs.",
+    "snapshotId and stream cursors remain stable during retention; expired snapshot/cursor must fail explicitly.",
+    "reconciliation count covers every initialized entity; amount sums for hzkj_orders, hzkj_stock_order_new and hzkj_purorderbill are grouped by actual settlement currency.",
+    "AUTHORIZATION employees is the complete trusted directory for this connection/tenant, not a company/page/user-filtered subset. Omitted/disabled identities revoke existing local mappings; bare pending IDs cannot become verified accounts."
+  ]
+}

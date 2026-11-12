@@ -1,6 +1,9 @@
-import { BadRequestException, ForbiddenException, Inject, Injectable, ServiceUnavailableException } from '@nestjs/common'
+import { BadRequestException, ForbiddenException, Inject, Injectable, Optional, ServiceUnavailableException } from '@nestjs/common'
+import { LocalWorkbenchService } from '../workbench-replica/local-workbench.service'
+import { MockWorkbenchCapabilities } from '../workbench-replica/mock-workbench-capabilities'
+import { DataSource } from 'typeorm'
 import { createHash } from 'crypto'
-import { FOP_DATA_PROVIDER, FopDataProvider, FopPermissionDeniedError } from './fop-data.types'
+import { FOP_DATA_PROVIDER, FopDataProvider, FopPermissionDeniedError, FopIntegrationUnavailableError } from './fop-data.types'
 import { FopDataService } from './fop-data.service'
 import { ApprovalPreviewDto, ApprovalSubmitDto } from './fop-approval.dto'
 import { ApprovalQueue, ApprovalTarget, ApprovalRowResult, approvalEntity, approvalVersion } from './fop-approval.types'
@@ -8,11 +11,11 @@ import { getDispatchCompletionStatus } from './workbench-status'
 
 @Injectable()
 export class FopApprovalService {
-  constructor(private readonly data: FopDataService, @Inject(FOP_DATA_PROVIDER) private readonly provider: FopDataProvider) {}
+  constructor(private readonly data: FopDataService, @Inject(FOP_DATA_PROVIDER) private readonly provider: FopDataProvider, @Optional() private readonly local?: LocalWorkbenchService, @Optional() private readonly db?: DataSource) {}
   private async targets(userId: string, queue: ApprovalQueue, orderId: string, sessionVersion: number) {
     const context = await this.data.approvalContext(userId, queue, orderId, sessionVersion)
     let targets: ApprovalTarget[]
-    try { targets = await this.provider.approvalTargets(context.identity, queue, orderId) }
+    try { targets = context.targets ?? await this.provider.approvalTargets(context.identity, queue, orderId) }
     catch (error) {
       if (error instanceof FopPermissionDeniedError) throw new ForbiddenException('FOP审核权限不足')
       throw new ServiceUnavailableException('FOP审核接口暂不可用或尚未配置')
@@ -33,6 +36,7 @@ export class FopApprovalService {
     return { ...latest, targets: dispatchComplete ? targets : targets.map(target => ({ ...target, eligible: false, reason: '请先完成发运单制作' })) }
   }
   async preview(userId: string, query: ApprovalPreviewDto, sessionVersion = 0) {
+    if(this.local?.enabled&&this.local.mock&&this.db)return new MockWorkbenchCapabilities(this.db,this.local).preview(userId,query,sessionVersion)
     if (!['review', 'allocation_review'].includes(query.queue)) throw new BadRequestException('Invalid approval queue')
     const started = Date.now()
     const items = []
@@ -45,12 +49,15 @@ export class FopApprovalService {
     return { source: this.provider.source ?? 'fop', queue: query.queue, items }
   }
   async submit(userId: string, query: ApprovalSubmitDto, sessionVersion = 0) {
+    if(this.local?.enabled&&this.local.mock&&this.db)return new MockWorkbenchCapabilities(this.db,this.local).submit(userId,query,sessionVersion)
     if (!['review', 'allocation_review'].includes(query.queue)) throw new BadRequestException('Invalid approval queue')
     const started = Date.now()
     const items: ApprovalRowResult[] = []
+    let unconfirmed = false
     for (const selected of query.items) {
       let attemptedTargets: ApprovalTarget[] = []
       const row: ApprovalRowResult = { orderId: selected.orderId, orderNumber: '', status: 'blocked', message: '', documents: [] }
+      if (unconfirmed) { row.message = '前一笔审核结果尚未确认，本次未提交；请先在 FOP 核对'; items.push(row); continue }
       try {
         if (Date.now() - started > 30000) throw new Error('Batch time budget exceeded; not submitted')
         const context = await this.targets(userId, query.queue, selected.orderId, sessionVersion)
@@ -72,18 +79,29 @@ export class FopApprovalService {
                 || current.order.allocationDocument?.id !== document.id || current.order.allocationDocument?.number !== document.number)) throw new Error('Scope or dispatch state changed')
             const idempotencyKey = createHash('sha256').update(JSON.stringify([context.identity, userId, query.requestId, document.entity, document.id])).digest('hex')
             try {
-              const outcome = await this.provider.approveDocument(context.identity, { ...document, operation: 'audit', idempotencyKey, requestId: query.requestId, actorAccountId: userId })
+              const outcome = await this.provider.approveDocument(context.identity, { ...document, operation: 'audit', idempotencyKey, requestId: query.requestId, actorAccountId: userId, ...(current.currentScope ? { currentScope: current.currentScope } : {}) })
               if (!outcome || !['approved', 'already_approved', 'blocked', 'failed', 'unknown'].includes(outcome.status) || typeof outcome.message !== 'string'
                 || (outcome.warning !== null && typeof outcome.warning !== 'string')) throw new Error('Invalid audit response')
               row.documents.push({ id: document.id, number: document.number, status: outcome.status, message: outcome.message.slice(0, 1000), warning: outcome.warning?.slice(0, 1000) ?? null })
             } catch (error) {
+              if (error instanceof FopIntegrationUnavailableError && ['fop_approval_not_configured', 'fop_queries_paused'].includes(error.code)) {
+                row.code = error.code as 'fop_approval_not_configured' | 'fop_queries_paused'
+                row.documents.push({ id: document.id, number: document.number, status: 'blocked', code: row.code, message: row.code === 'fop_queries_paused' ? 'FOP 访问已暂停，本次未提交' : 'FOP 专用审核接口尚未配置，本次未提交', warning: null })
+                break
+              }
               // A transport error can occur after FOP commits. Never classify it as a failed audit or automatically retry.
               row.documents.push({ id: document.id, number: document.number, status: error instanceof FopPermissionDeniedError ? 'blocked' : 'unknown', message: error instanceof FopPermissionDeniedError ? 'FOP审核权限不足，未提交' : '审核结果尚未确认，请在 FOP 核对，勿重复提交', warning: null })
             }
             if (row.documents[row.documents.length - 1]?.status === 'unknown') break
           }
         }
-      } catch { row.message = '无法审核：权限或单据状态已变化，或 FOP 暂不可用；请刷新核对' }
+      } catch (error) {
+        const response = error instanceof ServiceUnavailableException ? error.getResponse() : null
+        if (response && typeof response === 'object' && 'code' in response && ['fop_approval_not_configured', 'fop_queries_paused'].includes(String(response.code))) {
+          row.code = response.code as 'fop_approval_not_configured' | 'fop_queries_paused'
+          row.message = row.code === 'fop_queries_paused' ? 'FOP 访问已暂停，本次未提交' : 'FOP 专用审核接口尚未配置，本次未提交'
+        } else row.message = '无法审核：权限或单据状态已变化，或 FOP 暂不可用；请刷新核对'
+      }
       for (const document of attemptedTargets) {
         if (!row.documents.some(d => d.id === document.id)) row.documents.push({ id: document.id, number: document.number, status: document.status === 'C' ? 'already_approved' : 'blocked', message: document.status === 'C' ? '已审核，无需重复操作' : '本次未提交，请核对已执行结果后重新选择', warning: null })
       }
@@ -92,6 +110,7 @@ export class FopApprovalService {
         row.status = row.documents.some(d => d.status === 'unknown') ? 'unknown' : row.message ? success ? 'partial' : 'blocked' : success === row.documents.length ? 'approved' : success ? 'partial' : row.documents.some(d => d.status === 'failed') ? 'failed' : 'blocked'
         row.message ||= row.status === 'approved' ? '审核完成' : row.status === 'partial' ? '部分单据审核完成，请查看逐笔结果' : row.status === 'unknown' ? '结果待核对；其余单据未继续提交' : '未完成审核，请查看原因'
       }
+      if (row.status === 'unknown') unconfirmed = true
       items.push(row)
     }
     return { source: this.provider.source ?? 'fop', requestId: query.requestId, items, completedAt: new Date().toISOString() }

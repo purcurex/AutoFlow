@@ -1,4 +1,4 @@
-import { flushPromises, mount, RouterLinkStub } from '@vue/test-utils'
+import { flushPromises, mount, RouterLinkStub, type VueWrapper } from '@vue/test-utils'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { createI18n } from 'vue-i18n'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -22,6 +22,7 @@ const sample: FopDashboardData = {
   tasks: [{ id: 'allocation', kind: 'allocation', count: 2, time: '', priority: 'normal' }],
   receipts: { currency: 'USD', months: [], departments: [] },
 }
+const linkedQueue = (link: VueWrapper) => (link.props() as { to: { query: { queue: string } } }).to.query.queue
 function dashboardFixture(data: FopDashboardData): FopDashboardData { return { ...data, departmentReceipts: { ...data.receipts, departments: data.receipts.departments.map(item => ({ ...item, salespeople: [] })) } } }
 function mountView() {
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: { template: '<div />' } }, { path: '/workbench/:role/receipts', name: 'RoleWorkbenchReceipts', component: { template: '<div />' } }] })
@@ -36,7 +37,48 @@ describe('FOP Dashboard interactions', () => {
     const cards = wrapper.findAll('.summary-card')
     expect(cards[0]!.find('strong').text()).toBe('32')
     expect(cards.slice(1).every(card => card.find('strong').text() === '未接入')).toBe(true)
-    expect(wrapper.text()).toContain('本期已接入待审核履约订单')
+    expect(wrapper.find('.dashboard-footnote').text()).not.toContain('仅接入待审核')
+    wrapper.unmount()
+  })
+  it('shows no-access and failures separately from genuine zero counts and disables unavailable entrances', async () => {
+    vi.mocked(getFopDashboard).mockResolvedValue({ ...dashboardFixture(sample),
+      queues: { review: 0, dispatch: 3, procurement: null, allocation: null, shipping: null },
+      queueStates: { review: 'ready', dispatch: 'ready', procurement: 'forbidden', allocation: 'unavailable', shipping: 'not_configured' },
+    } as FopDashboardData)
+    const wrapper = mountView(); await flushPromises()
+    const cards = wrapper.findAll('.summary-card')
+    expect(cards.map(card => card.find('strong').text())).toEqual(['0', '3', '无权限', '加载失败', '未接入'])
+    expect(cards[0]!.findComponent(RouterLinkStub).props('to')).toMatchObject({ params: { role: 'sales' }, query: { queue: 'review' } })
+    expect(cards.slice(2).every(card => !card.findComponent(RouterLinkStub).exists())).toBe(true)
+    expect(cards[1]!.text()).not.toContain('已审核')
+    wrapper.unmount()
+  })
+  it('provides both list counts and links for combined cards without nesting links', async () => {
+    vi.mocked(getFopDashboard).mockResolvedValue({ ...dashboardFixture(sample), queues: { ...sample.queues, procurement: 19, allocation: 7 },
+      queueBreakdown: {
+        procurement: [{ queue: 'procurement', count: 12, state: 'ready' }, { queue: 'procurement_shipping', count: 7, state: 'ready' }],
+        allocation: [{ queue: 'allocation', count: 3, state: 'ready' }, { queue: 'allocation_review', count: 4, state: 'ready' }],
+      },
+    } as FopDashboardData)
+    const wrapper = mountView(); await flushPromises()
+    const purchase = wrapper.findAll('.summary-card')[2]!
+    expect(purchase.find('strong').text()).toBe('19')
+    const links = purchase.findAllComponents(RouterLinkStub)
+    expect(links.map(linkedQueue)).toEqual(['procurement', 'procurement_shipping'])
+    expect(links.map((link: VueWrapper) => link.text())).toEqual(['待采购 12', '已采购待发货 7'])
+    const taskLinks = wrapper.find('.task-panel').findAllComponents(RouterLinkStub)
+    expect(taskLinks.map(linkedQueue)).toEqual(['allocation', 'allocation_review'])
+    expect(wrapper.find('a a').exists()).toBe(false)
+    wrapper.unmount()
+  })
+  it('does not claim there are no pending tasks when a queue could not be counted', async () => {
+    vi.mocked(getFopDashboard).mockResolvedValue({ ...dashboardFixture(sample), tasks: [],
+      queues: { review: 0, dispatch: null, procurement: null, allocation: null, shipping: null },
+      queueStates: { review: 'ready', dispatch: 'unavailable', procurement: 'forbidden', allocation: 'forbidden', shipping: 'forbidden' },
+    })
+    const wrapper = mountView(); await flushPromises()
+    expect(wrapper.find('.task-panel').text()).not.toContain('暂无待办任务')
+    expect(wrapper.find('.task-panel').text()).toContain('待办统计尚不完整')
     wrapper.unmount()
   })
   it('refreshes access and dashboard data from the single status action and waits for data completion', async () => {
@@ -113,7 +155,7 @@ describe('FOP Dashboard interactions', () => {
     await flushPromises()
     expect(wrapper.text()).toContain('待履约')
     expect(wrapper.text()).not.toContain('待打单')
-    expect(wrapper.text()).toContain('采购未完成付款 / 已采购未发货')
+    expect(wrapper.text()).toContain('采购未完成 / 已采购待发货')
     expect(wrapper.text()).not.toContain('采购下单 / 采购付款待完成')
     expect(wrapper.text()).not.toContain('MOCK')
     expect(wrapper.findAll('.card-top span').map(node => node.text())).toEqual(['待审核', '待履约', '待采购', '待配货', '待出库'])
@@ -176,10 +218,10 @@ describe('FOP Dashboard interactions', () => {
     await wrapper.findAll('input[type=date]')[0]!.setValue(end)
     await wrapper.find('form').trigger('submit')
     await flushPromises()
-    expect(getFopDashboard).toHaveBeenLastCalledWith({ from: end, to: end, year: new Date().getFullYear() })
+    expect(getFopDashboard).toHaveBeenLastCalledWith({ from: end, to: end, year: new Date().getFullYear() }, undefined, expect.any(Function))
     await wrapper.find('select[aria-label="回款年份"]').setValue(String(new Date().getFullYear() - 1))
     await flushPromises()
-    expect(getFopDashboard).toHaveBeenLastCalledWith({ from: end, to: end, year: new Date().getFullYear() - 1 })
+    expect(getFopDashboard).toHaveBeenLastCalledWith({ from: end, to: end, year: new Date().getFullYear() - 1 }, undefined, expect.any(Function))
     wrapper.unmount()
   })
   it('renders mock analytics using API department names and registration values', async () => {
@@ -342,4 +384,16 @@ it('labels partial record aggregates as scoped subtotals rather than complete or
   expect(wrapper.find('.salesperson-panel').text()).toContain('本人合计')
   expect(wrapper.find('.salesperson-panel').text()).not.toContain('蓝紫色为部门合计')
   wrapper.unmount()
+})
+
+
+it('shows workbench pending totals before slow analytics complete', async () => {
+  let finish!: (data: FopDashboardData) => void
+  vi.mocked(getFopDashboard).mockImplementation((_query, _now, publish) => {
+    publish?.({ queues: { review: 33, dispatch: null, procurement: null, allocation: null, shipping: null }, tasks: [] })
+    return new Promise(resolve => { finish = resolve })
+  })
+  const wrapper = mountView(); await flushPromises()
+  expect(wrapper.findAll('.summary-card')[0]!.find('strong').text()).toBe('33')
+  finish(dashboardFixture(sample)); await flushPromises(); wrapper.unmount()
 })

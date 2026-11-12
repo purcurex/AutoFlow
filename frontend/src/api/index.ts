@@ -1,4 +1,5 @@
 ﻿import axios from 'axios'
+import { clearWorkbenchCounts } from '@/utils/workbench-counts'
 import { useUserStore } from '@/stores/user'
 import { assertCurrentSession, captureSession, isCurrentSession, StaleSessionError } from '@/utils/session'
 
@@ -31,6 +32,7 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => {
     assertCurrentSession(response.config.sessionEpoch!)
+    if (response.config.method && !['get', 'head', 'options'].includes(response.config.method) && response.config.url?.startsWith('/autoflow/integrations/fop/')) clearWorkbenchCounts()
     return response.data
   },
   (error) => {
@@ -43,7 +45,8 @@ api.interceptors.response.use(
       userStore.clearSession()
       window.location.href = '/login'
     }
-    return Promise.reject(error.response?.data || error)
+    const body = error.response?.data
+    return Promise.reject(body && typeof body === 'object' ? { ...body, statusCode: body.statusCode ?? error.response.status } : body || error)
   },
 )
 

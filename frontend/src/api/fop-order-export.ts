@@ -13,7 +13,7 @@ export async function exportFopOrders(query: FopOrderExportQuery, signal?: Abort
     return await api.post<Blob, Blob>('/autoflow/integrations/fop/fulfillment-orders/export', {
       queue, ...(completed ? { completed } : {}), timeRange, shippingCountryCode, search, orderNumber, departmentId, ownerId, warehouseCode, paidAtOrder, sortBy, sortOrder, warehouseStage, procurementStage, taskStatus, mode,
       ...(mode === 'selected' ? { orderIds: query.orderIds } : {}),
-    }, { responseType: 'blob', timeout: 120000, signal })
+    }, { responseType: 'blob', timeout: 30000, signal })
   } catch (error) {
     if (error instanceof Blob) {
       let parsed: unknown

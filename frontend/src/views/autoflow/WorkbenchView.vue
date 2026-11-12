@@ -13,14 +13,18 @@ import FopFreightView from './FopFreightView.vue'
 import SalesPerformanceView from './SalesPerformanceView.vue'
 import FopOrdersView from './FopOrdersView.vue'
 import StockOrdersView from './StockOrdersView.vue'
+import ReceiptNoticesView from './ReceiptNoticesView.vue'
 import PurchaseReturnsView from './PurchaseReturnsView.vue'
 import RmaOrdersView from './RmaOrdersView.vue'
 import ProcurementOrdersView from './ProcurementOrdersView.vue'
+import WorkbenchReplicaControls from '@/components/autoflow/WorkbenchReplicaControls.vue'
+import { provideWorkbenchReplica } from '@/composables/workbenchReplicaContext'
 import WorkbenchFilterSummary from '@/components/WorkbenchFilterSummary.vue'
 import { useWorkbenchAccess } from '@/composables/useWorkbenchAccess'
 import { sessionEpoch } from '@/utils/session'
 import { defaultWorkbenchQueue, isWorkbenchRole, queueNames, workbenchNames, workbenchQueues, type WorkbenchRole } from '@/utils/workbench'
 
+const { replica, disabled: replicaDisabled, navigationReady, reload: reloadReplica } = provideWorkbenchReplica()
 const route = useRoute()
 const router = useRouter()
 const { locale } = useI18n()
@@ -67,17 +71,18 @@ const icons = { sales: BriefcaseBusiness, procurement: Boxes, allocation: Packag
 const departmentQuery = computed(() => typeof route.query.departmentId === 'string' && route.query.departmentId ? { departmentId: route.query.departmentId } : {})
 const todoScopeQuery = computed(() => ({ ...departmentQuery.value, ...(typeof route.query.ownerId === 'string' && route.query.ownerId ? { ownerId: route.query.ownerId } : {}) }))
 function roleLink(value: WorkbenchRole) { return { name: 'RoleWorkbench', params: { role: value }, query: todoScopeQuery.value } }
-function queueLink(value: string) { return { name: 'RoleWorkbench', params: { role: role.value }, query: { ...(role.value === 'procurement' && ['fulfillment', 'purchase'].includes(String(route.query.view)) ? { view: route.query.view } : {}), ...(['stock', 'stock_procurement', 'completed', 'purchase_returns', 'rma'].includes(value) || role.value && workbenchQueues[role.value].some(queue => queue === value) ? todoScopeQuery.value : departmentQuery.value), queue: value, ...(value === 'completed' ? { timeRange: '1w' } : {}) } } }
+function queueLink(value: string) { return { name: 'RoleWorkbench', params: { role: role.value }, query: { ...(role.value === 'procurement' && ['fulfillment', 'purchase'].includes(String(route.query.view)) ? { view: route.query.view } : {}), ...(['stock', 'stock_procurement', 'completed', 'purchase_returns', 'rma', 'receipt_notices'].includes(value) || role.value && workbenchQueues[role.value].some(queue => queue === value) ? todoScopeQuery.value : departmentQuery.value), queue: value, ...(value === 'completed' ? { timeRange: '1w' } : {}) } } }
 </script>
 
 <template>
   <AppLayout>
     <div class="app-page role-workbench">
-      <header class="workbench-heading"><div><p class="eyebrow">HYPERZONE · {{ text('智能办公平台', 'INTELLIGENT WORKPLACE') }}</p><h1>{{ route.name === 'Dashboard' ? text('我的工作台', 'My Workbench') : role ? workbenchNames[role][zh ? 0 : 1] : text('岗位工作台', 'Role Workbench') }}</h1></div><RouterLink to="/dashboard" class="dashboard-link">{{ text('Dashboard', 'Dashboard') }}<ArrowUpRight :size="16" /></RouterLink></header>
-      <nav class="role-tabs" :aria-label="text('岗位工作台', 'Role workbenches')"><RouterLink v-for="item in roles" :key="item" :to="roleLink(item)" :class="{ active: role === item }" :aria-current="role === item ? 'page' : undefined"><component :is="icons[item]" :size="19" /><span>{{ workbenchNames[item][zh ? 0 : 1] }}</span></RouterLink></nav>
+      <header class="workbench-heading"><div><p class="eyebrow">HYPERZONE · {{ text('智能办公平台', 'INTELLIGENT WORKPLACE') }}</p><h1>{{ route.name === 'Dashboard' ? text('我的工作台', 'My Workbench') : role ? workbenchNames[role][zh ? 0 : 1] : text('岗位工作台', 'Role Workbench') }}</h1></div><div class="workbench-heading-actions"><RouterLink to="/dashboard" class="dashboard-link">{{ text('Dashboard', 'Dashboard') }}<ArrowUpRight :size="16" /></RouterLink></div></header>
+      <div class="workbench-navigation"><nav class="role-tabs" :aria-label="text('岗位工作台', 'Role workbenches')"><RouterLink v-for="item in roles" :key="item" :to="roleLink(item)" :class="{ active: role === item }" :aria-current="role === item ? 'page' : undefined"><component :is="icons[item]" :size="19" /><span>{{ workbenchNames[item][zh ? 0 : 1] }}</span></RouterLink></nav><WorkbenchReplicaControls v-if="allowed" :replica="replica" :disabled="replicaDisabled" :navigation-ready="navigationReady" @synced="reloadReplica" /></div>
       <template v-if="allowed && role">
         <WorkbenchFilterSummary :queue="String(choice)" :labels="filterLabels" />
         <nav class="workbench-queues" :aria-label="text('工作台功能', 'Workbench functions')">
+          <RouterLink v-if="role === 'warehouse'" :to="queueLink('receipt_notices')" :class="{ active: choice === 'receipt_notices' }">{{ text('待入库清单', 'Pending inbound') }}</RouterLink>
           <template v-for="item in workbenchQueues[role]" :key="item">
             <RouterLink v-if="role === 'sales' && item === 'exceptions'" :to="queueLink('rma')" :class="{ active: choice === 'rma' }">{{ text('RMA售后清单', 'RMA after-sales') }}</RouterLink>
             <RouterLink :to="queueLink(item)" :class="{ active: choice === item }">{{ queueNames[item][zh ? 0 : 1] }}{{ ['procurement_shipping', 'allocation_review'].includes(item) ? '' : text('清单', item === 'exceptions' ? '' : ' orders') }}</RouterLink>
@@ -96,6 +101,7 @@ function queueLink(value: string) { return { name: 'RoleWorkbench', params: { ro
         <SalesPerformanceView v-else-if="choice === 'performance' && role === 'sales'" :key="dataRevision" />
         <StockOrdersView v-else-if="choice === 'stock' && role === 'sales' || choice === 'stock_procurement' && role === 'procurement'" :key="`${dataRevision}-${choice}`" :procurement="role === 'procurement'" @filter-labels="updateFilterLabels" />
         <RmaOrdersView v-else-if="choice === 'rma' && role === 'sales'" :key="dataRevision" @filter-labels="updateFilterLabels" />
+        <ReceiptNoticesView v-else-if="choice === 'receipt_notices' && role === 'warehouse'" :key="dataRevision" @filter-labels="updateFilterLabels" />
         <PurchaseReturnsView v-else-if="choice === 'purchase_returns' && (role === 'procurement' || role === 'warehouse')" :key="`${role}-${dataRevision}`" @filter-labels="updateFilterLabels" />
         <FopFreightView v-else-if="choice === 'freight'" :key="dataRevision" />
         <FopReceiptsView v-else-if="choice === 'receipts'" :key="dataRevision" />
@@ -112,7 +118,9 @@ function queueLink(value: string) { return { name: 'RoleWorkbench', params: { ro
 
 <style scoped>
 .role-workbench { color: var(--color-text); }.workbench-heading { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin-bottom: 24px; }.eyebrow { font-size: 10px; font-weight: 700; letter-spacing: .16em; color: #8490a3; margin-bottom: 7px; }.workbench-heading h1 { font-size: 28px; font-weight: 750; letter-spacing: -.03em; }.workbench-heading p:last-child { margin-top: 7px; font-size: 12px; line-height: 1.7; color: #8490a3; }.dashboard-link { display: flex; align-items: center; gap: 6px; font-size: 12px; padding: 9px 13px; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 6px; }
-.role-tabs { display: flex; gap: 10px; margin-bottom: 22px; overflow-x: auto; padding-bottom: 2px; }.role-tabs a { display: flex; flex: 1; min-width: 150px; max-width: 230px; align-items: center; gap: 11px; padding: 17px; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-surface); color: #8490a3; font-size: 13px; font-weight: 600; }.role-tabs a.active { color: #fff; background: #4f67bf; border-color: #4f67bf; box-shadow: 0 5px 15px #4f67bf20; }.workbench-filter-summary + .workbench-queues { margin-top: 24px; }.workbench-queues { display: flex; gap: 24px; border-bottom: 1px solid var(--color-border); margin-bottom: 22px; overflow-x: auto; }.workbench-queues a { white-space: nowrap; color: #8490a3; font-size: 13px; padding: 0 2px 12px; border-bottom: 2px solid transparent; }.workbench-queues a.active { color: #5873d4; font-weight: 700; border-color: #5873d4; }.access-message { padding: 70px 20px; text-align: center; color: #8490a3; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 8px; }@media (max-width: 700px) { .workbench-heading { align-items: flex-start; }.workbench-heading h1 { font-size: 24px; }.role-tabs a { min-width: 140px; padding: 14px; } }
+.workbench-heading-actions { display:flex; align-items:center; justify-content:flex-end; gap:16px; flex-wrap:wrap; min-width:0; }.workbench-heading-actions .dashboard-link { flex-shrink:0; }
+.workbench-navigation { display:flex; align-items:center; gap:24px; margin-bottom:22px; }.workbench-navigation .role-tabs { flex:1; min-width:0; margin-bottom:0; }
+.role-tabs { display: flex; gap: 10px; margin-bottom: 22px; overflow-x: auto; padding-bottom: 2px; }.role-tabs a { display: flex; flex: 1; min-width: 130px; max-width: 230px; align-items: center; gap: 11px; padding: 17px; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-surface); color: #8490a3; font-size: 13px; font-weight: 600; }.role-tabs a.active { color: #fff; background: #4f67bf; border-color: #4f67bf; box-shadow: 0 5px 15px #4f67bf20; }.workbench-filter-summary + .workbench-queues { margin-top: 24px; }.workbench-queues { display: flex; gap: 24px; border-bottom: 1px solid var(--color-border); margin-bottom: 22px; overflow-x: auto; }.workbench-queues a { white-space: nowrap; color: #8490a3; font-size: 13px; padding: 0 2px 12px; border-bottom: 2px solid transparent; }.workbench-queues a.active { color: #5873d4; font-weight: 700; border-color: #5873d4; }.access-message { padding: 70px 20px; text-align: center; color: #8490a3; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 8px; }@media (max-width: 700px) { .workbench-heading { align-items: flex-start; flex-wrap:wrap; }.workbench-heading-actions { justify-content:flex-start; width:100%; }.workbench-navigation { flex-wrap:wrap; gap:12px; }.workbench-navigation .role-tabs { flex-basis:100%; }.workbench-navigation :deep(.workbench-replica-controls) { margin-left:auto; }.workbench-heading h1 { font-size: 24px; }.role-tabs a { min-width: 140px; padding: 14px; } }
 
 .dark .role-tabs a { color: #afbdd2; background: var(--color-surface); }
 .dark .role-tabs a.active { color: #e9efff; background: #344d84; border-color: #627db7; box-shadow: 0 5px 16px #0000001a; }

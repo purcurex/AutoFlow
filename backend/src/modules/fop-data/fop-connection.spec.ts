@@ -10,6 +10,7 @@ import { KingdeeFopDataProvider } from './fop-kingdee.provider'
 import { FOP_DATA_PROVIDER, FopDataProvider, FopPermissionDeniedError } from './fop-data.types'
 import { FulfillmentOrdersController } from '../users/workbench.controller'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
+import { LocalWorkbenchService } from '../workbench-replica/local-workbench.service'
 
 const subject = { tenantId: 'offline-company', userId: '100' }
 const company = { id: '10', name: 'Test Company' }
@@ -70,7 +71,7 @@ describe('Kingdee automatic token lifecycle', () => {
   it('coalesces concurrent token requests and keeps credentials out of connection responses', async () => {
     const { provider, request, counts } = setup()
     const results = await Promise.all([provider.getConnectionContext(), provider.getConnectionContext()])
-    expect(counts()).toEqual({ tokens: 1, reads: 2 })
+    expect(counts()).toEqual({ tokens: 1, reads: 1 })
     const tokenRequest = JSON.parse(String(request.mock.calls[0][1]?.body))
     expect(tokenRequest).toMatchObject({ client_id: 'offline-client', client_secret: 'offline-secret', accountId: '200', username: 'offline-user', language: 'zh_CN' })
     expect(tokenRequest.nonce).toMatch(/^[a-f0-9-]{36}$/)
@@ -116,7 +117,7 @@ describe('explicit current-admin binding', () => {
     const user = { id: 'local-admin', role: UserRole.ADMIN, businessRole: 'admin', businessDepartmentId: null, businessEmployeeId: null,
       fopTenantId: null, fopUserId: null, workbenchRoles: ['sales'] } as User
     const users = { findById: jest.fn(async () => user), connectCurrentAdminFop: jest.fn(async () => ({ fopBinding: subject })) }
-    const provider = { isConfigured: () => true, getConnectionContext: jest.fn(async () => connection) }
+    const provider = { isConfigured: () => true, administratorIdentity: async () => null, getConnectionContext: jest.fn(async () => connection) }
     return { user, users, provider, service: new FopDataService(users as unknown as UsersService, provider as unknown as FopDataProvider) }
   }
   const expected = { ...subject, organizationId: company.id }
@@ -129,11 +130,18 @@ describe('explicit current-admin binding', () => {
     expect(users.connectCurrentAdminFop).toHaveBeenCalledWith('local-admin', null, subject)
   })
 
-  it.each([{ role: UserRole.USER, businessRole: 'admin' }, { role: UserRole.ADMIN, businessRole: 'none' }])('rejects an account without both administrator roles: %j', async roles => {
+  it.each([{ role: UserRole.USER, businessRole: 'admin' }, { role: UserRole.USER, businessRole: 'none' }])('rejects an account without the system administrator role: %j', async roles => {
     const { user, service, provider, users } = setup()
     Object.assign(user, roles)
     await expect(service.testConnection(user.id)).rejects.toBeInstanceOf(ForbiddenException)
     expect(provider.getConnectionContext).not.toHaveBeenCalled()
+    expect(users.connectCurrentAdminFop).not.toHaveBeenCalled()
+  })
+
+  it('allows a system administrator with stale closed business assignment to test its connection', async () => {
+    const { user, service, users } = setup()
+    user.businessRole = 'none'
+    await expect(service.testConnection(user.id)).resolves.toEqual(connection)
     expect(users.connectCurrentAdminFop).not.toHaveBeenCalled()
   })
 
@@ -179,11 +187,12 @@ describe('current-admin connection HTTP contract', () => {
   let app: INestApplication
   const user = { id: 'session-admin', role: UserRole.ADMIN, businessRole: 'admin', fopTenantId: null, fopUserId: null } as User
   const users = { findById: jest.fn(async () => user), connectCurrentAdminFop: jest.fn(async () => ({ fopBinding: subject })) }
-  const provider = { isConfigured: () => true, getConnectionContext: jest.fn(async () => connection) }
+  const provider = { isConfigured: () => true, administratorIdentity: async () => null, getConnectionContext: jest.fn(async () => connection) }
   const path = '/api/autoflow/integrations/fop/connection'
 
   beforeAll(async () => {
     const module = await Test.createTestingModule({ controllers: [FulfillmentOrdersController], providers: [FopDataService,
+      { provide: LocalWorkbenchService, useValue: { enabled: false } },
       { provide: UsersService, useValue: users }, { provide: FOP_DATA_PROVIDER, useValue: provider }, { provide: FopApprovalService, useValue: {} }] })
       .overrideGuard(JwtAuthGuard).useValue({ canActivate: (context: { switchToHttp(): { getRequest(): { headers: Record<string, string>; user?: { userId: string } } } }) => {
         const req = context.switchToHttp().getRequest()

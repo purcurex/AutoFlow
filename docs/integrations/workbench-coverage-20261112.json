@@ -1,0 +1,449 @@
+{
+  "checkedAt": "2026-11-12T08:28:41.835648+00:00",
+  "fopContactedThisRound": false,
+  "initialized": false,
+  "automaticCallsEnabled": false,
+  "fopQueriesPaused": true,
+  "realDatabase": {
+    "checkedAt": "2026-11-12T08:26:12.245Z",
+    "database": "autoflow_local_demo",
+    "readOnly": true,
+    "fopContacted": false,
+    "tables": 63,
+    "columns": 980,
+    "appliedMigrations": 51,
+    "pendingMigrations": [],
+    "missingColumns": [],
+    "documents": 0,
+    "datasets": [],
+    "capabilities": {
+      "historicalImport": {
+        "implemented": true,
+        "executable": false,
+        "blockers": [
+          "fop_queries_paused",
+          "source_adapter_not_configured"
+        ]
+      },
+      "incrementalSync": {
+        "configured": false,
+        "executable": false,
+        "blockers": [
+          "fop_queries_paused",
+          "source_adapter_not_configured",
+          "dataset_not_initialized"
+        ]
+      }
+    },
+    "historicalImportReady": false,
+    "implementationGaps": [],
+    "externalRequirements": [
+      "FOP stable snapshot/change feed and reconciliation APIs must be provided",
+      "Current service authorization and domain facts must be verified",
+      "Explicit FOP access restoration required while paused"
+    ]
+  },
+  "httpVerification": {
+    "checkedAt": "2026-11-12T08:26:52.014Z",
+    "session": "short-lived local administrator verification token; no password change",
+    "statusHttp": 200,
+    "status": {
+      "readMode": "local",
+      "initialized": false,
+      "state": "not_initialized",
+      "paused": true,
+      "automaticCallsEnabled": false,
+      "bootstrap": {
+        "allowed": true,
+        "configured": false,
+        "executable": false,
+        "blockers": [
+          "fop_queries_paused",
+          "workbench_replica_sync_not_configured"
+        ],
+        "missingConfiguration": [
+          "FOP_REPLICA_SNAPSHOT_BEGIN_URL",
+          "FOP_REPLICA_SNAPSHOT_PAGE_URL",
+          "FOP_REPLICA_BARRIER_URL",
+          "FOP_REPLICA_CHANGES_URL",
+          "FOP_REPLICA_AUTHORIZATION_URL",
+          "FOP_REPLICA_RECONCILE_URL",
+          "FOP_REPLICA_ACCESS_TOKEN"
+        ],
+        "resume": null
+      }
+    },
+    "configureHttp": 503,
+    "configureCode": "workbench_replica_sync_not_configured",
+    "tableCounts": {
+      "datasets": 0,
+      "documents": 0
+    },
+    "fopContacted": false
+  },
+  "publishedProjectionAudit": {
+    "checkedAt": "2026-11-12T08:26:12.403Z",
+    "readOnly": true,
+    "fopContacted": false,
+    "database": "autoflow_local_demo",
+    "scope": "All active local company datasets; operator-only aggregate diagnostic, not a user authorization grant",
+    "state": "not_initialized",
+    "activeDatasets": 0,
+    "fulfillmentOrders": 0,
+    "counts": null,
+    "regularGaps": null,
+    "reasons": {},
+    "queueMemberships": {},
+    "unknownQueues": {},
+    "actualVisibleGapCount": null,
+    "limitation": "Potential membership does not prove current screen visibility: resource grants, linked-document predicates, list completeness and account scope still apply. No datasets means unmeasured, not zero missing orders."
+  },
+  "rawCapture": {
+    "files": 449,
+    "manifest_pages": 449,
+    "manifest_rows": 44855,
+    "rows": 44855,
+    "unique_order_ids": 44855,
+    "manifest_hash_matches": 449,
+    "hash_mismatch_count": 0,
+    "file_mismatch_count": 0,
+    "count_mismatch_count": 0,
+    "manifest_only_files": 0,
+    "stable_snapshot": false,
+    "published": false,
+    "cursor_exhausted": true,
+    "page_aggregate": {
+      "success_true": 449,
+      "empty_facts": 449,
+      "nonempty_facts": 0,
+      "hasMore_true": 448,
+      "hasMore_false": 1,
+      "source_version_header_present": 0
+    },
+    "manifest_sha256": "ab47cf906082bb5e6433e5923f2fe39832c7e5e20843ddbe123454ff19d1f1a2"
+  },
+  "standardFulfillment": {
+    "rows": 44841,
+    "states": {
+      "hzkj_orderstatus": {
+        "0": 518,
+        "1": 17532,
+        "2": 225,
+        "3": 197,
+        "4": 14870,
+        "5": 1,
+        "no": 11498
+      },
+      "hzkj_receipt_status": {
+        "0": 29554,
+        "1": 15287
+      },
+      "billstatus": {
+        "A": 29172,
+        "B": 358,
+        "C": 15311
+      },
+      "hzkj_purchase_status": {
+        "<absent>": 44841
+      },
+      "hzkj_delivery_status": {
+        "0": 30877,
+        "1": 159,
+        "2": 13754,
+        "<empty>": 51
+      },
+      "hzkj_refund_status": {
+        "<empty>": 44622,
+        "none": 27,
+        "partial_refunded": 46,
+        "refunded": 146
+      },
+      "hzkj_use_status": {
+        "1": 44841
+      },
+      "hzkj_lock_store": {
+        "0": 34522,
+        "1": 3159,
+        "<empty>": 7160
+      }
+    },
+    "known_unfinished": {
+      "rows": 31036,
+      "cancelled": 518,
+      "non_cancelled": 30518,
+      "payment_non_cancelled": {
+        "0": 28981,
+        "1": 1537
+      },
+      "paid_non_cancelled_audit": {
+        "A": 49,
+        "B": 35,
+        "C": 1453
+      },
+      "paid_non_cancelled_orderstatus": {
+        "2": 224,
+        "3": 62,
+        "4": 1251
+      },
+      "paid_non_cancelled_refund": {
+        "<empty>": 1430,
+        "none": 1,
+        "partial_refunded": 7,
+        "refunded": 99
+      },
+      "paid_non_cancelled_native_outbound": {
+        "0": 1382,
+        "1": 155
+      },
+      "paid_raw_shipped_audit": {
+        "C": 1251
+      },
+      "paid_raw_shipped_outbound": {
+        "0": 1118,
+        "1": 133
+      },
+      "paid_raw_shipped_refund": {
+        "<empty>": 1194,
+        "none": 1,
+        "partial_refunded": 2,
+        "refunded": 54
+      },
+      "all_orderstatus": {
+        "0": 518,
+        "1": 17485,
+        "2": 224,
+        "3": 62,
+        "4": 1251,
+        "no": 11496
+      },
+      "all_refund": {
+        "<empty>": 30929,
+        "none": 1,
+        "partial_refunded": 7,
+        "refunded": 99
+      },
+      "payment_audit_cancelled_cross": [
+        {
+          "receipt": "0",
+          "billstatus": "A",
+          "cancelled": false,
+          "rows": 28665
+        },
+        {
+          "receipt": "0",
+          "billstatus": "A",
+          "cancelled": true,
+          "rows": 409
+        },
+        {
+          "receipt": "0",
+          "billstatus": "B",
+          "cancelled": false,
+          "rows": 239
+        },
+        {
+          "receipt": "0",
+          "billstatus": "B",
+          "cancelled": true,
+          "rows": 84
+        },
+        {
+          "receipt": "0",
+          "billstatus": "C",
+          "cancelled": false,
+          "rows": 77
+        },
+        {
+          "receipt": "0",
+          "billstatus": "C",
+          "cancelled": true,
+          "rows": 25
+        },
+        {
+          "receipt": "1",
+          "billstatus": "A",
+          "cancelled": false,
+          "rows": 49
+        },
+        {
+          "receipt": "1",
+          "billstatus": "B",
+          "cancelled": false,
+          "rows": 35
+        },
+        {
+          "receipt": "1",
+          "billstatus": "C",
+          "cancelled": false,
+          "rows": 1453
+        }
+      ]
+    },
+    "outbound_unknown": {
+      "rows": 51,
+      "cancelled": 0,
+      "non_cancelled": 51,
+      "payment_non_cancelled": {
+        "0": 50,
+        "1": 1
+      },
+      "paid_non_cancelled_audit": {
+        "C": 1
+      },
+      "paid_non_cancelled_orderstatus": {
+        "4": 1
+      },
+      "paid_non_cancelled_refund": {
+        "<empty>": 1
+      },
+      "paid_non_cancelled_native_outbound": {
+        "<empty>": 1
+      },
+      "paid_raw_shipped_audit": {
+        "C": 1
+      },
+      "paid_raw_shipped_outbound": {
+        "<empty>": 1
+      },
+      "paid_raw_shipped_refund": {
+        "<empty>": 1
+      },
+      "all_orderstatus": {
+        "1": 47,
+        "4": 2,
+        "no": 2
+      },
+      "all_refund": {
+        "<empty>": 51
+      },
+      "payment_audit_cancelled_cross": [
+        {
+          "receipt": "0",
+          "billstatus": "A",
+          "cancelled": false,
+          "rows": 49
+        },
+        {
+          "receipt": "0",
+          "billstatus": "C",
+          "cancelled": false,
+          "rows": 1
+        },
+        {
+          "receipt": "1",
+          "billstatus": "C",
+          "cancelled": false,
+          "rows": 1
+        }
+      ]
+    },
+    "all_paid_non_cancelled_audit": {
+      "A": 49,
+      "B": 35,
+      "C": 15203
+    }
+  },
+  "entries": {
+    "rows": 80186,
+    "orders_with_empty_entries": 2,
+    "field_present_counts": {
+      "hzkj_entrypurc_status": 80186,
+      "hzkj_local_sku": 80186,
+      "hzkj_pay_prod_qty": 80186,
+      "hzkj_picture": 80186,
+      "hzkj_purcqty": 80186,
+      "hzkj_qty": 80186,
+      "hzkj_shopify_itemid": 80186,
+      "hzkj_use_stock": 80186,
+      "id": 80186,
+      "pid": 80186,
+      "seq": 80186
+    },
+    "raw_states": {
+      "hzkj_entrypurc_status": {
+        "0": 64620,
+        "1": 69,
+        "2": 650,
+        "3": 14178,
+        "4": 655,
+        "<empty>": 14
+      },
+      "hzkj_use_stock": {
+        "0": 76006,
+        "1": 4169,
+        "<empty>": 11
+      }
+    }
+  },
+  "importantAbsentHeaders": {
+    "hzkj_purchase_status": 44855,
+    "hzkj_total_amount": 44855,
+    "hzkj_settlecurrency": 44855,
+    "hzkj_fre_quo_amount": 44855,
+    "hzkj_fixed_tax_fee": 44855,
+    "hzkj_discount_cost": 44855,
+    "sourceVersion": 44855
+  },
+  "actualAllListGapCount": null,
+  "logicalCoverageGapsProven": false,
+  "candidateNativeShippedButNotFullyOutbound": 1251,
+  "validation": {
+    "backend": {
+      "suites": 124,
+      "tests": 1594,
+      "evidenceSha256": "7b6d4d9d2d2fb6b05dd619d40bc6ebb5bcb64f437c497813b1000613d6ceeff1"
+    },
+    "frontend": {
+      "suites": 83,
+      "tests": 679,
+      "evidenceSha256": "894dd223209aefd5cea95d19b8ce62c23d48649af151214b6e6804cf27ca726d"
+    },
+    "bootstrapHttp": {
+      "suites": 1,
+      "tests": 5,
+      "evidenceSha256": "f6fbf3716c97c5ff7d8ea3f0b208533dd0990d0392b2bc49ec2ef761be5e5110"
+    },
+    "lint": "passed",
+    "build": "passed",
+    "independentReview": "passed_after_three_fixes",
+    "realFopIntegration": "blocked_missing_services",
+    "browserVisualCheck": "not_performed"
+  },
+  "sourceDigests": {
+    "backend/src/modules/fop-data/workbench-queue-rules.ts": "b5ba7f8209ecf981753709dac025370e5d007cc86ea1825d187215927bf32440",
+    "backend/src/modules/workbench-replica/replica-domain-normalizer.ts": "a88c21bfbd2b0752d0df8ae3f291732b36255b9c6a82568de62c4b23bd44702d",
+    "backend/src/modules/workbench-replica/local-workbench-query.ts": "729f8f1388fe7ca7fde58128e6f340710d6278d53fc0edd2a83df4aeaee53956",
+    "backend/src/modules/workbench-replica/local-workbench.service.ts": "ec1eef8fa8dcb36eadeb713f9147de1388333bc1933d2da8151f51c18199f2cd",
+    "backend/src/modules/workbench-replica/local-workbench-logistics.ts": "e43d8831d663265b2e22735724deebcc6cabbb34294d58c404bb2191a9348312"
+  },
+  "businessRuleRevision": {
+    "date": "2026-11-12",
+    "basis": "user_confirmed_current_FOP_rules_and_project_V2.0_reference",
+    "withdrawnNormalGapHypotheses": [
+      "stock_usage_order_without_allocation_after_normal_audit",
+      "incomplete_allocation_successfully_audited"
+    ],
+    "currentStockRoute": "allocation_review_when_ready_and_pending_review",
+    "confirmedPendingCapability": "order_interception_lifecycle",
+    "operationalChecks": [
+      "async_allocation_generation_failure_or_delay",
+      "missing_synced_relations",
+      "historical_or_reverse_inventory_inconsistency"
+    ],
+    "futureRequiredCoverage": [
+      "pending",
+      "waiting_stock",
+      "ready",
+      "paused_or_intercepted_visible",
+      "change_awaiting_resume"
+    ],
+    "actualAllListGapCount": null,
+    "referencePath": "docs/solutions/HyperZone智能配货与自动审核方案.html",
+    "referenceSha256": "a2bf949c2930555e2e6f1d2144db49ef11d5259c0e2738170da95b87408798ab",
+    "requestedWechatOriginalRead": false,
+    "requestedWechatOriginalBlocker": "macOS Operation not permitted",
+    "referenceIdentityVerified": false,
+    "fopContacted": false
+  },
+  "syntheticInputsProveNormalSourceReachability": false
+}

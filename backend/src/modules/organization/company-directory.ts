@@ -23,6 +23,8 @@ export interface DirectoryPolicy {
 }
 
 const ADMIN_NAMES = new Set(['ethan', 'robin', 'nora', 'mason', 'xinke'])
+// The original workbook is historical; departed accounts must not be provisioned again.
+const EXCLUDED_DIRECTORY_EMAILS = new Set(['ruth@hzdrop.com'])
 export function directoryPolicy(member: DirectoryMember): DirectoryPolicy {
   if (ADMIN_NAMES.has(member.englishName.toLowerCase())) return { role: UserRole.ADMIN, businessRole: 'admin', workbenchRoles: [...WORKBENCH_ROLES], chartPermissions: [] }
   const paths = member.profile.departmentPaths
@@ -51,6 +53,7 @@ export function directoryMembers(rows: unknown[][]): DirectoryMember[] {
     if (!/^[A-Za-z][A-Za-z0-9._-]{0,31}$/.test(englishName)) throw new Error(`第${line}行英文名缺失或不能直接生成邮箱`)
     if (!code || code.length > 40 || !field('姓名')) throw new Error(`第${line}行姓名或源账号无效`)
     const email = `${englishName.toLowerCase()}@hzdrop.com`
+    if (EXCLUDED_DIRECTORY_EMAILS.has(email)) continue
     if (emails.has(email) || codes.has(code.toLowerCase())) throw new Error(`第${line}行账号或英文名重复`)
     emails.add(email); codes.add(code.toLowerCase())
     const departmentPaths = [...new Set(field('部门').split(/[;；]/).map(path => path.split('/').map(part => part.trim()).join('/')).filter(Boolean))]

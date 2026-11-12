@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed, onScopeDispose } from 'vue'
 import type { User } from '@/types'
 import { authApi } from '@/api/auth'
-import { englishDisplayName, PRESET_AVATARS } from '@/utils/user-display'
+import { defaultAvatarUrl, englishDisplayName, presetAvatarSrc, PRESET_AVATARS } from '@/utils/user-display'
 import { assertCurrentSession, captureSession, invalidateSession, isCurrentSession, onSessionReset } from '@/utils/session'
 
 const API_URL = import.meta.env.VITE_API_URL || '/api'
@@ -21,8 +21,9 @@ export const useUserStore = defineStore('user', () => {
   const displayName = computed(() => englishDisplayName(user.value))
   const isAdmin = computed(() => user.value?.role === 'admin')
   const avatarUrl = computed(() => {
-    if (!user.value?.avatarUrl) return null
-    if (PRESET_AVATARS.some(avatar => avatar.url === user.value?.avatarUrl)) return `${import.meta.env.BASE_URL}${user.value.avatarUrl.slice(1)}`
+    if (!user.value) return null
+    if (!user.value.avatarUrl) return presetAvatarSrc(defaultAvatarUrl(user.value))
+    if (PRESET_AVATARS.some(avatar => avatar.url === user.value?.avatarUrl)) return presetAvatarSrc(user.value.avatarUrl)
     // 如果是完整URL则直接返回，否则拼接API地址
     if (user.value.avatarUrl.startsWith('http')) {
       return user.value.avatarUrl
@@ -67,8 +68,8 @@ export const useUserStore = defineStore('user', () => {
     try {
       const response = await authApi.getProfile()
       assertCurrentSession(session)
-      const previous = user.value?.id || JSON.parse(localStorage.getItem('user') || '{}').id
-      if (previous && previous !== response.id) invalidateSession()
+      const previous = user.value ?? JSON.parse(localStorage.getItem('user') || '{}')
+      if (previous.id && (previous.id !== response.id || (previous.dataDisplayScope ?? 'self') !== (response.dataDisplayScope ?? 'self'))) invalidateSession()
       user.value = response
       localStorage.setItem('user', JSON.stringify(response))
     } catch {
@@ -76,11 +77,13 @@ export const useUserStore = defineStore('user', () => {
     }
   }
 
-  async function updateProfile(data: { username?: string; avatarUrl?: string }) {
+  async function updateProfile(data: { username?: string; avatarUrl?: string; dataDisplayScope?: 'department' | 'self' }) {
     const session = captureSession()
     const response = await authApi.updateProfile(data)
     assertCurrentSession(session)
+    if ((user.value?.dataDisplayScope ?? 'self') !== (response.dataDisplayScope ?? 'self')) invalidateSession()
     user.value = response
+    localStorage.setItem('user', JSON.stringify(response))
     return response
   }
 

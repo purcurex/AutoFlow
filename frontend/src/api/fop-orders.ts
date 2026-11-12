@@ -1,3 +1,6 @@
+import type { WorkbenchDataAvailability, WorkbenchReplicaSnapshot } from './workbench-replica'
+import { beginWorkbenchCount } from '@/utils/workbench-counts'
+import { isProcurementReady } from '@/utils/workbench-queue-rules'
 import { matchesCompletedQueue } from '@/utils/completed-orders'
 import { canFilterTaskStatus, type TaskStatus } from '@/utils/workbench-status'
 import { canFilterProcurementStage, type ProcurementStage } from '@/utils/procurement-stage'
@@ -14,7 +17,7 @@ export interface FopOrderItem {
   name: string
   imageUrl: string | null
   variant: string
-  quantity: number
+  quantity: number | null
 }
 /** Independent, normalized FOP facts; unknown must never be inferred as pending. */
 export interface FulfillmentProgress {
@@ -40,6 +43,7 @@ export interface ProcurementProgress {
 
 /** Effective linked dispatch documents; never inferred from customer payment or Shopify sync. */
 export interface DispatchDocument {
+  deliveryStatus?: string | null
   id: string
   number: string
   status: 'draft' | 'submitted' | 'approved' | 'unknown'
@@ -61,18 +65,22 @@ export interface LogisticsChannel { name: string | null; code: string | null }
 
 export interface LogisticsTrackingNumber { type: 'full' | 'first_mile' | 'last_mile'; number: string }
 export interface LogisticsInfo {
+  /** Actual channel for this same package; never inferred by array position. */
+  channelName?: string | null
+  channelCode?: string | null
   carrierName: string | null
   /** Explicit FOP selection for Shopify; never chosen from raw candidate numbers by this app. */
   shopifyTracking?: LogisticsTrackingNumber | null
-  /** @deprecated Legacy candidates do not prove which number is selected. */
+  /** Dispatch full/last-mile facts. Other queues must not infer Shopify selection from this array. */
   trackingNumbers?: LogisticsTrackingNumber[]
 }
 
 export interface AllocationDocumentReference { id: string; number: string }
 
 export interface FopOrder {
+  dataQuality?: { mode: 'collected'; readOnly: true; missingFields: string[]; reasons: string[] }
   /** 服务端按未完成期望包裹聚合，避免缺包裹被已有发运单掩盖。 */
-  dispatchTaskStatus?: 'dispatch_missing' | 'dispatch_draft' | 'dispatch_submitted' | 'dispatch_approved' | 'dispatch_synced' | 'unknown'
+  dispatchTaskStatus?: 'dispatch_pending' | 'dispatch_tracking' | 'dispatch_updating' | 'dispatch_cancelled' | 'dispatch_missing' | 'dispatch_draft' | 'dispatch_submitted' | 'dispatch_approved' | 'dispatch_synced' | 'unknown'
   shipmentInterceptStatus?: 'intercepted' | 'released' | null
   /** Unique effective FOP allocation for this order; null/omitted = unavailable or not yet created. */
   allocationDocument?: AllocationDocumentReference | null
@@ -82,15 +90,15 @@ export interface FopOrder {
   customLogisticsChannelName?: string | null
   /** Actual fulfillment channels, never carrier categories or customer-facing custom channels. */
   logisticsChannels?: LogisticsChannel[] | null
-  /** C端付款时间取履约订单源单付款时间，区别于FOP创建时间和收款日期；未知为null。 */
   /** Actual phase completion timestamps supplied by the trusted gateway; no fallbacks. */
   shopifySyncedAt?: string | null
-  /** 当前有效发运单的最大审核时间，用于已履约清单日期筛选，不代表Shopify同步时间。 */
+  /** 当前有效发运单的最大审核时间，用于阶段时间展示及手动排序。 */
   dispatchApprovedAt?: string | null
   procurementCompletedAt?: string | null
   allocationApprovedAt?: string | null
   outboundCompletedAt?: string | null
   reviewedAt?: string | null
+  /** 客户完成付款时间；相对时间筛选及默认排序使用此字段，未知为null。 */
   consumerPaidAt?: string | null
   /** Earliest actual payment among effective paid purchase obligations still awaiting supplier shipment. */
   procurementPaidAt?: string | null
@@ -121,12 +129,15 @@ export interface FopOrder {
   customerName: string
   storeName: string
   items: FopOrderItem[]
-  amount: number
+  amount: number | null
   /** Stored FOP amounts in the order currency; absent details are unknown, never derived. */
   amountBreakdown?: FopOrderAmountBreakdown | null
-  currency: string
-  paymentStatus: 'paid' | 'unpaid' | 'refunded'
-  reviewStatus: 'pending' | 'approved'
+  currency: string | null
+  paymentStatus: 'paid' | 'unpaid' | 'refunded' | 'unknown'
+  reviewStatus: 'pending' | 'approved' | 'unknown'
+  /** FOP fulfillment header hzkj_purchase_status / hzkj_delivery_status; null means unknown. */
+  sourcePurchaseStatus?: '0' | '1' | '2' | '3' | '4' | null
+  sourceOutboundStatus?: '0' | '1' | '2' | null
   procurementStatus: 'pending' | 'purchased' | 'not_required' | 'unknown'
   allocationStatus: 'pending' | 'allocated' | 'not_ready' | 'unknown'
   dispatchStatus: 'pending' | 'dispatched' | 'not_ready' | 'unknown'
@@ -135,10 +146,10 @@ export interface FopOrder {
   carrier: string | null
   trackingNumber: string | null
   salesperson: string
-  createdAt: string
+  createdAt: string | null
   paidAt: string | null
-  cancelled: boolean
-  exception: { type: FopExceptionType | null; reason: string | null; hours: number } | null
+  cancelled: boolean | null
+  exception: { type: FopExceptionType | null; reason: string | null; hours: number | null } | null
 }
 export const warehouseStages = ['all', 'pending_review', 'pending_outbound'] as const
 export type WarehouseStage = typeof warehouseStages[number]
@@ -154,7 +165,7 @@ export function canSortFopQueue(queue: FopOrderQueue, field: FopOrderSortBy): bo
   const queues: Record<Exclude<FopOrderSortBy, 'paidAt'>, readonly FopOrderQueue[]> = {
     completedAt: ['review', 'dispatch', 'procurement', 'allocation_review', 'shipping'],
     reviewedAt: ['procurement'],
-    consumerPaidAt: ['unpaid', 'review', 'exceptions', 'dispatch', 'allocation'],
+    consumerPaidAt: ['unpaid', 'review', 'exceptions', 'dispatch', 'procurement', 'procurement_shipping', 'allocation', 'allocation_review', 'shipping'],
     dispatchDocumentStatus: ['dispatch', 'allocation', 'allocation_review'],
     allocationDocumentStatus: ['allocation', 'allocation_review', 'shipping'],
     stockReadiness: ['allocation', 'allocation_review'],
@@ -164,7 +175,9 @@ export function canSortFopQueue(queue: FopOrderQueue, field: FopOrderSortBy): bo
   return field === 'paidAt' || !!queues[field]?.includes(queue)
 }
 export interface FopOrderQuery {
+  projection?: 'count'
   completed?: boolean
+  /** Customer completed payment time; completed lists default to the last week. */
   timeRange?: 'all' | '1w' | '1m' | '3m'
   shippingCountryCode?: string
   warehouseCode?: 'HZ' | 'SZ'
@@ -185,10 +198,14 @@ export interface FopOrderQuery {
 /** Full authorized filter scope, independent of the requested page. */
 export interface FopOrderTotals {
   orderCount: number
-  itemQuantity: number
+  itemQuantity: number | null
+  complete?: boolean
   amountsByCurrency: { currency: string; amount: number }[]
 }
 export interface FopOrderPage {
+  dataAvailability?: WorkbenchDataAvailability
+  replica?: WorkbenchReplicaSnapshot
+
   source: 'mock' | 'fop'
   items: FopOrder[]
   total: number
@@ -206,6 +223,29 @@ export interface FopQueuePage extends FopOrderPage {
   departments: { id: string; name: string }[]
   /** Authorized order owners in the selected department, independent of queue/search/page. */
   salespeople?: { id: string; name: string }[]
+}
+
+/** Partial rows are accepted only in an explicitly labelled, immutable collection. */
+export function isFopOrderPageDataValid(page: { items: unknown[]; replica?: WorkbenchReplicaSnapshot; dataAvailability?: WorkbenchDataAvailability }): boolean {
+  const collected = page.replica?.dataMode === 'collected' && page.replica.readMode === 'local'
+    && page.replica.complete === false && page.dataAvailability?.mode === 'collected' && page.dataAvailability.complete === false
+  return page.items.every(value => {
+    if (!value || typeof value !== 'object') return false
+    const row = value as FopOrder
+    const partial = collected && row.dataQuality?.mode === 'collected' && row.dataQuality.readOnly === true
+      && Array.isArray(row.dataQuality.missingFields) && Array.isArray(row.dataQuality.reasons)
+    if (row.dataQuality && !partial) return false
+    const number = (v: unknown) => typeof v === 'number' && Number.isFinite(v) || partial && v == null
+    return number(row.amount) && (typeof row.currency === 'string' && !!row.currency || partial && row.currency == null)
+      && Array.isArray(row.items) && row.items.every(item => number(item.quantity))
+      && (row.paymentStatus !== 'unknown' && row.reviewStatus !== 'unknown' || partial)
+  })
+}
+
+/** One unknown line makes the quantity total unknown. */
+export function orderItemQuantity(items: readonly Pick<FopOrderItem, 'quantity'>[]): number | null {
+  if (!items.length || items.some(item => typeof item.quantity !== 'number' || !Number.isFinite(item.quantity))) return null
+  return items.reduce((sum, item) => sum + item.quantity!, 0)
 }
 
 export function isFopOrderQueue(value: unknown): value is FopOrderQueue {
@@ -233,6 +273,7 @@ function validateQuery(query: FopOrderQuery) {
 
 export function matchesFopQueue(order: FopOrder, queue: FopOrderQueue, warehouseStage?: WarehouseStage, completed = false): boolean {
   if (completed) return matchesCompletedQueue(order, queue)
+  if (queue === 'exceptions' && order.dataQuality?.mode === 'collected' && order.dataQuality.readOnly === true && order.dataQuality.reasons.length > 0) return true
   if (order.cancelled) return false
   if (queue === 'exceptions') return order.exception != null
   if (queue === 'unpaid') return order.paymentStatus === 'unpaid'
@@ -240,13 +281,14 @@ export function matchesFopQueue(order: FopOrder, queue: FopOrderQueue, warehouse
   if (queue === 'review') return order.reviewStatus === 'pending'
   const progress = order.fulfillmentProgress
   if (!progress) return false
-  // Only reviewed fulfillment orders can await Shopify tracking/fulfillment sync.
-  if (queue === 'dispatch') return order.reviewStatus === 'approved' && progress.shopifySync === 'pending'
+  // Customer payment and the actual Shopify sync result determine pending fulfillment.
+  if (queue === 'dispatch') return progress.shopifySync === 'pending'
   if (queue === 'procurement' || queue === 'procurement_shipping') {
+    if (order.sourcePurchaseStatus !== undefined && !['0','1','2'].includes(order.sourcePurchaseStatus ?? '')) return false
     const purchase = order.procurementProgress
-    if (!purchase) return false
+    if (!purchase || purchase.purchaseOrder === 'not_required' || (order.sourcePurchaseStatus === undefined && progress.supplierShipment === 'shipped')) return false
     const pendingPush = purchase.alibabaOrder === 'not_pushed' || purchase.alibabaOrder === 'partial'
-    if (queue === 'procurement_shipping') return !pendingPush && purchase.purchaseOrder === 'ordered' && purchase.supplierPayment === 'paid'
+    if (queue === 'procurement_shipping') return isProcurementReady(purchase)
       && (progress.supplierShipment === 'pending' || progress.supplierShipment === 'partial')
     // Remaining unplaced demand is not fully paid; unknown facts are not unpaid facts.
     return purchase.purchaseOrder === 'not_ordered' || purchase.purchaseOrder === 'partial'
@@ -254,8 +296,8 @@ export function matchesFopQueue(order: FopOrder, queue: FopOrderQueue, warehouse
   }
   if (order.reviewStatus !== 'approved' || progress.allocationCreated !== true) return false
   switch (queue) {
-    case 'allocation': return progress.stockReadiness === 'incomplete' && progress.allocationReview === 'pending' && progress.outbound !== 'completed'
-    case 'allocation_review': return progress.stockReadiness === 'ready' && progress.allocationReview === 'pending' && progress.outbound !== 'completed'
+    case 'allocation': return progress.stockReadiness === 'incomplete' && progress.allocationReview === 'pending' && (progress.outbound === 'pending' || progress.outbound === 'partial')
+    case 'allocation_review': return progress.stockReadiness === 'ready' && progress.allocationReview === 'pending' && (progress.outbound === 'pending' || progress.outbound === 'partial')
     // Pending allocation approval belongs only to allocation; legacy pending_review queries stay empty.
     case 'shipping': return warehouseStage !== 'pending_review' && progress.stockReadiness === 'ready'
       && progress.allocationReview === 'approved' && (progress.outbound === 'pending' || progress.outbound === 'partial')
@@ -263,13 +305,16 @@ export function matchesFopQueue(order: FopOrder, queue: FopOrderQueue, warehouse
 }
 
 /** User identity and data scope are derived exclusively by the authenticated backend. */
-export async function getFopOrders(query: FopOrderQuery): Promise<FopQueuePage> {
+export async function getFopOrders(query: FopOrderQuery, signal?: AbortSignal): Promise<FopQueuePage> {
   validateQuery(query)
   const { default: api } = await import('./index')
-  const { queue, completed, timeRange, shippingCountryCode, search, orderNumber, departmentId, ownerId, warehouseCode, paidAtOrder, sortBy, sortOrder, warehouseStage, procurementStage, taskStatus, page, pageSize } = query
-  return api.get('/autoflow/integrations/fop/fulfillment-orders', { params: { queue, ...(completed ? { completed } : {}), timeRange, shippingCountryCode, search, orderNumber, departmentId, ownerId, warehouseCode, paidAtOrder, sortBy, sortOrder, warehouseStage, procurementStage, taskStatus, page, pageSize } })
+  const { queue, projection, completed, timeRange, shippingCountryCode, search, orderNumber, departmentId, ownerId, warehouseCode, paidAtOrder, sortBy, sortOrder, warehouseStage, procurementStage, taskStatus, page, pageSize } = query
+  const remember = beginWorkbenchCount(query)
+  const result: FopQueuePage = await api.get('/autoflow/integrations/fop/fulfillment-orders', { params: { queue, projection, ...(completed ? { completed } : {}), timeRange, shippingCountryCode, search, orderNumber, departmentId, ownerId, warehouseCode, paidAtOrder, sortBy, sortOrder, warehouseStage, procurementStage, taskStatus, page, pageSize }, ...(signal ? { signal } : {}) })
+  if (!isFopOrderPageDataValid(result)) throw new Error('Unexpected partial data')
+  if (!result.dataAvailability?.missingDatasets?.length) remember?.(result.total)
+  return result
 }
-export const getFopOrdersFromApi = getFopOrders
 
 export interface FopOrderAmountBreakdown {
   productAmount: number | null

@@ -1,0 +1,351 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="hyperzone-html-style" content="1.0">
+<title>FOP 智能配货与自动审核方案</title>
+<style>/* HyperZone HTML Standard v1.0 — shared canonical stylesheet */
+
+:root{--ink:#172b43;--muted:#5b6e80;--blue:#165a9b;--teal:#087f8c;--line:#dbe5ed;--bg:#f3f6fa;--nav:274px}
+*{box-sizing:border-box}html{scroll-behavior:smooth;scroll-padding-top:24px}
+body{margin:0;color:var(--ink);background:var(--bg);font:15px/1.85 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
+a{color:var(--blue);text-underline-offset:3px;overflow-wrap:anywhere}a:hover{color:var(--teal)}
+.sidebar{position:fixed;inset:0 auto 0 0;width:var(--nav);padding:32px 24px;background:#13283f;color:#dae5ef;overflow-y:auto}
+.brand{font-size:12px;letter-spacing:2px;color:#8ebedb;font-weight:700}.sidebar h2{font-size:22px;line-height:1.5;margin:16px 0 5px;color:#fff}
+.sidebar .subtitle{font-size:12px;color:#a9bfce}.toc ul{padding:0;list-style:none}.toc a{display:block;padding:9px 10px;margin:3px 0;text-decoration:none;border-radius:6px;font-size:13px;line-height:1.5;color:#cfdae7}.toc a:hover{background:#24445f;color:white}
+.sidebar-foot{font-size:11px;color:#96aebf;border-top:1px solid #365066;margin-top:22px;padding-top:18px}
+.page{margin-left:var(--nav);padding:40px 48px 64px;max-width:1470px}
+.toolbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:22px;gap:12px;font-size:12px;color:var(--muted)}
+.toolbar button{background:white;border:1px solid #cbd8e4;border-radius:7px;padding:9px 16px;color:var(--ink);cursor:pointer;font:inherit}
+.hero{background:linear-gradient(120deg,#123e68,#087b88);color:white;padding:42px 44px;border-radius:14px;box-shadow:0 14px 40px #173a5515}
+.eyebrow{font-size:11px;letter-spacing:2.5px;color:#c0e4ef;font-weight:700}.hero h1{font-size:34px;line-height:1.4;letter-spacing:-.5px;margin:15px 0 10px}.hero p{color:#dfedf3;max-width:740px;margin:0;font-size:15px}.badges{display:flex;flex-wrap:wrap;gap:8px;margin-top:22px}.badges span{font-size:11px;border:1px solid #ffffff45;background:#ffffff0e;padding:4px 11px;border-radius:30px}
+.highlights{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:20px 0 28px}.highlight{background:white;border:1px solid var(--line);border-radius:10px;padding:19px 22px}.highlight b{display:block;font-size:18px;color:var(--blue)}.highlight small{color:var(--muted);font-size:12px}
+article{background:white;border:1px solid var(--line);border-radius:12px;padding:30px 40px 40px}
+article h2{font-size:24px;line-height:1.5;padding-top:28px;margin:30px 0 20px;border-top:1px solid var(--line);color:#133f69}article h3{font-size:17px;margin:28px 0 12px;color:#27566e}article p{margin:12px 0}article strong{font-weight:650}article ul,article ol{padding-left:25px}article li{padding:3px 0}
+blockquote{margin:8px 0 20px;padding:10px 18px;background:#edf6f9;border-left:4px solid var(--teal);color:#315d71}blockquote p{margin:4px 0!important}
+.table-wrap{overflow-x:auto;margin:18px 0 24px;border:1px solid var(--line);border-radius:8px}table{border-collapse:collapse;width:100%;font-size:13px;line-height:1.7}th,td{padding:12px 14px;vertical-align:top;text-align:left;border-bottom:1px solid var(--line);min-width:100px}th{background:#eaf1f7;color:#234867;font-weight:650}tr:last-child td{border-bottom:0}tbody tr:nth-child(even){background:#f8fafc}td a{word-break:break-word}
+code{font:12px/1.7 ui-monospace,SFMono-Regular,Consolas,monospace;background:#eef2f6;padding:2px 5px;border-radius:4px;overflow-wrap:anywhere}pre{background:#142c42;color:#e3f0f7;border-radius:8px;padding:20px;overflow:auto;line-height:1.8}pre code{padding:0;background:none;color:inherit;white-space:pre-wrap;word-break:break-word}
+.footer{margin-top:24px;font-size:12px;color:var(--muted);text-align:center}.skip{position:absolute;left:-9999px}.skip:focus{left:20px;top:10px;background:white;padding:10px;z-index:9}
+@media(min-width:1600px){.page{margin-right:auto;margin-left:calc(var(--nav) + (100vw - 1600px)/2)}}
+@media(max-width:1100px){:root{--nav:230px}.sidebar{padding:24px 16px}.page{padding:25px}article{padding:22px}.hero{padding:30px}.hero h1{font-size:29px}}
+@media(max-width:760px){.sidebar{position:relative;width:auto;padding:22px}.sidebar h2{font-size:18px;margin:8px 0}.sidebar .toc{max-height:190px;overflow:auto}.sidebar-foot{display:none}.page{margin:0;padding:16px}.hero{padding:25px}.hero h1{font-size:26px}.highlights{grid-template-columns:1fr;gap:8px}.highlight{padding:13px 18px}.highlight b{font-size:16px}article{padding:18px}article h2{font-size:21px}th,td{padding:10px;min-width:120px}.toolbar{font-size:11px}}
+@media print{@page{size:A4;margin:16mm 14mm}html{scroll-behavior:auto}body{background:white;font-size:10pt;line-height:1.65}.sidebar,.toolbar,.skip{display:none}.page{margin:0;padding:0;max-width:none}.hero{background:#eef5fa!important;color:#163f62;padding:22px;border:1px solid #cbdde9;box-shadow:none;border-radius:0}.hero p,.eyebrow{color:#315773}.hero h1{font-size:25pt}.badges span{border-color:#bccfdc;color:#315773}.highlights{gap:10px;margin:14px 0}.highlight{padding:12px}.highlight b{font-size:12pt}.highlight small{font-size:9pt}article{padding:0;border:0}article h2{font-size:17pt;break-after:avoid;padding-top:15px;margin-top:22px}article h3{font-size:12pt;break-after:avoid}.table-wrap{overflow:visible;border-radius:0}table{font-size:8.4pt}th,td{padding:7px;min-width:0}tr{break-inside:avoid}thead{display:table-header-group}pre,blockquote,.highlight{break-inside:avoid}a{color:#184f78}pre{color:#172b43;background:#f0f4f7}code{font-size:9pt}.footer{font-size:8pt}}
+
+article h2:target{color:#087f8c} .hero h1{font-size:32px} .table-wrap td{overflow-wrap:anywhere} @media print{pre{white-space:pre-wrap}.table-wrap{break-inside:auto}}
+
+.brand-logo{display:block;width:180px;max-width:100%;height:auto;margin:0 0 20px}.hero-brand{display:inline-block;background:transparent;padding:0;border-radius:0;margin-bottom:18px}.hero-brand img{display:block;width:220px;max-width:100%;height:auto}@media(max-width:760px){.brand-logo{width:160px;margin-bottom:14px}.hero-brand img{width:190px}}@media print{.hero{background:#123e68!important;color:#fff;print-color-adjust:exact;-webkit-print-color-adjust:exact}.hero p,.hero .eyebrow,.hero .badges span{color:#dfedf3}.hero-brand{background:transparent!important}.hero-brand img{width:180px}}
+</style>
+</head>
+<body>
+<a class="skip" href="#report">跳至正文</a>
+<aside class="sidebar">
+  <img class="brand-logo" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHhtbG5zOnhsaW5rPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5L3hsaW5rIiB2ZXJzaW9uPSIxLjAiIHg9IjAiIHk9IjAiIHdpZHRoPSIyNDAwIiBoZWlnaHQ9IjU1My4yMzk1OTE5NTE5NTg2IiB2aWV3Qm94PSI2Ni43NTA1MDE1NTYzOTY0OSAxMDEuMTk5MjkzMDYwMzAyNzQgMjA2LjQ5ODk5Njg4NzIwNzAzIDQ3LjYwMTQyNTMyMzQ4NjMyNSIgcHJlc2VydmVBc3BlY3RSYXRpbz0ieE1pZFlNaWQgbWVldCIgY29sb3ItaW50ZXJwb2xhdGlvbi1maWx0ZXJzPSJzUkdCIj48Zz48ZGVmcz48bGluZWFyR3JhZGllbnQgaWQ9IjkyIiB4MT0iMCUiIHkxPSIwJSIgeDI9IjEwMCUiIHkyPSIwJSI+PHN0b3Agb2Zmc2V0PSIwJSIgc3RvcC1jb2xvcj0iI2ZhNzFjZCI+PC9zdG9wPiA8c3RvcCBvZmZzZXQ9IjEwMCUiIHN0b3AtY29sb3I9IiM5YjU5YjYiPjwvc3RvcD48L2xpbmVhckdyYWRpZW50PjxsaW5lYXJHcmFkaWVudCBpZD0iOTMiIHgxPSIwJSIgeTE9IjAlIiB4Mj0iMTAwJSIgeTI9IjAlIj48c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjZjlkNDIzIj48L3N0b3A+IDxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iI2Y4MzYwMCI+PC9zdG9wPjwvbGluZWFyR3JhZGllbnQ+PGxpbmVhckdyYWRpZW50IGlkPSI5NCIgeDE9IjAlIiB5MT0iMCUiIHgyPSIxMDAlIiB5Mj0iMCUiPjxzdG9wIG9mZnNldD0iMCUiIHN0b3AtY29sb3I9IiMwMDY0ZDIiPjwvc3RvcD4gPHN0b3Agb2Zmc2V0PSIxMDAlIiBzdG9wLWNvbG9yPSIjMWNiMGY2Ij48L3N0b3A+PC9saW5lYXJHcmFkaWVudD48bGluZWFyR3JhZGllbnQgaWQ9Ijk1IiB4MT0iMCUiIHkxPSIwJSIgeDI9IjEwMCUiIHkyPSIwJSI+PHN0b3Agb2Zmc2V0PSIwJSIgc3RvcC1jb2xvcj0iI2YwMDk3OCI+PC9zdG9wPiA8c3RvcCBvZmZzZXQ9IjEwMCUiIHN0b3AtY29sb3I9IiMzZjUxYjEiPjwvc3RvcD48L2xpbmVhckdyYWRpZW50PjxsaW5lYXJHcmFkaWVudCBpZD0iOTYiIHgxPSIwJSIgeTE9IjAlIiB4Mj0iMTAwJSIgeTI9IjAlIj48c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjNzg3M2Y1Ij48L3N0b3A+IDxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iI2VjNzdhYiI+PC9zdG9wPjwvbGluZWFyR3JhZGllbnQ+PGxpbmVhckdyYWRpZW50IGlkPSI5NyIgeDE9IjAlIiB5MT0iMCUiIHgyPSIxMDAlIiB5Mj0iMCUiPjxzdG9wIG9mZnNldD0iMCUiIHN0b3AtY29sb3I9IiNmOWQ0MjMiPjwvc3RvcD4gPHN0b3Agb2Zmc2V0PSIxMDAlIiBzdG9wLWNvbG9yPSIjZTE0ZmFkIj48L3N0b3A+PC9saW5lYXJHcmFkaWVudD48bGluZWFyR3JhZGllbnQgaWQ9Ijk4IiB4MT0iMCUiIHkxPSIwJSIgeDI9IjEwMCUiIHkyPSIwJSI+PHN0b3Agb2Zmc2V0PSIwJSIgc3RvcC1jb2xvcj0iIzAwOWVmZCI+PC9zdG9wPiA8c3RvcCBvZmZzZXQ9IjEwMCUiIHN0b3AtY29sb3I9IiMyYWY1OTgiPjwvc3RvcD48L2xpbmVhckdyYWRpZW50PjxsaW5lYXJHcmFkaWVudCBpZD0iOTkiIHgxPSIwJSIgeTE9IjAlIiB4Mj0iMTAwJSIgeTI9IjAlIj48c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjZmZjYzAwIj48L3N0b3A+IDxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iIzAwYjE0MCI+PC9zdG9wPjwvbGluZWFyR3JhZGllbnQ+PGxpbmVhckdyYWRpZW50IGlkPSIxMDAiIHgxPSIwJSIgeTE9IjAlIiB4Mj0iMTAwJSIgeTI9IjAlIj48c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjZDUxMDA3Ij48L3N0b3A+IDxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iI2ZmODE3NyI+PC9zdG9wPjwvbGluZWFyR3JhZGllbnQ+PGxpbmVhckdyYWRpZW50IGlkPSIxMDIiIHgxPSIwJSIgeTE9IjAlIiB4Mj0iMTAwJSIgeTI9IjAlIj48c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjYTJiNmRmIj48L3N0b3A+IDxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iIzBjMzQ4MyI+PC9zdG9wPjwvbGluZWFyR3JhZGllbnQ+PGxpbmVhckdyYWRpZW50IGlkPSIxMDMiIHgxPSIwJSIgeTE9IjAlIiB4Mj0iMTAwJSIgeTI9IjAlIj48c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjN2FjNWQ4Ij48L3N0b3A+IDxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iI2VlYTJhMiI+PC9zdG9wPjwvbGluZWFyR3JhZGllbnQ+PGxpbmVhckdyYWRpZW50IGlkPSIxMDQiIHgxPSIwJSIgeTE9IjAlIiB4Mj0iMTAwJSIgeTI9IjAlIj48c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjMDBlY2JjIj48L3N0b3A+IDxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iIzAwN2FkZiI+PC9zdG9wPjwvbGluZWFyR3JhZGllbnQ+PGxpbmVhckdyYWRpZW50IGlkPSIxMDUiIHgxPSIwJSIgeTE9IjAlIiB4Mj0iMTAwJSIgeTI9IjAlIj48c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjYjg4NzQ2Ij48L3N0b3A+IDxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iI2ZkZjVhNiI+PC9zdG9wPjwvbGluZWFyR3JhZGllbnQ+PC9kZWZzPjxnIGZpbGw9IiNmZmZmZmYiIGNsYXNzPSJpY29uLXRleHQtd3JhcHBlciBpY29uLXN2Zy1ncm91cCBpY29uc3ZnIiB0cmFuc2Zvcm09InRyYW5zbGF0ZSg2OC43NzUwMDE1MjcwOTAyNCwxMDMuMjIzNzg3MzA3NzM5MjYpIj48ZyBjbGFzcz0iaWNvbnN2Zy1pbWFnZXN2ZyIgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMCwwKSI+PGc+PHJlY3QgZmlsbD0iI2ZmZmZmZiIgZmlsbC1vcGFjaXR5PSIwIiBzdHJva2Utd2lkdGg9IjIiIHg9IjAiIHk9IjAiIHdpZHRoPSI2MCIgaGVpZ2h0PSI0My41NTI0MjYyMzMwNzgwNjYiIGNsYXNzPSJpbWFnZS1yZWN0Ij48L3JlY3Q+IDxzdmcgeD0iMCIgeT0iMCIgd2lkdGg9IjYwIiBoZWlnaHQ9IjQzLjU1MjQyNjIzMzA3ODA2NiIgZmlsdGVyc2VjPSJjb2xvcnNiMTQ2MjY1MDgxNCIgY2xhc3M9ImltYWdlLXN2Zy1zdmcgcHJpbWFyeSIgc3R5bGU9Im92ZXJmbG93OiB2aXNpYmxlOyI+PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAuMDUwMjAwNDYyMzQxMzA4NTk0IC0wLjAxNjg5MDA0ODk4MDcxMjg5IDE4NC41MjE2ODI3MzkyNTc4IDEzMy45Mzk0MjI2MDc0MjE4OCI+PHBhdGggZD0iTTg4LjU5IDU0LjIxYzE4LjkyIDAgMzcuODUtLjMxIDU2Ljc1LjE4IDcuMjMuMTggMTEuNTctMS41MSAxMi42MS05LjE3LjMyLTIuMzMuNzctNS41OSAzLjctNiAyLjM5LS4zNiAzLjc3IDIuMjggNS4xMSA0IDUuMzkgNyAxMC41OSAxNC4xMiAxNiAyMS4xIDIuNzEgMy41MSAyLjQ3IDYuMDgtMS4zMyA4Ljc1LTEwLjcyIDcuNTMtMjEuMjYgMTUuMzMtMzEuOSAyMy0xLjU2IDEuMTItMy4yNyAzLjEyLTUuMzEgMS41NXMtLjU4LTMuNjktLjM0LTUuNjVjLjM0LTIuNzggMy45NC02LjctMS43LTcuODMtNC40Mi0uODktOC41MS0uMjgtMTAgNS4zNC0zIDExLjQ1LTYuNjMgMjIuNzQtOS41MiAzNC4yMi0xLjc5IDcuMTUtNS4xOSAxMC43NS0xMy4xNCAxMC4xNi04LjUzLS42My0xNy4xNC0uMDgtMjUuNzItLjE3cy05LjE5LTEtNi43Mi05LjQycTQuNzEtMTUuOTQgOS42NC0zMS44MmMyLjI1LTcuMjQgMS41MS04LjY0LTYuMTItOC41My0yNy4wOC4zNy0yMS4xNy00LjA3LTI4LjU1IDIxLTIuMiA3LjQ5LTQuNjIgMTQuOTItNi43NyAyMi40Mi0xLjE5IDQuMTctMy40MyA2LjQyLTggNi4zNS0xMC41OS0uMTUtMjEuMTktLjA5LTMxLjc4IDAtNC44NiAwLTYuMjktMi4zMi01LTYuNzdDNy4wNiAxMDQuNDMgMTMuNyA4MiAyMC4yMyA1OS40NmMxLjMyLTQuNTQgNC4yNi01LjM4IDguNTgtNS4zMyAxOS45Mi4xOCAzOS44NS4wOCA1OS43OC4wOHoiIGZpbGw9IiNmYWJlMDAiPjwvcGF0aD48cGF0aCBkPSJNMTIzLjE2IDQ1Ljg5aC0xNS44NWMtNC42LjA1LTYuNDItMS40OC00LjktNi40NCAzLjI1LTEwLjU3IDYuMTgtMjEuMjMgOS0zMS45MiAxLjMzLTUuMDcgMy44NS03LjcgOS40Ny03LjU0IDEwLjA2LjMgMjAuMTIuMjEgMzAuMTkuMDEgNS4zOC0uMDkgNy40NiAxLjc5IDUuNzQgNy4yNnEtNS4zMyAxNi44OC0xMC4zMyAzMy44N2MtMSAzLjU0LTMuMzMgNC43NS02LjcxIDQuNzMtNS41NC4wMS0xMS4wOC4wMy0xNi42MS4wM3pNNDcuODMgNDUuODloLTE2LjZjLTQuMDUgMC02LjE2LTEuMjYtNC43NC02UTMxLjUgMjMuMzEgMzYgNi41NkMzNy4yIDEuOTIgMzkuODYgMCA0NC42MSAwYzEwLjMxLjE1IDIwLjYzLjEyIDMwLjk0IDAgNC44NCAwIDcuMTkgMS41NyA1LjU2IDYuNzlxLTUuMzUgMTcuMjctMTAuNTIgMzQuNmMtMS4wOCAzLjYzLTMuNjMgNC40Ni02LjkxIDQuNDQtNS4yOC4wNS0xMC41Ny4wNy0xNS44NS4wNnoiIGZpbGw9IiNlYTU1MDQiPjwvcGF0aD48L3N2Zz48L3N2Zz4gPC9nPjwvZz4gPGcgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoNjgsNy4zMjYyMTI4ODI5OTU2MDU1KSI+PGcgZmlsbC1ydWxlPSIiIGNsYXNzPSJ0cC1uYW1lIGljb25zdmctbmFtZXN2ZyI+PGcgdHJhbnNmb3JtPSJzY2FsZSgxKSI+PGc+PHBhdGggZD0iTTUuNzcgMEwyLjk3IDAgMi45Ny0yMS45IDUuNzctMjEuOSA1Ljc3LTEyLjcxIDE1Ljk4LTEyLjcxIDE1Ljk4LTIxLjkgMTguNzItMjEuOSAxOC43MiAwIDE1Ljk4IDAgMTUuOTgtMTAuMzIgNS43Ny0xMC4zMiA1Ljc3IDBaTTIyLjcyIDdMMjIuNzIgN1EyMS42NyA3IDIwLjgzIDYuNjVMMjAuODMgNi42NSAyMS4zNSA0LjQ5UTIyLjA4IDQuNzUgMjIuNTggNC43NUwyMi41OCA0Ljc1UTI1LjA5IDQuNjkgMjYuMjUgMS4yNUwyNi4yNSAxLjI1IDI2LjYzIDAuMDMgMjAuMS0xNi4yMSAyMi45Ni0xNi4yMSAyNi4yNS03LjJRMjYuNTEtNi40MSAyNy4xMy00LjY5TDI3LjEzLTQuNjlRMjcuNjItMy4yOSAyNy44My0yLjY1TDI3LjgzLTIuNjUgMjcuOTctMi42NVEyOS4wNS02LjI3IDI5LjM0LTcuMkwyOS4zNC03LjIgMzIuMjMtMTYuMjEgMzQuODgtMTYuMjEgMjguNzYgMS4zNFEyNy4xNiA1LjgzIDI0LjQ0IDYuNzRMMjQuNDQgNi43NFEyMy42MyA3IDIyLjcyIDdaTTM4LjcxIDYuODJMMzYgNi44MiAzNi0xNi4yMSAzOC4yNS0xNi4yMSAzOC40OC0xNC4zNyAzOC41Ny0xNC4zN1E0MS4zMS0xNi41OSA0My43My0xNi42Mkw0My43My0xNi42MlE0Ny42NC0xNi42MiA0OS4yNy0xMy4xMkw0OS4yNy0xMy4xMlE1MC4yLTExLjE3IDUwLjItOC4zN0w1MC4yLTguMzdRNTAuMi0zLjczIDQ3LjQzLTEuMjhMNDcuNDMtMS4yOFE0NS41NyAwLjM4IDQzLjE1IDAuMzhMNDMuMTUgMC4zOFE0MC45MyAwLjM1IDM4LjY2LTEuNDlMMzguNjYtMS40OSAzOC43MSAxLjM0IDM4LjcxIDYuODJaTTQyLjcxLTEuOUw0Mi43MS0xLjlRNDUuMTktMS45IDQ2LjQ3LTQuMzJMNDYuNDctNC4zMlE0Ny4zNC01Ljk4IDQ3LjM0LTguMzRMNDcuMzQtOC4zNFE0Ny4yOS0xNC4zMiA0My4wOS0xNC4zNEw0My4wOS0xNC4zNFE0MS4xLTE0LjMyIDM4LjcxLTEyLjFMMzguNzEtMTIuMSAzOC43MS0zLjU5UTQwLjctMS45IDQyLjcxLTEuOVpNNTkuMDIgMC4zOEw1OS4wMiAwLjM4UTU1LjM3IDAuMzggNTMuMTktMi4yNUw1My4xOS0yLjI1UTUxLjI2LTQuNTggNTEuMjYtOC4xMUw1MS4yNi04LjExUTUxLjI2LTEyLjMgNTMuOTQtMTQuNzVMNTMuOTQtMTQuNzVRNTUuOTktMTYuNjIgNTguNTgtMTYuNjJMNTguNTgtMTYuNjJRNjIuNTItMTYuNjIgNjQuMTUtMTMuMzJMNjQuMTUtMTMuMzJRNjUuMDItMTEuNDkgNjUuMDItOS4wMUw2NS4wMi05LjAxUTY1LjAyLTguMjIgNjQuOTEtNy40Nkw2NC45MS03LjQ2IDUzLjk3LTcuNDZRNTQuMTUtNC4wOCA1Ni40OC0yLjU5TDU2LjQ4LTIuNTlRNTcuNzMtMS43OCA1OS4zNy0xLjc4TDU5LjM3LTEuNzhRNjEuNTUtMS44MSA2My40Mi0zLjA2TDYzLjQyLTMuMDYgNjQuNDEtMS4yOFE2MS44NSAwLjM4IDU5LjAyIDAuMzhaTTUzLjk0LTkuNDJMNTMuOTQtOS40MiA2Mi42My05LjQyUTYyLjYzLTEzLjQ3IDU5Ljg5LTE0LjI5TDU5Ljg5LTE0LjI5UTU5LjI4LTE0LjQ2IDU4LjYxLTE0LjQ2TDU4LjYxLTE0LjQ2UTU2LjMxLTE0LjQ2IDU0Ljk3LTEyLjQyTDU0Ljk3LTEyLjQyUTU0LjEyLTExLjE0IDUzLjk0LTkuNDJaTTY5LjczIDBMNjcuMDIgMCA2Ny4wMi0xNi4yMSA2OS4yNi0xNi4yMSA2OS41LTEzLjI3IDY5LjU4LTEzLjI3UTcxLjE5LTE2LjE1IDczLjU1LTE2LjU2TDczLjU1LTE2LjU2UTczLjg3LTE2LjYyIDc0LjE5LTE2LjYyTDc0LjE5LTE2LjYyUTc1LjI3LTE2LjYyIDc1LjkxLTE2LjI3TDc1LjkxLTE2LjI3IDc1LjQyLTEzLjg4UTc0LjcyLTE0LjE0IDczLjg0LTE0LjE0TDczLjg0LTE0LjE0UTcxLjg2LTE0LjE0IDcwLjQzLTExLjg0TDcwLjQzLTExLjg0UTcwLjA1LTExLjIgNjkuNzMtMTAuNDFMNjkuNzMtMTAuNDEgNjkuNzMgMFpNOTAuNDEgMEw3NS4zNCAwIDc1LjM0LTEuNjMgODYuODktMTkuNTYgNzYuMzktMTkuNTYgNzYuMzktMjEuOSA5MC4zLTIxLjkgOTAuMy0yMC4yNiA3OC43NS0yLjM2IDkwLjQxLTIuMzYgOTAuNDEgMFpNOTguODggMC4zOEw5OC44OCAwLjM4UTk1LjYxIDAuMzggOTMuNDYtMi4wNEw5My40Ni0yLjA0UTkxLjM2LTQuNDMgOTEuMzYtOC4xMUw5MS4zNi04LjExUTkxLjM2LTEyLjU0IDk0LjIyLTE0Ljk2TDk0LjIyLTE0Ljk2UTk2LjI2LTE2LjYyIDk4Ljg4LTE2LjYyTDk4Ljg4LTE2LjYyUTEwMi4xNy0xNi42MiAxMDQuMzMtMTQuMTdMMTA0LjMzLTE0LjE3UTEwNi40LTExLjc4IDEwNi40LTguMTFMMTA2LjQtOC4xMVExMDYuNC0zLjcgMTAzLjU1LTEuMzFMMTAzLjU1LTEuMzFRMTAxLjUzIDAuMzggOTguODggMC4zOFpNOTguODgtMS45TDk4Ljg4LTEuOVExMDEuNDUtMS45IDEwMi43Ni00LjMyTDEwMi43Ni00LjMyUTEwMy42LTUuOTIgMTAzLjYtOC4xMUwxMDMuNi04LjExUTEwMy42LTExLjY5IDEwMS41Ni0xMy40MUwxMDEuNTYtMTMuNDFRMTAwLjQtMTQuMzcgOTguODgtMTQuMzdMOTguODgtMTQuMzdROTYuMzQtMTQuMzcgOTUuMDYtMTEuOTJMOTUuMDYtMTEuOTJROTQuMjItMTAuMzIgOTQuMjItOC4xMUw5NC4yMi04LjExUTk0LjIyLTQuNCA5Ni4zMS0yLjc3TDk2LjMxLTIuNzdROTcuNDItMS45IDk4Ljg4LTEuOVpNMTExLjM3IDBMMTA4LjY2IDAgMTA4LjY2LTE2LjIxIDExMC45LTE2LjIxIDExMS4xNC0xMy44OCAxMTEuMjItMTMuODhRMTEzLjg4LTE2LjQ3IDExNi4zNi0xNi42MkwxMTYuMzYtMTYuNjJRMTE2LjUzLTE2LjYyIDExNi42OC0xNi42MkwxMTYuNjgtMTYuNjJRMTIxLjYtMTYuNTYgMTIxLjYzLTEwLjI2TDEyMS42My0xMC4yNiAxMjEuNjMgMCAxMTguODkgMCAxMTguODktOS45MVExMTguODktMTMuMzggMTE3LjA2LTE0LjA1TDExNy4wNi0xNC4wNVExMTYuNS0xNC4yMyAxMTUuODMtMTQuMjNMMTE1LjgzLTE0LjIzUTExNC4wOC0xNC4yMyAxMTIuMjctMTIuNjJMMTEyLjI3LTEyLjYyUTExMS44Ny0xMi4yNSAxMTEuMzctMTEuNzVMMTExLjM3LTExLjc1IDExMS4zNyAwWk0xMzEuNDEgMC4zOEwxMzEuNDEgMC4zOFExMjcuNzcgMC4zOCAxMjUuNTgtMi4yNUwxMjUuNTgtMi4yNVExMjMuNjYtNC41OCAxMjMuNjYtOC4xMUwxMjMuNjYtOC4xMVExMjMuNjYtMTIuMyAxMjYuMzQtMTQuNzVMMTI2LjM0LTE0Ljc1UTEyOC4zOC0xNi42MiAxMzAuOTgtMTYuNjJMMTMwLjk4LTE2LjYyUTEzNC45MS0xNi42MiAxMzYuNTQtMTMuMzJMMTM2LjU0LTEzLjMyUTEzNy40Mi0xMS40OSAxMzcuNDItOS4wMUwxMzcuNDItOS4wMVExMzcuNDItOC4yMiAxMzcuMy03LjQ2TDEzNy4zLTcuNDYgMTI2LjM3LTcuNDZRMTI2LjU0LTQuMDggMTI4Ljg4LTIuNTlMMTI4Ljg4LTIuNTlRMTMwLjEzLTEuNzggMTMxLjc2LTEuNzhMMTMxLjc2LTEuNzhRMTMzLjk1LTEuODEgMTM1LjgyLTMuMDZMMTM1LjgyLTMuMDYgMTM2LjgxLTEuMjhRMTM0LjI0IDAuMzggMTMxLjQxIDAuMzhaTTEyNi4zNC05LjQyTDEyNi4zNC05LjQyIDEzNS4wMy05LjQyUTEzNS4wMy0xMy40NyAxMzIuMjktMTQuMjlMMTMyLjI5LTE0LjI5UTEzMS42Ny0xNC40NiAxMzEtMTQuNDZMMTMxLTE0LjQ2UTEyOC43LTE0LjQ2IDEyNy4zNi0xMi40MkwxMjcuMzYtMTIuNDJRMTI2LjUxLTExLjE0IDEyNi4zNC05LjQyWiIgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoLTIuOTcwMDAwMDI4NjEwMjI5NSwgMjEuODk5OTk5NjE4NTMwMjczKSI+PC9wYXRoPjwvZz4gPC9nPjwvZz4gPC9nPjwvZz48ZGVmcyB2LWdyYT0ib2QiPjwvZGVmcz48L2c+PC9zdmc+" alt="HyperZone 品牌 Logo" width="2400" height="553">
+  <div class="brand">HYPERZONE</div>
+  <h2>FOP 智能配货与自动审核方案</h2>
+  <nav aria-label="文档目录"><div class="toc"><ul><li><a href="#workflow">01 · 业务与对象</a><ul class="toc-sub"><li><a href="#object-map">1.1 实现对象</a></li></ul></li><li><a href="#orders">02 · 履约订单</a><ul class="toc-sub"><li><a href="#order-fields">2.1 原订单扩展项</a></li><li><a href="#order-audit">2.2 自动审核</a></li><li><a href="#order-reservation-storage">2.3 预占关联与保存</a></li><li><a href="#order-field-options">2.4 字段选项</a></li></ul></li><li><a href="#demand">03 · 待配货列表</a><ul class="toc-sub"><li><a href="#pending-query">3.1 查询与展示</a></li><li><a href="#pending-operations">3.2 列表功能操作</a></li></ul></li><li><a href="#allocation">04 · 配货单与列表</a><ul class="toc-sub"><li><a href="#allocation-build">4.1 自动建单</a></li><li><a href="#allocation-query">4.2 配货单列表</a></li><li><a href="#allocation-operations">4.3 单据功能操作</a></li></ul></li><li><a href="#routing">05 · 自动计算</a><ul class="toc-sub"><li><a href="#calculation-events">5.1 触发与调度</a></li><li><a href="#routing-rules">5.2 选仓与排序</a></li><li><a href="#reservation-rules">5.3 增量预占</a></li></ul></li><li><a href="#control">06 · 业务场景</a><ul class="toc-sub"><li><a href="#scenario-orders">6.1 缺货与多包裹</a></li><li><a href="#warehouse-changes">6.2 人工仓库调整</a></li><li><a href="#scenario-supply">6.3 供货与异常</a></li></ul></li><li><a href="#platform">07 · 实现与切换</a><ul class="toc-sub"><li><a href="#technical-entities">7.1 实体与服务</a></li><li><a href="#consistency">7.2 一致性与防重</a></li><li><a href="#delivery">7.3 改造与切换</a></li></ul></li><li><a href="#warehouse-reservation-guide">08 · 选仓预占说明</a><ul class="toc-sub"><li><a href="#reservation-entry">8.1 从哪里操作</a></li><li><a href="#reservation-selection">8.2 自动选仓与回写</a></li><li><a href="#reservation-ready-example">8.3 场景：现货齐套</a></li><li><a href="#reservation-shortage-example">8.4 场景：缺货待补</a></li></ul></li><li><a href="#order-change-appendix">09 · 附录：订单变更</a><ul class="toc-sub"><li><a href="#change-entry">9.1 范围与入口</a></li><li><a href="#change-before-allocation">9.2 未生成配货单</a></li><li><a href="#change-after-allocation">9.3 已建单先拦截</a></li><li><a href="#change-reservation-reversal">9.4 锁库逆向规则</a></li><li><a href="#change-control">9.5 状态与恢复</a></li><li><a href="#change-writeback">9.6 生效与回写</a></li><li><a href="#change-customer-view">9.7 客户端展示</a></li><li><a href="#change-api-sync">9.8 接口与同步</a></li><li><a href="#change-examples">9.9 场景与改造</a></li></ul></li></ul></div></nav>
+  <div class="sidebar-foot">2026-11-06 V2.0</div>
+</aside>
+<main class="page">
+  <div class="toolbar"><span>HyperZone · FOP 智能配货与自动审核方案</span><button type="button" onclick="window.print()">打印 / 保存 PDF</button></div>
+  <header class="hero">
+    <div class="hero-brand"><img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHhtbG5zOnhsaW5rPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5L3hsaW5rIiB2ZXJzaW9uPSIxLjAiIHg9IjAiIHk9IjAiIHdpZHRoPSIyNDAwIiBoZWlnaHQ9IjU1My4yMzk1OTE5NTE5NTg2IiB2aWV3Qm94PSI2Ni43NTA1MDE1NTYzOTY0OSAxMDEuMTk5MjkzMDYwMzAyNzQgMjA2LjQ5ODk5Njg4NzIwNzAzIDQ3LjYwMTQyNTMyMzQ4NjMyNSIgcHJlc2VydmVBc3BlY3RSYXRpbz0ieE1pZFlNaWQgbWVldCIgY29sb3ItaW50ZXJwb2xhdGlvbi1maWx0ZXJzPSJzUkdCIj48Zz48ZGVmcz48bGluZWFyR3JhZGllbnQgaWQ9IjkyIiB4MT0iMCUiIHkxPSIwJSIgeDI9IjEwMCUiIHkyPSIwJSI+PHN0b3Agb2Zmc2V0PSIwJSIgc3RvcC1jb2xvcj0iI2ZhNzFjZCI+PC9zdG9wPiA8c3RvcCBvZmZzZXQ9IjEwMCUiIHN0b3AtY29sb3I9IiM5YjU5YjYiPjwvc3RvcD48L2xpbmVhckdyYWRpZW50PjxsaW5lYXJHcmFkaWVudCBpZD0iOTMiIHgxPSIwJSIgeTE9IjAlIiB4Mj0iMTAwJSIgeTI9IjAlIj48c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjZjlkNDIzIj48L3N0b3A+IDxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iI2Y4MzYwMCI+PC9zdG9wPjwvbGluZWFyR3JhZGllbnQ+PGxpbmVhckdyYWRpZW50IGlkPSI5NCIgeDE9IjAlIiB5MT0iMCUiIHgyPSIxMDAlIiB5Mj0iMCUiPjxzdG9wIG9mZnNldD0iMCUiIHN0b3AtY29sb3I9IiMwMDY0ZDIiPjwvc3RvcD4gPHN0b3Agb2Zmc2V0PSIxMDAlIiBzdG9wLWNvbG9yPSIjMWNiMGY2Ij48L3N0b3A+PC9saW5lYXJHcmFkaWVudD48bGluZWFyR3JhZGllbnQgaWQ9Ijk1IiB4MT0iMCUiIHkxPSIwJSIgeDI9IjEwMCUiIHkyPSIwJSI+PHN0b3Agb2Zmc2V0PSIwJSIgc3RvcC1jb2xvcj0iI2YwMDk3OCI+PC9zdG9wPiA8c3RvcCBvZmZzZXQ9IjEwMCUiIHN0b3AtY29sb3I9IiMzZjUxYjEiPjwvc3RvcD48L2xpbmVhckdyYWRpZW50PjxsaW5lYXJHcmFkaWVudCBpZD0iOTYiIHgxPSIwJSIgeTE9IjAlIiB4Mj0iMTAwJSIgeTI9IjAlIj48c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjNzg3M2Y1Ij48L3N0b3A+IDxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iI2VjNzdhYiI+PC9zdG9wPjwvbGluZWFyR3JhZGllbnQ+PGxpbmVhckdyYWRpZW50IGlkPSI5NyIgeDE9IjAlIiB5MT0iMCUiIHgyPSIxMDAlIiB5Mj0iMCUiPjxzdG9wIG9mZnNldD0iMCUiIHN0b3AtY29sb3I9IiNmOWQ0MjMiPjwvc3RvcD4gPHN0b3Agb2Zmc2V0PSIxMDAlIiBzdG9wLWNvbG9yPSIjZTE0ZmFkIj48L3N0b3A+PC9saW5lYXJHcmFkaWVudD48bGluZWFyR3JhZGllbnQgaWQ9Ijk4IiB4MT0iMCUiIHkxPSIwJSIgeDI9IjEwMCUiIHkyPSIwJSI+PHN0b3Agb2Zmc2V0PSIwJSIgc3RvcC1jb2xvcj0iIzAwOWVmZCI+PC9zdG9wPiA8c3RvcCBvZmZzZXQ9IjEwMCUiIHN0b3AtY29sb3I9IiMyYWY1OTgiPjwvc3RvcD48L2xpbmVhckdyYWRpZW50PjxsaW5lYXJHcmFkaWVudCBpZD0iOTkiIHgxPSIwJSIgeTE9IjAlIiB4Mj0iMTAwJSIgeTI9IjAlIj48c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjZmZjYzAwIj48L3N0b3A+IDxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iIzAwYjE0MCI+PC9zdG9wPjwvbGluZWFyR3JhZGllbnQ+PGxpbmVhckdyYWRpZW50IGlkPSIxMDAiIHgxPSIwJSIgeTE9IjAlIiB4Mj0iMTAwJSIgeTI9IjAlIj48c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjZDUxMDA3Ij48L3N0b3A+IDxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iI2ZmODE3NyI+PC9zdG9wPjwvbGluZWFyR3JhZGllbnQ+PGxpbmVhckdyYWRpZW50IGlkPSIxMDIiIHgxPSIwJSIgeTE9IjAlIiB4Mj0iMTAwJSIgeTI9IjAlIj48c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjYTJiNmRmIj48L3N0b3A+IDxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iIzBjMzQ4MyI+PC9zdG9wPjwvbGluZWFyR3JhZGllbnQ+PGxpbmVhckdyYWRpZW50IGlkPSIxMDMiIHgxPSIwJSIgeTE9IjAlIiB4Mj0iMTAwJSIgeTI9IjAlIj48c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjN2FjNWQ4Ij48L3N0b3A+IDxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iI2VlYTJhMiI+PC9zdG9wPjwvbGluZWFyR3JhZGllbnQ+PGxpbmVhckdyYWRpZW50IGlkPSIxMDQiIHgxPSIwJSIgeTE9IjAlIiB4Mj0iMTAwJSIgeTI9IjAlIj48c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjMDBlY2JjIj48L3N0b3A+IDxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iIzAwN2FkZiI+PC9zdG9wPjwvbGluZWFyR3JhZGllbnQ+PGxpbmVhckdyYWRpZW50IGlkPSIxMDUiIHgxPSIwJSIgeTE9IjAlIiB4Mj0iMTAwJSIgeTI9IjAlIj48c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjYjg4NzQ2Ij48L3N0b3A+IDxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iI2ZkZjVhNiI+PC9zdG9wPjwvbGluZWFyR3JhZGllbnQ+PC9kZWZzPjxnIGZpbGw9IiNmZmZmZmYiIGNsYXNzPSJpY29uLXRleHQtd3JhcHBlciBpY29uLXN2Zy1ncm91cCBpY29uc3ZnIiB0cmFuc2Zvcm09InRyYW5zbGF0ZSg2OC43NzUwMDE1MjcwOTAyNCwxMDMuMjIzNzg3MzA3NzM5MjYpIj48ZyBjbGFzcz0iaWNvbnN2Zy1pbWFnZXN2ZyIgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMCwwKSI+PGc+PHJlY3QgZmlsbD0iI2ZmZmZmZiIgZmlsbC1vcGFjaXR5PSIwIiBzdHJva2Utd2lkdGg9IjIiIHg9IjAiIHk9IjAiIHdpZHRoPSI2MCIgaGVpZ2h0PSI0My41NTI0MjYyMzMwNzgwNjYiIGNsYXNzPSJpbWFnZS1yZWN0Ij48L3JlY3Q+IDxzdmcgeD0iMCIgeT0iMCIgd2lkdGg9IjYwIiBoZWlnaHQ9IjQzLjU1MjQyNjIzMzA3ODA2NiIgZmlsdGVyc2VjPSJjb2xvcnNiMTQ2MjY1MDgxNCIgY2xhc3M9ImltYWdlLXN2Zy1zdmcgcHJpbWFyeSIgc3R5bGU9Im92ZXJmbG93OiB2aXNpYmxlOyI+PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAuMDUwMjAwNDYyMzQxMzA4NTk0IC0wLjAxNjg5MDA0ODk4MDcxMjg5IDE4NC41MjE2ODI3MzkyNTc4IDEzMy45Mzk0MjI2MDc0MjE4OCI+PHBhdGggZD0iTTg4LjU5IDU0LjIxYzE4LjkyIDAgMzcuODUtLjMxIDU2Ljc1LjE4IDcuMjMuMTggMTEuNTctMS41MSAxMi42MS05LjE3LjMyLTIuMzMuNzctNS41OSAzLjctNiAyLjM5LS4zNiAzLjc3IDIuMjggNS4xMSA0IDUuMzkgNyAxMC41OSAxNC4xMiAxNiAyMS4xIDIuNzEgMy41MSAyLjQ3IDYuMDgtMS4zMyA4Ljc1LTEwLjcyIDcuNTMtMjEuMjYgMTUuMzMtMzEuOSAyMy0xLjU2IDEuMTItMy4yNyAzLjEyLTUuMzEgMS41NXMtLjU4LTMuNjktLjM0LTUuNjVjLjM0LTIuNzggMy45NC02LjctMS43LTcuODMtNC40Mi0uODktOC41MS0uMjgtMTAgNS4zNC0zIDExLjQ1LTYuNjMgMjIuNzQtOS41MiAzNC4yMi0xLjc5IDcuMTUtNS4xOSAxMC43NS0xMy4xNCAxMC4xNi04LjUzLS42My0xNy4xNC0uMDgtMjUuNzItLjE3cy05LjE5LTEtNi43Mi05LjQycTQuNzEtMTUuOTQgOS42NC0zMS44MmMyLjI1LTcuMjQgMS41MS04LjY0LTYuMTItOC41My0yNy4wOC4zNy0yMS4xNy00LjA3LTI4LjU1IDIxLTIuMiA3LjQ5LTQuNjIgMTQuOTItNi43NyAyMi40Mi0xLjE5IDQuMTctMy40MyA2LjQyLTggNi4zNS0xMC41OS0uMTUtMjEuMTktLjA5LTMxLjc4IDAtNC44NiAwLTYuMjktMi4zMi01LTYuNzdDNy4wNiAxMDQuNDMgMTMuNyA4MiAyMC4yMyA1OS40NmMxLjMyLTQuNTQgNC4yNi01LjM4IDguNTgtNS4zMyAxOS45Mi4xOCAzOS44NS4wOCA1OS43OC4wOHoiIGZpbGw9IiNmYWJlMDAiPjwvcGF0aD48cGF0aCBkPSJNMTIzLjE2IDQ1Ljg5aC0xNS44NWMtNC42LjA1LTYuNDItMS40OC00LjktNi40NCAzLjI1LTEwLjU3IDYuMTgtMjEuMjMgOS0zMS45MiAxLjMzLTUuMDcgMy44NS03LjcgOS40Ny03LjU0IDEwLjA2LjMgMjAuMTIuMjEgMzAuMTkuMDEgNS4zOC0uMDkgNy40NiAxLjc5IDUuNzQgNy4yNnEtNS4zMyAxNi44OC0xMC4zMyAzMy44N2MtMSAzLjU0LTMuMzMgNC43NS02LjcxIDQuNzMtNS41NC4wMS0xMS4wOC4wMy0xNi42MS4wM3pNNDcuODMgNDUuODloLTE2LjZjLTQuMDUgMC02LjE2LTEuMjYtNC43NC02UTMxLjUgMjMuMzEgMzYgNi41NkMzNy4yIDEuOTIgMzkuODYgMCA0NC42MSAwYzEwLjMxLjE1IDIwLjYzLjEyIDMwLjk0IDAgNC44NCAwIDcuMTkgMS41NyA1LjU2IDYuNzlxLTUuMzUgMTcuMjctMTAuNTIgMzQuNmMtMS4wOCAzLjYzLTMuNjMgNC40Ni02LjkxIDQuNDQtNS4yOC4wNS0xMC41Ny4wNy0xNS44NS4wNnoiIGZpbGw9IiNlYTU1MDQiPjwvcGF0aD48L3N2Zz48L3N2Zz4gPC9nPjwvZz4gPGcgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoNjgsNy4zMjYyMTI4ODI5OTU2MDU1KSI+PGcgZmlsbC1ydWxlPSIiIGNsYXNzPSJ0cC1uYW1lIGljb25zdmctbmFtZXN2ZyI+PGcgdHJhbnNmb3JtPSJzY2FsZSgxKSI+PGc+PHBhdGggZD0iTTUuNzcgMEwyLjk3IDAgMi45Ny0yMS45IDUuNzctMjEuOSA1Ljc3LTEyLjcxIDE1Ljk4LTEyLjcxIDE1Ljk4LTIxLjkgMTguNzItMjEuOSAxOC43MiAwIDE1Ljk4IDAgMTUuOTgtMTAuMzIgNS43Ny0xMC4zMiA1Ljc3IDBaTTIyLjcyIDdMMjIuNzIgN1EyMS42NyA3IDIwLjgzIDYuNjVMMjAuODMgNi42NSAyMS4zNSA0LjQ5UTIyLjA4IDQuNzUgMjIuNTggNC43NUwyMi41OCA0Ljc1UTI1LjA5IDQuNjkgMjYuMjUgMS4yNUwyNi4yNSAxLjI1IDI2LjYzIDAuMDMgMjAuMS0xNi4yMSAyMi45Ni0xNi4yMSAyNi4yNS03LjJRMjYuNTEtNi40MSAyNy4xMy00LjY5TDI3LjEzLTQuNjlRMjcuNjItMy4yOSAyNy44My0yLjY1TDI3LjgzLTIuNjUgMjcuOTctMi42NVEyOS4wNS02LjI3IDI5LjM0LTcuMkwyOS4zNC03LjIgMzIuMjMtMTYuMjEgMzQuODgtMTYuMjEgMjguNzYgMS4zNFEyNy4xNiA1LjgzIDI0LjQ0IDYuNzRMMjQuNDQgNi43NFEyMy42MyA3IDIyLjcyIDdaTTM4LjcxIDYuODJMMzYgNi44MiAzNi0xNi4yMSAzOC4yNS0xNi4yMSAzOC40OC0xNC4zNyAzOC41Ny0xNC4zN1E0MS4zMS0xNi41OSA0My43My0xNi42Mkw0My43My0xNi42MlE0Ny42NC0xNi42MiA0OS4yNy0xMy4xMkw0OS4yNy0xMy4xMlE1MC4yLTExLjE3IDUwLjItOC4zN0w1MC4yLTguMzdRNTAuMi0zLjczIDQ3LjQzLTEuMjhMNDcuNDMtMS4yOFE0NS41NyAwLjM4IDQzLjE1IDAuMzhMNDMuMTUgMC4zOFE0MC45MyAwLjM1IDM4LjY2LTEuNDlMMzguNjYtMS40OSAzOC43MSAxLjM0IDM4LjcxIDYuODJaTTQyLjcxLTEuOUw0Mi43MS0xLjlRNDUuMTktMS45IDQ2LjQ3LTQuMzJMNDYuNDctNC4zMlE0Ny4zNC01Ljk4IDQ3LjM0LTguMzRMNDcuMzQtOC4zNFE0Ny4yOS0xNC4zMiA0My4wOS0xNC4zNEw0My4wOS0xNC4zNFE0MS4xLTE0LjMyIDM4LjcxLTEyLjFMMzguNzEtMTIuMSAzOC43MS0zLjU5UTQwLjctMS45IDQyLjcxLTEuOVpNNTkuMDIgMC4zOEw1OS4wMiAwLjM4UTU1LjM3IDAuMzggNTMuMTktMi4yNUw1My4xOS0yLjI1UTUxLjI2LTQuNTggNTEuMjYtOC4xMUw1MS4yNi04LjExUTUxLjI2LTEyLjMgNTMuOTQtMTQuNzVMNTMuOTQtMTQuNzVRNTUuOTktMTYuNjIgNTguNTgtMTYuNjJMNTguNTgtMTYuNjJRNjIuNTItMTYuNjIgNjQuMTUtMTMuMzJMNjQuMTUtMTMuMzJRNjUuMDItMTEuNDkgNjUuMDItOS4wMUw2NS4wMi05LjAxUTY1LjAyLTguMjIgNjQuOTEtNy40Nkw2NC45MS03LjQ2IDUzLjk3LTcuNDZRNTQuMTUtNC4wOCA1Ni40OC0yLjU5TDU2LjQ4LTIuNTlRNTcuNzMtMS43OCA1OS4zNy0xLjc4TDU5LjM3LTEuNzhRNjEuNTUtMS44MSA2My40Mi0zLjA2TDYzLjQyLTMuMDYgNjQuNDEtMS4yOFE2MS44NSAwLjM4IDU5LjAyIDAuMzhaTTUzLjk0LTkuNDJMNTMuOTQtOS40MiA2Mi42My05LjQyUTYyLjYzLTEzLjQ3IDU5Ljg5LTE0LjI5TDU5Ljg5LTE0LjI5UTU5LjI4LTE0LjQ2IDU4LjYxLTE0LjQ2TDU4LjYxLTE0LjQ2UTU2LjMxLTE0LjQ2IDU0Ljk3LTEyLjQyTDU0Ljk3LTEyLjQyUTU0LjEyLTExLjE0IDUzLjk0LTkuNDJaTTY5LjczIDBMNjcuMDIgMCA2Ny4wMi0xNi4yMSA2OS4yNi0xNi4yMSA2OS41LTEzLjI3IDY5LjU4LTEzLjI3UTcxLjE5LTE2LjE1IDczLjU1LTE2LjU2TDczLjU1LTE2LjU2UTczLjg3LTE2LjYyIDc0LjE5LTE2LjYyTDc0LjE5LTE2LjYyUTc1LjI3LTE2LjYyIDc1LjkxLTE2LjI3TDc1LjkxLTE2LjI3IDc1LjQyLTEzLjg4UTc0LjcyLTE0LjE0IDczLjg0LTE0LjE0TDczLjg0LTE0LjE0UTcxLjg2LTE0LjE0IDcwLjQzLTExLjg0TDcwLjQzLTExLjg0UTcwLjA1LTExLjIgNjkuNzMtMTAuNDFMNjkuNzMtMTAuNDEgNjkuNzMgMFpNOTAuNDEgMEw3NS4zNCAwIDc1LjM0LTEuNjMgODYuODktMTkuNTYgNzYuMzktMTkuNTYgNzYuMzktMjEuOSA5MC4zLTIxLjkgOTAuMy0yMC4yNiA3OC43NS0yLjM2IDkwLjQxLTIuMzYgOTAuNDEgMFpNOTguODggMC4zOEw5OC44OCAwLjM4UTk1LjYxIDAuMzggOTMuNDYtMi4wNEw5My40Ni0yLjA0UTkxLjM2LTQuNDMgOTEuMzYtOC4xMUw5MS4zNi04LjExUTkxLjM2LTEyLjU0IDk0LjIyLTE0Ljk2TDk0LjIyLTE0Ljk2UTk2LjI2LTE2LjYyIDk4Ljg4LTE2LjYyTDk4Ljg4LTE2LjYyUTEwMi4xNy0xNi42MiAxMDQuMzMtMTQuMTdMMTA0LjMzLTE0LjE3UTEwNi40LTExLjc4IDEwNi40LTguMTFMMTA2LjQtOC4xMVExMDYuNC0zLjcgMTAzLjU1LTEuMzFMMTAzLjU1LTEuMzFRMTAxLjUzIDAuMzggOTguODggMC4zOFpNOTguODgtMS45TDk4Ljg4LTEuOVExMDEuNDUtMS45IDEwMi43Ni00LjMyTDEwMi43Ni00LjMyUTEwMy42LTUuOTIgMTAzLjYtOC4xMUwxMDMuNi04LjExUTEwMy42LTExLjY5IDEwMS41Ni0xMy40MUwxMDEuNTYtMTMuNDFRMTAwLjQtMTQuMzcgOTguODgtMTQuMzdMOTguODgtMTQuMzdROTYuMzQtMTQuMzcgOTUuMDYtMTEuOTJMOTUuMDYtMTEuOTJROTQuMjItMTAuMzIgOTQuMjItOC4xMUw5NC4yMi04LjExUTk0LjIyLTQuNCA5Ni4zMS0yLjc3TDk2LjMxLTIuNzdROTcuNDItMS45IDk4Ljg4LTEuOVpNMTExLjM3IDBMMTA4LjY2IDAgMTA4LjY2LTE2LjIxIDExMC45LTE2LjIxIDExMS4xNC0xMy44OCAxMTEuMjItMTMuODhRMTEzLjg4LTE2LjQ3IDExNi4zNi0xNi42MkwxMTYuMzYtMTYuNjJRMTE2LjUzLTE2LjYyIDExNi42OC0xNi42MkwxMTYuNjgtMTYuNjJRMTIxLjYtMTYuNTYgMTIxLjYzLTEwLjI2TDEyMS42My0xMC4yNiAxMjEuNjMgMCAxMTguODkgMCAxMTguODktOS45MVExMTguODktMTMuMzggMTE3LjA2LTE0LjA1TDExNy4wNi0xNC4wNVExMTYuNS0xNC4yMyAxMTUuODMtMTQuMjNMMTE1LjgzLTE0LjIzUTExNC4wOC0xNC4yMyAxMTIuMjctMTIuNjJMMTEyLjI3LTEyLjYyUTExMS44Ny0xMi4yNSAxMTEuMzctMTEuNzVMMTExLjM3LTExLjc1IDExMS4zNyAwWk0xMzEuNDEgMC4zOEwxMzEuNDEgMC4zOFExMjcuNzcgMC4zOCAxMjUuNTgtMi4yNUwxMjUuNTgtMi4yNVExMjMuNjYtNC41OCAxMjMuNjYtOC4xMUwxMjMuNjYtOC4xMVExMjMuNjYtMTIuMyAxMjYuMzQtMTQuNzVMMTI2LjM0LTE0Ljc1UTEyOC4zOC0xNi42MiAxMzAuOTgtMTYuNjJMMTMwLjk4LTE2LjYyUTEzNC45MS0xNi42MiAxMzYuNTQtMTMuMzJMMTM2LjU0LTEzLjMyUTEzNy40Mi0xMS40OSAxMzcuNDItOS4wMUwxMzcuNDItOS4wMVExMzcuNDItOC4yMiAxMzcuMy03LjQ2TDEzNy4zLTcuNDYgMTI2LjM3LTcuNDZRMTI2LjU0LTQuMDggMTI4Ljg4LTIuNTlMMTI4Ljg4LTIuNTlRMTMwLjEzLTEuNzggMTMxLjc2LTEuNzhMMTMxLjc2LTEuNzhRMTMzLjk1LTEuODEgMTM1LjgyLTMuMDZMMTM1LjgyLTMuMDYgMTM2LjgxLTEuMjhRMTM0LjI0IDAuMzggMTMxLjQxIDAuMzhaTTEyNi4zNC05LjQyTDEyNi4zNC05LjQyIDEzNS4wMy05LjQyUTEzNS4wMy0xMy40NyAxMzIuMjktMTQuMjlMMTMyLjI5LTE0LjI5UTEzMS42Ny0xNC40NiAxMzEtMTQuNDZMMTMxLTE0LjQ2UTEyOC43LTE0LjQ2IDEyNy4zNi0xMi40MkwxMjcuMzYtMTIuNDJRMTI2LjUxLTExLjE0IDEyNi4zNC05LjQyWiIgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoLTIuOTcwMDAwMDI4NjEwMjI5NSwgMjEuODk5OTk5NjE4NTMwMjczKSI+PC9wYXRoPjwvZz4gPC9nPjwvZz4gPC9nPjwvZz48ZGVmcyB2LWdyYT0ib2QiPjwvZGVmcz48L2c+PC9zdmc+" alt="HyperZone 品牌 Logo" width="2400" height="553"></div>
+    <h1>FOP 智能配货与自动审核方案</h1>
+    <p>单据与列表 · 功能操作与校验 · 自动计算与业务场景</p>
+    <div class="badges"><span>2026-11-06 V2.0</span></div>
+  </header>
+  <article id="report" style="margin-top:28px"><style>
+#report p{text-indent:2em}#report h2:first-of-type{border-top:0;margin-top:0;padding-top:0}.flow-scroll{overflow-x:auto;margin:18px 0 8px}.flow-chart{display:block;width:100%;min-width:820px;height:auto}.rules{margin:12px 0;padding-left:24px}.rules li{padding:5px 0}.rules li>strong{white-space:nowrap}#report table th:first-child,#report table td:first-child{width:10em;min-width:10em;white-space:nowrap;overflow-wrap:normal;word-break:normal}#report table th:nth-child(2),#report table td:nth-child(2){min-width:20em;white-space:normal;word-break:normal;overflow-wrap:anywhere}.toc a{white-space:nowrap}.toc .toc-sub{margin:0 0 8px 12px;padding-left:8px;border-left:1px solid #365066}.toc .toc-sub a{font-size:12px;padding:5px 8px;margin:1px 0}#report .operations th:first-child,#report .operations td:first-child{width:9em;min-width:9em}#report .operations th:nth-child(2),#report .operations td:nth-child(2){min-width:12em}#report .operations th:nth-child(3),#report .operations td:nth-child(3){min-width:16em}#report .operations th:nth-child(4),#report .operations td:nth-child(4){min-width:12em}#report h3:target{color:#087f8c}@media print{.flow-scroll{overflow:visible;break-inside:avoid}.flow-chart{min-width:0;width:100%}}
+</style>
+
+<h2 id="workflow">01 · 业务与对象</h2>
+<p><strong>直接筛选待配货履约订单，发货仓库由真实可用库存计算确定；整单同仓齐套后生成正式配货单。</strong>保留 FOP 现有增量锁定、释放、防饥饿保护及人工干预机制。</p>
+<figure class="flow-scroll" aria-label="自动审核、筛选待配货订单、选仓预占、齐套建单及整单出库流程">
+<svg class="flow-chart" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1060 330" role="img" aria-labelledby="flow-title flow-desc">
+<title id="flow-title">订单直接筛选，齐套后建单</title><desc id="flow-desc">已支付且地址校验通过后自动审核，筛选符合条件的履约订单，系统基于真实可用库存自动选仓，已分配商品持续锁定，后续仅补缺口；同仓整单齐套后回写最终发货仓并生成正式配货单，再下发出库。未齐套订单继续纳入筛选，可用入库、库存释放或需求变更触发重算，定时任务每三分钟补算。</desc>
+<defs><marker id="flow-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10Z" fill="#477494"/></marker></defs>
+<g fill="none" stroke="#477494" stroke-width="2.2" marker-end="url(#flow-arrow)"><path d="M185 85H225"/><path d="M395 85H435"/><path d="M605 85H645"/><path d="M815 85H855"/><path d="M490 130V155H410V259H435"/><path d="M605 259H645"/><path d="M730 215V172H550V130"/></g>
+<g font-family="PingFang SC,Microsoft YaHei,sans-serif" text-anchor="middle">
+<g fill="#edf4fb" stroke="#c5d9e8"><rect x="15" y="40" width="170" height="90" rx="10"/><rect x="225" y="40" width="170" height="90" rx="10"/><rect x="435" y="40" width="170" height="90" rx="10"/></g>
+<g fill="#edf7f5" stroke="#b9ded7"><rect x="645" y="40" width="170" height="90" rx="10"/><rect x="855" y="40" width="190" height="90" rx="10"/></g>
+<g fill="#f8fafc" stroke="#ccdbe6"><rect x="435" y="215" width="170" height="90" rx="10"/><rect x="645" y="215" width="170" height="90" rx="10"/></g>
+<g fill="#133f69" font-size="20" font-weight="600"><text x="100" y="77">自动审核</text><text x="310" y="77">筛选待配货订单</text><text x="520" y="77">选仓预占</text><text x="730" y="77">齐套建单</text><text x="950" y="77">下发出库</text><text x="520" y="252">待供货</text><text x="730" y="252">自动重算</text></g>
+<g fill="#426277" font-size="16"><text x="100" y="106" font-size="14">已支付／地址校验通过</text><text x="310" y="106">履约订单及商品明细</text><text x="520" y="106">真实库存／持续锁定</text><text x="730" y="106">正式生成配货单</text><text x="950" y="106">执行冻结 · 整单同仓</text><text x="520" y="281">已锁保留／缺口补货</text><text x="730" y="281">入库／释放／定时</text><text x="377" y="186">缺货</text><text x="615" y="163">触发重算</text></g>
+</g></svg>
+</figure>
+<h3 id="object-map">1.1 实现对象</h3>
+<div class="table-wrap"><table><thead><tr><th scope="col">对象</th><th scope="col">建设范围</th></tr></thead><tbody>
+<tr><td>履约订单</td><td>复用 <code>hzkj_orders</code>，改造自动审核及配货结果回写。</td></tr>
+<tr><td>待配货列表</td><td>新增订单筛选视图，承载未建配货单时的查询与操作；不新建配货需求业务单据。</td></tr>
+<tr><td>配货单及列表</td><td>复用 <code>hzkj_alloc_bill</code>，改为齐套后建单，保留原权限、审核、放行及人工操作入口。</td></tr>
+<tr><td>配货预占记录</td><td>新增持久化技术实体，复用现有锁库、余额及日志服务，统一承载建单前后订单级占用。</td></tr>
+<tr><td>采购与调拨单</td><td>沿用现有业务单据，保留需求分摊、收货安排、实际入库及实物移仓关联。</td></tr>
+</tbody></table></div>
+
+<h2 id="orders">02 · 履约订单</h2>
+<h3 id="order-fields">2.1 原订单扩展项</h3>
+<p><strong>在原履约订单 <code>hzkj_orders</code> 上扩展配货管理字段，持久保存系统选仓预占结果。</strong>商品、数量及付款时间沿用原订单；待配货列表读取原订单及关联预占记录，不新建配货需求业务单据。</p>
+<div class="table-wrap"><table><thead><tr><th scope="col">改造字段</th><th scope="col">内容与更新规则</th></tr></thead><tbody>
+<tr><td>配货进度</td><td>固定五个选项：不适用、待计算、待齐套、已齐套、已生成配货单。编码及流转条件见 <a href="#order-field-options">2.4 字段选项</a>。</td></tr>
+<tr><td>建议仓</td><td>系统选仓后自动保存；已有实物预占时保持与预占仓一致，改仓按授权操作同步更新。</td></tr>
+<tr><td>计算结果</td><td>最近计算结果固定选项：未计算、成功、失败。另存最近计算时间、未齐套说明和失败原因；商品已锁数量、缺口由原订单需求与有效预占记录计算展示。</td></tr>
+<tr><td>自动配货暂停</td><td>布尔选项：否（false，默认）、是（true）。人工暂停或释放锁定后设为是；恢复时校验订单拦截及取消状态。</td></tr>
+<tr><td>订单版本</td><td>影响配货的商品、数量、客户归属、地址、运输要求及人工仓库调整发生有效变更时递增版本；计算及保存前复核，防止旧结果覆盖新订单。</td></tr>
+<tr><td>最终发货仓</td><td>复用原发货仓字段，齐套建单时将计算确定的仓库同步回写履约订单与配货单。原仓库仅作参考，不作为强制选仓条件。</td></tr>
+</tbody></table></div>
+<p>计算字段由后台服务更新；订单详情增加配货信息及预占明细查询，人工干预通过已有权限操作办理。商品、数量变更使用 <a href="#order-change-appendix">附录 9 订单变更</a> 的统一入口。</p>
+<h3 id="order-audit">2.2 自动审核</h3>
+<div class="table-wrap"><table><thead><tr><th scope="col">项目</th><th scope="col">实现要求</th></tr></thead><tbody>
+<tr><td>触发与校验</td><td>本单已完成支付，商品、价格、地址及运输服务校验通过，订单未取消、未关闭、未拦截。</td></tr>
+<tr><td>处理逻辑</td><td>调用原审核操作及校验插件，保留全款备货权益与费用处理。审核事务提交后，以订单内码触发配货计算，不直接创建配货单。</td></tr>
+<tr><td>失败与重试</td><td>保留已支付订单和校验原因，修正后重试；同一订单重复通知不重复审核。普通缺货进入待配货列表。</td></tr>
+<tr><td>业务场景</td><td>正常客户订单支付后自动流转；全款备货订单沿用已付产品款，本次仅支付运费、税费等费用。人工审核成功同样触发计算。</td></tr>
+</tbody></table></div>
+
+<h3 id="order-reservation-storage">2.3 预占关联与保存</h3>
+<div class="table-wrap"><table><thead><tr><th scope="col">改造事项</th><th scope="col">实现要求</th></tr></thead><tbody>
+<tr><td>关联预占实体</td><td>新增系统维护的持久化技术记录，以履约订单内码、原商品分录内码关联，保存 SKU、预占仓、客户库存归属、已锁数量、记录状态、订单版本及关联配货单。记录状态固定选项：有效（active）、已释放（released）、已结转（consumed）。</td></tr>
+<tr><td>保存时机</td><td>每次有效预占、补锁、释放、改仓或出库结转，同步保存预占记录、占用余额及订单计算结果；失败保留原有效记录并记录原因。</td></tr>
+<tr><td>列表读取</td><td>主行读取履约订单扩展字段；展开商品时关联有效预占记录，展示各仓已锁数量及缺口。库存占用以预占记录为准。</td></tr>
+<tr><td>建单复用</td><td>配货单生成后关联同一份订单级预占记录，后续释放及出库继续更新该记录，建单不重复锁库。</td></tr>
+</tbody></table></div>
+
+<h3 id="order-field-options">2.4 字段选项</h3>
+<div class="table-wrap"><table><thead><tr><th scope="col">配货进度</th><th scope="col">编码与赋值条件</th></tr></thead><tbody>
+<tr><td>不适用</td><td><code>not_applicable</code>：整笔订单无需实物配货，不参与配货计算。</td></tr>
+<tr><td>待计算</td><td><code>pending</code>：需要实物配货的订单创建时默认赋值；尚未完成当前版本的有效配货计算。未审核时不参与计算，审核成功且满足配货资格后自动计算。</td></tr>
+<tr><td>待齐套</td><td><code>waiting_stock</code>：当前版本已完成有效计算，同仓实物预占未满足整单需求；保留已有锁定并继续补算。</td></tr>
+<tr><td>已齐套</td><td><code>ready</code>：当前版本整单同仓有效预占齐套，正式配货单尚未生成成功；进入自动建单，建单失败时保留此进度并记录原因。</td></tr>
+<tr><td>已生成配货单</td><td><code>allocated</code>：整单所需配货单已成功生成并关联有效预占；多包裹须全部有效任务生成成功。</td></tr>
+</tbody></table></div>
+<p>配货进度必填，按订单是否需要实物配货初始化为“待计算”或“不适用”。使用全款备货的履约订单仍需实物配货，默认“待计算”。取消、关闭沿用原订单状态并停止自动处理；拦截或人工暂停保留配货进度，另显示暂停标签。变更或撤销后按当前订单版本、有效预占及有效配货单重新判定进度。</p>
+<p>最近计算结果编码：未计算 <code>not_run</code>（默认）、成功 <code>success</code>、失败 <code>failed</code>。正常缺货计算属于成功；计算失败保留原有效预占及最近已确认进度。预占记录只有“有效”计入当前占用；释放后记“已释放”，实际出库核销后记“已结转”，生成配货单时仍为“有效”。</p>
+
+<h2 id="demand">03 · 待配货列表</h2>
+<h3 id="pending-query">3.1 查询与展示</h3>
+<div class="table-wrap"><table><thead><tr><th scope="col">项目</th><th scope="col">实现要求</th></tr></thead><tbody>
+<tr><td>页面载体</td><td>“智能配货 → 待配货”，直接筛选原履约订单，读取其扩展字段及关联预占记录；动态表单定制标准列表模板，复用分页、过滤及单据联查。</td></tr>
+<tr><td>业务范围</td><td>全部历史有效、已审核、需实物履约、未取消或关闭且尚无有效配货单的订单；未审核的“待计算”订单及“不适用”订单不纳入。拦截或人工暂停订单保留原配货进度并显示“暂停”标签，不参与分配；未齐套订单持续纳入。</td></tr>
+<tr><td>列表字段</td><td>订单编号、客户、商品、客户付款时间、C 端付款时间、配货进度、建议仓、齐套情况、未齐套说明、业务员。展开查看 SKU 需求、已锁数量、缺口及关联供货。</td></tr>
+<tr><td>查询与导出</td><td>按部门、客户、进度、仓库及 SKU 筛选，默认 C 端付款时间倒序；查询、合计、导出共用账号数据权限。SKU 命中后展示履约订单整单商品。</td></tr>
+<tr><td>状态与场景</td><td>待配货列表的进度筛选固定为全部、待计算、待齐套、已齐套；暂停作为独立标签展示。建单成功后进度更新为已生成配货单，转入配货单列表。</td></tr>
+</tbody></table></div>
+<h3 id="pending-operations">3.2 列表功能操作</h3>
+<div class="table-wrap"><table class="operations"><thead><tr><th scope="col">功能操作</th><th scope="col">校验条件</th><th scope="col">实现逻辑</th><th scope="col">业务场景</th></tr></thead><tbody>
+<tr><td>重新计算</td><td>订单仍满足配货资格，未暂停。</td><td>调用统一计算服务，保留有效锁定并补缺口，结果同步刷新。</td><td>人工补算库存或供货变化。</td></tr>
+<tr><td>优先配货</td><td>有操作权限，订单有效且允许配货。</td><td>保留单选、批量优先分配；仅使用可分配库存，已有其他订单锁定不被抢占，未齐套仍保存新增占用。</td><td>人工优先跟进指定订单。</td></tr>
+<tr><td>释放锁定</td><td>有权限、尚未建单且存在可释放占用。</td><td>释放订单实物预占并暂停其自动占用，释放库存供其他订单重分配；不释放全款／押金备货权益。</td><td>人工让出库存或解除不再需要的占用。</td></tr>
+<tr><td>暂停／恢复</td><td>有权限，校验订单当前状态。</td><td>暂停时保留有效锁定并停止自动占用、建单；恢复时复核取消、拦截及配货资格，合格后重新入队。</td><td>业务暂缓；释放后由人工决定恢复时机。</td></tr>
+<tr><td>调整预占仓</td><td>尚未生成配货单、已有实物预占，有权限。</td><td>从待配货订单发起，调整该订单的建议仓及预占仓；执行 6.2 的共同校验与预占更新。</td><td>部分商品已锁定，人工决定更换配货仓。</td></tr>
+<tr><td>库存与联查</td><td>账号有相关数据查询权限。</td><td>查看相关 SKU 库存及预占，联查订单、采购、入库和计算日志。</td><td>定位缺货及供货进展。</td></tr>
+</tbody></table></div>
+
+<h2 id="allocation">04 · 配货单与列表</h2>
+<h3 id="allocation-build">4.1 自动建单</h3>
+<div class="table-wrap"><table><thead><tr><th scope="col">项目</th><th scope="col">实现要求</th></tr></thead><tbody>
+<tr><td>建单条件</td><td>订单最新版本仍符合配货资格，全部实物商品在同一仓库有效预占齐套，无取消、拦截、人工暂停及重复有效配货任务。</td></tr>
+<tr><td>处理逻辑</td><td>沿用订单到配货单转换关系，关联同一份预占并回写最终发货仓。建单不重复锁库，按原审核与放行规则进入执行。</td></tr>
+<tr><td>多包裹建单</td><td>可保留原按包裹建单结构，但以履约订单统一仓库与整单齐套校验；全部关联有效任务一致后才能放行。</td></tr>
+<tr><td>业务场景</td><td>单品现货直接齐套建单；多品缺货订单逐步锁定，最后一个缺口补齐后自动建单。</td></tr>
+</tbody></table></div>
+<h3 id="allocation-query">4.2 配货单列表</h3>
+<p>“智能配货 → 配货单列表”使用现有配货单列表，沿用原数据权限。保留配货单号、关联履约单、包裹、客户、发货仓、SKU、需求／锁定／缺口数量、单据与执行状态及下游单据；支持原筛选、查询、联查和导出；存量或人工释放后未齐套的配货单保留原状态及处理入口。</p>
+<h3 id="allocation-operations">4.3 单据功能操作</h3>
+<div class="table-wrap"><table class="operations"><thead><tr><th scope="col">功能操作</th><th scope="col">校验条件</th><th scope="col">实现逻辑</th><th scope="col">业务场景</th></tr></thead><tbody>
+<tr><td>原人工配货</td><td>沿用原状态校验；已齐套、已审核或作废单据不重复配货。</td><td>保留原单选、批量入口及逐单结果，调用同一增量锁库服务。</td><td>兼容历史未齐套配货单与人工处理。</td></tr>
+<tr><td>释放锁定</td><td>有权限、允许释放的未审核配货单；已审核或下发先按原流程回退、撤销。</td><td>共用订单预占释放服务，更新数量、齐套及执行状态，暂停来源订单自动占用；保留备货权益。</td><td>释放现有配货单实物占用。</td></tr>
+<tr><td>配货单改仓</td><td>已生成配货单，有权限；已审核或下发先回退、撤销。</td><td>从具体配货单发起，按关联履约订单整体调整仓库及预占，执行 6.2 共同规则。</td><td>人工修改已生成配货单的发货仓。</td></tr>
+<tr><td>审核与放行</td><td>整单同仓齐套，锁定有效，仓库及实际物流渠道完整，无取消或拦截。</td><td>复用原审核、通知及放行门禁；下发中或下游受理后冻结执行仓，结果不明先核实。</td><td>向仓库提交整单执行任务。</td></tr>
+<tr><td>出库结转</td><td>真实出库单据及来源匹配，占用可核销。</td><td>各出库入口统一校验和结转预占、余额，不重复扣减；保留原删除、作废和撤销的释放校验。</td><td>整单出库完成及异常回退。</td></tr>
+</tbody></table></div>
+
+<h2 id="routing">05 · 自动计算</h2>
+<h3 id="calculation-events">5.1 触发与调度</h3>
+<div class="table-wrap"><table><thead><tr><th scope="col">触发条件</th><th scope="col">计算范围与逻辑</th></tr></thead><tbody>
+<tr><td>履约订单审核</td><td>自动或人工审核事务提交后触发；读取本单及同库存竞争范围的合格订单，统一排序分配。</td></tr>
+<tr><td>可用库存变化</td><td>采购／调拨可用入库、预占释放等，重算相关 SKU、仓库及库存归属下的合格订单。</td></tr>
+<tr><td>订单变更</td><td>商品、数量、取消或拦截状态变更时，复核订单版本及受影响占用；RMA 建单同步触发关联履约订单拦截，恢复配货须先确认解除拦截并通过业务校验。</td></tr>
+<tr><td>定时补算</td><td>默认每 3 分钟，可配置；分批筛选待配货订单、重试失败任务，补齐遗漏事件。后台任务独立执行，不受页面打开、筛选及分页影响。</td></tr>
+<tr><td>已有单据补算</td><td>存量或人工释放后未齐套的未审核配货单，恢复自动配货后走原配货单增量重算通道；与未建单订单共用库存预算、排序及锁库服务，齐套时更新原单，不重复建单。</td></tr>
+<tr><td>暂停与防重</td><td>事件、人工补算及定时任务均校验最新状态、暂停标记及订单变更阻断；重复事件不重复预占、建单或下发。</td></tr>
+</tbody></table></div>
+<h3 id="routing-rules">5.2 选仓与排序</h3>
+<ol class="rules">
+<li><strong>锁库顺序：</strong>客户付款时间较早优先；客户付款时间相同时，按 C 端付款时间较早优先；两者均相同按稳定订单顺序。缺失时间列入核对；首次计算、补算及释放后重分配共用此顺序。</li>
+<li><strong>候选仓：</strong>校验客户库存归属、商品属性、收件国家、运输服务、报价费用及仓库作业条件。履约订单原仓库不作为强制选仓条件。</li>
+<li><strong>整单匹配：</strong>逐仓核对全部 SKU 与数量，保护客户专属库存并排除其他订单有效占用；多仓齐套时，依次按发货时效、物流成本、仓库优先级选择。</li>
+<li><strong>尚未齐套：</strong>结合现货、关联采购及到货计划确定建议仓，遵守已确认收货安排；实际可用入库后才参与预占。</li>
+</ol>
+<h3 id="reservation-rules">5.3 增量预占</h3>
+<p><strong>未齐套也逐品锁定；普通重算保留原仓及已有有效锁定，只补缺口。</strong>已锁商品不能被其他订单再次分配；未齐套不回滚本次已成功取得的占用。保留现有防饥饿保护，整单齐套判断不改变默认锁库排序，人工优先调整按权限留痕。</p>
+<p>加锁后复核订单版本、客户归属及真实可分配库存，保存逐品锁定、缺口与余额；预占限制可分配数量，实物库存由实际出库扣减。尚无实物预占、有效配货单和下游任务且未暂停时，可自动重新选建议仓；已有锁定后由人工调整。</p>
+
+<h2 id="control">06 · 业务场景</h2>
+<h3 id="scenario-orders">6.1 缺货与多包裹</h3>
+<div class="table-wrap"><table><thead><tr><th scope="col">业务场景</th><th scope="col">处理规则</th></tr></thead><tbody>
+<tr><td>多品交替缺货</td><td>订单需 A、B 两品，A 已锁而 B 缺货：持续保留 A，B 入库后补锁并整单建单。其他订单不能发走本单有效锁定的 A。</td></tr>
+<tr><td>多包裹同仓</td><td>一笔履约订单对应多张包裹配货单时，从任一配货单发起改仓，均按履约订单整体校验并调整全部有效关联配货单及预占；任一不满足条件则整笔不执行，不允许只改其中一张。</td></tr>
+</tbody></table></div>
+<h3 id="warehouse-changes">6.2 人工仓库调整</h3>
+<div class="table-wrap"><table><thead><tr><th scope="col">步骤／场景</th><th scope="col">共同校验与处理</th></tr></thead><tbody>
+<tr><td>操作入口</td><td>未建单但已有预占，从待配货订单发起“调整预占仓”；已建单，从具体配货单发起“配货单改仓”。由授权人员选择目标仓并填写原因，操作期间暂停自动计算。</td></tr>
+<tr><td>目标仓校验</td><td>校验客户归属、物流、供货安排及新仓可用量，确认能够承接整笔履约订单需要迁移的锁定数量；不得只修改仓库字段。</td></tr>
+<tr><td>预占同步更新</td><td>新仓锁定、原仓释放及关联订单／配货单仓库更新作为同一次业务变更，失败保留原状态。按新仓重新判断齐套，未建单者齐套后建单；已建单按原流程更新，重建时停用原单并保留关联。</td></tr>
+<tr><td>下发后改仓</td><td>先按原规则回退审核并撤销发运、打单、拣货等相关任务，确认成功后执行改仓；结果不明先核实。已出库走退货、补发流程。</td></tr>
+<tr><td>完成与留痕</td><td>不重复释放已转移预占；完成后恢复操作前的自动配货状态，记录前后仓库、数量、操作人及原因。</td></tr>
+<tr><td>实物移仓</td><td>商品需要从原仓运至新仓时通过调拨单处理，实际可用入库后配货；原仓库存不得直接视为新仓库存。</td></tr>
+</tbody></table></div>
+<h3 id="scenario-supply">6.3 供货与异常</h3>
+<div class="table-wrap"><table><thead><tr><th scope="col">业务场景</th><th scope="col">处理规则</th></tr></thead><tbody>
+<tr><td>全款备货</td><td>仅使用该客户有权使用的库存，已有锁定复用或转换；不足时补货或调拨，不自动转为普通采购计费。</td></tr>
+<tr><td>多单合并采购</td><td>按履约订单净缺口及供货分摊采购，不等待配货单。支持一单多品对应多张采购订单、合并采购对应多笔履约订单；1688 按供应商、收货地址等兼容条件拆并。</td></tr>
+<tr><td>计划仓与实仓</td><td>采购计划收货仓、实际入库仓、最终发货仓分别记录。采购在途只参与计划，送货安排变更走对应业务单据，多仓商品通过供货或调拨集中。</td></tr>
+<tr><td>人工释放后</td><td>暂停来源订单自动占用，本轮重分配排除本单；事件及每 3 分钟补算均遵守暂停标记。释放库存供其他合格订单分配，经授权恢复后本单重新参与。</td></tr>
+<tr><td>RMA 拦截</td><td>所有 RMA 建单成功即拦截关联履约订单，暂停自动分配、配货建单及放行，保留有效锁定；非拦截业务不创建 RMA。</td></tr>
+<tr><td>解除与取消</td><td>明确解除拦截后，复核订单及人工暂停状态，符合条件才恢复配货。订单取消按独立流程确认，取消及下游撤销确认后释放未执行预占。</td></tr>
+<tr><td>库存异常</td><td>盘点差异、冻结等真实库存变化沿用原反向校正与异常处理，阻断不满足条件的审核、放行；保留调整原因及日志。</td></tr>
+</tbody></table></div>
+
+<h2 id="platform">07 · 实现与切换</h2>
+<h3 id="technical-entities">7.1 实体与服务</h3>
+<div class="table-wrap"><table><thead><tr><th scope="col">技术载体</th><th scope="col">实现要求</th></tr></thead><tbody>
+<tr><td>订单与列表</td><td>按 <a href="#order-fields">2.1 原订单扩展项</a> 保存计算结果，按 <a href="#order-reservation-storage">2.3 预占关联与保存</a> 维护明细；资格依据原订单、有效配货单及暂停状态实时校验。待配货列表仅提供筛选视图。</td></tr>
+<tr><td>配货预占记录</td><td>采用基础资料实体模板实现系统维护的技术记录，关联订单、商品分录、仓库、客户库存归属、锁定数量、订单版本、配货单及必要库存维度。</td></tr>
+<tr><td>占用余额</td><td>复用 <code>hzkj_alloc_balance</code> 保存库存池汇总；订单级占用以预占记录为准，配货单明细关联同一记录，展示原锁定及缺口数量。</td></tr>
+<tr><td>统一服务</td><td>复用现有增量预占、防饥饿、人工优先、释放、余额与日志逻辑；订单入口和配货单入口共用校验、锁库、暂停及仓库调整服务。</td></tr>
+</tbody></table></div>
+<h3 id="consistency">7.2 一致性与防重</h3>
+<p>订单、库存维度加锁并复核版本；预占、余额、建单及有效关联保持事务一致，跨服务步骤使用可靠任务及补偿。订单变更在短事务内先设置阻断并校验执行阶段，等待仓库回执期间不持有数据库长事务；提交时重新核对版本及下游状态。同一订单只保留一套有效执行任务，建单前后共用预占，转换不新增重复锁定。</p>
+<p>释放、迁移、改仓、作废及出库共用占用口径；人工操作记录来源、操作人、原因、数量及时间。自动任务不得覆盖人工暂停或正在调整的结果。RMA 建单与关联履约订单拦截同步生效，配货建单及放行前复核拦截状态。</p>
+<h3 id="delivery">7.3 改造与切换</h3>
+<ol class="rules">
+<li><strong>审核与转换：</strong>取消审核后直接建配货单；最终仓库及实际物流渠道校验移至执行阶段，审核保留运输服务及费用约束。转换规则采用库存计算结果，取消原订单仓库的强制继承。</li>
+<li><strong>计算与操作：</strong>将原按配货单分配扩展为建单前按履约订单预占；统一两级付款排序、人工释放暂停、仓库调整及多包裹整体处理。</li>
+<li><strong>事件与页面：</strong>接入审核、入库、库存释放、RMA 拦截及订单变更事件与每 3 分钟补算；适配两个列表、原操作入口、采购关联及放行门禁。</li>
+<li><strong>历史迁移：</strong>已进入执行的单据保留原任务；未执行单据核对供货、下游及占用，保留锁定数量、防饥饿与人工干预状态。原占用和新记录一致后切换，避免重复计入余额。</li>
+</ol>
+
+<h2 id="warehouse-reservation-guide">08 · 选仓预占说明</h2>
+<h3 id="reservation-entry">8.1 从哪里操作</h3>
+<p><strong>选仓预占由后台配货服务自动执行，结果在“智能配货 → 待配货”列表展示。</strong>履约订单审核成功后，系统筛选订单、计算仓库并保存预占；未齐套订单由库存事件及每 3 分钟补算继续处理。</p>
+<div class="table-wrap"><table><thead><tr><th scope="col">入口</th><th scope="col">操作与结果</th></tr></thead><tbody>
+<tr><td>待配货列表</td><td>业务员或配货人员查询订单，查看建议仓、配货进度和缺口；展开商品明细，查看各 SKU 的预占仓、需求数量、已锁数量及关联采购。</td></tr>
+<tr><td>人工补算</td><td>选中订单点击“重新计算”，调用同一后台服务并刷新结果；需要优先处理时使用有权限的“优先配货”。具体校验沿用 <a href="#pending-operations">3.2 列表功能操作</a>。</td></tr>
+<tr><td>配货单列表</td><td>整单同仓齐套后自动生成配货单，订单进入“智能配货 → 配货单列表”，联查最终发货仓、有效预占及下游任务。</td></tr>
+</tbody></table></div>
+<h3 id="reservation-selection">8.2 自动选仓与回写</h3>
+<ol class="rules">
+<li><strong>读取订单与库存：</strong>取得订单全部 SKU、数量、客户归属和运输要求，读取各候选仓真实可分配库存及关联采购收货安排。</li>
+<li><strong>计算目标仓：</strong>首次选仓优先选择可整单齐套的仓库；多个仓库满足时按发货时效、物流成本、仓库优先级选择。均未齐套时，结合现货与供货计划确定建议仓，实际可用数量逐品锁定。</li>
+<li><strong>加锁并保存：</strong>按 <a href="#routing-rules">5.2 选仓与排序</a> 分配，在订单及库存锁内复核数量、版本和状态，保存本单预占及余额。竞争导致可用量不足时重新计算；后续补算保留已有有效锁定，仅补缺口。</li>
+</ol>
+<div class="table-wrap"><table><thead><tr><th scope="col">处理阶段</th><th scope="col">系统赋值与保存</th></tr></thead><tbody>
+<tr><td>选仓、尚未齐套</td><td>履约订单保存建议仓、配货进度、缺口及计算时间；预占记录保存原订单商品分录、实际预占仓、客户库存归属及已锁数量。</td></tr>
+<tr><td>整单齐套建单</td><td>将确定的最终发货仓同步回写履约订单与配货单，配货单关联已有预占记录，按原审核与放行规则进入执行。</td></tr>
+<tr><td>下发执行</td><td>冻结执行仓库；需调整时，从对应列表按 <a href="#warehouse-changes">6.2 人工仓库调整</a> 办理。</td></tr>
+</tbody></table></div>
+<h3 id="reservation-ready-example">8.3 场景：现货齐套</h3>
+<p>一笔订单需要 A 商品 2 件、B 商品 1 件。杭州仓可分配 A 5 件、B 0 件；深圳仓可分配 A 2 件、B 1 件，两仓均满足客户归属及运输条件。</p>
+<div class="table-wrap"><table><thead><tr><th scope="col">环节</th><th scope="col">系统处理与页面结果</th></tr></thead><tbody>
+<tr><td>审核后计算</td><td>订单自动进入计算；深圳仓满足整单需求，系统选定深圳仓并锁定 A 2 件、B 1 件。</td></tr>
+<tr><td>齐套建单</td><td>复核后生成配货单，履约订单与配货单最终发货仓均为深圳仓。</td></tr>
+<tr><td>业务人员查看</td><td>在配货单列表查看生成的配货单及锁定明细，按原流程审核、放行。</td></tr>
+</tbody></table></div>
+<h3 id="reservation-shortage-example">8.4 场景：缺货待补</h3>
+<p>另一笔订单同样需要 A 2 件、B 1 件。当前各候选仓均无法整单齐套；杭州仓可分配 A 5 件、B 0 件，关联采购确认 B 到杭州仓，系统确定杭州仓为建议仓。</p>
+<div class="table-wrap"><table><thead><tr><th scope="col">环节</th><th scope="col">系统处理与页面结果</th></tr></thead><tbody>
+<tr><td>首次计算</td><td>在杭州仓锁定 A 2 件。待配货列表显示“建议仓：杭州仓；待齐套”；展开显示 A 已锁 2 件，B 缺口 1 件。</td></tr>
+<tr><td>定时补算</td><td>B 尚无可用库存时，继续保留 A 的锁定和缺口，等待供货；业务人员可联查采购与入库进度。</td></tr>
+<tr><td>B 可用入库</td><td>库存事件触发计算，按分配顺序取得 B 1 件后补锁，整单齐套自动生成杭州仓配货单；事件遗漏由定时任务补算。</td></tr>
+<tr><td>需改为其他仓</td><td>已有杭州仓锁定时，普通重算保持原仓。授权人员从待配货列表发起“调整预占仓”，通过校验后同步更新锁定及建议仓。</td></tr>
+</tbody></table></div>
+
+<h2 id="order-change-appendix">09 · 附录：订单变更</h2>
+<h3 id="change-entry">9.1 范围与入口</h3>
+<p><strong>已生成配货单的商品或数量变更，必须先完成订单拦截、确认仓库停止执行，再回退配货单并调整锁库。</strong>以整笔履约订单为单位处理全部包裹；实际已交运的订单通过售后流程处理。</p>
+<div class="table-wrap"><table><thead><tr><th scope="col">事项</th><th scope="col">处理要求</th></tr></thead><tbody>
+<tr><td>操作入口</td><td>原履约订单列表及详情增加“订单变更”；待配货列表、配货单列表联查至同一入口。下推新增“订单变更单”，单据表单展示修改前后差异、预占、关联采购及下游执行状态，由授权人员提交。客户 AppStore 提交申请时关联同一业务单据。</td></tr>
+<tr><td>变更内容</td><td>商品、数量、收件地址、运输服务及相关费用；商品或数量变更按本附录处理，仓库调整同时遵守 6.2。内部备注独立修改留痕。</td></tr>
+<tr><td>业务载体</td><td>新增独立业务单据“订单变更单”，采用苍穹业务单据实体、单据表单及列表承载；一单对应一张履约订单，保存变更前后快照、订单版本、拦截回执、原新配货单及锁库差额。履约订单继续承载当前有效业务数据，不另建配货需求单。</td></tr>
+<tr><td>单据关联</td><td>同一履约订单同时只允许一张未结束的变更单；草稿亦占用该入口，后续申请先进入现有单处理。变更单记录来源及 RMA 关联，同一次变更共用一张单，不重复拦截、逆向或回写。</td></tr>
+<tr><td>拦截与 RMA</td><td>已建配货单的订单变更发起“订单拦截”，原因记录为“订单变更”；已有拦截时关联本次变更。退款、退货、补发由 RMA 承载，涉及本次订单商品或数量调整时关联同一张变更单；独立补发单不改写原订单已执行事实。所有 RMA 建单即拦截；非拦截业务不创建 RMA。</td></tr>
+</tbody></table></div>
+<h3 id="change-before-allocation">9.2 未生成配货单</h3>
+<p>提交变更时先设置本次变更暂停，阻止自动审核、预占及建单；保存前重新校验实际阶段，若期间已建配货单，转入 9.3 流程。</p>
+<div class="table-wrap"><table><thead><tr><th scope="col">订单情况</th><th scope="col">处理方式</th></tr></thead><tbody>
+<tr><td>尚无预占</td><td>按 9.6 完成内容、费用及必要的客户确认／补款校验，再保存新版本并解除本次暂停；未审核订单进入自动审核，已审核订单重新计算。</td></tr>
+<tr><td>已有部分预占</td><td>保留仍需使用的原仓锁定；满足 9.6 生效条件时，仅释放减少或被替换的部分并保存新版本，新增商品及数量作为缺口，恢复后自动补锁。</td></tr>
+<tr><td>已齐套待建单</td><td>暂停并撤销旧版本建单任务，按变更后的需求调整预占；复核新版本齐套情况后再建单。</td></tr>
+</tbody></table></div>
+<h3 id="change-after-allocation">9.3 已建单先拦截</h3>
+<p><strong>订单拦截 → 仓库确认 → 下游回退 → 配货单与锁库逆向 → 变更生效并回写原订单 → 解除本次拦截 → 重新配货。</strong></p>
+<ol class="rules">
+<li><strong>提交并拦截：</strong>保存变更申请及原版本快照，立即阻断自动配货、配货单审核、下发与出库放行；修改内容暂不覆盖正式订单。</li>
+<li><strong>确认停止执行：</strong>核查所有包裹及下游任务。未下发订单由系统确认无执行任务；已下发订单取得仓库／物流明确拦截回执。全部包裹确认停止后才进入变更；拦截请求成功不等于仓库拦截成功，任一包裹超时、结果不明或拦截失败时整单保持阻断。</li>
+<li><strong>回退下游：</strong>撤销关联拣货、打包、面单及发货任务；已拣货实物由仓库确认归位后才能释放对应锁定。系统已记账出库但尚未实际交运时，先按原业务单据回退库存与占用，再进入变更；实际已交运不修改原执行事实。</li>
+<li><strong>逆向原配货单：</strong>按下游到上游顺序完成回退，已审核配货单先反审核；整单全部关联配货单作废留痕，进入专用变更逆向服务，保留可复用预占并释放差额。</li>
+<li><strong>保存新版本：</strong>重新校验商品、数量、地址、运输服务及费用，完成必要的客户确认与补款后，统一提交原履约订单新版本、原配货单失效、预占差额、余额及变更生效标记。旧订单商品分录保留追溯关系；新 SKU 建立新分录关联。</li>
+<li><strong>恢复并重配：</strong>确认新版本有效、差额款处理完成、下游回退完成后，由授权操作解除本次变更拦截。其他 RMA 拦截及人工暂停继续有效；具备资格后自动重算，齐套生成新配货单，缺货进入待配货列表。</li>
+</ol>
+<h3 id="change-reservation-reversal">9.4 锁库逆向规则</h3>
+<div class="table-wrap"><table><thead><tr><th scope="col">变更情况</th><th scope="col">库存与单据处理</th></tr></thead><tbody>
+<tr><td>商品数量未变</td><td>SKU、仓库、客户归属仍匹配时保留原有效锁定，关联新订单版本；原配货单失效不得触发这部分库存全量释放。</td></tr>
+<tr><td>减少或删除</td><td>保留数量取原有效锁定与新需求数量的较小值，释放多余数量；删除商品释放该商品全部可释放占用。释放部分与保留部分分别留痕。</td></tr>
+<tr><td>增加或换品</td><td>增加数量形成新缺口；换品释放旧 SKU，保留未变化商品，新增 SKU 在恢复配货后按原排序取得库存。</td></tr>
+<tr><td>换仓或归属变更</td><td>旧库存不直接改挂新仓或新客户；按客户权益及目标仓可用量重新校验，仓库调整按 6.2 办理。</td></tr>
+<tr><td>账实与防重</td><td>单纯释放预占只增加可分配数量，不增加实物库存；出库回退由原库存单据恢复。以变更编号、订单版本及分录标识防重，禁止通用作废释放与变更差额释放重复执行。</td></tr>
+<tr><td>采购与备货</td><td>按本履约订单采购分摊处理供货差额，已执行采购通过取消采购或采购退货办理；全款备货权益与实物预占分别校验，实物释放不自行注销客户备货权益。</td></tr>
+</tbody></table></div>
+<h3 id="change-control">9.5 状态与恢复</h3>
+<div class="table-wrap"><table><thead><tr><th scope="col">变更状态</th><th scope="col">编码与条件</th></tr></thead><tbody>
+<tr><td>草稿</td><td><code>draft</code>：保存申请内容，尚未提交；不回写原订单、不暂停自动执行。提交时重新校验订单版本及实际阶段。</td></tr>
+<tr><td>待拦截</td><td><code>awaiting_intercept</code>：已建配货单，已发起拦截，等待整单停止执行确认。</td></tr>
+<tr><td>待变更</td><td><code>ready_to_change</code>：未建单已暂停，或已建单且拦截确认成功，等待校验及逆向处理。</td></tr>
+<tr><td>变更中</td><td><code>applying</code>：正在回退原任务、调整锁库并保存订单新版本。</td></tr>
+<tr><td>待恢复</td><td><code>awaiting_resume</code>：新版本已生效，等待恢复执行确认或解除本次拦截／暂停。</td></tr>
+<tr><td>已完成</td><td><code>completed</code>：本次变更完成并解除自身阻断，订单按最新资格继续处理；不以重新齐套作为完成条件。</td></tr>
+<tr><td>已撤回</td><td><code>withdrawn</code>：新版本尚未生效，撤回申请并完成原任务、预占及执行资格核对后关闭。</td></tr>
+<tr><td>处理失败</td><td><code>failed</code>：拦截、逆向或保存失败，记录失败步骤并保持阻断；重试先核对实际进度，成功步骤不重复执行。</td></tr>
+</tbody></table></div>
+<p>变更状态独立于配货进度。旧配货单失效、新版本生效后置“待计算”，恢复后按实际结果更新为“待齐套、已齐套、已生成配货单”；无需实物配货时为“不适用”。原订单新增当前变更编号及变更状态，变更单保存各阻断来源，禁止解除本次变更时一并清除其他 RMA 或人工暂停。</p>
+<p>需要客户确认或补款时，完成前保留原有效版本并保持阻断；退款走 RMA 及收款调整流程，原支付记录保留。订单新版本生效前保存失败，回滚本次数据库变更；已经确认撤销的外部任务不自动恢复。新版本已生效后恢复失败，保留“待恢复”并重试；撤回已产生下游回退的申请时，先核实或重建原有效任务，再允许恢复执行。</p>
+<h3 id="change-writeback">9.6 生效与回写</h3>
+<p><strong>订单变更单保存申请与处理过程，原履约订单保存当前有效版本。提交申请不覆盖原单，变更正式生效时统一回写。</strong></p>
+<div class="table-wrap"><table><thead><tr><th scope="col">事项</th><th scope="col">实现要求</th></tr></thead><tbody>
+<tr><td>生效条件</td><td>完成本次所需拦截确认、下游回退、预占调整校验及费用核算；需要客户确认或补款时须先完成。提交前再次校验订单版本、全部包裹执行状态及变更单状态。</td></tr>
+<tr><td>回写内容</td><td>回写批准的商品、数量、收件地址、运输服务及核算后的产品金额、运费、优惠、税费、订单总额；未申请变更的字段保持不变。最终发货仓由后续选仓规则确定，不由变更申请直接指定。</td></tr>
+<tr><td>身份与追溯</td><td>保持原履约订单 ID、订单编号及来源订单关联，递增订单版本；保留变更前后快照、原新商品分录映射、操作人和生效时间。历史配货、出库及支付事实不得被新值覆盖。</td></tr>
+<tr><td>一致性提交</td><td>原订单新版本、原配货单失效、预占差额与余额、变更单生效标记在受控服务内一致提交；外部仓库回退须先取得回执，不跨等待过程持有数据库事务。保存失败不发布新版本。</td></tr>
+<tr><td>生效与恢复</td><td>回写成功后可展示新版本，但须待恢复条件满足才能重新配货；其他 RMA 拦截及人工暂停独立保留。新版本已生效后不能按“撤回”恢复旧数据，需另行受控变更。</td></tr>
+<tr><td>金额与凭证</td><td>新订单金额、原支付、补款、实际退款分别保存和展示。补款关联本次变更；退款由 RMA 及收款调整单执行，不通过改订单金额推定资金已退回。FOP 变更不直接覆盖 Shopify 原始订单。</td></tr>
+</tbody></table></div>
+<h3 id="change-customer-view">9.7 客户端展示</h3>
+<p>AppStore 为客户使用系统。订单列表及详情始终读取履约订单当前有效版本；变更申请单独展示，不将申请商品或金额混入正式订单。</p>
+<div class="table-wrap"><table><thead><tr><th scope="col">处理阶段</th><th scope="col">AppStore 展示与操作</th></tr></thead><tbody>
+<tr><td>草稿</td><td>订单主信息保持当前有效版本；申请页可编辑草稿，明确尚未提交，不显示已拦截或已暂停。</td></tr>
+<tr><td>已提交、处理中</td><td>主信息保留原有效商品、数量、金额及地址，增加“变更处理中”提示；变更详情展示申请内容及前后差异。</td></tr>
+<tr><td>待确认或补款</td><td>保留原有效版本；展示已核算的变更前后差异、补款金额与确认／支付入口。确认结果及补款记录关联变更单，重复回调不得重复生效。</td></tr>
+<tr><td>变更已生效</td><td>主信息展示回写后的新版本，变更历史保留。仍有拦截时显示“暂缓发货”；已恢复但缺货时显示实际等待状态，不因变更生效显示已发货。</td></tr>
+<tr><td>失败或已撤回</td><td>未生效时保留原有效版本并展示处理结果；已生效但恢复失败时保留新版本并显示“暂缓发货”。撤回不代表原仓库任务已自动恢复。</td></tr>
+<tr><td>金额与物流</td><td>分别展示当前订单金额、已支付、待补款、退款进度与实退金额。失效的配货单及运单归入历史，不作为当前有效发货信息。</td></tr>
+</tbody></table></div>
+<h3 id="change-api-sync">9.8 接口与同步</h3>
+<div class="table-wrap"><table><thead><tr><th scope="col">改造项</th><th scope="col">实现要求</th></tr></thead><tbody>
+<tr><td>统一查询</td><td>订单列表与详情返回当前有效订单版本、变更单编号、变更状态、生效时间、恢复阻断原因及客户可执行操作。申请前后差异通过变更详情查询；客户仅可访问自身订单及关联变更单。</td></tr>
+<tr><td>受控提交</td><td>AppStore 提交变更申请，不直接修改已锁定履约订单；后台校验客户身份、订单归属、最新版本及未结束变更单。版本冲突时重新加载确认，禁止覆盖他人已生效变更。</td></tr>
+<tr><td>一致刷新</td><td>生效事务提交后发布变更通知并失效相关缓存；AppStore 刷新列表、详情及金额摘要，按订单版本整份更新。旧版本响应不覆盖新版本，禁止拼接新商品与旧金额；通知失败可重试，并由重新查询取得最新数据。</td></tr>
+<tr><td>现有接口</td><td>现有 queryOrder 从履约订单返回商品、地址及金额信息；updateSalOutOrder 对金额已锁定订单限制修改。新增变更申请、详情、客户确认及受控生效能力，保留原接口限制，不直接放开商品编辑。</td></tr>
+<tr><td>状态与权限</td><td>内部八种变更状态保持统一；客户待确认、待补款提示由独立确认状态及实际结算记录生成。客户接口不暴露内部采购成本、锁库明细或其他客户数据；返回允许操作仍须由服务端执行时再次校验。</td></tr>
+</tbody></table></div>
+<h3 id="change-examples">9.9 场景与改造</h3>
+<div class="table-wrap"><table><thead><tr><th scope="col">场景</th><th scope="col">处理结果</th></tr></thead><tbody>
+<tr><td>未建单减量</td><td>原需 A 2 件、B 1 件，已锁 A 2 件；改为 A 1 件、B 1 件。保留 A 1 件、释放 A 1 件，新版本恢复后继续等待 B，仍为待齐套。</td></tr>
+<tr><td>已建单换品</td><td>原单 A 2 件、B 1 件已锁定齐套，改为 A 2 件、C 1 件。先拦截并确认仓库停止执行，回退原配货单；保留 A 2 件、释放 B 1 件。变更恢复后计算 C，缺货等待补齐，齐套生成新配货单并关联订单变更单。</td></tr>
+<tr><td>仓库已拣货</td><td>B 已拣出但未交运，先由仓库撤销拣货并确认归位，再释放 B 预占；收到停止执行回执前不得改订单商品、释放占用或下发新任务。</td></tr>
+<tr><td>开发改造</td><td>新增订单变更单及列表，扩展原订单变更入口、版本与拦截回执；增加整单逆向、差额锁库、受控回写及客户端同步服务。原反审核／作废门禁适配已撤销失效的下游记录并保留追溯，建单、审核、下发及出库各入口统一校验变更阻断和订单版本。</td></tr>
+</tbody></table></div>
+</article>
+  <footer class="footer">HyperZone · FOP 智能配货与自动审核方案</footer>
+</main>
+</body>
+</html>

@@ -1,0 +1,16 @@
+[
+ {"label":"订单标识","local":"source_id · order_number","source":"hzkj_orders.id · billno","display":"id · orderNumber","state":"实际落库并展示"},
+ {"label":"原生状态","local":"raw_bill_status · raw_order_status · raw_payment_status · raw_delivery_status","source":"billstatus · hzkj_orderstatus · hzkj_receipt_status · hzkj_delivery_status","display":"reviewStatus · cancelled · paymentStatus · sourceOutboundStatus","state":"已知枚举展示，未知保留；不推定 Shopify 履约或配货齐套"},
+ {"label":"客户与店铺","local":"customer_id · display.customerName · display.storeName","source":"hzkj_customer · hzkj_shop","display":"customerId · customerName · storeName","state":"实际落库并展示；空引用留空"},
+ {"label":"商品明细","local":"display.items · total_quantity","source":"hzkj_orders_billentry（hzkj_local_sku · hzkj_qty · hzkj_picture）","display":"items（sku/name/variant/imageUrl/quantity）","state":"明细原样保存；数量缺失不补零，SKU 缺失不生成虚拟商品"},
+ {"label":"产品金额","local":"product_amount · display.amountBreakdown.productAmount","source":"hzkj_order_amount","display":"amountBreakdown.productAmount","state":"已有值写入；结算币种未知时不标美元或本位币"},
+ {"label":"总额与币种","local":"total_amount · currency_code · display.amount · display.currency","source":"hzkj_total_amount · hzkj_settlecurrency.number","display":"amount · currency","state":"旧响应未提供，NULL／—；不以产品金额或 hzkj_currency 替代"},
+ {"label":"金额明细","local":"display.amountBreakdown.shippingFee/taxAmount/discountAmount","source":"hzkj_fre_quo_amount · hzkj_fixed_tax_fee · hzkj_discount_cost","display":"amountBreakdown","state":"本轮未提供，NULL／—"},
+ {"label":"业务归属","local":"owner_employee_id · display.owner；organization_employees/nodes","source":"hzkj_operator.id（业务员 masterId）","display":"owner · department","state":"采集归属入库；展示部门取本地已核实目录，不用认证用户ID代替业务员"},
+ {"label":"仓库与国家","local":"warehouse_code · country_code · display.warehouse","source":"hzkj_dst_warehouse · hzkj_country.twocountrycode","display":"warehouseCode · shippingCountryCode · warehouse","state":"已有值入库，仓库代码使用明确配置映射；未知留空"},
+ {"label":"收件信息","local":"display.shippingRecipient","source":"hzkj_customer_first_name/last_name · phone · email · state · city · post_code · address1/address2（hzkj_前缀）","display":"shippingRecipient","state":"原响应已有值入库，缺失子字段留空"},
+ {"label":"事件时间","local":"created_at · paid_at · consumer_paid_at · display.reviewedAt","source":"createtime · hzkj_receipt_date · hzkj_datetimefield · auditdate","display":"createdAt · paidAt/consumerPaidAt兼容别名 · sourceOrderPaidAt · reviewedAt","state":"原时区保留；客户付款与 C 端付款独立；缺失不以创建时间补充"},
+ {"label":"物流渠道","local":"display.customLogisticsChannelName","source":"hzkj_customer_channel.name","display":"customLogisticsChannelName","state":"已有自定义渠道可展示；实际渠道、号码及包裹关系未接入留空"},
+ {"label":"下游业务","local":"display.fulfillmentProgress · dispatchDocuments · allocationDocument · procurementProgress","source":"配货／发运／采购／出库实际关联事实","display":"进度与关联单据","state":"未采集，unknown/null；未完成且无法归类订单归异常待核查"},
+ {"label":"数据质量","local":"display.dataQuality · raw；hz_fop_collected_batches.source_as_of/metadata","source":"原响应＋本次采集校验","display":"采集时间 · 缺失字段 · 待核查原因 · readOnly","state":"只读核查，完整快照证明未建立；所有自动 FOP 调用暂停"}
+]

@@ -1,6 +1,7 @@
 <script setup lang="ts">
+import { isUncollectedPage } from '@/utils/workbench-data'
 import { useWorkbenchDepartment } from '@/composables/useWorkbenchDepartment'
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ChevronDown, ChevronRight, RefreshCw, Search } from 'lucide-vue-next'
@@ -18,18 +19,22 @@ import { purchaseCurrentStage } from '@/utils/purchase-current-stage'
 import { fopAccessError } from '@/api/fop-access'
 import { fopExportError } from '@/api/fop-order-export'
 import { captureSession, isCurrentSession, onSessionReset } from '@/utils/session'
-const { defaultDepartmentLabel } = useWorkbenchDepartment(computed(() => Object.fromEntries((result.value?.departments ?? []).map(d => [d.id, d.name]))))
+const { defaultDepartmentLabel, departmentOptions, defaultDepartmentValue } = useWorkbenchDepartment(computed(() => Object.fromEntries((result.value?.departments ?? []).map(d => [d.id, d.name]))))
 const emit = defineEmits<{ 'filter-labels': [rows: { id: string; name: string }[]] }>()
 const route = useRoute(), router = useRouter(), { locale } = useI18n()
 const zh = computed(() => String(locale.value).startsWith('zh')), t = (cn: string, en: string) => zh.value ? cn : en
 const scalar = (key: string) => typeof route.query[key] === 'string' ? route.query[key] as string : ''
 const completed = computed(() => route.query.queue === 'completed')
-const filters = computed<PurchaseFilters>(() => ({ ...(completed.value ? { completed: true, timeRange: (route.query.timeRange === '1m' || route.query.timeRange === '3m' ? route.query.timeRange : '1w') as '1w' | '1m' | '3m' } : {}), purchaseStage: !completed.value && route.query.queue !== 'procurement_shipping' && isPurchaseStage(route.query.purchaseStage) ? route.query.purchaseStage : undefined, queue: route.query.queue === 'procurement_shipping' ? 'procurement_shipping' : 'procurement', search: scalar('search') || undefined, departmentId: scalar('departmentId') || undefined, ownerId: scalar('ownerId') || undefined, warehouseCode: scalar('warehouseCode') || undefined, sortOrder: scalar('sortOrder') === 'desc' ? 'desc' : scalar('sortOrder') === 'asc' ? 'asc' : completed.value ? 'desc' : 'asc' }))
+const filters = computed<PurchaseFilters>(() => ({ ...(completed.value ? { completed: true, timeRange: (route.query.timeRange === '1m' || route.query.timeRange === '3m' ? route.query.timeRange : '1w') as '1w' | '1m' | '3m' } : {}), purchaseStage: !completed.value && route.query.queue !== 'procurement_shipping' && isPurchaseStage(route.query.purchaseStage) ? route.query.purchaseStage : undefined, queue: route.query.queue === 'procurement_shipping' ? 'procurement_shipping' : 'procurement', search: scalar('search') || undefined, departmentId: scalar('departmentId') || undefined, ownerId: scalar('ownerId') || undefined, warehouseCode: scalar('warehouseCode') || undefined, sortOrder: scalar('sortOrder') === 'desc' ? 'desc' : scalar('sortOrder') === 'asc' ? 'asc' : 'desc' }))
 const query = computed<PurchaseQuery>(() => ({ ...filters.value, page: Math.max(1, Number(scalar('page')) || 1), pageSize: [20, 50, 100].includes(Number(scalar('pageSize'))) ? Number(scalar('pageSize')) : 50 }))
 const search = ref(scalar('search')), result = ref<PurchasePage>(), loading = ref(false), error = ref(''), now = ref(Date.now())
+const unavailable = computed(() => isUncollectedPage(result.value))
 const expanded = ref<string[]>([]), selected = ref<string[]>([]), details = ref<Record<string, PurchaseDetails>>({}), detailErrors = ref<Record<string, string>>({}), detailBusy = ref<Record<string, boolean>>({})
 const followUp = ref<{ orderId: string; orderNumber: string; purchaseOrderId: string }>(), exporting = ref(false), exportError = ref('')
-let generation = 0, disposed = false, sessionClosed = false, timer: ReturnType<typeof setInterval> | undefined, exportController: AbortController | undefined
+let generation = 0, disposed = false, sessionClosed = false, exportController: AbortController | undefined
+let listController: AbortController | undefined
+const detailControllers = new Map<string, AbortController>()
+function cancelListReads() { listController?.abort(); for (const controller of detailControllers.values()) controller.abort(); detailControllers.clear() }
 const detailTickets = new Map<string, number>()
 const pages = computed(() => Math.max(1, Math.ceil((result.value?.total ?? 0) / query.value.pageSize)))
 const allExpanded = computed(() => !!result.value?.items.length && result.value.items.every(g => expanded.value.includes(g.id)))
@@ -45,9 +50,11 @@ watch(search, v => { if (!v.trim() && filters.value.search) submit() })
 async function loadDetails(id: string, page = 1) {
   if (disposed || sessionClosed) return
   const session = captureSession(), current = generation, ticket = (detailTickets.get(id) ?? 0) + 1
+  detailControllers.get(id)?.abort()
+  const controller = new AbortController(); detailControllers.set(id, controller)
   detailTickets.set(id, ticket); detailBusy.value[id] = true; delete details.value[id]; delete detailErrors.value[id]
   try {
-    const next = await getPurchaseGroupDetails(id, { ...filters.value, page, pageSize: 20 })
+    const next = await getPurchaseGroupDetails(id, { ...filters.value, page, pageSize: 20 }, controller.signal)
     if (disposed || current !== generation || detailTickets.get(id) !== ticket || !isCurrentSession(session)) return
     details.value[id] = next
     // Refresh the group header with the same snapshot as the expanded rows.
@@ -76,12 +83,14 @@ function toggleAll() {
 function followPurchase(group: PurchaseGroup) {
   if (group.purchase) followUp.value = { orderId: group.id, orderNumber: group.purchase.number, purchaseOrderId: group.purchase.id }
 }
+function reloadReplica() { selected.value = []; expanded.value = []; exportController?.abort(); exporting.value = false; exportError.value = ''; void load() }
 async function load() {
   if (disposed || sessionClosed) return
   const ticket = ++generation, session = captureSession(), prior = [...expanded.value]
+  cancelListReads(); listController = new AbortController()
   now.value = Date.now(); loading.value = true; error.value = ''; result.value = undefined; details.value = {}; detailErrors.value = {}; detailBusy.value = {}; followUp.value = undefined
   try {
-    const next = await getPurchaseGroups(query.value)
+    const next = await getPurchaseGroups(query.value, listController.signal)
     if (disposed || ticket !== generation || !isCurrentSession(session)) return
     const lastPage = Math.max(1, Math.ceil(next.total / query.value.pageSize))
     if (query.value.page > lastPage) { await update({ page: lastPage }); return }
@@ -104,34 +113,32 @@ async function download() {
   finally { if (exportController === controller) exporting.value = false }
 }
 watch(query, () => { search.value = scalar('search'); selected.value = []; expanded.value = []; exportController?.abort(); exporting.value = false; exportError.value = ''; void load() }, { immediate: true })
-function refreshVisible() { now.value = Date.now(); if (document.visibilityState === 'visible' && navigator.onLine && !loading.value && !exporting.value && !followUp.value) void load() }
-const off = onSessionReset(() => { sessionClosed = true; generation++; result.value = undefined; details.value = {}; detailErrors.value = {}; detailBusy.value = {}; selected.value = []; expanded.value = []; followUp.value = undefined; exportController?.abort() })
-onMounted(() => { timer = setInterval(refreshVisible, 30000); document.addEventListener('visibilitychange', refreshVisible); window.addEventListener('focus', refreshVisible); window.addEventListener('online', refreshVisible) })
-onBeforeUnmount(() => { disposed = true; generation++; clearInterval(timer); exportController?.abort(); off(); document.removeEventListener('visibilitychange', refreshVisible); window.removeEventListener('focus', refreshVisible); window.removeEventListener('online', refreshVisible) })
+const off = onSessionReset(() => { sessionClosed = true; cancelListReads(); generation++; result.value = undefined; details.value = {}; detailErrors.value = {}; detailBusy.value = {}; selected.value = []; expanded.value = []; followUp.value = undefined; exportController?.abort() })
+onBeforeUnmount(() => { disposed = true; cancelListReads(); generation++; exportController?.abort(); off() })
 </script>
 <template>
   <section class="purchase-groups">
-    <WorkbenchTaskHeading :title="completed ? t('采购完成清单', 'Completed purchases') : filters.queue === 'procurement_shipping' ? t('已采购待发货', 'Awaiting supplier shipment') : t('待采购清单', 'Pending procurement')" :description="completed ? undefined : t('展开查看关联履约明细，采购操作在 FOP 完成。', 'Expand linked fulfillment details. Process purchases in FOP.')">
+    <WorkbenchTaskHeading :data-availability="result?.dataAvailability" :replica="result?.replica" :sync-disabled="loading || exporting" @replica-synced="reloadReplica" :title="completed ? t('采购完成清单', 'Completed purchases') : filters.queue === 'procurement_shipping' ? t('已采购待发货', 'Awaiting supplier shipment') : t('待采购清单', 'Pending procurement')" :description="completed ? undefined : t('展开查看关联履约明细，采购操作在 FOP 完成。', 'Expand linked fulfillment details. Process purchases in FOP.')">
       <div class="refresh-controls">
         <slot name="heading-actions" />
         <button class="workbench-button workbench-refresh" :disabled="loading || exporting" @click="load"><RefreshCw :size="15" />{{ t('刷新', 'Refresh') }}</button>
-        <span class="refresh-status">{{ t('每 30 秒自动刷新', 'Refreshes every 30 seconds') }}<br />{{ t('最近刷新', 'Last refreshed') }} {{ result?.refreshedAt ? new Date(result.refreshedAt).toLocaleTimeString(zh ? 'zh-CN' : 'en-GB', { timeZone: 'Asia/Shanghai', hour12: false }) : '—' }} · UTC+8</span>
+        <span class="refresh-status">{{ t('手动刷新', 'Manual refresh') }}<br />{{ t('最近查询', 'Last queried') }} {{ result?.refreshedAt ? new Date(result.refreshedAt).toLocaleTimeString(zh ? 'zh-CN' : 'en-GB', { timeZone: 'Asia/Shanghai', hour12: false }) : '—' }} · UTC+8</span>
       </div>
     </WorkbenchTaskHeading>
     <div class="group-panel">
       <form class="group-filters workbench-filter-toolbar" @submit.prevent="submit">
         <div class="workbench-filter-main">
           <div class="workbench-filter-search"><div class="workbench-search-field"><Search :size="16" /><input v-model="search" type="search" maxlength="200" :aria-label="t('搜索采购分组', 'Search purchase groups')" :placeholder="t('采购单 / 供应商 / 履约单 / 客户 / 业务员 / SKU', 'Purchase / supplier / fulfillment / customer / salesperson / SKU')" /></div><button class="workbench-button workbench-primary" :disabled="loading">{{ t('查询', 'Search') }}</button></div>
-          <label>{{ t('业务部门', 'Department') }}<select class="workbench-filter-select" :value="filters.departmentId || ''" @change="choose($event, 'departmentId')"><option value="">{{ defaultDepartmentLabel }}</option><option v-for="d in result?.departments" :key="d.id" :value="d.id">{{ d.name }}</option></select></label>
+          <label>{{ t('业务部门', 'Department') }}<select class="workbench-filter-select" :value="filters.departmentId || ''" @change="choose($event, 'departmentId')"><option :value="defaultDepartmentValue(result?.departments, filters.departmentId)">{{ defaultDepartmentLabel }}</option><option v-for="d in departmentOptions(result?.departments)" :key="d.id" :value="d.id">{{ d.name }}</option></select></label>
           <label>{{ t('发货仓库', 'Warehouse') }}<select class="workbench-filter-select" :value="filters.warehouseCode || ''" @change="choose($event, 'warehouseCode')"><option value="">{{ t('全部', 'All') }}</option><option value="HZ">{{ t('杭州仓', 'Hangzhou') }}</option><option value="SZ">{{ t('深圳仓', 'Shenzhen') }}</option></select></label>
         </div>
         <div class="workbench-filter-secondary">
-          <label v-if="completed">{{ t('完成时间', 'Completion time') }}<select class="workbench-filter-select" :value="filters.timeRange" :disabled="loading" :aria-label="t('完成时间范围', 'Completion time range')" @change="choose($event, 'timeRange')"><option value="1w">{{ t('近一周', 'Last week') }}</option><option value="1m">{{ t('近一月', 'Last month') }}</option><option value="3m">{{ t('近三月', 'Last three months') }}</option></select></label>
+          <label v-if="completed">{{ t('客户付款时间', 'Customer payment time') }}<select class="workbench-filter-select" :value="filters.timeRange" :disabled="loading" :aria-label="t('客户付款时间范围', 'Customer payment time range')" @change="choose($event, 'timeRange')"><option value="1w">{{ t('近一周', 'Last week') }}</option><option value="1m">{{ t('近一月', 'Last month') }}</option><option value="3m">{{ t('近三月', 'Last three months') }}</option></select></label>
           <label v-if="!completed && filters.queue === 'procurement'">{{ t('采购进度', 'Purchase progress') }}<select class="workbench-filter-select" :value="filters.purchaseStage || ''" :disabled="loading" :aria-label="t('采购进度筛选', 'Purchase progress filter')" @change="choose($event, 'purchaseStage')"><option value="">{{ t('全部状态', 'All statuses') }}</option><option v-for="(label, value) in purchaseStageLabels" :key="value" :value="value">{{ label[zh ? 0 : 1] }}</option></select></label>
-          <button class="workbench-button" type="button" @click="update({sortOrder:filters.sortOrder === 'asc' ? 'desc' : 'asc'})">{{ completed ? filters.sortOrder === 'asc' ? t('最早完成优先', 'Oldest completion first') : t('最新完成优先', 'Latest completion first') : filters.sortOrder === 'asc' ? t('最早收款优先', 'Oldest receipt first') : t('最新收款优先', 'Newest receipt first') }}</button>
+          <button class="workbench-button" type="button" @click="update({sortOrder:filters.sortOrder === 'asc' ? 'desc' : 'asc'})">{{ filters.sortOrder === 'asc' ? t('最早客户付款优先', 'Oldest customer payment first') : t('最新客户付款优先', 'Newest customer payment first') }}</button>
           <button v-if="filters.ownerId" class="workbench-button" type="button" @click="update({ownerId:undefined})">{{ t('清除业务员筛选', 'Clear salesperson filter') }}</button>
-          <span class="result-count" aria-live="polite" :title="result ? t(`关联履约单 ${result.totals.orderCount} 笔（去重）`, `${result.totals.orderCount} unique fulfillment orders`) : undefined">
-            {{ result ? t(`共 ${result.totals.purchaseCount} 张采购单`, `${result.totals.purchaseCount} purchase orders`) : '—' }}<template v-if="result?.totals.uncreatedCount"> · {{ t(`待建 ${result.totals.uncreatedCount} 笔`, `${result.totals.uncreatedCount} awaiting creation`) }}</template>
+          <span class="result-count" aria-live="polite" :title="!unavailable && result ? t(`关联履约单 ${result.totals.orderCount ?? '—'} 笔（去重）`, `${result.totals.orderCount ?? '—'} unique fulfillment orders`) : undefined">
+            {{ unavailable ? t('— · 待接入', '— · Not connected') : result ? t(`共 ${result.totals.purchaseCount ?? '—'} 张采购单`, `${result.totals.purchaseCount ?? '—'} purchase orders`) : '—' }}<template v-if="result?.totals.uncreatedCount"> · {{ t(`待建 ${result.totals.uncreatedCount ?? '—'} 笔`, `${result.totals.uncreatedCount ?? '—'} awaiting creation`) }}</template>
           </span>
         </div>
       </form>
@@ -172,16 +179,16 @@ onBeforeUnmount(() => { disposed = true; generation++; clearInterval(timer); exp
             </div>
             <span v-if="!group.purchase">{{ t('待采购数量', 'Quantity to purchase') }} <strong>{{ number(group.quantity) }}</strong></span>
             <span v-else>{{ t('采购数量', 'Purchase quantity') }} {{ number(group.quantity) }} <span class="count-divider">·</span> {{ t('已发', 'Shipped') }} {{ number(group.shippedQuantity) }} <span class="count-divider">·</span> {{ t('待发', 'Pending') }} <strong>{{ number(group.pendingQuantity) }}</strong></span>
-            <small>{{ t('最早收款', 'Earliest receipt') }} {{ date(group.earliestReceiptAt) }}</small>
+            <small>{{ t('客户付款', 'Customer payment') }} {{ date(group.latestConsumerPaidAt ?? null) }}</small>
           </div>
         </header>
         <div v-if="expanded.includes(group.id)" class="group-body">
           <p v-if="detailBusy[group.id]" class="group-message">{{ t('正在加载履约明细…', 'Loading fulfillment details…') }}</p>
           <div v-else-if="detailErrors[group.id]" class="group-error" role="alert">{{ detailErrors[group.id] }} <button class="workbench-button" @click="loadDetails(group.id)">{{ t('重试', 'Retry') }}</button></div>
-          <template v-else-if="details[group.id]"><div class="group-table-wrap"><table><thead><tr><th>{{ t('履约订单', 'Fulfillment order') }}</th><th>{{ t('关联商品 / SKU', 'Linked products / SKU') }}</th><th>{{ t('客户 / 店铺', 'Customer / store') }}</th><th>{{ t('业务员 / 部门', 'Salesperson / department') }}</th><th>{{ completed ? t('发货仓库 / 采购完成时间', 'Warehouse / purchase completion') : t('发货仓库 / 收款时间', 'Warehouse / receipt time') }}</th></tr></thead><tbody><tr v-for="row in details[group.id]!.items" :key="row.orderId"><td class="fulfillment-cell"><StockCopy :value="row.orderNumber" /><small><StockCopy :value="row.shopifyOrderNumber" /></small></td><td><div v-for="line in row.lines" :key="line.fulfillmentLineId + ':' + line.purchaseLineId" class="linked-product"><OrderProductImage :src="line.imageUrl" :name="line.name" /><div><p :title="line.name">{{ line.name }}</p><StockCopy :value="line.sku" /><small>{{ line.variant }}</small><small v-if="!group.purchase">{{ t('待采购数量', 'Quantity to purchase') }} {{ number(line.quantity) }}</small><small v-else>{{ t('采购', 'Purchased') }} {{ number(line.quantity) }} · {{ t('已发', 'Shipped') }} {{ number(line.shippedQuantity) }} · {{ t('未发', 'Unshipped') }} {{ number(Number((line.quantity-line.shippedQuantity).toFixed(8))) }}</small></div></div></td><td>{{ row.customerName }}<small>{{ row.storeName }}</small></td><td>{{ row.ownerName }}<small>{{ row.departmentName }}</small></td><td>{{ row.warehouse }}<small>{{ date(completed ? row.completedAt ?? null : row.paidAt) }}</small></td></tr></tbody></table></div><div v-if="details[group.id]!.total > 20" class="detail-pagination"><span>{{ t('履约明细', 'Fulfillment details') }} {{ details[group.id]!.page }} / {{ Math.ceil(details[group.id]!.total / 20) }}</span><button class="workbench-button" :disabled="details[group.id]!.page <= 1" @click="loadDetails(group.id, details[group.id]!.page-1)">{{ t('上一页', 'Previous') }}</button><button class="workbench-button" :disabled="details[group.id]!.page * 20 >= details[group.id]!.total" @click="loadDetails(group.id, details[group.id]!.page+1)">{{ t('下一页', 'Next') }}</button></div></template>
+          <template v-else-if="details[group.id]"><div class="group-table-wrap"><table><thead><tr><th>{{ t('履约订单', 'Fulfillment order') }}</th><th>{{ t('关联商品 / SKU', 'Linked products / SKU') }}</th><th>{{ t('客户 / 店铺', 'Customer / store') }}</th><th>{{ t('业务员 / 部门', 'Salesperson / department') }}</th><th>{{ completed ? t('发货仓库 / 采购完成时间', 'Warehouse / purchase completion') : t('发货仓库 / 客户付款时间', 'Warehouse / customer payment time') }}</th></tr></thead><tbody><tr v-for="row in details[group.id]!.items" :key="row.orderId"><td class="fulfillment-cell"><StockCopy :value="row.orderNumber" /><small><StockCopy :value="row.shopifyOrderNumber" /></small></td><td><div v-for="line in row.lines" :key="line.fulfillmentLineId + ':' + line.purchaseLineId" class="linked-product"><OrderProductImage :src="line.imageUrl" :name="line.name" /><div><p :title="line.name">{{ line.name }}</p><StockCopy :value="line.sku" /><small>{{ line.variant }}</small><small v-if="!group.purchase">{{ t('待采购数量', 'Quantity to purchase') }} {{ number(line.quantity) }}</small><small v-else>{{ t('采购', 'Purchased') }} {{ number(line.quantity) }} · {{ t('已发', 'Shipped') }} {{ number(line.shippedQuantity) }} · {{ t('未发', 'Unshipped') }} {{ number(Number((line.quantity-line.shippedQuantity).toFixed(8))) }}</small></div></div></td><td>{{ row.customerName }}<small>{{ row.storeName }}</small></td><td>{{ row.ownerName }}<small>{{ row.departmentName }}</small></td><td>{{ row.warehouse }}<small>{{ date(completed ? row.completedAt ?? null : row.consumerPaidAt ?? null) }}</small></td></tr></tbody></table></div><div v-if="details[group.id]!.total > 20" class="detail-pagination"><span>{{ t('履约明细', 'Fulfillment details') }} {{ details[group.id]!.page }} / {{ Math.ceil(details[group.id]!.total / 20) }}</span><button class="workbench-button" :disabled="details[group.id]!.page <= 1" @click="loadDetails(group.id, details[group.id]!.page-1)">{{ t('上一页', 'Previous') }}</button><button class="workbench-button" :disabled="details[group.id]!.page * 20 >= details[group.id]!.total" @click="loadDetails(group.id, details[group.id]!.page+1)">{{ t('下一页', 'Next') }}</button></div></template>
         </div>
       </article>
-      <p v-if="!result?.items.length" class="group-message">{{ loading ? t('正在查询…', 'Loading…') : error ? t('请刷新重试', 'Refresh to retry') : t('暂无符合条件的采购待办', 'No matching purchase tasks') }}</p>
+      <p v-if="!result?.items.length" class="group-message">{{ loading ? t('正在查询…', 'Loading…') : error ? t('请刷新重试', 'Refresh to retry') : unavailable ? t('采购数据尚未接入', 'Procurement data is not connected') : t('暂无符合条件的采购待办', 'No matching purchase tasks') }}</p>
       <footer class="group-pagination"><label>{{ t('每页采购组', 'Groups per page') }}<select class="workbench-filter-select" :value="query.pageSize" @change="choose($event, 'pageSize')"><option v-for="size in [20,50,100]" :key="size" :value="size">{{ size }}</option></select></label><span>{{ query.page }} / {{ pages }}</span><button class="workbench-button" :disabled="loading || query.page <= 1" @click="update({page:query.page-1})">{{ t('上一页', 'Previous') }}</button><button class="workbench-button" :disabled="loading || query.page >= pages" @click="update({page:query.page+1})">{{ t('下一页', 'Next') }}</button></footer>
     </div>
     <SupplierFollowUpDialog v-if="followUp" :order-id="followUp.orderId" :order-number="followUp.orderNumber" :purchase-order-id="followUp.purchaseOrderId" :group-filters="filters" @close="followUp = undefined" />

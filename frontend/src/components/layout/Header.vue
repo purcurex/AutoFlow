@@ -6,6 +6,7 @@ import { useI18n } from 'vue-i18n'
 import { onClickOutside } from '@vueuse/core'
 import { useUserStore } from '@/stores'
 import { isWorkbenchRole, workbenchNames } from '@/utils/workbench'
+import DataDisplayScopeSwitch from './DataDisplayScopeSwitch.vue'
 import { LanguageSwitch, ThemeToggle } from '@/components/ui'
 
 defineProps<{ sidebarCollapsed: boolean }>()
@@ -77,6 +78,7 @@ function handleLogout() {
       </div>
 
       <div class="ml-auto flex items-center gap-2">
+        <DataDisplayScopeSwitch />
         <LanguageSwitch class="hidden sm:inline-flex" />
         <ThemeToggle />
 

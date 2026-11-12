@@ -11,7 +11,7 @@ export const accountRoleNames: Record<AccountRole, [string, string]> = {
   salesperson: ['外贸业务员', 'Sales representative'], collaboration: ['协同管理岗', 'Operations coordinator'],
 }
 export const accountRoleDescriptions: Record<AccountRole, [string, string]> = {
-  administrator: ['系统管理与账号授权', 'System and account management'],
+  administrator: ['全部业务数据与系统管理', 'All business data and system management'],
   department_manager: ['仅本部门业务', 'Own department records only'],
   salesperson: ['本人负责的业务', 'Own business records'],
   collaboration: ['跨部门待办 · 部门汇总', 'Cross-team tasks · Department summaries'],

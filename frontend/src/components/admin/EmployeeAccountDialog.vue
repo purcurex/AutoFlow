@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { FopEmployeeSelection } from '@/api/fop-access'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, useId, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { UserPlus, X } from 'lucide-vue-next'
@@ -17,7 +18,7 @@ const text = (cn: string, en: string) => zh.value ? cn : en
 const titleId = useId(), dialog = ref<HTMLDialogElement>()
 const directory = ref(props.workspace), loading = ref(false), saving = ref(false), error = ref('')
 const createLogin = ref(!props.edit), bindFop = ref(false)
-const kingdeeEmployee = ref<{ employeeId: string; membershipId: string } | null>(null), bindingBusy = ref(false)
+const kingdeeEmployee = ref<FopEmployeeSelection | null>(null), bindingBusy = ref(false)
 const draft = reactive({ name: props.employee?.name ?? '', code: props.employee?.code ?? '', email: props.employee?.email ?? '', departmentId: props.employee?.departmentId ?? props.departmentId ?? '',
   workbenchRoles: [...(props.employee?.workbenchRoles ?? ['sales'])] as WorkbenchRole[], jobTitle: props.employee?.jobTitle ?? '', phone: props.employee?.phone ?? '', username: '', password: '', confirmPassword: '' })
 const title = computed(() => props.edit ? text('编辑成员信息', 'Edit member') : props.employee ? text('开通员工账号', 'Open employee account') : text('添加部门成员', 'Add department member'))

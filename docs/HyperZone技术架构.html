@@ -93,7 +93,7 @@ article h2:target{color:#087f8c} .hero h1{font-size:32px} .table-wrap td{overflo
 <h2 id="hz-section-5">05 核心数据流</h2>
 <h3>工作台查询与导出</h3>
 <ol><li>浏览器进入相应工作台，获取入口权限及可选业务部门。</li><li>后端验证当前账号，解析本地业务范围与绑定的 FOP 租户、员工身份。</li><li>FOP Provider 取得授权和候选业务数据，校验返回身份与资源范围。</li><li>服务端生成待办或阶段完成记录，执行搜索、专属筛选、排序、汇总和分页；异常是独立维度，不替代主流程进度。</li><li>前端用共享组件展示结果；Excel 默认导出当前查询全部结果，也可限定选中记录，仍重新校验权限。</li></ol>
-<p>目前 HttpFopDataProvider 的基础订单读取采用候选集合返回后处理，不是上游数据库分页。数据量扩大时，需与 FOP 约定分页、聚合与快照语义，不能把当前查询方式视为无限数据量方案。</p>
+<p>真实工作台数据由 KingdeeFopDataProvider 按已发布且已验证的接口能力读取；普通清单使用上游分页，需补充原始事实的查询在 BFF 续读后统一筛选、汇总和分页。大数据量仍需完善上游过滤、分页、聚合与快照语义，不能把当前查询方式视为无限数据量方案。</p>
 <h3>业务操作与状态回流</h3>
 <p>查询与协同后，员工在 FOP 跟进采购、发运等正式业务操作；前端已有部分审核入口及员工网关操作契约。真实审核需网关落实员工权限、业务校验、审计及持久幂等，不能以界面按钮已完成认定生产写入已接通。刷新后由 FOP 最新事实更新状态。</p>
 <p>采购单与履约单按多对多关联展示，同一采购单一个供应商；分组统计只包含当前权限和查询范围内的数据。完成清单按各阶段完成时间筛选，业务时间展示与日月归属采用 UTC+8。</p>
@@ -102,8 +102,8 @@ article h2:target{color:#087f8c} .hero h1{font-size:32px} .table-wrap td{overflo
 <p>工作流与 1688 寻源任务持久化到 PostgreSQL，由 NestJS 同进程 Worker 轮询执行。任务通过事务及 FOR UPDATE SKIP LOCKED 领取，配合租约、心跳、过期回收与有限重试。当前没有独立 Worker 服务部署。</p>
 <h2 id="hz-section-6">06 FOP 接入边界</h2>
 <p>FOP 源码位于 /Library/VSCode/dtr5b。源码可用于核对字段、枚举、单据插件与业务规则；代码中存在某能力不代表对应 HTTP 接口已发布。</p>
-<div class="table-wrap"><table><thead><tr><th scope="col">接入层</th><th scope="col">当前实现</th><th scope="col">尚需完成</th></tr></thead><tbody><tr><td>五工作台数据</td><td>FopDataService + Demo / HTTP / 未配置 Provider；本地展示、授权处理和导出已实现</td><td>发布并验证员工网关；补齐真实员工、资源授权、字段与各项能力</td></tr><tr><td>员工数据网关</td><td>HTTP 适配器按 subject 传递服务端身份；使用服务端 Bearer 凭证和 HTTPS</td><td>对照每项方法实现覆盖，不把已配置 URL 等同于所有业务能力可用</td></tr><tr><td>原始苍穹 OpenAPI</td><td>历史联调记录已验证增强型 Token 及指定单笔履约订单查询</td><td>组织、用户等接口授权与发布；员工代理、数据范围与工作台事实映射</td></tr><tr><td>成本 / 物流渠道 / 运费 / CRM</td><td>已定义 Port，提供开发 Sandbox 与 Unavailable 适配器</td><td>Live 适配器未实现；配置模式为 live 也不自动获得真实能力</td></tr><tr><td>报价实际物流渠道</td><td>已预留实际渠道搜索 API，支持服务商、编码及名称检索</td><td>FOP 完整渠道目录读取、有效性判定及独立目录权限</td></tr></tbody></table></div>
-<p>工作台员工网关使用 FOP_EMPLOYEE_API_URL / FOP_EMPLOYEE_API_TOKEN；报价等端口使用 FOP_INTEGRATION_MODE。两套开关职责不同，不能相互替代。Demo 仅允许本地、开发或测试，Sandbox 禁止用于生产。</p>
+<div class="table-wrap"><table><thead><tr><th scope="col">接入层</th><th scope="col">当前实现</th><th scope="col">尚需完成</th></tr></thead><tbody><tr><td>五工作台数据</td><td>FopDataService + Kingdee / 显式 Demo / 未配置 Provider；本地展示、授权处理和导出已实现</td><td>按实际 Kingdee 发布接口逐项验证资源授权、字段与能力；未发布功能保持不可用</td></tr><tr><td>待发布业务契约</td><td>RMA、采购退货等保留目标契约及显式 Demo；旧通用 HTTP 适配器已移除</td><td>发布独立资源授权及真实来源关联，完成 Kingdee 适配；不以原始单据可查询证明业务能力完整</td></tr><tr><td>原始苍穹 OpenAPI</td><td>历史联调记录已验证增强型 Token 及指定单笔履约订单查询</td><td>组织、用户等接口授权与发布；员工代理、数据范围与工作台事实映射</td></tr><tr><td>成本 / 物流渠道 / 运费 / CRM</td><td>已定义 Port，提供开发 Sandbox 与 Unavailable 适配器</td><td>Live 适配器未实现；配置模式为 live 也不自动获得真实能力</td></tr><tr><td>报价实际物流渠道</td><td>已预留实际渠道搜索 API，支持服务商、编码及名称检索</td><td>FOP 完整渠道目录读取、有效性判定及独立目录权限</td></tr></tbody></table></div>
+<p>工作台使用显式 FOP_DATA_MODE=kingdee 和 FOP_KINGDEE_* 配置；显式 demo 仅允许本地、开发或测试，其余模式保持未配置，不再自动回退通用 HTTP 员工网关。报价等独立端口仍使用 FOP_INTEGRATION_MODE 及原有 FOP_BASE_URL 等配置，不能与工作台数据源开关互相替代；Sandbox 禁止用于生产。</p>
 <p>原始苍穹 OpenAPI 的 access_token、x-acgw-identity 与应用密钥只在服务端使用。原始接口与员工授权网关是不同契约，不能仅用应用级 Token 冒充任意员工的业务权限。</p>
 <p>当前状态：<strong>工作台交互和本地数据权限机制已落地；FOP 正式业务数据链路尚未全部完成。</strong> 未配置或未授权时应返回明确失败，不以演示数据伪装真实查询成功。</p>
 <h2 id="hz-section-7">07 部署与协同</h2>

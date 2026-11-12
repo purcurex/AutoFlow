@@ -1,0 +1,104 @@
+{
+  "checked_at": "2026-11-11T10:12:12.059Z",
+  "target": {
+    "database": "autoflow_local_demo",
+    "role": "autoflow_demo",
+    "server_address": "127.0.0.1/32",
+    "port": 55432,
+    "version": "16.15 (Homebrew)",
+    "read_only": "off",
+    "recovery": false
+  },
+  "connection_profile": "existing-local-demo",
+  "original_env_connection_result": "ECONNREFUSED: backend/.env points to localhost:5432; verified existing local profile uses 127.0.0.1:55432",
+  "permissions": {
+    "superuser": true,
+    "create_database": true,
+    "create_role": true,
+    "can_login": true,
+    "connect": true,
+    "create_schema": true,
+    "temporary_tables": true,
+    "public_usage": true,
+    "public_create": true,
+    "database_owner": "autoflow_demo"
+  },
+  "ddl_probe": {
+    "create_table": true,
+    "primary_key": true,
+    "unique": true,
+    "foreign_key": true,
+    "deferrable": true,
+    "check": true,
+    "index": true,
+    "insert_update_delete": true,
+    "rolled_back": true
+  },
+  "business_tables": 29,
+  "migration_table": "typeorm_migrations",
+  "actual_table_count": 30,
+  "actual_column_count": 449,
+  "entity_column_count": 446,
+  "migration_comparison": {
+    "registered": 41,
+    "executed": 41,
+    "pending": [],
+    "orphaned": []
+  },
+  "table_and_column_name_differences": [],
+  "existing_row_counts": {
+    "users": 37,
+    "organization_nodes": 19,
+    "organization_employees": 36,
+    "notes": 2,
+    "quotations": 0
+  },
+  "workbench_tables_created": false,
+  "backup": {
+    "file": "/Library/VSCode/AutoFlow/work-app/.runtime/local-demo/database-preflight-2026-11-11T10-12-11-995Z/before-workbench-tables.dump",
+    "bytes": 186097,
+    "sha256": "a99881a1c1fe47b46fce7611ce35564bb4000496c979368fa803ca8762c27b58",
+    "file_mode": "0600",
+    "backup_restore_verified": true,
+    "restore_mode": "pre-data -> qualified-function fix -> data -> post-data",
+    "existing_restore_function_issue_reproduced": true,
+    "qualified_call_fix_applied_to": "validation_database_only",
+    "original_database_fix_required_before_standard_restore": true,
+    "semantic_examples_passed": 4,
+    "restored_validation_database": "hz_ddl_validation_1794392169018",
+    "validation_table_count": 30,
+    "validation_migration_count": 41,
+    "validation_counts": {
+      "users": 37,
+      "organization_nodes": 19,
+      "organization_employees": 36,
+      "notes": 2,
+      "quotations": 0
+    },
+    "validation_database_retained_for_migration_tests": true,
+    "original_database_unchanged": true,
+    "created_at": "2026-11-11T10:16:09.256Z"
+  },
+  "execution_readiness": "permissions_verified_restore_prerequisite_tested_in_validation_database",
+  "required_first_migration": {
+    "function": "public.autoflow_valid_chart_permissions(jsonb)",
+    "change": "qualify internal call to public.autoflow_valid_chart_permissions_v1; preserve all validation rules",
+    "verified_empty_search_path": true,
+    "semantic_examples_passed": 4,
+    "applied_to_original_database": false
+  },
+  "fop_access_paused": true,
+  "final_checks": {
+    "checked_at": "2026-11-11T10:20:30.615Z",
+    "original_function_definition_unchanged": true,
+    "original_business_row_counts_unchanged": true,
+    "no_workbench_tables_created": true,
+    "no_probe_tables_remaining": true,
+    "original_vs_validation_semantics_matched": 4,
+    "typeorm_cli_migration_show": {
+      "applied": 41,
+      "pending": 0,
+      "exit_code": 0
+    }
+  }
+}

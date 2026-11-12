@@ -1,0 +1,29 @@
+{
+  "date": "2026-11-12",
+  "basis": "user_confirmed_current_FOP_rules_and_project_V2.0_reference",
+  "withdrawnNormalGapHypotheses": [
+    "stock_usage_order_without_allocation_after_normal_audit",
+    "incomplete_allocation_successfully_audited"
+  ],
+  "currentStockRoute": "allocation_review_when_ready_and_pending_review",
+  "confirmedPendingCapability": "order_interception_lifecycle",
+  "operationalChecks": [
+    "async_allocation_generation_failure_or_delay",
+    "missing_synced_relations",
+    "historical_or_reverse_inventory_inconsistency"
+  ],
+  "futureRequiredCoverage": [
+    "pending",
+    "waiting_stock",
+    "ready",
+    "paused_or_intercepted_visible",
+    "change_awaiting_resume"
+  ],
+  "actualAllListGapCount": null,
+  "referencePath": "docs/solutions/HyperZone智能配货与自动审核方案.html",
+  "referenceSha256": "a2bf949c2930555e2e6f1d2144db49ef11d5259c0e2738170da95b87408798ab",
+  "requestedWechatOriginalRead": false,
+  "requestedWechatOriginalBlocker": "macOS Operation not permitted",
+  "referenceIdentityVerified": false,
+  "fopContacted": false
+}

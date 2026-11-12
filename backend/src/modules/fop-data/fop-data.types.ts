@@ -1,3 +1,4 @@
+import type { StockSupplierFollowUpResult } from './stock-supplier-follow-up'
 import type { RmaSnapshot } from './rma-orders'
 import type { PurchaseReturnSnapshot } from './purchase-returns'
 import type { PurchaseLinkSnapshot } from './procurement-groups.types'
@@ -37,7 +38,9 @@ export interface FopOrganizationSummary { subject: FopIdentity; chartId: FopSumm
 /** Current assignment and historical document attribution are separate facts. */
 export interface FopCurrentCustomerOwner { id: string; departmentId: string; departmentPathIds?: readonly string[] }
 
-export interface FopIdentity { tenantId: string; userId: string }
+/** Server-only authentication context; symbols cannot be supplied through JSON requests. */
+export const FOP_ADMIN_CONTEXT: symbol = Symbol('FOP_ADMIN_CONTEXT')
+export interface FopIdentity { tenantId: string; userId: string; [key: symbol]: { organizationId: string } | undefined }
 
 /** 管理员连接预览只返回已认证身份、当前公司和资源类别，不返回任何认证凭据。 */
 export interface FopConnectionContext {
@@ -56,6 +59,7 @@ export interface FopPermissionGrant {
   allowedStockInventoryIds?: readonly string[]
   /** 独立员工备货接口的组织授权，不能由履约订单权限或空逐单白名单推导。 */
   stockQuery?: { orders: readonly string[]; inventory: readonly string[] }
+  stockEmployeeFilterVersion?: 1
   allocationInventoryScopes?: readonly AllocationInventoryScope[]
   /** Explicit operation grants; read or system-admin access never implies approval. */
   approvalActions?: readonly ApprovalQueue[]
@@ -73,7 +77,7 @@ export interface FopPermissionGrant {
   allowedProfitIds?: readonly string[]
   analyticsScopes?: readonly FopAnalyticsScope[]
   /** 真实分页模式只授权声明的队列；不把空 allowlist 解释成全部数据。 */
-  orderQuery?: { queues: readonly ('unpaid' | 'review' | 'dispatch')[]; organizationIds: readonly string[] }
+  orderQuery?: { queues: readonly import('./workbench-queue-rules').Queue[]; organizationIds: readonly string[]; employeeFilterVersion?: 1 }
   /** 各统计资源的独立组织授权；仅真实查询适配器使用，不扩大订单/收款/成本权限。 */
   analyticsQuery?: Partial<Record<FopAnalyticsResource, readonly string[]>>
   /** Independent aggregate grants; never inferred from record allowlists. */
@@ -146,6 +150,7 @@ export interface ProcurementProgress {
 
 /** Effective linked dispatch documents; never inferred from customer payment or Shopify sync. */
 export interface DispatchDocument {
+  deliveryStatus?: string | null
   id: string
   number: string
   status: 'draft' | 'submitted' | 'approved' | 'unknown'
@@ -167,10 +172,13 @@ export interface LogisticsChannel { name: string | null; code: string | null }
 
 export interface LogisticsTrackingNumber { type: 'full' | 'first_mile' | 'last_mile'; number: string }
 export interface LogisticsInfo {
+  /** Actual channel for this same package; never inferred by array position. */
+  channelName?: string | null
+  channelCode?: string | null
   carrierName: string | null
   /** Explicit FOP selection for Shopify; never chosen from raw candidate numbers by this app. */
   shopifyTracking?: LogisticsTrackingNumber | null
-  /** @deprecated Legacy candidates do not prove which number is selected. */
+  /** Dispatch full/last-mile facts. Other queues must not infer Shopify selection from this array. */
   trackingNumbers?: LogisticsTrackingNumber[]
 }
 
@@ -178,7 +186,7 @@ export interface AllocationDocumentReference { id: string; number: string }
 
 export interface FopOrder {
   /** 服务端按未完成期望包裹聚合，避免缺包裹被已有发运单掩盖。 */
-  dispatchTaskStatus?: 'dispatch_missing' | 'dispatch_draft' | 'dispatch_submitted' | 'dispatch_approved' | 'dispatch_synced' | 'unknown'
+  dispatchTaskStatus?: 'dispatch_pending' | 'dispatch_tracking' | 'dispatch_updating' | 'dispatch_cancelled' | 'dispatch_missing' | 'dispatch_draft' | 'dispatch_submitted' | 'dispatch_approved' | 'dispatch_synced' | 'unknown'
   /** Explicit latest FOP interception fact; absent is unknown, never an inferred release. */
   shipmentInterceptStatus?: 'intercepted' | 'released' | null
   /** Unique effective FOP allocation for this order; null/omitted = unavailable or not yet created. */
@@ -189,7 +197,6 @@ export interface FopOrder {
   customLogisticsChannelName?: string | null
   /** Actual fulfillment channels, never carrier categories or customer-facing custom channels. */
   logisticsChannels?: LogisticsChannel[] | null
-  /** 待支付清单取履约订单源单付款时间，区别于FOP创建时间和收款日期；未知为null。 */
   /** Actual phase completion timestamps supplied by the trusted gateway; no fallbacks. */
   shopifySyncedAt?: string | null
   /** 已履约清单取当前有效发运单的最大审核时间，不代表Shopify同步完成时间。 */
@@ -198,6 +205,7 @@ export interface FopOrder {
   allocationApprovedAt?: string | null
   outboundCompletedAt?: string | null
   reviewedAt?: string | null
+  /** 履约订单收款日期 paidAt 的兼容展示字段；未知不以源单或阶段日期回退。 */
   consumerPaidAt?: string | null
   /** Earliest actual payment among effective paid purchase obligations still awaiting supplier shipment. */
   procurementPaidAt?: string | null
@@ -235,6 +243,9 @@ export interface FopOrder {
   currency: string
   paymentStatus: 'paid' | 'unpaid' | 'refunded'
   reviewStatus: 'pending' | 'approved'
+  /** FOP fulfillment header hzkj_purchase_status / hzkj_delivery_status; null means unknown. */
+  sourcePurchaseStatus?: '0' | '1' | '2' | '3' | '4' | null
+  sourceOutboundStatus?: '0' | '1' | '2' | null
   procurementStatus: 'pending' | 'purchased' | 'not_required' | 'unknown'
   allocationStatus: 'pending' | 'allocated' | 'not_ready' | 'unknown'
   dispatchStatus: 'pending' | 'dispatched' | 'not_ready' | 'unknown'
@@ -286,14 +297,19 @@ export interface FopReceiptCandidate extends FopReceipt { tenantId: string; depa
 export const FOP_DATA_PROVIDER = 'FOP_DATA_PROVIDER'
 
 export interface FopOrderPageQuery {
+  /** Same list total without row enrichment, used by dashboard counters. */
+  projection?: 'count'
+  /** Computed only by the BFF; never accepted from public request DTOs. */
+  employeeFilter?: { employeeIds: readonly string[] | null; version: string }
   queue: string; search?: string; orderNumber?: string; page: number; pageSize: number
-  /** 仅 dispatch 支持完成清单；省略时保留原待履约语义。 */
+  /** Sales approval history and dispatch completion have independent source facts. */
   completed?: boolean
-  timeRange?: 'all' | '1w' | '1m' | '3m'; departmentId?: string; ownerId?: string; warehouseCode?: 'HZ' | 'SZ'
+  timeRange?: 'all' | '1w' | '1m' | '3m'; departmentId?: string; ownerId?: string; warehouseCode?: 'HZ' | 'SZ'; shippingCountryCode?: string
   sortBy?: string; sortOrder?: 'asc' | 'desc'; paidAtOrder?: 'asc' | 'desc'
   taskStatus?: string; orderIds?: readonly string[]; exportManifest?: boolean
 }
 export interface FopOrderPage {
+  shippingCountries?: string[]
   departments?: { id: string; name: string }[]
   salespeople?: { id: string; name: string }[]
   orderIds?: string[]
@@ -307,15 +323,29 @@ export interface FopOrderPage {
 
 /** No employee identity, permission grant or scope is ever accepted from an HTTP client. */
 export abstract class FopDataProvider {
+  /** Dedicated operations never read historical list endpoints or inventory mirrors. */
+  async readApprovalContext(_identity: Readonly<FopIdentity>, _scope: import('./fop-realtime.types').FopRealtimeScope, _queue: ApprovalQueue, _orderId: string): Promise<import('./fop-realtime.types').FopRealtimeApprovalContext> { throw new FopIntegrationUnavailableError('fop_approval_not_configured') }
+  async queryCurrentInventory(_identity: Readonly<FopIdentity>, _scope: import('./fop-realtime.types').FopRealtimeScope, _query: import('./allocation-inventory.dto').AllocationInventoryQueryDto): Promise<import('./fop-realtime.types').FopRealtimePage<import('./fop-realtime.types').CurrentInventoryRow>> { throw new FopIntegrationUnavailableError('fop_current_inventory_not_configured') }
+  async queryReservedInventory(_identity: Readonly<FopIdentity>, _scope: import('./fop-realtime.types').FopRealtimeScope, _query: import('./fop-stock.types').StockInventoryQuery): Promise<import('./fop-realtime.types').FopRealtimePage<import('./fop-realtime.types').ReservedInventoryRow>> { throw new FopIntegrationUnavailableError('fop_reserved_inventory_not_configured') }
+  async queryReservedCustomers(_identity: Readonly<FopIdentity>, _scope: import('./fop-realtime.types').FopRealtimeScope, _query: { search?: string }): Promise<{ items: { id: string; code: string; name: string }[]; total: number }> { throw new FopIntegrationUnavailableError('fop_reserved_inventory_not_configured') }
+  async querySupplierContacts(_identity: Readonly<FopIdentity>, _scope: import('./fop-realtime.types').FopRealtimeScope, _query: import('./fop-realtime.types').FopSupplierContext): Promise<import('./fop-realtime.types').FopSupplierContacts> { throw new FopIntegrationUnavailableError('fop_supplier_contacts_not_configured') }
+  async launchSupplierChat(_identity: Readonly<FopIdentity>, _scope: import('./fop-realtime.types').FopRealtimeScope, _query: import('./fop-realtime.types').FopSupplierLaunchQuery): Promise<import('./fop-realtime.types').FopSupplierLaunch> { throw new FopIntegrationUnavailableError('fop_supplier_contacts_not_configured') }
   readonly source: 'mock' | 'fop' = 'fop'
   readonly pagedOrders: boolean = false
+  /** Explicit adapter capabilities, independent of the current user's authorization. */
+  readonly supportedOrderQueues?: readonly FopOrderPageQuery['queue'][]
+  get supportsReviewCountryFilters(): boolean { return false }
+  readonly supportsStockSupplierFollowUp: boolean = false
   readonly queriedStock: boolean = false
+  readonly queriedRma: boolean = false
   readonly supportsEmployeeBinding: boolean = false
+  get usesLocalWorkbenchOrganization(): boolean { return false }
+  async administratorIdentity(): Promise<FopIdentity | null> { return null }
   /** 管理员专用目录及验证入口；未接通的适配器不能伪造真实员工绑定。 */
   async listBindingEmployees(_cursor?: string, _scopeVersion?: string): Promise<FopBindingEmployeePage> {
     throw new FopIntegrationUnavailableError('fop_feature_not_configured')
   }
-  async verifyEmployeeBinding(_employeeId: string, _membershipId: string): Promise<VerifiedFopEmployeeBinding> {
+  async verifyEmployeeBinding(_employeeId: string, _membershipId: string, _employeeNumber: string): Promise<VerifiedFopEmployeeBinding> {
     throw new FopIntegrationUnavailableError('fop_feature_not_configured')
   }
   async getConnectionContext(): Promise<FopConnectionContext> {
@@ -334,12 +364,16 @@ export abstract class FopDataProvider {
   async getOrganizationSummary(_identity: Readonly<FopIdentity>, _permission: Readonly<FopPermissionGrant>, _query: Readonly<FopOrganizationSummaryQuery>): Promise<FopOrganizationSummary> {
     throw new FopOrganizationSummaryNotConfiguredError('Organization summary provider is not configured')
   }
+  async listStockSupplierFollowUps(_identity: Readonly<FopIdentity>, _permission: Readonly<FopPermissionGrant>, _orderId: string): Promise<StockSupplierFollowUpResult> {
+    throw new Error('Stock supplier follow-up provider is not configured')
+  }
   async listSupplierFollowUps(_identity: Readonly<FopIdentity>, _permission: Readonly<FopPermissionGrant>, _orderId: string): Promise<SupplierFollowUpResult> {
     throw new Error('Supplier follow-up provider is not configured')
   }
   async getPurchaseLinks(_identity: Readonly<FopIdentity>, _permission: Readonly<FopPermissionGrant>, _orderIds: readonly string[]): Promise<PurchaseLinkSnapshot> { throw new Error('Purchase linkage provider is not configured') }
   async listPurchaseReturns(_identity: Readonly<FopIdentity>, _permission: Readonly<FopPermissionGrant>): Promise<PurchaseReturnSnapshot> { throw new Error('Purchase returns provider is not configured') }
-  async listRmaCases(_identity: Readonly<FopIdentity>, _permission: Readonly<FopPermissionGrant>): Promise<RmaSnapshot> { throw new Error('RMA provider is not configured') }
+  async queryRmaOrders(_identity: Readonly<FopIdentity>, _permission: Readonly<FopPermissionGrant>, _scope: Readonly<BusinessScope>, _flowStatus?: 'active' | 'closed' | 'all'): Promise<{ snapshot: RmaSnapshot; orders: FopOrder[]; permission: FopPermissionGrant }> { throw new FopIntegrationUnavailableError('fop_rma_not_configured') }
+  async listRmaCases(_identity: Readonly<FopIdentity>, _permission: Readonly<FopPermissionGrant>): Promise<RmaSnapshot> { throw new FopIntegrationUnavailableError('fop_rma_not_configured') }
   abstract isConfigured(): boolean
   async approvalTargets(_identity: Readonly<FopIdentity>, _queue: ApprovalQueue, _orderId: string): Promise<ApprovalTarget[]> { throw new Error('FOP approval adapter is not configured') }
   async approveDocument(_identity: Readonly<FopIdentity>, _command: ApprovalCommand): Promise<ApprovalOutcome> { throw new Error('FOP approval adapter is not configured') }
@@ -369,10 +403,10 @@ export abstract class FopDataProvider {
 }
 
 export class FopPermissionDeniedError extends Error {
-  constructor(message = 'FOP access denied', readonly code: 'fop_permission_denied' | 'fop_authentication_expired' | 'fop_binding_required' | 'fop_employee_unavailable' | 'fop_proxy_user_required' | 'fop_api_not_authorized' = 'fop_permission_denied') { super(message) }
+  constructor(message = 'FOP access denied', readonly code: 'fop_permission_denied' | 'fop_authentication_expired' | 'fop_binding_required' | 'fop_employee_unavailable' | 'fop_proxy_user_required' | 'fop_api_not_authorized' | 'fop_employee_number_mismatch' | 'fop_employee_number_ambiguous' = 'fop_permission_denied') { super(message) }
 }
 export class FopIntegrationUnavailableError extends Error {
-  constructor(readonly code: 'fop_feature_not_configured' | 'fop_endpoint_not_published' | 'fop_mapping_required' | 'fop_fx_missing' | 'fop_result_too_large') { super(code) }
+  constructor(readonly code: 'fop_queries_paused' | 'fop_supplier_contacts_not_configured' | 'fop_reserved_customers_search_required' | 'fop_approval_not_configured' | 'fop_current_inventory_not_configured' | 'fop_reserved_inventory_not_configured' | 'fop_rma_not_configured' | 'fop_feature_not_configured' | 'fop_endpoint_not_published' | 'fop_mapping_required' | 'fop_fx_missing' | 'fop_result_too_large') { super(code) }
 }
 export class FopOrganizationSummaryNotConfiguredError extends Error {}
 

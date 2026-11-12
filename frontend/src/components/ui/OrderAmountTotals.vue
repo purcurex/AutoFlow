@@ -7,7 +7,7 @@ const { locale } = useI18n()
 </script>
 
 <template>
-  <span v-if="!totals">—</span>
+  <span v-if="!totals || totals.complete === false || (totals.orderCount > 0 && !totals.amountsByCurrency.length)">—</span>
   <span v-else-if="!totals.orderCount">{{ formatCurrency(0, 'USD', String(locale)) }}</span>
   <template v-else><span v-for="item in totals.amountsByCurrency" :key="item.currency" class="order-currency-total">{{ formatCurrency(item.amount, item.currency, String(locale)) }}</span></template>
 </template>

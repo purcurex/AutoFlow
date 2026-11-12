@@ -29,3 +29,8 @@ it('exports approval date in UTC+8 and never substitutes creation time', async (
   expect(ws.getRow(2).getCell(col).value).toContain('09:00')
   expect(ws.getRow(3).getCell(col).value).toBe('—')
 })
+
+it.each(['unpaid', 'review', 'exceptions', 'dispatch', 'procurement', 'procurement_shipping', 'allocation', 'allocation_review', 'shipping'] as const)('defaults %s to newest consumer payment first without receipt fallback', queue => {
+  const rows = [{ ...fixture, id: 'old', consumerPaidAt: '2026-10-01T00:00:00Z', paidAt: '2026-10-03T00:00:00Z' }, { ...fixture, id: 'missing', consumerPaidAt: null, paidAt: '2026-11-01T00:00:00Z' }, { ...fixture, id: 'new', consumerPaidAt: '2026-10-02T00:00:00Z', paidAt: '2026-10-01T00:00:00Z' }]
+  expect(rows.sort((a, b) => compareFulfillmentOrders(a, b, { queue })).map(row => row.id)).toEqual(['new', 'old', 'missing'])
+})

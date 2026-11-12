@@ -1,3 +1,5 @@
+import { validate } from 'class-validator'
+import { StockFiltersDto } from './fop-stock.dto'
 import { FopDataService } from './fop-data.service'
 import { FopDataProvider, FopIdentity, FopPermissionGrant } from './fop-data.types'
 import { FopStockOrderCandidate, FopStockInventoryCandidate } from './fop-stock.types'
@@ -38,61 +40,62 @@ it('filters stock lifecycle stages without hiding intermediate stages from all r
   expect((await service.getStockOrders('u', { ...query, ...filters })).items.map(r => r.id)).toEqual(['partial'])
 })
 
-it('filters by actual stock creation time and keeps the same scope in both Excel exports', async () => {
+it('filters by customer payment despite conflicting creation dates and keeps both Excel export modes in scope', async () => {
   const now = Date.parse('2026-10-31T08:00:00Z')
   const clock = jest.spyOn(Date, 'now').mockReturnValue(now)
   try {
-    const entries = [
-      ['recent-unpaid', '2026-10-30T01:00:00Z', 'unpaid'],
-      ['week-start', '2026-10-24T08:00:00Z', 'unpaid'],
-      ['before-week', '2026-10-24T07:59:59.999Z', 'unpaid'],
-      ['old-paid-recently', '2026-06-01T01:00:00Z', 'paid'],
-      ['future', '2026-10-31T08:00:00.001Z', 'unpaid'],
-      ['missing', null, 'unpaid'], ['invalid', '2026-02-30T01:00:00Z', 'unpaid'],
-      ['naive', '2026-10-30T01:00:00', 'unpaid'],
-    ] as const
-    provider.orders = entries.map(([id, createdAt, paymentStatus]) => Object.assign(order(id, { paymentStatus, reviewStatus: 'pending', paidAt: paymentStatus === 'unpaid' ? null : '2026-10-30T01:00:00Z' }), { createdAt }))
+    provider.orders = [
+      order('old-created-recent-paid', { createdAt: '2026-06-02T01:00:00Z', paidAt: '2026-10-30T01:00:00Z', paymentStatus: 'paid', reviewStatus: 'pending' }),
+      order('week-start', { createdAt: '2026-06-01T01:00:00Z', paidAt: '2026-10-24T08:00:00Z', paymentStatus: 'paid', reviewStatus: 'pending' }),
+      order('recent-created-old-paid', { createdAt: '2026-10-30T01:00:00Z', paidAt: '2026-06-01T01:00:00Z', paymentStatus: 'paid', reviewStatus: 'pending' }),
+      order('before-week', { createdAt: '2026-10-30T01:00:00Z', paidAt: '2026-10-24T07:59:59.999Z', paymentStatus: 'paid', reviewStatus: 'pending' }),
+      order('future', { createdAt: '2026-10-30T01:00:00Z', paidAt: '2026-10-31T08:00:00.001Z', paymentStatus: 'paid', reviewStatus: 'pending' }),
+      order('missing', { createdAt: '2026-10-30T01:00:00Z', paidAt: null, paymentStatus: 'paid', reviewStatus: 'pending' }),
+      order('unpaid', { createdAt: '2026-10-30T01:00:00Z', paidAt: null, paymentStatus: 'unpaid', reviewStatus: 'pending' }),
+    ]
     provider.grant.allowedStockOrderIds = provider.orders.map(r => r.id)
-    const filters = { timeRange: '1w' as const, lifecycle: 'unpaid' as const }
+    const filters = { timeRange: '1w' as const, lifecycle: 'pending_procurement' as const }
     const page = await service.getStockOrders('u', { ...query, ...filters, pageSize: 1 })
+    expect(page.items.map(row => row.id)).toEqual(['old-created-recent-paid'])
     expect(page.total).toBe(2)
     expect(page.totals.orderCount).toBe(2)
-    expect((await service.getStockOrders('u', { ...query, ...filters, page: 2, pageSize: 1 })).items).toHaveLength(1)
-    expect((await service.getStockOrders('u', query)).total).toBe(8)
+    expect((await service.getStockOrders('u', { ...query, ...filters, page: 2, pageSize: 1 })).items.map(row => row.id)).toEqual(['week-start'])
+    expect((await service.getStockOrders('u', query)).total).toBe(7)
+    expect((await service.getStockOrders('u', { ...query, lifecycle: 'unpaid', timeRange: '1w' })).items).toEqual([])
     for (const mode of ['filtered', 'selected'] as const) {
       const book = new ExcelJS.Workbook()
-      await book.xlsx.load(await service.exportStockOrders('u', { ...filters, mode, ...(mode === 'selected' ? { orderIds: ['recent-unpaid'] } : {}) }) as never)
+      await book.xlsx.load(await service.exportStockOrders('u', { ...filters, mode, ...(mode === 'selected' ? { orderIds: ['old-created-recent-paid'] } : {}) }) as never)
       const sheet = book.getWorksheet('备货清单')!
       const headings = sheet.getRow(1).values as string[]
-      const createdColumn = headings.indexOf('创建时间（UTC+8）')
-      expect(createdColumn).toBeGreaterThan(0)
-      expect(sheet.getCell(2, createdColumn).text).toBe('2026-10-30 09:00:00')
+      const paymentColumn = headings.indexOf('收款时间（UTC+8）')
+      expect(paymentColumn).toBeGreaterThan(0)
+      expect(sheet.getCell(2, paymentColumn).text).toBe('2026-10-30 09:00:00')
+      expect(sheet.getCell(2, headings.indexOf('创建时间（UTC+8）')).text).toBe('2026-06-02 09:00:00')
       expect(sheet.rowCount).toBe(mode === 'selected' ? 3 : 4)
-      expect(JSON.stringify(sheet.getSheetValues())).not.toContain('old-paid-recently')
+      expect(JSON.stringify(sheet.getSheetValues())).not.toContain('recent-created-old-paid')
+      expect(JSON.stringify(book.getWorksheet('说明')!.getSheetValues())).toContain('客户付款时间范围')
       expect(JSON.stringify(book.getWorksheet('说明')!.getSheetValues())).toContain('近一周')
     }
     await expect(service.exportStockOrders('u', { ...filters, mode: 'selected', orderIds: ['before-week'] })).rejects.toMatchObject({ status: 409 })
   } finally { clock.mockRestore() }
 })
 
-it.each([['1m', '2026-09-30T08:00:00Z'], ['3m', '2026-07-31T08:00:00Z']] as const)('uses UTC+8 rolling calendar boundary for stock creation %s', async (timeRange, boundary) => {
+it.each([['1m', '2026-09-30T08:00:00Z'], ['3m', '2026-07-31T08:00:00Z']] as const)('uses UTC+8 rolling calendar boundary for stock customer payment %s', async (timeRange, boundary) => {
   const clock = jest.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-10-31T08:00:00Z'))
   try {
-    provider.orders = [Object.assign(order('boundary'), { createdAt: boundary }), Object.assign(order('before'), { createdAt: new Date(Date.parse(boundary) - 1).toISOString() })]
+    provider.orders = [order('boundary', { paidAt: boundary, createdAt: '2026-10-30T00:00:00Z' }), order('before', { paidAt: new Date(Date.parse(boundary) - 1).toISOString(), createdAt: '2026-10-30T00:00:00Z' })]
     provider.grant.allowedStockOrderIds = provider.orders.map(r => r.id)
-    const filters = { timeRange }
-    expect((await service.getStockOrders('u', { ...query, ...filters })).items.map(r => r.id)).toEqual(['boundary'])
+    expect((await service.getStockOrders('u', { ...query, timeRange })).items.map(r => r.id)).toEqual(['boundary'])
   } finally { clock.mockRestore() }
 })
-it('keeps the creation-range cutoff fixed while revalidating an Excel export', async () => {
+it('keeps the customer-payment cutoff fixed while revalidating an Excel export', async () => {
   const now = Date.parse('2026-10-31T08:00:00Z'), clock = jest.spyOn(Date, 'now').mockReturnValue(now)
   try {
-    provider.orders = [Object.assign(order('1'), { createdAt: '2026-10-24T08:00:00Z' })]
+    provider.orders = [order('1', { paidAt: '2026-10-24T08:00:00Z', createdAt: '2026-10-30T00:00:00Z' })]
     let reads = 0
     jest.spyOn(provider, 'listStockOrders').mockImplementation(async () => { if (++reads > 1) clock.mockReturnValue(now + 1000); return provider.orders })
-    const filters = { timeRange: '1w' as const }
     const book = new ExcelJS.Workbook()
-    await book.xlsx.load(await service.exportStockOrders('u', { ...filters, mode: 'filtered' }) as never)
+    await book.xlsx.load(await service.exportStockOrders('u', { timeRange: '1w', mode: 'filtered' }) as never)
     expect(book.getWorksheet('备货清单')!.getCell('A2').text).toBe('BH2610281')
   } finally { clock.mockRestore() }
 })
@@ -112,6 +115,7 @@ const inventory = (id: string, extra: Partial<FopStockInventoryCandidate> = {}):
   fullPayment: { available: 12, locked: 3 }, deposit: { available: 7, locked: 2 }, ...extra,
 })
 class Provider extends FopDataProvider {
+  readonly source = 'mock' as const
   orders = [order('1'), order('2', { stockType: 'deposit', purchaseStatus: 'received', paidAt: null }), order('3', { cancelled: true })]
   inventory = [inventory('i1'), inventory('i2', { customerId: 'c2', owner: { id: 'e2', name: 'Bob' }, department: { id: 'd2', name: '业务二部' }, departmentPathIds: ['d2'] })]
   grant: FopPermissionGrant = { subject: { tenantId: 't', userId: 'u' }, allowedOrderIds: [], allowedStockOrderIds: ['1', '2', '3'], allowedStockInventoryIds: ['i1', 'i2'] }
@@ -193,8 +197,9 @@ it('intersects type, warehouse, department and salesperson/SKU/name searches', a
 it('sorts the entire result before paging and keeps missing payments last in both directions', async () => {
   provider.orders.push(order('4', { paidAt: '2026-10-03T01:00:00Z' }))
   provider.grant.allowedStockOrderIds = ['1', '2', '4']
-  expect((await service.getStockOrders('u', { ...query, pageSize: 1, sortOrder: 'desc' })).items[0].id).toBe('4')
-  expect((await service.getStockOrders('u', { ...query, sortOrder: 'desc' })).items.slice(-1)[0]?.id).toBe('2')
+  expect((await service.getStockOrders('u', { ...query, sortBy: 'paidAt', pageSize: 1 })).items[0].id).toBe('4')
+  expect((await service.getStockOrders('u', { ...query, sortBy: 'paidAt', pageSize: 1, sortOrder: 'desc' })).items[0].id).toBe('4')
+  expect((await service.getStockOrders('u', { ...query, sortBy: 'paidAt', sortOrder: 'desc' })).items.slice(-1)[0]?.id).toBe('2')
 })
 it('queries inventory by explicit permitted customer and keeps full/deposit balances separate without subtracting locks twice', async () => {
   const page = await service.getStockInventory('u', { ...query, customerId: 'c1' })
@@ -249,7 +254,7 @@ it('keeps every stock SKU in a separate detail sheet and filters only data rows,
   await book.xlsx.load(await service.exportStockOrders('u', { mode: 'selected', orderIds: [provider.orders[0].id] }) as never)
   const list = book.getWorksheet('备货清单')!, detail = book.getWorksheet('商品明细')!
   expect(list.getCell('B2').text).toContain('完整内容见商品明细')
-  expect(list.autoFilter).toBe('A1:M2')
+  expect(list.autoFilter).toBe('A1:L2')
   expect(detail).toBeDefined()
   expect(detail.rowCount).toBe(31)
   expect(detail.getCell('C31').value).toBe('00029')
@@ -339,7 +344,7 @@ it.each(['orderStatus', 'purchaseStatus'] as const)('sorts %s by business stage 
 })
 
 it.each(['admin', 'department_manager'])('defaults inventory to the logged-in salesperson even for %s access', async businessRole => {
-  Object.assign(user, { businessRole, businessDepartmentId: 'd1' })
+  Object.assign(user, { businessRole, businessDepartmentId: 'd1', dataDisplayScope: 'department' })
   provider.inventory = [inventory('i1'), inventory('i2', { customerId: 'c2', owner: { id: 'e2', name: 'Bob' } })]
   expect((await service.getStockInventory('u', query)).items.map(r => r.id)).toEqual(['i1'])
   expect((await service.getStockInventory('u', { ...query, ownerId: 'e2' })).total).toBe(0)
@@ -380,4 +385,37 @@ it('checks procurement selection against its current queue and role, while keepi
   await expect(service.getStockInventory('u', selected)).rejects.toMatchObject({ status: 409 })
   user.workbenchRoles = ['sales']
   await expect(service.getStockInventory('u', selected)).rejects.toMatchObject({ status: 403 })
+})
+
+it('defaults independent stock orders to creation time even when receipt order is opposite', async () => {
+  provider.orders = [order('1', { createdAt: '2026-10-01T00:00:00Z', paidAt: '2026-11-01T00:00:00Z' }), order('2', { createdAt: '2026-10-03T00:00:00Z', paidAt: null })]
+  expect((await service.getStockOrders('u', query)).items.map(row => row.id)).toEqual(['2', '1'])
+})
+
+
+it('keeps procurement-in-progress distinct from supplier pending through lifecycle, queue, sorting and Excel', async () => {
+  expect(await validate(Object.assign(new StockFiltersDto(), { purchaseStatus: 'in_progress' }))).toEqual([])
+  provider.orders = [
+    order('before', { paymentStatus: 'paid', reviewStatus: 'approved', purchaseStatus: 'partial' }),
+    order('progress', { paymentStatus: 'paid', reviewStatus: 'approved', purchaseStatus: 'in_progress' as const }),
+    order('after', { paymentStatus: 'paid', reviewStatus: 'approved', purchaseStatus: 'purchased' }),
+  ]
+  provider.grant.allowedStockOrderIds = provider.orders.map(row => row.id)
+  const filters = { purchaseStatus: 'in_progress' as const }
+  const lifecycle = await service.getStockOrders('u', { ...query, ...filters, lifecycle: 'pending_procurement' })
+  expect(lifecycle.items.map(row => row.id)).toEqual(['progress'])
+  user.workbenchRoles = ['procurement']
+  const page = await service.getStockOrders('u', { ...query, queue: 'procurement', ...filters })
+  expect(page.items.map(row => row.purchaseStatus)).toEqual(['in_progress'])
+  expect(page.totals.amounts).toEqual([{ currency: 'USD', amount: 100 }])
+  for (const [sortOrder, expected] of [['asc', ['before', 'progress', 'after']], ['desc', ['after', 'progress', 'before']]] as const) {
+    expect((await service.getStockOrders('u', { ...query, queue: 'procurement', sortBy: 'purchaseStatus', sortOrder })).items.map(row => row.id)).toEqual(expected)
+  }
+  for (const mode of ['selected', 'filtered'] as const) {
+    const book = new ExcelJS.Workbook()
+    await book.xlsx.load(await service.exportStockOrders('u', { mode, queue: 'procurement', ...filters, ...(mode === 'selected' ? { orderIds: ['progress'] } : {}) }) as never)
+    const sheet = book.getWorksheet('备货清单')!
+    expect(sheet.rowCount).toBe(3)
+    expect(sheet.getCell(2, (sheet.getRow(1).values as string[]).indexOf('采购状态')).value).toBe('采购中')
+  }
 })

@@ -1,3 +1,4 @@
+import { demoStockSupplierFollowUps } from './stock-supplier-follow-up'
 import { demoRmaCases } from './rma-orders-demo'
 import { demoPurchaseReturns } from './purchase-returns-demo'
 import { demoShipmentOrders } from './supplier-shipment-demo'
@@ -74,6 +75,7 @@ function imageUrl(product: typeof PRODUCTS[number]) {
 
 /** Local demo only. This adapter never writes bindings or attempts an upstream fallback. */
 export class DemoFopDataProvider extends FopDataProvider {
+  readonly supportsStockSupplierFollowUp = true
   private readonly approved = new Set<string>()
   private reviewedTimes = new Map<string, string>()
   private readonly approvalRequests = new Map<string, { fingerprint: string; outcome: ApprovalOutcome }>()
@@ -136,7 +138,7 @@ export class DemoFopDataProvider extends FopDataProvider {
       return node ? [{ code: d.id, departmentId: node.id, departmentPathIds: departmentPath(workspace, node.id) }] : []
     })
     const organizationSummaries = (['registrations', 'department_receipts', 'order_volume'] as const).map(chartId => ({ chartId, departments }))
-    return { allowedRmaCaseIds: demoRmaCases(identity, await this.orders(identity), this.paymentDemoAnchor).map(row => row.id), allowedPurchaseReturnIds: demoPurchaseReturns(identity, await this.orders(identity)).map(row => row.id), allocationInventoryScopes: demoAllocationScopes(await this.orders(identity)), approvalActions: ['review', 'allocation_review'], organizationSummaries, subject: { ...identity }, allowedOrderIds: (await this.orders(identity)).map(order => order.id), allowedStockOrderIds: demoStockOrders(await this.orders(identity)).map(row => row.id), allowedStockInventoryIds: demoStockInventory(await this.orders(identity)).map(row => row.id), allowedPurchaseOrderIds: [...(await this.orders(identity)).flatMap(order => demoSupplierFollowUps(order).map(row => row.purchaseOrderId)), ...demoPurchaseLinks(identity, await this.orders(identity)).orders.flatMap(o => o.obligations?.flatMap(link => link.purchase ? [link.purchase.id] : []) ?? [])], allowedReceiptIds: (await this.receipts(identity)).map(receipt => receipt.id), allowedFreightIds: demoFreight(identity, await this.orders(identity)).map(row => row.id), allowedProfitIds: demoProfits(identity, await this.orders(identity)).map(row => row.id), analyticsScopes: ['rates', 'registrations', 'receipts', 'freight', 'sales_profit'] }
+    return { allowedRmaCaseIds: demoRmaCases(identity, await this.orders(identity), this.paymentDemoAnchor).map(row => row.id), allowedPurchaseReturnIds: demoPurchaseReturns(identity, await this.orders(identity)).map(row => row.id), allocationInventoryScopes: demoAllocationScopes(await this.orders(identity)), approvalActions: ['review', 'allocation_review'], organizationSummaries, subject: { ...identity }, allowedOrderIds: (await this.orders(identity)).map(order => order.id), allowedStockOrderIds: demoStockOrders(await this.orders(identity)).map(row => row.id), allowedStockInventoryIds: demoStockInventory(await this.orders(identity)).map(row => row.id), allowedPurchaseOrderIds: [...demoStockOrders(await this.orders(identity), new Date(this.paymentDemoAnchor)).flatMap(order => demoStockSupplierFollowUps(order).map(row => row.purchaseOrderId)), ...(await this.orders(identity)).flatMap(order => demoSupplierFollowUps(order).map(row => row.purchaseOrderId)), ...demoPurchaseLinks(identity, await this.orders(identity)).orders.flatMap(o => o.obligations?.flatMap(link => link.purchase ? [link.purchase.id] : []) ?? [])], allowedReceiptIds: (await this.receipts(identity)).map(receipt => receipt.id), allowedFreightIds: demoFreight(identity, await this.orders(identity)).map(row => row.id), allowedProfitIds: demoProfits(identity, await this.orders(identity)).map(row => row.id), analyticsScopes: ['rates', 'registrations', 'receipts', 'freight', 'sales_profit'] }
   }
   async listRmaCases(identity: Readonly<FopIdentity>, permission: Readonly<FopPermissionGrant>) {
     this.assertIdentity(identity, permission)
@@ -161,6 +163,12 @@ export class DemoFopDataProvider extends FopDataProvider {
     this.assertIdentity(identity, permission)
     const allowed = new Set(permission.allowedOrderIds)
     return (await this.orders(identity)).filter(order => allowed.has(order.id))
+  }
+  async listStockSupplierFollowUps(identity: Readonly<FopIdentity>, permission: Readonly<FopPermissionGrant>, orderId: string) {
+    this.assertIdentity(identity, permission)
+    const order = (await this.listStockOrders(identity, permission)).find(row => row.id === orderId)
+    const allowed = new Set(permission.allowedPurchaseOrderIds ?? [])
+    return { subject: { ...identity }, orderId, items: order ? demoStockSupplierFollowUps(order).filter(row => allowed.has(row.purchaseOrderId)) : [] }
   }
   async listStockOrders(identity: Readonly<FopIdentity>, permission: Readonly<FopPermissionGrant>) {
     this.assertIdentity(identity, permission)
@@ -361,19 +369,21 @@ export class DemoFopDataProvider extends FopDataProvider {
         if (allocated) dispatchDocuments.forEach(document => { document.status = 'approved' })
       }
       if (dispatchDocuments.length && procurementProgress.logisticsGate === 'pending_dispatch') procurementProgress.logisticsGate = 'pending_logistics'
-      orders.push({
-        shippingCountryCode: ['US', 'GB', 'AU', 'DE', 'FR', 'CA', 'JP', 'NL'][index % 8],
-        shippingRecipient: demoRecipient(index),
-        customLogisticsChannelName: ['Economy Shipping', 'Standard Shipping', 'Battery Shipping'][Math.floor(index / 4) % 3],
-        logisticsChannels: [{ name: `${carrier.label}标准专线`, code: `DEMO-${carrier.id}-STD` }, ...(index % 13 === 0 ? [{ name: `${carrier.label}带电专线`, code: `DEMO-${carrier.id}-BAT` }] : [])],
-        logisticsInfo: dispatchDocuments.length ? dispatchDocuments.map((document, groupIndex) => ({
+      const logisticsInfo: FopOrderCandidate['logisticsInfo'] = dispatchDocuments.length ? dispatchDocuments.map((document, groupIndex) => ({
           carrierName: groupIndex ? '4PX' : carrier.label,
+          channelName: groupIndex ? '4PX标准专线' : `${carrier.label}标准专线`, channelCode: groupIndex ? 'DEMO-4PX-STD' : `DEMO-${carrier.id}-STD`,
           // Demo selection only. Production gateway supplies FOP's resolved Shopify number.
           shopifyTracking: document.status === 'draft' ? null : {
             type: (['full', 'first_mile', 'last_mile'] as const)[index % 3],
             number: `${groupIndex ? '4PX' : carrier.id === 'JS' ? 'JSEJX' : carrier.id}${2881622244 + index * 10 + groupIndex}${!groupIndex && carrier.id === 'JS' ? 'YQ' : ''}`,
           },
-        })) : null,
+        })) : null
+      orders.push({
+        shippingCountryCode: ['US', 'GB', 'AU', 'DE', 'FR', 'CA', 'JP', 'NL'][index % 8],
+        shippingRecipient: demoRecipient(index),
+        customLogisticsChannelName: ['Economy Shipping', 'Standard Shipping', 'Battery Shipping'][Math.floor(index / 4) % 3],
+        logisticsChannels: [{ name: `${carrier.label}标准专线`, code: `DEMO-${carrier.id}-STD` }, ...(dispatchDocuments.length > 1 ? [{ name: '4PX标准专线', code: 'DEMO-4PX-STD' }] : [])],
+        logisticsInfo,
         dispatchDocuments,
         procurementProgress,
         wmsCreatedAt: completed || allocated && index % 5 !== 0 ? new Date(createdAt + 3 * 3_600_000).toISOString() : null,
@@ -398,14 +408,14 @@ export class DemoFopDataProvider extends FopDataProvider {
         procurementStatus: completed || stage >= 2 ? 'purchased' : 'pending', allocationStatus: allocated ? 'allocated' : stage === 2 ? 'pending' : 'not_ready',
         dispatchStatus: shipping ? 'dispatched' : stage === 3 ? 'pending' : 'not_ready', shippingStatus: completed ? 'shipped' : stage === 4 ? 'pending' : 'not_ready',
         warehouseCode: (index + Math.floor(index / 12)) % 3 === 0 ? 'SZ' : 'HZ', warehouse: (index + Math.floor(index / 12)) % 3 === 0 ? '深圳仓' : '杭州仓', carrierCode: carrier.id, carrier: carrier.label,
-        trackingNumber: shipping ? `HZ${accountKey.slice(0, 5).toUpperCase()}${String(800000000 + index)}` : null,
-        shopifySyncedAt: completed || stage >= 2 && stage <= 4 ? new Date(createdAt + 90 * 60_000).toISOString() : null,
-        dispatchApprovedAt: completed || stage >= 2 && stage <= 4 ? new Date(createdAt + 75 * 60_000).toISOString() : null,
+        trackingNumber: logisticsInfo?.length === 1 ? logisticsInfo[0].shopifyTracking?.number ?? null : null,
+        shopifySyncedAt: shopifySync === 'synced' ? new Date(createdAt + 90 * 60_000).toISOString() : null,
+        dispatchApprovedAt: dispatchDocuments.some(d => d.status === 'approved') ? new Date(createdAt + 75 * 60_000).toISOString() : null,
         procurementCompletedAt: completed || procurementProgress.purchaseOrder === 'ordered' && procurementProgress.supplierPayment === 'paid' ? new Date(createdAt + 60 * 60_000).toISOString() : null,
         allocationApprovedAt: completed || stage === 4 ? new Date(createdAt + 120 * 60_000).toISOString() : null,
         outboundCompletedAt: completed ? new Date(createdAt + 180 * 60_000).toISOString() : null,
         reviewedAt: completed || stage !== 0 ? new Date(createdAt + 30 * 60_000).toISOString() : null,
-        salesperson: owner.name, consumerPaidAt: new Date(createdAt - 45 * 60_000).toISOString(), createdAt: new Date(createdAt).toISOString(), paidAt: paid ? new Date(createdAt + 15 * 60_000).toISOString() : null,
+        salesperson: owner.name, consumerPaidAt: paid ? new Date(createdAt + 15 * 60_000).toISOString() : null, createdAt: new Date(createdAt).toISOString(), paidAt: paid ? new Date(createdAt + 15 * 60_000).toISOString() : null,
         cancelled: false, exception: (stage === 5 || index % 13 === 0) ? { type: FOP_EXCEPTION_TYPES[Math.floor(index / 6) % 5], reason: null, hours: 3 + index % 47 } : null,
       })
     }
@@ -428,7 +438,7 @@ export class DemoFopDataProvider extends FopDataProvider {
     }
     const source = orders.find(o => o.salesDepartmentCode && o.reviewStatus === 'approved' && o.paymentStatus === 'paid')
     if (source) orders.push({ ...source, id: `${source.id}:prepaid-fulfillment`, orderNumber: `TO${businessDate(new Date(backlogDay - DAY)).slice(2).replaceAll('-', '')}039999`, amount: 60, amountBreakdown: { productAmount: 55, shippingFee: 5, taxAmount: 0, discountAmount: 0 },
-      createdAt: new Date(backlogDay - DAY).toISOString(), paidAt: new Date(backlogDay - DAY + 3_600_000).toISOString(),
+      consumerPaidAt: new Date(backlogDay - DAY + 3_600_000).toISOString(), createdAt: new Date(backlogDay - DAY).toISOString(), paidAt: new Date(backlogDay - DAY + 3_600_000).toISOString(),
       customerId: `${accountKey}:prepaid-customer`, customerCode: 'PRE001', customerName: 'Prepaid Demo Customer', exception: null })
     orders.push(...demoShipmentOrders(orders, this.paymentDemoAnchor))
     for (const [allocationIndex, order] of orders.entries()) {

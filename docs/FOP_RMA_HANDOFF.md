@@ -1,49 +1,63 @@
 # 销售 RMA 售后清单接入
 
-## 展示范围
+## 当前实现
 
-销售工作台新增queue=rma，只读跟进仅退款、退货退款及补发货，订单取消、订单拦截、拦截取消作为订单编号下标签展示。与采购退货、供应商退款独立，不从supplierPayment=refunded推定客户售后。
+销售工作台已通过 Kingdee 适配器读取 FOP 测试环境真实 RMA，不回退演示数据。沿用履约订单视角合并展示、整单 SKU 搜索、类型／流程／部门／仓库筛选、客户付款时间倒序及 Excel 导出。
 
-销售页签位于备货之后、异常订单之前。列表首列统一“订单编号”，选择框、居中订单号及多商品汇总沿用待审核清单样式；Shopify单号独立列，演示订单沿用同一履约来源的TO＋日期＋流水号，不另外生成售后履约单号。按履约单一行，退款及退货以整笔履约订单为单位，展示全部原商品，不增加SKU级售后拆分。退款支持部分金额；申请退款金额与订单金额独立显示，不用订单金额覆盖申请金额，也不据此推定实退金额或退款已完成。合并同单多个匹配的授权售后事项；默认进行中，可筛选已结束/全部，按售后最近更新时间降序，默认50条。RMA单列按每张售后单展示“售后类型＋售后单号”，同类型多张单据分别保留，不按类型合并丢失单号；单号支持复制，缺失显示—且不补造。售后类型筛选保留仅退款、退货退款、补发货；原售后事项区域改为售后原因纯文本列，Shopify单号独立列参考待支付；退款金额单列显示。支持类型、关键词、业务部门、发货仓库，继承当前业务员范围；关键词检索订单/售后单号、商品、客户、业务员、原因和当前节点。缺更新时间显示—，不以订单创建时间替代。
+| 真实验证单据 | 原履约订单 | 类型 | 状态 |
+| --- | --- | --- | --- |
+| RMA26110900013 | TO260928021876 | 补发货 | 待处理 |
+| RMA26110900004 | TO261107047695 | 仅退款 | 处理完成 |
 
-售后是独立维度：取消申请不等于订单已取消；cancelled=true、订单未支付、已发货不阻止授权售后记录展示。RMA不修改原待办及完成清单的状态口径。isOpen必须来自售后实际流程，不能从单个订单状态、退款标志或拦截标签猜测。
+## 读取与权限
 
-## API 与权限
+1. 当前员工独立 Token（管理员使用已授权服务上下文）调用 `queryOrderList`，按已授权公司编码分页取得客户及来源索引；本地人员范围只收窄候选数据。
+2. 按付款客户调用已登记、独立订阅授权且开启组织数据权限的 `queryAfterSaleOrders`，取得真实 RMA。接口强制客户内码，不能直接查询全公司；缺少 RMA API 授权明确失败，不以订单权限替代售后 API 授权。
+3. 仅按源单号精确匹配履约订单，并核对付款客户、客户、店铺与公司；备货来源、RMA 来源或无法精确关联的记录不并入履约清单。
+4. 用来源内码减一作为 `employee-orders/page` 原生事实游标，每次读取一行并要求返回内码精确相等。该接口继续执行当前员工、公司、角色及本地成员范围，回传主体和范围版本必须一致；来源不可见时不展示对应售后。此查询不依赖待审核、待支付等队列状态，保留已取消及已发货来源。
+5. 原履约单完整商品、客户付款时间及发货仓库来自上述已授权事实；金额币种须采用字段绑定的结算币种，不能使用本位币替代。查询完成后重查权限与本地范围；Excel 在生成前后再次读取、比对筛选结果及会话，变更则拒绝输出旧数据。
 
-- GET /api/autoflow/integrations/fop/rma-orders
-- POST /api/autoflow/integrations/fop/rma-orders/export
+来源索引最多缓存 60 秒，只用于发现候选客户／单据，不缓存授权结论；每次都重读 RMA 及精确来源权限。并发限制为 6，限定总时长、响应体积、累计数量并校验分页、重复内码和总数，失败不返回截断的清单。仅为当前流程可能命中的履约单读取完整事实；关键词仍在整单层面匹配，命中一个 SKU 后保留全部原商品。
 
-GET：type可选refund|return_refund|reshipment；flowStatus=active|closed|all默认active；search≤200字符；departmentId/ownerId≤128；warehouseCode=HZ|SZ；page默认1，pageSize=20|50|100默认50。
+原生接口缺少共享快照版本，列表为分次只读查询的组合；不是审核或退款操作凭证。待 FOP 提供公司／员工维度 RMA 专用分页接口后，可替换客户遍历，不改变前端契约。
 
-POST：同筛选，mode=filtered|selected；filtered不接受orderIds，selected要求1–100个唯一orderIds。最多10000笔履约单，商品与售后事项合计最多50000行。默认导出全部查询结果，选中后仅导出所选订单当前匹配事项；失效选择或范围变化409。
+## 字段口径
 
-独立授权allowedRmaCaseIds与allowedOrderIds、当前本人/部门/公司范围求交。管理员也受独立白名单限制。查询先取售后快照，之后重新读取授权履约单当前归属，再取得最新授权过滤；搜索、选项、合计、分页、导出不包含未授权事项。同单多事项金额只按订单计一次，按币种分别合计；售后申请金额不等于实际退款，不从订单金额中扣减。
+| 字段 | 映射 |
+| --- | --- |
+| 类型 `hzkj_sales_type` | A 退货退款；B 仅退款；C 补发货 |
+| 流程 `hzkj_orderstatus` | 1 待处理、2 处理中为进行中；0 取消、3 处理完成、4 已补发、5 取消发货、6 已关闭为已结束 |
+| 历史空状态 | `isOpen=null`，只在“全部”展示，标记“状态未提供”；不推定进行中或已结束 |
+| 原单关系 | `hzkj_srcnumber` 精确匹配履约单号，结合付款客户、店铺及员工授权事实核验 |
+| 原因 | `hzkj_resason1`，缺失时使用实际返回的原因基础资料名称 |
+| 退款数值 | `hzkj_refund_amount`，保留零值，不以申请金额或订单金额兜底 |
+| 退款币种 | 仅使用接口明确返回的 `hzkj_tocurr_number`；当前原生响应未返回，保留空，不使用原单币种替代。每张售后单独立保留退款数值；币种缺失单独标记，不跨售后单汇总 |
+| 原单金额／币种 | 当前已授权履约单 `hzkj_order_amount`／`hzkj_settlecurrency.number`；现有事实接口缺少结算币种时用内部 `XXX` 标识未知，页面显示“币种未提供”，Excel 币种为 —，不提供不完整金额合计 |
+| 客户付款时间 | 履约单 `hzkj_receipt_date`，不由创建、审核或售后时间替代 |
+| RMA 创建／更新 | 原生无时区时间按测试环境 UTC+8 转换；非法值保留空 |
 
-## 员工网关契约
+同一履约订单可保留不同时间、已结束或状态缺失的历史 RMA；进行中的“仅退款”不得同时与“退货退款／补发货”冲突。校验在类型筛选前执行，页面、BFF 和 Excel 一致；历史记录不互相覆盖。订单取消、拦截及取消拦截标签仅由明确业务事实形成，不从 RMA 结束推定。
 
-HttpFopDataProvider预留POST /rma-cases（相对FOP_EMPLOYEE_API_URL），用现有服务端Bearer凭证，body.subject={tenantId,userId}来自登录身份，不允许客户端指定。
+## 本地配置
 
-返回RmaSnapshot：subject必须完全匹配，cases数组。每项包含：
-- id、tenantId、orderId：真实售后资源、租户和履约单关联；ID唯一，不接受规范化后冲突。
-- type：业务类型refund仅退款、return_refund退货退款、reshipment补发货；兼容的流程事件interception订单拦截、cancellation订单取消及interception_release拦截取消不作为售后类型值，而在订单编号下形成标签；仅处于这些流程的订单仍保留在默认/流程状态查询中，以继续跟进，RMA单列为—，相关原因、更新时间及事项计数保留。不能作为type查询值。旧前端事件类型书签移除该类型并回第一页，API旧值返回400。
-- isOpen：明确boolean，表示实际流程是否仍未结束；缺失/非法导致失败，不能当已结束或进行中。
-- number、stage、reason：可空售后单号、当前流程节点原文、原因原文。拦截/取消无独立业务单号时允许number=null，不拼造单号。
-- createdAt、updatedAt：可空、明确时区；无效时间归null。
-- refundAmount、refundCurrency：可空独立FOP售后退款金额及币种；不以requestedAmount或订单金额补造，零保留为零，负数/非法值失败。它是售后单退款金额，不据此推断财务到账。当前授权、筛选匹配的退款/退货退款事项按币种精确合计，某币种任一金额缺失则该币种合计显示—；未知币种单独显示—；补发货不形成退款。
-- requestedAmount、currency：可空独立申请金额/申请币种，不用订单币种替代未知币种，不代表财务实际退款。
+后端私有 `backend/.env.fop.local` 已填写测试接口地址，凭据不提交 Git。协同开发按 `backend/.env.fop.local.example` 配置：
 
-完整类型见backend/src/modules/fop-data/rma-orders.ts。未接入网关明确503；缺失独立资源授权返回零记录，不以演示结果代替真实读取。
+- `FOP_KINGDEE_RMA_URL`：`/kapi/v2/hzkj/hzkj_ordercenter/hzkj_after_sale_orders/queryAfterSaleOrders`。
+- `FOP_KINGDEE_RMA_ORDER_LIST_URL`：`/kapi/v2/hzkj/hzkj_ordercenter/hzkj_orders/queryOrderList`。
+- `FOP_KINGDEE_ORGANIZATION_NUMBERS`：公司内码到公司编码的 JSON 映射。
+- 继续使用既有自动 Token、员工绑定、组织授权及 `FOP_KINGDEE_WORKBENCH_FACTS_MODE=raw`；跨成员范围要求上游 `employeeFilterVersion=1`。
 
-订单标签优先使用授权履约单明确的cancelled及shipmentInterceptStatus；另可读取独立授权的取消/拦截流程事件，未结束取消申请只表示取消流程，以cancellation_requested标签key、黄色“订单取消”及“取消申请处理中”提示区分实际cancelled的红色“订单取消”，Excel记录订单取消（申请中）；不推定取消已执行。拦截取消需要released或明确interception_release事件，不从isOpen=false或节点中文推定。标签可来自当前订单关联的已授权事项，类型及流程状态筛选只裁剪售后原因/退款与类型明细，不导致当前订单标签丢失。关键词（含SKU）按整单匹配，命中后保留该单当前类型/流程筛选下全部商品和事项；不按关键词继续裁剪事项或退款金额。退款金额、类型、原因、标签及Shopify单号同步Excel；售后明细保留申请金额与退款金额的独立数值列。
+未配置接口返回 `503/fop_rma_not_configured`；未订阅、身份失效、范围变化与上游错误分别处理，不以成功零条掩盖失败。首次需建立来源索引，测试环境约数十秒；客户端列表与导出等待时间分别为 180／360 秒。
 
-## FOP 源码核对
+## 本地接口与导出
 
-已核对dtr5b的hzkj_return_apply_order / hzkj_return_order退货申请与退货单元数据，存在订单关联hzkj_order_billno、申请日期hzkj_bizdate、业务员hzkj_bizoperator及订单状态字段。OrderRefundMaintenanceController/OrderRefundBackfillService为退款维护/历史补算能力，不能直接作为客户售后流程只读清单。Shopify取消回调与物流取消、仓库拦截也不是同一业务事实。
+- `GET /api/autoflow/integrations/fop/rma-orders`：`type=refund|return_refund|reshipment`；`flowStatus=active|closed|all` 默认 active；支持关键词、部门、业务员及仓库；每页 20／50／100。
+- `POST /api/autoflow/integrations/fop/rma-orders/export`：`mode=filtered|selected`；默认导出筛选范围全部记录，选中时导出所选履约订单。包含主清单、售后明细、商品明细及导出说明，排序与列表一致。
 
-正式接入仍需FOP提供售后资源ID、精确履约关联、客户退款/退货分类、isOpen与节点、拦截/取消申请及终态的明确映射。不能仅用订单号文本模糊关联或依据cancelled/shipmentInterceptStatus合成售后申请。当前仅完成BFF、UI、演示与网关契约，未修改FOP源码、凭据、订阅或真实应用权限。
+最多导出 10000 笔订单、合计 50000 条商品及售后明细。RMA 单号、Shopify 单号、原因、退款数值／币种与订单标签均保留独立字段。财务实际退款仍在 FOP 业务单据中核对。本轮未修改 FOP 后台源码、业务单据或应用订阅权限。
 
-本轮补充核对：hzkj_after_sale_orders.dym中hzkj_sales_type枚举A=退货退款、B=仅退款、C=补发货，hzkj_refund_amount为退款金额，hzkj_resason1为售后原因；AllocationConstants.AFTER_SALE_TYPE_REISSUE=C与AfterSaleAllocationBuildService相符。源码字段存在不代表员工网关已发布；正式字段币种、退款金额与实际到账关系仍需接口联调确认。
+## 本地查询粒度更正（2026-11-11）
 
-## 售后类型互斥
+一张 RMA 售后单一行；同履约单的多张售后分别展示。列表行 ID、分页计数、勾选及导出以售后单为单位，导出选择参数为 `caseIds`；`sourceOrderId` 关联原履约单。退款金额仅取当前 RMA；原订单金额、商品数量合计按履约单去重。原类型互斥、独立授权及权限复验保留。
 
-同一授权履约订单，refund仅退款不得与return_refund退货退款或reshipment补发货并存；取消/拦截标签及同类型的部分退款记录不受此限制。检查在业务类型、流程状态、关键词筛选前执行，不能通过筛选掩盖已授权数据冲突；上游冲突明确失败，不自行选择优先级或删除一类事实。前端拒绝冲突响应，Excel生成再次校验，列表与导出保持一致。Demo每笔履约只生成一种业务售后类型，可叠加独立订单事件；历史网关也须遵守此口径。
+真实同步适配仍未配置，FOP 访问保持暂停。本轮验证采用本地模拟数据及隔离数据库，不代表上游同步完成。

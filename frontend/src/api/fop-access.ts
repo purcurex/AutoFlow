@@ -1,18 +1,20 @@
 import type { BusinessScope } from './workbench-access'
 export interface FopBinding { tenantId: string; userId: string }
 export interface FopBindingDetails {
+  employeeNumber?: string | null
   username: string; name: string; employeeRecordId: string; employeeMasterId: string
   departmentId: string; organizationId: string; verifiedAt: string
 }
-export interface FopBindingEmployee { id: string; masterId: string; membershipId: string; departmentId: string; name: string; username: string; state: 'active' | 'disabled' | 'unknown' }
+export interface FopEmployeeSelection { employeeId: string; membershipId: string; employeeNumber: string }
+export interface FopBindingEmployee { employeeNumber?: string | null; id: string; masterId: string; membershipId: string; departmentId: string; name: string; username: string; state: 'active' | 'disabled' | 'unknown' }
 export interface FopBindingEmployeePage { items: FopBindingEmployee[]; nextCursor: string | null; scopeVersion: string }
 export async function getFopBindingEmployees(query: { cursor?: string; scopeVersion?: string } = {}): Promise<FopBindingEmployeePage> {
   const { default: api } = await import('./index')
   return api.get('/users/fop-employees', { params: query })
 }
-export async function bindFopEmployee(accountId: string, employeeId: string, membershipId: string): Promise<import('./organization').EmployeeLogin> {
+export async function bindFopEmployee(accountId: string, employeeId: string, membershipId: string, employeeNumber: string): Promise<import('./organization').EmployeeLogin> {
   const { default: api } = await import('./index')
-  return api.put(`/users/${encodeURIComponent(accountId)}/kingdee-binding`, { employeeId, membershipId })
+  return api.put(`/users/${encodeURIComponent(accountId)}/kingdee-binding`, { employeeId, membershipId, employeeNumber })
 }
 export async function unbindFopEmployee(accountId: string): Promise<import('./organization').EmployeeLogin> {
   const { default: api } = await import('./index')
@@ -40,6 +42,13 @@ export async function getFopDataAccess(): Promise<FopDataAccess> {
 export function fopAccessError(error: unknown, zh: boolean): string {
   const code = typeof error === 'object' && error !== null && 'code' in error ? error.code : undefined
   const messages: Record<string, [string, string]> = {
+    workbench_replica_not_initialized: ['本地工作台尚未初始化，暂无可用数据。请联系管理员完成初始化。', 'The local workbench is not initialized. Contact an administrator to initialize the data.'],
+    workbench_replica_authorization_stale: ['当前数据授权已过期。请通过“同步数据”续验后重试；若 FOP 调用已暂停，请联系管理员。', 'Current data authorization has expired. Use Sync data to renew it; contact an administrator if FOP access is paused.'],
+    workbench_snapshot_expired: ['初始化快照已过期。请再次点击初始化，创建新的快照。', 'The initialization snapshot has expired. Click Initialize again to create a new snapshot.'],
+    workbench_replica_incomplete: ['本地工作台数据尚不完整，当前清单暂不可用。请联系管理员核对同步配置。', 'Local workbench data is incomplete. Contact an administrator to verify synchronization.'],
+    workbench_replica_sync_not_configured: ['源数据同步尚未配置，请联系管理员。', 'Source synchronization is not configured. Contact an administrator.'],
+    workbench_replica_export_revalidation_required: ['导出需要复核源数据授权，当前暂不可导出。请在源数据核验恢复后重试。', 'Export requires current source authorization verification. Retry when verification is available.'],
+    fop_rma_not_configured: ['RMA售后清单尚未接通，请先在 FOP 查看。', 'RMA after-sales is not connected yet. View the records in FOP.'],
     rma_type_conflict: ['售后类型存在冲突，请在 FOP 核对后刷新。', 'Conflicting after-sales types. Verify the records in FOP and refresh.'],
     stock_inventory_orders_changed: ['所选备货订单已变化或不可查看，请关闭库存窗口，刷新清单后重新勾选。', 'Selected stock orders changed or are unavailable. Close this window, refresh the list and select again.'],
     chart_access_denied: ['暂时无法查看此图表，请联系管理员。', 'This chart is unavailable. Contact an administrator.'],
@@ -47,10 +56,15 @@ export function fopAccessError(error: unknown, zh: boolean): string {
     business_access_disabled: ['当前账号尚未开通业务数据，请联系管理员。', 'Business data is not enabled for your account. Contact an administrator.'],
     business_scope_required: ['业务数据暂不可查看，请联系管理员。', 'Business data is unavailable. Contact an administrator.'],
     fop_binding_required: ['业务数据暂不可查看，请联系管理员。', 'Business data is unavailable. Contact an administrator.'],
+    fop_employee_number_mismatch: ['工号缺失或已变化，请刷新人员目录后重新选择。', 'Employee number is missing or changed. Refresh the directory and select again.'],
+    fop_employee_number_ambiguous: ['FOP 工号对应多个人员，请先核对人员档案。', 'This employee number matches multiple people. Check the FOP directory.'],
     fop_proxy_user_required: ['该员工尚未加入金蝶应用代理用户名单，请配置后重试。', 'Add this employee to the Kingdee application proxy users and retry.'],
     fop_employee_unavailable: ['金蝶员工账号不可用或状态无法核实，请核对当前数据中心的用户状态。', 'The Kingdee employee is unavailable or its current state cannot be verified.'],
     fop_api_not_authorized: ['金蝶应用尚未授权当前接口，请核对自建API授权。', 'Authorize this API for the Kingdee application.'],
     fop_employee_directory_not_configured: ['金蝶人员目录尚未接通，请核对目录接口的实际URL、API登记及应用授权。', 'Check the Kingdee employee directory URLs, API registration and application authorization.'],
+    fop_supplier_contacts_not_configured: ['供应商联系人服务尚未接通，请在 FOP 联系供应商。', 'Supplier contacts are not connected yet. Contact the supplier in FOP.'],
+    fop_reserved_customers_search_required: ['匹配客户过多或候选不完整，请输入更完整的客户名称或编码缩小查询范围。', 'Customer matches are too numerous or incomplete. Enter a more specific customer name or code.'],
+    fop_queries_paused: ['FOP 测试环境数据访问已暂停，待集成方案调整后恢复。', 'FOP test data access is paused pending integration changes.'],
     fop_not_configured: ['业务数据服务尚未接通，请联系管理员。', 'The business data service is not connected. Contact an administrator.'],
     fop_summary_not_configured: ['部门汇总暂不可用，请联系管理员。', 'Department summaries are unavailable. Contact an administrator.'],
     fop_permission_denied: ['暂时无法查看这些数据，请联系管理员。', 'This data is unavailable to your account. Contact an administrator.'],

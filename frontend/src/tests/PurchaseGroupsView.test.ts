@@ -1,3 +1,4 @@
+vi.mock('@/api/workbench-replica', () => ({ getWorkbenchReplicaStatus: vi.fn().mockResolvedValue({ readMode: 'live' }), requestWorkbenchReplicaSync: vi.fn(), getWorkbenchReplicaJob: vi.fn() }))
 import { beforeEach, afterEach, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createRouter, createMemoryHistory } from 'vue-router'
@@ -158,4 +159,59 @@ it.each(['procurement', 'procurement_shipping'])('shows the account department f
   const { wrapper, router } = await setup(`/workbench/procurement?queue=${queue}`)
   expect(wrapper.findAll('select')[0].get('option[value=""]').text()).toBe('业务一部')
   expect(router.currentRoute.value.query.departmentId).toBeUndefined()
+})
+
+it('aborts group and expanded-detail reads when leaving the workbench', async () => {
+  const { wrapper } = await setup()
+  const listSignal = vi.mocked(api.get).mock.calls[0]![1]?.signal
+  expect(listSignal).toBeInstanceOf(AbortSignal)
+  await wrapper.get('.group-expand').trigger('click'); await flushPromises()
+  const detailSignal = vi.mocked(api.get).mock.calls.at(-1)![1]?.signal
+  expect(detailSignal).toBeInstanceOf(AbortSignal)
+  wrapper.unmount()
+  expect(listSignal!.aborted).toBe(true)
+  expect(detailSignal!.aborted).toBe(true)
+})
+
+it('uses customer payment ranges for completed groups and carries the scope through details and export', async () => {
+  vi.mocked(api.post).mockRejectedValue(new Error('download unavailable'))
+  vi.mocked(api.get).mockImplementation(async url => String(url).includes('/purchase%3Ap1') ? { ...detail, items: [{ ...row, completedAt: '2026-10-28T01:00:00Z', consumerPaidAt: '2026-10-27T00:00:00Z' }] } : page)
+  const { wrapper, router } = await setup('/workbench/procurement?queue=completed&departmentId=d1')
+  expect(wrapper.get('select[aria-label="客户付款时间范围"]').element).toHaveProperty('value', '1w')
+  expect(wrapper.findAll('button').some(b => b.text() === '最新客户付款优先')).toBe(true)
+  await wrapper.get('select[aria-label="客户付款时间范围"]').setValue('3m'); await flushPromises()
+  expect(router.currentRoute.value.query).toMatchObject({ queue: 'completed', timeRange: '3m', departmentId: 'd1' })
+  expect(api.get).toHaveBeenLastCalledWith(expect.stringContaining('/purchase-groups'), expect.objectContaining({ params: expect.objectContaining({ completed: true, timeRange: '3m', sortOrder: 'desc' }) }))
+  await wrapper.get('.group-expand').trigger('click'); await flushPromises()
+  expect(api.get).toHaveBeenLastCalledWith(expect.stringContaining('/purchase%3Ap1'), expect.objectContaining({ params: expect.objectContaining({ completed: true, timeRange: '3m' }) }))
+  expect(wrapper.get('thead').text()).toContain('采购完成时间')
+  expect(wrapper.get('tbody').text()).toContain('2026/10/28 09:00')
+  await wrapper.get('[data-testid="export-orders"]').trigger('click'); await flushPromises()
+  expect(api.post).toHaveBeenLastCalledWith(expect.stringContaining('/export'), expect.objectContaining({ completed: true, timeRange: '3m', sortOrder: 'desc', mode: 'filtered' }), expect.anything())
+})
+
+it('does not query on timers, focus, visibility changes or network reconnection', async () => {
+  vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
+  try {
+
+    const { wrapper } = await setup()
+    const baseline = vi.mocked(api.get).mock.calls.length
+    await vi.advanceTimersByTimeAsync(300_000)
+    window.dispatchEvent(new Event('focus'))
+    window.document.dispatchEvent(new Event('visibilitychange'))
+    window.dispatchEvent(new Event('online'))
+    await flushPromises()
+    expect(api.get).toHaveBeenCalledTimes(baseline)
+    expect(wrapper.text()).toContain('手动刷新')
+    wrapper.unmount()
+  } finally { vi.useRealTimers() }
+})
+
+it('labels uncollected counts and empty states without implying a business zero', async () => {
+  vi.mocked(api.get).mockResolvedValue({ ...page, items: [], total: 0, dataAvailability: { mode: 'collected', complete: false, missingDatasets: ['procurement'] } })
+  const { wrapper } = await setup()
+  expect(wrapper.get('.result-count').text()).toBe('— · 待接入')
+  expect(wrapper.text()).toContain('采购数据尚未接入')
+  expect(wrapper.text()).not.toContain('暂无符合条件')
+  wrapper.unmount()
 })

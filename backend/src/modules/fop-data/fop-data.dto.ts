@@ -1,9 +1,14 @@
-import { Type } from 'class-transformer'
-import { IsInt, IsString, Matches, Max, Min } from 'class-validator'
+import { Transform, Type } from 'class-transformer'
+import { IsBoolean, IsOptional, IsInt, IsString, Matches, Max, Min } from 'class-validator'
 
 export class FopDataAccessQueryDto {}
 
 export class FopDashboardQueryDto {
+  @IsOptional()
+  @Transform(({ value }) => value === 'false' ? false : value === 'true' ? true : value)
+  @IsBoolean()
+  includeQueues?: boolean
+
   @IsString()
   @Matches(/^\d{4}-\d{2}-\d{2}$/)
   from: string

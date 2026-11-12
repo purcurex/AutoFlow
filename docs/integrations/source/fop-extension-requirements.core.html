@@ -1,0 +1,229 @@
+<style>
+.req-table th:first-child,.req-table td:first-child{width:1%;white-space:nowrap;word-break:normal;overflow-wrap:normal}
+.req-table td{vertical-align:top}.req-table code{white-space:normal;overflow-wrap:anywhere}
+.callout{padding:14px 18px;border-left:4px solid #087f8c;background:#eff8f8;margin:18px 0}.callout p{margin:4px 0}
+.sidebar h2{font-size:15px;white-space:nowrap;letter-spacing:0}.sidebar .project-subtitle{display:block;font-size:12px;line-height:1.6;color:#c4d7e8;margin:5px 0 20px;text-indent:0}.sidebar .toc a{white-space:nowrap;font-size:13px}
+@media print{.req-table{font-size:10px}.table-wrap{overflow:visible}.req-table code{overflow-wrap:anywhere}}
+</style>
+
+<h2 id="scope">01 · 开发目标与当前联调结论</h2>
+<p>本需求列明 FOP 系统应交付的业务数据、接口和后台扩展，用于支持智能办公平台的销售、履约、采购、配货、仓库工作台。当前开发范围为已有业务事实开放、完整同步服务、实时审核与库存、供应商联系、实物退货和订单拦截；未来智能配货与订单变更独立安排版本。</p>
+<div class="callout"><p><strong>当前结论：</strong>本轮再次验证原 FOP 认证及旧订单查询可用，继续复用既有租户、组织和集成用户认证。订单总金额 hzkj_total_amount、结算币种 hzkj_settlecurrency 仍全部缺失，须由 FOP 补齐。完整同步方案所需六项新服务仍待提供，不阻塞已有字段的采集与展示；旧接口可用不代表新服务已发布。</p></div>
+<p>现行流程已确认：履约订单审核后 FOP 自动创建配货单；使用备货库存且足量的订单仍需实物配货，进入已齐套未审核阶段；不齐套配货单不能审核。复用已有预占、锁库、齐套门禁及标准审核插件，只补充对外事实、操作结果和异常处理能力。异步建单失败或延迟应有可查询任务状态，不通过补造单据或状态掩盖。</p>
+<p>字段存在、源码存在与接口已发布分别确认。未提供的正式实体、字段或地址均标记“待提供”，不得将来源确认、数据库预留或模拟结果作为交付完成。</p>
+<h2 id="coverage">02 · 工作台与操作覆盖范围</h2>
+<table class="req-table"><thead><tr><th>业务范围</th><th>FOP 应交付的事实与能力</th></tr></thead><tbody>
+<tr><td>销售</td><td>履约订单、商品及收件快照、总额与币种、客户付款、审核、RMA、异常、备货订单；履约标准审核。</td></tr>
+<tr><td>履约</td><td>有效包裹及发运关联、渠道与跟踪号、发运审核、Shopify 同步和实际交付状态。</td></tr>
+<tr><td>采购</td><td>需求、采购申请、采购整单及来源分摊、平台订单、供应商付款和发货、实物退货、联系供应商。</td></tr>
+<tr><td>配货</td><td>有效配货单、齐套与缺量、预占和审核状态；实时即时库存、备货库存、配货标准审核。</td></tr>
+<tr><td>仓库</td><td>收货通知、供应商发货、逐行实际入库、发货通知、实际出库及撤销、实物退货和物流事实。</td></tr>
+</tbody></table>
+<p>各对象应具备稳定主键、当前业务归属、独立资源权限和有效关系。正常无数据、无权限、接口未提供、业务事实缺失须使用不同结果表达。数据权限、当前事实和版本校验同样适用于实时操作。</p>
+<h2 id="architecture">03 · 建议改造方案与职责边界</h2>
+<table class="req-table"><thead><tr><th>实施层次</th><th>FOP 开发动作</th><th>适用边界</th></tr></thead><tbody>
+<tr><td>已有能力</td><td>复用现有认证、业务实体、自动配货建单、库存预占／锁定、齐套审核门禁与标准 audit 操作；开放准确结果与关系。</td><td>不重复建设已确认能力；核对实际部署与源码的一致性。</td></tr>
+<tr><td>字段补齐</td><td>补齐第 05 节权威字段、分录、关联、金额和业务状态；以现有 API 扩展或专用读取服务提供。</td><td>已有接口按真实语义继续使用；新增字段须说明适用范围、空值和版本。</td></tr>
+<tr><td>完整同步</td><td>按第 06 节交付稳定快照、变更、屏障、授权和核对六项服务。</td><td>用于完整全量／增量同步；只有六项及其依赖均验收通过后，才声明具备该完整能力。</td></tr>
+<tr><td>实时能力</td><td>补齐审核幂等及结果查证、即时／备货库存、供应商联系，并对当前权限和业务状态即时校验。</td><td>实时接口不能以过期库存或旧权限冒充当前结果。</td></tr>
+<tr><td>当前拦截</td><td>实现订单拦截、包裹回执、阻断、异常处理及独立解除。</td><td>当前缺口；不得等待未来智能配货版本才处理。</td></tr>
+<tr><td>未来版本</td><td>订单级智能配货、持久预占、建单前待配货查询、订单变更单与版本切换。</td><td>按第 12 节独立交付，不提前替换当前生产流程。</td></tr>
+</tbody></table>
+
+<h2 id="entities">04 · 落地目标单据与关系</h2><p>以下为需 FOP 开放或扩展的源业务对象。实体编码已确认的直接复用；正式编码尚未确定的由 FOP 提供，不将逻辑需求名称当成已落地字段。全部对象提供稳定单据／分录主键、版本、修改与审核时间，以及关系建立、解除、删除和撤销事实。</p>
+<table class="req-table"><thead><tr><th>目标单据</th><th>FOP 实体／业务内容</th><th>必须提供的业务关系与能力</th></tr></thead><tbody>
+<tr><td>履约订单</td><td><code>hzkj_orders</code>；订单头、商品行、收件人、金额、付款、原生采购／出库状态、包裹。</td><td>客户／业务员／店铺／仓库；采购需求与分摊、配货、发运、出库、收款、RMA、库存消耗；订单审核。</td></tr>
+<tr><td>备货订单</td><td><code>hzkj_stock_order_new</code>；全款／押金、创建和付款时间、金额／币种、商品。</td><td>客户归属、采购／付款、备货权益来源及消耗；店铺字段来源待确认。</td></tr>
+<tr><td>采购申请</td><td><code>hzkj_purapplybill</code>；组织、状态、有效申请行。</td><td>履约或备货需求行→申请行→采购行；取消／关闭／免采购情况。</td></tr>
+<tr><td>采购订单</td><td><code>hzkj_purorderbill</code>；供应商、采购账号、平台订单、付款与供应商发货、全部有效商品行。</td><td>按行分摊履约／备货；收货通知、入库、支付、实物退货；旺旺联系人。</td></tr>
+<tr><td>收货通知</td><td><code>hzkj_receiptnotice</code>；供应商、仓库、国内物流、WMS 状态、数量和已入库量。</td><td>采购分录、履约／备货分摊和实际采购入库；不以通知数量充当已入库。</td></tr>
+<tr><td>采购入库</td><td><code>im_purinbill</code>；仓库、供应商、业务时间、有效数量与撤销。</td><td>采购／通知／来源行、批次与库存货主；入库更新受影响订单。</td></tr>
+<tr><td>配货单</td><td><code>hzkj_alloc_bill</code>；来源履约、包裹、仓库、齐套、分配／缺量、审核时间。</td><td>有效来源行与数量；标准 audit；反审核／删除／重建后旧关联失效。</td></tr>
+<tr><td>发运单</td><td><code>hzkj_deliver_bill</code>；渠道、物流商、QC／WC、交付与 Shopify 同步事实。</td><td>明确属于哪个履约包裹；一单多发运；选定跟踪号；取消／更正／换号。</td></tr>
+<tr><td>发货通知</td><td><code>hzkj_deliver_order</code>；仓库、客户、单据／WMS 状态、物流号、WMS 创建时间。</td><td>履约行与实际出库行，不把通知创建等同实物出库。</td></tr>
+<tr><td>销售出库</td><td><code>im_saloutbill</code>；有效出库数量、时间、仓库、移动类型。</td><td>履约／发货通知、撤销及反向移动；生成正确出库状态和完成时间。</td></tr>
+<tr><td>收款单</td><td><code>hzkj_receive_bill</code>；付款客户、实收、到账／收款状态、币种、交易号。</td><td>履约／备货的分配金额和到账事件；客户付款时间回写完整。</td></tr>
+<tr><td>付款单</td><td><code>hzkj_pay_cost_bill</code>；采购来源、平台单号、支付／退款金额、支付及确认时间。</td><td>采购付款与备货待采购使用的真实支付事实；不能从平台订单状态推定已付。</td></tr>
+<tr><td>调整单</td><td><code>hzkj_adjust_bill</code>；客户、币种、调整与费用、原因。</td><td>来源订单和金额分配；不能作为未定义金额的兜底。</td></tr>
+<tr><td>RMA 售后</td><td><code>hzkj_after_sale_orders</code>；类型、流程、有效性、申请／实际退款金额币种。</td><td>稳定来源履约内码与行；保留关闭历史，一张 RMA 一行，独立权限。</td></tr>
+<tr><td>实物退货</td><td><strong>正式实体待 FOP 确认并提供</strong>；退货单／行、实际退回数量、状态、仓库／供应商、物流。</td><td><code>hzkj_purrefundapplybill</code> 是退款申请，禁止用作实物退货。FOP 提供正式实体、分录编码及对外 API。</td></tr>
+<tr><td>异常与权益</td><td><strong>正式来源待确认</strong>；异常标记生命周期、取消／拦截事实、备货权益与履约消费关系。</td><td>可以复用现有实体扩展字段或独立事实实体，由 FOP 确认权威来源，提供正式字段与变更事件。</td></tr>
+<tr><td>订单预占</td><td><strong>未来待扩展：</strong>hzkj_orders 配货扩展字段＋持久化预占技术实体；正式实体／字段编码待 FOP 提供。</td><td>订单与原商品行→预占→配货单；预占与余额一致，建单前后复用、释放／结转／变更可追溯；不新增配货需求业务单。</td></tr>
+<tr><td>拦截与变更</td><td><strong>待扩展：</strong>订单拦截记录／包裹回执；未来独立订单变更单，正式实体编码待提供。</td><td>履约、RMA、变更单、旧新配货及下游任务强关联；多阻断来源独立解除；原单保留 ID，生效时整份更新版本。</td></tr>
+<tr><td>基础资料</td><td>customer、supplier、sku、store、warehouse、logistics_provider、actual_channel、currency；完整员工目录。</td><td>sourceId、masterId（适用时）、code、name、version、deleted；当前客户业务员和可靠权限关联。</td></tr>
+</tbody></table>
+<h2 id="fields">05 · 字段级开发要求与业务口径</h2>
+<p>本节箭头右侧及驼峰名称为对外逻辑字段要求，不能视作 FOP 已存在的物理字段。FOP 应逐项回复正式实体、分录、源字段、数据类型和发布版本；未明确的保持待确认／待提供。内码和版本使用字符串；同步金额与数量使用十进制字符串；日期含时区，业务日月按 UTC+8 解释。缺失、不适用、无此业务和数值 0 分开表达。</p>
+<table class="req-table"><thead><tr><th>字段事项</th><th>FOP 源字段 → 对外逻辑字段</th><th>字段级要求与验收示例</th><th>当前状态</th></tr></thead><tbody>
+<tr><td>订单金额</td><td>hzkj_orders：<code>hzkj_total_amount → totalAmount<br>hzkj_order_amount → productAmount<br>hzkj_fre_quo_amount → freightAmount<br>hzkj_fixed_tax_fee → taxAmount<br>hzkj_discount_cost → discountAmount<br>hzkj_settlecurrency → settlementCurrency</code></td><td>提供原始金额、优惠符号、税是否含价及舍入规则。总额以权威总额为准；产品额不替代总额，hzkj_currency 不替代结算币种。多币种分别核对，不跨币种相加。</td><td>本轮总金额、结算币种全部缺失；费用分项亦待提供。产品金额与本位币不得代替缺项。</td></tr>
+<tr><td>备货金额</td><td><code>hzkj_stock_order_new.hzkj_order_amount → totalAmount<br>hzkj_settlecurrency → settlementCurrency</code>；receivableAmount、receivedAmount、depositAmount。</td><td>全款／押金分开，客户应收、实收、押金不混同；给出退款后的权益与金额变化。</td><td>结算币种 API 待提供，其余源字段和写回完整性待确认。</td></tr>
+<tr><td>付款时间</td><td>履约／备货 <code>hzkj_receipt_date → customerPaidAt</code>；履约 <code>hzkj_datetimefield → consumerPaidAt</code>；备货 <code>hzkj_bizdate → businessCreatedAt</code>；采购 hzkj_pay_time → paidAt／procurementPaidAt。</td><td>客户付款与 C 端买家付款分别提供，不相互替代；备货创建取业务创建时间，不取采购付款或最近修改时间。</td><td>收款插件已有履约回写；备货回写、采购付款字段实际部署及到账规则待确认。</td></tr>
+<tr><td>收件信息</td><td>recipientName、recipientPhone、recipientEmail、countryCode、stateName、cityName、postalCode、addressLine1、addressLine2。</td><td>订单当次收件快照；已定义的 hzkj_state 应按正式映射提供。空地址不补客户主档现地址；按用户可见范围提供。</td><td>有归档定义，实际完整数据待联调。</td></tr>
+<tr><td>物流渠道</td><td><code>hzkj_customer_channel → customChannelId／Name<br>hzkj_orders 包裹 hzkj_channel → packages[].channelId<br>hzkj_deliver_bill.hzkj_logistics_channel1 → actualChannelId</code></td><td>自定义英文与实际中文分别展示；未付款可仅有自定义。所有已支付履约订单（含待审核）必须有物流商和实际渠道；审核时复核后续发货渠道；发运阶段以发运单渠道为准。备货国内物流不强填国际渠道。</td><td>包裹实际渠道、发运渠道 API 待提供。</td></tr>
+<tr><td>物流号码</td><td><code>hzkj_logistics_orderno → full（QC）<br>hzkj_logistics_trackno → last_mile（WC）</code>；trackingNumbers[].sourceTrackingId、package、shopifySelected。</td><td>按发运单／包裹保持对应，不能按数组下标拼接；号为空显示未获取。删除旧发运或换号后清除旧值；取号不等同 Shopify 同步／交付成功。</td><td>原始字段可参考归档；包裹关联、选定关系及删除事件待补完整。</td></tr>
+<tr><td>采购进度</td><td>履约 <code>hzkj_purchase_status → rawPurchaseStatus</code>；申请、采购覆盖、平台下单、供应商付款／发货独立事实。</td><td>原生 0／1／2／3／4 与细分进度分开；2 不能推断已支付、1688 已下单或供应商已全发。虚拟／组合商品口径对齐 FOP 工具类，父子行不能重复累计。</td><td>工具类可参考；旧文档仅部分枚举，需确认完整定义和样例。</td></tr>
+<tr><td>供应商发货</td><td>采购 <code>hzkj_shipping_tim、hzkj_status_changed</code>；行 orderedQuantity、supplierShippedQuantity、cancelledQuantity；supplied proof／时间。</td><td>采购整单所有有效采购行与履约分摊分别累计。transportqty 未确认前不能当已发量；收货通知同名字段不能冒作采购表头字段。</td><td>采购发货字段 API 待提供；数量／取消／退货影响待确认。</td></tr>
+<tr><td>通知与入库</td><td>收货通知 <code>hzkj_providersupplier → supplierId<br>hzkj_ware_house → warehouseId</code>；supplierShippedAt、trackingNumber、rawWmsStatus、entries[].inboundQuantity。</td><td>审核有效＋供应商已发有证明＋剩余入库量&gt;0 才进入待入库。receiveqty 不当已入库；状态 15／20／25／30 排除，0／5／10 仍需业务条件成立。整张通知关联人员均可见才可展示。</td><td>供应商／仓库 API 待提供；逐行入库与强关联待补。</td></tr>
+<tr><td>原生出库</td><td>履约 <code>hzkj_delivery_status → rawDeliveryStatus</code>；实际出库行、outboundAt／outboundCompletedAt。</td><td>0 未出库、1 部分出库、2 已出库；不能用行 hzkj_outbound_status 替代表头。所有有效出库和反向移动共同决定状态。</td><td>按已核对源码枚举实施并给出部分出库、撤销样例。</td></tr>
+<tr><td>审核时间</td><td>sourceFields.rawBillStatus、auditedAt（auditdate）；配货／发运有效关联。</td><td>销售已审核取履约 auditdate；配货全部有效单已审核才完成，多单取最近审核时间，任一缺失保留未知。发运审核时间不标为 Shopify 同步时间。</td><td>字段来源已确认，真实同步与反审核事件待提供。</td></tr>
+<tr><td>售后退款</td><td>RMA afterSaleType、rawFlowStatus、isOpen、sourceDocumentNumber／稳定来源 ID；requestedAmount／Currency、refundAmount／Currency；<code>hzkj_tocurr</code>。</td><td>退款、退货退款、补发活动类型互斥；历史留存。一张 RMA 一行，按案件内码操作；实际退款不以申请额代替，关联履约统计去重。</td><td>hzkj_tocurr API 待提供；内码、来源关系、状态完整性待确认。</td></tr>
+<tr><td>实物退货</td><td><strong>待扩展：</strong>returnId／number、returnEntryId、sourceOrderId／EntryId、purchaseId／EntryId、supplierId、warehouseId、status、requestedQuantity、returnedQuantity、returnedAt、logistics、allocationQuantity。</td><td>正式退货主／行键；一退货行分摊多个履约须明确数量。保留申请量、已退量、退款量的区别；撤销与删除可重放。字段名为逻辑需求，待正式映射版本确认后接入。</td><td>正式实体、源字段及 API 待提供。</td></tr>
+<tr><td>异常控制</td><td><strong>待扩展：</strong>exceptionId、sourceOrderId、type、reason、active、occurredAt、resolvedAt、sourceDocumentRef、version；cancelled、interceptStatus。</td><td>分类至少覆盖采购退货、订单取消、配货超时、物流异常、妥投异常；每类定义触发／解除与优先级，可并存但不重复计数。拦截／取消拦截独立于 RMA 类型。</td><td>权威分类／生命周期未提供；须提供正式实体／字段与状态事件。</td></tr>
+<tr><td>库存消耗</td><td><strong>待扩展：</strong>consumptionId、sourceOrder／Entry、stockOrder／Entry、customer、SKU、warehouse、stockType、quantity、reversalOf、version；rawStockUsage 和覆盖事实。</td><td>备货权益来源、分配、锁定、消费、释放／撤销可追溯；禁止从当前余额反推历史消费。全款库存已覆盖且无新增需求的订单不进入待采购。</td><td>完整来源和领域关系待确认；只返回库存余额无法满足此项。</td></tr>
+<tr><td>归属目录</td><td>ownerEmployeeId／Ids、currentCustomerOwnerId、ownershipVersion、ownershipVerifiedAt；员工 authUserId、personRecordId、masterId、number、enabled。</td><td>按当前人员身份和授权校验；归属变化使旧可见范围及时失效。多业务员单据、跨公司、离职、客户改属均提供测试。</td><td>原目录可复用；完整服务目录与归属向量契约待交付。</td></tr>
+</tbody></table>
+<h3>5.1 公共明细、关系与扩展对象</h3>
+<table class="req-table"><thead><tr><th>字段对象</th><th>必须提供的逻辑字段</th><th>实现约束</th></tr></thead><tbody>
+<tr><td>商品分录</td><td>entryEntity、sourceEntryId、sequence、rowType、skuSourceId、skuMasterId、skuCode、productName、variant、imageUrl、quantity、unitCode、unitPrice、lineAmount、currencyCode、rawStatus、inboundQuantity。</td><td>稳定行主键；完整有效行和行生命周期；款数按有效 SKU，件数按约定单位。对数量无法确认的商品行补充权威数量、单位及组合／虚拟行规则，不能默认 0 或 1；空 SKU、重复行或无数量不标记完整。</td></tr>
+<tr><td>订单行事实</td><td>orderDetails：sourceQuantity、stockConsumedQuantity、purchasedQuantity、inboundQuantity、discountAmount、taxAmount、grossAmount、rawPurchaseStatus、shopifyLineId。</td><td>业务数量分别表达；与表头和采购／库存消费关系可解释一致。</td></tr>
+<tr><td>采购行事实</td><td>procurementDetails：salesOrderNumber、supplierId、orderedQuantity、supplierShippedQuantity、receivedQuantity、inboundQuantity、cancelledQuantity、rawCloseStatus、rawPlatformStatus。</td><td>采购整单数量不能取某一页关联履约之和；有效 hzkj_salbillnumber 去空、去重后计履约单数。</td></tr>
+<tr><td>配货行事实</td><td>allocationDetails：sourceOrderEntryId、requiredQuantity、newlyReservedQuantity、allocatedQuantity、shortQuantity、customerReservedQuantity、commonReservedQuantity、protectedQuantity。</td><td>对齐需求与实际分配，齐套不得凭可用余额推断；新锁定、既有锁定和公共／客户库存分开。</td></tr>
+<tr><td>库存流水行</td><td>inventoryDetails：warehouseId、stockOwnerId、lotNumber、baseQuantity、baseUnitCode、direction、rawLineStatus。</td><td>入库／出库／冲销方向明确，不能把库存移动记录误作备货权益余额。</td></tr>
+<tr><td>财务行事实</td><td>financialDetails：sourceDocumentType／Number、orderAmount、receivedAmount、refundAmount、feeAmount、productAmount、freightAmount、taxAmount、adjustAmount、currencyCode。</td><td>给出来源单据分摊与汇率规则；不同币种不能直接抵消。</td></tr>
+<tr><td>退回行事实</td><td>returnDetails：sourceOrderEntryId、purchaseEntryId、requestedQuantity、returnedQuantity、requestedAmount、refundedAmount、currencyCode。</td><td>正式实物退货实体及上述源字段待提供；退款申请不能替代。</td></tr>
+<tr><td>关系对象</td><td>sourceRelationId、relationType、from／to 单据或行引用、allocatedQuantity、allocatedAmount、currencyCode。</td><td>demand_purchase、purchase_receipt、inbound、outbound、allocation、dispatch、delivery_notice、receipt、payment、rma、purchase_return、adjustment；删除／改向带旧受影响订单。不得凭 SKU 或单号模糊匹配强关联。</td></tr>
+<tr><td>包裹对象</td><td>sourcePackageKey、packageNumber、warehouseId、providerId、channelId、trackingNumber、expectedActive、lines[{lineRef,quantity}]。</td><td>包裹键稳定，包裹商品数量可核对；重建包裹清理旧物流对象。</td></tr>
+<tr><td>跟踪号</td><td>sourceTrackingId、trackingType、number、providerId、shopifySelected、package{order,sourcePackageKey}。</td><td>trackingType 为 full／first_mile／last_mile／unknown；每个号属于明确包裹，不凭展示顺序关联。</td></tr>
+<tr><td>平台订单</td><td>sourcePlatformOrderId、platformCode、purchasingAccountId、externalOrderId、externalSuborderId、rawStatus、paidAt、shippedAt、paidAmount、currencyCode。</td><td>1688 主／子单和采购单内码独立；重推、拆单、取消／退款需保留关系变更。</td></tr>
+</tbody></table>
+
+<h3>5.2 业务状态与关系一致性</h3>
+<p>采购完成表示有效需求已覆盖且对应供应商全部发货，不等待入库；FOP 须确认原生采购状态 3／4 与已全发事实一致，状态 2 不独立证明付款、平台下单或全发。整张采购单全部有效行数量与按履约分摊数量分别提供；履约笔数按有效 hzkj_salbillnumber 去空、去重计算。取消、退货、部分发货、反审核均更新相关事实。</p>
+<p>已支付履约订单须有物流服务商与实际渠道；发运审核须已取得跟踪号，Shopify 同步发货才表示平台履约。提供各有效发运单的 hzkj_delivery_status、同步状态及独立时间，不将取号、订单审核、发运审核和履约混为一个状态。备货库存足量免新增采购，但仍保留配货与实际出库链。</p>
+<p>字段来源和业务口径以<a href="HyperZone待办清单数据字段对照表.html">字段对照表</a>作为集成参考；FOP 交付须同步提供自身正式字段映射和实际接口版本。</p>
+<h2 id="sync-api">06 · 六项同步 API 交付契约</h2>
+<p>本节为采用完整全量／增量同步方案时的 FOP 服务交付范围，六项正式地址目前均待提供。沿用可验证的现有认证能力，由 FOP 明确六服务是否共用原网关认证、凭据生命周期、续期方式及必需请求头；不能因旧 API 调用成功而认为新同步服务已发布。</p>
+<p>服务协议为 <code>fop-replica/1</code>、领域协议为 <code>fop-replica-domain/1</code>，见<a href="../openapi/fop-replica-service-contract.json">服务契约</a>与<a href="../openapi/fop-replica-domain.schema.json">领域 Schema</a>。全部 POST、HTTPS、JSON；公共请求 schemaVersion、tenantId、companyId；成功响应 <code>{success:true,data:{schemaVersion,tenantId,companyId,...}}</code>。新增对象发布前应形成明确版本，不将旧通用分页响应当作事务变更流。</p>
+<table class="req-table"><thead><tr><th>API 事项</th><th>请求字段</th><th>data 响应字段</th><th>必要语义</th></tr></thead><tbody>
+<tr><td>S01 快照开始</td><td>requestKey。</td><td>snapshotId、scopeVersion、sourceAsOf、expiresAt、entityCodes[]、streams[{key,endCursor}]。</td><td>同 requestKey 幂等；固定数据截止点与实体全集。冻结的源版本及关联可稳定续读；过期明确拒绝。</td></tr>
+<tr><td>S02 快照分页</td><td>snapshotId、streamKey、afterCursor=null 或上页游标、limit=100。</td><td>回显 snapshotId／streamKey／afterCursor；complete、groups[]。</td><td>完整提交组不能切页；链连续，最后页准确到 manifest.endCursor。空快照也需完整清单和明确终结语义。</td></tr>
+<tr><td>S03 同步屏障</td><td>仅公共请求。</td><td>id、scopeVersion、sourceAsOf、expiresAt、targetVector、proof。</td><td>证明全部相关流捕获健康且覆盖该向量；proof 必须有真实采集证据，不能返回无依据的当前时间。</td></tr>
+<tr><td>S04 变更读取</td><td>streamKey、afterCursor、untilCursor、limit=100。</td><td>回显 streamKey／afterCursor／untilCursor；groups[]。</td><td>直到屏障精确水位；未到目标不能用空数组掩盖断档；重放同事件内容一致；删除与旧关联变化都可见。</td></tr>
+<tr><td>S05 授权续验</td><td>仅公共请求。</td><td>scopeVersion、sourceAsOf、expiresAt、companyAllowed、ownershipVector、resources、employees、references。</td><td>独立于业务数据同步；证明 60 秒内有效；完整归属向量，普通续期不随意改变授权版本。详见下表。</td></tr>
+<tr><td>S06 数据核对</td><td>barrierId、targetVector。</td><td>回显 barrierId／targetVector；scopeVersion、entities[{entityCode,count,amounts}]。</td><td>同一屏障／范围下所有实体（含零数据）；履约、备货、采购按结算币种汇总十进制金额。禁止拿响应时刻另一版本对账。</td></tr>
+</tbody></table>
+<h3>6.1 完整事件、权限与归属</h3>
+<table class="req-table"><thead><tr><th>协议对象</th><th>FOP 输出要求</th></tr></thead><tbody>
+<tr><td>提交组</td><td>schemaVersion、groupKey、afterCursor、endCursor、committedAt、expectedCount、documents、orderProjections。事务内相关变化完整成组，事件计数准确；不得丢失关联依赖或截断半组。</td></tr>
+<tr><td>单据事件</td><td>eventId、entityCode、sourceId、sourceVersion、operation=upsert／delete、documentNumber、linesComplete、relationsComplete、sourceFields、header、entries、relations、affectedOrders。sourceVersion 为最多 30 位数字字符串；同版本同内容；完整版本替换及删除须带旧受影响订单。</td></tr>
+<tr><td>依赖版本</td><td>orderProjections 提供完整订单事实及 dependencies[{entityCode,sourceId,sourceVersion,relationRevision}]。独立采购变更、关系解除、归属调整及删除均覆盖所有受影响订单。</td></tr>
+<tr><td>资源权限</td><td>orders、stock_orders、purchases、rma、purchase_returns、receipt_notices、stock_inventory、allocation_inventory、contacts、channels；grants 说明 target 与 allow／deny，deny 优先、空授权拒绝。服务身份可见范围与终端主体权限语义须明确。</td></tr>
+<tr><td>归属证明</td><td>ownershipVector 覆盖快照全部同步流，和 scopeVersion 原子取证；客户／员工改属必须产生对应变更。普通续期不得无故变更授权版本，不以当前时间替代实际捕获健康证明。</td></tr>
+<tr><td>人员资料</td><td>完整可信目录 employees[{authUserId,personRecordId,masterId,number,enabled}]；引用资料 resource、sourceId、masterId、code、name、version、deleted。不得将仅一页人员误称完整目录。</td></tr>
+</tbody></table>
+<h3>6.2 服务容量与错误</h3>
+<p>按当前协议每页最多 100 组、每组最多 1,000 事件、最多 30 流、单响应 8 MiB、请求预算 15 秒验证真实最大对象；超限时明确拒绝或发布分块协议，不能截断后声称完整。授权证明 sourceAsOf 在 60 秒内，expiresAt 不超过未来 60 秒。FOP 给出快照有效期、事件及幂等记录保留期、并发配额和恢复规则，覆盖实际初始化与故障恢复窗口。</p>
+<p>提供稳定错误码及 requestId，区分认证失败、权限拒绝、版本冲突、快照／游标过期、捕获不健康、限流和暂不可用。失败不能返回成功空列表；游标过期不得跳过历史继续最新水位。核对覆盖同一屏障、同一授权范围下全部实体及分币种金额，零数据实体也明确返回。</p>
+<h2 id="audit">07 · 履约审核与配货审核</h2>
+<p>复用标准 audit 业务操作及现有配货齐套、预占、锁库校验，不直接修改 billstatus。履约目标为 hzkj_orders，配货目标为 hzkj_alloc_bill；FOP 应在当前授权与并发控制范围内完成资格检查和标准操作。</p>
+<table class="req-table"><thead><tr><th>审核能力</th><th>接口与字段要求</th><th>FOP 完成条件</th></tr></thead><tbody>
+<tr><td>A01 上下文</td><td>输入 subject/currentScope、queue=review／allocation_review、orderId；输出 order、inQueue、action、actionAllowed、targets。目标含 entity、id、number、version、status、eligible、reason。</td><td>返回当前有效订单与配货／发运关联；明确唯一有效配货目标是否成立。多目标合法时逐项返回，不任取首单。</td></tr>
+<tr><td>A02 标准审核</td><td>输入目标字段、operation=audit、idempotencyKey、requestId、actorAccountId、currentScope。</td><td>事务内复核主体、公司、动作及资源权限、当前归属、关联、版本、状态和门禁；提交态 B 可审核，草稿 A 不自动提交，已审核 C 返回已审核。</td></tr>
+<tr><td>A03 操作结果</td><td>atomicChecks、requestId、idempotencyKey、documentId、status、message、warning；status=approved／already_approved／blocked／failed／unknown。</td><td>准确区分主操作与异步后续动作，逐项回显；未知结果不得返回普通失败诱发重复写入。</td></tr>
+<tr><td>A04 结果查证</td><td>新增，地址待提供。按租户／公司、主体范围、幂等键、原 requestId 及目标查证；返回 processing／committed／rejected／not_found、原结果与版本。</td><td>持久保存幂等记录；同键同内容不重复业务效果，同键异内容拒绝；not_found 不证明原业务从未发生。</td></tr>
+<tr><td>A05 回读定位</td><td>成功结果提供已提交 sourceVersion、事务事件定位或可查询屏障；附关联任务状态和失败原因。</td><td>审核及其建配货、建发运／发货通知等实际后效进入变更输出；异步失败可追踪、可安全补偿，不伪报全部完成。</td></tr>
+</tbody></table>
+<p>配货审核继续执行既有齐套门禁，并校验有效关联发运单均已审核；空、草稿、提交、未知或混合状态拒绝。预检查与正式提交间版本或权限变化须阻断。受信任调用身份与传入主体范围须绑定校验，不接受任意自报人员或部门。提供单笔、批量逐项结果、并发重复、部分失败和超时后查证场景。</p>
+<h2 id="inventory">08 · 即时库存与备货库存</h2>
+<p>两类查询实时读取 FOP 库存与权益账本，校验独立资源权限，均为只读操作。请求包含 schemaVersion、subject、currentScope、resource、query；响应回显主体及范围、organizationIds、authorization{resource,allowed,checkedAt}，并返回 result。库存 asOf 和授权 checkedAt 均在 60 秒内；列表 complete、items、total、page、pageSize 必须一致。</p>
+<table class="req-table"><thead><tr><th>库存事项</th><th>即时库存</th><th>备货库存</th></tr></thead><tbody>
+<tr><td>权限范围</td><td>resource=current_inventory；独立 allocation_inventory 授权。</td><td>resource=reserved_inventory；独立 stock_inventory 授权。</td></tr>
+<tr><td>选单条件</td><td>客户＋SKU＋发货仓；公共库存 customer=null 仅限同 SKU／仓。选单与 SKU 搜索模式互斥。</td><td>客户＋SKU，可跨仓；无选单仅当前登录人员负责客户。管理员不自动扩大为全部人员。</td></tr>
+<tr><td>请求内容</td><td>queue、mode、orderIds（最多 100）或 search、warehouseCode、page、pageSize（20／50／100）。</td><td>orderIds（可选，最多 100）、queue、customerId／customerSearch、search、warehouseCode、人员范围、page、pageSize。</td></tr>
+<tr><td>行字段</td><td>id、sku、name、warehouseCode、warehouse、customer、onHand、occupied；客户＋SKU＋仓汇总唯一行。</td><td>id、customerId／Code／Name、owner、department、sku、name、imageUrl、warehouseCode、warehouse、fullPayment{available,locked}、deposit{available,locked}。</td></tr>
+<tr><td>数量口径</td><td>现存与占用独立，可用=max(0,onHand−occupied)；库存批次不得重复计数。</td><td>全款／押金的可用及锁定四项分别给出；以权益账本为准，不从实物现存反推客户权益。</td></tr>
+<tr><td>选单证明</td><td colspan="2">selectedOrders 完整覆盖所选源 ID，每项含客户、仓库、SKU 与 eligible；权限或关联不成立明确拒绝，不返回部分结果冒充完整。</td></tr>
+<tr><td>客户候选</td><td>不适用。</td><td>query.projection=customers；items[{id,code,name}]、total、complete。按同一人员范围返回完整匹配结果；超过协议 100 条应明确要求缩小条件或交付分页版本。</td></tr>
+</tbody></table>
+<p>现行实时 v1 数量为有限非负 JSON number 且不超过安全整数范围；需更高精度时发布十进制字符串新版本。数据及 total 同一读取视图计算；跨页固定快照如需支持，须明确提供快照令牌和有效期。禁止以过期缓存冒充实时库存；查询不得触发占用、扣减或建单。</p>
+<h2 id="contacts">09 · 供应商联系与旺旺启动</h2>
+<p>FOP 提供专用联系人查询和会话启动服务，正式地址及旺旺账号权威源字段待提供。覆盖履约、备货、采购分组和正式实物退货；联系权限与来源单据权限同时成立。调用只打开会话，不自动发送消息。</p>
+<table class="req-table"><thead><tr><th>联系能力</th><th>FOP 接口要求</th></tr></thead><tbody>
+<tr><td>L01 查询</td><td>输入 subject/currentScope、context、源单／分组及适用队列；返回 source=fop、orderId、orderNumber、refreshedAt、items。FOP 根据有效业务关系确定供应商。</td></tr>
+<tr><td>L02 联系人</td><td>purchaseOrderId、purchaseOrderNumber、platformOrderNumber、supplier{id,name,wangwangAccount}、shipmentStatus、lines、availability、contactVersion。缺账号与不可用状态明确表达。</td></tr>
+<tr><td>L03 分摊</td><td>lines 包含履约／备货行、purchaseLineId、sku、name、pendingQuantity；只返回对应分摊。待跟进采购须已付且仍有未发量；退货按正式退货关系及待办数量判断。</td></tr>
+<tr><td>L04 启动</td><td>输入原上下文、purchaseOrderId、contactVersion；再次检查权限、归属、供应商与账号版本，输出 wangwangAccount、可用状态及允许的 aliim sendmsg 链接。账号变化拒绝旧版本。</td></tr>
+<tr><td>L05 不可用</td><td>区分 ready、missing_account、chat_unavailable，并返回可行动原因；不泄露无权联系人，不接受任意收件账号或任意外站跳转。</td></tr>
+</tbody></table>
+<h2 id="interception">10 · 当前订单拦截与异常闭环</h2>
+<p>E14 是当前待补能力。FOP 实现履约订单与 RMA、人工操作及下游执行任务的拦截关联；所有 RMA 建单按已确认方案发起关联履约拦截。拦截请求成立即阻断后续执行，收到全部相关包裹停止回执后才可标记拦截成功。</p>
+<table class="req-table"><thead><tr><th>拦截事项</th><th>FOP 开发要求</th></tr></thead><tbody>
+<tr><td>来源记录</td><td>正式实体／字段编码待提供。逻辑内容：interceptId、orderId、sourceType／sourceId、reason、requestedAt、status、blockingScope、ownerId、version。</td></tr>
+<tr><td>包裹回执</td><td>packageReceipts 明确包裹、下游任务、请求时间、回执时间、结果与原因；区分请求、处理中、成功、失败、未知、已解除。</td></tr>
+<tr><td>执行阻断</td><td>人工暂停、拦截、变更等阻断来源独立保存；审核、建单和下游放行均校验有效阻断。已发出请求不等于仓库已停止。</td></tr>
+<tr><td>异常处理</td><td>失败／未知有持续可查询异常、责任人和处理状态；保留有效锁定，不自动释放或隐去订单；重复请求幂等。</td></tr>
+<tr><td>独立解除</td><td>releasedAt／By／Reason 留存；只解除本来源，不连带解除其他来源。恢复前重新检查全部阻断、订单版本、库存与下游状态。</td></tr>
+<tr><td>对外同步</td><td>输出状态、包裹回执、阻断及解除事件；提供操作结果查证。后续实际停仓结果变化须可追踪，不能只返回一次请求成功。</td></tr>
+</tbody></table>
+
+<h2 id="backlog">11 · FOP 开发待办与待确认清单</h2><h3>11.1 待确认事项</h3>
+<table class="req-table"><thead><tr><th>确认事项</th><th>需 FOP 回复的明确结论</th><th>影响与交付物</th></tr></thead><tbody>
+<tr><td>C01 身份范围</td><td>核实已有租户／公司／组织范围，明确服务身份与终端主体授权、10 类资源及完整员工目录。</td><td>提供有权／无权样例及范围定义。</td></tr>
+<tr><td>C02 发布鉴权</td><td>各 API 实际部署版本、六项同步服务的网关认证、Token 生命周期和刷新方式、响应封装、时间精度。</td><td>发布清单与成功／失败报文；如需 x-acgw-identity 等请求头须完整列出。</td></tr>
+<tr><td>C03 金额状态</td><td>金额公式、优惠符号、税费含价、结算币种、原生采购／出库枚举及 unknown／不适用表达；确认采购状态 3／4 与供应商全发事实的一致性，给出矛盾状态的源端修复规则与完成版本。</td><td>逐单财务样例和状态流转表，禁止用默认 0 消除缺失。</td></tr>
+<tr><td>C04 采购发货</td><td>hzkj_pay_time 与元数据差异；hzkj_paystatus／pay_status、平台状态、transportqty、取消／退货后的发货量。</td><td>采购整单与履约分摊量双样例，确定完成规则。</td></tr>
+<tr><td>C05 收货入库</td><td>供应商已发证明、通知状态、收货与入库区别、跨业务员通知的来源行关系。</td><td>部分收货／入库、整单归属混合、撤销和终止状态样例。</td></tr>
+<tr><td>C06 备货售后</td><td>备货店铺来源、付款回写、全款／押金账本；RMA 来源内码、类型、金额币种与历史。</td><td>单据字段映射和真实状态链，包含客户转移与权益冲销。</td></tr>
+<tr><td>C07 审核目标</td><td>标准 audit 插件、并发版本、唯一有效配货目标是否成立；幂等记录、结果查证和副作用范围。</td><td>若多目标合法，提供完整目标集合和逐项操作契约。</td></tr>
+<tr><td>C08 实物退货</td><td>正式实体／分录表标识、主键、状态、业务员、供应商、仓库、物流及履约分摊。</td><td>正式实体未确定前不能排期为仅配置任务；退款申请不能替代。</td></tr>
+<tr><td>C09 联系账号</td><td>供应商旺旺权威字段、采购账号选择规则、退货联系人、URL 协议与可用状态。</td><td>四类上下文和无账号、变更账号、权限拒绝样例。</td></tr>
+<tr><td>C10 异常权益</td><td>异常分类／解除、取消／拦截、全款库存消费的正式字段或实体，事件捕获位置。</td><td>正式实体／字段、对外协议版本与完整关联变更。</td></tr>
+<tr><td>C11 容量时限</td><td>快照有效期、日志／幂等保留期、最大单据／提交组、限流／并发配额、全量目标耗时。</td><td>按实际数据规模及全部关联实体容量验证后定值；超限处理不能截断事实。</td></tr>
+<tr><td>C12 配货切换</td><td>现阶段自动建单与审核门禁已由用户确认；FOP 回复异步任务状态、异常逆向、未来智能配货上线批次、正式字段／实体编码、版本识别及存量迁移规则。</td><td>未来 warehouse／channel 校验时点、FOP 待配货查询和整单多包裹交接一起锁定；不重新询问已确认业务规则。</td></tr>
+</tbody></table>
+<h3>11.2 当前开发与未来版本</h3>
+<table class="req-table"><thead><tr><th>开发事项</th><th>优先级／目标单据</th><th>FOP 必须落地的内容</th><th>FOP 交付标准</th></tr></thead><tbody>
+<tr><td>E01 稳定快照</td><td>P0；全部实体</td><td>S01／S02、固定集合／版本、完整实体清单、可重试分页和过期恢复。</td><td>同 requestKey 重放一致、写入并发不漂移、空实体与跨页关系用例。</td></tr>
+<tr><td>E02 事务变更</td><td>P0；全部实体／关系</td><td>事务事件捕获、S04／S03、墓碑、旧关系解除、完整受影响订单投影。</td><td>新增／修改／独立分录／删除／反审核／重建／迟提交／重放全部覆盖。</td></tr>
+<tr><td>E03 授权目录</td><td>P0；公司／员工／资料</td><td>S05、10 类资源、完整目录／引用、ownershipVector、撤权和归属变更。</td><td>跨公司拒绝、停用撤权、部门／客户转移和租约过期用例。</td></tr>
+<tr><td>E04 屏障核对</td><td>P0；全部实体及金额</td><td>S06 同屏障数量、履约／备货／采购分币种金额及采集健康证明。</td><td>漏单／重复／错误金额可检出；同屏障数据可一致核对。</td></tr>
+<tr><td>E05 核心事实</td><td>P0；订单／采购／财务</td><td>第 05 节金额、时间、状态、人员和完整业务事实；补本轮缺失字段。</td><td>facts 不再为空；全部必需字段真实有效，未知项不伪造完整。</td></tr>
+<tr><td>E06 物流入库</td><td>P1；发运／收货／出库</td><td>包裹渠道、QC／WC、供应商发货、通知供应商／仓库、实际入库及出库关联。</td><td>一单多包、换号／删除、部分入库、跨人员通知和交付状态测试。</td></tr>
+<tr><td>E07 实物退货</td><td>P1；正式退货实体</td><td>正式实体 API、完整行／分摊、状态／数量／物流、独立授权和变更。</td><td>正式退货数据、联系关系和独立权限通过验证。</td></tr>
+<tr><td>E08 原子审核</td><td>P0；履约／配货</td><td>复用现有齐套／预占／锁库审核门禁；补 A01—A05 上下文、幂等、结果查证、事务事件及回读定位。</td><td>并发／冲突／未知结果／已审核／部分批次；成功后的单据、关联和变更结果正确。</td></tr>
+<tr><td>E09 两类库存</td><td>P0；库存／权益账本</td><td>真实即时、备货库存和客户候选；当前范围、分页完整和时效证明。</td><td>选单／未选单、全款／押金、公共库存、跨仓、超 100 客户用例。</td></tr>
+<tr><td>E10 异常权益</td><td>P1；异常／订单消费</td><td>异常分类、取消、权益消费／冲销事实与强关联，版本化输出；拦截完整流程单列 E14。</td><td>异常进入／解除、备货覆盖排除采购、撤销回滚与归属变更。</td></tr>
+<tr><td>E11 供应商联系</td><td>P1；采购／供应商／退货</td><td>L01—L05 专用联系查询与启动、分摊、版本和权限校验。</td><td>四类入口、账号缺失／变更、无权限和客户端无法打开均可处理。</td></tr>
+<tr><td>E12 发布联调</td><td>P0 贯穿；全部服务</td><td>真实地址、OpenAPI／Schema、测试数据、错误码、部署／回滚说明、服务运行指标。</td><td>按第 13 节适用阶段验收，无未解释差异；接口定义与实际发布分别标记。</td></tr>
+<tr><td>E13 智能配货</td><td>未来版本 P0；履约／预占／配货</td><td>自动审核、订单扩展与预占技术实体、FOP 待配货查询、五进度、增量锁定、齐套建单、暂停／失败可见、事件与三分钟补算；按第 12 节输出。</td><td>未建单、缺货、已齐套建单失败均有入口；多包裹全部建成才交接；不重复锁库或建单。</td></tr>
+<tr><td>E14 订单拦截</td><td>当前缺口 P0；履约／RMA／下游</td><td>补齐拦截发起、各包裹回执、阻断、责任人、异常待办与解除；方案要求所有 RMA 建单拦截关联履约，保留有效锁定；与人工暂停独立。</td><td>请求成功不当仓库停止成功；失败／未知持续可见且阻断；解除自身原因不解除其他原因，重新校验后恢复。</td></tr>
+<tr><td>E15 订单变更</td><td>未来版本 P0；变更单／原订单／预占</td><td>按方案附录 9 新增独立变更单、八状态、整单拦截／逆向、差额预占、原单版本回写及 AppStore 同步。先回退已审核配货与下游，再变更；已交运走售后。</td><td>旧版本保留至生效；多包裹一致，失败不重复释放；原单 ID 不变，旧配货／物流移历史，待恢复状态有责任人。</td></tr>
+</tbody></table>
+<h2 id="future">12 · 未来智能配货与订单变更</h2>
+<p>本节 E13／E15 属未来版本，依据<a href="../solutions/HyperZone智能配货与自动审核方案.html">《HyperZone智能配货与自动审核方案》V2.0</a>。FOP 复用已有增量锁定、释放、防饥饿和人工优先机制，改为订单级计算、整单同仓齐套后建正式配货单。未来字段与技术实体的正式编码及 API 均待提供，不将以下逻辑名称标为已上线。</p>
+<table class="req-table"><thead><tr><th>未来事项</th><th>字段与后台动作</th><th>交付约束</th></tr></thead><tbody>
+<tr><td>自动审核</td><td>本单已完成支付，商品、价格、地址及运输服务校验通过且未取消、关闭或拦截时，调用原 audit 及校验插件；保留全款备货权益和费用处理。</td><td>审核事务提交后触发配货计算，未来版本不直接建配货单；人工审核同样触发。重复通知幂等，失败保留已支付订单和原因，修正后可重试。</td></tr>
+<tr><td>订单扩展</td><td>allocationProgress=not_applicable／pending／waiting_stock／ready／allocated；orderVersion、requiresPhysicalFulfillment、suggestedWarehouseId、finalWarehouseId、calculationResult、calculatedAt、shortageReason、failureReason、autoAllocationPaused。</td><td>在原 hzkj_orders 上扩展；正常缺货不等于计算失败。暂停独立于进度；ready 不等于建单成功。</td></tr>
+<tr><td>持久预占</td><td>新增技术实体，含 reservationId、orderId／entryId、SKU、warehouseId、customerOwnerId、requiredQuantity、lockedQuantity、shortQuantity、status、orderVersion、allocationId。</td><td>复用锁库服务；active／released／consumed 可追溯，建单不视为消费，实际出库结转。权益和实物占用分别表达，不新增“配货需求”业务单。</td></tr>
+<tr><td>建单前查询</td><td>FOP 待配货查询覆盖 pending／waiting_stock／ready 及暂停、失败、拦截；输出缺量、计算版本、原因、责任人与有效预占。</td><td>没有配货单也可定位订单；不因缺货、失败或暂停从工作范围消失。</td></tr>
+<tr><td>选仓规则</td><td>候选仓校验库存归属、商品、收件国家、运输服务、费用及作业条件；逐仓判断整单 SKU／数量，多仓齐套依次按时效、成本、仓优先级选择。</td><td>原仓仅供参考；缺货可结合采购及到货计划选建议仓，实际可用入库才预占。已有锁定后改仓须受控；计算和保存前复核订单版本。</td></tr>
+<tr><td>自动调度</td><td>审核、入库可用变化、释放、有效订单变更触发；默认每 3 分钟补算。客户付款时间较早优先，其次 C 端付款时间、稳定订单顺序，保留防饥饿和授权人工优先。</td><td>普通补算保留原仓及有效锁定，仅补缺口；已有未齐套配货单走原单补算，共用库存预算且不重建；暂停及全部阻断持续生效；并发不超占。</td></tr>
+<tr><td>建单任务</td><td>generationTaskId、generationStatus、failureReason、startedAt／completedAt、orderVersion、预期包裹数与有效配货集合。</td><td>整单同仓齐套后按版本幂等建单；全部有效包裹生成成功才交接，部分失败可重试且不重复锁库／建单。</td></tr>
+<tr><td>变更单据</td><td>新增独立变更单；changeId／number、orderId、beforeVersion／afterVersion、before／afterSnapshot、entryMappings、补款／实退关联、旧新配货集合。</td><td>商品、数量、地址、运输服务及费用变更先申请；生效前保留原版本，生效时整份更新原单，原 ID 不变。</td></tr>
+<tr><td>变更状态</td><td>draft／awaiting_intercept／ready_to_change／applying／awaiting_resume／completed／withdrawn／failed；effectiveAt、currentBlockers、责任人及原因。</td><td>已建单先整单拦截，已审配货及下游先逆向；已交运走售后。按差额调整预占，失败不重复释放；恢复失败保留新版本和阻断。</td></tr>
+<tr><td>变更同步</td><td>补算、人工优先、暂停／恢复、释放、改仓、变更提交及查证提供受控服务；同步完整订单版本、预占、历史关系与阻断，FOP 负责 AppStore 版本同步。</td><td>旧配货／物流转历史，禁止新商品与旧金额拼接；客户端只接收完整一致版本。</td></tr>
+<tr><td>存量切换</td><td>提供旧新流程识别、存量分组、原占用核对与迁移、切换及回退方案。</td><td>已执行任务保留；未执行订单核对供货、下游、锁定、防饥饿与人工状态，一致后切换，不重复计入库存余额。</td></tr>
+</tbody></table>
+<h2 id="acceptance">13 · 完整联调与功能验收清单</h2>
+<p>以下为 FOP 可独立交付的服务验收条件。当前范围覆盖 E01—E12、E14；E13／E15 按未来版本单独验收。每项注明正式版本、环境、适用业务对象、结果与遗留问题，未提供接口不得记为通过。</p>
+<table class="req-table"><thead><tr><th>验收编号</th><th>FOP 验收条件</th><th>关联事项</th></tr></thead><tbody>
+<tr><td>T01 认证</td><td>既有认证与新服务网关要求明确；有权成功、过期／无权／跨公司拒绝，不重新假定原账号失效。</td><td>C01—C02、E03</td></tr>
+<tr><td>T02 快照</td><td>固定范围与截止版本；并发修改不漂移，重试一致，空实体明确，过期可识别。</td><td>E01</td></tr>
+<tr><td>T03 变更</td><td>新增、修改、分录变更、反审核、删除、重建和旧关系解除完整输出；重放一致，无游标断档。</td><td>E02</td></tr>
+<tr><td>T04 核对</td><td>同屏障实体数和分币种金额一致；漏单、重复、金额差异可明确检出。</td><td>E04</td></tr>
+<tr><td>T05 权限</td><td>全部资源独立授权；客户／员工改属、停用、撤权及时生效；员工目录和归属向量完整。</td><td>E03</td></tr>
+<tr><td>T06 核心字段</td><td>总额／产品额、结算币／本位币、客户／C 端付款时间不混用；关键事实非空且有权威来源。</td><td>E05</td></tr>
+<tr><td>T07 采购物流</td><td>整单与分摊量、部分／全部发货、部分入库、撤销、多包裹、换号与删除均一致；不把取号当履约。</td><td>E06</td></tr>
+<tr><td>T08 实物退货</td><td>正式实体和源行关系、已退数量、状态与权限可查；退款申请不冒充实物退货。</td><td>E07</td></tr>
+<tr><td>T09 审核</td><td>已齐套／未齐套、版本冲突、无权、已审核、并发同键、超时查证通过；异步后效独立可查。</td><td>E08</td></tr>
+<tr><td>T10 库存</td><td>客户＋SKU＋仓范围、公共库存、全款／押金、跨仓、无选单和候选超限均按约定；查询无副作用。</td><td>E09</td></tr>
+<tr><td>T11 异常权益</td><td>异常发生／解除与消费／冲销可追溯；库存覆盖免新增采购且仍存在实物配货链。</td><td>E10</td></tr>
+<tr><td>T12 联系</td><td>四类上下文、真实分摊、账号缺失／变更和无权场景明确，启动前重新校验。</td><td>E11</td></tr>
+<tr><td>T13 拦截</td><td>请求、各包裹回执、失败／未知、责任人及独立解除完整；单一解除不清除其他阻断。</td><td>E14</td></tr>
+<tr><td>T14 发布</td><td>正式地址、协议、字段映射、错误码、容量、有效期及恢复方案齐全；未接通项逐项明确。</td><td>E12</td></tr>
+<tr><td>T15 智能配货</td><td>未来：未建单可查询、缺货继续预占、暂停／失败可见、整单同仓、多包裹及幂等建单正确。</td><td>E13</td></tr>
+<tr><td>T16 订单变更</td><td>未来：整单拦截和逆向、差额预占、版本原子生效、恢复失败保留阻断、存量切换不重复占库。</td><td>E15</td></tr>
+</tbody></table>
+<h2 id="delivery">14 · 联调顺序、交付物与变更管理</h2>
+<ol><li>FOP 回复 C01—C12，给出每项责任人、正式源实体／字段、现有能力复用结论、预计版本与交付日期；未承诺事项不代填日期。</li><li>优先补齐关键业务字段和关联，交付审核、库存、联系及当前拦截能力；实际地址、请求／响应、鉴权、错误与幂等规则一并提供。</li><li>完整同步方案按稳定快照、事务变更、授权、屏障核对的依赖顺序交付；先验证履约最小业务链，再覆盖本需求全部对象，完成同版本核对。</li><li>当前范围按第 13 节验收，形成正式发布版本、OpenAPI／Schema、FOP 字段映射、示例单据、容量与恢复说明、遗留事项以及发布／回退方案。</li><li>未来智能配货和订单变更单独提交版本计划，先完成预占与存量一致性验证，再切换 FOP 建单、拦截、变更与 AppStore 同步；未完成未来验收不宣称已切换。</li></ol>
+<p>任一实体、字段、枚举或关联变化均应在 FOP 实现与对外契约中同步更新，并说明兼容策略、旧版本停止时间和受影响范围。已定义、已开发、已发布、已联调分别记录；未提供 API 仍标记“待提供”。</p>

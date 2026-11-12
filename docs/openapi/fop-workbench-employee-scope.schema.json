@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "FOP 工作台本地组织筛选扩展 V1",
+  "description": "待 FOP 发布的 BFF→FOP 内部接口扩展。浏览器不能提交 employeeIds、认证身份或范围版本。使用当前登录员工 Token；本地部门解析出的业务员 masterId 集合只能收窄其 FOP 授权。未声明能力时经理及跨业务员范围拒绝；本人单业务员旧查询、管理员未收窄查询兼容。空集合由 BFF 返回空结果，不作为省略筛选。分析接口不适用此扩展。",
+  "$defs": {
+    "EmployeeIds": {
+      "type": "array", "minItems": 1, "maxItems": 10000, "uniqueItems": true,
+      "items": { "type": "string", "pattern": "^[1-9][0-9]{0,18}$" }
+    },
+    "OrderPermissionExtension": {
+      "type": "object", "required": ["orderQuery"],
+      "properties": {
+        "orderQuery": { "type": "object", "required": ["employeeFilterVersion"], "properties": { "employeeFilterVersion": { "const": 1 } } }
+      },
+      "description": "订单授权响应 data 扩展；已有 subject、资源 queues、organizationIds 及其校验全部保留。不能代替独立备货权限。"
+    },
+    "StockPermissionExtension": {
+      "type": "object", "required": ["stockEmployeeFilterVersion"],
+      "properties": { "stockEmployeeFilterVersion": { "const": 1 } },
+      "description": "备货权限响应 data 扩展；原 schemaVersion、subject、orders/inventory 独立公司授权保持不变。"
+    },
+    "QueryExtension": {
+      "type": "object", "required": ["employeeIds", "localScopeVersion", "departmentIds"],
+      "properties": {
+        "employeeIds": { "$ref": "#/$defs/EmployeeIds" },
+        "localScopeVersion": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "departmentIds": { "type": "array", "maxItems": 0 }
+      },
+      "description": "请求 query 扩展；保留 tenantId/userId/organizationIds/scopeRole，绝不把本地部门 UUID 作为 FOP 部门 ID。FOP先按当前认证权限交集过滤，再筛选、排序、汇总、分页。此合同也适用于导出 manifest 和按ID批量详情。"
+    },
+    "ResponseEchoExtension": {
+      "type": "object", "required": ["employeeIds", "localScopeVersion"],
+      "properties": {
+        "employeeIds": { "$ref": "#/$defs/EmployeeIds" },
+        "localScopeVersion": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+      },
+      "description": "每个数据页、汇总及导出manifest响应 data 必须回显实际执行的同一集合（顺序不限）和同一版本。现有 subject/company/schemaVersion/分页/独立资源授权校验继续执行。BFF逐行验证 owner.id 属于集合，不以当前页裁剪代替上游授权和正确总数。备货全量受限分页快照必须每页验证。"
+    }
+  }
+}

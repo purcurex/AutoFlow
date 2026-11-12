@@ -2579,7 +2579,7 @@ article h2:target{color:#087f8c} .hero h1{font-size:32px} .table-wrap td{overflo
 </tr>
 <tr>
 <td>BFF→待发布网关</td>
-<td>POST <code>{FOP_EMPLOYEE_API_URL}/permissions</code></td>
+<td>POST <code>{plannedGateway}/permissions</code></td>
 <td>服务端派生<code>subject:{tenantId,userId}</code></td>
 <td><code>FopPermissionGrant</code>，含明确<code>approvalActions</code>；读取授权与审核授权独立</td>
 </tr>
@@ -2603,8 +2603,8 @@ article h2:target{color:#087f8c} .hero h1{font-size:32px} .table-wrap td{overflo
 </tr>
 </tbody>
 </table></div>
-<p>上述FOP路径是本工程提出的员工网关合同，<strong>不是已发现或已上线的金蝶标准URL</strong>。BFF环境<code>FOP_EMPLOYEE_API_URL</code>必须为HTTPS，<code>FOP_EMPLOYEE_API_TOKEN</code>仅放服务端；不填时保持未配置。每次HTTP请求15秒超时、不跟随重定向、不自动重试。审核目标解析必须排除取消/作废/替代历史单据，按包裹精确关联；不能只按SKU或订单号字符串碰撞关联。网关必须将<code>subject</code>作为服务端授权委托，校验服务调用方有权委托该用户；事务内重查支付、来源、审核权限和版本，记录幂等响应。同一幂等键不同载荷拒绝，重复请求重放原结果；不同请求对同一单据也须锁定避免重复副作用。请求编号用于排查，不能当作权限凭证。</p>
-<p>适配器当前覆盖订单授权/清单与审核；回款、毛利、物流成本及联系人等接口仍沿用原有待接入计划，不因配置本接口而冒充全部业务已接通。</p>
+<p>上述路径保留为历史目标契约，<strong>不是已发现或已上线的金蝶标准URL</strong>。旧通用 HTTP 员工网关适配器及其运行配置已移除，<code>{plannedGateway}</code>不是可配置的数据源。真实工作台只通过显式<code>FOP_DATA_MODE=kingdee</code>选择 Kingdee 适配器，逐项使用已发布且已验证的接口；未发布能力保持不可用。审核目标解析必须排除取消/作废/替代历史单据，按包裹精确关联；不能只按SKU或订单号字符串碰撞关联。网关必须将<code>subject</code>作为服务端授权委托，校验服务调用方有权委托该用户；事务内重查支付、来源、审核权限和版本，记录幂等响应。同一幂等键不同载荷拒绝，重复请求重放原结果；不同请求对同一单据也须锁定避免重复副作用。请求编号用于排查，不能当作权限凭证。</p>
+<p>本节历史网关方法不代表当前已实现的 Kingdee 能力。订单、回款、毛利、物流成本及联系人等资源须按真实适配器、独立授权和发布接口逐项验收；RMA及采购退货关联仍待接入，不因页面或契约存在而声明全部业务已接通。</p>
 <h3>9.12 所有工作台待办清单批量导出 Excel（2026-10-26）</h3>
 <ul>
 <li>覆盖五工作台九队列：unpaid、review、exceptions、procurement、procurement_shipping、allocation、allocation_review、dispatch、shipping。每页提供单选、多选、全选当前页与清空；勾选仅用于导出，导出不要求审核权。</li>
@@ -3359,7 +3359,7 @@ article h2:target{color:#087f8c} .hero h1{font-size:32px} .table-wrap td{overflo
 </table></div>
 <p><strong>独立权限：</strong> <code>allowedStockOrderIds</code>、<code>allowedStockInventoryIds</code>分别与租户、销售岗位、本地本人/部门/全部业务范围求交，省略或空则无数据；系统管理员身份不自动扩大业务数据。备货单沿用单据业务归属；库存必须用客户当前归属。客户选项来自允许查询的备货单/库存，不能据此放开其他库存。HTTP请求的customerId、departmentId、ownerId仅缩小范围，不是身份声明。</p>
 <p><strong>平台已实现接口（路径前加/api）：</strong> GET <code>/autoflow/integrations/fop/stock-orders</code>、GET <code>/stock-customers</code>、GET <code>/stock-inventory</code>（同前缀）、POST <code>/stock-orders/export</code>。完整参数、返回字段与例子见下方OpenAPI字段字典。GET清单和库存默认page=1/pageSize=50，仅20/50/100；customerId库存可选，新增customerSearch客户模糊查询，详见9.37。</p>
-<p><strong>待IT发布员工网关：</strong> <code>POST {FOP_EMPLOYEE_API_URL}/stock-orders</code>和<code>/stock-inventory</code>，请求复用服务间凭据及服务端绑定subject，不由浏览器提供身份；响应为完整授权candidate数组，不能悄悄只返回上游第一页。网关内部可复用现有<code>OrderController.getStockInventoryQty</code>（customerId、skuName、warehouseId、0基pageIndex、pageSize），但须完成当前员工/客户权限、库存可读白名单、完整分页、SKU/仓库展开及FOP仓库编码映射。现有源码接口不等于该员工网关已上线。</p>
+<p><strong>历史目标网关契约：</strong> <code>POST {plannedGateway}/stock-orders</code>和<code>/stock-inventory</code>不是当前 Kingdee 运行地址，通用适配器已移除。真实备货及库存按已配置、已验证的 Kingdee 接口接入；本节保留的目标合同要求服务端认证身份、独立资源授权和完整分页，不由浏览器提供身份，也不能悄悄只返回上游第一页。网关内部可复用现有<code>OrderController.getStockInventoryQty</code>（customerId、skuName、warehouseId、0基pageIndex、pageSize），但须完成当前员工/客户权限、库存可读白名单、完整分页、SKU/仓库展开及FOP仓库编码映射。现有源码接口不等于该员工网关已上线。</p>
 <p><strong>生产阻塞与人工核对：</strong> 备货店铺来源当前元数据未发现，必须确认真实关联，未确认返回null，不从履约单猜店铺；核实两类库存数量语义、负数异常处理及客户移交权限；核实采购枚举0/1/2/3/4、取消/待支付单、币种与收款时间；确认零库存实体是否保留。演示数据已覆盖两类型、多商品、未收款和完成状态，不能作为生产库存来源。</p>
 <h2 id="hz-section-31">9.37 采购待备货、订单审核时间与库存模糊查询（2026-10-28 UTC+8）</h2>
 <h3>采购工作台新增备货待采购清单</h3>

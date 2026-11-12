@@ -16,6 +16,7 @@ const order: FopOrderCandidate = {
   fulfillmentProgress: { allocationCreated: true, stockReadiness: 'incomplete', allocationReview: 'pending', outbound: 'pending', shopifySync: 'pending', supplierShipment: 'pending' },
 }
 class Provider extends FopDataProvider {
+  readonly source = 'mock' as const
   orders = [structuredClone(order)]
   grant: FopPermissionGrant = { subject: { tenantId: 't', userId: 'u' }, allowedOrderIds: ['o1'], allocationInventoryScopes: demoAllocationScopes(this.orders) }
   isConfigured() { return true }

@@ -11,11 +11,12 @@ import * as bcrypt from 'bcrypt'
 import { User, UserRole } from './user.entity'
 import type { UpdateProfileDto } from './dto/update-profile.dto'
 import type { ListWorkbenchAccountsDto } from './dto/workbench.dto'
-import type { WorkbenchRole } from './workbench-role'
+import { WORKBENCH_ROLES, type WorkbenchRole } from './workbench-role'
 import type { FopIdentity } from '../fop-data/fop-data.types'
 import { ChartPermissionOverride, collaborationChartPermissions, validateChartPermissions } from './chart-permissions'
 import { accountRole } from './account-role'
 import { UpdateAccountAccessDto } from './dto/account-access.dto'
+import { buildLocalWorkbenchOrganization, LocalWorkbenchOrganization, type LocalWorkbenchCompany } from './local-workbench-organization'
 
 function workbenchAccount(user: User) {
   return {
@@ -107,18 +108,41 @@ export class UsersService {
 
   async workbenchDepartment(user: User): Promise<{ id: string; name: string | null } | null> {
     const scope = businessScope(user)
-    if (scope.role === 'admin' || scope.role === 'none' || !scope.departmentId) return null
+    if (scope.role === 'admin' || scope.role === 'none') return null
     const employees = await this.usersRepository.manager.getRepository(OrganizationEmployeeEntity).find({
       where: { accountId: user.id, archivedAt: IsNull() },
-      select: { ownerUserId: true }, take: 2,
+      select: { ownerUserId: true, departmentId: true }, take: 2,
     })
+    if (employees.length > 1 || employees.length === 1 && user.organizationWorkspaceOwnerId && user.organizationWorkspaceOwnerId !== employees[0].ownerUserId) return null
     const ownerUserId = employees.length === 1 ? employees[0].ownerUserId : user.organizationWorkspaceOwnerId
+    const departmentId = scope.role === 'salesperson' ? employees[0]?.departmentId : scope.departmentId
+    if (!ownerUserId || !departmentId) return null
     const nodes = ownerUserId ? await this.usersRepository.manager.getRepository(OrganizationNodeEntity).find({
       where: { ownerUserId }, select: { id: true, name: true },
     }) : []
-    // External FOP IDs must not be relabelled with an unrelated local employee department.
-    // Match in memory: external IDs need not be valid UUIDs for organization_nodes.id.
-    return { id: scope.departmentId, name: nodes.find(node => node.id === scope.departmentId)?.name ?? null }
+    const department = nodes.find(node => node.id === departmentId)
+    return department ? { id: department.id, name: department.name } : null
+  }
+
+  /** Workbench membership is local; only verified master IDs become upstream filters. */
+  async localWorkbenchOrganization(user: User, company?: LocalWorkbenchCompany): Promise<LocalWorkbenchOrganization> {
+    const employeesRepository = this.usersRepository.manager.getRepository(OrganizationEmployeeEntity)
+    const linked = await employeesRepository.find({ where: { accountId: user.id },
+      select: { id: true, ownerUserId: true, archivedAt: true }, take: 2 })
+    const invalid = () => new ForbiddenException({ code: 'local_organization_scope_required', message: 'Current local organization assignment is unavailable' })
+    if (linked.length > 1 || linked[0]?.archivedAt || linked[0] && user.organizationWorkspaceOwnerId && user.organizationWorkspaceOwnerId !== linked[0].ownerUserId) throw invalid()
+    const ownerUserId = linked[0]?.ownerUserId ?? user.organizationWorkspaceOwnerId ?? (businessScope(user).role === 'admin' ? user.id : null)
+    if (!ownerUserId) throw invalid()
+    const [nodes, employees] = await Promise.all([
+      this.usersRepository.manager.getRepository(OrganizationNodeEntity).find({ where: { ownerUserId },
+        select: { id: true, ownerUserId: true, parentId: true, name: true, kind: true } }),
+      employeesRepository.find({ where: { ownerUserId, archivedAt: IsNull() },
+        select: { id: true, ownerUserId: true, departmentId: true, name: true, accountId: true, archivedAt: true } }),
+    ])
+    const accountIds = [...new Set(employees.flatMap(employee => employee.accountId ? [employee.accountId] : []))]
+    const accounts = accountIds.length ? await this.usersRepository.find({ where: { id: In(accountIds) },
+      select: { id: true, accountDisabled: true, fopTenantId: true, fopUserId: true, fopBindingDetails: true } }) : []
+    return buildLocalWorkbenchOrganization(user, ownerUserId, nodes, employees, accounts, company)
   }
 
   async defaultProcurementView(user: User): Promise<'fulfillment' | 'purchase'> {
@@ -150,8 +174,8 @@ export class UsersService {
   }
 
   async updateAccountAccess(actorId: string, id: string, input: UpdateAccountAccessDto) {
-    // 管理员开通业务后固定全部部门，兼容历史客户端提交的本人/部门范围；未开通仍关闭。
-    const scope = input.accountRole === 'administrator' && input.businessScope.role !== 'none'
+    // 管理员固定全部本地业务范围，兼容历史客户端提交的关闭/本人/部门范围。
+    const scope = input.accountRole === 'administrator'
       ? { ...input.businessScope, role: 'admin' as const } : input.businessScope
     const valid = input.accountRole === 'administrator'
       || input.accountRole === 'collaboration' && ['admin', 'none'].includes(scope.role)
@@ -169,7 +193,8 @@ export class UsersService {
       const resetTemplate = accountRole(target) !== input.accountRole || target.businessRole === 'none' && scope.role !== 'none'
       await repository.update(id, {
         role, businessRole: scope.role, businessDepartmentId: scope.departmentId, businessEmployeeId: scope.employeeId,
-        workbenchRoles: [...input.workbenchRoles],
+        ...(input.accountRole === 'department_manager' && accountRole(target) !== 'department_manager' ? { dataDisplayScope: 'self' as const } : {}),
+        workbenchRoles: input.accountRole === 'administrator' ? [...WORKBENCH_ROLES] : [...input.workbenchRoles],
         ...(resetTemplate ? { chartPermissions: input.accountRole === 'collaboration' ? collaborationChartPermissions() : [] } : {}),
       })
       return workbenchAccount((await repository.findOne({ where: { id } }))!)
@@ -185,8 +210,12 @@ export class UsersService {
       const actor = await repository.findOneBy({ id: actorId })
       if (actor?.role !== UserRole.ADMIN) throw new ForbiddenException('Administrator access required')
       if (actorId === id && role !== UserRole.ADMIN) throw new ConflictException('不能撤销自己的系统管理权限，请由另一位管理员操作')
-      if (!await repository.existsBy({ id })) throw new NotFoundException('用户不存在')
-      await repository.update(id, { role })
+      const target = await repository.findOneBy({ id })
+      if (!target) throw new NotFoundException('用户不存在')
+      // 旧入口只指定系统角色；撤销管理员时关闭业务，之后再显式选择岗位范围。
+      await repository.update(id, { role, ...(role === UserRole.ADMIN
+        ? { businessRole: 'admin' as const, workbenchRoles: [...WORKBENCH_ROLES] }
+        : target.role === UserRole.ADMIN ? { businessRole: 'none' as const, workbenchRoles: [] } : {}) })
       return workbenchAccount((await repository.findOneBy({ id }))!)
     })
   }
@@ -210,8 +239,10 @@ export class UsersService {
   }
 
   async updateBusinessScope(id: string, scope: UpdateBusinessScopeDto) {
-    if (!await this.findById(id)) throw new NotFoundException('用户不存在')
-    await this.usersRepository.update(id, { businessRole: scope.role, businessDepartmentId: scope.departmentId, businessEmployeeId: scope.employeeId })
+    const current = await this.findById(id)
+    if (!current) throw new NotFoundException('用户不存在')
+    await this.usersRepository.update(id, { businessRole: scope.role, businessDepartmentId: scope.departmentId, businessEmployeeId: scope.employeeId,
+      ...(scope.role === 'department_manager' && current.businessRole !== 'department_manager' ? { dataDisplayScope: 'self' as const } : {}) })
     const updated = await this.findById(id)
     if (!updated) throw new NotFoundException('用户不存在')
     return workbenchAccount(updated)
@@ -270,10 +301,19 @@ export class UsersService {
     }
 
     // Never save a full profile snapshot: grants may have changed since the read.
-    const changes: Partial<Pick<User, 'username' | 'avatarUrl'>> = {}
+    const changes: Partial<Pick<User, 'username' | 'avatarUrl' | 'dataDisplayScope'>> = {}
     if (updateData.username !== undefined) changes.username = updateData.username
     if (updateData.avatarUrl !== undefined) changes.avatarUrl = updateData.avatarUrl
-    if (Object.keys(changes).length) await this.usersRepository.update(id, changes)
+    if (updateData.dataDisplayScope !== undefined) {
+      if (user.role !== UserRole.USER || user.businessRole !== 'department_manager' || user.accountDisabled) {
+        throw new ForbiddenException('只有部门经理可以切换数据展示范围')
+      }
+      if (!['department', 'self'].includes(updateData.dataDisplayScope)) throw new BadRequestException('无效的数据展示范围')
+      changes.dataDisplayScope = updateData.dataDisplayScope
+      // Check the role again in the write, so a concurrent demotion cannot save this preference.
+      const result = await this.usersRepository.update({ id, role: UserRole.USER, businessRole: 'department_manager', accountDisabled: false }, changes)
+      if (result.affected !== 1) throw new ForbiddenException('账号权限已变更，请刷新后重试')
+    } else if (Object.keys(changes).length) await this.usersRepository.update(id, changes)
     const updated = await this.findById(id)
     if (!updated) throw new NotFoundException('用户不存在')
     return updated

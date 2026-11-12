@@ -1036,8 +1036,8 @@
                 "outboundStatus",
                 "completedAt"
               ],
-              "default": "paidAt",
-              "description": " reviewedAt仅procurement可用，实际订单审核时间，空值始终最后，同值按paidAt升序及id。"
+              "default": "consumerPaidAt",
+              "description": "履约待办默认按consumerPaidAt（C端付款时间）降序，缺失或非法值始终末尾，禁止回退收款/创建时间；完成清单默认completedAt。显式排序字段保留。"
             },
             "description": "主排序字段；stockReadiness和allocationReviewStatus仅allocation/allocation_review，分别对应齐套和审核事实；allocationDocumentStatus保留仓库及旧链接兼容。非法组合400。详见接口描述。 需求9.30：allocation与allocation_review均仅dispatch_incomplete未完成和dispatch_complete已完成。已完成=非空关联有效发运单全部已审核，与Shopify同步无关；缺失、未知或任一未审归未完成。未完成保留队列，不改变Dashboard总数。状态排序未完成→已完成，同组收款日期/id。旧细分状态在该队列查询/导出返回400，旧前端书签迁移到对应分类。allocation未齐套页同样采用上述两态，dispatch待履约清单保留原四种。 最新9.33：销售unpaid/review/exceptions及待履约dispatch支持sortBy=consumerPaidAt、sortOrder=asc/desc。默认仍paidAt升序；同C端时间按paidAt升序/id升序，缺失或非法时间双向均置后，不回退其他日期。先授权/筛选后对完整结果排序再分页；所选及全筛选Excel同顺序。其他队列使用该排序返回400。单号及SKU复制仅客户端原值操作，不新增API或改变权限。 9.35覆盖原四队列限制：allocation未齐套也允许consumerPaidAt；allocation_review仍不允许，使用独立齐套时间展示。"
           },
@@ -1052,7 +1052,7 @@
                 "desc"
               ]
             },
-            "description": "升序asc/降序desc。显式值优先；省略时仅paidAt沿用paidAtOrder，consumerPaidAt和状态默认asc。缺失或非法值始终最后；C端时间及状态同值按收款日期升序/id升序。非法或重复参数400。"
+            "description": "升序asc/降序desc。显式值优先；省略时仅paidAt沿用paidAtOrder，时间字段默认desc，状态字段默认asc。缺失或非法值始终最后；C端时间及状态同值按收款日期升序/id升序。非法或重复参数400。"
           },
           {
             "name": "paidAtOrder",
@@ -1064,9 +1064,9 @@
                 "asc",
                 "desc"
               ],
-              "default": "asc"
+              "default": "desc"
             },
-            "description": "收款日期排序：asc最早在前，desc最新在前。先授权和筛选，再对完整结果排序后分页；同时间id升序，空/非法日期始终最后。非法值或重复参数返回400。 仅sortBy省略或paidAt且sortOrder未指定时决定日期排序方向；状态排序的同值顺序固定收款升序。"
+            "description": "默认desc最新收款在前；asc最早收款在前。显式sortOrder优先；缺失或非法日期始终末尾，同时间按ID升序。授权、筛选后排序，再分页；导出同序。"
           },
           {
             "name": "page",
@@ -1319,6 +1319,16 @@
               "type": "integer",
               "minimum": 2020,
               "maximum": 9999
+            }
+          },
+          {
+            "name": "includeQueues",
+            "in": "query",
+            "required": false,
+            "description": "是否查询待办计数，默认 true；新版首页传 false，计数在前端复用同范围工作台列表 total。",
+            "schema": {
+              "type": "boolean",
+              "default": true
             }
           }
         ]
@@ -2042,6 +2052,18 @@
           "backend/src/modules/autoflow/autoflow.service.ts",
           "backend/src/modules/autoflow/autoflow.types.ts",
           "backend/src/modules/users/business-data-access.ts"
+        ],
+        "parameters": [
+          {
+            "name": "includeQueues",
+            "in": "query",
+            "required": false,
+            "description": "是否查询待办计数，默认 true；新版首页传 false，计数在前端复用同范围工作台列表 total。",
+            "schema": {
+              "type": "boolean",
+              "default": true
+            }
+          }
         ]
       }
     },
@@ -4928,12 +4950,13 @@
             "schema": {
               "type": "string",
               "enum": [
+                "createdAt",
                 "paidAt",
                 "orderStatus",
                 "purchaseStatus"
               ],
-              "default": "paidAt",
-              "description": "主排序字段：paidAt收款时间（默认）、orderStatus备货订单状态、purchaseStatus采购状态。状态升序按unpaid→paid→approved，以及unpurchased→partial→purchased→shipped→received；状态未知/null双向置后。同状态按paidAt升序（空值最后）、id升序。先授权和筛选，再完整排序后分页；Excel沿用相同顺序。sortBy非法、空值、重复参数返回400。"
+              "default": "createdAt",
+              "description": "独立备货单默认按创建时间createdAt降序，缺失末尾；可显式按收款或状态排序。"
             }
           },
           {
@@ -4946,8 +4969,7 @@
                 "asc",
                 "desc"
               ],
-              "default": "asc",
-              "description": "指定主排序字段的方向；默认asc。省略sortBy兼容原paidAt排序。状态同值始终收款升序/id升序，未知状态及空收款时间双向最后。"
+              "description": "时间排序默认desc（最新在前），状态排序默认asc；显式sortOrder优先。状态同值按收款升序/ID升序，未知状态及空收款时间始终最后。"
             }
           },
           {
@@ -5965,7 +5987,7 @@
                 "asc",
                 "desc"
               ],
-              "default": "asc"
+              "default": "desc"
             }
           },
           {
@@ -6154,7 +6176,7 @@
                 "asc",
                 "desc"
               ],
-              "default": "asc"
+              "default": "desc"
             }
           },
           {
@@ -6364,7 +6386,7 @@
                 "asc",
                 "desc"
               ],
-              "default": "asc"
+              "default": "desc"
             }
           },
           {
@@ -6507,7 +6529,7 @@
                 "asc",
                 "desc"
               ],
-              "default": "asc"
+              "default": "desc"
             }
           },
           {
@@ -6673,6 +6695,226 @@
               }
             }
           }
+        }
+      }
+    },
+    "/autoflow/integrations/fop/stock-orders/{orderId}/supplier-follow-ups": {
+      "get": {
+        "operationId": "getStockSupplierFollowUps",
+        "summary": "读取备货单待发货采购供应商",
+        "tags": [
+          "备货"
+        ],
+        "description": "采购工作台权限、当前客户归属数据范围、独立备货单授权及 allowedPurchaseOrderIds 共同限制。仅有效已支付已审核且 purchaseStatus=purchased 的备货单；采购联系人仅包含本备货源单关联、已付款且未发数量大于零的采购。不得使用履约单授权代替备货单授权。查询后重读权限与订单状态，每次打开重新取数并核对 contactVersion；列表不返回聊天URL，Mock打开返回demo及null URL。当前已实现BFF与Mock，真实FOP备货采购关联和旺旺资料接口仍待发布对接；适配器未支持时返回503 fop_feature_not_configured，不伪装为空联系人，无Mock回退。",
+        "parameters": [
+          {
+            "name": "orderId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功，裸JSON；本接口不发送消息或修改订单。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StockSupplierFollowUpPage"
+                },
+                "example": {
+                  "source": "mock",
+                  "orderId": "order-1",
+                  "orderNumber": "BH261109000001",
+                  "refreshedAt": "2026-10-25T16:00:00+08:00",
+                  "items": [
+                    {
+                      "purchaseOrderId": "purchase-1",
+                      "purchaseOrderNumber": "CG-00021-1",
+                      "platformOrderNumber": "DEMO1688-21-1",
+                      "supplier": {
+                        "id": "supplier-1",
+                        "name": "杭州云帆箱包（演示）",
+                        "wangwangAccount": "HyperZone演示供应商1"
+                      },
+                      "shipmentStatus": "pending",
+                      "lines": [
+                        {
+                          "stockLineId": "line-1",
+                          "purchaseLineId": "purchase-line-1",
+                          "sku": "HZ-BAG-001",
+                          "name": "Everyday commuter backpack",
+                          "pendingQuantity": 2
+                        }
+                      ],
+                      "availability": "ready",
+                      "contactVersion": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "x-implementation-status": "implemented",
+        "x-source-files": [
+          "backend/src/modules/users/workbench.controller.ts",
+          "backend/src/modules/fop-data/fop-data.service.ts",
+          "backend/src/modules/fop-data/stock-supplier-follow-up.ts",
+          "frontend/src/components/autoflow/SupplierFollowUpDialog.vue"
+        ],
+        "x-provider-contract": {
+          "method": "POST",
+          "path": "/stock-supplier-follow-ups",
+          "request": {
+            "subject": "FopIdentity",
+            "orderId": "stock-order ID"
+          },
+          "response": "StockSupplierFollowUpProviderResult",
+          "status": "gateway contract; not a Kingdee standard endpoint"
+        }
+      }
+    },
+    "/autoflow/integrations/fop/stock-orders/{orderId}/supplier-follow-ups/{purchaseOrderId}/launch": {
+      "get": {
+        "operationId": "getStockSupplierChat",
+        "summary": "核验备货采购供应商并读取旺旺地址",
+        "tags": [
+          "备货"
+        ],
+        "description": "采购工作台权限、当前客户归属数据范围、独立备货单授权及 allowedPurchaseOrderIds 共同限制。仅有效已支付已审核且 purchaseStatus=purchased 的备货单；采购联系人仅包含本备货源单关联、已付款且未发数量大于零的采购。不得使用履约单授权代替备货单授权。查询后重读权限与订单状态，每次打开重新取数并核对 contactVersion；列表不返回聊天URL，Mock打开返回demo及null URL。当前已实现BFF与Mock，真实FOP备货采购关联和旺旺资料接口仍待发布对接；适配器未支持时返回503 fop_feature_not_configured，不伪装为空联系人，无Mock回退。",
+        "parameters": [
+          {
+            "name": "orderId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "purchaseOrderId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "contactVersion",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功，裸JSON；本接口不发送消息或修改订单。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupplierChatLaunch"
+                },
+                "example": {
+                  "source": "mock",
+                  "mode": "demo",
+                  "orderId": "order-1",
+                  "purchaseOrderId": "purchase-1",
+                  "wangwangAccount": "HyperZone演示供应商1",
+                  "url": null
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "x-implementation-status": "implemented",
+        "x-source-files": [
+          "backend/src/modules/users/workbench.controller.ts",
+          "backend/src/modules/fop-data/fop-data.service.ts",
+          "backend/src/modules/fop-data/stock-supplier-follow-up.ts",
+          "frontend/src/components/autoflow/SupplierFollowUpDialog.vue"
+        ],
+        "x-provider-contract": {
+          "method": "POST",
+          "path": "/stock-supplier-follow-ups",
+          "request": {
+            "subject": "FopIdentity",
+            "orderId": "stock-order ID"
+          },
+          "response": "StockSupplierFollowUpProviderResult",
+          "status": "gateway contract; not a Kingdee standard endpoint"
         }
       }
     }
@@ -8459,29 +8701,44 @@
         "type": "object",
         "properties": {
           "review": {
-            "type": "integer",
+            "type": [
+              "integer",
+              "null"
+            ],
             "minimum": 0,
-            "description": "待审核：paid且reviewStatus=pending。 排除取消，按订单ID去重；无对应岗位权限为0，不受日期筛选。"
+            "description": "待审核：未取消、已支付、reviewStatus=pending，对应销售待审核清单。 按当前FOP授权与清单本地成员范围计数，不受图表日期影响。无权限／未接入／查询失败均为null，状态见queueStates；0仅表示完整查询后无待办。"
           },
           "dispatch": {
-            "type": "integer",
+            "type": [
+              "integer",
+              "null"
+            ],
             "minimum": 0,
-            "description": "待履约：paid、approved，shopifySync=pending。 排除取消，按订单ID去重；无对应岗位权限为0，不受日期筛选。"
+            "description": "待履约：未取消、已支付、shopifySync=pending，不额外要求审核通过，对应发运待履约清单。 按当前FOP授权与清单本地成员范围计数，不受图表日期影响。无权限／未接入／查询失败均为null，状态见queueStates；0仅表示完整查询后无待办。"
           },
           "procurement": {
-            "type": "integer",
+            "type": [
+              "integer",
+              "null"
+            ],
             "minimum": 0,
-            "description": "待采购卡片及tasks：procurement与procurement_shipping去重并集，即采购未完成付款＋已采购未发货。共同要求paid、履约approved、supplierShipment=pending/partial；付款完成仅跨采购页签，全部发货退出。排除取消，先数据权限过滤，无岗位权限为0，不受日期筛选。tasks时间取并集最早paidAt。 已创建PO但明确alibabaOrder=not_pushed/partial仍留待采购，从待发货排除；不依赖物流条件或当前付款事实。"
+            "description": "待采购卡片：procurement与procurement_shipping互斥阶段并集；前者采购未完成（下单、平台下单及付款事实），后者采购完成且明确供应商未发完。不包含独立备货。 按当前FOP授权与清单本地成员范围计数，不受图表日期影响。无权限／未接入／查询失败均为null，状态见queueStates；0仅表示完整查询后无待办。"
           },
           "allocation": {
-            "type": "integer",
+            "type": [
+              "integer",
+              "null"
+            ],
             "minimum": 0,
-            "description": "待配货卡片及tasks：allocation与allocation_review去重并集，即未齐套＋已齐套未审核。共同要求paid、履约approved；incomplete，或ready且allocationReview=pending且outbound!=completed。齐套跨页签不减少卡片合计，审核完成退出。排除取消，先数据权限过滤，无岗位权限为0，不受日期筛选。tasks时间取并集最早paidAt。"
+            "description": "待配货卡片：allocation未齐套与allocation_review已齐套未审核互斥阶段并集；已支付、履约已审核、有有效配货单、配货未审核，且明确未完成出库。 按当前FOP授权与清单本地成员范围计数，不受图表日期影响。无权限／未接入／查询失败均为null，状态见queueStates；0仅表示完整查询后无待办。"
           },
           "shipping": {
-            "type": "integer",
+            "type": [
+              "integer",
+              "null"
+            ],
             "minimum": 0,
-            "description": "待出库：有权有效、客户已付、履约已审、allocationCreated=true、stockReadiness=ready、allocationReview=approved、outbound=pending/partial。未审核配货仅属于配货工作台。与无临时筛选的shipping.total一致。"
+            "description": "待出库：未取消、已支付、履约已审核、有有效配货单、已齐套且配货已审核，明确未完成出库。 按当前FOP授权与清单本地成员范围计数，不受图表日期影响。无权限／未接入／查询失败均为null，状态见queueStates；0仅表示完整查询后无待办。"
           }
         },
         "required": [
@@ -8808,6 +9065,30 @@
           "departmentReceipts": {
             "$ref": "#/components/schemas/DashboardReceipts",
             "description": "独立组织汇总。salespeople必须为空，不与个人或部门内授权记录小计混同。"
+          },
+          "queueStates": {
+            "$ref": "#/components/schemas/DashboardQueueStates"
+          },
+          "queueBreakdown": {
+            "$ref": "#/components/schemas/DashboardQueueBreakdown"
+          },
+          "integratedQueues": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "review",
+                "dispatch",
+                "procurement",
+                "allocation",
+                "shipping"
+              ]
+            },
+            "description": "完整统计成功的卡片，包含真实零笔。"
+          },
+          "analyticsConfigured": {
+            "type": "boolean",
+            "description": "分页适配器的分析资源接入情况，与待办队列独立。"
           }
         },
         "required": [
@@ -17239,8 +17520,8 @@
               "outboundStatus",
               "completedAt"
             ],
-            "default": "paidAt",
-            "description": "主排序字段；stockReadiness和allocationReviewStatus仅allocation/allocation_review，分别对应齐套和审核事实；allocationDocumentStatus保留仓库及旧链接兼容。非法组合400。详见接口描述。 最新9.33：销售unpaid/review/exceptions及待履约dispatch支持sortBy=consumerPaidAt、sortOrder=asc/desc。默认仍paidAt升序；同C端时间按paidAt升序/id升序，缺失或非法时间双向均置后，不回退其他日期。先授权/筛选后对完整结果排序再分页；所选及全筛选Excel同顺序。其他队列使用该排序返回400。单号及SKU复制仅客户端原值操作，不新增API或改变权限。 9.35覆盖原四队列限制：allocation未齐套也允许consumerPaidAt；allocation_review仍不允许，使用独立齐套时间展示。 reviewedAt仅procurement可用，实际订单审核时间，空值始终最后，同值按paidAt升序及id。"
+            "default": "consumerPaidAt",
+            "description": "履约待办默认按consumerPaidAt（C端付款时间）降序，缺失或非法值始终末尾，禁止回退收款/创建时间；完成清单默认completedAt。显式排序字段保留。"
           },
           "sortOrder": {
             "type": "string",
@@ -17248,7 +17529,7 @@
               "asc",
               "desc"
             ],
-            "description": "升序asc/降序desc。显式值优先；省略时仅paidAt沿用paidAtOrder，consumerPaidAt和状态默认asc。缺失或非法值始终最后；C端时间及状态同值按收款日期升序/id升序。非法或重复参数400。"
+            "description": "升序asc/降序desc。显式值优先；省略时仅paidAt沿用paidAtOrder，时间字段默认desc，状态字段默认asc。缺失或非法值始终最后；C端时间及状态同值按收款日期升序/id升序。非法或重复参数400。"
           },
           "paidAtOrder": {
             "type": "string",
@@ -17256,8 +17537,8 @@
               "asc",
               "desc"
             ],
-            "default": "asc",
-            "description": "收款日期排序：asc最早在前，desc最新在前。先授权和筛选，再对完整结果排序后分页；同时间id升序，空/非法日期始终最后。非法值或重复参数返回400。 仅sortBy省略或paidAt且sortOrder未指定时决定日期排序方向；状态排序的同值顺序固定收款升序。"
+            "default": "desc",
+            "description": "默认desc最新收款在前；asc最早收款在前。显式sortOrder优先；缺失或非法日期始终末尾，同时间按ID升序。授权、筛选后排序，再分页；导出同序。"
           },
           "mode": {
             "type": "string",
@@ -17886,12 +18167,13 @@
         "enum": [
           "unpurchased",
           "partial",
+          "in_progress",
           "purchased",
           "shipped",
           "received",
           "unknown"
         ],
-        "description": "hzkj_purchase_status：0未采购，1部分采购，2已采购，4已发货，3已入库。缺失/无法识别映射unknown（显示—），不是履约采购进度。"
+        "description": "备货采购阶段：in_progress为采购中；原始FOP采购状态2不代表供应商已付款或待发货。purchased仅在采购、付款、平台下单及待发事实明确时使用。"
       },
       "StockOrder": {
         "type": "object",
@@ -18812,8 +19094,7 @@
               "asc",
               "desc"
             ],
-            "default": "asc",
-            "description": "指定主排序字段的方向；默认asc。省略sortBy兼容原paidAt排序。状态同值始终收款升序/id升序，未知状态及空收款时间双向最后。"
+            "description": "时间排序默认desc（最新在前），状态排序默认asc；显式sortOrder优先。状态同值按收款升序/ID升序，未知状态及空收款时间始终最后。"
           },
           "mode": {
             "type": "string",
@@ -18854,12 +19135,13 @@
           "sortBy": {
             "type": "string",
             "enum": [
+              "createdAt",
               "paidAt",
               "orderStatus",
               "purchaseStatus"
             ],
-            "default": "paidAt",
-            "description": "主排序字段：paidAt收款时间（默认）、orderStatus备货订单状态、purchaseStatus采购状态。状态升序按unpaid→paid→approved，以及unpurchased→partial→purchased→shipped→received；状态未知/null双向置后。同状态按paidAt升序（空值最后）、id升序。先授权和筛选，再完整排序后分页；Excel沿用相同顺序。sortBy非法、空值、重复参数返回400。"
+            "default": "createdAt",
+            "description": "独立备货单默认按创建时间createdAt降序，缺失末尾；可显式按收款或状态排序。"
           },
           "lifecycle": {
             "type": "string",
@@ -19837,6 +20119,12 @@
             ],
             "format": "date-time",
             "description": "当前筛选范围内的采购完成时间；组为关联履约明细中的最新完成时间。"
+          },
+          "latestConsumerPaidAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "当前授权履约行中的最近C端付款时间；待办分组据此排序，不更改earliestReceiptAt的独立口径。"
           }
         },
         "description": " 所有purchase=null需求合并为唯一id=uncreated组；每笔履约单一行，多个待建义务合并lines。不按客户、供应商或SKU拆组。 未建组固定置顶，优先于收款升降序，分页与导出同序；界面默认收起。"
@@ -19946,6 +20234,12 @@
             ],
             "format": "date-time",
             "description": "当前筛选范围内的采购完成时间；组为关联履约明细中的最新完成时间。"
+          },
+          "consumerPaidAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "真实C端付款时间；缺失为null，不回退收款或创建时间。"
           }
         }
       },
@@ -20129,7 +20423,7 @@
                   "asc",
                   "desc"
                 ],
-                "default": "asc"
+                "default": "desc"
               },
               "mode": {
                 "const": "selected"
@@ -20251,7 +20545,7 @@
                   "asc",
                   "desc"
                 ],
-                "default": "asc"
+                "default": "desc"
               },
               "mode": {
                 "const": "filtered"
@@ -20398,6 +20692,582 @@
           "shippingFee",
           "discountAmount"
         ]
+      },
+      "StockSupplierFollowUpLine": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "stockLineId",
+          "purchaseLineId",
+          "sku",
+          "name",
+          "pendingQuantity"
+        ],
+        "properties": {
+          "stockLineId": {
+            "type": "string",
+            "description": "源备货订单有效分录ID"
+          },
+          "purchaseLineId": {
+            "type": "string",
+            "description": "实际采购单分录ID"
+          },
+          "sku": {
+            "type": "string",
+            "description": "本地SKU"
+          },
+          "name": {
+            "type": "string",
+            "description": "商品名称"
+          },
+          "pendingQuantity": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "当前备货源分录分摊的未发数量；不得返回整张合并采购单其他订单数量。"
+          }
+        },
+        "description": "已排除取消/已发明细的源单关联，不按SKU默认供应商猜测。"
+      },
+      "StockSupplierFollowUp": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "purchaseOrderId",
+          "purchaseOrderNumber",
+          "platformOrderNumber",
+          "supplier",
+          "shipmentStatus",
+          "lines",
+          "availability",
+          "contactVersion"
+        ],
+        "properties": {
+          "purchaseOrderId": {
+            "type": "string",
+            "description": "采购单稳定ID"
+          },
+          "purchaseOrderNumber": {
+            "type": "string",
+            "description": "采购单号"
+          },
+          "platformOrderNumber": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "1688订单号；线下采购可空。"
+          },
+          "supplier": {
+            "$ref": "#/components/schemas/SupplierFollowUpSupplier"
+          },
+          "shipmentStatus": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "partial"
+            ]
+          },
+          "lines": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StockSupplierFollowUpLine"
+            }
+          },
+          "availability": {
+            "type": "string",
+            "enum": [
+              "ready",
+              "missing_account",
+              "chat_unavailable"
+            ]
+          },
+          "contactVersion": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "description": "非授权凭据；联系人/采购关联/待发明细/地址内容版本，每次打开与新鲜查询对比。"
+          }
+        },
+        "description": "一张有效已付且仍有未发数量的采购单；同供应商多采购仍逐单保留。",
+        "examples": [
+          {
+            "purchaseOrderId": "purchase-1",
+            "purchaseOrderNumber": "CG-00021-1",
+            "platformOrderNumber": "DEMO1688-21-1",
+            "supplier": {
+              "id": "supplier-1",
+              "name": "杭州云帆箱包（演示）",
+              "wangwangAccount": "HyperZone演示供应商1"
+            },
+            "shipmentStatus": "pending",
+            "lines": [
+              {
+                "stockLineId": "line-1",
+                "purchaseLineId": "purchase-line-1",
+                "sku": "HZ-BAG-001",
+                "name": "Everyday commuter backpack",
+                "pendingQuantity": 2
+              }
+            ],
+            "availability": "ready",
+            "contactVersion": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          }
+        ]
+      },
+      "StockSupplierFollowUpPage": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "source",
+          "orderId",
+          "orderNumber",
+          "refreshedAt",
+          "items"
+        ],
+        "properties": {
+          "source": {
+            "type": "string",
+            "enum": [
+              "mock",
+              "fop"
+            ]
+          },
+          "orderId": {
+            "type": "string",
+            "description": ""
+          },
+          "orderNumber": {
+            "type": "string",
+            "description": ""
+          },
+          "refreshedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "BFF完成查询时间，不承诺FOP同步水位。"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StockSupplierFollowUp"
+            }
+          }
+        },
+        "description": "",
+        "examples": [
+          {
+            "source": "mock",
+            "orderId": "order-1",
+            "orderNumber": "BH261109000001",
+            "refreshedAt": "2026-10-25T16:00:00+08:00",
+            "items": [
+              {
+                "purchaseOrderId": "purchase-1",
+                "purchaseOrderNumber": "CG-00021-1",
+                "platformOrderNumber": "DEMO1688-21-1",
+                "supplier": {
+                  "id": "supplier-1",
+                  "name": "杭州云帆箱包（演示）",
+                  "wangwangAccount": "HyperZone演示供应商1"
+                },
+                "shipmentStatus": "pending",
+                "lines": [
+                  {
+                    "stockLineId": "line-1",
+                    "purchaseLineId": "purchase-line-1",
+                    "sku": "HZ-BAG-001",
+                    "name": "Everyday commuter backpack",
+                    "pendingQuantity": 2
+                  }
+                ],
+                "availability": "ready",
+                "contactVersion": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+              }
+            ]
+          }
+        ]
+      },
+      "StockSupplierFollowUpCandidate": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "purchaseOrderId",
+          "purchaseOrderNumber",
+          "platformOrderNumber",
+          "supplier",
+          "shipmentStatus",
+          "tenantId",
+          "stockOrderId",
+          "chatUrl",
+          "paid",
+          "cancelled",
+          "lines"
+        ],
+        "properties": {
+          "purchaseOrderId": {
+            "type": "string",
+            "description": "采购单稳定ID"
+          },
+          "purchaseOrderNumber": {
+            "type": "string",
+            "description": "采购单号"
+          },
+          "platformOrderNumber": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "1688订单号；线下采购可空。"
+          },
+          "supplier": {
+            "$ref": "#/components/schemas/SupplierFollowUpSupplier"
+          },
+          "shipmentStatus": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "partial",
+              "shipped",
+              "unknown"
+            ]
+          },
+          "tenantId": {
+            "type": "string",
+            "description": "来源租户；必须匹配subject"
+          },
+          "stockOrderId": {
+            "type": "string",
+            "description": "本次查询订单ID"
+          },
+          "chatUrl": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "从FOP现有可信旺旺解析能力获得；不能接收浏览器任意URL。当前仅放行账号匹配的aliim:sendmsg，其他格式需适配。"
+          },
+          "paid": {
+            "type": "boolean"
+          },
+          "cancelled": {
+            "type": "boolean"
+          },
+          "lines": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "stockLineId",
+                "purchaseLineId",
+                "sku",
+                "name",
+                "pendingQuantity"
+              ],
+              "properties": {
+                "stockLineId": {
+                  "type": "string",
+                  "description": "源备货订单有效分录ID"
+                },
+                "purchaseLineId": {
+                  "type": "string",
+                  "description": "实际采购单分录ID"
+                },
+                "sku": {
+                  "type": "string",
+                  "description": "本地SKU"
+                },
+                "name": {
+                  "type": "string",
+                  "description": "商品名称"
+                },
+                "pendingQuantity": {
+                  "type": "number",
+                  "minimum": 0
+                }
+              },
+              "description": ""
+            }
+          }
+        },
+        "description": "provider内部契约，不是HTTP响应；BFF过滤后剥离tenantId/chatUrl等内部字段。"
+      },
+      "StockSupplierFollowUpProviderResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "subject",
+          "orderId",
+          "items"
+        ],
+        "properties": {
+          "subject": {
+            "$ref": "#/components/schemas/FopIdentity"
+          },
+          "orderId": {
+            "type": "string",
+            "description": ""
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StockSupplierFollowUpCandidate"
+            }
+          }
+        },
+        "description": ""
+      },
+      "DashboardQueueStates": {
+        "type": "object",
+        "properties": {
+          "review": {
+            "type": "string",
+            "enum": [
+              "ready",
+              "forbidden",
+              "not_configured",
+              "unavailable"
+            ]
+          },
+          "dispatch": {
+            "type": "string",
+            "enum": [
+              "ready",
+              "forbidden",
+              "not_configured",
+              "unavailable"
+            ]
+          },
+          "procurement": {
+            "type": "string",
+            "enum": [
+              "ready",
+              "forbidden",
+              "not_configured",
+              "unavailable"
+            ]
+          },
+          "allocation": {
+            "type": "string",
+            "enum": [
+              "ready",
+              "forbidden",
+              "not_configured",
+              "unavailable"
+            ]
+          },
+          "shipping": {
+            "type": "string",
+            "enum": [
+              "ready",
+              "forbidden",
+              "not_configured",
+              "unavailable"
+            ]
+          }
+        },
+        "required": [
+          "review",
+          "dispatch",
+          "procurement",
+          "allocation",
+          "shipping"
+        ],
+        "additionalProperties": false
+      },
+      "DashboardQueueBreakdown": {
+        "type": "object",
+        "properties": {
+          "review": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "queue": {
+                  "type": "string",
+                  "enum": [
+                    "review"
+                  ]
+                },
+                "count": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 0
+                },
+                "state": {
+                  "type": "string",
+                  "enum": [
+                    "ready",
+                    "forbidden",
+                    "not_configured",
+                    "unavailable"
+                  ]
+                }
+              },
+              "required": [
+                "queue",
+                "count",
+                "state"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "dispatch": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "queue": {
+                  "type": "string",
+                  "enum": [
+                    "dispatch"
+                  ]
+                },
+                "count": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 0
+                },
+                "state": {
+                  "type": "string",
+                  "enum": [
+                    "ready",
+                    "forbidden",
+                    "not_configured",
+                    "unavailable"
+                  ]
+                }
+              },
+              "required": [
+                "queue",
+                "count",
+                "state"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "procurement": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "queue": {
+                  "type": "string",
+                  "enum": [
+                    "procurement",
+                    "procurement_shipping"
+                  ]
+                },
+                "count": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 0
+                },
+                "state": {
+                  "type": "string",
+                  "enum": [
+                    "ready",
+                    "forbidden",
+                    "not_configured",
+                    "unavailable"
+                  ]
+                }
+              },
+              "required": [
+                "queue",
+                "count",
+                "state"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "allocation": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "queue": {
+                  "type": "string",
+                  "enum": [
+                    "allocation",
+                    "allocation_review"
+                  ]
+                },
+                "count": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 0
+                },
+                "state": {
+                  "type": "string",
+                  "enum": [
+                    "ready",
+                    "forbidden",
+                    "not_configured",
+                    "unavailable"
+                  ]
+                }
+              },
+              "required": [
+                "queue",
+                "count",
+                "state"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "shipping": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "queue": {
+                  "type": "string",
+                  "enum": [
+                    "shipping"
+                  ]
+                },
+                "count": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 0
+                },
+                "state": {
+                  "type": "string",
+                  "enum": [
+                    "ready",
+                    "forbidden",
+                    "not_configured",
+                    "unavailable"
+                  ]
+                }
+              },
+              "required": [
+                "queue",
+                "count",
+                "state"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "review",
+          "dispatch",
+          "procurement",
+          "allocation",
+          "shipping"
+        ],
+        "additionalProperties": false,
+        "description": "组合卡片按子清单展示数值及入口；任一子项不可用时卡片总数为null，不显示不完整合计。"
       }
     },
     "responses": {

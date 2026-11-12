@@ -1,4 +1,4 @@
-import { KingdeeFopDataProvider } from './fop-kingdee.provider'
+import { KingdeeWorkbenchDiagnosticProvider as KingdeeFopDataProvider } from './fop-kingdee.diagnostic'
 import { FopIntegrationUnavailableError, FopPermissionDeniedError } from './fop-data.types'
 import { FopDataService } from './fop-data.service'
 import { UsersService } from '../users/users.service'
@@ -36,22 +36,29 @@ function setup(transform?: (value: ReturnType<typeof page>, summary: boolean) =>
 }
 
 describe('Kingdee server-paged review integration', () => {
-  it.each(['2026-10-02T01:30:00Z', null])('待审核保留源单付款时间%s，不回退创建或收款日期', async consumerPaidAt => {
+  it.each(['2026-10-02T01:30:00Z', null])('忽略旧源单时间%s，客户付款时间取订单收款日期', async consumerPaidAt => {
     const { provider } = setup((value, summary) => summary ? value : { ...value,
       items: [{ ...row('1001', '501'), consumerPaidAt, paidAt: '2026-10-03T00:00:00Z' }] })
     const grant = await provider.resolvePermissions(identity, scope)
     const result = await provider.queryOrders(identity, grant, scope, { queue: 'review', page: 1, pageSize: 10 })
-    expect(result.items[0]).toMatchObject({ consumerPaidAt, paidAt: '2026-10-03T00:00:00Z', paymentStatus: 'paid', reviewStatus: 'pending' })
+    expect(result.items[0]).toMatchObject({ consumerPaidAt: '2026-10-03T00:00:00Z', paidAt: '2026-10-03T00:00:00Z', paymentStatus: 'paid', reviewStatus: 'pending' })
   })
 
-  it('待审核源单付款时间排序传给金蝶，在分页前执行', async () => {
+  it('待审核收款日期排序传给金蝶，在分页前执行', async () => {
     const { provider, request } = setup()
     const grant = await provider.resolvePermissions(identity, scope)
     await provider.queryOrders(identity, grant, scope, { queue: 'review', page: 2, pageSize: 10, sortBy: 'consumerPaidAt', sortOrder: 'desc' })
-    expect(JSON.parse(String(request.mock.calls[1][1]?.body)).query).toMatchObject({ sortBy: 'consumerPaidAt', sortOrder: 'desc' })
+    expect(JSON.parse(String(request.mock.calls[1][1]?.body)).query).toMatchObject({ sortBy: 'paidAt', sortOrder: 'desc' })
   })
 
-  it('待审核页面服务允许源单付款时间排序，并保留金蝶总数与支付审核条件', async () => {
+  it('keeps the latest consumer-time default independent of the legacy receipt direction', async () => {
+    const { provider, request } = setup()
+    const grant = await provider.resolvePermissions(identity, scope)
+    await provider.queryOrders(identity, grant, scope, { queue: 'review', page: 1, pageSize: 10, sortBy: 'consumerPaidAt', paidAtOrder: 'asc' })
+    expect(JSON.parse(String(request.mock.calls[1][1]?.body)).query).toMatchObject({ sortBy: 'paidAt', sortOrder: 'desc' })
+  })
+
+  it('待审核页面服务将客户付款时间排序映射为收款日期排序，并保留金蝶总数与支付审核条件', async () => {
     const { provider, request } = setup((value, summary) => summary ? value : { ...value,
       items: [{ ...row('1001', '501'), consumerPaidAt: '2026-10-02T01:30:00Z' }] })
     const user = { id: 'local-admin', role: 'admin', businessRole: 'admin', workbenchRoles: ['sales'],
@@ -62,8 +69,8 @@ describe('Kingdee server-paged review integration', () => {
     const service = new FopDataService({ findById: jest.fn().mockResolvedValue(user) } as unknown as UsersService, provider)
     const result = await service.getOrders(user.id, { queue: 'review', page: 1, pageSize: 10, sortBy: 'consumerPaidAt', sortOrder: 'desc' })
     expect(result.total).toBe(32)
-    expect(result.items[0]).toMatchObject({ consumerPaidAt: '2026-10-02T01:30:00Z', paymentStatus: 'paid', reviewStatus: 'pending' })
-    expect(JSON.parse(String(request.mock.calls[1][1]?.body)).query).toMatchObject({ sortBy: 'consumerPaidAt', sortOrder: 'desc', scopeRole: 'admin' })
+    expect(result.items[0]).toMatchObject({ consumerPaidAt: null, paymentStatus: 'paid', reviewStatus: 'pending' })
+    expect(JSON.parse(String(request.mock.calls[1][1]?.body)).query).toMatchObject({ sortBy: 'paidAt', sortOrder: 'desc', scopeRole: 'admin' })
   })
 
   it('reports a bounded shipment-query overflow without treating it as denied permissions', async () => {
@@ -71,12 +78,12 @@ describe('Kingdee server-paged review integration', () => {
     request.mockResolvedValue(new Response(JSON.stringify({ status: false, errorCode: '', message: 'FOP_RESULT_TOO_LARGE：待履约读取超过上限' })))
     await expect(provider.resolvePermissions(identity, scope)).rejects.toMatchObject({ code: 'fop_result_too_large' })
   })
-  it.each(['A', 'B', 'C'])('待履约限定履约订单已审核，独立于发运单阶段：%s', async billStatus => {
+  it.each(['A', 'B', 'C', 'unknown'])('待履约保留已支付订单的真实审核状态，独立于发运单阶段：%s', async billStatus => {
     const { provider, request } = setup((value, summary) => ({ ...value, queue: 'dispatch', basis: 'paid_tracking_pending_active', dispatchSchemaVersion: 1,
       departments: [], salespeople: [], items: summary ? [] : [{ ...row('1001', '501'), billStatus,
         dispatchTaskStatus: 'dispatch_missing', dispatchDocuments: [], logisticsInfo: [], fulfillmentProgress: { shopifySync: 'pending' } }] }))
     const grant = { subject: identity, allowedOrderIds: [], orderQuery: { queues: ['review', 'dispatch'] as ('review' | 'dispatch')[], organizationIds: ['10', '20'] } }
-    if (billStatus !== 'C') {
+    if (billStatus === 'unknown') {
       await expect(provider.queryOrders(identity, grant, scope, { queue: 'dispatch', page: 1, pageSize: 10 })).rejects.toThrow('Unexpected review order status')
       return
     }
@@ -267,7 +274,7 @@ describe('Kingdee server-paged review integration', () => {
     expect(result.items[1]?.items[0]?.imageUrl).toBeNull()
   })
 
-  it('keeps unrelated cards unavailable and uses the upstream count for Dashboard', async () => {
+  it('does not revive diagnostic upstream counts when the product dashboard has no local reader', async () => {
     const { provider } = setup()
     const user = { id: 'local-admin', role: 'admin', businessRole: 'admin', fopTenantId: identity.tenantId, fopUserId: identity.userId,
       businessDepartmentId: null, businessEmployeeId: null, workbenchRoles: ['sales'],
@@ -275,13 +282,14 @@ describe('Kingdee server-paged review integration', () => {
     const users = { findById: jest.fn().mockResolvedValue(user) } as unknown as UsersService
     const service = new FopDataService(users, provider)
     const result = await service.getDashboard(user.id, { from: '2026-10-01', to: '2026-10-22', year: 2026 })
-    expect(result.queues).toEqual({ review: 32, procurement: null, allocation: null, dispatch: null, shipping: null })
+    expect(result.queues).toEqual({ review: null, procurement: null, allocation: null, dispatch: null, shipping: null })
+    expect(result.integratedQueues).toEqual([])
     expect(result.registrations).toEqual([])
     expect(result.receipts.departments).toEqual([])
     await expect(service.getOrderVolume(user.id, { category: 'organization', grain: 'month', year: 2025, warehouse: 'ALL' })).rejects.toMatchObject({ response: { code: 'fop_feature_not_configured' } })
   })
 
-  it.each([true, false])('keeps advertised dispatch capability through service permissions, with dispatch role=%s', async dispatchRole => {
+  it.each([true, false])('uses current local counts and role gates while keeping explicit legacy diagnostic reads separate, dispatch role=%s', async dispatchRole => {
     const provider = new KingdeeFopDataProvider({ get: key => key === 'FOP_KINGDEE_ANALYTICS_PERMISSIONS_URL' ? 'https://example.test/permissions' : settings[key] },
       async (input, init) => {
         const query = JSON.parse(String(init?.body)).query
@@ -298,12 +306,117 @@ describe('Kingdee server-paged review integration', () => {
       businessDepartmentId: '400', businessEmployeeId: '501', workbenchRoles: dispatchRole ? ['sales', 'dispatch'] : ['sales'],
       fopBindingDetails: { username: 'offline-user', name: '测试职员', employeeRecordId: identity.userId, employeeMasterId: identity.userId, departmentId: '10', organizationId: '10', localEmployeeId: null, localDepartmentId: null, verifiedAt: '2026-10-29T00:00:00Z' } } as User
     const service = new FopDataService({ findById: jest.fn().mockResolvedValue(user) } as unknown as UsersService, provider)
-    const result = await service.getDashboard(user.id, { from: '2026-10-01', to: '2026-10-22', year: 2026 })
+    const local = { enabled: true, getOrders: jest.fn(async (_userId: string, query: { queue: string }) => ({ total: query.queue === 'dispatch' ? 13 : 11 })) }
+    const result = await service.getDashboard(user.id, { from: '2026-10-01', to: '2026-10-22', year: 2026 }, local as any)
     expect('integratedQueues' in result && result.integratedQueues).toEqual(dispatchRole ? ['review', 'dispatch'] : ['review'])
-    expect(result.queues.dispatch).toBe(dispatchRole ? 7 : null)
+    expect(result.queues.dispatch).toBe(dispatchRole ? 13 : null)
+    expect(result.queues.review).toBe(11)
+    expect(local.getOrders.mock.calls.map(call => call[1].queue)).toEqual(dispatchRole ? ['review', 'dispatch'] : ['review'])
     expect(result.tasks.some(task => task.kind === 'dispatch')).toBe(dispatchRole)
     const orders = service.getOrders(user.id, { queue: 'dispatch', workbenchRole: 'dispatch', page: 1, pageSize: 10 })
     if (dispatchRole) expect((await orders).total).toBe(7)
     else await expect(orders).rejects.toMatchObject({ status: 403 })
+  })
+})
+
+describe('Kingdee local workbench organization boundary', () => {
+  const localScope = { role: 'department_manager' as const, departmentId: 'local-department-uuid', employeeId: null,
+    localOrganization: { employeeIds: ['501', '502'], version: 'local-v1' } }
+  const localQuery = { queue: 'review' as const, page: 1, pageSize: 10,
+    employeeFilter: { employeeIds: ['501'], version: 'local-v1' } }
+  function localSetup(options: { capability?: unknown; echo?: Record<string, unknown>; rows?: unknown[]; enabled?: boolean } = {}) {
+    const request = jest.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      const query = JSON.parse(String(init?.body)).query
+      const data = String(url).endsWith('/permissions')
+        ? { subject: identity, grants: { orders: ['10'], receipts: [], registrations: [], freight: [] }, orderQueues: ['review'],
+          orderQuery: { employeeFilterVersion: options.capability ?? 1 } }
+        : { ...page(options.rows ?? [{ ...row('1001', '501'), department: null, departmentPathIds: ['not-a-fop-department'] }], 32),
+          organizationIds: ['10'], page: query.page, pageSize: query.pageSize,
+          employeeIds: query.employeeIds, localScopeVersion: query.localScopeVersion, ...options.echo }
+      return new Response(JSON.stringify({ status: true, errorCode: '0', data }))
+    })
+    const provider = new KingdeeFopDataProvider({ get: key => key === 'FOP_KINGDEE_LOCAL_ORGANIZATION' ? String(options.enabled !== false)
+      : key === 'FOP_KINGDEE_ANALYTICS_PERMISSIONS_URL' ? 'https://example.test/permissions' : settings[key] }, request)
+    return { provider, request }
+  }
+  it('filters managers before pagination using explicit employee capability and ignores FOP departments', async () => {
+    const { provider, request } = localSetup()
+    const grant = await provider.resolvePermissions(identity, localScope)
+    const result = await provider.queryOrders(identity, grant, localScope, localQuery)
+    expect(result.total).toBe(32)
+    expect(result.items[0].owner?.id).toBe('501')
+    expect(result.items[0].department?.id).not.toBe('400')
+    expect(result.items[0].departmentPathIds).toBeUndefined()
+    expect(JSON.parse(String(request.mock.calls[1][1]?.body)).query).toMatchObject({ userId: '100', organizationIds: ['10', '20'],
+      scopeRole: 'department_manager', employeeIds: ['501'], localScopeVersion: 'local-v1', departmentIds: [] })
+    expect(JSON.stringify(request.mock.calls)).not.toContain('local-department-uuid')
+  })
+  it('refuses an employee-set query when the permission endpoint has not advertised the capability', async () => {
+    const { provider } = localSetup({ capability: 0 })
+    await expect(provider.resolvePermissions(identity, localScope)).rejects.toMatchObject({ code: 'fop_feature_not_configured' })
+  })
+  it.each([{ employeeIds: ['502'] }, { localScopeVersion: 'stale' }, { employeeIds: undefined }, { employeeIds: ['501', '501'] }])('rejects changed or missing query echo %j', async echo => {
+    const { provider } = localSetup({ echo, rows: [row('1001', '501')] })
+    const adminScope = { ...localScope, role: 'admin' as const }
+    const grant = await provider.resolvePermissions(identity, adminScope)
+    await expect(provider.queryOrders(identity, grant, adminScope, localQuery)).rejects.toBeInstanceOf(FopPermissionDeniedError)
+  })
+  it('rejects an out-of-filter row instead of filtering one page and keeping its totals', async () => {
+    const { provider } = localSetup({ rows: [row('1001', '502')] })
+    const adminScope = { ...localScope, role: 'admin' as const }
+    const grant = await provider.resolvePermissions(identity, adminScope)
+    await expect(provider.queryOrders(identity, grant, adminScope, localQuery)).rejects.toBeInstanceOf(FopPermissionDeniedError)
+  })
+  it('rejects filter expansion and stale local versions before reading orders', async () => {
+    const { provider, request } = localSetup()
+    const grant = await provider.resolvePermissions(identity, localScope)
+    for (const employeeFilter of [{ employeeIds: ['999'], version: 'local-v1' }, { employeeIds: null, version: 'local-v1' }, { employeeIds: ['501'], version: 'stale' }]) {
+      await expect(provider.queryOrders(identity, grant, localScope, { ...localQuery, employeeFilter })).rejects.toBeInstanceOf(FopPermissionDeniedError)
+    }
+    expect(request).toHaveBeenCalledTimes(1)
+  })
+  it('returns a safe empty page without transmitting an empty employee set to FOP', async () => {
+    const { provider, request } = localSetup()
+    const grant = await provider.resolvePermissions(identity, localScope)
+    const result = await provider.queryOrders(identity, grant, localScope, { ...localQuery, employeeFilter: { employeeIds: [], version: 'local-v1' } })
+    expect(result).toMatchObject({ total: 0, items: [], totals: { orderCount: 0, itemQuantity: 0, amountsByCurrency: [] } })
+    expect(request).toHaveBeenCalledTimes(1)
+  })
+  it.each(['salesperson', 'admin'] as const)('retains the legacy self/admin query without requiring employee-set capability: %s', async role => {
+    const { provider, request } = localSetup({ capability: 0 })
+    const employeeIds = role === 'salesperson' ? ['501'] : null
+    const self = { role, departmentId: 'local-uuid', employeeId: role === 'salesperson' ? '501' : null,
+      localOrganization: { employeeIds, version: 'local-v1' } }
+    const grant = await provider.resolvePermissions(identity, self)
+    expect((await provider.queryOrders(identity, grant, self, { ...localQuery, employeeFilter: { employeeIds, version: 'local-v1' } })).total).toBe(32)
+    const sent = JSON.parse(String(request.mock.calls[1][1]?.body)).query
+    expect(sent.employeeId).toBe(role === 'salesperson' ? '501' : null)
+    expect(sent.employeeIds).toBeUndefined()
+    expect(sent.departmentIds).toEqual([])
+  })
+  it('retains ownerless historical fulfillment for unfiltered local admins without inventing an owner', async () => {
+    const { provider } = localSetup({ rows: [{ ...row('1001', '501'), owner: null }] })
+    const unbounded = { role: 'admin' as const, employeeId: null, departmentId: null,
+      localOrganization: { employeeIds: null, version: 'local-v1' } }
+    const grant = await provider.resolvePermissions(identity, unbounded)
+    const result = await provider.queryOrders(identity, grant, unbounded, { ...localQuery, employeeFilter: unbounded.localOrganization })
+    expect(result.items).toHaveLength(1)
+    expect(result.items[0].owner).toBeUndefined()
+    expect(result.items[0].department).toEqual({ id: 'local:unmapped', name: '未关联本地部门' })
+    expect(result.total).toBe(32)
+  })
+  it.each(['admin', 'department_manager', 'salesperson'] as const)('rejects ownerless history under a selected local employee range: %s', async role => {
+    const { provider } = localSetup({ rows: [{ ...row('1001', '501'), owner: null }] })
+    const selected = { role, employeeId: role === 'salesperson' ? '501' : null, departmentId: 'local-uuid',
+      localOrganization: { employeeIds: role === 'admin' ? null : ['501'], version: 'local-v1' } }
+    const grant = await provider.resolvePermissions(identity, selected)
+    await expect(provider.queryOrders(identity, grant, selected, localQuery)).rejects.toBeInstanceOf(FopPermissionDeniedError)
+  })
+  it('keeps legacy scopes unchanged when the local feature is configured but no local scope is attached', async () => {
+    const { provider, request } = localSetup({ rows: [row('1001', '501')] })
+    const legacy = { role: 'department_manager' as const, departmentId: '400', employeeId: null }
+    const grant = await provider.resolvePermissions(identity, legacy)
+    await provider.queryOrders(identity, grant, legacy, { queue: 'review', page: 1, pageSize: 10 })
+    expect(JSON.parse(String(request.mock.calls[1][1]?.body)).query.departmentIds).toEqual(['400'])
   })
 })

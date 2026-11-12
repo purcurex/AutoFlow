@@ -1,3 +1,4 @@
+import { configureReplicaTestRuntime, isolateReplicaProviders } from './replica-test-boundary'
 import { INestApplication, ValidationPipe } from '@nestjs/common'
 import { JwtService } from '@nestjs/jwt'
 import { Test } from '@nestjs/testing'
@@ -8,6 +9,7 @@ import { flattenDemoSalesDepartments } from '../src/database/flatten-demo-sales-
 
 jest.setTimeout(30000)
 
+configureReplicaTestRuntime()
 describe('Per-account organization sandbox persistence API', () => {
   let app: INestApplication
   let database: DataSource
@@ -30,7 +32,7 @@ describe('Per-account organization sandbox persistence API', () => {
     await migrationSource.runMigrations()
     await migrationSource.destroy()
     const { AppModule } = await import('../src/app.module')
-    const module = await Test.createTestingModule({ imports: [AppModule] }).compile()
+    const module = await isolateReplicaProviders(Test.createTestingModule({ imports: [AppModule] })).compile()
     app = module.createNestApplication()
     app.setGlobalPrefix('api')
     app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }))
@@ -61,11 +63,11 @@ describe('Per-account organization sandbox persistence API', () => {
       expect.objectContaining({ name: 'HyperZone', kind: 'organization' }),
     ])
     expect(first.body.nodes.length).toBeGreaterThanOrEqual(25)
-    expect(first.body.employees).toHaveLength(23)
-    expect(first.body.employees.find((employee: any) => employee.code === 'EMP001').name).toBe('曹可滢（Ruth）')
+    expect(first.body.employees).toHaveLength(22)
+    expect(first.body.employees.some((employee: any) => employee.code === 'EMP001' || employee.name.includes('Ruth'))).toBe(false)
     expect(first.body.employees.find((employee: any) => employee.code === 'EMP022').name).toBe('杨莹（Kiki）')
     // Sales staff report directly to one of the four business departments.
-    for (const [name, count] of [['业务一部', 5], ['业务二部', 4], ['业务三部', 5], ['业务四部', 1]]) {
+    for (const [name, count] of [['业务一部', 4], ['业务二部', 4], ['业务三部', 5], ['业务四部', 1]]) {
       const department = first.body.nodes.find((node: any) => node.name === name)
       expect(first.body.employees.filter((employee: any) => employee.departmentId === department.id)).toHaveLength(count as number)
       expect(first.body.nodes.filter((node: any) => node.parentId === department.id)).toHaveLength(0)
@@ -102,7 +104,7 @@ describe('Per-account organization sandbox persistence API', () => {
     const sales = initial.nodes.find((node: any) => node.name === '业务一部')
     const sales2 = initial.nodes.find((node: any) => node.name === '业务二部')
     const sales3 = initial.nodes.find((node: any) => node.name === '业务三部')
-    const employee = initial.employees.find((row: any) => row.code === 'EMP001')
+    const employee = initial.employees.find((row: any) => row.code === 'EMP013')
     const add = async (parentId: string, name: string) => (await create({ parentId, name }).expect(201)).body.nodes.find((node: any) => node.name === name)
     const legacy = await add(sales.id, '欧洲销售组')
     const custom = await add(sales.id, '自定义销售组')
@@ -206,7 +208,10 @@ describe('Per-account organization sandbox persistence API', () => {
     await remove(department.id, otherId).expect(403)
   })
 
-  it('denies reads, writes and exports across business modules for a management-only administrator', async () => {
+  it('keeps administrator business access and denies disabled business access after management revocation', async () => {
+    await request(app.getHttpServer()).get('/api/autoflow/dashboard').auth(auth(), { type: 'bearer' }).expect(200)
+    await database.query("UPDATE users SET role='user', business_role='none' WHERE id=$1", [ownerId])
+    try {
     const paths = [
       '/autoflow/dashboard', '/autoflow/workflows', '/autoflow/leads', '/autoflow/quotes',
       '/notes', '/notes/admin/all', '/folders', '/ai/outreach-conversations',
@@ -221,6 +226,7 @@ describe('Per-account organization sandbox persistence API', () => {
     for (const path of ['/autoflow/workflows', '/autoflow/quotes', '/notes', '/ai/outreach-conversations']) {
       await request(app.getHttpServer()).post(`/api${path}`).auth(auth(), { type: 'bearer' }).send({}).expect(403)
     }
+    } finally { await database.query("UPDATE users SET role='admin' WHERE id=$1", [ownerId]) }
     await request(app.getHttpServer()).get('/api/users/workbench-accounts').auth(auth(), { type: 'bearer' }).expect(200)
     await request(app.getHttpServer()).get('/api/users/profile').auth(auth(), { type: 'bearer' }).expect(200)
     expect((await get().expect(200)).body.canEdit).toBe(true)
@@ -241,7 +247,7 @@ describe('Per-account organization sandbox persistence API', () => {
     await change(otherId, 'user').expect(200)
     await get(otherId).expect(403)
     await change(ownerId, 'admin', otherId).expect(403)
-    expect((await app.get(UsersService).findById(otherId))?.businessRole).toBe('admin')
+    expect((await app.get(UsersService).findById(otherId))?.businessRole).toBe('none')
   })
 
 })

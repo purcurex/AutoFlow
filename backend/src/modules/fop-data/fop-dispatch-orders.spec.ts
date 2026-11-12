@@ -1,4 +1,4 @@
-import { KingdeeFopDataProvider } from './fop-kingdee.provider'
+import { KingdeeWorkbenchDiagnosticProvider as KingdeeFopDataProvider } from './fop-kingdee.diagnostic'
 import { FopDataService } from './fop-data.service'
 import type { FopOrderPageQuery } from './fop-data.types'
 import type { UsersService } from '../users/users.service'
@@ -47,8 +47,16 @@ describe('待履约真实分页接口', () => {
     const { provider } = setup(stage)
     const result = await provider.queryOrders(identity, grant, admin, { queue: 'dispatch', page: 1, pageSize: 10 })
     expect(result.items[0]).toMatchObject({ dispatchTaskStatus: stage, reviewStatus: 'approved', warehouseCode: 'HZ',
-      consumerPaidAt: '2026-11-01T12:00:00Z', logisticsInfo: [{ carrierName: 'Carrier', shopifyTracking: { type: 'last_mile', number: 'TRACK1' } }] })
+      consumerPaidAt: '2026-11-02T00:00:00Z', logisticsInfo: [{ carrierName: 'Carrier', shopifyTracking: { type: 'last_mile', number: 'TRACK1' } }] })
     expect(result.departments).toHaveLength(2)
+  })
+  it.each(['1w', '1m', '3m'] as const)('用履约单收款日期筛选%s窗口，不依赖收款接口或源单时间', async timeRange => {
+    const recent = new Date(Date.now() - 1000).toISOString()
+    const { provider, request } = setup('dispatch_missing', row => ({ ...row, paidAt: recent }))
+    for (const summaryOnly of [false, true]) {
+      expect(await provider.queryOrders(identity, grant, admin, { queue: 'dispatch', page: 1, pageSize: 10, timeRange }, summaryOnly)).toMatchObject({ total: 1 })
+    }
+    expect(request.mock.calls.every(call => String(call[0]).endsWith('/page') && JSON.parse(String(call[1]?.body)).query.timeRange === undefined)).toBe(true)
   })
   it('上级可看管理范围内子部门，不能查看无管理关系部门', async () => {
     const { provider } = setup()
@@ -57,13 +65,19 @@ describe('待履约真实分页接口', () => {
     await expect(provider.queryOrders(identity, grant, { ...manager, departmentId: '999' }, { queue: 'dispatch', page: 1, pageSize: 10 })).rejects.toThrow()
   })
   it('将状态、仓库、部门和排序完整交给金蝶分页前执行', async () => {
-    const { service, request, user } = setup('dispatch_draft')
-    await service.getOrders(user.id, { queue: 'dispatch', page: 1, pageSize: 10, departmentId: '400', warehouseCode: 'HZ', taskStatus: 'dispatch_draft', sortBy: 'dispatchDocumentStatus', sortOrder: 'desc' })
-    expect(JSON.parse(String(request.mock.calls[0][1]?.body)).query).toMatchObject({ departmentId: '400', warehouseIds: ['600'], taskStatus: 'dispatch_draft', sortBy: 'dispatchDocumentStatus', sortOrder: 'desc' })
+    const { service, request, user } = setup('dispatch_missing')
+    await service.getOrders(user.id, { queue: 'dispatch', page: 1, pageSize: 10, departmentId: '400', warehouseCode: 'HZ', taskStatus: 'dispatch_missing', sortBy: 'dispatchDocumentStatus', sortOrder: 'desc' })
+    expect(JSON.parse(String(request.mock.calls[0][1]?.body)).query).toMatchObject({ departmentId: '400', warehouseIds: ['600'], taskStatus: 'dispatch_missing', sortBy: 'dispatchDocumentStatus', sortOrder: 'desc' })
   })
-  it.each(['A', 'B'])('拒绝未审核履约订单%s，而非混淆发运单暂存状态', async billStatus => {
+  it('未发布交付状态筛选时明确拒绝，不能沿用旧审核状态代替', async () => {
+    const {service,user,request}=setup('dispatch_approved')
+    await expect(service.getOrders(user.id,{queue:'dispatch',page:1,pageSize:10,taskStatus:'dispatch_tracking'})).rejects.toMatchObject({response:{code:'fop_feature_not_configured'}})
+    expect(request).not.toHaveBeenCalled()
+  })
+  it.each(['A', 'B'])('保留已付款未审核履约订单%s，且不混淆发运单阶段', async billStatus => {
     const { provider } = setup('dispatch_missing', row => ({ ...row, billStatus }))
-    await expect(provider.queryOrders(identity, grant, admin, { queue: 'dispatch', page: 1, pageSize: 10 })).rejects.toThrow()
+    const result = await provider.queryOrders(identity, grant, admin, { queue: 'dispatch', page: 1, pageSize: 10 })
+    expect(result.items[0]).toMatchObject({ paymentStatus: 'paid', reviewStatus: 'pending', dispatchTaskStatus: 'dispatch_missing' })
   })
   it('同步已完成不得返回到待履约清单', async () => {
     const { provider } = setup('dispatch_approved', row => ({ ...row, fulfillmentProgress: { shopifySync: 'synced' } }))

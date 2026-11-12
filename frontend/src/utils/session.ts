@@ -26,7 +26,7 @@ if (typeof window !== 'undefined') {
   window.addEventListener('storage', event => {
     if (event.key !== 'user' && event.key !== null) return
     const identity = (value: string | null) => {
-      try { return value ? JSON.parse(value).id : null } catch { return null }
+      try { return value ? `${JSON.parse(value).id}:${JSON.parse(value).dataDisplayScope ?? 'self'}` : null } catch { return null }
     }
     if (event.key === null || identity(event.oldValue) !== identity(event.newValue)) invalidateSession()
   })

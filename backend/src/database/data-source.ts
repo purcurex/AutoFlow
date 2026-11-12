@@ -2,6 +2,7 @@ import { config } from 'dotenv'
 import { resolve } from 'path'
 import { DataSource } from 'typeorm'
 
+config({ path: resolve(__dirname, '../../.env.workbench.local') })
 config({ path: resolve(__dirname, '../../.env') })
 
 const AppDataSource = new DataSource({

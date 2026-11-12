@@ -1,0 +1,355 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "HyperZone proposed realtime supplier extensions",
+    "version": "0.1.0-proposed",
+    "description": "Local receiving implementation only. All endpoint names, configuration keys, source permission proof fields and publication details in this file are proposed-awaiting-fop. They are not deployed APIs or evidence of live integration."
+  },
+  "x-status": "proposed-awaiting-fop",
+  "x-deployed": false,
+  "servers": [],
+  "x-remaining-dependencies": {
+    "supplier": "FOP confirms C09 authoritative account source; implements and publishes both dedicated APIs, contacts capability and source/ownership checks. Provide endpoint URLs, formal source relationships and real test examples. FOP access remains paused until separately authorized.",
+    "physicalReturn": "FOP must confirm formal entity and independent source read/relationship semantics; FOP_KINGDEE_PHYSICAL_RETURN_ENTITY stays empty until then. Refund application cannot substitute. Contact-only adapter returns no invented return quantity.",
+    "reservedCustomerCandidates": "Existing projection=customers/search contract is used. Local parser requires complete=true AND total=items.length<=100. Truncation raises fop_reserved_customers_search_required and tells the caller to narrow the customer name/code. No pagination fields invented; current inventory UI already searches customer text and paginates inventory directly. FOP must confirm exhaustive search behavior or publish a versioned candidate pagination contract.",
+    "approvalResultLookup": "A04 final endpoint/request/result contract and durable FOP idempotency records remain pending. No successful lookup API, not_found retry rule or irreversible local result ledger is introduced. Unknown operations remain unknown with no automatic write retry.",
+    "approvalReadback": "A05 committed sourceVersion/transaction event locator or barrier remains pending. Existing manual Sync data can capture a new barrier, but local refresh alone cannot confirm operation-specific propagation. UI explicitly states source approval and local-awaiting-sync; it does not claim readback confirmation."
+  },
+  "x-configuration": {
+    "FOP_KINGDEE_SUPPLIER_CONTACTS_URL": "Blank until dedicated contact endpoint is published. Missing -> fop_supplier_contacts_not_configured, no legacy fallback.",
+    "FOP_KINGDEE_SUPPLIER_CHAT_URL": "Blank until dedicated launch endpoint is published. Missing -> fop_supplier_contacts_not_configured.",
+    "FOP_KINGDEE_PHYSICAL_RETURN_ENTITY": "Blank until formal FOP physical-return entity is confirmed; hzkj_purrefundapplybill prohibited.",
+    "FOP_QUERIES_PAUSED": "Existing pause guard blocks both APIs before network access."
+  },
+  "paths": {
+    "/proposed/supplier-contacts": {
+      "post": {
+        "operationId": "supplier_contacts",
+        "x-status": "proposed-awaiting-fop",
+        "x-configuration-key": "FOP_KINGDEE_SUPPLIER_CONTACTS_URL",
+        "description": "Logical proposed endpoint only. This is not a published URL. Read current source-linked supplier contacts; source and independent contacts authorization must both pass.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "allOf": [
+                  {"$ref": "#/components/schemas/RealtimeRequest"},
+                  {"properties": {"resource": {"const": "supplier_contacts"},"query": {"$ref": "#/components/schemas/SupplierContext"}}}
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Kingdee success data contains RealtimeEnvelope with result SupplierContactsResult",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {"$ref": "#/components/schemas/RealtimeEnvelope"},
+                    {"properties": {"resource": {"const": "supplier_contacts"},"result": {"$ref": "#/components/schemas/SupplierContactsResult"}}}
+                  ]
+                }
+              }
+            }
+          },
+          "403": {"description": "Source/contacts permission, identity, relationship or current scope denied. Do not return supplier details."},
+          "409": {"description": "Contact/source version changed or chat unavailable; refresh the contact list."},
+          "503": {"description": "Unpublished endpoint, missing configuration, paused access or formal physical return source unavailable; no legacy fallback."}
+        }
+      }
+    },
+    "/proposed/supplier-chat": {
+      "post": {
+        "operationId": "supplier_chat",
+        "x-status": "proposed-awaiting-fop",
+        "x-configuration-key": "FOP_KINGDEE_SUPPLIER_CHAT_URL",
+        "description": "Logical proposed endpoint only. This is not a published URL. Revalidate current source relation, business eligibility, supplier/account and contactVersion atomically for this read, then return an aliim URL. Opens a conversation only; never sends a message.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "allOf": [
+                  {"$ref": "#/components/schemas/RealtimeRequest"},
+                  {"properties": {"resource": {"const": "supplier_chat"},"query": {"$ref": "#/components/schemas/SupplierLaunchQuery"}}}
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Kingdee success data contains RealtimeEnvelope with result SupplierLaunchResult",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {"$ref": "#/components/schemas/RealtimeEnvelope"},
+                    {"properties": {"resource": {"const": "supplier_chat"},"result": {"$ref": "#/components/schemas/SupplierLaunchResult"}}}
+                  ]
+                }
+              }
+            }
+          },
+          "403": {"description": "Source/contacts permission, identity, relationship or current scope denied. Do not return supplier details."},
+          "409": {"description": "Contact/source version changed or chat unavailable; refresh the contact list."},
+          "503": {"description": "Unpublished endpoint, missing configuration, paused access or formal physical return source unavailable; no legacy fallback."}
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "CurrentScope": {
+        "type": "object",
+        "properties": {
+          "actorAccountId": {"type": "string","minLength": 1,"maxLength": 2000},
+          "actorEmployeeId": {"type": ["string","null"]},
+          "business": {
+            "type": "object",
+            "description": "Existing server-derived BusinessScope: role, departmentId, employeeId, optional localOrganization. Must be echoed exactly."
+          },
+          "employeeFilter": {
+            "type": "object",
+            "properties": {
+              "employeeIds": {"type": ["array","null"],"items": {"type": "string","minLength": 1,"maxLength": 2000}},
+              "version": {"type": "string","minLength": 1,"maxLength": 2000}
+            },
+            "required": ["employeeIds","version"]
+          }
+        },
+        "required": ["actorAccountId","business","employeeFilter"]
+      },
+      "SupplierContext": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {"context": {"const": "fulfillment"},"orderId": {"type": "string","minLength": 1,"maxLength": 2000},"queue": {"const": "procurement_shipping"}},
+            "required": ["context","orderId","queue"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {"context": {"const": "stock"},"orderId": {"type": "string","minLength": 1,"maxLength": 2000},"queue": {"const": "procurement_shipping"}},
+            "required": ["context","orderId","queue"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "context": {"const": "purchase_group"},
+              "groupId": {"type": "string","minLength": 1,"maxLength": 2000},
+              "filters": {
+                "type": "object",
+                "required": ["queue"],
+                "properties": {"queue": {"const": "procurement_shipping"}},
+                "description": "Existing PurchaseGroupFiltersDto, including current department/owner/completion filters. Canonical JSON fields must be echoed unchanged; upstream must re-evaluate all source rows within this scope."
+              }
+            },
+            "required": ["context","groupId","filters"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "context": {"const": "purchase_return"},
+              "returnId": {"type": "string","minLength": 1,"maxLength": 2000},
+              "orderId": {"type": "string","minLength": 1,"maxLength": 2000},
+              "workbenchRole": {"enum": ["procurement","warehouse"]}
+            },
+            "required": ["context","returnId","orderId","workbenchRole"],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "SupplierLaunchQuery": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "context": {"const": "fulfillment"},
+              "orderId": {"type": "string","minLength": 1,"maxLength": 2000},
+              "queue": {"const": "procurement_shipping"},
+              "purchaseOrderId": {"type": "string","minLength": 1,"maxLength": 2000},
+              "contactVersion": {"type": "string","pattern": "^[a-f0-9]{64}$"}
+            },
+            "required": ["context","orderId","queue","purchaseOrderId","contactVersion"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "context": {"const": "stock"},
+              "orderId": {"type": "string","minLength": 1,"maxLength": 2000},
+              "queue": {"const": "procurement_shipping"},
+              "purchaseOrderId": {"type": "string","minLength": 1,"maxLength": 2000},
+              "contactVersion": {"type": "string","pattern": "^[a-f0-9]{64}$"}
+            },
+            "required": ["context","orderId","queue","purchaseOrderId","contactVersion"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "context": {"const": "purchase_group"},
+              "groupId": {"type": "string","minLength": 1,"maxLength": 2000},
+              "filters": {
+                "type": "object",
+                "required": ["queue"],
+                "properties": {"queue": {"const": "procurement_shipping"}},
+                "description": "Existing PurchaseGroupFiltersDto, including current department/owner/completion filters. Canonical JSON fields must be echoed unchanged; upstream must re-evaluate all source rows within this scope."
+              },
+              "purchaseOrderId": {"type": "string","minLength": 1,"maxLength": 2000},
+              "contactVersion": {"type": "string","pattern": "^[a-f0-9]{64}$"}
+            },
+            "required": ["context","groupId","filters","purchaseOrderId","contactVersion"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "context": {"const": "purchase_return"},
+              "returnId": {"type": "string","minLength": 1,"maxLength": 2000},
+              "orderId": {"type": "string","minLength": 1,"maxLength": 2000},
+              "workbenchRole": {"enum": ["procurement","warehouse"]},
+              "purchaseOrderId": {"type": "string","minLength": 1,"maxLength": 2000},
+              "contactVersion": {"type": "string","pattern": "^[a-f0-9]{64}$"}
+            },
+            "required": ["context","returnId","orderId","workbenchRole","purchaseOrderId","contactVersion"],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "SupplierLine": {
+        "type": "object",
+        "properties": {
+          "fulfillmentLineId": {"type": "string","minLength": 1,"maxLength": 2000},
+          "stockLineId": {"type": "string","minLength": 1,"maxLength": 2000},
+          "purchaseLineId": {"type": "string","minLength": 1,"maxLength": 2000},
+          "sku": {"type": "string","minLength": 1,"maxLength": 2000},
+          "name": {"type": "string","minLength": 1,"maxLength": 2000},
+          "pendingQuantity": {"type": "number","exclusiveMinimum": 0,"maximum": 9007199254740991}
+        },
+        "required": ["purchaseLineId","sku","name","pendingQuantity"]
+      },
+      "SupplierContact": {
+        "type": "object",
+        "properties": {
+          "purchaseOrderId": {"type": "string","minLength": 1,"maxLength": 2000},
+          "purchaseOrderNumber": {"type": "string","minLength": 1,"maxLength": 2000},
+          "platformOrderNumber": {"type": ["string","null"]},
+          "supplier": {
+            "type": "object",
+            "properties": {
+              "id": {"type": "string","minLength": 1,"maxLength": 2000},
+              "name": {"type": "string","minLength": 1,"maxLength": 2000},
+              "wangwangAccount": {"type": ["string","null"],"maxLength": 128}
+            },
+            "required": ["id","name","wangwangAccount"]
+          },
+          "paid": {"type": "boolean"},
+          "cancelled": {"type": "boolean"},
+          "shipmentStatus": {"enum": ["pending","partial"]},
+          "lines": {"type": "array","items": {"$ref": "#/components/schemas/SupplierLine"}},
+          "availability": {"enum": ["ready","missing_account","chat_unavailable"]},
+          "contactVersion": {"type": "string","pattern": "^[a-f0-9]{64}$"}
+        },
+        "required": ["purchaseOrderId","purchaseOrderNumber","platformOrderNumber","supplier","lines","availability","contactVersion"],
+        "description": "For every non-return context require paid=true, cancelled=false and pending/partial shipmentStatus. Fulfillment/stock lines must be nonempty, unique by source line + purchase line, and carry the matching source line ID. For purchase_group and purchase_return lines must be empty: this extension does not define or invent whole-purchase or physical-return quantities. missing_account iff account is null; ready/chat_unavailable require a nonempty account. Account rejects controls. contactVersion is an opaque FOP-generated lowercase SHA-256 token accepted by the existing launch DTO, and must change with contact/source relationship changes."
+      },
+      "SupplierSourceProof": {
+        "type": "object",
+        "properties": {
+          "source": {"const": "fop"},
+          "context": {"$ref": "#/components/schemas/SupplierContext"},
+          "orderId": {"type": "string","minLength": 1,"maxLength": 2000},
+          "relationshipVerified": {"const": true},
+          "sourceAuthorization": {
+            "type": "object",
+            "properties": {
+              "resource": {"enum": ["orders","stock_orders","purchase_orders","purchase_returns"]},
+              "allowed": {"const": true},
+              "checkedAt": {"type": "string","format": "date-time","description": "No older than 60 seconds; future skew at most 5 seconds."}
+            },
+            "required": ["resource","allowed","checkedAt"]
+          },
+          "sourceEntity": {"type": "string","minLength": 1,"maxLength": 2000}
+        },
+        "required": ["source","context","orderId","relationshipVerified","sourceAuthorization"]
+      },
+      "RealtimeRequest": {
+        "type": "object",
+        "properties": {
+          "schemaVersion": {"const": 1},
+          "subject": {
+            "type": "object",
+            "properties": {"tenantId": {"type": "string","minLength": 1,"maxLength": 2000},"userId": {"type": "string","minLength": 1,"maxLength": 2000}},
+            "required": ["tenantId","userId"]
+          },
+          "currentScope": {"$ref": "#/components/schemas/CurrentScope"},
+          "resource": {"enum": ["supplier_contacts","supplier_chat"]},
+          "query": {"type": "object"}
+        },
+        "required": ["schemaVersion","subject","currentScope","resource","query"]
+      },
+      "RealtimeEnvelope": {
+        "type": "object",
+        "properties": {
+          "schemaVersion": {"const": 1},
+          "subject": {
+            "type": "object",
+            "properties": {"tenantId": {"type": "string","minLength": 1,"maxLength": 2000},"userId": {"type": "string","minLength": 1,"maxLength": 2000}},
+            "required": ["tenantId","userId"]
+          },
+          "organizationIds": {"type": "array","minItems": 1,"uniqueItems": true,"items": {"type": "string","minLength": 1,"maxLength": 2000}},
+          "currentScope": {"$ref": "#/components/schemas/CurrentScope"},
+          "resource": {"enum": ["supplier_contacts","supplier_chat"]},
+          "authorization": {
+            "type": "object",
+            "properties": {"resource": {"enum": ["supplier_contacts","supplier_chat"]},"allowed": {"const": true},"checkedAt": {"type": "string","format": "date-time"}},
+            "required": ["resource","allowed","checkedAt"]
+          },
+          "result": {"type": "object"}
+        },
+        "required": ["schemaVersion","subject","organizationIds","currentScope","resource","authorization","result"],
+        "description": "Inside Kingdee {status:true,errorCode:\"0\",data:<this envelope>}. Exact subject/currentScope/resource, resource grant and configured organization checks remain mandatory. Each resource also requires the independent contacts capability; it cannot be inferred from order permission. Denials fail closed. No caller-supplied account, subject or currentScope is accepted by browser routes."
+      },
+      "SupplierContactsResult": {
+        "allOf": [
+          {"$ref": "#/components/schemas/SupplierSourceProof"},
+          {
+            "type": "object",
+            "properties": {
+              "complete": {"const": true},
+              "orderNumber": {"type": "string","minLength": 1,"maxLength": 2000},
+              "refreshedAt": {"type": "string","format": "date-time"},
+              "items": {"type": "array","maxItems": 1000,"items": {"$ref": "#/components/schemas/SupplierContact"}}
+            },
+            "required": ["complete","orderNumber","refreshedAt","items"]
+          }
+        ],
+        "description": "Fresh refreshedAt at most 60 seconds; duplicates rejected. At most one item for group/return. orderId equals groupId for groups, otherwise original orderId. An empty list is allowed only with successful source/contacts/relationship proof. For purchase_return require sourceEntity exactly FOP_KINGDEE_PHYSICAL_RETURN_ENTITY; formal entity and semantics are still awaiting FOP. Reject hzkj_purrefundapplybill. No registered source/entity is invented by this file."
+      },
+      "SupplierLaunchResult": {
+        "allOf": [
+          {"$ref": "#/components/schemas/SupplierSourceProof"},
+          {
+            "type": "object",
+            "properties": {
+              "mode": {"const": "live"},
+              "purchaseOrderId": {"type": "string","minLength": 1,"maxLength": 2000},
+              "contactVersion": {"type": "string","pattern": "^[a-f0-9]{64}$"},
+              "wangwangAccount": {"type": "string","minLength": 1,"maxLength": 2000},
+              "url": {"type": ["string","null"]}
+            },
+            "required": ["mode","purchaseOrderId","contactVersion","wangwangAccount","url"]
+          }
+        ],
+        "description": "Echo exact purchaseOrderId and contactVersion; context excludes these two launch fields. BFF first obtains fresh contacts and compares the supplied version/account, then calls this endpoint and rechecks local account/scope. Only aliim:sendmsg?touid=cnalichn<account> (optional siteid=cnalichn) accepted; no host, fragment, duplicate parameters or additional parameters. Null URL means unavailable; never construct an alternative URL."
+      }
+    }
+  }
+}

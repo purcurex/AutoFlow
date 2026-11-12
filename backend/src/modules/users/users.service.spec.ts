@@ -202,7 +202,7 @@ describe('Procurement defaults from current employee job and organization', () =
 
 describe('Workbench department display follows business scope', () => {
   function setup() {
-    const employees = { find: jest.fn().mockResolvedValue([{ ownerUserId: 'company' }]) }
+    const employees = { find: jest.fn().mockResolvedValue([{ ownerUserId: 'company', departmentId: 'd1' }]) }
     const nodes = { find: jest.fn().mockResolvedValue([{ id: 'd1', name: '业务一部' }, { id: 'd2', name: '业务二部' }]) }
     const repository = { manager: { getRepository: (entity: unknown) => entity === OrganizationEmployeeEntity ? employees : nodes } } as unknown as Repository<User>
     const user = { id: 'employee-account', role: UserRole.USER, businessRole: 'salesperson', businessDepartmentId: 'd1' } as User
@@ -219,17 +219,19 @@ describe('Workbench department display follows business scope', () => {
     expect(await service.workbenchDepartment({ ...user, role, businessRole: 'admin' })).toBeNull()
     expect(employees.find).not.toHaveBeenCalled()
   })
-  it('never assigns a local department name to an external scope ID', async () => {
+  it('uses local employee assignment for sales and never exposes an external manager scope ID', async () => {
     const { service, user } = setup()
-    expect(await service.workbenchDepartment({ ...user, businessDepartmentId: 'FOP-DEPT-1' })).toEqual({ id: 'FOP-DEPT-1', name: null })
+    expect(await service.workbenchDepartment({ ...user, businessDepartmentId: 'FOP-DEPT-1' })).toEqual({ id: 'd1', name: '业务一部' })
+    expect(await service.workbenchDepartment({ ...user, businessRole: 'department_manager', businessDepartmentId: 'FOP-DEPT-1' })).toBeNull()
   })
   it('handles absent and ambiguous employee bindings without choosing another workspace', async () => {
     const { service, user, employees, nodes } = setup()
     employees.find.mockResolvedValue([{ ownerUserId: 'other' }, { ownerUserId: 'company' }])
-    expect(await service.workbenchDepartment(user)).toEqual({ id: 'd1', name: null })
+    expect(await service.workbenchDepartment(user)).toBeNull()
     expect(nodes.find).not.toHaveBeenCalled()
     employees.find.mockResolvedValue([])
-    expect(await service.workbenchDepartment({ ...user, organizationWorkspaceOwnerId: 'company' })).toEqual({ id: 'd1', name: '业务一部' })
+    expect(await service.workbenchDepartment({ ...user, organizationWorkspaceOwnerId: 'company' })).toBeNull()
+    expect(await service.workbenchDepartment({ ...user, businessRole: 'department_manager', organizationWorkspaceOwnerId: 'company' })).toEqual({ id: 'd1', name: '业务一部' })
     expect(await service.workbenchDepartment({ ...user, businessRole: 'none' })).toBeNull()
     expect(await service.workbenchDepartment({ ...user, businessDepartmentId: null })).toBeNull()
   })

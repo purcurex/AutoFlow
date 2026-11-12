@@ -8,6 +8,7 @@ export interface User {
   username: string
   avatarUrl?: string
   role: UserRole
+  dataDisplayScope?: 'department' | 'self'
   businessRole?: import('@/api/workbench-access').BusinessScope['role']
   workbenchRoles?: import('@/utils/workbench').WorkbenchRole[]
   createdAt: string

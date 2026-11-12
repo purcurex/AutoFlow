@@ -1,4 +1,6 @@
 const TRUE_VALUES = new Set(['true', '1', 'yes'])
+import { workbenchMockEnabled } from '../modules/workbench-replica/workbench-mock'
+import { ConfigService } from '@nestjs/config'
 
 function enabled(value: unknown): boolean {
   return TRUE_VALUES.has(String(value ?? '').toLowerCase())
@@ -23,7 +25,12 @@ function requireHttpsUrl(config: Record<string, unknown>, key: string): string {
 }
 
 export function validateEnvironment(config: Record<string, unknown>): Record<string, unknown> {
+  workbenchMockEnabled(new ConfigService(config))
   const nodeEnv = String(config.NODE_ENV ?? 'development')
+  if (config.WORKBENCH_READ_MODE !== undefined && config.WORKBENCH_READ_MODE !== 'local') throw new Error('WORKBENCH_READ_MODE must be local; legacy live list passthrough has been removed.')
+  if (config.WORKBENCH_SYNC_ENABLED !== undefined && !['true', 'false'].includes(String(config.WORKBENCH_SYNC_ENABLED))) throw new Error('WORKBENCH_SYNC_ENABLED must be true or false.')
+  if (config.WORKBENCH_COLLECTED_ENABLED !== undefined && !['true', 'false'].includes(String(config.WORKBENCH_COLLECTED_ENABLED))) throw new Error('WORKBENCH_COLLECTED_ENABLED must be true or false.')
+  if (config.WORKBENCH_AUTOMATIC_CALLS_ENABLED !== undefined && !['true', 'false'].includes(String(config.WORKBENCH_AUTOMATIC_CALLS_ENABLED))) throw new Error('WORKBENCH_AUTOMATIC_CALLS_ENABLED must be true or false.')
 
   if (nodeEnv === 'production') {
     const jwtSecret = requireValue(config, 'JWT_SECRET')

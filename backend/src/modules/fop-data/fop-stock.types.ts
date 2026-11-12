@@ -3,18 +3,18 @@ import { procurementStageLabels } from './procurement-stage'
 
 export const STOCK_TYPES = ['full_payment', 'deposit'] as const
 export const STOCK_ORDER_STATUSES = ['unpaid', 'paid', 'approved'] as const
-export const STOCK_SORT_FIELDS = ['paidAt', 'orderStatus', 'purchaseStatus'] as const
+export const STOCK_SORT_FIELDS = ['createdAt', 'paidAt', 'orderStatus', 'purchaseStatus'] as const
 export type StockSortField = typeof STOCK_SORT_FIELDS[number]
 export type StockOrderStatus = typeof STOCK_ORDER_STATUSES[number]
 export const STOCK_LIFECYCLES = ['unpaid', 'pending_procurement', 'received'] as const
 export type StockLifecycle = typeof STOCK_LIFECYCLES[number]
 export const STOCK_LIFECYCLE_LABELS: Record<StockLifecycle, string> = { unpaid: '已创建待支付', pending_procurement: '已支付待采购', received: '采购完成已入库' }
 export const STOCK_ORDER_LABELS = { unpaid: '未支付', paid: '已支付', approved: '已审核' }
-export const STOCK_PURCHASE_STATUSES = ['unpurchased', 'partial', 'purchased', 'shipped', 'received', 'unknown'] as const
+export const STOCK_PURCHASE_STATUSES = ['unpurchased', 'partial', 'in_progress', 'purchased', 'shipped', 'received', 'unknown'] as const
 export type StockType = typeof STOCK_TYPES[number]
 export type StockPurchaseStatus = typeof STOCK_PURCHASE_STATUSES[number]
 export const STOCK_TYPE_LABELS = { full_payment: '全款备货', deposit: '押金备货' }
-export const STOCK_PURCHASE_LABELS = { unpurchased: '未采购', partial: '部分采购', purchased: procurementStageLabels.supplier_pending[0], shipped: procurementStageLabels.shipped[0], received: '已入库', unknown: '—' }
+export const STOCK_PURCHASE_LABELS = { unpurchased: '未采购', partial: '部分采购', in_progress: '采购中', purchased: procurementStageLabels.supplier_pending[0], shipped: procurementStageLabels.shipped[0], received: '已入库', unknown: '—' }
 
 export interface StockOwnership {
   customerId: string; customerCode: string; customerName: string

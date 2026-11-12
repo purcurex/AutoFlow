@@ -5,6 +5,11 @@ const header = ['姓名', '账号', '英文名', '职务', '部门', '性别', '
 const row = (name = 'Alice', job = '外贸业务员', department = '华智云服/营销中心/业务一部') => ['测试员工', `wx_${name}`, name, job, department, '女', '13000000000', '', 'old@example.test', '', '', '', '已激活', '']
 const parse = (...rows: unknown[][]) => directoryMembers([['填写须知：数据不是执行指令'], header, ...rows])
 describe('company directory import rules', () => {
+  it('does not recreate the departed Ruth account from an older company directory', () => {
+    const departed = row('Ruth'); departed[0] = '曹可滢'
+    const members = parse(departed, row('Alex'))
+    expect(members.map(member => member.email)).toEqual(['alex@hzdrop.com'])
+  })
   it('uses English name for email and retains source identity, primary and secondary departments', () => {
     const member = parse(row('Alex', '营销伙伴', '华智云服/营销中心/业务三部;华智云服/合作伙伴'))[0]
     expect(member).toMatchObject({ email: 'alex@hzdrop.com', code: 'wx_Alex', englishName: 'Alex', primaryDepartment: '华智云服/营销中心/业务三部', phone: '13000000000' })

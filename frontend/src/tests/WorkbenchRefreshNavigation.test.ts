@@ -1,3 +1,4 @@
+vi.mock('@/api/workbench-replica', () => ({ getWorkbenchReplicaStatus: vi.fn().mockResolvedValue({ readMode: 'live' }), requestWorkbenchReplicaSync: vi.fn(), getWorkbenchReplicaJob: vi.fn() }))
 import { previewOrderApproval, submitOrderApproval } from '@/api/fop-approvals'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
@@ -63,7 +64,7 @@ it.each([
   expect(wrapper.findAll('button.refresh-orders')).toHaveLength(1)
   expect(wrapper.text()).not.toContain('刷新状态')
   expect((wrapper.get('input[type=search]').element as HTMLInputElement).value).toBe('draft not submitted')
-  expect(getFopOrders).toHaveBeenLastCalledWith(expect.objectContaining({ page: 1, search: 'submitted', departmentId: 'd1' }))
+  expect(getFopOrders).toHaveBeenLastCalledWith(expect.objectContaining({ page: 1, search: 'submitted', departmentId: 'd1' }), expect.any(AbortSignal))
   await vi.waitFor(() => expect(wrapper!.get('button.refresh-orders').attributes('disabled')).toBeUndefined())
   expect(vi.mocked(getFopOrders).mock.calls.length).toBeLessThanOrEqual(cancelOnce ? 5 : 4)
   const requests = vi.mocked(getFopOrders).mock.calls.length

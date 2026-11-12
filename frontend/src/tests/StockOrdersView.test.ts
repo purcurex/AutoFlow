@@ -1,3 +1,4 @@
+vi.mock('@/api/workbench-replica', () => ({ getWorkbenchReplicaStatus: vi.fn().mockResolvedValue({ readMode: 'live' }), requestWorkbenchReplicaSync: vi.fn(), getWorkbenchReplicaJob: vi.fn() }))
 import { useWorkbenchAccess, clearWorkbenchAccess } from '@/composables/useWorkbenchAccess'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { createMemoryHistory, createRouter } from 'vue-router'
@@ -33,13 +34,17 @@ async function setup(path = '/workbench/sales?queue=stock', procurement = false)
   await flushPromises()
   return { wrapper, router }
 }
-it('applies lifecycle and creation range together, clears selection and exports the applied scope', async () => {
+it('applies lifecycle and customer payment range together, clears selection and exports the applied scope', async () => {
   vi.mocked(api.post).mockRejectedValue(new Error('download unavailable'))
   const { wrapper, router } = await setup('/workbench/sales?queue=stock&warehouseCode=HZ&departmentId=d1&search=Lamp&page=2')
+  expect(api.get).toHaveBeenLastCalledWith(expect.stringContaining('stock-orders'), expect.objectContaining({ params: expect.objectContaining({ sortOrder: 'desc' }) }))
   const stage = wrapper.findAll('select').find(s => s.text().includes('已创建待支付'))
   expect(stage).toBeDefined()
   const range = wrapper.findAll('select').find(s => s.text().includes('近一周'))
   expect(range).toBeDefined()
+  expect(range!.attributes('aria-label')).toBe('客户付款时间范围')
+  expect(range!.element.closest('label')?.textContent).toContain('客户付款时间')
+  expect(wrapper.get('.stock-heading').text()).toContain('可按备货阶段和客户付款时间查询')
   expect(stage!.findAll('option').map(o=>o.text())).toEqual(['全部', '已创建待支付', '已支付待采购', '采购完成已入库'])
   expect((range!.element as HTMLSelectElement).value).toBe('all')
   await wrapper.get('tbody input[type=checkbox]').setValue(true)
@@ -166,7 +171,7 @@ it('uses the procurement queue for listing and export and offers unfinished purc
   expect(wrapper.get('h2').text()).toContain('备货待采购清单')
   expect(api.get).toHaveBeenLastCalledWith(expect.stringContaining('stock-orders'), expect.objectContaining({ params: expect.objectContaining({ queue: 'procurement' }) }))
   const options = wrapper.findAll('select').find(s => s.text().includes('未采购'))!
-  expect(options.findAll('option').map(o => o.text())).toEqual(['全部', '未采购', '部分采购', '供应商待发货'])
+  expect(options.findAll('option').map(o => o.text())).toEqual(['全部', '未采购', '部分采购', '采购中', '供应商待发货'])
   await options.setValue('purchased'); await flushPromises()
   expect(api.get).toHaveBeenLastCalledWith(expect.stringContaining('stock-orders'), expect.objectContaining({ params: expect.objectContaining({ queue: 'procurement', purchaseStatus: 'purchased' }) }))
   vi.mocked(api.post).mockRejectedValue(new Error('test export'))
@@ -210,7 +215,7 @@ it.each([['备货订单状态', 'orderStatus', false], ['采购状态', 'purchas
   expect(wrapper.get('th[aria-sort="descending"]').text()).toBe(label)
   await exportNow(wrapper)
   expect(api.post).toHaveBeenLastCalledWith(expect.stringContaining('stock-orders/export'), expect.objectContaining({ sortBy, sortOrder: 'desc', mode: 'filtered', search: 'Lamp', warehouseCode: 'HZ' }), expect.anything())
-  await wrapper.findAll('thead button').find(b => b.text() === '收款时间')!.trigger('click'); await flushPromises()
+  await wrapper.findAll('thead button').find(b => b.text() === '客户付款时间')!.trigger('click'); await flushPromises()
   expect(router.currentRoute.value.query).toMatchObject({ sortBy: 'paidAt', sortOrder: 'asc' })
   wrapper.unmount()
 })
@@ -241,4 +246,77 @@ it.each([false, true])('shows the account department on stock lists, procurement
     expect(router.currentRoute.value.query.departmentId).toBeUndefined()
     wrapper.unmount()
   } finally { clearWorkbenchAccess() }
+})
+
+it('offers stock supplier follow-up only for purchased procurement rows and clears it on filter changes', async () => {
+  const items = ['purchased', 'unpurchased', 'partial', 'in_progress', 'shipped', 'received'].map((purchaseStatus, i) => ({ ...row, id: `s${i}`, purchaseStatus }))
+  vi.mocked(api.get).mockImplementation(async url => String(url).includes('supplier-follow-ups')
+    ? { source: 'mock', orderId: 's0', orderNumber: row.stockNumber, refreshedAt: response.refreshedAt, items: [] }
+    : { ...response, items })
+  const { wrapper, router } = await setup('/workbench/procurement?queue=stock_procurement', true)
+  expect(wrapper.findAll('.stock-follow-up')).toHaveLength(1)
+  await wrapper.get('.stock-follow-up').trigger('click'); await flushPromises()
+  expect(api.get).toHaveBeenCalledWith('/autoflow/integrations/fop/stock-orders/s0/supplier-follow-ups')
+  expect(wrapper.findComponent({ name: 'SupplierFollowUpDialog' }).exists()).toBe(true)
+  await router.replace('/workbench/procurement?queue=stock_procurement&warehouseCode=HZ'); await flushPromises()
+  expect(wrapper.findComponent({ name: 'SupplierFollowUpDialog' }).exists()).toBe(false)
+  wrapper.unmount()
+  const sales = await setup()
+  expect(sales.wrapper.findAll('.stock-follow-up')).toHaveLength(0)
+  sales.wrapper.unmount()
+})
+
+
+it.each([false, true])('renders and filters procurement in progress without shipment urgency or follow-up (procurement=%s)', async procurement => {
+  vi.mocked(api.get).mockResolvedValue({ ...response, items: [{ ...row, purchaseStatus: 'in_progress', procurementPaidAt: '2026-01-01T00:00:00Z' }] })
+  vi.mocked(api.post).mockRejectedValue(new Error('download unavailable'))
+  const { wrapper } = await setup(procurement ? '/workbench/procurement?queue=stock_procurement&purchaseStatus=in_progress' : '/workbench/sales?queue=stock&purchaseStatus=in_progress', procurement)
+  expect(wrapper.get('td[data-label="采购状态"]').text()).toBe('采购中')
+  expect(wrapper.find('.supplier-shipment-pill').exists()).toBe(false)
+  expect(wrapper.find('.stock-follow-up').exists()).toBe(false)
+  const filter = wrapper.get('select[aria-label="采购状态"]')
+  expect(filter.findAll('option').map(option => option.text())).toContain('采购中')
+  expect(filter.element).toHaveProperty('value', 'in_progress')
+  expect(api.get).toHaveBeenLastCalledWith(expect.stringContaining('stock-orders'), expect.objectContaining({ params: expect.objectContaining({ purchaseStatus: 'in_progress' }) }))
+  await exportNow(wrapper)
+  expect(api.post).toHaveBeenLastCalledWith(expect.stringContaining('stock-orders/export'), expect.objectContaining({ purchaseStatus: 'in_progress', mode: 'filtered' }), expect.anything())
+  wrapper.unmount()
+})
+
+it('aborts obsolete list reads on filter changes and page disposal', async () => {
+  const { wrapper, router } = await setup()
+  const first = vi.mocked(api.get).mock.calls.find(([url]) => String(url).endsWith('stock-orders'))![1]?.signal
+  expect(first).toBeInstanceOf(AbortSignal)
+  await router.replace('/workbench/sales?queue=stock&stockType=deposit'); await flushPromises()
+  expect(first!.aborted).toBe(true)
+  const latest = vi.mocked(api.get).mock.calls.at(-1)![1]!.signal!
+  expect(latest.aborted).toBe(false)
+  wrapper.unmount()
+  expect(latest.aborted).toBe(true)
+})
+
+it('does not query on timers, focus, visibility changes or network reconnection', async () => {
+  vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
+  try {
+
+    const { wrapper } = await setup()
+    const baseline = vi.mocked(api.get).mock.calls.length
+    await vi.advanceTimersByTimeAsync(300_000)
+    window.dispatchEvent(new Event('focus'))
+    window.document.dispatchEvent(new Event('visibilitychange'))
+    window.dispatchEvent(new Event('online'))
+    await flushPromises()
+    expect(api.get).toHaveBeenCalledTimes(baseline)
+    expect(wrapper.text()).toContain('手动刷新')
+    wrapper.unmount()
+  } finally { vi.useRealTimers() }
+})
+
+it('labels uncollected counts and empty states without implying a business zero', async () => {
+  vi.mocked(api.get).mockResolvedValue({ ...response, items: [], total: 0, dataAvailability: { mode: 'collected', complete: false, missingDatasets: ['stock_orders'] } })
+  const { wrapper } = await setup()
+  expect(wrapper.get('.count').text()).toBe('— · 待接入')
+  expect(wrapper.text()).toContain('备货数据尚未接入')
+  expect(wrapper.text()).not.toContain('暂无符合条件')
+  wrapper.unmount()
 })

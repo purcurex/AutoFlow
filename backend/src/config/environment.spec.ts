@@ -1,6 +1,10 @@
 import { validateEnvironment } from './environment'
 
 describe('production environment validation', () => {
+  it('rejects unknown workbench modes rather than silently enabling live queries', () => {
+    expect(() => validateEnvironment({ WORKBENCH_READ_MODE: 'repilca' })).toThrow('WORKBENCH_READ_MODE')
+    expect(() => validateEnvironment({ WORKBENCH_SYNC_ENABLED: 'sometimes' })).toThrow('WORKBENCH_SYNC_ENABLED')
+  })
   const validProductionConfig = {
     NODE_ENV: 'production',
     JWT_SECRET: 'a-secure-production-secret-with-32-characters',

@@ -27,7 +27,7 @@ export class FopAccountBindingService {
       if (error instanceof FopPermissionDeniedError) throw new ForbiddenException({ code: error.code, message: error.message })
       if (error instanceof FopIntegrationUnavailableError) throw new ServiceUnavailableException({
         code: ['fop_feature_not_configured','fop_endpoint_not_published'].includes(error.code) ? 'fop_employee_directory_not_configured' : error.code,
-        message: '金蝶人员目录接口尚未接通，请核对实际URL、API登记及应用授权' })
+        message: error.code === 'fop_queries_paused' ? 'FOP 测试环境数据访问已暂停，待集成方案调整后恢复。' : '金蝶人员目录接口尚未接通，请核对实际URL、API登记及应用授权' })
       throw new ServiceUnavailableException({ code: 'fop_unavailable', message: '金蝶员工验证暂时失败，请稍后重试' })
     }
   }
@@ -53,7 +53,7 @@ export class FopAccountBindingService {
   /** 新建账号也复用相同验证，避免先创建账号再绑定失败造成半成功和重复开通。 */
   async verify(actorId: string, input: BindFopEmployeeDto, sessionVersion?: number) {
     const actor = await this.requireAdmin(actorId, sessionVersion)
-    const verified = await this.platform(() => this.provider.verifyEmployeeBinding(input.employeeId, input.membershipId))
+    const verified = await this.platform(() => this.provider.verifyEmployeeBinding(input.employeeId, input.membershipId, input.employeeNumber))
     await this.requireAdmin(actorId, actor.sessionVersion)
     return { ...verified, actorSessionVersion: actor.sessionVersion }
   }

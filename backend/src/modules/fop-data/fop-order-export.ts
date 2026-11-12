@@ -1,3 +1,5 @@
+import { sourceStatusLabel } from './fulfillment-source-status'
+import { fulfillmentSortDirection, fulfillmentSortField } from './fop-order-sort'
 import { completedAt, completionLabels, completionTimeLabels, isCompletionQueue } from './completed-orders'
 import { normalizeOrderAmountBreakdown } from './order-amount-breakdown'
 import { logisticsInfoText } from './logistics-info'
@@ -24,7 +26,7 @@ const dateText = (value: string | null) => {
   return Number.isFinite(date.getTime()) ? new Date(date.getTime() + 8 * 3600_000).toISOString().slice(0, 19).replace('T', ' ') : '—'
 }
 function queueColumns(queue: ExportFulfillmentOrdersDto['queue']) {
-  return taskStatusOptions(queue).length ? [...(queue === 'allocation_review' ? [column('配货单号', 'allocationNumber', 30)] : []), ...(['dispatch', 'allocation', 'allocation_review'].includes(queue) ? [column('发运单编号', 'dispatchNumbers', 28)] : []), column(taskStatusHeading(queue)[0], 'primaryStatus', 28)] : []
+  return taskStatusOptions(queue).length ? [...(queue === 'allocation_review' ? [column('配货单号', 'allocationNumber', 30)] : []), ...(['dispatch', 'allocation', 'allocation_review'].includes(queue) ? [column('发运单编号', 'dispatchNumbers', 28)] : []), column(queue==='procurement' ? '采购状态' : queue==='shipping' ? '出库状态' : taskStatusHeading(queue)[0], 'primaryStatus', 28)] : []
 }
 function statuses(order: FopOrder, queue: ExportFulfillmentOrdersDto['queue']) {
   const label = taskStatusLabel(getTaskStatus(order, queue), queue)[0]
@@ -62,24 +64,24 @@ export async function buildFulfillmentWorkbook(orders: readonly FopOrder[], quer
   workbook.creator = 'HyperZone'
   workbook.created = new Date()
   const showAmountBreakdown = query.queue === 'unpaid' || query.queue === 'review'
-  const columns: Column[] = [column('订单编号', 'orderNumber', 30), column('商品信息', 'products', 44), column('Shopify 单号', 'shopifyOrderNumber'), { ...column('订单金额', 'amount', 18), money: true }, ...(showAmountBreakdown ? ['产品金额', '运费', '税费', '优惠金额'].map((header, i) => ({ ...column(header, ['productAmount', 'shippingFee', 'taxAmount', 'discountAmount'][i], 18), money: true })) : []), column('Customer', 'shippingCountryCode', 14), column('收款日期（UTC+8）', 'paidAt', 24), ...queueColumns(query.queue), column('客户名称', 'customerName', 28), column('店铺', 'storeName'), column('币种', 'currency', 10)]
+  const columns: Column[] = [column('订单编号', 'orderNumber', 30), column('商品信息', 'products', 44), column('Shopify 单号', 'shopifyOrderNumber'), { ...column('订单金额', 'amount', 18), money: true }, ...(showAmountBreakdown ? ['产品金额', '运费', '税费', '优惠金额'].map((header, i) => ({ ...column(header, ['productAmount', 'shippingFee', 'taxAmount', 'discountAmount'][i], 18), money: true })) : []), column('Customer', 'shippingCountryCode', 14), ...(query.queue !== 'unpaid' ? [column('收款日期（UTC+8）', 'paidAt', 24)] : []), ...queueColumns(query.queue), column('客户名称', 'customerName', 28), column('店铺', 'storeName'), column('币种', 'currency', 10)]
   if (query.queue === 'shipping' && !query.completed) columns.splice(1, 0, column('订单拦截状态', 'shipmentInterceptStatus', 20))
   if (query.queue === 'exceptions') columns.push(column('异常原因', 'exceptionReason', 36), { ...column('异常时长（小时）', 'exceptionHours', 20), number: true })
-  columns.push(column('发货仓库', 'warehouse'))
+  if (query.queue !== 'review') columns.push(column('发货仓库', 'warehouse'))
   if (query.queue === 'unpaid') columns.push(column('自定义物流渠道', 'customLogisticsChannelName', 32))
-  if (query.queue === 'review') columns.push(column('物流渠道', 'logisticsChannels', 36))
-  if (query.queue === 'dispatch') columns.push(column('物流信息', 'logisticsInfo', 38))
-  if (query.queue === 'shipping') columns.push(column('物流商', 'carrier'), column('物流单号', 'trackingNumber', 30))
-  columns.push(column('业务员', 'salesperson', 26), query.completed && isCompletionQueue(query.queue) ? column(`${completionTimeLabels[query.queue][0]}（UTC+8）`, 'completedAt', 26) : query.queue === 'shipping' ? column('WMS创建时间（UTC+8）', 'wmsCreatedAt', 26) : query.queue === 'procurement' ? column('订单审核时间（UTC+8）', 'reviewedAt', 26) : query.queue === 'allocation_review' ? column('齐套时间（UTC+8）', 'allocationReadyAt', 26) : query.queue === 'procurement_shipping' ? column('采购付款时间（UTC+8）', 'procurementPaidAt', 26) : ['unpaid', 'review', 'exceptions', 'dispatch', 'allocation'].includes(query.queue) ? column('C端付款时间（UTC+8）', 'consumerPaidAt', 26) : column('创建日期（UTC+8）', 'createdAt', 24))
+  if (query.queue === 'review') columns.splice(columns.findIndex(c => c.key === 'shippingCountryCode') + 1, 0, column('物流信息', 'reviewLogistics', 38), column('发货仓库', 'warehouse'))
+  if (query.queue === 'dispatch' || query.queue === 'shipping') columns.push(column('物流渠道 / 跟踪号', 'logisticsInfo', 38))
+  columns.push(column('业务员', 'salesperson', 26), query.completed && isCompletionQueue(query.queue) ? column(`${completionTimeLabels[query.queue][0]}（UTC+8）`, 'completedAt', 26) : query.queue === 'shipping' ? column('WMS创建时间（UTC+8）', 'wmsCreatedAt', 26) : query.queue === 'procurement' ? column('订单审核时间（UTC+8）', 'reviewedAt', 26) : query.queue === 'allocation_review' ? column('齐套时间（UTC+8）', 'allocationReadyAt', 26) : query.queue === 'procurement_shipping' ? column('采购付款时间（UTC+8）', 'procurementPaidAt', 26) : ['unpaid', 'review', 'exceptions', 'dispatch', 'allocation'].includes(query.queue) ? column('客户付款时间（UTC+8）', 'consumerPaidAt', 26) : column('创建日期（UTC+8）', 'createdAt', 24))
+  if (query.completed || !['unpaid', 'review', 'exceptions', 'dispatch', 'allocation'].includes(query.queue)) columns.push(column('客户付款时间（UTC+8）', 'consumerPaidAt', 26))
   if (query.completed) {
     const statusColumn = columns.find(column => column.key === 'primaryStatus')
-    if (statusColumn) statusColumn.header = '完成状态'
+    if (statusColumn) statusColumn.header = query.queue === 'procurement' ? '采购状态' : query.queue === 'shipping' ? '出库状态' : query.queue === 'dispatch' ? '履约状态' : query.queue === 'allocation_review' ? '审核状态' : '完成状态'
   }
   const list = sheet(workbook, '订单清单', columns)
   const items = sheet(workbook, '商品明细', [column('订单编号', 'orderNumber', 30), column('商品信息', 'name', 40), column('SKU', 'sku', 26), column('规格', 'variant', 26), { ...column('数量', 'quantity', 12), number: true }, column('商品图片链接', 'imageUrl', 50)])
   for (const order of orders) {
     const [pendingStatus] = statuses(order, query.queue)
-    const primaryStatus = query.completed ? query.queue === 'shipping' ? '已出库' : query.queue === 'dispatch' ? '已同步' : '已完成' : pendingStatus
+    const primaryStatus = ['procurement','procurement_shipping'].includes(query.queue) && order.sourcePurchaseStatus !== undefined ? sourceStatusLabel(order.sourcePurchaseStatus,'purchase')+(!query.completed ? `\n${pendingStatus}` : '') : query.queue==='shipping' && order.sourceOutboundStatus !== undefined ? sourceStatusLabel(order.sourceOutboundStatus,'outbound') : query.completed ? query.queue === 'allocation_review' ? ({approved:'已审核',pending:'未审核',unknown:'—'}[order.fulfillmentProgress.allocationReview] ?? '—') : query.queue === 'shipping' ? '已出库' : query.queue === 'dispatch' ? '已发货' : '已完成' : pendingStatus
     const detail = normalizeOrderAmountBreakdown(order.amountBreakdown)
     const detailMoney = (value: number | null | undefined) => value == null ? '—' : moneyToCents(value) / 100
     addRow(list, {
@@ -87,7 +89,8 @@ export async function buildFulfillmentWorkbook(orders: readonly FopOrder[], quer
       completedAt: dateText(completedAt(order, query.queue)), orderNumber: order.orderNumber, products: itemSummary(order.items.map(item => `${item.name}\nSKU · ${item.sku} × ${item.quantity}${item.variant ? `\n${item.variant}` : ''}`)), shopifyOrderNumber: order.shopifyOrderNumber,
       customerName: order.customerName, shippingCountryCode: normalizeShippingCountry(order.shippingCountryCode) ?? '—', paidAt: dateText(order.paidAt), primaryStatus, allocationNumber: order.allocationDocument?.number || '—', dispatchNumbers: order.dispatchDocuments?.map(doc => doc.number).join('\n') || '—', storeName: order.storeName,
       amount: moneyToCents(order.amount) / 100, productAmount: detailMoney(detail?.productAmount), shippingFee: detailMoney(detail?.shippingFee), taxAmount: detailMoney(detail?.taxAmount), discountAmount: detailMoney(detail?.discountAmount), currency: order.currency?.trim().toUpperCase() || 'USD', exceptionReason: order.exception?.reason || '—', exceptionHours: order.exception?.hours ?? '', warehouse: order.warehouse,
-      logisticsInfo: logisticsInfoText(order.logisticsInfo, order.carrier, order.trackingNumber),
+      reviewLogistics: `${normalizeCustomLogisticsChannelName(order.customLogisticsChannelName) ?? '—'}\n${query.completed ? logisticsInfoText(order.logisticsInfo, null, null, order.logisticsChannels, false, '尚未获取') : [...new Set(normalizeLogisticsChannels(order.logisticsChannels)?.map(c => c.name?.trim()).filter(Boolean))].join(' / ') || '—'}`,
+      logisticsInfo: logisticsInfoText(order.logisticsInfo, order.carrier, order.trackingNumber, order.logisticsChannels, query.queue === 'dispatch' || query.queue === 'shipping'),
       carrier: order.carrier ?? '—', trackingNumber: order.trackingNumber ?? '—', salesperson: `${order.owner?.name || order.salesperson || '—'}\n${order.department?.name || '—'}`, wmsCreatedAt: dateText(normalizeBusinessTimestamp(order.wmsCreatedAt)), reviewedAt: dateText(normalizeBusinessTimestamp(order.reviewedAt)), allocationReadyAt: dateText(normalizeBusinessTimestamp(order.allocationReadyAt)), createdAt: dateText(order.createdAt), consumerPaidAt: dateText(normalizeConsumerPaidAt(order.consumerPaidAt)), procurementPaidAt: dateText(normalizeBusinessTimestamp(order.procurementPaidAt)),
       logisticsChannels: normalizeLogisticsChannels(order.logisticsChannels)?.map(logisticsChannelLabel).join('\n') || '—',
       customLogisticsChannelName: normalizeCustomLogisticsChannelName(order.customLogisticsChannelName) ?? '—',
@@ -104,15 +107,15 @@ export async function buildFulfillmentWorkbook(orders: readonly FopOrder[], quer
   const entries = [
     ['清单', query.completed && isCompletionQueue(query.queue) ? completionLabels[query.queue][0] : query.queue === 'dispatch' && query.taskStatus === 'dispatch_synced' ? '已同步清单' : exportQueueLabels[query.queue]], ['导出方式', query.mode === 'selected' ? '导出所选订单' : '当前筛选全部订单（跨分页）'], ['生成时间（UTC+8）', dateText(workbook.created.toISOString())],
     ['数据来源', source === 'mock' ? '演示数据' : 'FOP'], ['搜索条件', query.search?.trim() || '无'], ['指定订单', query.orderNumber || '无'],
-    ...(query.completed ? [[query.queue === 'dispatch' ? '发运单审核时间范围' : '完成时间范围', query.timeRange === '1m' ? '近一月' : query.timeRange === '3m' ? '近三月' : '近一周']] : []),
-    ...(query.queue === 'unpaid' ? [['C端付款时间范围', query.timeRange === '1w' ? '近一周' : query.timeRange === '1m' ? '近一月' : query.timeRange === '3m' ? '近三月' : '全部']] : []),
+    ...(query.completed ? [['客户付款时间范围', query.timeRange === '1m' ? '近一月' : query.timeRange === '3m' ? '近三月' : '近一周']] : []),
+    ...(query.queue === 'unpaid' ? [['客户付款时间范围', query.timeRange === '1w' ? '近一周' : query.timeRange === '1m' ? '近一月' : query.timeRange === '3m' ? '近三月' : '全部']] : []),
     ...(query.queue === 'review' ? [['发货国家', query.shippingCountryCode || '全部']] : []),
     ['发货仓库', query.warehouseCode === 'HZ' ? '杭州仓' : query.warehouseCode === 'SZ' ? '深圳仓' : '全部'],
     ['业务部门', query.departmentId ? [...new Set(orders.map(o => o.department?.name).filter(Boolean))].join('、') : '全部可见部门'],
-    ['清单状态筛选', query.completed ? '已完成' : query.taskStatus ? taskStatusLabel(query.taskStatus, query.queue)[0] : query.queue === 'dispatch' ? '全部待履约' : '全部状态'],
+    ['清单状态筛选', query.completed ? query.queue === 'allocation_review' ? '已审核' : '已完成' : query.taskStatus ? taskStatusLabel(query.taskStatus, query.queue)[0] : query.queue === 'dispatch' ? '全部待履约' : '全部状态'],
     ['原采购状态筛选', query.procurementStage ? procurementStageLabels[query.procurementStage][0] : '全部状态'],
     ['业务员', query.ownerId ? [...new Set(orders.map(o => o.owner?.name || o.salesperson))].join('、') : '全部业务员'],
-    ['排序', `${({ completedAt: query.queue === 'dispatch' ? '发运单审核时间' : '阶段完成时间', paidAt: '收款日期', reviewedAt: '订单审核时间', consumerPaidAt: 'C端付款时间', dispatchDocumentStatus: '发运单状态', allocationDocumentStatus: '配货单状态', stockReadiness: '配货状态', allocationReviewStatus: '配货单状态', outboundStatus: '出库状态' })[query.sortBy ?? (query.completed ? 'completedAt' : 'paidAt')]} · ${(query.sortOrder ?? (query.completed && !query.sortBy ? 'desc' : query.sortBy && query.sortBy !== 'paidAt' ? 'asc' : query.paidAtOrder) ?? 'asc') === 'asc' ? '升序' : '降序'}`],
+    ['排序', `${({ completedAt: query.queue === 'dispatch' ? '发运单审核时间' : '阶段完成时间', paidAt: '收款日期', reviewedAt: '订单审核时间', consumerPaidAt: '客户付款时间', dispatchDocumentStatus: '发运单状态', allocationDocumentStatus: '配货单状态', stockReadiness: '配货状态', allocationReviewStatus: '配货单状态', outboundStatus: '出库状态' })[fulfillmentSortField(query) as NonNullable<ExportFulfillmentOrdersDto['sortBy']>]} · ${fulfillmentSortDirection(query) === 'asc' ? '升序' : '降序'}`],
     ...(showAmountBreakdown ? [['金额明细', '产品金额、运费、税费、优惠金额为FOP原币独立金额；优惠正数表示扣减，缺失显示—。订单金额以FOP最终金额为准，不按明细重新计算。']] : []),
     ['金额口径', '订单金额按币种分别合计，未换汇；一单多品的订单金额仅计算一次。此表为待办订单金额，不等同于回款业绩。'],
     ['Customer', '订单收货国家二字码；空缺显示—，不使用客户档案国家。'],

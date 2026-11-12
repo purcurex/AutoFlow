@@ -15,14 +15,14 @@ describe('procurement workflow facts', () => {
     ['partial', 'paid', 'partial', '待建采购订单'],
     ['ordered', 'unpaid', 'pending', '待支付采购款'],
     ['ordered', 'partial', 'partial', '待支付采购款'],
-    ['ordered', 'paid', 'pending', '供应商待发货'],
-    ['ordered', 'paid', 'partial', '供应商部分发货'],
+    ['ordered', 'paid', 'pending', '供应商待发货', 'pushed'],
+    ['ordered', 'paid', 'partial', '供应商部分发货', 'pushed'],
     ['ordered', 'unknown', 'partial', '待确认'],
     ['unknown', 'paid', 'pending', '待确认'],
     ['cancelled', 'unpaid', 'pending', '采购单已取消'],
     ['ordered', 'refunded', 'pending', '采购退款待跟进'],
-  ] as const)('%s / %s / %s uses the outstanding stage', (purchaseOrder, supplierPayment, shipment, expected) => {
-    const wrapper = mount(ProcurementStatus, { props: { progress: { purchaseOrder, supplierPayment }, shipment }, global: { plugins: [createI18n({ legacy: false, locale: 'zh-CN' })] } })
+  ] as const)('%s / %s / %s uses the outstanding stage', (purchaseOrder, supplierPayment, shipment, expected, alibabaOrder?: 'pushed') => {
+    const wrapper = mount(ProcurementStatus, { props: { progress: { purchaseOrder, supplierPayment, alibabaOrder }, shipment }, global: { plugins: [createI18n({ legacy: false, locale: 'zh-CN' })] } })
     expect(wrapper.get('.procurement-stage').text()).toBe(expected)
     expect(wrapper.findAll('.procurement-fact')).toHaveLength(0)
     wrapper.unmount()

@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="sky" x2="0" y2="1"><stop stop-color="#8ED9FC"/><stop offset="1" stop-color="#E5F6FF"/></linearGradient>
+    <linearGradient id="planet" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#FFE89A"/><stop offset=".55" stop-color="#FFC155"/><stop offset="1" stop-color="#EF8745"/></linearGradient>
+    <clipPath id="frame"><rect width="128" height="128" rx="32"/></clipPath>
+    <clipPath id="globe"><circle cx="61" cy="69" r="30"/></clipPath>
+  </defs>
+  <g clip-path="url(#frame)">
+    <rect width="128" height="128" fill="url(#sky)"/>
+    <circle cx="101" cy="26" r="20" fill="#FFF4C8" opacity=".65"/>
+    <circle cx="101" cy="26" r="13" fill="#FFD15A"/>
+    <ellipse cx="62" cy="71" rx="51" ry="15" transform="rotate(-25 62 71)" fill="none" stroke="#377FCE" stroke-width="7"/>
+    <circle cx="61" cy="69" r="30" fill="url(#planet)"/>
+    <g clip-path="url(#globe)" fill="none" stroke-linecap="round">
+      <path d="M29 52q26 18 62 9" stroke="#FFF0B9" stroke-width="6"/>
+      <path d="M30 69q30 20 65 6" stroke="#E99443" stroke-width="6" opacity=".6"/>
+      <path d="M33 81q26 18 53 6" stroke="#FFE2A0" stroke-width="4"/>
+    </g>
+    <path d="M11 71a51 15 0 0 0 102 0" transform="rotate(-25 62 71)" fill="none" stroke="#246AB8" stroke-width="7" stroke-linecap="round"/>
+    <path d="m24 23 2.5 6.5L33 32l-6.5 2.5L24 41l-2.5-6.5L15 32l6.5-2.5Z" fill="#FFF"/>
+    <circle cx="102" cy="102" r="4" fill="#57AADB"/>
+    <circle cx="24" cy="101" r="2" fill="#4E96CF"/>
+  </g>
+</svg>

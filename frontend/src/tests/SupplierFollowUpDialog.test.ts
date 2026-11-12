@@ -40,6 +40,18 @@ describe('supplier follow-up contact selection', () => {
     expect(wrapper.find('ul').exists()).toBe(false)
     expect(open).not.toHaveBeenCalled()
   })
+  it('opens the stock-specific contact with source-line details and never invokes a mock seller', async () => {
+    const open = vi.spyOn(chat, 'openSupplierChat').mockImplementation(() => {})
+    vi.mocked(api.get).mockImplementation(async path => path.endsWith('/launch')
+      ? { source: 'mock', mode: 'demo', orderId: 's1', purchaseOrderId: 'p1', wangwangAccount: '卖家p1', url: null }
+      : { source: 'mock', orderId: 's1', orderNumber: 'BH001', items: [{ ...contact('p1'), lines: [{ stockLineId: 'sl1', purchaseLineId: 'pl1', sku: 'STOCK-SKU', name: '备货商品', pendingQuantity: 12 }] }], refreshedAt: new Date().toISOString() })
+    wrapper = mount(SupplierFollowUpDialog, { props: { orderId: 's1', orderNumber: 'BH001', sourceKind: 'stock' }, global: { plugins: [createI18n({ legacy: false, locale: 'zh-CN', messages: {} })], stubs: { Teleport: true } } })
+    await flushPromises()
+    expect(wrapper.text()).toContain('STOCK-SKU')
+    expect(wrapper.text()).toContain('当前无法打开聊天')
+    expect(api.get).toHaveBeenLastCalledWith('/autoflow/integrations/fop/stock-orders/s1/supplier-follow-ups/p1/launch', { params: { contactVersion: 'a'.repeat(64) } })
+    expect(open).not.toHaveBeenCalled()
+  })
   it('requires selection when multiple purchases exist and opens only the chosen supplier', async () => {
     const open = vi.spyOn(chat, 'openSupplierChat').mockImplementation(() => {})
     const w = await show([contact('p1'), contact('p2')])
@@ -86,4 +98,30 @@ describe('safe supplier chat launcher', () => {
   it.each(['javascript:alert(1)', 'https://evil.test/', 'aliim:sendmsg?touid=cnalichnother', 'aliim:sendmsg?touid=cnalichnAlice&text=secret', 'aliim:sendmsg?touid=cnalichnAlice&touid=cnalichnother'])('rejects %s before invoking the OS', url => {
     expect(() => chat.openSupplierChat(url, 'Alice')).toThrow()
   })
+})
+
+it.each(['procurement', 'warehouse'] as const)('uses the selected return supplier for the %s workbench without pending-shipment restrictions', async workbenchRole => {
+  const open = vi.spyOn(chat, 'openSupplierChat').mockImplementation(() => {})
+  const item = { ...contact('p1'), shipmentStatus: undefined, lines: [] }
+  vi.mocked(api.get).mockImplementation(async path => path.endsWith('/launch')
+    ? { source: 'fop', mode: 'live', orderId: 'o1', purchaseOrderId: 'p1', wangwangAccount: '卖家p1', url: 'aliim:sendmsg?touid=cnalichn%E5%8D%96%E5%AE%B6p1' }
+    : { source: 'fop', orderId: 'o1', orderNumber: 'ORDER-1', refreshedAt: '', items: [item] })
+  wrapper = mount(SupplierFollowUpDialog, { props: { orderId: 'o1', orderNumber: 'ORDER-1', purchaseOrderId: 'p1', returnContext: { returnId: 'r1', workbenchRole } }, global: { plugins: [createI18n({ legacy: false, locale: 'zh-CN', messages: {} })], stubs: { Teleport: true } } })
+  await flushPromises()
+  expect(api.get).toHaveBeenCalledWith('/autoflow/integrations/fop/purchase-returns/r1/supplier-follow-up', { params: { orderId: 'o1', workbenchRole } })
+  expect(api.get).toHaveBeenLastCalledWith('/autoflow/integrations/fop/purchase-returns/r1/supplier-follow-up/launch', { params: { orderId: 'o1', workbenchRole, contactVersion: item.contactVersion } })
+  expect(wrapper.text()).toContain('退货联系供应商')
+  expect(wrapper.text()).not.toContain('待发货')
+  expect(open).toHaveBeenCalledOnce()
+})
+
+it('explains that a proposed dedicated supplier endpoint is awaiting FOP configuration', async () => {
+  const open = vi.spyOn(chat, 'openSupplierChat').mockImplementation(() => {})
+  vi.mocked(api.get).mockRejectedValue({ code: 'fop_supplier_contacts_not_configured' })
+  wrapper = mount(SupplierFollowUpDialog, { props: { orderId: 'o1', orderNumber: 'ORDER-1' }, global: { plugins: [createI18n({ legacy: false, locale: 'zh-CN', messages: {} })], stubs: { Teleport: true } } })
+  await flushPromises()
+  expect(wrapper.text()).toContain('供应商联系人服务尚未接通')
+  expect(wrapper.text()).toContain('FOP 联系供应商')
+  expect(wrapper.find('.open-chat').exists()).toBe(false)
+  expect(open).not.toHaveBeenCalled()
 })

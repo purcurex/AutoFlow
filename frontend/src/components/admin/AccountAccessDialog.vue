@@ -15,7 +15,7 @@ const { locale } = useI18n(), titleId = useId()
 const text = (cn: string, en: string) => String(locale.value).startsWith('zh') ? cn : en
 const dialog = ref<HTMLDialogElement>(), busy = ref(false), error = ref('')
 const role = ref(getAccountRole(props.account))
-const scope = ref<BusinessScope>({ ...(props.account.businessScope ?? { role: 'salesperson', departmentId: null, employeeId: null }) })
+const scope = ref<BusinessScope>({ ...(props.account.businessScope ?? { role: 'salesperson', departmentId: null, employeeId: null }), ...(role.value === 'administrator' ? { role: 'admin' as const } : {}) })
 const benches = ref([...props.account.workbenchRoles])
 const advanced = ref(false)
 const scoped = computed(() => ['department_manager', 'salesperson'].includes(scope.value.role))
@@ -70,11 +70,11 @@ onBeforeUnmount(() => { active = false; off(); dialog.value?.close?.(); if (open
           <div class="role-options" role="group" :aria-label="text('账号角色', 'Account role')"><button v-for="option in accountRoles" :key="option" type="button" :data-role="option" :aria-pressed="role === option" :disabled="busy || self && option !== 'administrator'" @click="chooseRole(option)"><span>{{ text(...accountRoleNames[option]) }}<Check v-if="role === option" :size="15" /></span><small>{{ text(...accountRoleDescriptions[option]) }}</small></button></div>
         </section>
         <section class="data-access-section"><div class="access-section-title"><h3>{{ text('业务数据', 'Business data') }}</h3><span class="scope-preview">{{ text(...scopeName({ businessScope: scope })) }}</span></div>
-          <label v-if="role === 'administrator'" class="access-field">{{ text('数据范围', 'Data scope') }}<select v-model="scope.role" class="input" :disabled="busy" aria-label="业务数据范围"><option value="admin">{{ text('全部业务部门', 'All business departments') }}</option><option value="none">{{ text('未开通', 'Off') }}</option></select></label>
+          <p v-if="role === 'administrator'" class="assignment-preview">{{ text('管理员拥有全部业务数据、工作台及图表权限；FOP 数据仍以实际授权为准。', 'Administrators have full access to business data, workbenches and charts; FOP data follows its actual grants.') }}</p>
           <label v-else-if="role === 'collaboration'" class="business-toggle"><span>{{ text('开通业务数据', 'Enable business data') }}</span><input type="checkbox" :checked="scope.role !== 'none'" :disabled="busy" aria-label="开通业务数据" @change="scope.role = ($event.target as HTMLInputElement).checked ? 'admin' : 'none'" /></label>
           <p v-if="scoped" class="assignment-preview">{{ account.employee?.department.id === scope.departmentId ? account.employee.department.name : (scope.departmentId || text('待设置部门', 'Department not assigned')) }}<span v-if="scope.role === 'salesperson'"> · {{ account.employee?.id === scope.employeeId ? account.employee.name : (scope.employeeId || text('待绑定员工', 'Employee not assigned')) }}</span></p>
           <div class="access-inline"><span>{{ text('工作台', 'Workbenches') }}</span><strong>{{ scope.role === 'none' ? text('未开放', 'Closed') : scope.role === 'admin' || benches.length === 5 ? text('全部 5 个', 'All 5') : text(`${benches.length} 个`, `${benches.length} enabled`) }}</strong></div>
-          <button type="button" class="chart-config-link" data-chart-permissions :disabled="busy || changed" @click="emit('charts')"><span><SlidersHorizontal :size="15" />{{ text('图表权限', 'Chart permissions') }}</span><span>{{ account.chartPermissions.length ? text('已配置', 'Configured') : text('角色默认', 'Role defaults') }}<ChevronRight :size="16" /></span></button>
+          <button type="button" class="chart-config-link" data-chart-permissions :disabled="busy || changed || role === 'administrator'" @click="emit('charts')"><span><SlidersHorizontal :size="15" />{{ text('图表权限', 'Chart permissions') }}</span><span>{{ role === 'administrator' ? text('全部权限', 'Full access') : account.chartPermissions.length ? text('已配置', 'Configured') : text('角色默认', 'Role defaults') }}<ChevronRight :size="16" /></span></button>
           <p v-if="templateChanged" class="template-note">{{ text('保存时应用所选角色的工作台与图表模板。', 'Saving applies the selected role’s workbench and chart defaults.') }}</p>
         </section>
         <details :open="advanced" @toggle="advanced = ($event.target as HTMLDetailsElement).open"><summary>{{ text('高级配置', 'Advanced settings') }}</summary><div class="advanced-content">

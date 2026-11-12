@@ -1,3 +1,4 @@
+vi.mock('@/api/workbench-replica', () => ({ getWorkbenchReplicaStatus: vi.fn().mockResolvedValue({ readMode: 'live' }), requestWorkbenchReplicaSync: vi.fn(), getWorkbenchReplicaJob: vi.fn() }))
 import { useWorkbenchAccess, clearWorkbenchAccess } from '@/composables/useWorkbenchAccess'
 import { matchesTaskStatus } from '@/utils/workbench-status'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
@@ -12,6 +13,7 @@ import * as exporter from '@/api/fop-order-export'
 import * as downloads from '@/utils/export'
 import { invalidateSession } from '@/utils/session'
 import OrderApprovalDialog from '@/components/autoflow/OrderApprovalDialog.vue'
+import WorkbenchTaskHeading from '@/components/autoflow/WorkbenchTaskHeading.vue'
 import { previewOrderApproval } from '@/api/fop-approvals'
 import AllocationInventoryDialog from '@/components/autoflow/AllocationInventoryDialog.vue'
 vi.mock('@/api/allocation-inventory', () => ({ getAllocationInventory: vi.fn(async () => ({ items: [], total: 0, page: 1, pageSize: 50, asOf: '2026-10-28T01:00:00Z', source: 'mock' })) }))
@@ -44,6 +46,78 @@ vi.mock('@/api/index', () => ({ default: { get: vi.fn(async (_path, { params: qu
 }) } }))
 
 describe('fulfillment order list', () => {
+  it('displays collected missing values without zero and blocks audit of read-only rows', async () => {
+    const row = { ...mockFopOrders[0]!, id: 'collected', paymentStatus: 'paid', reviewStatus: 'pending', cancelled: false, amount: null, currency: null,
+      items: [{ ...mockFopOrders[0]!.items[0]!, quantity: null }], dataQuality: { mode: 'collected', readOnly: true, missingFields: ['amount','currency','quantity'], reasons: ['关联配货单未采集'] } } as orders.FopOrder
+    vi.spyOn(orders, 'getFopOrders').mockResolvedValue({ source: 'fop', items: [row], total: 1, page: 1, pageSize: 50, departments: [], refreshedAt: '',
+      totals: { orderCount: 1, itemQuantity: null, amountsByCurrency: [], complete: false }, dataAvailability: { mode: 'collected', complete: false },
+      replica: { readMode: 'local', datasetId: 'real-batch', revision: '1', sourceSyncedAt: '2026-11-12T01:00:00Z', dataMode: 'collected', complete: false } })
+    const { wrapper } = await setup('?queue=review', 'sales')
+    expect(wrapper.get('td[data-label="订单金额"]').text()).toBe('—')
+    expect(wrapper.get('.product-quantity').text()).toBe('× —')
+    expect(wrapper.get('.quantity-total').text()).toBe('— 件')
+    await wrapper.get('tbody input[type="checkbox"]').setValue(true)
+    expect(wrapper.get('[data-testid="open-approval"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.text()).toContain('只读')
+  })
+  it('makes known product amount inspectable on collected exception rows without inventing a total', async () => {
+    const row = { ...mockFopOrders[0]!, cancelled: true, amount: null, currency: null,
+      amountBreakdown: { productAmount: 32.5, shippingFee: null, taxAmount: null, discountAmount: null },
+      dataQuality: { mode: 'collected', readOnly: true, missingFields: ['amount', 'currency'], reasons: ['linked_workbench_facts_not_provided'] } } as orders.FopOrder
+    vi.spyOn(orders, 'getFopOrders').mockResolvedValue({ source: 'fop', items: [row], total: 1, page: 1, pageSize: 50, departments: [], refreshedAt: '',
+      totals: { orderCount: 1, itemQuantity: null, amountsByCurrency: [], complete: false }, dataAvailability: { mode: 'collected', complete: false },
+      replica: { readMode: 'local', datasetId: 'real-batch', revision: '1', sourceSyncedAt: null, dataMode: 'collected', complete: false } })
+    const { wrapper } = await setup('?queue=exceptions', 'sales')
+    const cell = wrapper.get('td[data-label="订单金额"]')
+    expect(cell.text()).toBe('—')
+    await cell.get('button').trigger('focus'); await flushPromises()
+    expect(document.querySelector('[role="tooltip"]')?.textContent).toContain('产品32.50')
+    expect(document.querySelector('[role="tooltip"]')?.textContent).toContain('总金额—')
+    expect(document.querySelector('[role="tooltip"]')?.textContent).not.toContain('$')
+  })
+  it('distinguishes uncollected fulfillment queues from confirmed empty results', async () => {
+    vi.spyOn(orders, 'getFopOrders').mockResolvedValue({ source: 'fop', items: [], total: 0, page: 1, pageSize: 50, departments: [], refreshedAt: '',
+      totals: { orderCount: 0, itemQuantity: null, amountsByCurrency: [], complete: false }, dataAvailability: { mode: 'collected', complete: false, missingDatasets: ['allocation'] },
+      replica: { readMode: 'local', datasetId: 'real-batch', revision: '1', sourceSyncedAt: null, dataMode: 'collected', complete: false } })
+    const { wrapper } = await setup()
+    expect(wrapper.get('.result-count').text()).toBe('— · 待接入')
+    expect(wrapper.text()).toContain('本清单业务数据尚未接入')
+    expect(wrapper.text()).not.toContain('暂无符合条件')
+    expect(wrapper.get('tfoot').text()).not.toContain('0 笔订单')
+  })
+  it('keeps uncollected tracking unknown on approved sales rows', async () => {
+    const row = { ...mockFopOrders[0]!, reviewStatus: 'approved', logisticsInfo: null, logisticsChannels: null,
+      dataQuality: { mode: 'collected', readOnly: true, missingFields: ['dispatchDocuments'], reasons: ['发运单未采集'] } } as orders.FopOrder
+    vi.spyOn(orders, 'getFopOrders').mockResolvedValue({ source: 'fop', items: [row], total: 1, page: 1, pageSize: 50, departments: [], refreshedAt: '',
+      totals: { orderCount: 1, itemQuantity: null, amountsByCurrency: [], complete: false }, dataAvailability: { mode: 'collected', complete: false },
+      replica: { readMode: 'local', datasetId: 'real-batch', revision: '1', sourceSyncedAt: null, dataMode: 'collected', complete: false } })
+    const { wrapper } = await setup('?queue=completed', 'sales')
+    expect(wrapper.get('td[data-label="物流信息"]').text()).not.toContain('尚未获取')
+    expect(wrapper.get('td[data-label="物流信息"]').text()).toContain('—')
+  })
+  it('shows collected coverage reasons as checks without inventing exception duration', async () => {
+    const row = { ...mockFopOrders[0]!, id: 'collected-exception', cancelled: true, exception: null,
+      dataQuality: { mode: 'collected', readOnly: true, missingFields: ['allocationDocuments'], reasons: ['legacy_capture_not_consistent_snapshot', 'linked_workbench_facts_not_provided'] } } as orders.FopOrder
+    vi.spyOn(orders, 'getFopOrders').mockResolvedValue({ source: 'fop', items: [row], total: 1, page: 1, pageSize: 50, departments: [], refreshedAt: '',
+      totals: { orderCount: 1, itemQuantity: null, amountsByCurrency: [], complete: false }, dataAvailability: { mode: 'collected', complete: false },
+      replica: { readMode: 'local', datasetId: 'real-batch', revision: '1', sourceSyncedAt: null, dataMode: 'collected', complete: false } })
+    const { wrapper } = await setup('?queue=exceptions', 'sales')
+    expect(wrapper.get('td[data-label="异常原因"]').text()).toContain('关联业务单据尚未采集')
+    expect(wrapper.get('td[data-label="异常类型"]').text()).toBe('待核查')
+    expect(wrapper.get('td[data-label="异常时长"]').text()).toBe('—')
+  })
+
+  it('closes a stale approval preview and reloads when source sync completes during review', async () => {
+    vi.mocked(previewOrderApproval).mockResolvedValue({ source: 'mock', queue: 'review', items: [] })
+    const { wrapper } = await setup('?queue=review', 'sales')
+    await wrapper.get('tbody input[type="checkbox"]').setValue(true)
+    await wrapper.get('[data-testid="open-approval"]').trigger('click'); await flushPromises()
+    expect(wrapper.findComponent(OrderApprovalDialog).exists()).toBe(true)
+    const reads = vi.mocked(api.get).mock.calls.length
+    wrapper.getComponent(WorkbenchTaskHeading).vm.$emit('replica-synced'); await flushPromises()
+    expect(wrapper.findComponent(OrderApprovalDialog).exists()).toBe(false)
+    expect(api.get).toHaveBeenCalledTimes(reads + 1)
+  })
   it('offers interception filters, accepts matching server rows and migrates retired partial-outbound links', async () => {
     const row = { ...mockFopOrders[0]!, id: 'intercepted', orderNumber: 'OUT-TEST', shipmentInterceptStatus: 'intercepted', paymentStatus: 'paid', reviewStatus: 'approved', cancelled: false, fulfillmentProgress: { allocationCreated: true, shopifySync: 'pending', supplierShipment: 'shipped', stockReadiness: 'ready', allocationReview: 'approved', outbound: 'pending' } } as orders.FopOrder
     vi.spyOn(orders, 'getFopOrders').mockResolvedValue({ source: 'mock', items: [row], total: 1, page: 1, pageSize: 50, departments: [], refreshedAt: '', totals: { orderCount: 1, itemQuantity: 1, amountsByCurrency: [] } })
@@ -79,7 +153,7 @@ describe('fulfillment order list', () => {
     expect(wrapper.get('td[data-label="异常原因"]').find('img').exists()).toBe(false)
     await select.setValue('logistics_exception'); await flushPromises()
     expect(router.currentRoute.value.query.taskStatus).toBe('logistics_exception')
-    expect(get).toHaveBeenLastCalledWith(expect.objectContaining({ queue: 'exceptions', taskStatus: 'logistics_exception' }))
+    expect(get).toHaveBeenLastCalledWith(expect.objectContaining({ queue: 'exceptions', taskStatus: 'logistics_exception' }), expect.any(AbortSignal))
   })
   it('keeps shipped delivery exceptions in the exception list without changing their main workflow', () => {
     const source = { ...mockFopOrders[0]!, paymentStatus: 'paid', reviewStatus: 'approved', shippingStatus: 'shipped', exception: { type: 'delivery_exception', reason: null, hours: 3 } } as unknown as orders.FopOrder
@@ -89,7 +163,7 @@ describe('fulfillment order list', () => {
   })
 
   it.each([
-    ['sales', '已完成清单', 'review'], ['dispatch', '已履约订单', 'dispatch'], ['procurement', '采购完成清单', 'procurement'],
+    ['sales', '已审核清单', 'review'], ['dispatch', '已履约订单', 'dispatch'], ['procurement', '采购完成清单', 'procurement'],
     ['allocation', '配货完成清单', 'allocation_review'], ['warehouse', '已出库清单', 'shipping'],
   ])('reuses the %s list for completed records with a default week and no pending actions', async (role, heading, queue) => {
     const item: orders.FopOrder = { ...mockFopOrders[0]!, orderNumber: 'COMPLETED-ORDER', reviewedAt: '2026-10-28T00:00:00Z', dispatchApprovedAt: '2026-10-28T00:00:00Z', shopifySyncedAt: '2026-10-28T00:00:00Z', procurementCompletedAt: '2026-10-28T00:00:00Z', allocationApprovedAt: '2026-10-28T00:00:00Z', outboundCompletedAt: '2026-10-28T00:00:00Z', paymentStatus: 'paid', reviewStatus: role === 'procurement' ? 'pending' : 'approved',
@@ -100,30 +174,32 @@ describe('fulfillment order list', () => {
     expect(wrapper.get('tbody').text()).toContain('COMPLETED-ORDER')
     expect(wrapper.get('tbody').text()).toContain('2026/10/28 08:00')
     expect(wrapper.get('h2').text()).toBe(heading)
-    const rangeLabel = role === 'dispatch' ? '发运单审核时间范围' : '完成时间范围'
+    if (role === 'allocation') { expect(wrapper.findAll('thead th').map(th => th.text())).toContain('审核状态'); expect(wrapper.get('td[data-label="审核状态"]').text()).toBe('已审核') }
+    expect(wrapper.get('thead button[aria-label^="客户付款时间："]').element.closest('th')?.getAttribute('aria-sort')).toBe('descending')
+    const rangeLabel = '客户付款时间范围'
     expect(wrapper.get(`select[aria-label="${rangeLabel}"]`).element).toHaveProperty('value', '1w')
     if (role === 'dispatch') {
       expect(wrapper.get('thead').text()).toContain('发运单审核时间')
       expect(wrapper.get('thead').text()).not.toContain('Shopify同步时间')
-      expect(wrapper.get('.sort-consumer').attributes('title')).toContain('最新审核在前')
+      expect(wrapper.get('.sort-consumer').attributes('title')).toContain('点击按最新审核在前排序')
       expect(wrapper.get('.sort-consumer').attributes('title')).not.toContain('最新完成在前')
     }
     expect(wrapper.find('[data-testid="open-approval"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="open-inventory"]').exists()).toBe(false)
-    expect(get).toHaveBeenLastCalledWith(expect.objectContaining({ queue, completed: true, timeRange: '1w' }))
+    expect(get).toHaveBeenLastCalledWith(expect.objectContaining({ queue, completed: true, timeRange: '1w', sortBy: 'consumerPaidAt', sortOrder: 'desc' }), expect.any(AbortSignal))
     await wrapper.get(`select[aria-label="${rangeLabel}"]`).setValue('1m'); await flushPromises()
     expect(router.currentRoute.value.query).toMatchObject({ queue: 'completed', timeRange: '1m' })
-    expect(get).toHaveBeenLastCalledWith(expect.objectContaining({ completed: true, timeRange: '1m' }))
+    expect(get).toHaveBeenLastCalledWith(expect.objectContaining({ completed: true, timeRange: '1m' }), expect.any(AbortSignal))
     await router.push({ query: { ...router.currentRoute.value.query, page: '99' } }); await flushPromises()
     expect(router.currentRoute.value.query).toMatchObject({ queue: 'completed', timeRange: '1m', page: '1' })
     await wrapper.get('button.sort-payment').trigger('click'); await flushPromises()
-    expect(get).toHaveBeenLastCalledWith(expect.objectContaining({ completed: true, sortBy: 'paidAt', sortOrder: 'asc' }))
+    expect(get).toHaveBeenLastCalledWith(expect.objectContaining({ completed: true, sortBy: 'paidAt', sortOrder: 'asc' }), expect.any(AbortSignal))
     await wrapper.get('button.sort-consumer').trigger('click'); await flushPromises()
-    expect(get).toHaveBeenLastCalledWith(expect.objectContaining({ completed: true, sortBy: 'completedAt', sortOrder: 'desc' }))
+    expect(get).toHaveBeenLastCalledWith(expect.objectContaining({ completed: true, sortBy: 'completedAt', sortOrder: 'desc' }), expect.any(AbortSignal))
   })
   it.each(['unpaid', 'review'] as const)('shows only the total until hovering the amount in %s', async queue => {
     const source = mockFopOrders.find(o => orders.matchesFopQueue(o, queue))!
-    vi.spyOn(orders, 'getFopOrders').mockResolvedValue({ source: 'mock', items: [{ ...source, amount: 109.5, currency: 'USD', amountBreakdown: { productAmount: 100, shippingFee: 12, taxAmount: 2.5, discountAmount: 5 } }], total: 1, page: 1, pageSize: 50, departments: [], refreshedAt: '', totals: { orderCount: 1, itemQuantity: source.items.reduce((sum, item) => sum + item.quantity, 0), amountsByCurrency: [{ currency: 'USD', amount: 109.5 }] } })
+    vi.spyOn(orders, 'getFopOrders').mockResolvedValue({ source: 'mock', items: [{ ...source, amount: 109.5, currency: 'USD', amountBreakdown: { productAmount: 100, shippingFee: 12, taxAmount: 2.5, discountAmount: 5 } }], total: 1, page: 1, pageSize: 50, departments: [], refreshedAt: '', totals: { orderCount: 1, itemQuantity: source.items.reduce((sum, item) => sum + item.quantity!, 0), amountsByCurrency: [{ currency: 'USD', amount: 109.5 }] } })
     const { wrapper } = await setup(`?queue=${queue}`, 'sales')
     const cell = wrapper.get('tbody .amount-cell')
     expect(cell.text()).toBe('$109.50') // Authoritative total can include tax; never reconstruct it.
@@ -140,7 +216,7 @@ describe('fulfillment order list', () => {
   })
   it('distinguishes zero and missing detail amounts without adding the sales detail layout to other queues', async () => {
     const source = mockFopOrders.find(o => orders.matchesFopQueue(o, 'review'))!
-    vi.spyOn(orders, 'getFopOrders').mockResolvedValue({ source: 'mock', items: [{ ...source, amount: 25, currency: 'EUR', amountBreakdown: { productAmount: null, shippingFee: 0, taxAmount: 0, discountAmount: 0 } }], total: 1, page: 1, pageSize: 50, departments: [], refreshedAt: '', totals: { orderCount: 1, itemQuantity: source.items.reduce((sum, item) => sum + item.quantity, 0), amountsByCurrency: [{ currency: 'EUR', amount: 25 }] } })
+    vi.spyOn(orders, 'getFopOrders').mockResolvedValue({ source: 'mock', items: [{ ...source, amount: 25, currency: 'EUR', amountBreakdown: { productAmount: null, shippingFee: 0, taxAmount: 0, discountAmount: 0 } }], total: 1, page: 1, pageSize: 50, departments: [], refreshedAt: '', totals: { orderCount: 1, itemQuantity: source.items.reduce((sum, item) => sum + item.quantity!, 0), amountsByCurrency: [{ currency: 'EUR', amount: 25 }] } })
     const { wrapper, router } = await setup('?queue=review', 'sales')
     expect(wrapper.get('tbody .amount-cell').text()).toBe('€25.00')
     await wrapper.get('tbody .amount-cell button').trigger('focus'); await flushPromises()
@@ -177,7 +253,7 @@ describe('fulfillment order list', () => {
     await input.setValue('   '); await flushPromises()
     expect(router.currentRoute.value.query.search).toBeUndefined()
     expect(router.currentRoute.value.query).toMatchObject({ queue, page: '1', pageSize: '100', departmentId: 'd1', warehouseCode: 'HZ', paidAtOrder: 'desc' })
-    expect(get).toHaveBeenLastCalledWith(expect.objectContaining({ search: '', page: 1, pageSize: 100, departmentId: 'd1', warehouseCode: 'HZ', paidAtOrder: 'desc' }))
+    expect(get).toHaveBeenLastCalledWith(expect.objectContaining({ search: '', page: 1, pageSize: 100, departmentId: 'd1', warehouseCode: 'HZ', paidAtOrder: 'desc' }), expect.any(AbortSignal))
     const after = get.mock.calls.length
     await input.setValue(''); await flushPromises()
     expect(get.mock.calls.length).toBe(after)
@@ -231,7 +307,7 @@ describe('fulfillment order list', () => {
     expect(wrapper.get('.supplier-shipment-pill').attributes('data-tone')).toBe(tone === 'normal' ? 'success' : tone)
     for (const value of [undefined, null, 'invalid', '2026-02-30T00:00:00Z', '2026-10-01T00:00:00']) {
       get.mockResolvedValue({ ...page, items: [{ ...row, procurementPaidAt: value }] })
-      window.dispatchEvent(new Event('focus')); await flushPromises()
+      await wrapper.get('button.refresh-orders').trigger('click'); await flushPromises()
       expect(wrapper.get('td[data-label="采购付款时间"]').text()).toBe('—')
       expect(wrapper.get('.supplier-shipment-pill').attributes('data-aging')).toBe('normal')
     }
@@ -246,7 +322,7 @@ describe('fulfillment order list', () => {
     expect(wrapper.get('.supplier-shipment-pill').attributes('data-aging')).toBe('normal')
     vi.stubGlobal('navigator', { onLine: false })
     window.dispatchEvent(new Event('offline')); await flushPromises()
-    await vi.advanceTimersByTimeAsync(30000); await flushPromises()
+    await vi.advanceTimersByTimeAsync(30000); window.dispatchEvent(new Event('focus')); await flushPromises()
     expect(wrapper.get('.supplier-shipment-pill').attributes('data-aging')).toBe('warning')
     vi.setSystemTime(new Date('2026-10-29T04:00:01Z'))
     window.dispatchEvent(new Event('focus')); await flushPromises()
@@ -275,31 +351,38 @@ describe('fulfillment order list', () => {
     expect(wrapper.findComponent(OrderApprovalDialog).exists()).toBe(false)
   })
 
-  it('sorts procurement by actual order approval time and preserves receipt default and filters', async () => {
+  it('sorts procurement by actual order approval time and preserves newest receipt default and filters', async () => {
     const { wrapper, router } = await setup('?queue=procurement&departmentId=d1', 'procurement')
     expect(wrapper.get('thead').text()).not.toContain('创建时间')
-    expect(wrapper.get('button.sort-payment').element.closest('th')?.getAttribute('aria-sort')).toBe('ascending')
+    expect(wrapper.get('button.sort-payment').element.closest('th')?.getAttribute('aria-sort')).toBe('none')
     await wrapper.get('thead button[aria-label^="订单审核时间："]').trigger('click'); await flushPromises()
     expect(router.currentRoute.value.query).toMatchObject({ sortBy: 'reviewedAt', sortOrder: 'asc', departmentId: 'd1', page: '1' })
     await wrapper.get('.compact-consumer-sort').trigger('click'); await flushPromises()
-    expect(api.get).toHaveBeenLastCalledWith(expect.stringContaining('fulfillment-orders'), { params: expect.objectContaining({ sortBy: 'reviewedAt', sortOrder: 'desc' }) })
+    expect(api.get).toHaveBeenLastCalledWith(expect.stringContaining('fulfillment-orders'), { params: expect.objectContaining({ sortBy: 'reviewedAt', sortOrder: 'desc' }), signal: expect.any(AbortSignal) })
     expect(wrapper.get('thead button[aria-label^="订单审核时间："]').attributes('aria-label')).toContain('审核')
     await wrapper.get('button.sort-payment').trigger('click'); await flushPromises()
-    expect(router.currentRoute.value.query.sortBy).toBeUndefined()
+    expect(router.currentRoute.value.query.sortBy).toBe('paidAt')
   })
 
   it.each([['unpaid', 'sales'], ['review', 'sales'], ['exceptions', 'sales'], ['dispatch', 'dispatch'], ['allocation', 'allocation']] as const)('sorts consumer checkout time in %s and restores oldest receipt first', async (queue, role) => {
     const { wrapper, router } = await setup(`?queue=${queue}&departmentId=d1`, role)
-    expect(wrapper.get('button.sort-payment').element.closest('th')?.getAttribute('aria-sort')).toBe('ascending')
-    await wrapper.get('thead button[aria-label^="C端付款时间："]').trigger('click'); await flushPromises()
+    if (queue === 'unpaid') {
+      expect(wrapper.find('button.sort-payment').exists()).toBe(false)
+      expect(wrapper.find('.compact-payment-sort').exists()).toBe(false)
+      expect(wrapper.find('td[data-label="收款日期"]').exists()).toBe(false)
+      expect(wrapper.findAll('colgroup col')).toHaveLength(wrapper.findAll('thead th').length)
+    } else expect(wrapper.get('button.sort-payment').element.closest('th')?.getAttribute('aria-sort')).toBe('none')
+    expect(wrapper.get('thead button[aria-label^="客户付款时间："]').element.closest('th')?.getAttribute('aria-sort')).toBe('descending')
+    await wrapper.get('thead button[aria-label^="客户付款时间："]').trigger('click'); await flushPromises()
     expect(router.currentRoute.value.query).toMatchObject({ sortBy: 'consumerPaidAt', sortOrder: 'asc', page: '1', departmentId: 'd1' })
-    expect(wrapper.get('thead button[aria-label^="C端付款时间："]').element.closest('th')?.getAttribute('aria-sort')).toBe('ascending')
+    expect(wrapper.get('thead button[aria-label^="客户付款时间："]').element.closest('th')?.getAttribute('aria-sort')).toBe('ascending')
     await wrapper.get('.compact-consumer-sort').trigger('click'); await flushPromises()
     expect(router.currentRoute.value.query.sortOrder).toBe('desc')
     await wrapper.get('button.refresh-orders').trigger('click'); await flushPromises()
-    expect(api.get).toHaveBeenLastCalledWith('/autoflow/integrations/fop/fulfillment-orders', { params: expect.objectContaining({ sortBy: 'consumerPaidAt', sortOrder: 'desc', departmentId: 'd1' }) })
+    expect(api.get).toHaveBeenLastCalledWith('/autoflow/integrations/fop/fulfillment-orders', { params: expect.objectContaining({ sortBy: 'consumerPaidAt', sortOrder: 'desc', departmentId: 'd1' }), signal: expect.any(AbortSignal) })
+    if (queue === 'unpaid') return
     await wrapper.get('button.sort-payment').trigger('click'); await flushPromises()
-    expect(router.currentRoute.value.query.sortBy).toBeUndefined()
+    expect(router.currentRoute.value.query.sortBy).toBe('paidAt')
     expect(router.currentRoute.value.query.paidAtOrder).toBe('asc')
   })
 
@@ -377,7 +460,7 @@ describe('fulfillment order list', () => {
     await button.trigger('click'); await flushPromises()
     expect(wrapper.getComponent(OrderApprovalDialog).props('orderIds')).toHaveLength(2)
     const calls = vi.mocked(api.get).mock.calls.length
-    window.dispatchEvent(new Event('focus')); await flushPromises()
+    await wrapper.get('button.refresh-orders').trigger('click'); await flushPromises()
     expect(api.get).toHaveBeenCalledTimes(calls)
     wrapper.getComponent(OrderApprovalDialog).vm.$emit('completed'); await flushPromises()
     expect(wrapper.findComponent(OrderApprovalDialog).exists()).toBe(true)
@@ -387,19 +470,21 @@ describe('fulfillment order list', () => {
     expect(wrapper.get('[data-testid="open-approval"]').attributes('disabled')).toBeDefined()
   })
 
-  it('merges dispatch carriers and typed tracking numbers without mixing carrier groups', async () => {
+  it.each([['?queue=dispatch','dispatch'],['?queue=shipping','warehouse'],['?queue=completed&timeRange=1w','warehouse']])('keeps shipment groups and typed tracking for %s / %s', async (query,role) => {
     const row = { ...mockFopOrders.find(o => orders.matchesFopQueue(o, 'dispatch'))!, logisticsInfo: [
-      { carrierName: '云途YT', shopifyTracking: { type: 'full' as const, number: 'YT123' } },
-      { carrierName: '4PX', shopifyTracking: { type: 'last_mile' as const, number: '9400' } },
+      { carrierName: '云途YT', channelName: '云途标准专线', trackingNumbers: [{ type: 'full' as const, number: 'YT123' }] },
+      { carrierName: '4PX', channelName: '4PX标准专线', trackingNumbers: [{ type: 'last_mile' as const, number: '9400' }] },
     ] }
+    if(role==='warehouse') { row.reviewStatus='approved'; row.paymentStatus='paid'; row.fulfillmentProgress={...row.fulfillmentProgress,allocationCreated:true,stockReadiness:'ready',allocationReview:'approved',outbound:query.includes('completed')?'completed':'pending'}; row.cancelled=false; row.sourceOutboundStatus=query.includes('completed')?'2':'1' }
     vi.spyOn(orders, 'getFopOrders').mockResolvedValue({ source: 'mock', refreshedAt: new Date().toISOString(), departments: [], items: [row], total: 1, page: 1, pageSize: 50, totals: { orderCount: 1, itemQuantity: 1, amountsByCurrency: [] } })
-    const { wrapper } = await setup('?queue=dispatch', 'dispatch')
+    const { wrapper } = await setup(query, role)
     const headings = wrapper.findAll('thead th').map(cell => cell.text())
-    expect(headings).toContain('物流信息')
+    if(role==='warehouse') expect(wrapper.get('td[data-label="出库状态"]').text()).toBe(query.includes('completed')?'已出库':'部分出库')
+    expect(headings).toContain('物流渠道 / 跟踪号')
     expect(headings).not.toContain('物流商')
     expect(headings).not.toContain('跟踪号')
-    const groups = wrapper.get('td[data-label="物流信息"]').findAll('.logistics-group')
-    expect(groups.map(group => group.text())).toEqual(['云途YTQC: YT123', '4PXWC: 9400'])
+    const groups = wrapper.get('td[data-label="物流渠道 / 跟踪号"]').findAll('.logistics-group')
+    expect(groups.map(group => group.text())).toEqual(['云途标准专线YT123QC', '4PX标准专线9400WC'])
     expect(wrapper.findAll('tbody tr')[0]!.findAll('td')).toHaveLength(headings.length)
   })
 
@@ -417,32 +502,39 @@ describe('fulfillment order list', () => {
     expect(wrapper.findAll('tbody tr')[0]!.findAll('td')).toHaveLength(wrapper.findAll('thead th').length)
     await wrapper.get('input[type="search"]').setValue('pRiOrItY')
     await wrapper.get('form.search-form').trigger('submit'); await flushPromises()
-    expect(get).toHaveBeenLastCalledWith(expect.objectContaining({ queue: 'unpaid', search: 'pRiOrItY', page: 1 }))
+    expect(get).toHaveBeenLastCalledWith(expect.objectContaining({ queue: 'unpaid', search: 'pRiOrItY', page: 1 }), expect.any(AbortSignal))
     get.mockResolvedValue({ ...page, items: [{ ...row, customLogisticsChannelName: undefined }] })
-    window.dispatchEvent(new Event('focus')); await flushPromises()
+    await wrapper.get('button.refresh-orders').trigger('click'); await flushPromises()
     expect(wrapper.get('td[data-label="自定义物流渠道"]').text()).toBe('—')
     await router.push('/workbench/sales?queue=review'); await flushPromises()
     expect(wrapper.find('td[data-label="自定义物流渠道"]').exists()).toBe(false)
     expect(wrapper.get('input[type="search"]').attributes('placeholder')).toContain('物流服务商')
   })
 
-  it('shows actual logistics channel names and codes as separate lines only in the review queue', async () => {
-    const row = { ...mockFopOrders.find(order => orders.matchesFopQueue(order, 'review'))!, logisticsChannels: [{ name: '云途标准专线', code: 'YT-STD' }, { name: '云途带电专线', code: 'YT-BAT' }] }
-    const page = { source: 'mock' as const, refreshedAt: new Date().toISOString(), items: [row], total: 1, page: 1, pageSize: 50, totals: { orderCount: 1, itemQuantity: 1, amountsByCurrency: [] }, departments: [], salespeople: [] }
-    const get = vi.spyOn(orders, 'getFopOrders').mockResolvedValue(page)
-    const { wrapper, router } = await setup('?queue=review', 'sales')
-    const headers = wrapper.findAll('thead th').map(cell => cell.text())
-    expect(headers[headers.indexOf('发货仓库') + 1]).toBe('物流渠道')
-    const cell = wrapper.get('td[data-label="物流渠道"]')
-    expect(cell.findAll('.logistics-channel-entry').map(entry => [entry.get('.logistics-channel-name').text(), entry.get('.logistics-channel-code').text()])).toEqual([
-      ['云途标准专线', 'YT-STD'], ['云途带电专线', 'YT-BAT'],
-    ])
-    expect(wrapper.findAll('tbody tr')[0]!.findAll('td')).toHaveLength(headers.length)
-    get.mockResolvedValue({ ...page, items: [{ ...row, logisticsChannels: undefined }] })
-    window.dispatchEvent(new Event('focus')); await flushPromises()
-    expect(wrapper.get('td[data-label="物流渠道"]').text()).toBe('—')
-    await router.push('/workbench/sales?queue=unpaid'); await flushPromises()
-    expect(wrapper.find('td[data-label="物流渠道"]').exists()).toBe(false)
+  it('shows custom and actual channels but never tracking in review', async () => {
+    const row={...mockFopOrders.find(order=>orders.matchesFopQueue(order,'review'))!,dispatchDocuments:[],customLogisticsChannelName:'Standard Shipping',logisticsChannels:[{name:'包裹实际渠道',code:'ACTUAL'}],logisticsInfo:[{carrierName:null,channelName:'包裹实际渠道',shopifyTracking:{type:'full' as const,number:'STALE-TRACKING'}}]}
+    const page={source:'mock' as const,refreshedAt:new Date().toISOString(),items:[row],total:1,page:1,pageSize:50,totals:{orderCount:1,itemQuantity:1,amountsByCurrency:[]},departments:[]}
+    vi.spyOn(orders,'getFopOrders').mockResolvedValue(page)
+    const {wrapper}=await setup('?queue=review','sales')
+    expect(wrapper.get('td[data-label="物流信息"]').text()).toContain('Standard Shipping')
+    expect(wrapper.get('td[data-label="物流信息"]').text()).toContain('包裹实际渠道')
+    expect(wrapper.get('td[data-label="物流信息"]').text()).not.toContain('STALE-TRACKING')
+    expect(wrapper.get('td[data-label="物流信息"]').find('.tracking-type').exists()).toBe(false)
+    expect(wrapper.get('td[data-label="物流信息"]').text()).not.toMatch(/自定义|实际：/)
+    const headings=wrapper.findAll('thead th').map(th=>th.text())
+    expect(headings.slice(headings.indexOf('Customer')+1,headings.indexOf('Customer')+3)).toEqual(['物流信息','发货仓库'])
+    const cells=wrapper.findAll('tr.order-record')[0]!.findAll('td').map(td=>td.attributes('data-label'))
+    expect(cells.slice(cells.indexOf('Customer')+1,cells.indexOf('Customer')+3)).toEqual(['物流信息','发货仓库'])
+  })
+  it('shows tracking or not-yet-obtained in approved sales orders', async () => {
+    const base={...mockFopOrders[0]!,reviewStatus:'approved' as const,customLogisticsChannelName:'Standard Shipping',logisticsChannels:[{name:'标准专线',code:'STD'}]}
+    const items=[{...base,id:'with',logisticsInfo:[{carrierName:null,channelName:'标准专线',shopifyTracking:{type:'full' as const,number:'TRACK-NEW'}}]}, {...base,id:'without',logisticsInfo:[{carrierName:null,channelName:'标准专线',shopifyTracking:null}]}]
+    vi.spyOn(orders,'getFopOrders').mockResolvedValue({source:'mock',refreshedAt:new Date().toISOString(),items,total:2,page:1,pageSize:50,totals:{orderCount:2,itemQuantity:2,amountsByCurrency:[]},departments:[]})
+    const {wrapper}=await setup('?queue=completed','sales')
+    expect(wrapper.text()).toContain('已审核清单')
+    const cells=wrapper.findAll('td[data-label="物流信息"]')
+    expect(cells[0]!.text()).toContain('TRACK-NEW')
+    expect(cells[1]!.text()).toContain('尚未获取')
   })
   it.each([['unpaid', 'sales'], ['review', 'sales'], ['exceptions', 'sales'], ['dispatch', 'dispatch']] as const)('shows consumer checkout payment time in %s with no creation/receipt fallback', async (queue, role) => {
     const fixture = mockFopOrders.find(order => orders.matchesFopQueue(order, queue))!
@@ -450,20 +542,20 @@ describe('fulfillment order list', () => {
     const page = { source: 'mock' as const, refreshedAt: new Date().toISOString(), items: [row], total: 1, page: 1, pageSize: 50, totals: { orderCount: 1, itemQuantity: 1, amountsByCurrency: [] }, departments: [], salespeople: [] }
     const get = vi.spyOn(orders, 'getFopOrders').mockResolvedValue(page)
     const { wrapper, router } = await setup(`?queue=${queue}`, role)
-    expect(wrapper.findAll('th').map(cell => cell.text())).toContain('C端付款时间')
-    expect(wrapper.get('td[data-label="C端付款时间"]').text()).toBe('2026/10/02 05:30')
+    expect(wrapper.findAll('th').map(cell => cell.text())).toContain('客户付款时间')
+    expect(wrapper.get('td[data-label="客户付款时间"]').text()).toBe('2026/10/02 05:30')
     if (queue === 'unpaid') {
       expect(wrapper.text()).toContain('按账号角色展示待支付平台订单')
     }
-    if (queue === 'unpaid' || queue === 'review') expect(wrapper.get('thead button[aria-label^="C端付款时间："]').attributes('title')).toContain('订单的源单付款时间')
+    if (queue === 'unpaid' || queue === 'review') expect(wrapper.get('thead button[aria-label^="客户付款时间："]').attributes('title')).toContain('客户完成付款时间')
     expect(wrapper.find('td[data-label="创建时间"]').exists()).toBe(false)
     get.mockResolvedValue({ ...page, items: [{ ...row, consumerPaidAt: undefined }] })
-    window.dispatchEvent(new Event('focus')); await flushPromises()
-    expect(wrapper.get('td[data-label="C端付款时间"]').text()).toBe('—')
-    get.mockResolvedValue({ ...page, items: [{ ...row, reviewedAt: undefined, paymentStatus: 'paid', reviewStatus: 'pending', procurementProgress: { purchaseOrder: 'ordered', supplierPayment: 'unpaid' } }] })
+    await wrapper.get('button.refresh-orders').trigger('click'); await flushPromises()
+    expect(wrapper.get('td[data-label="客户付款时间"]').text()).toBe('—')
+    get.mockResolvedValue({ ...page, items: [{ ...row, reviewedAt: undefined, fulfillmentProgress:{...row.fulfillmentProgress,supplierShipment:'pending'}, paymentStatus: 'paid', reviewStatus: 'pending', procurementProgress: { purchaseOrder: 'ordered', supplierPayment: 'unpaid' } }] })
     await router.push('/workbench/procurement?queue=procurement'); await flushPromises()
     expect(wrapper.get('td[data-label="订单审核时间"]').text()).toBe('—')
-    expect(wrapper.find('td[data-label="C端付款时间"]').exists()).toBe(false)
+    expect(wrapper.get('td[data-label="客户付款时间"]').text()).toBe('2026/10/02 05:30')
   })
   it('uses Procurement progress and excludes nonexistent filter choices', async () => {
     const { wrapper } = await setup('?queue=procurement', 'procurement')
@@ -472,7 +564,7 @@ describe('fulfillment order list', () => {
     expect(labels).toEqual(['全部状态', '待建采购订单', '待制作发运单', '待推1688采购', '待支付采购款', '采购退款待跟进'])
     expect(labels.join(' ')).not.toContain('物流条件待确认')
     expect(labels.join(' ')).not.toContain('采购款部分支付')
-    expect(wrapper.findAll('th').map(cell => cell.text())).toContain('采购进度')
+    expect(wrapper.findAll('th').map(cell => cell.text())).toContain('采购状态')
     expect(wrapper.text()).not.toContain('采购订单状态')
   })
 
@@ -487,7 +579,7 @@ describe('fulfillment order list', () => {
     let dialog = document.querySelector('dialog')!
     for (const value of ['Jane Recipient', '+1 202-555-0147', 'jane@example.com', 'Boston', '02108', '18 Example Street', 'Unit 4']) expect(dialog.textContent).toContain(value)
     get.mockResolvedValue({ ...page, items: [{ ...row, shippingRecipient: { ...row.shippingRecipient, city: 'Cambridge' } }] })
-    window.dispatchEvent(new Event('focus')); await flushPromises()
+    await wrapper.get('button.refresh-orders').trigger('click'); await flushPromises()
     expect(dialog.textContent).toContain('Cambridge')
     await router.push('/workbench/sales?queue=review&search=test'); await flushPromises()
     expect(document.querySelector('dialog')).toBeNull()
@@ -511,10 +603,10 @@ describe('fulfillment order list', () => {
     expect(document.querySelector('dialog')?.textContent).toContain('Example Road')
     expect(document.querySelector('dialog')?.textContent).toContain('—')
     get.mockResolvedValue({ ...page, items: [] })
-    window.dispatchEvent(new Event('focus')); await flushPromises()
+    await wrapper.get('button.refresh-orders').trigger('click'); await flushPromises()
     expect(document.querySelector('dialog')).toBeNull()
     get.mockResolvedValue({ ...page, items: [{ ...row, shippingRecipient: undefined }] })
-    window.dispatchEvent(new Event('focus')); await flushPromises()
+    await wrapper.get('button.refresh-orders').trigger('click'); await flushPromises()
     expect(wrapper.get('.recipient-empty').text()).toBe('—')
     expect(wrapper.find('.recipient-name').exists()).toBe(false)
   })
@@ -526,17 +618,17 @@ describe('fulfillment order list', () => {
     const run = vi.spyOn(exporter, 'exportFopOrders').mockResolvedValue(new Blob(['xlsx']))
     vi.spyOn(downloads, 'downloadBlob').mockImplementation(() => {})
     const { wrapper, router } = await setup('?queue=unpaid&page=2&departmentId=d1', 'sales')
-    const range = wrapper.get('select[aria-label="C端付款时间范围"]')
+    const range = wrapper.get('select[aria-label="客户付款时间范围"]')
     expect(range.findAll('option').map(o => o.text())).toEqual(['全部', '近一周', '近一月', '近三月'])
     await range.setValue(timeRange); await flushPromises()
     expect(router.currentRoute.value.query).toMatchObject({ timeRange, page: '1', departmentId: 'd1' })
-    expect(get).toHaveBeenLastCalledWith(expect.objectContaining({ queue: 'unpaid', timeRange, page: 1 }))
+    expect(get).toHaveBeenLastCalledWith(expect.objectContaining({ queue: 'unpaid', timeRange, page: 1 }), expect.any(AbortSignal))
     await exportNow(wrapper)
     expect(run).toHaveBeenLastCalledWith(expect.objectContaining({ timeRange, mode: 'filtered' }), expect.any(AbortSignal))
     for (const queue of ['review', 'exceptions']) {
       await router.push(`/workbench/sales?queue=${queue}&timeRange=1m`); await flushPromises()
-      expect(wrapper.find('select[aria-label="C端付款时间范围"]').exists()).toBe(false)
-      expect(get).toHaveBeenLastCalledWith(expect.objectContaining({ queue, timeRange: undefined }))
+      expect(wrapper.find('select[aria-label="客户付款时间范围"]').exists()).toBe(false)
+      expect(get).toHaveBeenLastCalledWith(expect.objectContaining({ queue, timeRange: undefined }), expect.any(AbortSignal))
     }
   })
   it('uses full authorized country facets instead of page rows and preserves selection in export', async () => {
@@ -547,12 +639,12 @@ describe('fulfillment order list', () => {
     const country = wrapper.get('select[aria-label="发货国家"]')
     expect(country.findAll('option').map(o => o.text())).toEqual(['全部', '🇬🇧 GB', '🇺🇸 US'])
     await country.setValue('US'); await flushPromises()
-    expect(get).toHaveBeenLastCalledWith(expect.objectContaining({ shippingCountryCode: 'US', page: 1 }))
+    expect(get).toHaveBeenLastCalledWith(expect.objectContaining({ shippingCountryCode: 'US', page: 1 }), expect.any(AbortSignal))
     await exportNow(wrapper)
     expect(run).toHaveBeenLastCalledWith(expect.objectContaining({ shippingCountryCode: 'US', mode: 'filtered' }), expect.any(AbortSignal))
     await router.push('/workbench/sales?queue=unpaid&shippingCountryCode=US'); await flushPromises()
     expect(wrapper.find('select[aria-label="发货国家"]').exists()).toBe(false)
-    expect(get).toHaveBeenLastCalledWith(expect.objectContaining({ shippingCountryCode: undefined }))
+    expect(get).toHaveBeenLastCalledWith(expect.objectContaining({ shippingCountryCode: undefined }), expect.any(AbortSignal))
   })
   it('filters from the list toolbar and preserves the stage in search and export', async () => {
     const get = vi.spyOn(orders, 'getFopOrders').mockResolvedValue({ source: 'mock', refreshedAt: new Date().toISOString(), items: [], total: 100, page: 2, pageSize: 20,
@@ -565,10 +657,10 @@ describe('fulfillment order list', () => {
     expect(wrapper.get('.query-controls').findAll('select').map(el => el.attributes('aria-label'))).toEqual(['业务部门', '发货仓库'])
     await wrapper.get('.workbench-filter-secondary select[aria-label="采购进度筛选"]').setValue('payment_pending'); await flushPromises()
     expect(router.currentRoute.value.query).toMatchObject({ taskStatus: 'payment_pending', page: '1', departmentId: 'd1', ownerId: 'employee-1' })
-    expect(get).toHaveBeenLastCalledWith(expect.objectContaining({ taskStatus: 'payment_pending', page: 1 }))
+    expect(get).toHaveBeenLastCalledWith(expect.objectContaining({ taskStatus: 'payment_pending', page: 1 }), expect.any(AbortSignal))
     await wrapper.get('input[type="search"]').setValue('SKU-1')
     await wrapper.get('form.search-form').trigger('submit'); await flushPromises()
-    expect(get).toHaveBeenLastCalledWith(expect.objectContaining({ taskStatus: 'payment_pending', search: 'SKU-1' }))
+    expect(get).toHaveBeenLastCalledWith(expect.objectContaining({ taskStatus: 'payment_pending', search: 'SKU-1' }), expect.any(AbortSignal))
     await exportNow(wrapper)
     expect(run).toHaveBeenLastCalledWith(expect.objectContaining({ taskStatus: 'payment_pending', search: 'SKU-1', mode: 'filtered' }), expect.any(AbortSignal))
     await wrapper.get('.workbench-filter-secondary select[aria-label="采购进度筛选"]').setValue(''); await flushPromises()
@@ -594,12 +686,12 @@ describe('fulfillment order list', () => {
     await wrapper.get('button[aria-label="清除原采购状态筛选"]').trigger('click'); await flushPromises()
     expect(router.currentRoute.value.query.procurementStage).toBeUndefined()
     expect(router.currentRoute.value.query.taskStatus).toBe('payment_pending')
-    expect(get).toHaveBeenLastCalledWith(expect.objectContaining({ taskStatus: 'payment_pending', procurementStage: undefined }))
+    expect(get).toHaveBeenLastCalledWith(expect.objectContaining({ taskStatus: 'payment_pending', procurementStage: undefined }), expect.any(AbortSignal))
   })
 
   it('filters warehouses without a salesperson dropdown and keeps name/carrier search', async () => {
     const get = vi.spyOn(orders, 'getFopOrders').mockResolvedValue({ source: 'mock', refreshedAt: new Date().toISOString(), items: [], total: 100, page: 2, pageSize: 20,
-      totals: { orderCount: 100, itemQuantity: 100, amountsByCurrency: [] }, departments: [{ id: 'd1', name: 'Department 1' }, { id: 'd2', name: 'Department 2' }], salespeople: [{ id: 'employee-1', name: 'Employee 1' }] })
+      totals: { orderCount: 100, itemQuantity: 100, amountsByCurrency: [] }, departments: [{ id: 'd1', name: '业务一部' }, { id: 'd2', name: '业务二部' }, { id: 'ops', name: '物流管理' }], salespeople: [{ id: 'employee-1', name: 'Employee 1' }] })
     const { wrapper, router } = await setup('?queue=shipping&departmentId=d1&ownerId=employee-1&search=YT&page=2&pageSize=20&paidAtOrder=desc', 'warehouse')
     expect(wrapper.find('select[aria-label="业务员"]').exists()).toBe(false)
     expect(wrapper.get('.legacy-owner-filter').text()).toContain('Employee 1')
@@ -607,13 +699,14 @@ describe('fulfillment order list', () => {
     expect(wrapper.get('input[type="search"]').attributes('placeholder')).toContain('业务员')
     await wrapper.get('select[aria-label="发货仓库"]').setValue('SZ'); await flushPromises()
     expect(router.currentRoute.value.query).toMatchObject({ warehouseCode: 'SZ', page: '1', departmentId: 'd1', search: 'YT', paidAtOrder: 'desc' })
-    expect(get).toHaveBeenLastCalledWith(expect.objectContaining({ warehouseCode: 'SZ', departmentId: 'd1', search: 'YT', page: 1 }))
+    expect(get).toHaveBeenLastCalledWith(expect.objectContaining({ warehouseCode: 'SZ', departmentId: 'd1', search: 'YT', page: 1 }), expect.any(AbortSignal))
     await wrapper.get('.legacy-owner-filter button').trigger('click'); await flushPromises()
     expect(router.currentRoute.value.query.ownerId).toBeUndefined()
+    expect(wrapper.get('select[aria-label="业务部门"]').text()).not.toContain('物流管理')
     await wrapper.get('select[aria-label="业务部门"]').setValue('d2'); await flushPromises()
-    expect(get).toHaveBeenLastCalledWith(expect.objectContaining({ ownerId: undefined, warehouseCode: 'SZ', departmentId: 'd2', page: 1 }))
+    expect(get).toHaveBeenLastCalledWith(expect.objectContaining({ ownerId: undefined, warehouseCode: 'SZ', departmentId: 'd2', page: 1 }), expect.any(AbortSignal))
     await wrapper.get('select[aria-label="发货仓库"]').setValue(''); await flushPromises()
-    expect(get).toHaveBeenLastCalledWith(expect.objectContaining({ warehouseCode: undefined }))
+    expect(get).toHaveBeenLastCalledWith(expect.objectContaining({ warehouseCode: undefined }), expect.any(AbortSignal))
   })
 
   it('exports selected orders or all filtered pages from a non-approval queue', async () => {
@@ -718,6 +811,15 @@ describe('fulfillment order list', () => {
     expect(wrapper.get('.workbench-list-actions').text()).toContain('已选 0 笔')
   })
 
+  it('shows the fulfillment native purchase status alongside purchase actions', async () => {
+    const row = { ...mockFopOrders.find(o => orders.matchesFopQueue(o, 'procurement'))!, sourcePurchaseStatus: '1' as const }
+    vi.spyOn(orders, 'getFopOrders').mockResolvedValue({ source: 'mock', refreshedAt: new Date().toISOString(), departments: [], items: [row], total: 1, page: 1, pageSize: 50, totals: { orderCount: 1, itemQuantity: 1, amountsByCurrency: [] } })
+    const { wrapper } = await setup('?queue=procurement', 'procurement')
+    expect(wrapper.get('td[data-label="采购状态"]').text()).toContain('部分采购')
+    expect(wrapper.find('td[data-label="采购状态"] .native-status-detail').exists()).toBe(true)
+    expect(wrapper.find('select[aria-label="采购进度筛选"]').exists()).toBe(true)
+  })
+
   it('shows purchase stages instead of customer payment in procurement, and keeps payment in sales', async () => {
     const { wrapper, router } = await setup('?queue=procurement', 'procurement')
     const headers = () => wrapper.findAll('thead th').map(th => th.text())
@@ -730,33 +832,33 @@ describe('fulfillment order list', () => {
     expect(wrapper.find('tbody').text()).toContain('供应商部分发货')
     await router.push('/workbench/sales?queue=review'); await flushPromises()
     expect(headers()).not.toContain('支付状态')
-    expect(headers()).not.toContain('采购进度')
+    expect(headers()).not.toContain('采购状态')
   })
 
   it('shows each dispatch document status independently of payment and Shopify synchronization', async () => {
     const original = mockFopOrders.find(o => orders.matchesFopQueue(o, 'dispatch'))!
     const items = [
       { ...original, id: 'mixed', dispatchDocuments: [
-        { id: 'd1', number: 'FY-001', status: 'draft' as const },
-        { id: 'd2', number: 'FY-002', status: 'submitted' as const },
-        { id: 'd3', number: 'FY-003', status: 'approved' as const },
+        { id: 'd1', number: 'FY-001', status: 'draft' as const, deliveryStatus: 'PENDING' },
+        { id: 'd2', number: 'FY-002', status: 'submitted' as const, deliveryStatus: 'UPDATING' },
+        { id: 'd3', number: 'FY-003', status: 'approved' as const, deliveryStatus: 'TRACKING_OBTAINED' },
       ] },
       { ...original, id: 'none', dispatchDocuments: [] },
       { ...original, id: 'unknown', dispatchDocuments: undefined },
     ]
-    vi.spyOn(orders, 'getFopOrders').mockResolvedValueOnce({ source: 'mock', refreshedAt: '2026-10-24T05:30:00Z', departments: [], items, total: 3, page: 1, pageSize: 10, totals: { orderCount: 3, itemQuantity: 3, amountsByCurrency: [{ currency: 'USD', amount: original.amount * 3 }] } })
+    vi.spyOn(orders, 'getFopOrders').mockResolvedValueOnce({ source: 'mock', refreshedAt: '2026-10-24T05:30:00Z', departments: [], items, total: 3, page: 1, pageSize: 10, totals: { orderCount: 3, itemQuantity: 3, amountsByCurrency: [{ currency: 'USD', amount: original.amount! * 3 }] } })
     const { wrapper, router } = await setup('?queue=dispatch', 'dispatch')
     const headers = () => wrapper.findAll('thead th').map(th => th.text())
-    expect(headers()).toContain('发运单状态')
+    expect(headers()).toContain('履约状态')
     expect(headers()).not.toContain('支付状态')
     expect(headers()).not.toContain('Shopify 履约状态')
     const rows = wrapper.findAll('tbody tr')
-    const statusCell = rows[0]!.findAll('td')[headers().indexOf('发运单状态')]!
+    const statusCell = rows[0]!.findAll('td')[headers().indexOf('履约状态')]!
     const numberCell = rows[0]!.findAll('td')[headers().indexOf('发运单编号')]!
     for (const number of ['FY-001', 'FY-002', 'FY-003']) expect(numberCell.text()).toContain(number)
-    expect(headers().indexOf('发运单编号')).toBe(headers().indexOf('发运单状态') - 1)
+    expect(headers().indexOf('发运单编号')).toBe(headers().indexOf('履约状态') - 1)
     expect(statusCell.findAll('.dispatch-stage')).toHaveLength(1)
-    expect(statusCell.get('.dispatch-stage').text()).toBe('暂存')
+    expect(statusCell.get('.dispatch-stage').text()).toBe('更正中')
     expect(statusCell.find('details').exists()).toBe(false)
     expect(statusCell.text()).not.toContain('FY-')
     expect(wrapper.findAll('tfoot th, tfoot td').reduce((sum, cell) => sum + Number(cell.attributes('colspan') || 1), 0)).toBe(headers().length)
@@ -765,27 +867,27 @@ describe('fulfillment order list', () => {
     expect(rows[0]!.findAll('td')).toHaveLength(headers().length)
     await router.push('/workbench/sales?queue=review'); await flushPromises()
     expect(headers()).not.toContain('支付状态')
-    expect(headers()).not.toContain('发运单状态')
+    expect(headers()).not.toContain('履约状态')
   })
 
   it('offers approved unsynced follow-up and clears the obsolete completed-dispatch route', async () => {
     const original = mockFopOrders.find(o => orders.matchesFopQueue(o, 'dispatch'))!
-    const pending = { ...original, dispatchDocuments: [{ id: 'd1', number: 'FY-PENDING', status: 'approved' as const }], fulfillmentProgress: { ...original.fulfillmentProgress, shopifySync: 'pending' as const } }
-    const page = { source: 'mock' as const, refreshedAt: new Date().toISOString(), departments: [], items: [pending], total: 1, page: 1, pageSize: 50, totals: { orderCount: 1, itemQuantity: 1, amountsByCurrency: [{ currency: 'USD', amount: original.amount }] } }
+    const pending = { ...original, dispatchDocuments: [{ id: 'd1', number: 'FY-PENDING', status: 'approved' as const, deliveryStatus: 'TRACKING_OBTAINED' }], fulfillmentProgress: { ...original.fulfillmentProgress, shopifySync: 'pending' as const } }
+    const page = { source: 'mock' as const, refreshedAt: new Date().toISOString(), departments: [], items: [pending], total: 1, page: 1, pageSize: 50, totals: { orderCount: 1, itemQuantity: 1, amountsByCurrency: [{ currency: 'USD', amount: original.amount! }] } }
     const get = vi.spyOn(orders, 'getFopOrders').mockResolvedValue(page)
     const { wrapper, router } = await setup('?queue=dispatch&taskStatus=dispatch_synced', 'dispatch')
-    const filter = () => wrapper.get('select[aria-label="发运单状态筛选"]')
+    const filter = () => wrapper.get('select[aria-label="履约状态筛选"]')
     expect(router.currentRoute.value.query.taskStatus).toBeUndefined()
-    expect(filter().findAll('option').map(o => o.text())).toEqual(['全部待履约', '未创建', '暂存', '已提交', '已审核未同步'])
-    await filter().setValue('dispatch_approved'); await flushPromises()
-    expect(router.currentRoute.value.query.taskStatus).toBe('dispatch_approved')
-    expect(get).toHaveBeenLastCalledWith(expect.objectContaining({ taskStatus: 'dispatch_approved' }))
+    expect(filter().findAll('option').map(o => o.text())).toEqual(['全部待履约', '未创建', '待处理', '已取号未同步', '更正中', '已取消'])
+    await filter().setValue('dispatch_tracking'); await flushPromises()
+    expect(router.currentRoute.value.query.taskStatus).toBe('dispatch_tracking')
+    expect(get).toHaveBeenLastCalledWith(expect.objectContaining({ taskStatus: 'dispatch_tracking' }), expect.any(AbortSignal))
     expect(wrapper.find('h2').text()).toContain('待履约清单')
-    expect(wrapper.get('tbody .dispatch-stage').text()).toBe('已审核未同步')
+    expect(wrapper.get('tbody .dispatch-stage').text()).toBe('已取号未同步')
     expect(wrapper.get('tbody .dispatch-numbers').text()).toBe('FY-PENDING')
     expect(wrapper.find('tbody details').exists()).toBe(false)
     get.mockResolvedValue({ ...page, items: [], total: 0, totals: { orderCount: 0, itemQuantity: 0, amountsByCurrency: [] } })
-    window.dispatchEvent(new Event('focus')); await flushPromises()
+    await wrapper.get('button.refresh-orders').trigger('click'); await flushPromises()
     expect(wrapper.find('tbody .dispatch-stage').exists()).toBe(false)
   })
 
@@ -793,7 +895,7 @@ describe('fulfillment order list', () => {
     const copy = vi.fn().mockResolvedValue(undefined)
     Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: copy } })
     const original = mockFopOrders.find(o => orders.matchesFopQueue(o, 'allocation'))!
-    vi.spyOn(orders, 'getFopOrders').mockResolvedValueOnce({ source: 'mock', refreshedAt: '2026-10-24T05:30:00Z', departments: [], items: [{ ...original, shippingCountryCode: 'gb', items: [original.items[0]!, { ...original.items[0]!, sku: 'ANOTHER-SKU', name: 'Second product', variant: 'Blue / XL', quantity: 3 }] }], total: 1, page: 1, pageSize: 10, totals: { orderCount: 1, itemQuantity: 4, amountsByCurrency: [{ currency: 'USD', amount: original.amount }] } })
+    vi.spyOn(orders, 'getFopOrders').mockResolvedValueOnce({ source: 'mock', refreshedAt: '2026-10-24T05:30:00Z', departments: [], items: [{ ...original, shippingCountryCode: 'gb', items: [original.items[0]!, { ...original.items[0]!, sku: 'ANOTHER-SKU', name: 'Second product', variant: 'Blue / XL', quantity: 3 }] }], total: 1, page: 1, pageSize: 10, totals: { orderCount: 1, itemQuantity: 4, amountsByCurrency: [{ currency: 'USD', amount: original.amount! }] } })
     const { wrapper } = await setup()
     expect(wrapper.findAll('thead th').slice(0, 2).map(th => th.text())).toEqual(['订单编号', '商品图片 / 商品信息'])
     const row = wrapper.findAll('tbody tr').find(r => r.findAll('.product').length > 1)!
@@ -838,51 +940,29 @@ describe('fulfillment order list', () => {
     finish({ source: 'mock', items: [], departments: [{ id: 'd1', name: '业务一部' }], total: 1, totals: { orderCount: 1, itemQuantity: 2, amountsByCurrency: [{ currency: 'USD', amount: 10 }] }, page: 2, pageSize: 20, refreshedAt: '2026-10-24T05:30:00Z' })
     await flushPromises()
     expect(router.currentRoute.value.query).toMatchObject({ page: '1', departmentId: 'd1' })
-    expect(spy).toHaveBeenLastCalledWith(expect.objectContaining({ page: 1, departmentId: 'd1' }))
+    expect(spy).toHaveBeenLastCalledWith(expect.objectContaining({ page: 1, departmentId: 'd1' }), expect.any(AbortSignal))
     expect((wrapper.get('input[type=search]').element as HTMLInputElement).value).toBe('not submitted')
     wrapper.unmount()
   })
 
-  it('polls every 30 seconds only while visible and online, resumes immediately and stops after unmount', async () => {
-    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
-    const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible')
-    const online = vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(true)
-    const spy = vi.spyOn(orders, 'getFopOrders')
-    const { wrapper } = await setup()
-    const baseline = spy.mock.calls.length
-    await vi.advanceTimersByTimeAsync(30_000); await flushPromises()
-    expect(spy).toHaveBeenCalledTimes(baseline + 1)
-    visibility.mockReturnValue('hidden'); document.dispatchEvent(new Event('visibilitychange'))
-    await vi.advanceTimersByTimeAsync(30_000)
-    expect(spy).toHaveBeenCalledTimes(baseline + 1)
-    visibility.mockReturnValue('visible'); document.dispatchEvent(new Event('visibilitychange')); await flushPromises()
-    expect(spy).toHaveBeenCalledTimes(baseline + 2)
-    online.mockReturnValue(false); window.dispatchEvent(new Event('offline'))
-    await vi.advanceTimersByTimeAsync(30_000)
-    expect(spy).toHaveBeenCalledTimes(baseline + 2)
-    expect(wrapper.text()).toContain('网络已断开')
-    online.mockReturnValue(true); window.dispatchEvent(new Event('online')); await flushPromises()
-    expect(spy).toHaveBeenCalledTimes(baseline + 3)
-    wrapper.unmount(); window.dispatchEvent(new Event('focus'))
-    await vi.advanceTimersByTimeAsync(60_000)
-    expect(spy).toHaveBeenCalledTimes(baseline + 3)
-  })
-
-  it('coalesces focus and timer refreshes while a request is pending', async () => {
+  it('never polls or queries on focus, visibility or reconnection; manual refresh still works', async () => {
     vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
     vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible')
     vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(true)
+    const spy = vi.spyOn(orders, 'getFopOrders')
     const { wrapper } = await setup()
-    let reject!: (reason: unknown) => void
-    const spy = vi.spyOn(orders, 'getFopOrders').mockImplementationOnce(() => new Promise((_, fail) => { reject = fail }))
-    window.dispatchEvent(new Event('focus')); await flushPromises()
+    const baseline = spy.mock.calls.length
+    await vi.advanceTimersByTimeAsync(300_000)
+    window.dispatchEvent(new Event('focus'))
     document.dispatchEvent(new Event('visibilitychange'))
-    await vi.advanceTimersByTimeAsync(60_000)
-    expect(spy).toHaveBeenCalledTimes(1)
-    reject({ code: 'fop_permission_denied' }); await flushPromises()
-    expect(wrapper.find('tbody').exists()).toBe(false)
-    expect(wrapper.get('[role=alert]').text()).toContain('刷新未成功')
+    window.dispatchEvent(new Event('online'))
+    await flushPromises()
+    expect(spy).toHaveBeenCalledTimes(baseline)
+    await wrapper.get('button.refresh-orders').trigger('click'); await flushPromises()
+    expect(spy).toHaveBeenCalledTimes(baseline + 1)
     wrapper.unmount()
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(spy).toHaveBeenCalledTimes(baseline + 1)
   })
 
   it('sends the department filter to the API, resets pagination and preserves search and browser history', async () => {
@@ -891,11 +971,11 @@ describe('fulfillment order list', () => {
     expect(select().findAll('option').map(o => o.text())).toEqual(['营销中心', '业务一部', '业务二部'])
     await select().setValue('d2'); await flushPromises()
     expect(router.currentRoute.value.query).toMatchObject({ departmentId: 'd2', page: '1', search: 'DEMO' })
-    expect(api.get).toHaveBeenLastCalledWith('/autoflow/integrations/fop/fulfillment-orders', { params: expect.objectContaining({ departmentId: 'd2', page: 1, search: 'DEMO' }) })
+    expect(api.get).toHaveBeenLastCalledWith('/autoflow/integrations/fop/fulfillment-orders', { params: expect.objectContaining({ departmentId: 'd2', page: 1, search: 'DEMO' }), signal: expect.any(AbortSignal) })
     await wrapper.find('input[type=search]').setValue('another')
     await wrapper.find('form').trigger('submit'); await flushPromises()
     expect(router.currentRoute.value.query.departmentId).toBe('d2')
-    expect(wrapper.get('th[aria-sort="ascending"]').text()).toContain('收款日期')
+    expect(wrapper.get('th[aria-sort="descending"]').text()).toContain('客户付款时间')
     await router.push('/workbench/allocation?queue=allocation&departmentId=d1&page=2'); await flushPromises()
     expect((select().element as HTMLSelectElement).value).toBe('d1')
     await select().setValue(''); await flushPromises()
@@ -906,18 +986,19 @@ describe('fulfillment order list', () => {
 
   it('toggles payment sorting before pagination and preserves it on refresh and filtering', async () => {
     const { wrapper, router } = await setup('?queue=allocation&page=2&pageSize=20&departmentId=d1&search=DEMO')
-    expect(wrapper.get('th[aria-sort]').attributes('aria-sort')).toBe('ascending')
+    expect(wrapper.get('thead button[aria-label^="客户付款时间："]').element.closest('th')?.getAttribute('aria-sort')).toBe('descending')
     await wrapper.get('button.sort-payment').trigger('click'); await flushPromises()
-    expect(router.currentRoute.value.query).toMatchObject({ paidAtOrder: 'desc', page: '1', departmentId: 'd1', search: 'DEMO' })
-    expect(wrapper.get('th[aria-sort]').attributes('aria-sort')).toBe('descending')
-    expect(api.get).toHaveBeenLastCalledWith('/autoflow/integrations/fop/fulfillment-orders', { params: expect.objectContaining({ paidAtOrder: 'desc', page: 1 }) })
+    expect(router.currentRoute.value.query).toMatchObject({ paidAtOrder: 'asc', page: '1', departmentId: 'd1', search: 'DEMO' })
+    expect(wrapper.get('th[aria-sort]').attributes('aria-sort')).toBe('ascending')
+    expect(api.get).toHaveBeenLastCalledWith('/autoflow/integrations/fop/fulfillment-orders', { params: expect.objectContaining({ paidAtOrder: 'asc', page: 1 }), signal: expect.any(AbortSignal) })
     await wrapper.get('button.refresh-orders').trigger('click'); await flushPromises()
-    expect(api.get).toHaveBeenLastCalledWith('/autoflow/integrations/fop/fulfillment-orders', { params: expect.objectContaining({ paidAtOrder: 'desc' }) })
+    expect(api.get).toHaveBeenLastCalledWith('/autoflow/integrations/fop/fulfillment-orders', { params: expect.objectContaining({ paidAtOrder: 'asc' }), signal: expect.any(AbortSignal) })
+    expect(wrapper.get('select[aria-label="业务部门"]').text()).not.toContain('物流管理')
     await wrapper.get('select[aria-label="业务部门"]').setValue('d2'); await flushPromises()
-    expect(router.currentRoute.value.query.paidAtOrder).toBe('desc')
+    expect(router.currentRoute.value.query.paidAtOrder).toBe('asc')
     await wrapper.get('button.sort-payment').trigger('click'); await flushPromises()
-    expect(wrapper.get('th[aria-sort]').attributes('aria-sort')).toBe('ascending')
-    expect(api.get).toHaveBeenLastCalledWith('/autoflow/integrations/fop/fulfillment-orders', { params: expect.objectContaining({ paidAtOrder: 'asc' }) })
+    expect(wrapper.get('th[aria-sort]').attributes('aria-sort')).toBe('descending')
+    expect(api.get).toHaveBeenLastCalledWith('/autoflow/integrations/fop/fulfillment-orders', { params: expect.objectContaining({ paidAtOrder: 'desc' }), signal: expect.any(AbortSignal) })
     await router.push('/workbench/allocation?queue=allocation&paidAtOrder=invalid'); await flushPromises()
     expect(wrapper.find('tbody').exists()).toBe(false)
     expect(wrapper.get('[role=alert]').text()).toContain('排序')
@@ -926,8 +1007,8 @@ describe('fulfillment order list', () => {
   it.each([
     ['allocation', 'allocation', '发运单状态', 'dispatchDocumentStatus'],
     ['allocation', 'allocation_review', '发运单状态', 'dispatchDocumentStatus'],
-    ['dispatch', 'dispatch', '发运单状态', 'dispatchDocumentStatus'],
-    ['warehouse', 'shipping', '出库进度', 'outboundStatus'],
+    ['dispatch', 'dispatch', '履约状态', 'dispatchDocumentStatus'],
+    ['warehouse', 'shipping', '出库状态', 'outboundStatus'],
   ])('sorts %s/%s %s and retains filters across refresh', async (role, queue, label, field) => {
     const { wrapper, router } = await setup(`?queue=${queue}&departmentId=d1&search=DEMO`, role)
     const button = () => wrapper.get(`thead button[aria-label^="${label}："]`)
@@ -940,13 +1021,13 @@ describe('fulfillment order list', () => {
     expect(router.currentRoute.value.query.sortOrder).toBe('desc')
     expect(button().element.closest('th')?.getAttribute('aria-sort')).toBe('descending')
     await wrapper.get('button.refresh-orders').trigger('click'); await flushPromises()
-    expect(api.get).toHaveBeenLastCalledWith('/autoflow/integrations/fop/fulfillment-orders', { params: expect.objectContaining({ sortBy: field, sortOrder: 'desc', departmentId: 'd1', search: 'DEMO' }) })
+    expect(api.get).toHaveBeenLastCalledWith('/autoflow/integrations/fop/fulfillment-orders', { params: expect.objectContaining({ sortBy: field, sortOrder: 'desc', departmentId: 'd1', search: 'DEMO' }), signal: expect.any(AbortSignal) })
     if (queue === 'shipping') {
       expect(wrapper.find('select[aria-label="配货单状态"]').exists()).toBe(false)
     }
     await wrapper.get('button.sort-payment').trigger('click'); await flushPromises()
-    expect(router.currentRoute.value.query.sortBy).toBeUndefined()
-    expect(router.currentRoute.value.query.sortOrder).toBeUndefined()
+    expect(router.currentRoute.value.query.sortBy).toBe('paidAt')
+    expect(router.currentRoute.value.query.sortOrder).toBe('asc')
     expect(wrapper.get('button.sort-payment').element.closest('th')?.getAttribute('aria-sort')).toBe('ascending')
     await router.push(`/workbench/${role}?queue=${queue}&sortBy=invalid`); await flushPromises()
     expect(wrapper.find('table').exists()).toBe(false)
@@ -957,7 +1038,7 @@ describe('fulfillment order list', () => {
     const { wrapper, router } = await setup('?queue=allocation&departmentId=unknown')
     expect((wrapper.get('select[aria-label="业务部门"]').element as HTMLSelectElement).value).toBe('unknown')
     expect(router.currentRoute.value.query.departmentId).toBe('unknown')
-    expect(api.get).toHaveBeenLastCalledWith('/autoflow/integrations/fop/fulfillment-orders', { params: expect.objectContaining({ departmentId: 'unknown' }) })
+    expect(api.get).toHaveBeenLastCalledWith('/autoflow/integrations/fop/fulfillment-orders', { params: expect.objectContaining({ departmentId: 'unknown' }), signal: expect.any(AbortSignal) })
     wrapper.unmount()
   })
 
@@ -993,7 +1074,7 @@ describe('fulfillment order list', () => {
     for (const label of ['支付状态', '审核状态', '发运状态', '发货状态']) expect(wrapper.findAll('thead th').map(th => th.text())).not.toContain(label)
     expect(wrapper.findAll('tbody tr')).toHaveLength(6)
     expect((wrapper.get('select[aria-label="每页条数"]').element as HTMLSelectElement).value).toBe('50')
-    expect(api.get).toHaveBeenLastCalledWith('/autoflow/integrations/fop/fulfillment-orders', { params: expect.objectContaining({ page: 1, pageSize: 50 }) })
+    expect(api.get).toHaveBeenLastCalledWith('/autoflow/integrations/fop/fulfillment-orders', { params: expect.objectContaining({ page: 1, pageSize: 50 }), signal: expect.any(AbortSignal) })
     expect(wrapper.findAll('tbody img').length).toBeGreaterThan(0)
     expect(wrapper.find('thead').text()).not.toContain('配货状态')
     expect(wrapper.find('tbody').text()).not.toContain('未齐套，未配货')
@@ -1008,16 +1089,17 @@ describe('fulfillment order list', () => {
     await flushPromises()
     expect(wrapper.find('thead').text()).not.toContain('Shopify 履约状态')
     expect(wrapper.find('thead').text()).not.toContain('配货单状态')
-    expect(wrapper.find('tbody').text()).not.toContain('TO261015036100')
+    // Paid, unsynced orders may belong to both allocation and pending fulfillment.
+    expect(wrapper.find('tbody').text()).toContain('TO261015036100')
     await router.push('/workbench/warehouse?queue=shipping'); await flushPromises()
     const warehouseHeaders = wrapper.findAll('thead th').map(th => th.text())
-    expect(warehouseHeaders).toContain('出库进度')
-    expect(warehouseHeaders).not.toContain('出库状态')
+    expect(warehouseHeaders).toContain('出库状态')
+    expect(warehouseHeaders).not.toContain('出库进度')
     expect(warehouseHeaders).not.toContain('支付状态')
     expect(wrapper.findAll('tfoot th, tfoot td').reduce((sum, cell) => sum + Number(cell.attributes('colspan') || 1), 0)).toBe(warehouseHeaders.length)
     for (const row of wrapper.findAll('tbody tr')) {
       expect(row.findAll('td')).toHaveLength(warehouseHeaders.length)
-      expect(row.findAll('td')[warehouseHeaders.indexOf('出库进度')]!.text()).toBe('待出库')
+      expect(row.findAll('td')[warehouseHeaders.indexOf('出库状态')]!.text()).toBe('待出库')
     }
     expect(wrapper.find('tbody').text()).not.toContain('已齐套未审核')
     expect(wrapper.find('thead').text()).not.toContain('配货单状态')
@@ -1093,10 +1175,11 @@ describe('fulfillment order list', () => {
     const { wrapper, router } = await setup()
     await router.push('/workbench/dispatch?queue=dispatch')
     await flushPromises()
-    resolve(await real({ queue: 'allocation', page: 1, pageSize: 10 }))
+    const stale = await real({ queue: 'allocation', page: 1, pageSize: 10 })
+    resolve({ ...stale, items: stale.items.map(row => ({ ...row, orderNumber: 'STALE-ALLOCATION-RESPONSE' })) })
     await flushPromises()
     expect(wrapper.find('h2').text()).toContain('待履约')
-    expect(wrapper.find('tbody').text()).not.toContain('TO261015036100')
+    expect(wrapper.find('tbody').text()).not.toContain('STALE-ALLOCATION-RESPONSE')
     wrapper.unmount()
     spy.mockRestore()
   })
@@ -1110,6 +1193,17 @@ it.each([['unpaid', 'sales'], ['review', 'sales'], ['exceptions', 'sales'], ['di
     const { wrapper, router } = await setup(`?queue=${queue}`, role)
     expect(wrapper.get('.department-filter option[value=""]').text()).toBe('业务一部')
     expect(router.currentRoute.value.query.departmentId).toBeUndefined()
-    expect(orders.getFopOrders).toHaveBeenLastCalledWith(expect.objectContaining({ departmentId: undefined }))
+    expect(orders.getFopOrders).toHaveBeenLastCalledWith(expect.objectContaining({ departmentId: undefined }), expect.any(AbortSignal))
   } finally { mounted.splice(0).forEach(wrapper => wrapper.unmount()); vi.restoreAllMocks(); clearWorkbenchAccess() }
+})
+
+it('cancels the previous fulfillment read when filters change and on unmount', async () => {
+  const { wrapper, router } = await setup('?queue=review', 'sales')
+  const first = vi.mocked(api.get).mock.calls.at(-1)![1]?.signal
+  expect(first).toBeInstanceOf(AbortSignal)
+  await router.replace('/workbench/sales?queue=review&shippingCountryCode=GB'); await flushPromises()
+  expect(first!.aborted).toBe(true)
+  const latest = vi.mocked(api.get).mock.calls.at(-1)![1]!.signal!
+  wrapper.unmount()
+  expect(latest.aborted).toBe(true)
 })

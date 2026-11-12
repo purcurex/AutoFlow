@@ -1,3 +1,5 @@
+import { safeWangwangUrl } from './supplier-follow-up'
+import { compareConsumerPaymentTime } from './fop-order-sort'
 import { matchesBusinessScope, type BusinessScope } from '../users/business-scope'
 import { normalizeBusinessTimestamp } from './fop-business-time'
 import { summarizeFopOrders } from './fop-order-totals'
@@ -13,7 +15,7 @@ export interface PurchaseReturnSource {
 }
 export interface PurchaseReturnLine { id: string; sku: string; name: string; variant: string; imageUrl: string | null; quantity: number; returnedQuantity: number; sourceOrder: PurchaseReturnSource }
 export interface PurchaseReturn {
-  id: string; number: string | null; status: PurchaseReturnStatus; purchaseOrder: { id: string; number: string }; supplier: { id: string; name: string }
+  id: string; number: string | null; status: PurchaseReturnStatus; purchaseOrder: { id: string; number: string }; supplier: { id: string; name: string; wangwangAccount?: string | null }; supplierChatUrl?: string | null
   warehouseCode: string; warehouse: string; createdAt: string | null; logistics: { carrier: string | null; trackingNumber: string | null }
   lines: PurchaseReturnLine[]; quantity: number; returnedQuantity: number
 }
@@ -54,7 +56,7 @@ export function buildPurchaseReturns(snapshot: unknown, permission: FopPermissio
         sourceOrder: { id: text(source.id, true), number: text(source.number, true), kind: source.kind, customerName: text(source.customerName), owner: { id: text(source.owner?.id, true), name: text(source.owner?.name, true) }, department: { id: text(source.department?.id, true), name: text(source.department?.name, true) }, ...(source.departmentPathIds ? { departmentPathIds: [...source.departmentPathIds] } : {}) } })
     }
     if (!lines.length) continue
-    result.push(subtotal({ id: text(row.id, true), number: text(row.number) || null, status: purchaseReturnStatuses.includes(row.status as PurchaseReturnStatus) ? row.status as PurchaseReturnStatus : 'unknown', purchaseOrder: { id: text(row.purchaseOrder.id, true), number: text(row.purchaseOrder.number, true) }, supplier: { id: text(row.supplier?.id, true), name: text(row.supplier?.name, true) }, warehouseCode: text(row.warehouseCode), warehouse: text(row.warehouse), createdAt: normalizeBusinessTimestamp(row.createdAt), logistics: { carrier: text(row.logistics?.carrier) || null, trackingNumber: text(row.logistics?.trackingNumber) || null }, lines }))
+    result.push(subtotal({ id: text(row.id, true), number: text(row.number) || null, status: purchaseReturnStatuses.includes(row.status as PurchaseReturnStatus) ? row.status as PurchaseReturnStatus : 'unknown', purchaseOrder: { id: text(row.purchaseOrder.id, true), number: text(row.purchaseOrder.number, true) }, supplier: { id: text(row.supplier?.id, true), name: text(row.supplier?.name, true), wangwangAccount: text(row.supplier?.wangwangAccount) || null }, supplierChatUrl: safeWangwangUrl(row.supplierChatUrl, text(row.supplier?.wangwangAccount) || null), warehouseCode: text(row.warehouseCode), warehouse: text(row.warehouse), createdAt: normalizeBusinessTimestamp(row.createdAt), logistics: { carrier: text(row.logistics?.carrier) || null, trackingNumber: text(row.logistics?.trackingNumber) || null }, lines }))
   }
   return result.sort((a, b) => (b.createdAt ? Date.parse(b.createdAt) : -Infinity) - (a.createdAt ? Date.parse(a.createdAt) : -Infinity) || a.id.localeCompare(b.id))
 }
@@ -80,12 +82,7 @@ export function groupPurchaseReturnOrders(documents: PurchaseReturn[], orders: r
   }
   const search = query.search?.trim().toLowerCase()
   const rows = [...grouped.values()].filter(row => !search || [row.orderNumber, row.shopifyOrderNumber, row.customerName, row.storeName, row.owner?.name, ...row.items.flatMap(item => [item.sku, item.name]), ...row.purchaseReturns.flatMap(item => [item.number, item.purchaseOrder.number, item.supplier.name, item.logistics.trackingNumber, ...item.lines.flatMap(line => [line.sku, line.name])])].some(value => value?.toLowerCase().includes(search)))
-  return rows.sort((a, b) => {
-    const left = a.paidAt ? Date.parse(a.paidAt) : NaN, right = b.paidAt ? Date.parse(b.paidAt) : NaN
-    if (!Number.isFinite(left) || !Number.isFinite(right)) { if (Number.isFinite(left) !== Number.isFinite(right)) return Number.isFinite(left) ? -1 : 1 }
-    else if (left !== right) return (left - right) * (query.paidAtOrder === 'desc' ? -1 : 1)
-    return a.id.localeCompare(b.id)
-  })
+  return rows.sort((a, b) => compareConsumerPaymentTime(a, b, query.paidAtOrder ?? 'desc'))
 }
 export function summarizePurchaseReturnOrders(rows: readonly PurchaseReturnOrder[]) {
   return { ...summarizeFopOrders(rows), returnCount: new Set(rows.flatMap(row => row.purchaseReturns.filter(document => document.number).map(document => document.id))).size, quantity: rows.reduce((sum, row) => sum + row.returnQuantity, 0), returnedQuantity: rows.reduce((sum, row) => sum + row.returnedQuantity, 0) }

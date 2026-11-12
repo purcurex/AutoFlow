@@ -2,13 +2,13 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { FopOrderAmountBreakdown } from '@/api/fop-orders'
-import { formatCurrency } from '@/utils/currency'
+import { formatKnownCurrency } from '@/utils/currency'
 import InfoTip from './InfoTip.vue'
 
-const props = defineProps<{ amount: number; currency: string; breakdown?: FopOrderAmountBreakdown | null }>()
+const props = defineProps<{ amount: number | null; currency: string | null; breakdown?: FopOrderAmountBreakdown | null }>()
 const { locale } = useI18n()
 const zh = computed(() => String(locale.value).startsWith('zh'))
-const money = (value: number) => formatCurrency(value, props.currency, String(locale.value))
+const money = (value: number | null) => formatKnownCurrency(value, props.currency, String(locale.value))
 const details = computed(() => [
   { key: 'productAmount' as const, label: zh.value ? '产品' : 'Products' },
   { key: 'shippingFee' as const, label: zh.value ? '运费' : 'Shipping' },

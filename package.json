@@ -28,7 +28,12 @@
     "db:migration:revert": "npm run migration:revert --workspace=backend",
     "test:prod-smoke": "node scripts/production-smoke.mjs",
     "ci:local": "npm run lint && npm run test && npm run test:e2e && npm run build && npm run test:prod-smoke && npm run audit:prod",
-    "start": "npm run start:prod --workspace=backend"
+    "start": "npm run start:prod --workspace=backend",
+    "fop:test-workbench": "node scripts/fop-workbench-openapi.mjs",
+    "workbench:mock:seed": "node scripts/seed-workbench-mock.cjs",
+    "workbench:mock:repair-logistics": "node scripts/repair-workbench-mock-logistics.cjs",
+    "workbench:preflight": "node scripts/workbench-preflight.cjs",
+    "workbench:initialize": "node scripts/workbench-initialize.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

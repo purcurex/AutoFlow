@@ -1,3 +1,4 @@
+import { configureReplicaTestRuntime, isolateReplicaProviders } from './replica-test-boundary'
 import { INestApplication, ValidationPipe } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import { JwtModule, JwtService } from '@nestjs/jwt'
@@ -18,6 +19,7 @@ import { WorkflowExecutionService } from '../src/modules/discovery/workflow-exec
 import { WorkflowSeedAssetService } from '../src/modules/autoflow/workflow-seed-asset.service'
 import { FOP_DATA_PROVIDER, UnconfiguredFopDataProvider } from '../src/modules/fop-data/fop-data.types'
 
+configureReplicaTestRuntime()
 describe('Workbench authorization HTTP API (repository boundary stub)', () => {
   let app: INestApplication
   let jwt: JwtService
@@ -47,7 +49,7 @@ describe('Workbench authorization HTTP API (repository boundary stub)', () => {
     Object.assign(repository, { manager: { getRepository: () => ({ find: async () => [] }), transaction: async (callback: (manager: any) => Promise<unknown>) => callback({
       query: async () => undefined, getRepository: () => repository,
     }) } })
-    const module = await Test.createTestingModule({
+    const module = await isolateReplicaProviders(Test.createTestingModule({
       imports: [UsersModule, JwtModule.register({ secret })],
       controllers: [AuthController, AutoflowController],
       providers: [
@@ -59,7 +61,7 @@ describe('Workbench authorization HTTP API (repository boundary stub)', () => {
         { provide: WorkflowExecutionService, useValue: {} },
         { provide: WorkflowSeedAssetService, useValue: {} },
       ],
-    }).overrideProvider(getRepositoryToken(User)).useValue(repository)
+    })).overrideProvider(getRepositoryToken(User)).useValue(repository)
       // HTTP权限回归只使用仓储桩，不读取本机金蝶配置或发起外部请求。
       .overrideProvider(FOP_DATA_PROVIDER).useValue(new UnconfiguredFopDataProvider()).compile()
     app = module.createNestApplication()
@@ -130,10 +132,10 @@ describe('Workbench authorization HTTP API (repository boundary stub)', () => {
     await putAccess(payload).expect(400)
     expect(accounts.get(userId).role).toBe(UserRole.USER)
   })
-  it('blocks self-demotion and supports closing business data while retaining system administration', async () => {
+  it('blocks self-demotion and preserves the current administrator full business role', async () => {
     await putAccess(accessInput('collaboration'), adminId, adminId).expect(409)
     const result = await putAccess({ ...accessInput('administrator'), businessScope: { role: 'none', departmentId: null, employeeId: null } }, adminId, adminId).expect(200)
-    expect(result.body).toMatchObject({ role: 'admin', businessScope: { role: 'none' } })
+    expect(result.body).toMatchObject({ role: 'admin', businessScope: { role: 'admin' } })
     await get('/users/workbench-accounts', adminId).expect(200)
   })
 
@@ -256,20 +258,16 @@ describe('Workbench authorization HTTP API (repository boundary stub)', () => {
     accounts.get(userId).workbenchRoles = ['warehouse']
     await get('/autoflow/dashboard').expect(403)
   })
-  it('keeps management-only administrators out of every business endpoint while retaining account management', async () => {
-    accounts.get(adminId).businessRole = 'none'
-    accounts.get(adminId).workbenchRoles = ['sales', 'warehouse']
-    const access = await get('/workbench/access', adminId).expect(200)
-    expect(access.body).toMatchObject({ roles: [], isAdmin: true, businessRole: 'none' })
-    await get('/users/workbench-accounts', adminId).expect(200)
-    for (const path of ['/autoflow/dashboard', '/autoflow/integrations/fop/dashboard', '/autoflow/integrations/fop/fulfillment-orders?queue=review']) {
-      const denied = await get(path, adminId).expect(403)
-      expect(denied.body.code).toBe('business_access_disabled')
-    }
-    await request(app.getHttpServer()).put(`/api/users/${adminId}/business-scope`).auth(token(adminId), { type: 'bearer' })
-      .send({ role: 'admin', departmentId: null, employeeId: null }).expect(200)
-    expect((await get('/workbench/access', adminId).expect(200)).body.roles).toHaveLength(5)
-    expect(accounts.get(adminId).role).toBe('admin')
+  it('gives current administrators full business access despite historical closed scope fields', async () => {
+    accounts.get(adminId).businessRole='none';accounts.get(adminId).workbenchRoles=['sales','warehouse']
+    expect((await get('/workbench/access',adminId).expect(200)).body).toMatchObject({roles:['sales','procurement','allocation','dispatch','warehouse'],isAdmin:true,businessRole:'admin'})
+    await get('/users/workbench-accounts',adminId).expect(200)
+    await get('/autoflow/dashboard',adminId).expect(200)
+    // No fake business rows are produced for an unconfigured synthetic source.
+    expect((await get('/autoflow/integrations/fop/fulfillment-orders?queue=review',adminId).expect(403)).body.code).toBe('fop_binding_required')
+    accounts.get(adminId).role=UserRole.USER
+    expect((await get('/workbench/access',adminId).expect(200)).body.isAdmin).toBe(false)
+    await get('/users/workbench-accounts',adminId).expect(403)
   })
 
 })

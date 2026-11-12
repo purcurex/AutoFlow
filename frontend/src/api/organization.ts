@@ -4,7 +4,7 @@ import type { FopBindingDetails } from './fop-access'
 export interface OrganizationNode { id: string; parentId: string | null; name: string; kind: 'organization' | 'department'; sortOrder: number; archivedEmployeeCount?: number }
 export interface DirectoryProfile { source: 'company-directory'; sourceAccount: string; englishName: string; departmentPaths: string[]; gender: string; originalEmail: string; enterpriseEmail: string; telephone: string; address: string }
 export interface OrganizationEmployee { id: string; name: string; code: string; email: string; departmentId: string; workbenchRoles: WorkbenchRole[]; accountId?: string | null; jobTitle?: string; phone?: string; archivedAt?: string | null; directoryProfile?: DirectoryProfile | null }
-export interface EmployeeAccountInput { username: string; password: string; fopBinding?: { tenantId: string; userId: string } | null; kingdeeEmployee?: { employeeId: string; membershipId: string } }
+export interface EmployeeAccountInput { username: string; password: string; fopBinding?: { tenantId: string; userId: string } | null; kingdeeEmployee?: { employeeId: string; membershipId: string; employeeNumber: string } }
 export interface OrganizationEmployeeInput { name: string; code: string; email: string; departmentId: string; workbenchRoles: WorkbenchRole[]; jobTitle?: string; phone?: string; account?: EmployeeAccountInput | null }
 export type EmployeeProfile = Pick<OrganizationEmployeeInput, 'name' | 'code' | 'email' | 'jobTitle' | 'phone'>
 export interface EmployeeImportPreview { employees: EmployeeProfile[]; rowNumbers: number[]; errors: {row: number; message: string}[] }

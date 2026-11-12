@@ -1,0 +1,261 @@
+{
+  "checkedAt": "2026-11-12T09:25:04.873Z",
+  "database": "autoflow_local_demo",
+  "batch": {
+    "id": "ce79b730-2b01-4f12-8cce-8696c538285b",
+    "row_count": 44855,
+    "page_count": 449,
+    "source_as_of": "2026-11-12T09:11:26.523Z",
+    "completed_at": "2026-11-12T09:13:28.895Z"
+  },
+  "status": {
+    "source": "fop",
+    "refreshedAt": "2026-11-12T09:25:04.498Z",
+    "replica": {
+      "readMode": "local",
+      "datasetId": "ce79b730-2b01-4f12-8cce-8696c538285b",
+      "revision": "ce79b730-2b01-4f12-8cce-8696c538285b",
+      "sourceSyncedAt": "2026-11-12T09:11:26.523Z",
+      "dataMode": "collected",
+      "complete": false,
+      "missingDatasets": [
+        "allocation",
+        "dispatch",
+        "procurement",
+        "stock_orders",
+        "rma",
+        "receipt_notices",
+        "inventory",
+        "interception"
+      ]
+    },
+    "dataAvailability": {
+      "mode": "collected",
+      "complete": false,
+      "reason": "已采集 API 数据已入本地库；缺失字段留空，下游状态待核查，自动调用已暂停。"
+    },
+    "initialized": true,
+    "state": "collected",
+    "dataMode": "collected",
+    "readMode": "local",
+    "paused": true,
+    "automaticCallsEnabled": false,
+    "syncConfigured": false,
+    "nextScheduledAt": null,
+    "sourceSyncedAt": "2026-11-12T09:11:26.523Z",
+    "datasetId": "ce79b730-2b01-4f12-8cce-8696c538285b",
+    "revision": "ce79b730-2b01-4f12-8cce-8696c538285b",
+    "collected": {
+      "batchId": "ce79b730-2b01-4f12-8cce-8696c538285b",
+      "sourceAsOf": "2026-11-12T09:11:26.523Z",
+      "rowCount": 44855,
+      "pageCount": 449,
+      "missingDatasets": [
+        "allocation",
+        "dispatch",
+        "procurement",
+        "stock_orders",
+        "rma",
+        "receipt_notices",
+        "inventory",
+        "interception"
+      ]
+    },
+    "capabilities": {
+      "historicalImport": {
+        "implemented": true,
+        "executable": false,
+        "blockers": [
+          "fop_queries_paused",
+          "source_adapter_not_configured"
+        ]
+      },
+      "incrementalSync": {
+        "configured": false,
+        "executable": false,
+        "blockers": [
+          "fop_queries_paused",
+          "source_adapter_not_configured",
+          "dataset_not_initialized"
+        ]
+      }
+    },
+    "bootstrap": {
+      "allowed": true,
+      "configured": false,
+      "executable": false,
+      "blockers": [
+        "fop_queries_paused",
+        "workbench_replica_sync_not_configured"
+      ],
+      "missingConfiguration": [
+        "FOP_REPLICA_SNAPSHOT_BEGIN_URL",
+        "FOP_REPLICA_SNAPSHOT_PAGE_URL",
+        "FOP_REPLICA_BARRIER_URL",
+        "FOP_REPLICA_CHANGES_URL",
+        "FOP_REPLICA_AUTHORIZATION_URL",
+        "FOP_REPLICA_RECONCILE_URL",
+        "FOP_REPLICA_ACCESS_TOKEN"
+      ],
+      "resume": null
+    }
+  },
+  "lists": [
+    {
+      "path": "fulfillment-orders?queue=unpaid",
+      "http": 200,
+      "total": 29038,
+      "items": 20,
+      "mode": "collected",
+      "reason": "已采集 API 数据已入本地库；缺失字段留空，下游状态待核查，自动调用已暂停。"
+    },
+    {
+      "path": "fulfillment-orders?queue=review",
+      "http": 200,
+      "total": 35,
+      "items": 20,
+      "mode": "collected",
+      "reason": "已采集 API 数据已入本地库；缺失字段留空，下游状态待核查，自动调用已暂停。"
+    },
+    {
+      "path": "fulfillment-orders?queue=review&completed=true",
+      "http": 200,
+      "total": 15321,
+      "items": 20,
+      "mode": "collected",
+      "reason": "已采集 API 数据已入本地库；缺失字段留空，下游状态待核查，自动调用已暂停。"
+    },
+    {
+      "path": "fulfillment-orders?queue=exceptions",
+      "http": 200,
+      "total": 2061,
+      "items": 20,
+      "mode": "collected",
+      "reason": "已采集 API 数据已入本地库；缺失字段留空，下游状态待核查，自动调用已暂停。"
+    },
+    {
+      "path": "fulfillment-orders?queue=allocation_review",
+      "http": 200,
+      "total": 0,
+      "items": 0,
+      "mode": "collected",
+      "reason": "此数据集尚未接入，暂时留空；不代表没有业务数据。"
+    },
+    {
+      "path": "stock-orders?queue=all",
+      "http": 200,
+      "total": 0,
+      "items": 0,
+      "mode": "collected",
+      "reason": "此数据集尚未接入，暂时留空；不代表没有业务数据。"
+    },
+    {
+      "path": "rma-orders",
+      "http": 200,
+      "total": 0,
+      "items": 0,
+      "mode": "collected",
+      "reason": "此数据集尚未接入，暂时留空；不代表没有业务数据。"
+    },
+    {
+      "path": "purchase-groups?queue=procurement",
+      "http": 200,
+      "total": 0,
+      "items": 0,
+      "mode": "collected",
+      "reason": "此数据集尚未接入，暂时留空；不代表没有业务数据。"
+    },
+    {
+      "path": "purchase-returns?workbenchRole=warehouse",
+      "http": 200,
+      "total": 0,
+      "items": 0,
+      "mode": "collected",
+      "reason": "此数据集尚未接入，暂时留空；不代表没有业务数据。"
+    },
+    {
+      "path": "receipt-notices",
+      "http": 200,
+      "total": 0,
+      "items": 0,
+      "mode": "collected",
+      "reason": "此数据集尚未接入，暂时留空；不代表没有业务数据。"
+    }
+  ],
+  "localChecks": {
+    "paginationTotalStable": true,
+    "noDuplicatePages": true,
+    "searchTotal": 1,
+    "searchMatches": true,
+    "countryOptions": 13,
+    "foreignOwnerHttp": 403,
+    "exportHttp": 200,
+    "exportCheck": {
+      "sheets": [
+        "已采集订单",
+        "商品明细",
+        "说明"
+      ],
+      "orderMatches": true,
+      "missingTotalBlank": true,
+      "missingCurrencyBlank": true
+    }
+  },
+  "coverage": {
+    "allCollected": {
+      "orders": 44855,
+      "unpaid": 29038,
+      "review": 35,
+      "exceptions": 2061,
+      "distinctCovered": 31099,
+      "uncovered": 13756,
+      "reviewExceptionOverlap": 35
+    },
+    "target": {
+      "orders": 31094,
+      "unpaid": 29033,
+      "review": 35,
+      "exceptions": 2061,
+      "distinctCovered": 31094,
+      "uncovered": 0,
+      "reviewExceptionOverlap": 35
+    },
+    "byOrderState": {
+      "active_not_cancelled": {
+        "orders": 30574,
+        "unpaid": 29033,
+        "review": 35,
+        "exceptions": 1541,
+        "distinctCovered": 30574,
+        "uncovered": 0,
+        "reviewExceptionOverlap": 35
+      },
+      "cancelled": {
+        "orders": 520,
+        "unpaid": 0,
+        "review": 0,
+        "exceptions": 520,
+        "distinctCovered": 520,
+        "uncovered": 0,
+        "reviewExceptionOverlap": 0
+      },
+      "unknown_order_status": {
+        "orders": 0,
+        "unpaid": 0,
+        "review": 0,
+        "exceptions": 0,
+        "distinctCovered": 0,
+        "uncovered": 0,
+        "reviewExceptionOverlap": 0
+      }
+    },
+    "zeroOmissionsWithinCollectedTarget": true,
+    "allCollectedUncoveredAreFullyOutbound": true,
+    "targetUnknownDelivery": 52,
+    "excludedFullyOutbound": 13761
+  },
+  "fopAutomaticCallsPaused": true,
+  "formalReplicaOrders": 0,
+  "collectedOrders": 44855,
+  "sourceAsOfMeaning": "capture_started_at_not_source_watermark"
+}

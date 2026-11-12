@@ -47,3 +47,17 @@ it('ignores old search responses and clears private rows on session reset', asyn
   expect(wrapper.emitted('close')).toBeTruthy(); expect(wrapper.find('tbody').exists()).toBe(false)
   wrapper.unmount()
 })
+
+it('shows actionable guidance for too many customer matches and can search again without a candidate dropdown', async () => {
+  vi.mocked(getStockInventory).mockRejectedValueOnce({ code: 'fop_reserved_customers_search_required' })
+  const wrapper = await setup()
+  expect(wrapper.get('[role="alert"]').text()).toContain('输入更完整的客户名称或编码')
+  expect(wrapper.find('tbody').exists()).toBe(false)
+  await wrapper.get('input[aria-label="搜索客户"]').setValue('C001-exact')
+  await wrapper.get('form').trigger('submit'); await flushPromises()
+  expect(getStockInventory).toHaveBeenLastCalledWith(expect.objectContaining({ customerSearch: 'C001-exact', page: 1 }))
+  expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+  expect(wrapper.text()).toContain('Client')
+  expect(getStockCustomers).not.toHaveBeenCalled()
+  wrapper.unmount()
+})

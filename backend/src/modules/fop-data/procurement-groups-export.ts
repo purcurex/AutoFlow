@@ -25,7 +25,7 @@ export async function buildPurchaseGroupWorkbook(groups: PurchaseGroup[], query?
   const book = new ExcelJS.Workbook()
   book.creator = 'HyperZone'; book.created = now
   const sheet = book.addWorksheet('采购关联明细', { views: [{ state: 'frozen', ySplit: 1, xSplit: 2 }] })
-  sheet.columns = ['采购订单号', '供应商', '平台订单号', '采购付款状态', '采购付款时间（UTC+8）', '履约订单号', 'Shopify单号', '客户', '业务员', '部门', '仓库', 'SKU', '商品', '采购数量', '供应商已发数量', '供应商待发数量', '采购单状态', '采购类型', '采购平台', '待采购数量', '采购下单状态', '供应商发货状态', '店铺', '规格', '收款时间（UTC+8）', '发货时效', ...(query?.completed ? ['采购完成时间（UTC+8）'] : [])].map((header, i) => ({ header, key: String(i), width: [3, 13, 14, 15, 19].includes(i) ? 18 : 26 }))
+  sheet.columns = ['采购订单号', '供应商', '平台订单号', '采购付款状态', '采购付款时间（UTC+8）', '履约订单号', 'Shopify单号', '客户', '业务员', '部门', '仓库', 'SKU', '商品', '采购数量', '供应商已发数量', '供应商待发数量', '采购单状态', '采购类型', '采购平台', '待采购数量', '采购下单状态', '供应商发货状态', '店铺', '规格', '客户付款时间（UTC+8）', '发货时效', ...(query?.completed ? ['采购完成时间（UTC+8）'] : [])].map((header, i) => ({ header, key: String(i), width: [3, 13, 14, 15, 19].includes(i) ? 18 : 26 }))
   for (const group of groups) for (const row of group.rows) for (const line of row.lines.length ? row.lines : [null]) {
     const purchase = group.purchase
     sheet.addRow([purchase?.number ?? '', purchase?.supplier.name ?? '', purchase?.platformOrderNumber ?? '', purchase ? payments[purchase.payment] : '', dateText(purchase?.paidAt ?? null),
@@ -33,7 +33,7 @@ export async function buildPurchaseGroupWorkbook(groups: PurchaseGroup[], query?
       purchase ? line?.quantity ?? '' : '', purchase ? line?.shippedQuantity ?? '' : '', purchase && line ? Number((line.quantity - line.shippedQuantity).toFixed(8)) : '',
       group.kind === 'uncreated' ? '待创建采购单' : '已创建', purchase ? purchase.purchaseType === 'offline' ? '线下' : '线上' : '', purchase?.platform === '1688' ? '1688' : purchase?.platform === 'other' ? '其他平台' : '',
       !purchase ? line?.quantity ?? '' : '', purchase ? purchase.placement === 'placed' ? '已下单' : purchase.placement === 'unknown' ? '下单待确认' : purchase.platform === '1688' ? '待推1688采购' : '待下单' : '',
-      purchase ? shipments[group.shipment] : '', row.storeName, line?.variant ?? '', dateText(row.paidAt), shipmentAging(group, now), ...(query?.completed ? [dateText(row.completedAt ?? null)] : [])])
+      purchase ? shipments[group.shipment] : '', row.storeName, line?.variant ?? '', dateText(row.consumerPaidAt ?? null), shipmentAging(group, now), ...(query?.completed ? [dateText(row.completedAt ?? null)] : [])])
   }
   sheet.eachRow((row, i) => {
     row.height = i === 1 ? 32 : 44
@@ -46,20 +46,34 @@ export async function buildPurchaseGroupWorkbook(groups: PurchaseGroup[], query?
     })
   })
   sheet.autoFilter = { from: 'A1', to: `${query?.completed ? 'AA' : 'Z'}${sheet.rowCount}` }
+  const summary = book.addWorksheet('采购单汇总', { views: [{ state: 'frozen', ySplit: 1 }] })
+  summary.columns = ['采购订单号','供应商','平台订单号','履约笔数','SKU种数','采购数量','供应商已发数量','供应商待发数量','待采购数量'].map((header,i)=>({header,key:String(i),width:i<3?28:18}))
+  for (const group of groups) summary.addRow([group.purchase?.number ?? '',group.purchase?.supplier.name ?? '',group.purchase?.platformOrderNumber ?? '',group.orderCount,group.skuCount,
+    group.purchase ? group.quantity ?? '' : '',group.purchase ? group.shippedQuantity ?? '' : '',group.purchase ? group.pendingQuantity ?? '' : '',group.purchase ? '' : group.quantity ?? ''])
+  summary.eachRow((row,index)=>{
+    row.height=index===1?32:28
+    row.eachCell((cell,col)=>{
+      cell.numFmt=col>3?'0.########':'@'
+      cell.alignment={vertical:'middle',wrapText:true}
+      cell.font={name:'Microsoft YaHei',size:10,bold:index===1,color:{argb:index===1?'FFFFFFFF':'FF243C50'}}
+      cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:index===1?'FF23435D':index%2?'FFF3F6F9':'FFFFFFFF'}}
+    })
+  })
+  summary.autoFilter={from:'A1',to:`I${summary.rowCount}`}
   const notes = book.addWorksheet('说明')
   notes.columns = [{ header: '项目', key: 'label', width: 26 }, { header: '内容', key: 'value', width: 90 }]
   const rows = groups.flatMap(g => g.rows)
   notes.addRows([
     ['清单', query?.completed ? '采购完成清单' : query?.queue === 'procurement_shipping' ? '已采购待发货清单' : '待采购清单'],
     ['导出方式', query?.mode === 'selected' ? '导出所选采购组的全部关联明细' : '当前筛选全部采购组（跨分页）'],
-    ['生成时间（UTC+8）', dateText(now.toISOString())], ...(query?.completed ? [['完成时间范围', query.timeRange === '1m' ? '近一月' : query.timeRange === '3m' ? '近三月' : '近一周']] : []),
+    ['生成时间（UTC+8）', dateText(now.toISOString())], ...(query?.completed ? [['客户付款时间范围', query.timeRange === '1m' ? '近一月' : query.timeRange === '3m' ? '近三月' : '近一周']] : []),
     ['数据来源', source === 'mock' ? '演示数据' : 'FOP'],
     ['搜索条件', query?.search?.trim() || '无'], ['采购进度筛选', query?.purchaseStage ? stages[query.purchaseStage] : '全部状态'],
     ['业务部门', query?.departmentId ? [...new Set(rows.map(r => r.departmentName))].join('、') : '全部'],
     ['业务员', query?.ownerId ? [...new Set(rows.map(r => r.ownerName))].join('、') : '全部'],
     ['发货仓库', query?.warehouseCode === 'HZ' ? '杭州仓' : query?.warehouseCode === 'SZ' ? '深圳仓' : '全部'],
-    ['排序', query?.completed ? `采购完成时间 · ${query.sortOrder === 'asc' ? '升序' : '降序'}` : `最早收款时间 · ${query?.sortOrder === 'desc' ? '降序' : '升序'}；待创建采购单置顶`],
-    ['数量口径', '每行是履约订单关联商品数量；待创建采购单只列待采购数量，采购及供应商发货数量留空。'],
+    ['排序', `客户付款时间 · ${query?.sortOrder === 'asc' ? '升序' : '降序'}${query?.completed ? '' : '；待创建采购单置顶'}`],
+    ['数量口径', '采购单汇总沿用清单组头的全部有效采购分录统计；履约笔数按采购分录销售订单编号去重。关联明细每行是履约分摊数量，不用于反推整单汇总；待创建采购单仅列待采购数量。'],
     ['去重', '同一履约订单可以在多张采购单下出现；本表不重复导出整笔履约金额。'],
     ['采购类型', '线下与线上独立分类；线上区分1688和其他平台。'],
     ['发货时效', '仅已付款且仍有待发商品时计算，超过24小时、超过48小时分档；缺失或未来付款时间显示—。'],

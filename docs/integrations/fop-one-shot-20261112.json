@@ -1,0 +1,107 @@
+{
+  "checkedAt": "2026-11-12T07:14:38.212Z",
+  "mode": "one_shot_completed_without_publication",
+  "fopContacted": true,
+  "integrationUser": {
+    "name": "李铭嵩",
+    "username": "limingsong",
+    "authUserId": "2361840554507041792",
+    "tenantId": "hyperzone.test",
+    "verified": true
+  },
+  "company": {
+    "name": "杭州华智云服科技有限公司",
+    "sourceId": "100000",
+    "verified": true,
+    "legacyConfiguredNumber": "hyperzone",
+    "legacyNumberQueryNeedsConfirmation": true
+  },
+  "capture": {
+    "checkedAt": "2026-11-12T07:12:48.326Z",
+    "pages": 449,
+    "rows": 44855,
+    "uniqueOrders": 44855,
+    "cursorExhausted": true,
+    "hashesVerified": true,
+    "factsRowsByType": {},
+    "absentRawHeaderFields": {
+      "hzkj_total_amount": 44855,
+      "hzkj_settlecurrency": 44855,
+      "hzkj_fre_quo_amount": 44855,
+      "hzkj_fixed_tax_fee": 44855,
+      "hzkj_discount_cost": 44855,
+      "sourceVersion": 44855
+    },
+    "stableSnapshot": false,
+    "published": false,
+    "startedAt": "2026-11-12T07:09:44.449Z",
+    "finishedAt": "2026-11-12T07:12:48.326Z",
+    "storage": "private_runtime_files",
+    "businessDatabaseImported": false
+  },
+  "runtime": {
+    "database": "autoflow_local_demo",
+    "dataMode": "kingdee",
+    "readMode": "local",
+    "mockEnabled": false,
+    "fopQueriesPaused": true,
+    "scheduledSyncEnabled": false,
+    "activeSyncJobs": 0,
+    "initialized": false,
+    "publishedDocuments": 0,
+    "backendPort": 3000
+  },
+  "migrations": {
+    "backupCreated": true,
+    "backupFormat": "PostgreSQL custom",
+    "appliedThisRound": 6,
+    "appliedTotal": 51,
+    "pending": 0,
+    "tables": 63,
+    "columns": 980
+  },
+  "bootstrap": {
+    "configured": false,
+    "errorCode": "workbench_replica_sync_not_configured",
+    "missingServiceUrls": [
+      "FOP_REPLICA_SNAPSHOT_BEGIN_URL",
+      "FOP_REPLICA_SNAPSHOT_PAGE_URL",
+      "FOP_REPLICA_CHANGES_URL",
+      "FOP_REPLICA_BARRIER_URL",
+      "FOP_REPLICA_AUTHORIZATION_URL",
+      "FOP_REPLICA_RECONCILE_URL"
+    ],
+    "fopDevelopmentTodo": [
+      "E01",
+      "E02",
+      "E03",
+      "E04",
+      "E05"
+    ]
+  },
+  "verification": {
+    "backendBuild": "passed",
+    "rawPageHashes": "passed",
+    "uniqueMonotonicIds": "passed",
+    "sameTenantUserAndCompany": "passed",
+    "finalHasMore": false,
+    "localServicePreflight": "passed",
+    "authenticatedUi": "not_verified_existing_saved_login_returned_401",
+    "browserUi": "not_verified_computer_use_permission_unavailable",
+    "pauseAndBootstrapTests": {
+      "suites": 4,
+      "tests": 24,
+      "passed": true
+    },
+    "fieldMatrix": "passed_23_lists_287_fields_348_mappings",
+    "handoffTable": "passed_six_missing_services_and_concise_first_columns"
+  },
+  "limitations": [
+    "旧接口主键扫描不提供一致性快照、水位及数量金额核对证明。",
+    "原始采集全部facts为空；核心金额、结算币种与来源版本缺失。",
+    "原组织编码通用清单返回0条，与同组织原始事实接口存在差异，待FOP核查过滤配置。",
+    "采集完成不等于初始化发布成功；工作台真实副本当前仍未初始化。",
+    "未调用审核、付款、即时库存或备货库存接口。"
+  ],
+  "privateEvidenceDirectory": ".runtime/fop-initialize-20261112"
+}

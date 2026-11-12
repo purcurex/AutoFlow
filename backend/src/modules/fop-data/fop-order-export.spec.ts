@@ -20,6 +20,31 @@ const headers = (sheet: ExcelJS.Worksheet) => sheet.getRow(1).values as string[]
 const value = (sheet: ExcelJS.Worksheet, row: number, header: string) => sheet.getRow(row).getCell(headers(sheet).indexOf(header))
 
 describe('fulfillment Excel export', () => {
+  it('places sales logistics and warehouse after Customer and exports approved tracking', async () => {
+    const workbook=new ExcelJS.Workbook()
+    await workbook.xlsx.load(await buildFulfillmentWorkbook([{...order,reviewStatus:'approved',customLogisticsChannelName:'Standard Shipping',logisticsChannels:[{name:'标准专线',code:'STD'}],logisticsInfo:[{carrierName:null,channelName:'标准专线',shopifyTracking:{type:'full',number:'TRACK-NEW'}}]}, {...order,id:'empty',reviewStatus:'approved'}],{queue:'review',completed:true,mode:'filtered'},'mock') as unknown as ExcelJS.Buffer)
+    const ws=workbook.getWorksheet('订单清单')!
+    expect(headers(ws).slice(headers(ws).indexOf('Customer')+1,headers(ws).indexOf('Customer')+3)).toEqual(['物流信息','发货仓库'])
+    expect(value(ws,2,'物流信息').value).toContain('TRACK-NEW')
+    expect(value(ws,3,'物流信息').value).toContain('尚未获取')
+  })
+
+  it.each([false,true])('exports warehouse completed=%s dispatch channels and typed numbers',async completed=>{
+    const book=new ExcelJS.Workbook()
+    await book.xlsx.load(await buildFulfillmentWorkbook([{...order,logisticsInfo:[{carrierName:null,channelName:'已审核发运渠道',shopifyTracking:null,trackingNumbers:[{type:'full',number:'FULL-1'},{type:'last_mile',number:'LAST-1'}]}]}],{queue:'shipping',completed,mode:'filtered'},'mock') as unknown as ExcelJS.Buffer)
+    const sheet=book.getWorksheet('订单清单')!
+    expect(value(sheet,2,'物流渠道 / 跟踪号').value).toBe('已审核发运渠道\nFULL-1 QC\nLAST-1 WC')
+  })
+
+  it('exports native fulfillment purchase and outbound values without replacing them with derived stages',async()=>{
+    const purchase=(await read([{...order,sourcePurchaseStatus:'1'}],'procurement')).getWorksheet('订单清单')!
+    expect(value(purchase,2,'采购状态').value).toContain('部分采购')
+    const outbound=(await read([{...order,sourceOutboundStatus:'1'}],'shipping')).getWorksheet('订单清单')!
+    expect(value(outbound,2,'出库状态').value).toBe('部分出库')
+    const missing=(await read([{...order,sourceOutboundStatus:null}],'shipping')).getWorksheet('订单清单')!
+    expect(value(missing,2,'出库状态').value).toBe('待确认')
+  })
+
   it('exports explicit outbound interception states and leaves unavailable facts blank', async () => {
     const rows = ['intercepted', 'released', null].map((shipmentInterceptStatus, index) => ({ ...order, id: String(index), shipmentInterceptStatus })) as FopOrder[]
     const ws = (await read(rows, 'shipping')).getWorksheet('订单清单')!
@@ -32,20 +57,20 @@ describe('fulfillment Excel export', () => {
     ['allocation_review', '配货审核时间（UTC+8）'], ['shipping', '出库完成时间（UTC+8）'],
   ] as const)('exports %s completion dates and completed-state metadata consistently with the page', async (queue, dateHeader) => {
     const at = '2026-10-28T00:00:00Z'
-    const done = { ...order, reviewStatus: 'approved' as const, reviewedAt: at, dispatchApprovedAt: at, shopifySyncedAt: '2026-10-01T00:00:00Z', procurementCompletedAt: at, allocationApprovedAt: at, outboundCompletedAt: at,
+    const done = { ...order, reviewStatus: 'approved' as const, consumerPaidAt: '2026-10-26T00:00:00Z', reviewedAt: at, dispatchApprovedAt: at, shopifySyncedAt: '2026-10-01T00:00:00Z', procurementCompletedAt: at, allocationApprovedAt: at, outboundCompletedAt: at,
       procurementProgress: { purchaseOrder: 'ordered' as const, supplierPayment: 'paid' as const, alibabaOrder: 'pushed' as const },
-      fulfillmentProgress: { ...order.fulfillmentProgress, shopifySync: 'synced' as const, allocationReview: 'approved' as const, outbound: 'completed' as const } }
+      fulfillmentProgress: { ...order.fulfillmentProgress, supplierShipment: 'shipped' as const, shopifySync: 'synced' as const, allocationReview: 'approved' as const, outbound: 'completed' as const } }
     const book = new ExcelJS.Workbook()
     await book.xlsx.load(await buildFulfillmentWorkbook([done], { queue, completed: true, mode: 'filtered' }, 'mock') as unknown as ExcelJS.Buffer)
     const ws = book.getWorksheet('订单清单')!, info = book.getWorksheet('导出说明')!
     expect(value(ws, 2, dateHeader).value).toBe('2026-10-28 08:00:00')
-    if (queue !== 'review') expect(headers(ws)).toContain('完成状态')
+    expect(value(ws, 2, '客户付款时间（UTC+8）').value).toBe('2026-10-26 08:00:00')
+    if (queue !== 'review') expect(headers(ws)).toContain(queue === 'dispatch' ? '履约状态' : queue === 'allocation_review' ? '审核状态' : queue === 'procurement' ? '采购状态' : queue === 'shipping' ? '出库状态' : '完成状态')
+    if (queue === 'allocation_review') expect(value(ws,2,'审核状态').value).toBe('已审核')
     const infoRows = info.getSheetValues() as (string[] | undefined)[]
-    expect(infoRows.find(row => row?.[1] === '清单状态筛选')?.[2]).toBe('已完成')
-    if (queue === 'dispatch') {
-      expect(infoRows.find(row => row?.[1] === '发运单审核时间范围')?.[2]).toBe('近一周')
-      expect(infoRows.find(row => row?.[1] === '排序')?.[2]).toBe('发运单审核时间 · 降序')
-    }
+    expect(infoRows.find(row => row?.[1] === '清单状态筛选')?.[2]).toBe(queue === 'allocation_review' ? '已审核' : '已完成')
+    expect(infoRows.find(row => row?.[1] === '客户付款时间范围')?.[2]).toBe('近一周')
+    expect(infoRows.find(row => row?.[1] === '排序')?.[2]).toBe('客户付款时间 · 降序')
   })
   it.each(['unpaid', 'review'] as const)('exports separate numeric amount details in %s without changing the total', async queue => {
     const detailed = { ...order, amount: 109.5, amountBreakdown: { productAmount: 100, shippingFee: 0, taxAmount: 14.5, discountAmount: 5 } }
@@ -84,25 +109,25 @@ describe('fulfillment Excel export', () => {
     expect(headers(pending)).toContain('订单审核时间（UTC+8）')
   })
   it('does not infer Shopify selection from empty or malformed typed data', async () => {
-    const groups = [{ carrierName: 'YT', trackingNumbers: [] }]
+    const groups = [{ carrierName: 'YT', channelName: 'YT Standard', trackingNumbers: [] }]
     const ws = (await read([{ ...order, carrier: 'Legacy Carrier', trackingNumber: '000123', logisticsInfo: groups }], 'dispatch')).getWorksheet('订单清单')!
-    expect(value(ws, 2, '物流信息').value).toBe('YT\n—')
-    expect(logisticsInfoText([{ carrierName: 'YT', shopifyTracking: { type: 'invalid', number: 'bad' } }], 'Legacy Carrier', '000123')).toBe('YT\n—')
-    expect(logisticsInfoText([{ carrierName: 'YT', shopifyTracking: { type: 'first_mile', number: 'JSEJX2881622244YQ' } }], 'Legacy Carrier', '000123')).toBe('YT\nTC: JSEJX2881622244YQ')
+    expect(value(ws, 2, '物流渠道 / 跟踪号').value).toBe('YT Standard\n—')
+    expect(logisticsInfoText([{ carrierName: 'YT', channelName: 'YT Standard', shopifyTracking: { type: 'invalid', number: 'bad' } }], 'Legacy Carrier', '000123')).toBe('YT Standard\n—')
+    expect(logisticsInfoText([{ carrierName: 'YT', channelName: 'YT Standard', shopifyTracking: { type: 'first_mile', number: 'JSEJX2881622244YQ' } }], 'Legacy Carrier', '000123')).toBe('YT Standard\nJSEJX2881622244YQ')
   })
-  it('exports only the Shopify-selected number in each carrier group', async () => {
+  it('exports independent dispatch channel and full/last-mile tracking types', async () => {
     const row: FopOrder = { ...order, logisticsInfo: [
-      { carrierName: '云途YT', shopifyTracking: { type: 'full', number: 'YT123' } },
-      { carrierName: '4PX', shopifyTracking: { type: 'last_mile', number: '9400' } },
+      { carrierName: '云途YT', channelName: '云途标准专线', trackingNumbers: [{ type: 'full', number: 'YT123' },{type:'last_mile',number:'000LAST'}] },
+      { carrierName: '4PX', channelName: '4PX标准专线', trackingNumbers: [{ type: 'last_mile', number: '9400' }] },
     ] }
     const legacy = { ...order, carrier: 'Legacy', trackingNumber: '0000123' }
     const ws = (await read([row, legacy], 'dispatch')).getWorksheet('订单清单')!
-    expect(headers(ws)).toContain('物流信息')
+    expect(headers(ws)).toContain('物流渠道 / 跟踪号')
     expect(headers(ws)).not.toContain('物流商')
     expect(headers(ws)).not.toContain('物流单号')
-    expect(value(ws, 2, '物流信息').value).toBe('云途YT\nQC: YT123\n\n4PX\nWC: 9400')
-    expect(value(ws, 3, '物流信息').value).toBe('Legacy\n—')
-    expect(headers((await read([row], 'shipping')).getWorksheet('订单清单')!)).toContain('物流商')
+    expect(value(ws, 2, '物流渠道 / 跟踪号').value).toBe('云途标准专线\nYT123 QC\n000LAST WC\n\n4PX标准专线\n9400 WC')
+    expect(value(ws, 3, '物流渠道 / 跟踪号').value).toBe('—')
+    expect(headers((await read([row], 'shipping')).getWorksheet('订单清单')!)).toContain('物流渠道 / 跟踪号')
   })
 
   it('exports only unpaid custom channel names and uses consistent business labels', async () => {
@@ -118,29 +143,29 @@ describe('fulfillment Excel export', () => {
     expect(headers((await read([row], 'review')).getWorksheet('订单清单')!)).not.toContain('自定义物流渠道')
   })
 
-  it('exports actual channels together in one review column with empty legacy values', async () => {
-    const row = { ...order, logisticsChannels: [{ name: '云途标准专线', code: 'YT-STD' }, { name: '云途带电专线', code: 'YT-BAT' }] }
-    const ws = (await read([row, order])).getWorksheet('订单清单')!
-    expect(headers(ws)[headers(ws).indexOf('发货仓库') + 1]).toBe('物流渠道')
-    expect(value(ws, 2, '物流渠道').value).toBe('云途标准专线（YT-STD）\n云途带电专线（YT-BAT）')
-    expect(value(ws, 3, '物流渠道').value).toBe('—')
-    expect(headers((await read([row], 'procurement')).getWorksheet('订单清单')!)).not.toContain('物流渠道')
+  it('exports only custom and actual channel names in the review logistics column', async () => {
+    const row={...order,customLogisticsChannelName:'Customer channel',logisticsChannels:[{name:'Actual route',code:'ACTUAL'}],logisticsInfo:[{carrierName:null,channelName:'Actual route',shopifyTracking:{type:'full' as const,number:'STALE'}}]}
+    const ws=(await read([row,order])).getWorksheet('订单清单')!
+    expect(value(ws,2,'物流信息').value).toBe('Customer channel\nActual route')
+    expect(JSON.stringify(ws.getSheetValues())).not.toContain('STALE')
+    expect(value(ws,3,'物流信息').value).toBe('—\n—')
   })
   it.each(['unpaid', 'review', 'exceptions', 'dispatch', 'allocation'] as const)('exports consumer payment completion time for %s instead of creation time', async queue => {
     const unpaid = { ...order, paymentStatus: 'unpaid' as const, paidAt: null, consumerPaidAt: '2026-10-01T17:30:00-04:00' }
     const ws = (await read([unpaid, { ...unpaid, id: 'missing', consumerPaidAt: undefined }], queue)).getWorksheet('订单清单')!
-    expect(headers(ws)).toContain('C端付款时间（UTC+8）')
+    expect(headers(ws)).toContain('客户付款时间（UTC+8）')
     expect(headers(ws)).not.toContain('创建日期（UTC+8）')
-    expect(value(ws, 2, 'C端付款时间（UTC+8）').value).toBe('2026-10-02 05:30:00')
-    expect(value(ws, 3, 'C端付款时间（UTC+8）').value).toBe('—')
-    expect(value(ws, 2, '收款日期（UTC+8）').value).toBe('—')
+    expect(value(ws, 2, '客户付款时间（UTC+8）').value).toBe('2026-10-02 05:30:00')
+    expect(value(ws, 3, '客户付款时间（UTC+8）').value).toBe('—')
+    if (queue === 'unpaid') expect(headers(ws)).not.toContain('收款日期（UTC+8）')
+    else expect(value(ws, 2, '收款日期（UTC+8）').value).toBe('—')
     expect(headers((await read([order], 'procurement')).getWorksheet('订单清单')!)).toContain('订单审核时间（UTC+8）')
   })
   it('preserves supplier shipment facts for unpaid purchases even after shipment', async () => {
     const shipped = { ...order, procurementProgress: { purchaseOrder: 'ordered', supplierPayment: 'unpaid' } as const, fulfillmentProgress: { ...order.fulfillmentProgress, supplierShipment: 'shipped' as const } }
     const sheet = (await read([shipped], 'procurement')).getWorksheet('订单清单')!
     expect(headers(sheet)).not.toContain('供应商发货状态')
-    expect(value(sheet, 2, '采购进度').value).toBe('待支付采购款')
+    expect(value(sheet, 2, '采购状态').value).toBe('待支付采购款')
   })
   it('preserves IDs and literal text, separates SKU rows, and totals each currency without double counting', async () => {
     const workbook = await read([order, { ...order, id: 'o2', orderNumber: '00003', items: [order.items[0]], currency: 'CNY', amount: 10 }])
@@ -176,7 +201,7 @@ describe('fulfillment Excel export', () => {
   })
   it('exports procurement facts and dispatch document statuses without substituting customer payment', async () => {
     const purchase = (await read([{ ...order, procurementProgress: { purchaseOrder: 'ordered', supplierPayment: 'unpaid', alibabaOrder: 'not_pushed', logisticsGate: 'pending_logistics' } }], 'procurement')).getWorksheet('订单清单')!
-    expect(value(purchase, 2, '采购进度').value).toBe('待制作发运单')
+    expect(value(purchase, 2, '采购状态').value).toBe('待制作发运单')
     const allocation = (await read([{ ...order, allocationDocument: { id: 'ao1', number: 'AO261028000404' }, dispatchDocuments: [{ id: 'd1', number: 'FY01', status: 'submitted' }, { id: 'd2', number: 'FY02', status: 'approved' }] }], 'allocation_review')).getWorksheet('订单清单')!
     expect(value(allocation, 2, '发运单状态').value).toBe('未完成')
     expect(value(allocation, 2, '配货单号').value).toBe('AO261028000404')
@@ -189,9 +214,9 @@ describe('fulfillment Excel export', () => {
     expect(headers(ready)).not.toContain('配货状态')
     expect(value(ready, 2, '发运单状态').value).toBe('未完成')
     const warehouse = (await read([{ ...order, fulfillmentProgress: { ...order.fulfillmentProgress, stockReadiness: 'ready', allocationReview: 'approved' } }], 'shipping')).getWorksheet('订单清单')!
-    expect(headers(warehouse)).not.toContain('出库状态')
-    expect(headers(warehouse).slice(headers(warehouse).indexOf('出库进度'), headers(warehouse).indexOf('出库进度') + 3)).toEqual(['出库进度', '客户名称', '店铺'])
-    expect(value(warehouse, 2, '出库进度').value).toBe('待出库')
+    expect(headers(warehouse)).not.toContain('出库进度')
+    expect(headers(warehouse).slice(headers(warehouse).indexOf('出库状态'), headers(warehouse).indexOf('出库状态') + 3)).toEqual(['出库状态', '客户名称', '店铺'])
+    expect(value(warehouse, 2, '出库状态').value).toBe('待出库')
     expect(value(warehouse, 3, '商品信息').value).toBe('合计 5 件')
     expect(value(warehouse, 4, '订单金额').value).toBe(12.34)
   })

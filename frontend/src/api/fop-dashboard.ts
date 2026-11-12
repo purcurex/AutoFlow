@@ -1,16 +1,24 @@
+import { getWorkbenchDashboardCounts, isWorkbenchScopeError } from './workbench-dashboard'
+import { assertCurrentSession, captureSession } from '@/utils/session'
 import type { FopExceptionType } from './fop-orders'
+import type { FopOrderQueue } from './fop-orders'
 import type { EffectiveChartAccess } from './fop-chart-access'
 /** Authenticated backend contract. No client-side mock fallback or scope selection. */
 export interface FopDashboardQuery { from: string; to: string; year: number }
 export interface ReceiptSeries { id: string; name?: string; amounts: number[]; previousAmount?: number | null; breakdown?: { fulfillment: number[]; fullPaymentStock: number[] }; previousBreakdown?: { fulfillment: number; fullPaymentStock: number } }
+export type DashboardQueue = 'review' | 'dispatch' | 'procurement' | 'allocation' | 'shipping'
+export type DashboardQueueState = 'ready' | 'forbidden' | 'not_configured' | 'unavailable'
 export interface FopDashboardData {
   chartAccess: EffectiveChartAccess[]
   departmentReceipts: FopDashboardData['receipts']
   source: 'mock' | 'fop'
   updatedAt: string
   queues: { procurement: number | null; review: number | null; allocation: number | null; dispatch: number | null; shipping: number | null }
+  queueStates?: Partial<Record<DashboardQueue, DashboardQueueState>>
+  queueBreakdown?: Partial<Record<DashboardQueue, { queue: FopOrderQueue; count: number | null; state: DashboardQueueState }[]>>
   integratedQueues?: string[]
   analyticsConfigured?: boolean
+  analyticsUnavailable?: boolean
   rates: { currency: string; cnyPerUnit: number }[]
   registrations: { date: string; count: number }[]
   registrationDepartments?: { id: string; name: string; counts: number[]; salespeople: { id: string; name: string; counts: number[] }[] }[]
@@ -31,7 +39,7 @@ function parseDay(value: string): number {
   return timestamp
 }
 
-export async function getFopDashboard(query: FopDashboardQuery, now = new Date()): Promise<FopDashboardData> {
+export async function getFopDashboard(query: FopDashboardQuery, now = new Date(), onPending?: (pending: import('./workbench-dashboard').DashboardPending) => void): Promise<FopDashboardData> {
   const start = parseDay(query.from)
   const end = parseDay(query.to)
   const day = 86_400_000
@@ -40,5 +48,25 @@ export async function getFopDashboard(query: FopDashboardQuery, now = new Date()
   const { default: api } = await import('./index')
   const { from, to, year } = query
   // 真实统计包含权限核对及多页事实汇总，使用独立超时，不改变其他业务接口。
-  return api.get('/autoflow/integrations/fop/dashboard', { params: { from, to, year }, timeout: 180000 })
+  const session = captureSession()
+  let active = true
+  try {
+    const [analytics, pending] = await Promise.all([
+      api.get<FopDashboardData, FopDashboardData>('/autoflow/integrations/fop/dashboard', { params: { from, to, year, includeQueues: false }, timeout: 180000 }).catch((cause: unknown) => {
+        if (isWorkbenchScopeError(cause)) throw cause
+        // Pending lists remain useful when an independent chart source is unavailable.
+        return { source: 'fop', updatedAt: new Date().toISOString(), analyticsUnavailable: true,
+          chartAccess: [], rates: [], registrations: [], exceptions: [],
+          receipts: { currency: 'USD', months: [], departments: [] },
+          departmentReceipts: { currency: 'USD', months: [], departments: [] } } as Omit<FopDashboardData, keyof import('./workbench-dashboard').DashboardPending>
+      }),
+      getWorkbenchDashboardCounts().then(pending => {
+        assertCurrentSession(session)
+        if (active) onPending?.(pending)
+        return pending
+      }),
+    ])
+    assertCurrentSession(session)
+    return { ...analytics, ...pending }
+  } finally { active = false }
 }

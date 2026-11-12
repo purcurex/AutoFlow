@@ -15,5 +15,5 @@ export class RmaQueryDto extends RmaFiltersDto {
 }
 export class RmaExportDto extends RmaFiltersDto {
   @IsIn(['selected', 'filtered']) mode: 'selected' | 'filtered'
-  @IsOptional() @IsArray() @ArrayMinSize(1) @ArrayMaxSize(100) @ArrayUnique() @IsString({ each: true }) @MaxLength(500, { each: true }) orderIds?: string[]
+  @IsOptional() @IsArray() @ArrayMinSize(1) @ArrayMaxSize(100) @ArrayUnique() @IsString({ each: true }) @MaxLength(500, { each: true }) caseIds?: string[]
 }

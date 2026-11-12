@@ -20,12 +20,12 @@ export function demoShipmentOrders(orders: readonly FopOrderCandidate[], anchor:
     const day = businessDate(new Date(paid)).replaceAll('-', '')
     return { ...source, id: `${source.id}:shipment-aging:${index}`, orderNumber: `TO${day.slice(2)}${900001 + index}`, shopifyOrderNumber: `#SHIP${900001 + index}`,
       items: [{ ...source.items[0], quantity: 4 }], amount: 40, amountBreakdown: { productAmount: 35, shippingFee: 5, taxAmount: 0, discountAmount: 0 },
-      createdAt: new Date(paid - 3 * HOUR).toISOString(), consumerPaidAt: new Date(paid - 4 * HOUR).toISOString(),
+      createdAt: new Date(paid - 3 * HOUR).toISOString(), consumerPaidAt: new Date(paid - 2 * HOUR).toISOString(),
       paidAt: new Date(paid - 2 * HOUR).toISOString(), reviewedAt: new Date(paid - HOUR).toISOString(), procurementPaidAt: new Date(paid).toISOString(),
       procurementProgress: { purchaseOrder: 'ordered', purchaseApplication: 'created', alibabaOrder: 'pushed', supplierPayment: 'paid', logisticsGate: 'satisfied' },
       fulfillmentProgress: { allocationCreated: false, shopifySync: 'pending', supplierShipment: example.partial ? 'partial' : 'pending', stockReadiness: 'incomplete', allocationReview: 'pending', outbound: 'pending' },
       procurementStatus: 'purchased', allocationStatus: 'not_ready', dispatchStatus: 'not_ready', shippingStatus: 'not_ready',
-      allocationDocument: null, allocationReadyAt: null, dispatchDocuments: [], logisticsInfo: null, wmsCreatedAt: null, trackingNumber: null, exception: null,
+      allocationDocument: null, allocationReadyAt: null, dispatchDocuments: [], dispatchApprovedAt: null, shopifySyncedAt: null, logisticsInfo: null, wmsCreatedAt: null, trackingNumber: null, exception: null,
     }
   })
 }

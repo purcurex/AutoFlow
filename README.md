@@ -4,6 +4,18 @@ HyperZone 是面向公司领导、销售、采购、订单、发运、仓库及 
 
 > 当前基线：2026-10-22。Dashboard 和履约分析已具备服务端 Mock 数据、前后端契约及权限校验；FOP 是基于金蝶云苍穹平台自研的 HyperZone 应用，后台源码位于 `/Library/VSCode/dtr5b`。真实用户授权、业务数据和组织同步网络适配器仍待接入。不要将演示数据视为真实经营结果。
 
+## FOP 本地集成核验
+
+当前五工作台清单与导出采用本地查询库；新服务身份适配器、独立授权续验和可恢复历史初始化入口已实现。FOP 测试环境访问保持暂停；六项同步API和专用实时契约仍待FOP提供，现有普通分页地址不能直接代替。
+
+- [当前字段对照表](docs/integrations/HyperZone待办清单数据字段对照表.html)
+- [同步与查询方案](docs/solutions/HyperZoneFOP数据同步与查询方案.html)
+- [集成核查与初始化条件](docs/integrations/HyperZoneFOP集成核查与初始化条件.html)
+- [HyperZone智能办公平台项目FOP扩展开发需求](docs/integrations/HyperZone智能办公平台项目FOP扩展开发需求.html)
+- [工作台初始化与业务待办覆盖诊断](docs/integrations/HyperZone工作台初始化与业务待办覆盖诊断.html)
+- 本地只读预检：`npm run workbench:preflight -- --env-file backend/.env.workbench.local`；原真实副本加 `--database autoflow_local_demo`。命令不连接 FOP、不迁移、不导入。
+- 对照表重建：`python3 scripts/fop-local-field-matrix/generate.py`；验证：`python3 scripts/fop-local-field-matrix/validate.py`。
+
 ## 当前功能
 
 | 模块 | 已实现能力 |
@@ -127,11 +139,15 @@ npm run dev:frontend
 
 | 配置 | 用途 |
 | --- | --- |
+| `WORKBENCH_READ_MODE=local` | 工作台清单仅读取本地副本；真实同步和初始化使用独立服务契约 |
+| `FOP_DATA_MODE=kingdee` | 旧诊断读取与独立能力使用 Kingdee 适配器；按 `backend/.env.fop.local.example` 配置已发布端点和服务端认证，逐项核验资源权限与能力 |
 | `FOP_DATA_MODE=demo` | 仅在 `development/local/test` 中启用履约、Dashboard 和组织演示数据；其他环境默认不返回演示业务数据 |
 | `FOP_INTEGRATION_MODE` | 既有报价/移交适配边界，与 Dashboard 的数据提供器不是同一个开关 |
 | `FOP_BASE_URL/FOP_TENANT_ID/FOP_APP_ID/FOP_APP_SECRET` | 既有对接配置；填写这些值不会自动完成真实 Dashboard/权限适配 |
 | `ZHIPU_* / PIPIADS_* / SERPAPI_KEY` | 客户发现与 AI 功能；敏感值仅置于后端忽略文件 |
 | `ALIBABA_1688_*` | 可选商品搜索；按需启用 |
+
+清单与导出走共享副本，配置 live 会被拒绝；生产提供器不注册历史清单穿透能力。独立认证与分析功能保留。审核、即时库存及备货库存走专用实时接口，供应商催办缺少正式接口时明确不可用。新同步源读取业务事实并本地生成投影，采购实物退货正式实体与API仍待提供；不能使用采购退款申请替代。
 
 真实密钥放在 `backend/.env.providers.local`、`backend/.env.alibaba1688.local` 或部署密钥存储中。配置键以对应 `.example` 文件为准；不要提交真实 `.env`、数据库备份、上传业务文件或本地账号密码。
 

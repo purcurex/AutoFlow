@@ -9,6 +9,9 @@ const props = defineProps<{ documents?: DispatchDocument[] | null; shopifySync?:
 const { locale } = useI18n()
 const status = computed(() => ['allocation', 'allocation_review'].includes(props.queue ?? '') ? getDispatchCompletionStatus(props.documents) : props.stage ?? getDispatchTaskStatus(props.documents, props.shopifySync))
 const tone = computed(() => {
+  if (status.value === 'dispatch_cancelled') return 'danger'
+  if (status.value === 'dispatch_tracking' || status.value === 'dispatch_updating') return 'info'
+  if (status.value === 'dispatch_pending') return 'warning'
   if (status.value === 'dispatch_approved') return (props.queue ?? 'dispatch') === 'dispatch' ? 'danger' : 'success'
   if (['dispatch_draft', 'dispatch_missing', 'dispatch_incomplete'].includes(status.value)) return 'warning'
   if (['dispatch_complete', 'dispatch_synced'].includes(status.value)) return 'success'

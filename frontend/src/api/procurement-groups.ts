@@ -1,3 +1,4 @@
+import type { WorkbenchDataAvailability, WorkbenchReplicaSnapshot } from './workbench-replica'
 import api from './index'
 export interface PurchaseHeader {
   purchaseType: 'offline' | 'online'; platform: '1688' | 'other' | null
@@ -7,10 +8,10 @@ export interface PurchaseHeader {
 export interface PurchaseGroup {
   id: string; kind: 'purchase' | 'uncreated'; purchase: PurchaseHeader | null
   orderCount: number; skuCount: number; quantity: number | null; shippedQuantity: number | null; pendingQuantity: number | null
-  shipment: 'pending' | 'partial' | 'shipped' | 'unknown'; earliestReceiptAt: string | null; completedAt?: string | null
+  shipment: 'pending' | 'partial' | 'shipped' | 'unknown'; earliestReceiptAt: string | null; latestConsumerPaidAt?: string | null; completedAt?: string | null
 }
 export interface PurchaseGroupRow {
-  orderId: string; orderNumber: string; shopifyOrderNumber: string; customerName: string; storeName: string; ownerName: string; departmentName: string; warehouse: string; paidAt: string | null; completedAt?: string | null
+  orderId: string; orderNumber: string; shopifyOrderNumber: string; customerName: string; storeName: string; ownerName: string; departmentName: string; warehouse: string; paidAt: string | null; consumerPaidAt?: string | null; completedAt?: string | null
   lines: { fulfillmentLineId: string; purchaseLineId: string | null; sku: string; name: string; imageUrl: string | null; variant: string; quantity: number; shippedQuantity: number }[]
 }
 export const purchaseStageLabels = {
@@ -25,13 +26,15 @@ export function isPurchaseStage(value: unknown): value is PurchaseStage {
 }
 export interface PurchaseFilters { completed?: boolean; timeRange?: '1w' | '1m' | '3m'; purchaseStage?: PurchaseStage; queue: 'procurement' | 'procurement_shipping'; search?: string; departmentId?: string; ownerId?: string; warehouseCode?: string; sortOrder?: 'asc' | 'desc' }
 export interface PurchaseQuery extends PurchaseFilters { page: number; pageSize: number }
-export interface PurchasePage { items: PurchaseGroup[]; total: number; page: number; pageSize: number; refreshedAt: string; source: 'mock' | 'fop'; departments: { id: string; name: string }[]; totals: { groupCount: number; purchaseCount: number; orderCount: number; uncreatedCount: number; pendingQuantity: number } }
+export interface PurchasePage {
+  dataAvailability?: WorkbenchDataAvailability; replica?: WorkbenchReplicaSnapshot
+ items: PurchaseGroup[]; total: number; page: number; pageSize: number; refreshedAt: string; source: 'mock' | 'fop'; departments: { id: string; name: string }[]; totals: { groupCount: number | null; purchaseCount: number | null; orderCount: number; uncreatedCount: number | null; pendingQuantity: number | null } }
 export interface PurchaseDetails { group: PurchaseGroup; items: PurchaseGroupRow[]; total: number; page: number; pageSize: number }
 const base = '/autoflow/integrations/fop/purchase-groups'
-export const getPurchaseGroups = (params: PurchaseQuery) => api.get<PurchasePage, PurchasePage>(base, { params })
-export const getPurchaseGroupDetails = (id: string, params: PurchaseQuery) => api.get<PurchaseDetails, PurchaseDetails>(`${base}/${encodeURIComponent(id)}`, { params })
+export const getPurchaseGroups = (params: PurchaseQuery, signal?: AbortSignal) => api.get<PurchasePage, PurchasePage>(base, { params, ...(signal ? { signal } : {}) })
+export const getPurchaseGroupDetails = (id: string, params: PurchaseQuery, signal?: AbortSignal) => api.get<PurchaseDetails, PurchaseDetails>(`${base}/${encodeURIComponent(id)}`, { params, ...(signal ? { signal } : {}) })
 export const exportPurchaseGroups = async (body: PurchaseFilters & ({ mode: 'filtered' } | { mode: 'selected'; groupIds: string[] }), signal?: AbortSignal) => {
-  try { return await api.post<Blob, Blob>(`${base}/export`, body, { responseType: 'blob', timeout: 120000, signal }) }
+  try { return await api.post<Blob, Blob>(`${base}/export`, body, { responseType: 'blob', timeout: 30000, signal }) }
   catch (error) {
     if (error instanceof Blob) {
       let parsed: unknown

@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getEmployeeLogin, updateEmployeeLogin, type EmployeeLogin } from '@/api/organization'
-import { bindFopEmployee, unbindFopEmployee, fopAccessError } from '@/api/fop-access'
+import { bindFopEmployee, unbindFopEmployee, fopAccessError, type FopEmployeeSelection } from '@/api/fop-access'
 import { captureSession, assertCurrentSession, onSessionReset } from '@/utils/session'
 import OrganizationModal from './OrganizationModal.vue'
 import KingdeeEmployeePicker from './KingdeeEmployeePicker.vue'
@@ -10,7 +10,7 @@ const props = defineProps<{ accountId: string }>(), emit = defineEmits<{ close: 
 const { locale } = useI18n(), zh = computed(() => locale.value.startsWith('zh'))
 const text = (cn: string, en: string) => zh.value ? cn : en
 const loading = ref(true), saving = ref(false), error = ref(''), loaded = ref(false), bindingBusy = ref(false), bindingMessage = ref('')
-const account = ref<EmployeeLogin>(), selectedEmployee = ref<{ employeeId: string; membershipId: string } | null>(null)
+const account = ref<EmployeeLogin>(), selectedEmployee = ref<FopEmployeeSelection | null>(null)
 const draft = reactive({ username: '', email: '', password: '', confirmPassword: '' })
 let active = true
 async function load() {
@@ -34,12 +34,12 @@ async function save() {
   } catch (cause) { if (active && targetId === props.accountId) error.value = (cause as {statusCode?: number;message?: string}).statusCode === 409 ? (cause as {message: string}).message : text('保存失败，请核对信息和权限后重试。', 'Save failed. Check details and access.') }
   finally { if (active && targetId === props.accountId) saving.value = false }
 }
-/** 只提交人员及任职ID；用户名、租户和认证主体由后端重新核验，不接收浏览器自报身份。 */
+/** 提交工号与人员任职ID供复验；用户名、租户和认证主体由后端重新核验，不接收浏览器自报身份。 */
 async function saveBinding(unlink = false) {
   if (saving.value || bindingBusy.value || !loaded.value || !unlink && !selectedEmployee.value) return
   saving.value = true; error.value = ''; bindingMessage.value = ''; const session = captureSession(), targetId = props.accountId
   try {
-    const result = unlink ? await unbindFopEmployee(targetId) : await bindFopEmployee(targetId, selectedEmployee.value!.employeeId, selectedEmployee.value!.membershipId)
+    const result = unlink ? await unbindFopEmployee(targetId) : await bindFopEmployee(targetId, selectedEmployee.value!.employeeId, selectedEmployee.value!.membershipId, selectedEmployee.value!.employeeNumber)
     assertCurrentSession(session)
     if (active && targetId === props.accountId) { account.value = result; selectedEmployee.value = null; bindingMessage.value = text('金蝶绑定已保存，该账号需重新登录后使用。', 'Kingdee binding saved. This account must sign in again.') }
   } catch (cause) { if (active && targetId === props.accountId) error.value = (cause as {statusCode?: number;message?: string}).statusCode === 409 ? (cause as {message: string}).message : fopAccessError(cause, zh.value) }
@@ -63,8 +63,8 @@ onBeforeUnmount(() => { active = false; draft.password = ''; draft.confirmPasswo
     </div><p class="mt-5 text-xs leading-6 text-slate-500">{{ text('邮箱与员工档案同步。修改密码后旧登录会话失效；角色与数据权限请在账号权限中分配。', 'Email is synchronized with the employee record. Resetting the password revokes previous sessions. Assign access on the permissions page.') }}</p></fieldset></form>
     <section v-if="loaded" class="mt-5 space-y-3 border-t pt-4" :aria-label="text('金蝶员工绑定', 'Kingdee employee binding')">
       <p class="field-label">{{ text('金蝶员工绑定', 'Kingdee employee binding') }}</p>
-      <p v-if="account?.fopBindingDetails" class="text-sm">{{ account.fopBindingDetails.name }} · {{ account.fopBindingDetails.username }}</p>
-      <p v-else class="text-sm text-slate-500">{{ account?.fopBinding ? text('原绑定尚未验证，请重新选择对应金蝶员工。', 'Verify the previous link by selecting the corresponding Kingdee employee.') : text('尚未绑定金蝶员工。', 'No Kingdee employee linked.') }}</p>
+      <p v-if="account?.fopBindingDetails" class="text-sm">{{ account.fopBindingDetails.employeeNumber || text('工号待核验', 'Employee number unverified') }} · {{ account.fopBindingDetails.name }} · {{ account.fopBindingDetails.username }}</p>
+      <p v-else class="text-sm text-slate-500">{{ account?.fopBinding ? text(`人员 ID：${account.fopBinding.userId} · 已绑定，待授权后验证。`, `Employee ID: ${account.fopBinding.userId} · Linked; verification pending authorization.`) : text('尚未绑定金蝶员工。', 'No Kingdee employee linked.') }}</p>
       <KingdeeEmployeePicker :key="accountId" v-model="selectedEmployee" :disabled="saving" @busy="bindingBusy = $event" />
       <div class="flex flex-wrap gap-3"><button type="button" class="btn btn-secondary" :disabled="saving || bindingBusy || !selectedEmployee" @click="saveBinding(false)">{{ text('验证并绑定金蝶员工', 'Verify and link Kingdee employee') }}</button><button v-if="account?.fopBinding" type="button" class="btn btn-secondary" :disabled="saving || bindingBusy" @click="saveBinding(true)">{{ text('解除金蝶绑定', 'Unlink Kingdee employee') }}</button></div>
       <p v-if="bindingMessage" role="status" class="text-sm text-emerald-600">{{ bindingMessage }}</p>

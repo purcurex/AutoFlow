@@ -81,7 +81,7 @@ describe('independent freight resource authorization', () => {
   afterEach(() => jest.useRealTimers())
   const setup = (records = [row('a')], extraGrant = {}, extraUser = {}) => {
     const user = { id: 'u', businessRole: 'admin', workbenchRoles: ['dispatch'], fopTenantId: 'tenant', fopUserId: 'fop-user', ...extraUser }
-    const provider = { source: 'mock', isConfigured: () => true,
+    const provider = { source: 'mock', isConfigured: () => true, administratorIdentity: async () => null,
       resolvePermissions: async () => ({ subject: { tenantId: 'tenant', userId: 'fop-user' }, allowedOrderIds: [], allowedFreightIds: records.map(r => r.id), analyticsScopes: ['freight'], ...extraGrant }),
       listFreight: jest.fn(async () => records), listOrders: jest.fn(async () => { throw new Error('Orders not needed') }),
     }
@@ -104,15 +104,21 @@ describe('independent freight resource authorization', () => {
     const { service } = setup([row('good'), row('other', { owner: { id: 'e2', name: 'Other' } }), row('cross', { tenantId: 'elsewhere' }), row('not-granted')], { allowedFreightIds: ['good', 'other', 'cross'] }, { businessRole: 'salesperson', businessEmployeeId: 'e1' })
     expect((await service.getFreight('u', query)).totals.amount).toBe(100)
   })
-  it('checks department descendants and blocks management-only accounts', async () => {
-    const scoped = setup([row('good', { departmentPathIds: ['d1', 'parent'] }), row('other', { department: { id: 'd2', name: 'Other' } })], {}, { businessRole: 'department_manager', businessDepartmentId: 'parent' })
+  it('uses the analytics direct department boundary and blocks nonadministrators with closed business access', async () => {
+    const scoped = setup([row('good', { departmentPathIds: ['parent', 'd1'] }), row('child', { department: { id: 'child', name: 'Child' }, departmentPathIds: ['parent', 'd1', 'child'] }), row('other', { department: { id: 'd2', name: 'Other' } })], {}, { businessRole: 'department_manager', dataDisplayScope: 'department' as const, businessDepartmentId: 'd1' })
     expect((await scoped.service.getFreight('u', query)).billCount).toBe(1)
-    await expect(setup(undefined, {}, { role: 'admin', businessRole: 'none' }).service.getFreight('u', query)).rejects.toMatchObject({ status: 403 })
+    await expect(setup(undefined, {}, { role: 'user', businessRole: 'none' }).service.getFreight('u', query)).rejects.toMatchObject({ status: 403 })
+  })
+  it('gives system administrators company scope while retaining independent freight grants', async () => {
+    const records = [row('own'), row('other', { owner: { id: 'e2', name: 'Other' } }), row('not-granted'), row('foreign', { tenantId: 'another' })]
+    const account = { role: 'admin', businessRole: 'none', businessEmployeeId: 'e1', workbenchRoles: [] }
+    expect((await setup(records, { allowedFreightIds: ['own', 'other', 'foreign'] }, account).service.getFreight('u', query)).billCount).toBe(2)
+    await expect(setup(records, { analyticsScopes: ['receipts'] }, account).service.getFreight('u', query)).rejects.toMatchObject({ status: 403 })
   })
   it('rejects malformed ancestry before a string substring can satisfy a department scope', async () => {
     const candidate = row('bad-path', { department: { id: 'd10', name: 'Other department' } })
     Object.assign(candidate, { departmentPathIds: 'd10' })
-    const scoped = setup([candidate], {}, { businessRole: 'department_manager', businessDepartmentId: 'd1' })
+    const scoped = setup([candidate], {}, { businessRole: 'department_manager', dataDisplayScope: 'department' as const, businessDepartmentId: 'd1' })
     await expect(scoped.service.getFreight('u', query)).rejects.toMatchObject({ status: 503 })
   })
   it('rejects duplicate authorized delivery facts and sanitized malformed cost errors', async () => {

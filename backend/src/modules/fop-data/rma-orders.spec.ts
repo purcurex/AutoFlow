@@ -7,9 +7,9 @@ const order = { id: 'o1', orderNumber: 'SO-001', shopifyOrderNumber: '#001', cus
 const flow = (id: string, extra = {}): RmaCaseCandidate => ({ id, orderId: 'o1', tenantId: 't1', type: 'refund', isOpen: true, number: `RMA-${id}`, reason: null, stage: null, requestedAmount: null, currency: null, createdAt: null, updatedAt: null, ...extra })
 const paths = new Map([['o1', ['parent', 'child']]])
 describe('RMA independent workflow read model', () => {
-  it('defaults to active and groups cases by authorized order even if the order is cancelled', () => {
+  it('defaults to active and returns one independent row per authorized RMA', () => {
     const rows = buildRmaOrders({ subject, cases: [flow('a'), flow('b', { type: 'cancellation' }), flow('c', { isOpen: false })] }, grant, [order], {}, paths)
-    expect(rows).toHaveLength(1); expect(rows[0].rmaCases.map(row => row.id)).toEqual(['a', 'b']); expect(rows[0].amount).toBe(20)
+    expect(rows).toHaveLength(1); expect(rows[0].rmaCases.map(row => row.id)).toEqual(['a']); expect(rows[0]).toMatchObject({id: 'a', sourceOrderId: 'o1'}); expect(rows[0].amount).toBe(20)
     expect(buildRmaOrders({ subject, cases: [flow('a')] }, grant, [order], { departmentId: 'parent' }, paths)).toHaveLength(1)
   })
   it.each(['refund', 'return_refund'] as const)('preserves full fulfillment products for %s without replacing the order amount', type => {
@@ -24,13 +24,13 @@ describe('RMA independent workflow read model', () => {
     const rows = buildRmaOrders({ subject, cases: [flow('a', { requestedAmount: 15, refundAmount: 5, refundCurrency: 'USD' }), flow('b', { type: 'interception', reason: '拦截申请' }), flow('c', { type: 'interception_release' })] }, grant, [{ ...order, cancelled: false, shipmentInterceptStatus: 'released' }], {}, paths)
     expect(rows[0].refundAmounts).toEqual([{ currency: 'USD', amount: 5 }])
     expect(rows[0].orderTags).toEqual(['interception_released'])
-    expect(rows[0].rmaCases.map(item => item.type)).toEqual(['refund', 'interception', 'interception_release'])
+    expect(rows[0].rmaCases.map(item => item.type)).toEqual(['refund'])
     const missing = buildRmaOrders({ subject, cases: [flow('a', { requestedAmount: 15, currency: 'USD' })] }, grant, [order], {}, paths)
     expect(missing[0].refundAmounts).toEqual([{ currency: null, amount: null }])
     expect(() => buildRmaOrders({ subject, cases: [flow('a', { refundAmount: -1, refundCurrency: 'USD' })] }, grant, [order], {}, paths)).toThrow()
   })
   it('distinguishes an open cancellation request from confirmed order cancellation', () => {
-    const snapshot = { subject, cases: [flow('a', { type: 'cancellation', stage: '取消申请待审核' })] }
+    const snapshot = { subject, cases: [flow('a', { type: 'cancellation', stage: '取消申请待审核' }), flow('b')] }
     expect(buildRmaOrders(snapshot, grant, [{ ...order, cancelled: false }], {}, paths)[0].orderTags).toEqual(['cancellation_requested'])
     expect(buildRmaOrders(snapshot, grant, [order], {}, paths)[0].orderTags).toEqual(['cancelled'])
   })
@@ -41,8 +41,11 @@ describe('RMA independent workflow read model', () => {
   })
   it('keeps partial refund installments and independent order events valid', () => {
     const rows = buildRmaOrders({ subject, cases: [flow('a', { refundAmount: 3, refundCurrency: 'USD' }), flow('b', { refundAmount: 2, refundCurrency: 'USD' }), flow('c', { type: 'interception' })] }, grant, [order], {}, paths)
-    expect(rows[0].refundAmounts).toEqual([{ currency: 'USD', amount: 5 }])
-    expect(rows[0].rmaCases).toHaveLength(3)
+    expect(rows).toHaveLength(2)
+    expect(rows.map(row => row.refundAmounts)).toEqual([[{ currency: 'USD', amount: 3 }], [{ currency: 'USD', amount: 2 }]])
+    expect(rows.map(row => row.rmaCases.length)).toEqual([1, 1])
+    expect(summarizeRmaOrders(rows).orderCount).toBe(1)
+    expect(buildRmaOrders({ subject, cases: [flow('a'), flow('b')] }, grant, [order], {search: 'RMA-b'}, paths).map(row=>row.id)).toEqual(['b'])
   })
   it('generates demo orders without mixing refund-only and other business types', () => {
     const sources = Array.from({ length: 32 }, (_, i) => ({ ...order, id: `order-${i}`, tenantId: 't1' })) as FopOrderCandidate[]
@@ -66,4 +69,21 @@ describe('RMA independent workflow read model', () => {
     expect(buildRmaOrders(snapshot, grant, [order], { type: 'refund' }, paths)[0]).toMatchObject({ rmaUpdatedAt: null, rmaCases: [{ id: 'a', requestedAmount: null, currency: null }] })
     expect(buildRmaOrders(snapshot, { ...grant, allowedRmaCaseIds: [] }, [order], {}, paths)).toEqual([])
   })
+})
+
+it('orders RMA tasks by consumer payment rather than RMA update or receipt time', () => {
+  const sources = [{ ...order, id: 'o1', consumerPaidAt: '2026-10-01T00:00:00Z', paidAt: '2026-11-01T00:00:00Z' }, { ...order, id: 'o2', consumerPaidAt: '2026-10-03T00:00:00Z', paidAt: null }]
+  const cases = [flow('a', { updatedAt: '2026-11-01T00:00:00Z' }), flow('b', { orderId: 'o2', updatedAt: '2026-10-01T00:00:00Z' })]
+  expect(buildRmaOrders({ subject, cases }, { ...grant, allowedOrderIds: ['o1', 'o2'] }, sources, {}, new Map()).map(row => row.id)).toEqual(['b', 'a'])
+})
+it('retains different historical RMA types without treating them as simultaneous active requests', () => {
+  const snapshot = { subject, cases: [flow('a', { isOpen: false }), flow('b', { type: 'reshipment', isOpen: false })] }
+  expect(buildRmaOrders(snapshot, grant, [order], { flowStatus: 'all' }, paths).map(row => row.rmaCases.length)).toEqual([1, 1])
+  expect(buildRmaOrders(snapshot, grant, [order], { flowStatus: 'closed' }, paths).map(row => row.rmaCases.length)).toEqual([1, 1])
+})
+
+import { summarizeRmaOrders } from './rma-orders'
+it('does not report a partial monetary total when any settlement currency is missing', () => {
+  const rows = [{ ...order, currency: 'USD', items: [{ sku: 'A', name: 'A', quantity: 2 }] }, { ...order, id: 'o2', currency: 'XXX', items: [{ sku: 'B', name: 'B', quantity: 3 }] }] as FopOrder[]
+  expect(summarizeRmaOrders(rows)).toEqual({ orderCount: 2, itemQuantity: 5, amountsByCurrency: [] })
 })

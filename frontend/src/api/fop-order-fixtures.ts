@@ -29,6 +29,11 @@ export const mockFopOrders: FopOrder[] = stages.flatMap((stage, stageIndex) => A
     ? { type: stage === 'review' ? 'procurement_exception' : stage === 'allocation' ? 'allocation_exception' : 'dispatch_exception', reason: null, hours: stage === 'review' ? 26 : stage === 'allocation' ? 38 : 18 }
     : null
   const paid = stage !== 'review' || index % 3 !== 2
+  const dispatchDocuments: NonNullable<FopOrder['dispatchDocuments']> = stage === 'dispatch'
+      ? [{ id: `${orderId}:dispatch:1`, number: dispatchNumber(), status: (['draft', 'submitted', 'approved'] as const)[index % 3]! },
+        ...(index % 4 === 0 ? [{ id: `${orderId}:dispatch:2`, number: dispatchNumber(2), status: 'approved' as const }] : [])]
+      : stage === 'shipping' ? [{ id: `${orderId}:dispatch:1`, number: dispatchNumber(), status: 'approved' }] : []
+  const logisticsInfo = dispatchDocuments.map((doc, part) => ({ carrierName: '云途YT', channelName: '云途标准专线', channelCode: 'DEMO-YT-STD', shopifyTracking: doc.status === 'draft' ? null : { type: 'full' as const, number: `YT${stageIndex}${30000 + index}${part}` } }))
   return {
     shippingCountryCode: ['US', 'GB', 'AU', 'DE', 'FR', 'CA'][index % 6],
         shippingRecipient: demoRecipient(index),
@@ -37,36 +42,33 @@ export const mockFopOrders: FopOrder[] = stages.flatMap((stage, stageIndex) => A
     storeName: ['Everyday', 'Northstar', 'Studio', 'Harbor'][stageIndex]!,
     items: [{ sku: `DEMO-SKU-${String(index % 3 + 1).padStart(3, '0')}`, name: product.name, imageUrl: productImage(product.image, product.color), variant: product.variant, quantity: index % 3 + 1 }],
     amount: Math.round((11.88 + index * 2.5) * 100) / 100, currency: 'USD', paymentStatus: paid ? 'paid' : 'unpaid',
-    dispatchDocuments: stage === 'dispatch'
-      ? [{ id: `${orderId}:dispatch:1`, number: dispatchNumber(), status: (['draft', 'submitted', 'approved'] as const)[index % 3]! },
-        ...(index % 4 === 0 ? [{ id: `${orderId}:dispatch:2`, number: dispatchNumber(2), status: 'approved' as const }] : [])]
-      : stage === 'shipping' ? [{ id: `${orderId}:dispatch:1`, number: dispatchNumber(), status: 'approved' }] : [],
+    dispatchDocuments,
     allocationReadyAt: stage === 'review' || stage === 'allocation' && index % 2 === 0 ? null : '2026-10-27T04:30:00Z',
     allocationDocument: stage === 'review' ? null : { id: `${orderId}:alloc:1`, number: `AO${documentDate}${String(stageIndex * 100 + index + 1).padStart(6, '0')}` },
     procurementProgress: { purchaseOrder: stage === 'review' ? 'unknown' : 'ordered', supplierPayment: stage === 'review' ? 'unknown' : 'paid' },
     fulfillmentProgress: {
       allocationCreated: stage !== 'review',
-      shopifySync: stage === 'dispatch' ? 'pending' : 'synced',
+      shopifySync: stage === 'shipping' ? 'synced' : 'pending',
       supplierShipment: 'shipped',
       stockReadiness: stage === 'review' ? 'unknown' : stage === 'allocation' && index % 2 === 0 ? 'incomplete' : 'ready',
       allocationReview: stage === 'allocation' || stage === 'review' ? 'pending' : 'approved',
-      outbound: stage === 'shipping' ? 'pending' : 'unknown',
+      outbound: stage === 'shipping' || stage === 'allocation' ? 'pending' : 'unknown',
     },
     reviewStatus: stage === 'review' ? 'pending' : 'approved',
     procurementStatus: stage === 'review' ? 'not_required' : 'purchased',
     allocationStatus: stage === 'review' ? 'not_ready' : stage === 'allocation' ? 'pending' : 'allocated',
     dispatchStatus: stageIndex < 2 ? 'not_ready' : stage === 'dispatch' ? 'pending' : 'dispatched',
     shippingStatus: stage === 'shipping' ? 'pending' : 'not_ready',
-    warehouse: index % 2 ? 'Sha Tin' : 'Hangzhou', carrier: stage === 'shipping' ? 'Demo Express' : null,
+    warehouse: index % 2 ? 'Sha Tin' : 'Hangzhou', carrier: '云途YT',
     logisticsChannels: [{ name: '云途标准专线', code: 'DEMO-YT-STD' }],
     customLogisticsChannelName: ['Economy Shipping', 'Standard Shipping', 'Battery Shipping'][index % 3],
-    logisticsInfo: stage === 'dispatch' ? [{ carrierName: '云途YT', shopifyTracking: { type: (['full', 'first_mile', 'last_mile'] as const)[index % 3]!, number: `YT${30000 + index}` } }] : null,
-    trackingNumber: stage === 'shipping' ? `DEMO-TRK-${30000 + index}` : null,
+    logisticsInfo,
+    trackingNumber: logisticsInfo.length === 1 ? logisticsInfo[0]?.shopifyTracking?.number ?? null : null,
     salesperson: ['业务员 A', '业务员 B', '业务员 C'][index % 3]!,
     createdAt: `2026-10-${String(15 + index % 7).padStart(2, '0')}T08:30:00Z`,
     wmsCreatedAt: stage === 'shipping' ? `2026-10-${String(15 + index % 7).padStart(2, '0')}T12:30:00Z` : null,
     reviewedAt: `2026-10-${String(15 + index % 7).padStart(2, '0')}T09:30:00Z`,
-    consumerPaidAt: `2026-10-${String(15 + index % 7).padStart(2, '0')}T07:45:00Z`,
+    consumerPaidAt: paid ? `2026-10-${String(15 + index % 7).padStart(2, '0')}T09:00:00Z` : null,
     paidAt: paid ? `2026-10-${String(15 + index % 7).padStart(2, '0')}T09:00:00Z` : null,
     cancelled: false, exception,
   }
@@ -79,12 +81,12 @@ mockFopOrders.push(...Array.from({ length: 8 }, (_, index): FopOrder => ({
     { purchaseOrder: 'not_ordered', supplierPayment: 'not_required' },
     { purchaseOrder: 'ordered', supplierPayment: 'unpaid' },
     { purchaseOrder: 'ordered', supplierPayment: 'unpaid' },
-    { purchaseOrder: 'ordered', supplierPayment: 'paid' },
-    { purchaseOrder: 'ordered', supplierPayment: 'paid' },
+    { purchaseOrder: 'ordered', supplierPayment: 'paid', alibabaOrder: 'pushed' },
+    { purchaseOrder: 'ordered', supplierPayment: 'paid', alibabaOrder: 'pushed' },
     { purchaseOrder: 'ordered', supplierPayment: 'refunded' },
     { purchaseOrder: 'unknown', supplierPayment: 'unknown' },
   ] as const)[index]!,
-  fulfillmentProgress: { shopifySync: 'synced', supplierShipment: index === 5 ? 'partial' : 'pending', stockReadiness: 'incomplete', allocationReview: 'pending', outbound: 'pending' },
+  fulfillmentProgress: { shopifySync: 'pending', supplierShipment: index === 5 ? 'partial' : 'pending', stockReadiness: 'incomplete', allocationReview: 'pending', outbound: 'pending' },
   procurementPaidAt: index === 4 || index === 5 ? `2026-10-${index === 4 ? '26' : '25'}T08:30:00Z` : null,
   shopifyOrderNumber: `#${1401 + index}`, procurementStatus: 'pending', allocationStatus: 'not_ready', exception: null,
 })))

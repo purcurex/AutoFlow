@@ -68,13 +68,17 @@ it('validates assignments and preserves external FOP IDs', async () => {
   await w.get('input[aria-label="业务部门 ID"]').setValue(' FOP-D1 '); await submit(w)
   expect(updateAccountAccess).toHaveBeenCalledWith('u1', expect.objectContaining({ businessScope: { role: 'department_manager', departmentId: 'FOP-D1', employeeId: 'FOP-0001' } }))
 })
-it('preserves HR closed access and independent admin business scope', async () => {
+it('preserves HR closed access and grants full business access when assigning administrator', async () => {
   current.businessScope = { role: 'none', departmentId: 'd1', employeeId: 'e1' }; current.workbenchRoles = []
   const w = await setup(); await edit(w)
   expect(w.get('[aria-label="开通业务数据"]').element).toHaveProperty('checked', false)
   expect(w.get('[data-save-access]').attributes('disabled')).toBeDefined()
-  await w.get(roleButton('administrator')).trigger('click'); await w.get('[aria-label="业务数据范围"]').setValue('none'); await submit(w)
-  expect(updateAccountAccess).toHaveBeenCalledWith('u1', expect.objectContaining({ accountRole: 'administrator', businessScope: { role: 'none', departmentId: 'd1', employeeId: 'e1' } }))
+  await w.get(roleButton('administrator')).trigger('click')
+  expect(w.find('[aria-label="业务数据范围"]').exists()).toBe(false)
+  expect(w.get('.scope-preview').text()).toBe('全部业务部门')
+  expect(w.get('[data-chart-permissions]').attributes('disabled')).toBeDefined()
+  await submit(w)
+  expect(updateAccountAccess).toHaveBeenCalledWith('u1', expect.objectContaining({ accountRole: 'administrator', businessScope: { role: 'admin', departmentId: 'd1', employeeId: 'e1' }, workbenchRoles: ['sales', 'dispatch', 'procurement', 'allocation', 'warehouse'] }))
 })
 it('disables self-demotion', async () => {
   current.role = 'admin'; current.businessScope!.role = 'admin'
@@ -112,7 +116,7 @@ it('ignores late saves after a session reset', async () => {
 it('routes unverified FOP bindings to organization without raw identity editing', async () => {
   current.fopBinding = { tenantId: 'offline', userId: 'employee-legacy' }
   const w = await setup()
-  expect(w.text()).toContain('原绑定需要重新验证')
+  expect(w.text()).toContain('ID已绑定 · 待验证')
   expect(w.find('[data-save-binding]').exists()).toBe(false)
   expect(w.find('input[aria-label*="FOP"]').exists()).toBe(false)
   expect(w.findAllComponents(RouterLinkStub).some(link => JSON.stringify(link.props('to')).includes('accountId'))).toBe(true)

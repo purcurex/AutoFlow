@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ArrowRight, LockKeyhole, Mail } from 'lucide-vue-next'
+import { ArrowRight, Eye, EyeOff, LockKeyhole, Mail } from 'lucide-vue-next'
 import { useI18n } from 'vue-i18n'
 import { useUserStore } from '@/stores'
 import { BrandLogo, LanguageSwitch, ThemeToggle } from '@/components/ui'
 
 const email = ref('')
 const password = ref('')
+const showPassword = ref(false)
 const error = ref('')
 const isLoading = ref(false)
 const router = useRouter()
@@ -61,7 +62,17 @@ async function handleLogin() {
 
         <form class="mt-8 space-y-5" @submit.prevent="handleLogin">
           <label class="block"><span class="field-label">{{ t('auth.email') }}</span><span class="relative block"><Mail class="pointer-events-none absolute left-3 top-3 h-4 w-4 text-slate-400" /><input v-model="email" type="email" class="input pl-10" :placeholder="t('auth.emailPlaceholder')" autocomplete="email" required /></span></label>
-          <label class="block"><span class="field-label">{{ t('auth.password') }}</span><span class="relative block"><LockKeyhole class="pointer-events-none absolute left-3 top-3 h-4 w-4 text-slate-400" /><input v-model="password" type="password" class="input pl-10" :placeholder="t('auth.passwordPlaceholder')" autocomplete="current-password" required /></span></label>
+          <div>
+            <label for="login-password" class="field-label">{{ t('auth.password') }}</label>
+            <div class="relative">
+              <LockKeyhole class="pointer-events-none absolute left-3 top-3 h-4 w-4 text-slate-400" />
+              <input id="login-password" v-model="password" :type="showPassword ? 'text' : 'password'" class="input pl-10 pr-12" :placeholder="t('auth.passwordPlaceholder')" autocomplete="current-password" required />
+              <button type="button" class="absolute inset-y-0 right-0 flex w-11 items-center justify-center rounded-r-md text-slate-400 transition hover:text-orange-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-orange-500 dark:hover:text-orange-400" :aria-label="t(showPassword ? 'auth.hidePassword' : 'auth.showPassword')" :title="t(showPassword ? 'auth.hidePassword' : 'auth.showPassword')" aria-controls="login-password" @click="showPassword = !showPassword">
+                <EyeOff v-if="showPassword" class="h-4 w-4" aria-hidden="true" />
+                <Eye v-else class="h-4 w-4" aria-hidden="true" />
+              </button>
+            </div>
+          </div>
           <div v-if="error" class="rounded-md border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300">{{ error }}</div>
           <button type="submit" class="btn btn-primary w-full" :disabled="isLoading"><span>{{ isLoading ? t('auth.loggingIn') : t('auth.login') }}</span><ArrowRight v-if="!isLoading" class="h-4 w-4" /></button>
         </form>

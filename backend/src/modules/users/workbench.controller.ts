@@ -1,5 +1,6 @@
+import type { FopSupplierContext } from '../fop-data/fop-realtime.types'
 import { RmaQueryDto, RmaExportDto } from '../fop-data/rma-orders.dto'
-import { PurchaseReturnQueryDto, PurchaseReturnExportDto } from '../fop-data/purchase-returns.dto'
+import { PurchaseReturnContactQueryDto, PurchaseReturnChatQueryDto, PurchaseReturnQueryDto, PurchaseReturnExportDto } from '../fop-data/purchase-returns.dto'
 import { PurchaseGroupQueryDto, PurchaseGroupExportDto, PurchaseGroupFiltersDto, PurchaseGroupChatQueryDto } from '../fop-data/procurement-groups.dto'
 import { AllocationInventoryQueryDto } from '../fop-data/allocation-inventory.dto'
 import { FopApprovalService } from '../fop-data/fop-approval.service'
@@ -12,6 +13,7 @@ import { Request as ExpressRequest } from 'express'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
 import { WorkbenchAccessService } from './workbench-access.service'
 import { ExportFulfillmentOrdersDto, ListFulfillmentOrdersDto } from './dto/workbench.dto'
+import { completionLabels } from '../fop-data/completed-orders'
 import { exportQueueLabels, FULFILLMENT_EXPORT_MIME } from '../fop-data/fop-order-export'
 import { FopDataService } from '../fop-data/fop-data.service'
 import { StockOrdersQueryDto, StockInventoryQueryDto, StockScopeDto, ExportStockOrdersDto } from '../fop-data/fop-stock.dto'
@@ -19,6 +21,9 @@ import { OrderVolumeQueryDto, OrderVolumeDetailsDto, OrderCustomerSearchDto } fr
 import { ReceiptQueryDto } from '../fop-data/fop-receipts.dto'
 import { FopDashboardQueryDto, FopDataAccessQueryDto, SupplierChatQueryDto } from '../fop-data/fop-data.dto'
 import { ConfirmFopConnectionDto } from '../fop-data/fop-connection.dto'
+import { ServiceUnavailableException } from '@nestjs/common'
+import { ReceiptNoticesQueryDto } from '../workbench-replica/receipt-notices.dto'
+import { LocalWorkbenchService } from '../workbench-replica/local-workbench.service'
 
 @AllowWithoutBusinessData()
 @Controller('workbench')
@@ -43,77 +48,124 @@ export class WorkbenchController {
 @Controller('autoflow/integrations/fop')
 @UseGuards(JwtAuthGuard)
 export class FulfillmentOrdersController {
-  constructor(private readonly data: FopDataService, private readonly approvals: FopApprovalService) {}
+  constructor(private readonly data: FopDataService, private readonly approvals: FopApprovalService, private readonly local?: LocalWorkbenchService) {}
+
+  private get reads(): LocalWorkbenchService {
+    if (!this.local?.enabled) throw new ServiceUnavailableException({ code: 'fop_feature_not_configured', message: 'Workbench queries require a configured local replica' })
+    return this.local
+  }
+
+  private get realtime(): FopDataService | LocalWorkbenchService { return this.local?.enabled && this.local.mock ? this.local : this.data }
+
+  private supplierContacts(userId: string, context: FopSupplierContext) {
+    if (this.local?.enabled && this.local.mock) return this.local.unavailableSupplier(userId)
+    return this.data.getRealtimeSupplierContacts(userId, context)
+  }
+
+  private supplierChat(userId: string, context: FopSupplierContext, contactVersion: string, purchaseOrderId?: string) {
+    if (this.local?.enabled && this.local.mock) return this.local.unavailableSupplier(userId)
+    return this.data.getRealtimeSupplierChat(userId, context, contactVersion, purchaseOrderId)
+  }
+
+  @Get('receipt-notices')
+  @Header('Cache-Control', 'private, no-store')
+  getReceiptNotices(@Request() req: ExpressRequest, @Query() query: ReceiptNoticesQueryDto) {
+    if (!this.local?.enabled) throw new ServiceUnavailableException({ code: 'fop_feature_not_configured', message: 'Receipt notices require a configured local replica' })
+    return this.local.getReceiptNotices(req.user!.userId, query)
+  }
 
   @Get('rma-orders')
   @Header('Cache-Control', 'private, no-store')
-  getRmaOrders(@Request() req: ExpressRequest, @Query() query: RmaQueryDto) { return this.data.getRmaOrders(req.user!.userId, query) }
+  getRmaOrders(@Request() req: ExpressRequest, @Query() query: RmaQueryDto) { return this.reads.getRmaOrders(req.user!.userId, query) }
 
   @Post('rma-orders/export')
   @HttpCode(200)
   @Header('Cache-Control', 'private, no-store')
   async exportRmaOrders(@Request() req: ExpressRequest, @Body() query: RmaExportDto) {
-    return new StreamableFile(await this.data.exportRmaOrders(req.user!.userId, query, req.user!.sessionVersion ?? 0), { type: FULFILLMENT_EXPORT_MIME, disposition: 'attachment; filename="rma-orders.xlsx"' })
+    return new StreamableFile(await this.reads.exportRmaOrders(req.user!.userId, query, req.user!.sessionVersion ?? 0), { type: FULFILLMENT_EXPORT_MIME, disposition: 'attachment; filename="rma-orders.xlsx"' })
   }
 
   @Get('purchase-returns')
   @Header('Cache-Control', 'private, no-store')
-  getPurchaseReturns(@Request() req: ExpressRequest, @Query() query: PurchaseReturnQueryDto) { return this.data.getPurchaseReturns(req.user!.userId, query) }
+  getPurchaseReturns(@Request() req: ExpressRequest, @Query() query: PurchaseReturnQueryDto) { return this.reads.getPurchaseReturns(req.user!.userId, query) }
+
+  @Get('purchase-returns/:returnId/supplier-follow-up')
+  @Header('Cache-Control', 'private, no-store')
+  getReturnSupplier(@Request() req: ExpressRequest, @Param('returnId') id: string, @Query() query: PurchaseReturnContactQueryDto) {
+    return this.supplierContacts(req.user!.userId, { context: 'purchase_return', returnId: id, orderId: query.orderId, workbenchRole: query.workbenchRole })
+  }
+
+  @Get('purchase-returns/:returnId/supplier-follow-up/launch')
+  @Header('Cache-Control', 'private, no-store')
+  getReturnSupplierChat(@Request() req: ExpressRequest, @Param('returnId') id: string, @Query() query: PurchaseReturnChatQueryDto) {
+    return this.supplierChat(req.user!.userId, { context: 'purchase_return', returnId: id, orderId: query.orderId, workbenchRole: query.workbenchRole }, query.contactVersion)
+  }
 
   @Post('purchase-returns/export')
   @HttpCode(200)
   @Header('Cache-Control', 'private, no-store')
   async exportPurchaseReturns(@Request() req: ExpressRequest, @Body() body: PurchaseReturnExportDto) {
-    const buffer = await this.data.exportPurchaseReturns(req.user!.userId, body, req.user!.sessionVersion ?? 0)
+    const buffer = await this.reads.exportPurchaseReturns(req.user!.userId, body, req.user!.sessionVersion ?? 0)
     return new StreamableFile(buffer, { type: FULFILLMENT_EXPORT_MIME, disposition: 'attachment; filename="purchase-returns.xlsx"' })
   }
 
   @Get('purchase-groups')
   @Header('Cache-Control', 'private, no-store')
-  getPurchaseGroups(@Request() req: ExpressRequest, @Query() query: PurchaseGroupQueryDto) { return this.data.getPurchaseGroups(req.user!.userId, query) }
+  getPurchaseGroups(@Request() req: ExpressRequest, @Query() query: PurchaseGroupQueryDto) { return this.reads.getPurchaseGroups(req.user!.userId, query) }
 
   @Get('purchase-groups/:groupId')
   @Header('Cache-Control', 'private, no-store')
-  getPurchaseGroupDetails(@Request() req: ExpressRequest, @Param('groupId') id: string, @Query() query: PurchaseGroupQueryDto) { return this.data.getPurchaseGroupDetails(req.user!.userId, id, query) }
+  getPurchaseGroupDetails(@Request() req: ExpressRequest, @Param('groupId') id: string, @Query() query: PurchaseGroupQueryDto) { return this.reads.getPurchaseGroupDetails(req.user!.userId, id, query) }
 
   @Get('purchase-groups/:groupId/supplier-follow-up')
   @Header('Cache-Control', 'private, no-store')
-  getPurchaseGroupSupplier(@Request() req: ExpressRequest, @Param('groupId') id: string, @Query() query: PurchaseGroupFiltersDto) { return this.data.getPurchaseGroupSupplier(req.user!.userId, id, query) }
+  getPurchaseGroupSupplier(@Request() req: ExpressRequest, @Param('groupId') id: string, @Query() query: PurchaseGroupFiltersDto) { return this.supplierContacts(req.user!.userId, { context: 'purchase_group', groupId: id, filters: query }) }
 
   @Get('purchase-groups/:groupId/supplier-follow-up/launch')
   @Header('Cache-Control', 'private, no-store')
-  getPurchaseGroupSupplierChat(@Request() req: ExpressRequest, @Param('groupId') id: string, @Query() query: PurchaseGroupChatQueryDto) { return this.data.getPurchaseGroupSupplierChat(req.user!.userId, id, query) }
+  getPurchaseGroupSupplierChat(@Request() req: ExpressRequest, @Param('groupId') id: string, @Query() query: PurchaseGroupChatQueryDto) {
+    const { contactVersion, ...filters } = query
+    return this.supplierChat(req.user!.userId, { context: 'purchase_group', groupId: id, filters }, contactVersion)
+  }
 
   @Post('purchase-groups/export')
   @HttpCode(200)
   @Header('Cache-Control', 'private, no-store')
   async exportPurchaseGroups(@Request() req: ExpressRequest, @Body() body: PurchaseGroupExportDto) {
-    const buffer = await this.data.exportPurchaseGroups(req.user!.userId, body, req.user!.sessionVersion ?? 0)
+    const buffer = await this.reads.exportPurchaseGroups(req.user!.userId, body, req.user!.sessionVersion ?? 0)
     return new StreamableFile(buffer, { type: FULFILLMENT_EXPORT_MIME, disposition: 'attachment; filename="purchase-groups.xlsx"' })
   }
 
   @Post('allocation-inventory/query')
   @HttpCode(200)
   @Header('Cache-Control', 'private, no-store')
-  getAllocationInventory(@Request() req: ExpressRequest, @Body() query: AllocationInventoryQueryDto) { return this.data.getAllocationInventory(req.user!.userId, query) }
+  getAllocationInventory(@Request() req: ExpressRequest, @Body() query: AllocationInventoryQueryDto) { return this.realtime.getAllocationInventory(req.user!.userId, query) }
 
   @Get('stock-orders')
   @Header('Cache-Control', 'private, no-store')
-  getStockOrders(@Request() req: ExpressRequest, @Query() query: StockOrdersQueryDto) { return this.data.getStockOrders(req.user!.userId, query) }
+  getStockOrders(@Request() req: ExpressRequest, @Query() query: StockOrdersQueryDto) { return this.reads.getStockOrders(req.user!.userId, query) }
+
+  @Get('stock-orders/:orderId/supplier-follow-ups')
+  @Header('Cache-Control', 'private, no-store')
+  getStockSupplierFollowUps(@Request() req: ExpressRequest, @Param('orderId') orderId: string) { return this.supplierContacts(req.user!.userId, { context: 'stock', orderId, queue: 'procurement_shipping' }) }
+
+  @Get('stock-orders/:orderId/supplier-follow-ups/:purchaseOrderId/launch')
+  @Header('Cache-Control', 'private, no-store')
+  getStockSupplierChat(@Request() req: ExpressRequest, @Param('orderId') orderId: string, @Param('purchaseOrderId') purchaseOrderId: string, @Query() query: SupplierChatQueryDto) { return this.supplierChat(req.user!.userId, { context: 'stock', orderId, queue: 'procurement_shipping' }, query.contactVersion, purchaseOrderId) }
 
   @Get('stock-customers')
   @Header('Cache-Control', 'private, no-store')
-  getStockCustomers(@Request() req: ExpressRequest, @Query() query: StockScopeDto) { return this.data.getStockCustomers(req.user!.userId, query) }
+  getStockCustomers(@Request() req: ExpressRequest, @Query() query: StockScopeDto) { return this.realtime.getStockCustomers(req.user!.userId, query) }
 
   @Get('stock-inventory')
   @Header('Cache-Control', 'private, no-store')
-  getStockInventory(@Request() req: ExpressRequest, @Query() query: StockInventoryQueryDto) { return this.data.getStockInventory(req.user!.userId, query) }
+  getStockInventory(@Request() req: ExpressRequest, @Query() query: StockInventoryQueryDto) { return this.realtime.getStockInventory(req.user!.userId, query) }
 
   @Post('stock-orders/export')
   @HttpCode(200)
   @Header('Cache-Control', 'private, no-store')
   async exportStockOrders(@Request() req: ExpressRequest, @Body() body: ExportStockOrdersDto) {
-    const buffer = await this.data.exportStockOrders(req.user!.userId, body, req.user!.sessionVersion ?? 0)
+    const buffer = await this.reads.exportStockOrders(req.user!.userId, body, req.user!.sessionVersion ?? 0)
     return new StreamableFile(buffer, { type: FULFILLMENT_EXPORT_MIME, disposition: `attachment; filename="stock-orders.xlsx"; filename*=UTF-8''${encodeURIComponent('备货清单.xlsx')}` })
   }
 
@@ -121,9 +173,9 @@ export class FulfillmentOrdersController {
   @HttpCode(200)
   @Header('Cache-Control', 'private, no-store')
   async exportOrders(@Request() req: ExpressRequest, @Body() body: ExportFulfillmentOrdersDto) {
-    const buffer = await this.data.exportOrders(req.user!.userId, body, req.user!.sessionVersion ?? 0)
+    const buffer = await this.reads.exportOrders(req.user!.userId, body, req.user!.sessionVersion ?? 0)
     const date = new Date(Date.now() + 8 * 3600_000).toISOString().slice(0, 10)
-    const filename = `${exportQueueLabels[body.queue]}_${date}.xlsx`
+    const filename = `${body.completed && body.queue === 'review' ? completionLabels.review[0] : exportQueueLabels[body.queue]}_${date}.xlsx`
     return new StreamableFile(buffer, { type: FULFILLMENT_EXPORT_MIME, disposition: `attachment; filename="workbench-orders-${date}.xlsx"; filename*=UTF-8''${encodeURIComponent(filename)}` })
   }
 
@@ -153,19 +205,19 @@ export class FulfillmentOrdersController {
   @Get('fulfillment-orders')
   @Header('Cache-Control', 'private, no-store')
   async getOrders(@Request() req: ExpressRequest, @Query() query: ListFulfillmentOrdersDto) {
-    return this.data.getOrders(req.user!.userId, query)
+    return this.reads.getOrders(req.user!.userId, query)
   }
 
   @Get('fulfillment-orders/:orderId/supplier-follow-ups')
   @Header('Cache-Control', 'private, no-store')
   getSupplierFollowUps(@Request() req: ExpressRequest, @Param('orderId') orderId: string, @Query() _query: FopDataAccessQueryDto) {
-    return this.data.getSupplierFollowUps(req.user!.userId, orderId)
+    return this.supplierContacts(req.user!.userId, { context: 'fulfillment', orderId, queue: 'procurement_shipping' })
   }
 
   @Get('fulfillment-orders/:orderId/supplier-follow-ups/:purchaseOrderId/launch')
   @Header('Cache-Control', 'private, no-store')
   getSupplierChat(@Request() req: ExpressRequest, @Param('orderId') orderId: string, @Param('purchaseOrderId') purchaseOrderId: string, @Query() query: SupplierChatQueryDto) {
-    return this.data.getSupplierChat(req.user!.userId, orderId, purchaseOrderId, query.contactVersion)
+    return this.supplierChat(req.user!.userId, { context: 'fulfillment', orderId, queue: 'procurement_shipping' }, query.contactVersion, purchaseOrderId)
   }
 
   @AllowWithoutBusinessData()
@@ -239,6 +291,6 @@ export class FulfillmentOrdersController {
   @Get('dashboard')
   @Header('Cache-Control', 'private, no-store')
   getDashboard(@Request() req: ExpressRequest, @Query() query: FopDashboardQueryDto) {
-    return this.data.getDashboard(req.user!.userId, query)
+    return this.data.getDashboard(req.user!.userId, query, query.includeQueues === false ? undefined : this.reads)
   }
 }

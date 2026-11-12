@@ -5,7 +5,7 @@ import { i18n } from '@/i18n'
 import AvatarPicker from '@/components/ui/AvatarPicker.vue'
 import { useUserStore } from '@/stores/user'
 import { authApi } from '@/api/auth'
-import { englishDisplayName } from '@/utils/user-display'
+import { defaultAvatarUrl, englishDisplayName, presetAvatarSrc, PRESET_AVATARS } from '@/utils/user-display'
 import type { User } from '@/types'
 
 vi.mock('@/api/auth', () => ({ authApi: { updateProfile: vi.fn(), uploadAvatar: vi.fn() } }))
@@ -21,17 +21,17 @@ it('shows a capitalized English name instead of the login email', () => {
 it('persists a preset through the profile API and updates the active avatar', async () => {
   vi.mocked(authApi.updateProfile).mockResolvedValue({ ...account, avatarUrl: '/avatars/preset-mint.svg' })
   const wrapper = mount(AvatarPicker, { global: { plugins: [i18n] } })
-  await wrapper.get('button[aria-label="青绿"]').trigger('click'); await flushPromises()
+  await wrapper.get('button[aria-label="元气柴犬"]').trigger('click'); await flushPromises()
   expect(authApi.updateProfile).toHaveBeenCalledWith({ avatarUrl: '/avatars/preset-mint.svg' })
-  expect(useUserStore().avatarUrl).toBe('/avatars/preset-mint.svg')
-  expect(wrapper.get('button[aria-label="青绿"]').attributes('aria-pressed')).toBe('true')
+  expect(useUserStore().avatarUrl).toBe(presetAvatarSrc('/avatars/preset-mint.svg'))
+  expect(wrapper.get('button[aria-label="元气柴犬"]').attributes('aria-pressed')).toBe('true')
   wrapper.unmount()
 })
 it('keeps the old avatar when saving fails and permits retry', async () => {
   vi.mocked(authApi.updateProfile).mockRejectedValue(new Error('offline'))
   const wrapper = mount(AvatarPicker, { global: { plugins: [i18n] } })
-  await wrapper.get('button[aria-label="海蓝"]').trigger('click'); await flushPromises()
-  expect(useUserStore().avatarUrl).toBeNull()
+  await wrapper.get('button[aria-label="云朵猫"]').trigger('click'); await flushPromises()
+  expect(useUserStore().avatarUrl).toBe(presetAvatarSrc(defaultAvatarUrl(account)))
   expect(wrapper.get('[role="status"]').text()).toBe('保存失败')
   expect(wrapper.get('fieldset').attributes('disabled')).toBeUndefined()
   wrapper.unmount()
@@ -49,5 +49,30 @@ it('uploads a selected photo and rejects oversized files before sending', async 
   await input.trigger('change'); await flushPromises()
   expect(authApi.uploadAvatar).toHaveBeenCalledTimes(1)
   expect(wrapper.get('[role="status"]').text()).toContain('5 MB')
+  wrapper.unmount()
+})
+
+it('uses a stable pet default without persisting over an uploaded photo', () => {
+  const store = useUserStore()
+  const initial = store.avatarUrl
+  expect(PRESET_AVATARS.some(avatar => presetAvatarSrc(avatar.url) === initial)).toBe(true)
+  store.user = { ...account, username: 'New name' }
+  expect(store.avatarUrl).toBe(initial)
+  store.user = { ...account, avatarUrl: 'https://example.com/my-photo.png' }
+  expect(store.avatarUrl).toBe('https://example.com/my-photo.png')
+  expect(authApi.updateProfile).not.toHaveBeenCalled()
+  store.user = null
+  expect(store.avatarUrl).toBeNull()
+})
+
+it('switches to the women collection and persists a selected style through the existing profile API', async () => {
+  vi.mocked(authApi.updateProfile).mockResolvedValue({ ...account, avatarUrl: '/avatars/preset-violet.svg' })
+  const wrapper = mount(AvatarPicker, { global: { plugins: [i18n] } })
+  await wrapper.get('[data-avatar-group="women"]').trigger('click')
+  expect(wrapper.get('fieldset[aria-label="靓丽女士"]').isVisible()).toBe(true)
+  expect(wrapper.get('fieldset[aria-label="宠物插画"]').isVisible()).toBe(false)
+  await wrapper.get('button[aria-label="紫韵女士"]').trigger('click'); await flushPromises()
+  expect(authApi.updateProfile).toHaveBeenCalledWith({ avatarUrl: '/avatars/preset-violet.svg' })
+  expect(wrapper.get('button[aria-label="紫韵女士"]').attributes('aria-pressed')).toBe('true')
   wrapper.unmount()
 })

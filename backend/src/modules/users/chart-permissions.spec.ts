@@ -23,15 +23,25 @@ describe('account chart policy', () => {
     expect(access(account(), 'registrations')).toMatchObject({ visible: true, dataScope: 'self', summaryOnly: false })
   })
 
-  it('管理员统一全部部门，业务员仅本人，未开通业务的账号继续关闭', () => {
-    for (const role of [UserRole.ADMIN, UserRole.USER]) {
-      expect(access(account({ role }), 'freight')?.dataScope).toBe(role === UserRole.ADMIN ? 'all' : 'self')
-      expect(resolveChartAccess(account({ role, businessRole: 'none', chartPermissions: [override({ visibility: 'allow' })] })).every(chart => !chart.visible && chart.dataScope === 'none' && !chart.canExport)).toBe(true)
-    }
+  it('管理员统一全部部门，业务员仅本人，非管理员未开通业务的账号继续关闭', () => {
+    expect(access(account({ role: UserRole.ADMIN }), 'freight')?.dataScope).toBe('all')
+    expect(access(account(), 'freight')?.dataScope).toBe('self')
+    expect(resolveChartAccess(account({ businessRole: 'none', chartPermissions: [override({ visibility: 'allow' })] })).every(chart => !chart.visible && chart.dataScope === 'none' && !chart.canExport)).toBe(true)
+  })
+
+  it.each(['none', 'salesperson'] as const)('system administrators ignore legacy %s and chart restrictions without widening nonadmins', businessRole => {
+    const user = account({ role: UserRole.ADMIN, businessRole, workbenchRoles: [], chartPermissions: CHART_IDS.map(chartId => override({ chartId, visibility: 'deny', dataScope: 'none', summaryMode: 'none', details: 'deny', export: 'deny' })) })
+    const charts = resolveChartAccess(user)
+    expect(charts.every(chart => chart.visible && chart.canExport)).toBe(true)
+    expect(charts.filter(chart => chart.chartId !== 'department_receipts').every(chart => chart.dataScope === 'all')).toBe(true)
+    expect(charts.find(chart => chart.chartId === 'customer_orders')?.canViewDetails).toBe(true)
+    expect(resolveChartSummaryPolicy(user, 'order_volume')).toEqual({ mode: 'marketing', departments: [] })
+    user.role = UserRole.USER
+    expect(resolveChartAccess(user).every(chart => !chart.visible && !chart.canExport)).toBe(true)
   })
 
   it('defaults managers to department records and summaries while administrators retain tenant scope', () => {
-    const manager = account({ businessRole: 'department_manager' })
+    const manager = account({ businessRole: 'department_manager', dataDisplayScope: 'department' as const })
     expect(access(manager, 'customer_orders')).toMatchObject({ dataScope: 'department' })
     expect(access(manager, 'department_receipts')).toMatchObject({ visible: true, dataScope: 'none', summaryOnly: true, canViewDetails: false, summaryDepartments: ['sales1'] })
     expect(resolveChartSummaryPolicy(manager, 'department_receipts')).toEqual({ mode: 'department', departments: [] })
@@ -41,13 +51,13 @@ describe('account chart policy', () => {
   })
 
   it('does not confuse unknown manager department IDs with marketing access', () => {
-    const manager = account({ businessRole: 'department_manager', businessDepartmentId: 'department-uuid' })
+    const manager = account({ businessRole: 'department_manager', dataDisplayScope: 'department' as const, businessDepartmentId: 'department-uuid' })
     expect(resolveChartSummaryPolicy(manager, 'registrations')).toEqual({ mode: 'department', departments: [] })
     expect(access(manager, 'department_receipts')?.summaryDepartments).toEqual([])
   })
 
   it('narrows manager record access to self without altering independent organization summaries', () => {
-    const user = account({ businessRole: 'department_manager', chartPermissions: [override({ chartId: 'order_volume', dataScope: 'self', details: 'deny', export: 'deny' })] })
+    const user = account({ businessRole: 'department_manager', dataDisplayScope: 'department' as const, chartPermissions: [override({ chartId: 'order_volume', dataScope: 'self', details: 'deny', export: 'deny' })] })
     expect(access(user, 'order_volume')).toMatchObject({ visible: true, dataScope: 'self', canViewDetails: false, canExport: false, summaryDepartments: ['sales1'] })
     expect(access(user, 'customer_orders')?.dataScope).toBe('department')
   })
@@ -57,7 +67,7 @@ describe('account chart policy', () => {
   })
 
   it('keeps missing employee bindings empty when a manager narrows to self', () => {
-    const user = account({ businessRole: 'department_manager', businessEmployeeId: null, chartPermissions: [override({ dataScope: 'self', visibility: 'allow' })] })
+    const user = account({ businessRole: 'department_manager', dataDisplayScope: 'department' as const, businessEmployeeId: null, chartPermissions: [override({ dataScope: 'self', visibility: 'allow' })] })
     expect(access(user, 'customer_orders')).toMatchObject({ visible: false, dataScope: 'none', canViewDetails: false })
   })
 
@@ -69,7 +79,7 @@ describe('account chart policy', () => {
 
   it('经理不能通过全部或指定部门汇总越过本部门', () => {
     for (const summaryMode of ['selected', 'marketing'] as const) {
-      const user = account({ businessRole: 'department_manager', chartPermissions: [override({ chartId: 'department_receipts', summaryMode,
+      const user = account({ businessRole: 'department_manager', dataDisplayScope: 'department' as const, chartPermissions: [override({ chartId: 'department_receipts', summaryMode,
         summaryDepartments: summaryMode === 'selected' ? ['sales2', 'sales4'] : [] })] })
       expect(resolveChartSummaryPolicy(user, 'department_receipts')).toEqual({ mode: 'department', departments: [] })
       expect(access(user, 'department_receipts')?.summaryDepartments).toEqual(['sales1'])

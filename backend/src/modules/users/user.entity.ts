@@ -22,6 +22,7 @@ export enum UserRole {
 
 @Entity('users')
 @Check('chk_users_chart_permissions', 'autoflow_valid_chart_permissions(chart_permissions)')
+@Check('chk_users_data_display_scope', "data_display_scope IN ('department','self')")
 @Check('chk_users_business_role', "business_role IN ('none','admin','department_manager','salesperson')")
 @Check('chk_users_business_ids', "(business_department_id IS NULL OR (char_length(business_department_id) > 0 AND business_department_id = btrim(business_department_id))) AND (business_employee_id IS NULL OR (char_length(business_employee_id) > 0 AND business_employee_id = btrim(business_employee_id)))")
 @Unique('uq_users_fop_identity', ['fopTenantId', 'fopUserId'])
@@ -101,6 +102,9 @@ export class User {
 
   @Column({ name: 'business_role', type: 'varchar', length: 24, default: 'salesperson' })
   businessRole: BusinessRole
+
+  @Column({ name: 'data_display_scope', type: 'varchar', length: 16, default: 'self' })
+  dataDisplayScope: 'department' | 'self'
 
   @Column({ name: 'business_department_id', type: 'varchar', length: 128, nullable: true })
   businessDepartmentId: string | null

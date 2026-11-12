@@ -76,3 +76,13 @@ test('can check token acquisition before order fields are known without returnin
 test('network errors cannot echo request credentials to CLI output', async () => {
   await assert.rejects(getToken(config, async () => { throw new Error(config.FOP_OPENAPI_CLIENT_SECRET) }), error => !error.message.includes(config.FOP_OPENAPI_CLIENT_SECRET))
 })
+
+ test('pause blocks token, data and unauthenticated probes with zero network calls', async () => {
+  let calls = 0
+  const fetcher = async () => { calls++; throw new Error('must not call') }
+  const paused = { ...config, FOP_QUERIES_PAUSED: 'true' }
+  await assert.rejects(getToken(paused, fetcher), /fop_queries_paused/)
+  await assert.rejects(runCheck(paused, {}, fetcher), /fop_queries_paused/)
+  await assert.rejects(runCheck(paused, { probe: true }, fetcher), /fop_queries_paused/)
+  assert.equal(calls, 0)
+})

@@ -1,0 +1,63 @@
+{
+  "date": "2026-11-11",
+  "policy": "2.2",
+  "backendTestsPassed": 1384,
+  "backendTestsSkipped": 7,
+  "frontendTestsPassed": 652,
+  "postgresDemandScenarios": 13,
+  "postgresPublicationScenarios": 15,
+  "build": "passed",
+  "lint": "passed",
+  "migration": "1794402000000",
+  "migrationRollbackReapply": "passed",
+  "currentData": "schema_backed_mock",
+  "fopPaused": true,
+  "realSourceConfigured": false,
+  "automaticSyncEnabled": false,
+  "review": "independent_review_passed_after_fixes",
+  "databases": {
+    "source": {
+      "accounts": 36,
+      "employees": 35,
+      "organizations": 19,
+      "migrations": 45,
+      "documents": 0
+    },
+    "mock": {
+      "accounts": 36,
+      "employees": 35,
+      "organizations": 19,
+      "migrations": 45,
+      "documents": 840,
+      "fulfillment": 280,
+      "stock": 120,
+      "inventoryBalances": 0
+    }
+  },
+  "sharedSyncEntry": {
+    "location": "workbench_role_tabs_right",
+    "instances": 1,
+    "manualPersistsAcrossQueues": true,
+    "localReadBeforeNavigationSync": true,
+    "approvalDefersReload": true,
+    "independentReview": "passed",
+    "idleHint": "source_synced_at_only",
+    "statusFailureRecovery": "next_queue_navigation"
+  },
+  "businessDepartmentFilters": {
+    "allowedNames": [
+      "营销中心",
+      "业务一部",
+      "业务二部",
+      "业务三部",
+      "业务四部"
+    ],
+    "accountScopePreserved": true,
+    "nonBusinessOrganizationsExcluded": true,
+    "analyticsDimensionAligned": true,
+    "themeVerification": [
+      "light",
+      "dark"
+    ]
+  }
+}

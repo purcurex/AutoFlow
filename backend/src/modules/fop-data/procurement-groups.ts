@@ -1,4 +1,5 @@
-import { completedAt, completedRange, isStageCompleted } from './completed-orders'
+import { completedAt, isStageCompleted } from './completed-orders'
+import { consumerPaymentRange } from './consumer-payment-range'
 import Decimal from 'decimal.js'
 import type { FopOrder, FopPermissionGrant } from './fop-data.types'
 import type { PurchaseGroup, PurchaseGroupFilters, PurchaseGroupRow, PurchaseHeader, PurchaseLinkSnapshot } from './procurement-groups.types'
@@ -28,7 +29,7 @@ const compareDate = (a: string | null, b: string | null, direction = 1) => {
 }
 function rowFor(order: FopOrder): PurchaseGroupRow {
   return { orderId: order.id, orderNumber: order.orderNumber, shopifyOrderNumber: order.shopifyOrderNumber, customerName: order.customerName, storeName: order.storeName,
-    ownerName: order.owner?.name || order.salesperson, departmentName: order.department?.name || '—', warehouse: order.warehouse, completedAt: completedAt(order, 'procurement'), paidAt: normalizeBusinessTimestamp(order.paidAt), lines: [] }
+    ownerName: order.owner?.name || order.salesperson, departmentName: order.department?.name || '—', warehouse: order.warehouse, completedAt: completedAt(order, 'procurement'), paidAt: normalizeBusinessTimestamp(order.paidAt), consumerPaidAt: normalizeBusinessTimestamp(order.consumerPaidAt), lines: [] }
 }
 export function buildPurchaseGroups(orders: FopOrder[], paths: Map<string, readonly string[]>, permission: FopPermissionGrant, snapshot: PurchaseLinkSnapshot, query: PurchaseGroupFilters): PurchaseGroup[] {
   if (!snapshot || snapshot.subject?.tenantId !== permission.subject.tenantId || snapshot.subject?.userId !== permission.subject.userId || !Array.isArray(snapshot.orders)) throw new Error('Invalid purchase snapshot subject')
@@ -40,7 +41,7 @@ export function buildPurchaseGroups(orders: FopOrder[], paths: Map<string, reado
     byOrder.set(entry.orderId, entry)
   }
   const groups = new Map<string, PurchaseGroup>(), headers = new Map<string, string>()
-  const matchesCompletionRange = completedRange(query.timeRange)
+  const matchesPaymentRange = consumerPaymentRange(query.timeRange ?? '1w')
   const search = query.search?.trim().toLowerCase()
   function add(id: string, kind: PurchaseGroup['kind'], purchase: PurchaseHeader | null, row: PurchaseGroupRow) {
     const matches = !search || [purchase?.number, purchase?.platformOrderNumber, purchase?.supplier.name, row.orderNumber, row.shopifyOrderNumber, row.customerName, row.storeName, row.ownerName, ...row.lines.flatMap(l => [l.sku, l.name])].some(v => v?.toLowerCase().includes(search))
@@ -90,19 +91,23 @@ export function buildPurchaseGroups(orders: FopOrder[], paths: Map<string, reado
         row.lines.push({ fulfillmentLineId: line.fulfillmentLineId, purchaseLineId: line.purchaseLineId, sku: line.sku, quantity: line.quantity, shippedQuantity: line.shippedQuantity, name: item.name, imageUrl: item.imageUrl, variant: item.variant })
       }
       const awaitingShipment = purchase?.payment === 'paid' && purchase.placement === 'placed'
+      // A missing completion fact is not evidence of outstanding procurement.
+      const awaitingProcurement = purchase === null || purchase.placement === 'pending'
+        || purchase.payment === 'unpaid' || purchase.payment === 'partial' || purchase.payment === 'refunded'
       if (query.completed) {
-        if (!awaitingShipment || !isStageCompleted(order, 'procurement') || !matchesCompletionRange(completedAt(order, 'procurement'))) continue
+        if (!awaitingShipment || !isStageCompleted(order, 'procurement') || !matchesPaymentRange(order.consumerPaidAt)) continue
       } else if (query.queue === 'procurement_shipping') {
         if (!awaitingShipment || !row.lines.some(l => l.shippedQuantity < l.quantity)) continue
-      } else if (awaitingShipment) continue
+      } else if (!awaitingProcurement) continue
       add(id, purchase ? 'purchase' : 'uncreated', purchase, row)
     }
   }
   for (const group of groups.values()) {
-    group.rows.sort((a, b) => compareDate(a.paidAt, b.paidAt) || a.orderId.localeCompare(b.orderId))
+    group.rows.sort((a, b) => compareDate(a.consumerPaidAt ?? null, b.consumerPaidAt ?? null, query.sortOrder === 'asc' ? 1 : -1) || a.orderId.localeCompare(b.orderId))
     if (query.completed) group.completedAt = group.rows.map(row => row.completedAt).filter((value): value is string => !!value).sort().slice(-1)[0] ?? null
+    group.latestConsumerPaidAt = group.rows.reduce<string | null>((latest, row) => compareDate(row.consumerPaidAt ?? null, latest, -1) < 0 ? row.consumerPaidAt ?? null : latest, null)
     group.orderCount = group.rows.length
-    group.earliestReceiptAt = group.rows[0]?.paidAt ?? null
+    group.earliestReceiptAt = group.rows.reduce<string | null>((earliest, row) => compareDate(row.paidAt, earliest) < 0 ? row.paidAt : earliest, null)
     const lines = group.rows.flatMap(r => r.lines)
     group.skuCount = new Set(lines.map(l => l.sku)).size
     group.quantity = sum(lines.map(l => l.quantity)); group.shippedQuantity = sum(lines.map(l => l.shippedQuantity))
@@ -118,7 +123,7 @@ export function buildPurchaseGroups(orders: FopOrder[], paths: Map<string, reado
     return stage === query.purchaseStage
   }
   return [...groups.values()].filter(matchesStage).sort((a, b) => Number(b.kind === 'uncreated') - Number(a.kind === 'uncreated')
-    || compareDate(query.completed ? a.completedAt ?? null : a.earliestReceiptAt, query.completed ? b.completedAt ?? null : b.earliestReceiptAt, query.sortOrder === 'desc' || query.completed && !query.sortOrder ? -1 : 1) || a.id.localeCompare(b.id))
+    || compareDate(a.latestConsumerPaidAt ?? null, b.latestConsumerPaidAt ?? null, query.sortOrder === 'asc' ? 1 : -1) || a.id.localeCompare(b.id))
 }
 export function purchaseGroupSummary({ rows: _rows, ...group }: PurchaseGroup) { return group }
 export function purchaseGroupTotals(groups: PurchaseGroup[]) {

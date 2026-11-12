@@ -1,4 +1,4 @@
-import { KingdeeFopDataProvider } from './fop-kingdee.provider'
+import { KingdeeWorkbenchDiagnosticProvider as KingdeeFopDataProvider } from './fop-kingdee.diagnostic'
 import { FopDataService } from './fop-data.service'
 import { FopPermissionDeniedError } from './fop-data.types'
 import { UsersService } from '../users/users.service'
@@ -25,9 +25,9 @@ function setup(transform?: (row: ReturnType<typeof order>) => unknown, queues = 
     const data = String(input).endsWith('/permissions')
       ? { subject: identity, currentOrganization: ref('10'), grants: { orders: ['10'], receipts: [], registrations: [], freight: [] }, orderQueues: queues }
       : { subject: identity, schemaVersion: 1, organizationIds: ['10'], queue: 'unpaid', basis: 'unpaid_active_self',
-        page: params.page, pageSize: params.pageSize, total: '31',
+        page: params.page, pageSize: params.pageSize, total: params.pageSize === 100 ? '1' : '31',
         items: String(input).endsWith('/summary') ? [] : [transform ? transform(order()) : order()],
-        totals: { orderCount: '31', itemQuantity: '77.5', amountsByCurrency: [{ currency: 'USD', amount: '3826.95' }] } }
+        totals: { orderCount: params.pageSize === 100 ? '1' : '31', itemQuantity: '77.5', amountsByCurrency: [{ currency: 'USD', amount: '3826.95' }] } }
     return new Response(JSON.stringify({ status: true, errorCode: '0', data }))
   })
   const provider = new KingdeeFopDataProvider({ get: key => settings[key] }, request)
@@ -40,21 +40,21 @@ function setup(transform?: (row: ReturnType<typeof order>) => unknown, queues = 
 }
 
 describe('按角色读取待支付平台订单', () => {
-  it('管理员保留全部部门范围、上游合计和源单付款时间', async () => {
+  it('管理员保留全部部门范围和上游合计，未配置收款来源时付款时间为空', async () => {
     const { service, request, user } = setup()
     user.role = 'admin' as User['role']; user.businessRole = 'admin'
-    const result = await service.getOrders('local-admin', { ...query, timeRange: '1w', warehouseCode: 'HZ', search: 'Custom',
+    const result = await service.getOrders('local-admin', { ...query, timeRange: 'all', warehouseCode: 'HZ', search: 'Custom',
       departmentId: '400', sortBy: 'consumerPaidAt', sortOrder: 'desc' })
     expect(result.total).toBe(31)
     expect(result.totals.amountsByCurrency).toEqual([{ currency: 'USD', amount: 3826.95 }])
-    expect(result.items[0]).toMatchObject({ paymentStatus: 'unpaid', consumerPaidAt: sourceTime, paidAt: null,
+    expect(result.items[0]).toMatchObject({ paymentStatus: 'unpaid', consumerPaidAt: null, paidAt: null,
       warehouseCode: 'HZ', customLogisticsChannelName: 'Custom Channel', owner: ref('501') })
     const sent = JSON.parse(String(request.mock.calls[1][1]?.body)).query
-    expect(sent).toMatchObject({ queue: 'unpaid', scopeRole: 'admin', employeeId: '501', timeRange: '1w',
-      warehouseIds: ['900'], departmentId: '400', search: 'Custom', sortBy: 'consumerPaidAt', sortOrder: 'desc' })
+    expect(sent).toMatchObject({ queue: 'unpaid', scopeRole: 'admin', employeeId: null, timeRange: 'all',
+      warehouseIds: ['900'], departmentId: '400', search: 'Custom', sortBy: 'paidAt', sortOrder: 'desc' })
   })
 
-  it('没有源单付款时间时保留空值，不回退创建时间', async () => {
+  it('没有已确认客户收款时间时保留空值，不回退源单或创建时间', async () => {
     const { service } = setup(row => ({ ...row, consumerPaidAt: null }))
     expect((await service.getOrders('local-admin', query)).items[0]).toMatchObject({ consumerPaidAt: null, paidAt: null })
   })
@@ -87,18 +87,30 @@ describe('按角色读取待支付平台订单', () => {
     await expect(service.getOrders('local-admin', query)).rejects.toMatchObject({ response: { code: 'fop_feature_not_configured' } })
   })
 
-  it('合计接口保留角色并携带相同时间和仓库条件', async () => {
+  it('无付款时间限制的合计接口保留角色和仓库条件', async () => {
     const { provider, request } = setup()
     const permission = await provider.resolvePermissions(identity, own)
-    const result = await provider.queryOrders(identity, permission, { ...own, role: 'admin' }, { ...query, timeRange: '3m', warehouseCode: 'SZ' }, true)
+    const result = await provider.queryOrders(identity, permission, { ...own, role: 'admin' }, { ...query, timeRange: 'all', warehouseCode: 'SZ' }, true)
     expect(result.items).toEqual([])
     expect(result.total).toBe(31)
-    expect(JSON.parse(String(request.mock.calls[1][1]?.body)).query).toMatchObject({ scopeRole: 'admin', employeeId: '501', timeRange: '3m', warehouseIds: ['901'] })
+    expect(JSON.parse(String(request.mock.calls[1][1]?.body)).query).toMatchObject({ scopeRole: 'admin', employeeId: '501', timeRange: 'all', warehouseIds: ['901'] })
+  })
+
+  it.each(['1w', '1m', '3m'] as const)('没有本单收款日期的待支付单不进入%s窗口，也不借用源单时间', async timeRange => {
+    const { service, request, provider } = setup()
+    expect(await service.getOrders('local-admin', { ...query, timeRange })).toMatchObject({ total: 0, items: [] })
+    const permission = await provider.resolvePermissions(identity, own)
+    expect(await provider.queryOrders(identity, permission, own, { ...query, timeRange }, true)).toMatchObject({ total: 0, items: [] })
+    const calls = request.mock.calls.filter(call => !String(call[0]).endsWith('/permissions'))
+    expect(calls).toHaveLength(2)
+    expect(calls.every(call => JSON.parse(String(call[1]?.body)).query.timeRange === undefined)).toBe(true)
   })
 
   it.each(['admin', 'department_manager'] as const)('%s可查看授权范围内其他业务员的待支付订单', async businessRole => {
     const { service, user, request } = setup(row => ({ ...row, owner: ref('502') }))
     user.businessRole = businessRole
+    user.dataDisplayScope = 'department'
+    user.dataDisplayScope = 'department'
     const result = await service.getOrders(user.id, query)
     expect(result.items[0].owner?.id).toBe('502')
     expect(JSON.parse(String(request.mock.calls[1][1]?.body)).query.scopeRole).toBe(businessRole)
@@ -108,7 +120,7 @@ describe('按角色读取待支付平台订单', () => {
   it.each([{ department: ref('999'), departmentPathIds: ['10', '999'] },
     { department: ref('401'), departmentPathIds: ['10', '400', '401'] }])('经理不能读取其他部门或子部门%j', async patch => {
     const { service, user } = setup(row => ({ ...row, ...patch }))
-    user.businessRole = 'department_manager'
+    user.dataDisplayScope = 'department'; user.businessRole = 'department_manager'
     await expect(service.getOrders(user.id, query)).rejects.toMatchObject({ status: 403 })
   })
 

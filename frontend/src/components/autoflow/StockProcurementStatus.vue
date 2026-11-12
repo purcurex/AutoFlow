@@ -10,5 +10,5 @@ const { locale } = useI18n()
 
 <template>
   <SupplierShipmentStatus v-if="status === 'purchased'" :paid-at="paidAt" :now="now" />
-  <WorkbenchStatusBadge v-else :tone="['unpurchased', 'partial'].includes(status) ? 'info' : ['shipped', 'received'].includes(status) ? 'success' : 'neutral'">{{ stockStatuses[status]?.[String(locale).startsWith('zh') ? 0 : 1] ?? '—' }}</WorkbenchStatusBadge>
+  <WorkbenchStatusBadge v-else :tone="['unpurchased', 'partial', 'in_progress'].includes(status) ? 'info' : ['shipped', 'received'].includes(status) ? 'success' : 'neutral'">{{ stockStatuses[status]?.[String(locale).startsWith('zh') ? 0 : 1] ?? '—' }}</WorkbenchStatusBadge>
 </template>

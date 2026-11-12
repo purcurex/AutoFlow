@@ -40,7 +40,12 @@ async function request(fetcher, url, init) {
   return { response, json, raw }
 }
 
+export function assertFopQueriesEnabled(config) {
+  if (config.FOP_QUERIES_PAUSED?.trim().toLowerCase() === 'true') throw new Error('fop_queries_paused: FOP 测试环境访问已暂停')
+}
+
 export async function getToken(config, fetcher = fetch) {
+  assertFopQueriesEnabled(config)
   const base = baseUrl(config)
   required(config, 'FOP_OPENAPI_IDENTITY')
   if (config.FOP_OPENAPI_ACCESS_TOKEN?.trim()) return config.FOP_OPENAPI_ACCESS_TOKEN.trim()
@@ -79,6 +84,7 @@ export async function runAuthCheck(config, fetcher = fetch) {
 }
 
 export async function runCheck(config, { probe = false, operation = 'order', body } = {}, fetcher = fetch) {
+  assertFopQueriesEnabled(config)
   const base = baseUrl(config)
   const target = OPERATIONS[operation]
   if (!target) throw new Error('Unknown read-only operation')
@@ -92,6 +98,7 @@ export async function runCheck(config, { probe = false, operation = 'order', bod
     headers[header] = await getToken(config, fetcher)
     headers['x-acgw-identity'] = required(config, 'FOP_OPENAPI_IDENTITY')
   }
+  assertFopQueriesEnabled(config)
   const url = new URL(`${base}${target[1]}`)
   const init = { method: target[0], headers }
   if (target[0] === 'GET') {
@@ -123,8 +130,10 @@ async function main() {
   let config, body
   try {
     config = { ...(existsSync(configPath) ? parseEnv(readFileSync(configPath, 'utf8')) : {}), ...process.env }
+    const pausePath = join(root, 'backend/.env.fop-pause')
+    if (existsSync(pausePath)) assertFopQueriesEnabled(parseEnv(readFileSync(pausePath, 'utf8')))
     body = requestFile ? JSON.parse(readFileSync(resolve(requestFile), 'utf8')) : undefined
-  } catch { throw new Error('Unable to read configuration or request JSON; file contents are not logged') }
+  } catch (error) { if (error.message?.startsWith('fop_queries_paused')) throw error; throw new Error('Unable to read configuration or request JSON; file contents are not logged') }
   const { report, raw } = args.includes('--auth-only') ? await runAuthCheck(config) : await runCheck(config, { probe: args.includes('--probe'), operation, body })
   const out = join(root, '.runtime/fop-test')
   mkdirSync(out, { recursive: true, mode: 0o700 })

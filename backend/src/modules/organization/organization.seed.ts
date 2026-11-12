@@ -34,7 +34,6 @@ export const ORGANIZATION_NODE_SEEDS = [
 // Reference roster: only members with a confirmed department and eligible job.
 // Codes retain the original demo employee identities where possible.
 export const SALES_ROSTER_SEEDS = [
-  { code: 'EMP001', name: '曹可滢', englishName: 'Ruth', department: 'sales1', position: '外贸业务员' },
   { code: 'EMP013', name: '陈会娟', englishName: 'Coco', department: 'sales1', position: '外贸业务员' },
   { code: 'EMP014', name: '董梦强', englishName: 'Alex', department: 'sales1', position: '外贸业务员' },
   { code: 'EMP015', name: '李文静', englishName: 'Betty', department: 'sales1', position: '外贸业务员' },

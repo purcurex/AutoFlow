@@ -3,12 +3,12 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Download } from 'lucide-vue-next'
 
-const props = defineProps<{ selectedCount: number; total: number; disabled?: boolean; busy?: boolean }>()
+const props = defineProps<{ selectedCount: number; total: number; disabled?: boolean; busy?: boolean; recordKind?: 'rma' }>()
 const emit = defineEmits<{ export: [mode: 'selected' | 'filtered'] }>()
 const { locale } = useI18n()
 const text = (cn: string, en: string) => String(locale.value).startsWith('zh') ? cn : en
 const unavailable = computed(() => props.disabled || props.busy || !props.total)
-const hint = computed(() => props.selectedCount > 0
+const hint = computed(() => props.recordKind === 'rma' ? (props.selectedCount > 0 ? text(`导出已选 ${props.selectedCount} 张售后单`, `Export ${props.selectedCount} selected RMA cases`) : text('导出当前筛选下的全部售后单，包含其他分页','Export all matching RMA cases across pages')) : props.selectedCount > 0
   ? text(`导出已选 ${props.selectedCount} 笔订单`, `Export ${props.selectedCount} selected orders`)
   : text('导出当前筛选下的全部订单，包含其他分页', 'Export all matching orders across pages'))
 function download() {

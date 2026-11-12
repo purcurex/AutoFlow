@@ -1,7 +1,7 @@
 import { isWorkbenchRole } from './workbench-role'
 import type { SalesDepartmentCode } from '../fop-data/fop-data.types'
 import type { User } from './user.entity'
-import { businessScope } from './business-scope'
+import { businessScope, effectiveBusinessScope } from './business-scope'
 
 export const CHART_IDS = ['registrations', 'department_receipts', 'salesperson_receipts', 'order_volume', 'customer_orders', 'freight', 'sales_performance'] as const
 export type ChartId = typeof CHART_IDS[number]
@@ -24,7 +24,7 @@ export interface EffectiveChartAccess {
   summaryOnly: boolean
   summaryDepartments: SalesDepartmentCode[]
 }
-export type ChartPolicyUser = Pick<User, 'role' | 'businessRole' | 'businessDepartmentId' | 'businessEmployeeId' | 'workbenchRoles'> & { chartPermissions?: ChartPermissionOverride[] }
+export type ChartPolicyUser = Pick<User, 'role' | 'businessRole' | 'businessDepartmentId' | 'businessEmployeeId' | 'workbenchRoles'> & { chartPermissions?: ChartPermissionOverride[]; dataDisplayScope?: 'department' | 'self'; fopBindingDetails?: User['fopBindingDetails'] }
 export interface ChartSummaryPolicy { mode: 'none' | 'department' | 'selected' | 'marketing'; departments: SalesDepartmentCode[] }
 
 const DEPARTMENTS: SalesDepartmentCode[] = ['sales1', 'sales2', 'sales3', 'sales4']
@@ -63,7 +63,8 @@ export function validateChartPermissions(value: unknown): value is ChartPermissi
  * authorized department codes and ancestry, independently from record grants. */
 export function resolveChartSummaryPolicy(user: ChartPolicyUser, chartId: ChartId): ChartSummaryPolicy {
   const none: ChartSummaryPolicy = { mode: 'none', departments: [] }
-  const scope = businessScope(user)
+  if (user.role === 'admin') return SUMMARY_CHARTS.includes(chartId) ? { mode: 'marketing', departments: [] } : none
+  const scope = effectiveBusinessScope(user)
   if (scope.role === 'none' || !SUMMARY_CHARTS.includes(chartId) || !validateChartPermissions(user.chartPermissions ?? [])) return none
   const override = user.chartPermissions?.find(row => row.chartId === chartId)
   if (override?.visibility === 'deny' || override?.summaryMode === 'none') return none
@@ -79,25 +80,28 @@ export function resolveChartSummaryPolicy(user: ChartPolicyUser, chartId: ChartI
 function recordScope(user: ChartPolicyUser, override?: ChartPermissionOverride): EffectiveChartAccess['dataScope'] {
   if (override?.dataScope === 'none') return 'none'
   let scope: EffectiveChartAccess['dataScope'] = 'none'
-  const business = businessScope(user)
+  const business = effectiveBusinessScope(user)
+  const employeeId = user.businessRole === 'department_manager' && user.dataDisplayScope !== 'department'
+    ? user.fopBindingDetails?.employeeMasterId ?? business.employeeId : user.businessEmployeeId
   if (business.role === 'admin') scope = 'all'
   else if (business.role === 'department_manager') scope = business.departmentId ? 'department' : 'none'
-  else if (business.role === 'salesperson') scope = business.employeeId ? 'self' : 'none'
+  else if (business.role === 'salesperson') scope = employeeId ? 'self' : 'none'
   if (scope === 'none') return scope
-  if (override?.dataScope === 'self') return user.businessEmployeeId ? 'self' : 'none'
+  if (override?.dataScope === 'self') return employeeId ? 'self' : 'none'
   if (override?.dataScope === 'department' && scope === 'all') return user.businessDepartmentId ? 'department' : 'none'
   return scope
 }
 
 export function resolveChartAccess(user: ChartPolicyUser): EffectiveChartAccess[] {
-  const validPolicy = validateChartPermissions(user.chartPermissions ?? [])
+  const isAdmin = user.role === 'admin'
+  const validPolicy = isAdmin || validateChartPermissions(user.chartPermissions ?? [])
   const templateEnabled = businessScope(user).role === 'admin' || !!user.workbenchRoles?.includes('sales')
   return CHART_IDS.map(chartId => {
-    const override = validPolicy ? user.chartPermissions?.find(row => row.chartId === chartId) : undefined
+    const override = validPolicy && !isAdmin ? user.chartPermissions?.find(row => row.chartId === chartId) : undefined
     const summary = resolveChartSummaryPolicy(user, chartId)
     const scope = chartId === 'department_receipts' ? 'none' : recordScope(user, override)
     const hasSummary = summary.mode !== 'none'
-    const visible = validPolicy && user.businessRole !== 'none' && override?.visibility !== 'deny'
+    const visible = validPolicy && businessScope(user).role !== 'none' && override?.visibility !== 'deny'
       && (override?.visibility === 'allow' || templateEnabled || chartId === 'freight' && user.workbenchRoles?.some(isWorkbenchRole)) && (scope !== 'none' || hasSummary)
     const summaryDepartments = !visible ? [] : summary.mode === 'selected' ? summary.departments
       : summary.mode === 'marketing' ? [...DEPARTMENTS]

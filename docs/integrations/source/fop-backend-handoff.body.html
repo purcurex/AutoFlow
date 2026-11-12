@@ -1,0 +1,60 @@
+<div class="callout"><p><strong>历史交接稿：</strong>当前开发与验收请以<a href="HyperZone智能办公平台项目FOP扩展开发需求.html">《HyperZone智能办公平台项目FOP扩展开发需求》</a>为准。新文档已重排确认／开发事项编号并补齐目标单据、字段、全部页面操作与验收；下文保留当轮交接记录，不作为当前完整开发范围。</p></div>
+<style>
+.handoff-table th:first-child,.handoff-table td:first-child{width:1%;white-space:nowrap;word-break:normal;overflow-wrap:normal}
+.handoff-table td:first-child a{word-break:normal}
+.requirement-priority{font-weight:600;color:var(--muted)}
+</style>
+<h2 id="delivery">01 · 本轮交付与边界</h2>
+<p>本项目已实现服务身份同步适配、业务事实归一化、可恢复历史初始化、独立授权续验，以及审核和两类库存的专用实时适配。五工作台清单、详情与 Excel 从本地副本查询。旧工作台穿透查询已退出生产路由，缺少配置或事实时明确返回不可用。</p>
+<p>本文件交给 FOP 后台开发人员排期与联调。下列“已定义”指本地归档包含接口定义，不表示当前服务器已部署或已联调。2026-11-12 按用户授权完成一次真实只读联调：李铭嵩与华智组织已核验，449页采集44,855条不重复履约订单；原始文件未发布到业务副本，未执行审核。后台自动调用继续暂停。六项同步服务契约及专用实时响应契约均须由 FOP 确认和提供，不能把现有分页地址直接填入新适配器。</p>
+<table class="handoff-table"><thead><tr><th>材料</th><th>用途</th></tr></thead><tbody>
+<tr><td><a href="HyperZone待办清单数据字段对照表.html">字段对照表</a></td><td>23 张清单的展示、本地字段和 FOP 来源；API 待提供／待确认独立标记。</td></tr>
+<tr><td><a href="HyperZoneFOP集成核查与初始化条件.html">初始化核查</a></td><td>代码交付、验证证据、当前运行阻塞与启动步骤。</td></tr>
+<tr><td><a href="../openapi/fop-replica-domain.schema.json">业务事实契约</a></td><td>领域事实与字段格式；版本不匹配拒绝接入。</td></tr>
+<tr><td><a href="../openapi/fop-replica-service-contract.json">同步服务契约</a></td><td>服务操作与通用封装；接口地址待 FOP 提供。</td></tr>
+</tbody></table>
+<h2 id="confirm">02 · 待确认事项</h2>
+<table class="handoff-table"><thead><tr><th>确认事项</th><th>需 FOP 确认</th><th>现有证据与影响</th><th>交付／验收</th></tr></thead><tbody>
+<tr><td>C01 身份与范围</td><td>专用集成身份、测试租户／公司、实体清单、独立资源授权；工号、认证用户 ID、人员记录 ID、业务员 masterId 的区别。</td><td>本轮已核验 limingsong／李铭嵩、tenantId=hyperzone.test、userId=2361840554507041792、华智组织ID=100000；目录返回46条员工。19号包请求模板缺少运行时必填参数；服务级10类资源授权与撤权契约仍待提供。本地角色与部门继续由本项目管理。</td><td>提供完整目录和授权样例；撤权、停用、调岗和跨公司分别验收。集成身份不得自动扩大终端用户权限。</td></tr>
+<tr><td>C02 接口版本</td><td>确认各独立包的最新部署版、订阅范围、字段可空规则、错误分类。</td><td>合并 OpenAPI 落后于独立17号包；hzkj_state已有定义。本轮原始接口扫描44,855条订单，所有页facts为空，须核查部署版本、关联事实输出及文档完整性；不能把空facts解释为没有采购、发运等业务。</td><td>以逐接口版本和样例锁定契约；缺字段、空值、无权限、错误不能混为成功空数组。</td></tr>
+<tr><td>C03 状态与金额</td><td>确认表头采购状态 0/1/2/3/4、出库状态 0/1/2；总金额、产品金额、结算币种和付款事件。</td><td>dtr5b 工具类已有当前枚举；旧 01 包采购枚举只写 0/1/2。hzkj_order_amount 是产品金额；hzkj_currency 不能替代结算币种。</td><td>给出未采购至发货、未出库至出库样例；多币种逐单与核对汇总一致。客户付款使用 hzkj_receipt_date。</td></tr>
+<tr><td>C04 付款与发货</td><td>hzkj_pay_time 与元数据差异；hzkj_paystatus、hzkj_pay_status、1688 状态；transportqty 的真实含义及取消／退货影响。</td><td>07／17 包已定义付款与平台字段；transportqty 只证明已运输数量，不能直接当供应商已发数量。</td><td>提供未付、部分付、已付、退款、线下无需平台、平台重建及部分发货样例；采购整单量与履约分摊量分别验收。</td></tr>
+<tr><td>C05 收货与入库</td><td>shipping_time/status_changed 是否构成供应商发货证明；通知单、采购分录和履约行的强关联；已收货与已入库的区别。</td><td>08 包已定义国内物流字段及 receiveqty；WMS 状态不证明供应商已发货，收货量不自动等于入库量。</td><td>整单通知全部归属可见才展示；跨业务员、部分收货／入库、终止状态和关联解除均有样例。</td></tr>
+<tr><td>C06 备货与售后</td><td>备货客户付款回写完整性、店铺来源；RMA 当前归属、来源履约 ID、状态和币种。</td><td>14 包定义备货 receipt_date；bizdate 为创建时间。13 包有 RMA，但 hzkj_tocurr 未定义。</td><td>RMA 一单一行、独立授权；不能以退款申请代替实物退货。备货全款／押金事实分开。</td></tr>
+<tr><td>C07 审核与库存</td><td>15／16 号审核标准操作、版本校验和幂等能力；18 号库存的真实来源、权限与完整分页。</td><td>既有审核路径可复用业务操作，但弱响应须扩展；当前 InventoryController.getInventoryList 有演示实现，不能作为真实库存服务。</td><td>按第04节特殊逻辑提供样例与错误案例；未确认写入结果不得被描述为“未提交”。</td></tr>
+<tr><td>C08 清单范围</td><td>核对华智组织编码hyperzone在通用清单的组织字段、过滤配置及数据权限；提供与原始事实接口一致的组织编码。</td><td>同一limingsong令牌，queryOrderList按现有组织编码返回HTTP 200、totalCount=0；原始事实接口按已核验组织ID=100000读到44,855条。此差异不能认定真实组织无订单。</td><td>提供正确编码与请求样例，并用同一授权范围的已知订单对账；不得去掉组织过滤绕过问题。</td></tr>
+</tbody></table>
+<h2 id="extend">03 · 待扩展开发事项</h2>
+<table class="handoff-table"><thead><tr><th>开发事项</th><th>FOP 需交付</th><th>本项目接收位置</th><th>验收门槛</th></tr></thead><tbody>
+<tr><td>E01 稳定快照</td><td><span class="requirement-priority">P0 · </span>按 requestKey 幂等创建 snapshotId；返回固定 entityCodes、scopeVersion、各流 endCursor、sourceAsOf、expiresAt；稳定分页，完整分录与关系。</td><td>FOP_REPLICA_SNAPSHOT_BEGIN_URL、SNAPSHOT_PAGE_URL</td><td>中断重试同批次不漂移；跨页、跨流关联可还原；快照过期明确拒绝。afterOrderId 不等于快照／变更游标。</td></tr>
+<tr><td>E02 变更与屏障</td><td><span class="requirement-priority">P0 · </span>持久游标、原子提交组、eventId、字符串 sourceVersion、删除墓碑、旧关联解除；屏障 targetVector 与采集覆盖证明；明确保留边界和过期错误。</td><td>FOP_REPLICA_BARRIER_URL、CHANGES_URL</td><td>新增、修改、独立分录变化、删除、迟提交、重放和空批均不漏；所有受影响履约投影能在完整组更新。建议保留至少7天，按实际恢复窗口确认。</td></tr>
+<tr><td>E03 授权续验</td><td><span class="requirement-priority">P0 · </span>独立于业务同步返回公司、10类资源、员工绑定和引用主数据；employees为当前连接／租户的完整可信目录，不按公司、页面或终端用户筛选；拒绝优先；sourceAsOf/expiresAt 最多60秒有效；完整 ownershipVector。</td><td>FOP_REPLICA_AUTHORIZATION_URL</td><td>ownershipVector 必须覆盖全部可改变归属的流，且与同一 scopeVersion 原子取证。本地仅在每条流水位精确一致时续验已有归属；有未应用变化则阻断。普通租约续期不能改变业务授权版本。</td></tr>
+<tr><td>E04 数据核对</td><td><span class="requirement-priority">P0 · </span>在指定 barrierId/targetVector 上返回完整实体数量及履约、备货、采购按结算币种的金额汇总，金额用十进制字符串。</td><td>FOP_REPLICA_RECONCILE_URL</td><td>禁止用响应时刻的另一快照核对；漏单、重复、金额差异、断关联、无归属或未完成投影均不激活。新数据失败保留旧 active。</td></tr>
+<tr><td>E05 核心字段</td><td><span class="requirement-priority">P0 · </span>履约 hzkj_total_amount、hzkj_settlecurrency、hzkj_fre_quo_amount、hzkj_fixed_tax_fee、hzkj_discount_cost；本轮44,855条原始订单均未返回上述字段。另补备货结算币种及RMA hzkj_tocurr。</td><td>完整版本业务事实；字段表“API待提供”</td><td>不能以产品金额代总额、以本位币代结算币种。缺失核心事实的业务链不得标记完整。</td></tr>
+<tr><td>E06 物流与入库</td><td><span class="requirement-priority">P1 · </span>包裹 hzkj_channel、发运 hzkj_logistics_channel1；采购表头 shipping_tim/status_changed；收货通知 hzkj_ware_house、hzkj_providersupplier、逐行实际入库量。</td><td>领域 header/entries/packages/tracking/relations</td><td>QC/WC、有效发运关联、选定跟踪号与删除生命周期保持一致；解除关系或完整版本省略字段必须清除旧值，不能残留历史号码。</td></tr>
+<tr><td>E07 实物退货</td><td><span class="requirement-priority">独立业务链 · </span>确认正式实体及主／行键，再提供实物状态、申请／已退量、采购和履约分摊、退货物流、独立授权及变更。</td><td>字段表采购／仓库退货清单；正式实体适配待提供后补齐</td><td>hzkj_purrefundapplybill 是退款申请，已移除错误实物退货映射。当前真实退货业务链明确不可用，不以空清单冒充无业务。</td></tr>
+<tr><td>E08 审核与库存</td><td><span class="requirement-priority">P0 · </span>审核上下文、审核标准操作、即时库存、备货库存，补齐统一身份／资源／范围回显、当前授权和完整响应。</td><td>FOP_KINGDEE_APPROVAL_CONTEXT_URL、OPERATION_URL、CURRENT_INVENTORY_URL、RESERVED_INVENTORY_URL</td><td>现有15/16/18包可复用底层业务能力，不能未经契约转换直接接入新适配器；具体要求见下一节。</td></tr>
+<tr><td>E09 异常与库存使用</td><td><span class="requirement-priority">P1 · </span>异常分类／原因及有效生命周期；明确订单取消、拦截发货／取消拦截的源字段；履约使用全款备货等库存覆盖／消耗事实及关联。</td><td>字段表异常、订单标签与库存使用映射；正式来源确认后扩展领域事件与投影</td><td>当前是否纳入异常清单保持未知；不按标签推断实际退货或拦截，不用库存余额反推消费，不把未知当无异常／无需采购。此项未完成前相关清单不能作为完整可用范围验收。</td></tr>
+</tbody></table>
+<h3>3.1 本轮明确列入 FOP 待办的六项服务</h3>
+<p>用户已确认：没有配置地址的服务列为 FOP 后端开发待办，先完成可执行的联调。以下六项均为“待提供／待扩展开发”，负责人为 FOP 后端；不填写推测地址，也不使用旧分页URL替代。</p>
+<table class="handoff-table"><thead><tr><th>服务事项</th><th>配置键</th><th>状态／验收依据</th></tr></thead><tbody>
+<tr><td>快照开始</td><td>FOP_REPLICA_SNAPSHOT_BEGIN_URL</td><td>地址待提供；E01，幂等快照与实体／水位清单。</td></tr>
+<tr><td>快照分页</td><td>FOP_REPLICA_SNAPSHOT_PAGE_URL</td><td>地址待提供；E01，固定快照的完整主单、分录和关联。</td></tr>
+<tr><td>变更读取</td><td>FOP_REPLICA_CHANGES_URL</td><td>地址待提供；E02，完整提交组、版本、删除与关联解除。</td></tr>
+<tr><td>同步屏障</td><td>FOP_REPLICA_BARRIER_URL</td><td>地址待提供；E02，targetVector及来源覆盖证明。</td></tr>
+<tr><td>授权续验</td><td>FOP_REPLICA_AUTHORIZATION_URL</td><td>地址待提供；E03，10类独立授权与完整归属向量。</td></tr>
+<tr><td>数据核对</td><td>FOP_REPLICA_RECONCILE_URL</td><td>地址待提供；E04，同一屏障的实体数量和分币种金额核对。</td></tr>
+</tbody></table>
+<p>真实库已补齐迁移，工作台已选真实来源且关闭Mock；当前state=not_initialized、正式来源单据0条。原始采集已在游标末页结束，仅用于核查与后续适配，不构成可激活快照。审核与两类库存仍按第04节专用契约对接，本轮未调用。</p>
+<h2 id="special">04 · 审核、即时库存、备货库存特殊逻辑</h2>
+<h3>4.1 审核</h3><p>清单是否展示不构成审核授权。提交前由本地当前账号与组织重算范围，FOP 复核当前队列、实体、目标单、来源关联、单据版本及可审核状态，再调用标准 audit 操作；履约审核与配货审核分别对应 hzkj_orders、hzkj_alloc_bill。源端须在同一操作事务内完成这些检查，返回 atomicChecks=true 及 requestId、idempotencyKey、documentId 和逐项结果。</p>
+<p>预检查过期、目标变更或授权变化应明确阻断。网络中断、提交后响应格式异常或回显不符均为“结果待核实”，本项目不自动重试，并停止批次剩余提交。FOP 需要提供按幂等键核对结果的能力或明确人工核验方法。已审核可返回 already_approved，不执行重复业务效果。</p>
+<h3>4.2 即时库存</h3><p>使用独立 allocation_inventory 权限和当前业务员范围，按需实时查询；选单模式按当前有效订单的客户＋SKU＋发货仓核验，允许对应 SKU／仓的公共库存。不能以备货权益、历史同步副本或旧演示接口冒充现存库存。响应返回 onHand、occupied；可用量为 max(0,onHand−occupied)，分页总数、完整标记与 asOf 必须一致。</p>
+<h3>4.3 备货库存</h3><p>使用独立 stock_inventory 权限。选单时按当前订单客户＋SKU 查询，允许该客户／SKU 的跨仓备货；未选单时只查询当前登录人员的备货，不因管理员身份扩大至全员。客户筛选、SKU 搜索及客户候选必须服从相同范围。全款余额与押金余额分别返回，不能从物理现存量推算或互相替代。</p>
+<h3>4.4 实时响应封装</h3><p>新实时适配器发送 schemaVersion=1、subject、currentScope、resource、query；resource 分别为 approval_context、approval_operation、current_inventory、reserved_inventory。即时库存对应独立 allocation_inventory 授权，备货库存对应 stock_inventory，不能由订单读权推导。响应须回显同一 subject/currentScope/resource，给出允许的 organizationIds、authorization.resource/allowed/checkedAt 及 result；授权证明不超过60秒。库存 result 需 complete=true、items、total、page、pageSize、asOf；选单查询另带所有 selectedOrders 的当前客户、SKU、仓库和 eligible 证明。</p>
+<h2 id="handoff">05 · 联调交付顺序</h2>
+<ol><li>FOP 先回复 C01—C08，逐项提供确认结论、接口发布版本、负责人和测试样例；E01—E09 分别给出地址、订阅要求及完成日期。</li><li>先以履约订单最小业务链验证快照、变更、授权、核对、查询和导出，再逐实体扩展；未导入的业务范围必须明确不可用。</li><li>真实测试库迁移已齐全；FOP提供六项同步服务、专用凭据及四项实时服务后再配置。本轮单次采集已结束，自动调用持续暂停；后续联调由用户安排。</li><li>执行带相同 requestKey 的初始化／续传，确认 state=published；逐单、数量、金额和权限对账。主动制造分页中断、删除、归属变化和写入结果未知等场景。</li><li>改动任何展示需求、字段语义或接口映射时，同步修改本项目代码、字段表及验证；不保留“文档有需求但实现不同”的未标记状态。</li></ol>
+<h2 id="evidence">06 · 核查依据</h2><p>本地接口归档为 .runtime/fop-round3/api-docs/金蝶测试环境完整接口，共19个功能包、27个接口定义；重点核对独立07、08、13—19包。FOP 源码核对 /Library/VSCode/dtr5b 中 OrderPurchaseStatusUtil、OrderOutboundStatusUtil、ReceiveBillOperationPlugIn 及单据元数据。归档为历史资料，实际发布和数据质量仍须联调。</p>
+<p>本项目实现依据为 replica-http-source.ts、replica-domain-normalizer.ts、replica-bootstrap.service.ts、replica-authorization.service.ts、replica-publisher.ts、local-workbench.service.ts、fop-kingdee.realtime.ts 和配套测试。字段表与代码证据摘要由版本化生成器重新核验。</p>
+<p>2026-11-12单轮实际调用、采集数量、迁移与暂停状态见<a href="fop-one-shot-20261112.json">本轮联调证据</a>。原始响应与备份只存本地私有.runtime目录，交接文件不含Token、密钥或订单明文。</p>

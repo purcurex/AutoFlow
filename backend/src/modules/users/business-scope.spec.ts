@@ -25,10 +25,16 @@ describe('independent management and business grants', () => {
     expect(account.role).toBe(UserRole.USER)
   })
 
-  it('denies business records for none even if an employee assignment is retained', async () => {
-    const account = { id: 'admin', role: UserRole.ADMIN, businessRole: 'none', businessEmployeeId: 'employee-1' } as unknown as User
+  it.each(['none', 'salesperson', 'department_manager', 'admin'] as const)('system administrators retain unrestricted local scope with legacy %s assignments', businessRole => {
+    const account = { role: UserRole.ADMIN, businessRole, businessDepartmentId: 'sales-1', businessEmployeeId: 'employee-1' } as User
+    expect(businessScope(account)).toEqual({ role: 'admin', departmentId: null, employeeId: null })
+    expect(matchesBusinessScope(businessScope(account), { owner: { id: 'other' }, department: { id: 'sales-2' } })).toBe(true)
+  })
+
+  it('denies business records for nonadmins with none even if an employee assignment is retained', async () => {
+    const account = { id: 'staff', role: UserRole.USER, businessRole: 'none', businessEmployeeId: 'employee-1' } as unknown as User
     expect(matchesBusinessScope(businessScope(account), { owner: { id: 'employee-1' } })).toBe(false)
     const db = { getRepository: () => ({ findOne: async () => account }) } as unknown as DataSource
-    await expect(readBusinessOwners(db, 'admin')).rejects.toMatchObject({ status: 403 })
+    await expect(readBusinessOwners(db, 'staff')).rejects.toMatchObject({ status: 403 })
   })
 })
