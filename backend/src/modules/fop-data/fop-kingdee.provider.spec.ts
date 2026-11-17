@@ -274,22 +274,19 @@ describe('Kingdee server-paged review integration', () => {
     expect(result.items[1]?.items[0]?.imageUrl).toBeNull()
   })
 
-  it('does not revive diagnostic upstream counts when the product dashboard has no local reader', async () => {
-    const { provider } = setup()
+  it('refuses unscoped diagnostic analytics when the product dashboard has no local reader', async () => {
+    const { provider, request } = setup()
     const user = { id: 'local-admin', role: 'admin', businessRole: 'admin', fopTenantId: identity.tenantId, fopUserId: identity.userId,
       businessDepartmentId: null, businessEmployeeId: null, workbenchRoles: ['sales'],
       fopBindingDetails: { username: 'offline-user', name: '测试职员', employeeRecordId: identity.userId, employeeMasterId: identity.userId, departmentId: '10', organizationId: '10', localEmployeeId: null, localDepartmentId: null, verifiedAt: '2026-10-29T00:00:00Z' } } as User
     const users = { findById: jest.fn().mockResolvedValue(user) } as unknown as UsersService
     const service = new FopDataService(users, provider)
-    const result = await service.getDashboard(user.id, { from: '2026-10-01', to: '2026-10-22', year: 2026 })
-    expect(result.queues).toEqual({ review: null, procurement: null, allocation: null, dispatch: null, shipping: null })
-    expect(result.integratedQueues).toEqual([])
-    expect(result.registrations).toEqual([])
-    expect(result.receipts.departments).toEqual([])
-    await expect(service.getOrderVolume(user.id, { category: 'organization', grain: 'month', year: 2025, warehouse: 'ALL' })).rejects.toMatchObject({ response: { code: 'fop_feature_not_configured' } })
+    await expect(service.getDashboard(user.id, { from: '2026-10-01', to: '2026-10-22', year: 2026 })).rejects.toMatchObject({ status: 503, response: { code: 'local_analytics_scope_required' } })
+    await expect(service.getOrderVolume(user.id, { category: 'organization', grain: 'month', year: 2026, warehouse: 'ALL' })).rejects.toMatchObject({ status: 503, response: { code: 'local_analytics_scope_required' } })
+    expect(request).not.toHaveBeenCalled()
   })
 
-  it.each([true, false])('uses current local counts and role gates while keeping explicit legacy diagnostic reads separate, dispatch role=%s', async dispatchRole => {
+  it.each([true, false])('refuses unscoped analysis with a local queue reader while retaining diagnostic role gates, dispatch role=%s', async dispatchRole => {
     const provider = new KingdeeFopDataProvider({ get: key => key === 'FOP_KINGDEE_ANALYTICS_PERMISSIONS_URL' ? 'https://example.test/permissions' : settings[key] },
       async (input, init) => {
         const query = JSON.parse(String(init?.body)).query
@@ -302,17 +299,13 @@ describe('Kingdee server-paged review integration', () => {
                   dispatchTaskStatus: 'dispatch_missing', dispatchDocuments: [], logisticsInfo: [], fulfillmentProgress: { shopifySync: 'pending' } }] } : {}) }
         return new Response(JSON.stringify({ status: true, errorCode: '0', data }))
       })
-    const user = { id: 'local-employee', role: 'user', businessRole: 'salesperson', fopTenantId: identity.tenantId, fopUserId: identity.userId,
+    const user = { id: 'local-employee', role: 'user', businessRole: 'department_manager', fopTenantId: identity.tenantId, fopUserId: identity.userId,
       businessDepartmentId: '400', businessEmployeeId: '501', workbenchRoles: dispatchRole ? ['sales', 'dispatch'] : ['sales'],
-      fopBindingDetails: { username: 'offline-user', name: '测试职员', employeeRecordId: identity.userId, employeeMasterId: identity.userId, departmentId: '10', organizationId: '10', localEmployeeId: null, localDepartmentId: null, verifiedAt: '2026-10-29T00:00:00Z' } } as User
+      fopBindingDetails: { username: 'offline-user', name: '测试职员', employeeRecordId: identity.userId, employeeMasterId: '501', departmentId: '10', organizationId: '10', localEmployeeId: null, localDepartmentId: null, verifiedAt: '2026-10-29T00:00:00Z' } } as User
     const service = new FopDataService({ findById: jest.fn().mockResolvedValue(user) } as unknown as UsersService, provider)
     const local = { enabled: true, getOrders: jest.fn(async (_userId: string, query: { queue: string }) => ({ total: query.queue === 'dispatch' ? 13 : 11 })) }
-    const result = await service.getDashboard(user.id, { from: '2026-10-01', to: '2026-10-22', year: 2026 }, local as any)
-    expect('integratedQueues' in result && result.integratedQueues).toEqual(dispatchRole ? ['review', 'dispatch'] : ['review'])
-    expect(result.queues.dispatch).toBe(dispatchRole ? 13 : null)
-    expect(result.queues.review).toBe(11)
-    expect(local.getOrders.mock.calls.map(call => call[1].queue)).toEqual(dispatchRole ? ['review', 'dispatch'] : ['review'])
-    expect(result.tasks.some(task => task.kind === 'dispatch')).toBe(dispatchRole)
+    await expect(service.getDashboard(user.id, { from: '2026-10-01', to: '2026-10-22', year: 2026 }, local as any)).rejects.toMatchObject({ status: 503, response: { code: 'local_analytics_scope_required' } })
+    expect(local.getOrders).not.toHaveBeenCalled()
     const orders = service.getOrders(user.id, { queue: 'dispatch', workbenchRole: 'dispatch', page: 1, pageSize: 10 })
     if (dispatchRole) expect((await orders).total).toBe(7)
     else await expect(orders).rejects.toMatchObject({ status: 403 })

@@ -1,0 +1,111 @@
+{
+  "verifiedAt": "2026-11-16T05:05:51.015Z",
+  "mode": "local_collected",
+  "scope": "local company capture totals, before individual permission filtering",
+  "remoteApiCalls": 0,
+  "automaticCallsEnabled": false,
+  "reviewRule": {
+    "orderStatus": "2",
+    "billStatus": [
+      "A",
+      "B"
+    ]
+  },
+  "review": [
+    {
+      "raw_bill_status": "A",
+      "count": 50
+    },
+    {
+      "raw_bill_status": "B",
+      "count": 35
+    }
+  ],
+  "approved": {
+    "billStatus": "C",
+    "timeField": "hzkj_receipt_date",
+    "defaultDays": 7,
+    "count": 631
+  },
+  "stock": [
+    {
+      "order_status": "cancelled",
+      "bill_status": "pending",
+      "count": 4
+    },
+    {
+      "order_status": "paid",
+      "bill_status": "approved",
+      "count": 127
+    },
+    {
+      "order_status": "paid",
+      "bill_status": "pending",
+      "count": 7
+    },
+    {
+      "order_status": "unpaid",
+      "bill_status": "pending",
+      "count": 26
+    }
+  ],
+  "totalStock": 164,
+  "verification": {
+    "backendTests": 186,
+    "frontendTests": 166,
+    "importTests": 2,
+    "backendBuild": "passed",
+    "frontendBuild": "passed",
+    "offlineProjection": {
+      "idempotent": true,
+      "rawUnchanged": true,
+      "insertedOnSecondRun": 0
+    },
+    "browser": {
+      "stockTotal": 164,
+      "cancelledTotal": 4,
+      "pendingReviewTotal": 85,
+      "approvedLastWeekTotal": 631,
+      "separateStatusBadges": true
+    }
+  },
+  "reviewStatusFilter": {
+    "options": [
+      "all",
+      "pending",
+      "approved"
+    ],
+    "listAndExportAligned": true,
+    "resetPageAndSelection": true,
+    "frontendTests": 30,
+    "backendTests": 50,
+    "builds": "passed",
+    "browser": {
+      "all": 164,
+      "pending": 37,
+      "approved": 127
+    },
+    "remoteApiCalls": 0
+  },
+  "stockMoney": {
+    "verifiedAt": "2026-11-16T05:24:37.492Z",
+    "amountField": "hzkj_order_amount",
+    "currencyField": "hzkj_settlecurrency",
+    "defaultCurrency": "USD",
+    "defaultBasis": "FOP metadata and user confirmed",
+    "rows": [
+      {
+        "currency": "USD",
+        "basis": "stock_metadata_default_usd",
+        "rows": 164,
+        "total": "32344.70"
+      }
+    ],
+    "check": {
+      "matched": 164,
+      "mismatches": 0
+    },
+    "tests": 79,
+    "remoteApiCalls": 0
+  }
+}

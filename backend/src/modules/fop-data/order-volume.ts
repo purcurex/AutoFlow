@@ -3,7 +3,7 @@ import { FopOrder, FopReceipt, SALES_DEPARTMENTS } from './fop-data.types'
 import { OrderVolumeQueryDto, OrderCustomerSearchDto } from './order-volume.dto'
 import { FOP_CARRIERS as VOLUME_CARRIERS, normalizeCarrierCode } from './fop-carriers'
 import { moneyToCents } from './fop-order-totals'
-import { businessDate as dateOf, BUSINESS_TIME_ZONE } from './fop-business-time'
+import { BUSINESS_START_DATE, FIRST_BUSINESS_YEAR, businessDate as dateOf, BUSINESS_TIME_ZONE } from './fop-business-time'
 import { eligibleReceipts, summarizeReceipts, sumReceiptCents } from './fop-receipts'
 
 const DAY = 86_400_000
@@ -28,7 +28,7 @@ export function orderVolumePeriods(query: OrderVolumeQueryDto, now = new Date())
     const start = Date.parse(`${query.from}T00:00:00Z`), end = Date.parse(`${query.to}T00:00:00Z`)
     if (query.category !== 'customer' || query.grain !== undefined || query.year !== undefined || query.month !== undefined || query.weekOf !== undefined
       || !query.from || !query.to || !Number.isFinite(start) || !Number.isFinite(end)
-      || iso(start) !== query.from || iso(end) !== query.to || query.from < '2020-01-01' || query.to > today || start > end) {
+      || iso(start) !== query.from || iso(end) !== query.to || query.from < BUSINESS_START_DATE || query.to > today || start > end) {
       throw new BadRequestException('Provide a valid customer date range without timeline parameters')
     }
     return Array.from({ length: (end - start) / DAY + 1 }, (_, index) => {
@@ -37,7 +37,7 @@ export function orderVolumePeriods(query: OrderVolumeQueryDto, now = new Date())
     })
   }
   const selectedYear = query.year
-  if (!selectedYear || !Number.isInteger(selectedYear) || selectedYear > year || selectedYear < 2020 || !['month', 'week', 'day'].includes(query.grain ?? '')) throw new BadRequestException('Invalid statistics year or timeline')
+  if (!selectedYear || !Number.isInteger(selectedYear) || selectedYear > year || selectedYear < FIRST_BUSINESS_YEAR || !['month', 'week', 'day'].includes(query.grain ?? '')) throw new BadRequestException('Invalid statistics year or timeline')
   if (query.grain === 'month') return Array.from({ length: selectedYear === year ? Number(today.slice(5, 7)) : 12 }, (_, i) => {
     const from = iso(Date.UTC(selectedYear, i, 1)), to = iso(Date.UTC(selectedYear, i + 1, 0))
     return period(from, to, `${i + 1}月`, from.slice(0, 7))
@@ -50,12 +50,13 @@ export function orderVolumePeriods(query: OrderVolumeQueryDto, now = new Date())
     })
   }
   const anchor = query.weekOf ?? today, at = Date.parse(`${anchor}T00:00:00Z`)
-  if (!Number.isFinite(at) || iso(at) !== anchor || anchor > today || anchor < '2020-01-01') throw new BadRequestException('Invalid week date')
+  if (!Number.isFinite(at) || iso(at) !== anchor || anchor > today || anchor < BUSINESS_START_DATE) throw new BadRequestException('Invalid week date')
   const monday = at - (new Date(at).getUTCDay() + 6) % 7 * DAY
   return Array.from({ length: 4 }, (_, i) => {
     const start = monday - (3 - i) * 7 * DAY, from = iso(start), to = iso(start + 6 * DAY)
-    return period(from, to, `${from.slice(5)}—${to.slice(5)}`)
-  })
+    const first = from < BUSINESS_START_DATE ? BUSINESS_START_DATE : from
+    return period(first, to, `${first.slice(5)}—${to.slice(5)}`)
+  }).filter(p => p.to >= BUSINESS_START_DATE)
 }
 
 function prepare(orders: FopOrder[], query: OrderVolumeQueryDto, now: Date, receipts: readonly FopReceipt[] = []) {

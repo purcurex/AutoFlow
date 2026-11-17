@@ -1,0 +1,27 @@
+{
+  "checkedAt": "2026-11-12T10:39:08.389Z",
+  "upstreamCalled": false,
+  "localMappedEmployees": 14,
+  "method": "Current buildReplicaOrganization, including verified legacy binding fallback; active collected batch; no raw owner IDs or personal names published.",
+  "datasets": [
+    {
+      "label": "履约订单",
+      "total": 44855,
+      "ownerFieldsPresent": 44855,
+      "ownerIdProjectionMismatch": 0,
+      "distinctSourceOwners": 20,
+      "matched": 30332,
+      "unmatched": 14523
+    },
+    {
+      "label": "备货订单",
+      "total": 153,
+      "ownerFieldsPresent": 153,
+      "ownerIdProjectionMismatch": 0,
+      "distinctSourceOwners": 13,
+      "matched": 128,
+      "unmatched": 25
+    }
+  ],
+  "conclusion": "所有已入库履约/备货订单都有来源业务员ID和名称；无效或未匹配本地绑定属于归属核查问题，不证明FOP授权失败。尚未采集的其他实体不在本统计范围内。"
+}

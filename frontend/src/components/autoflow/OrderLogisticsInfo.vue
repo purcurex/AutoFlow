@@ -7,7 +7,9 @@ const props = defineProps<{ groups?: LogisticsInfo[] | null; channels?: Logistic
 const { locale } = useI18n()
 const rows = computed(() => props.groups?.length ? props.groups.map(group => ({
   channelName: group.channelName || (props.groups?.length === 1 && props.channels?.length === 1 ? props.channels[0]?.name : null),
-  tracking: props.showAllTracking ? group.trackingNumbers ?? [] : group.shopifyTracking ? [group.shopifyTracking] : [],
+  tracking: 'packageTrackingNumber' in group
+    ? group.packageTrackingNumber ? [{ number: group.packageTrackingNumber, type: undefined }] : []
+    : props.showAllTracking ? group.trackingNumbers ?? [] : group.shopifyTracking ? [group.shopifyTracking] : [],
 })) : props.channels?.length ? props.channels.map(channel => ({ channelName: channel.name, tracking: [] })) : [{ channelName: null, tracking: [] }])
 const labels = { full: ['QC', '全程', 'Full route'], first_mile: ['TC', '头程', 'First mile'], last_mile: ['WC', '尾程', 'Last mile'] }
 </script>

@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "verified": false,
+  "verificationReference": "待填写各实体接口参数及完整性联调证据；本文件不能直接执行",
+  "tenantId": "待填写原租户",
+  "companyId": "100000",
+  "orgNumber": "hyperzone.test",
+  "entityCode": "hzkj_orders",
+  "sourceTimezone": "+08:00",
+  "fullDetails": false,
+  "companyWide": false,
+  "stableKeyset": false,
+  "readOnly": true,
+  "actions": {
+    "clock": { "path": null, "body": {} },
+    "full": { "path": null, "body": {} },
+    "created": { "path": null, "body": {} },
+    "modified": { "path": null, "body": {} },
+    "exists": { "path": null, "body": {} }
+  },
+  "response": {
+    "success": "status",
+    "company": "待提供公司范围回显路径",
+    "tenant": "待提供租户范围回显路径",
+    "rows": "data.rows",
+    "complete": "待确认明确结束标记路径",
+    "clock": "待提供源服务器时间路径",
+    "exists": "待提供明确存在性布尔值路径"
+  },
+  "document": {
+    "id": "id",
+    "company": "hzkj_org.id",
+    "created": "createtime",
+    "modified": "modifytime",
+    "requiredArrays": ["hzkj_orders_billentry"]
+  },
+  "templateVariables": ["{{tenantId}}", "{{companyId}}", "{{orgNumber}}", "{{entityCode}}", "{{from}}", "{{to}}", "{{afterTime}}", "{{afterId}}", "{{limit}}", "{{id}}"],
+  "instructions": "每个action可复用同一已发布查询URL，但必须按真实参数独立配置body。仅支持完整值占位符，不拼接未经验证的SQL或过滤表达式。时间参数为明确时区ISO、保留原精度；接口需支持此格式。未核验时不得把verified改为true。凭据只读取私有env，不写入此文件。"
+}

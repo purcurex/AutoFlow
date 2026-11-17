@@ -1,29 +1,32 @@
 <script setup lang="ts">
+import { businessYears, BUSINESS_START_DATE } from '@/utils/business-years'
 import type { DashboardPending } from '@/api/workbench-dashboard'
 import { clearWorkbenchCounts } from '@/utils/workbench-counts'
-import { taskStatusLabels } from '@/utils/workbench-status'
+import DashboardExceptions from '@/components/charts/DashboardExceptions.vue'
 import type { ChartId } from '@/api/fop-chart-access'
 import { onSessionReset } from '@/utils/session'
+import { useDateRangeQuery } from '@/composables/useDateRangeQuery'
 import { formatChartCurrency } from '@/utils/currency'
 import { sumMoney } from '@/utils/tableTotals'
 import TableTotals from '@/components/ui/TableTotals.vue'
 import ReceiptChangeValue from '@/components/charts/ReceiptChangeValue.vue'
 import { receiptChanges, totalReceiptChange, formatReceiptChange } from '@/utils/receiptChanges'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { AlertCircle, ClipboardCheck, Clock3, PackageCheck, ShoppingCart, Send, Truck, Users, Wallet } from 'lucide-vue-next'
+import { ClipboardCheck, Clock3, PackageCheck, ShoppingCart, Send, Truck, Users, Wallet } from 'lucide-vue-next'
 import { refreshWorkbenchAccess } from '@/composables/useWorkbenchAccess'
 import { RouterLink, useRouter } from 'vue-router'
 import { workbenchOrderLocation, queueNames } from '@/utils/workbench'
 import { useI18n } from 'vue-i18n'
 import { AppLayout } from '@/components/layout'
+import LocalDashboardAnalytics from '@/components/charts/LocalDashboardAnalytics.vue'
 import OrderVolumeAnalysis from '@/components/order-volume/OrderVolumeAnalysis.vue'
-import FreightAnalysis from '@/components/freight/FreightAnalysis.vue'
+import FreightAnalysis from '@/components/freight/LocalFreightAnalysis.vue'
 import EChart, { type ChartClick } from '@/components/charts/EChart.vue'
 import WorkCalendar from '@/components/WorkCalendar.vue'
 import FopDataAccessNotice from '@/components/FopDataAccessNotice.vue'
 import { fopAccessError } from '@/api/fop-access'
 import { useTheme } from '@/composables/useTheme'
-import { getFopDashboard, localDate, type FopDashboardData, type ReceiptSeries, type DashboardQueueState } from '@/api/fop-dashboard'
+import { getFopDashboard, getFopDashboardCharts, localDate, type FopDashboardData, type ReceiptSeries, type DashboardQueueState } from '@/api/fop-dashboard'
 
 const { locale } = useI18n()
 const router = useRouter()
@@ -32,12 +35,17 @@ const zh = computed(() => String(locale.value).startsWith('zh'))
 const text = (cn: string, en: string) => zh.value ? cn : en
 const today = new Date()
 const weekAgo = new Date(today.getTime() - 6 * 86_400_000)
-const from = ref(localDate(weekAgo))
+const from = ref([localDate(weekAgo), BUSINESS_START_DATE].sort().at(-1)!)
 const to = ref(localDate(today))
 const currentYear = Number(localDate(today).slice(0, 4))
 const year = ref(currentYear)
-const years = Array.from({ length: 5 }, (_, index) => currentYear - index)
+const salespersonYear = ref(currentYear)
+const chartBusy = ref({ registrations:false, department_receipts:false, salesperson_receipts:false })
+const chartErrors = ref({ registrations:"", department_receipts:"", salesperson_receipts:"" })
+const chartRequests = { registrations:0, department_receipts:0, salesperson_receipts:0 }
+const years = businessYears(currentYear)
 const data = ref<FopDashboardData>()
+const dashboardMode = ref<'local'|'remote'>()
 const pendingData = ref<DashboardPending>()
 const pending = computed(() => pendingData.value ?? data.value)
 const chart = (id: ChartId) => data.value?.chartAccess?.find(item => item.chartId === id)
@@ -107,7 +115,7 @@ const latestDepartmentChange = computed(() => selectedDepartment.value ? changes
 const momHint = computed(() => text('差额 = 本月 − 上月；比例 = 差额 ÷ 上月。1 月对比上年 12 月；本月为截至目前数据。', 'Change = this month − prior month; rate = change ÷ prior month. January compares with December; the current month is to date.'))
 
 const taskNames = computed(() => ({ review: text('审核履约订单', 'Review fulfillment orders'), dispatch: text('同步 Shopify 发货', 'Sync Shopify fulfillment'), procurement: text('跟进采购付款与供应商发货', 'Follow up purchase payment and supplier shipment'), allocation: text('跟进配货与配货单审核', 'Follow up allocation and approval'), shipping: text('跟进仓库打包与出库', 'Follow up warehouse packing and outbound') }))
-const queueStateLabel = (state?: DashboardQueueState) => state === 'forbidden' ? text('无权限', 'No access') : state === 'unavailable' ? text('加载失败', 'Load failed') : text('未接入', 'Not connected')
+const queueStateLabel = (state?: DashboardQueueState) => state === 'forbidden' ? text('无权限', 'No access') : state === 'unavailable' ? text('加载失败', 'Load failed') : '—'
 const cards = computed(() => ([
   { id: 'review', label: text('待审核', 'Pending review'), hint: text('履约订单待审核', 'Fulfillment orders awaiting review'), value: pending.value?.queues.review, icon: ClipboardCheck, color: 'review' },
   { id: 'dispatch', label: text('待履约', 'Pending fulfillment'), hint: text('已支付 · Shopify 待履约', 'Paid · Shopify fulfillment pending'), value: pending.value?.queues.dispatch, icon: Send, color: 'fulfillment' },
@@ -120,32 +128,62 @@ const cards = computed(() => ([
 })))
 const pendingIncomplete = computed(() => !!pending.value && cards.value.some(card => card.state === 'not_configured' || card.state === 'unavailable'))
 
-const orderVolumeRevision = ref(0)
+const exceptionRevision = ref(0)
 let requestId = 0
+const dateQuery = useDateRangeQuery(from, to, () => refreshChart('registrations'), () => ({ min: BUSINESS_START_DATE, max: localDate(today) }))
 async function refresh(force = false) {
-  if (busy.value) return
-  if (force) clearWorkbenchCounts()
+  dateQuery.cancel()
+  if (!dateQuery.isValid()) return
+  dateQuery.markApplied()
+  if (force) { clearWorkbenchCounts(); exceptionRevision.value++ }
   busy.value = true
-  if (requestId > 0) orderVolumeRevision.value++
   error.value = ''
-  data.value = undefined
   pendingData.value = undefined
   appliedRange.value = ''
   const id = ++requestId
   const submitted = { from: from.value, to: to.value, year: year.value }
   try {
-    const result = await getFopDashboard(submitted, undefined, counts => { if (id === requestId) pendingData.value = counts })
+    const result = await getFopDashboard(submitted, undefined, counts => { if (id === requestId) pendingData.value = counts }, { force })
     if (id !== requestId) return
     data.value = result
+    dashboardMode.value = result.localAnalytics ? 'local' : 'remote'
     if (!result.receipts.departments.some(department => department.id === selectedDepartmentId.value)) selectedDepartmentId.value = result.receipts.departments[0]?.id ?? 'sales1'
     if (registrationScope.value !== 'marketing' && !result.registrationDepartments?.some(department => department.id === registrationScope.value)) registrationScope.value = 'marketing'
     appliedRange.value = `${submitted.from} — ${submitted.to}`
     appliedYear.value = submitted.year
   } catch (cause) {
-    if (id === requestId) { pendingData.value = undefined; error.value = fopAccessError(cause, zh.value) }
+    if (id === requestId) { data.value = undefined; pendingData.value = undefined; error.value = fopAccessError(cause, zh.value) }
   } finally { if (id === requestId) busy.value = false }
 }
-const offSession = onSessionReset(() => { requestId++; data.value = undefined; pendingData.value = undefined; busy.value = false; error.value = ''; appliedRange.value = ''; registrationScope.value = 'marketing'; selectedDepartmentId.value = 'sales1' })
+type IndependentChart = keyof typeof chartRequests
+async function refreshChart(kind: IndependentChart, force = false) {
+  if (kind === 'registrations') { if (!dateQuery.isValid()) return; dateQuery.markApplied() }
+  const id = ++chartRequests[kind], session = requestId
+  chartBusy.value[kind] = true; chartErrors.value[kind] = ''
+  const selectedYear = kind === 'salesperson_receipts' ? salespersonYear.value : year.value
+  const submitted = kind === 'registrations' ? { from:from.value, to:to.value, year:currentYear }
+    : { from:`${selectedYear}-01-01`, to:[`${selectedYear}-12-31`,localDate(today)].sort()[0]!, year:selectedYear }
+  try {
+    const result = await getFopDashboardCharts(submitted, { force })
+    if (id !== chartRequests[kind] || session !== requestId || !data.value) return
+    if (kind === 'registrations') {
+      data.value.registrations = result.registrations
+      data.value.registrationDepartments = result.registrationDepartments
+      appliedRange.value = `${submitted.from} — ${submitted.to}`
+    } else if (kind === 'department_receipts') { data.value.departmentReceipts = result.departmentReceipts; appliedYear.value = submitted.year }
+    else data.value.receipts = result.receipts
+  } catch (cause) {
+    if (id === chartRequests[kind] && session === requestId) {
+      chartErrors.value[kind] = fopAccessError(cause, zh.value)
+      if (data.value) {
+        if (kind === 'registrations') { data.value.registrations=[]; data.value.registrationDepartments=[] }
+        else if (kind === 'department_receipts') data.value.departmentReceipts={currency:'USD',months:[],departments:[]}
+        else data.value.receipts={currency:'USD',months:[],departments:[]}
+      }
+    }
+  } finally { if (id === chartRequests[kind]) chartBusy.value[kind] = false }
+}
+const offSession = onSessionReset(() => { dashboardMode.value = undefined; requestId++; for (const key of Object.keys(chartRequests) as IndependentChart[]) { chartRequests[key]++; chartBusy.value[key]=false; chartErrors.value[key]='' } data.value = undefined; pendingData.value = undefined; busy.value = false; error.value = ''; appliedRange.value = ''; registrationScope.value = 'marketing'; selectedDepartmentId.value = 'sales1' })
 onBeforeUnmount(() => { requestId++; offSession() })
 onMounted(() => refresh())
 const axisColor = computed(() => isDark.value ? '#94a3b8' : '#8793a7')
@@ -226,7 +264,7 @@ function receiptBreakdown(series?: ReceiptSeries, index?: number) {
 }
 const marketingBreakdown = computed(() => {
   const receipts = data.value?.departmentReceipts
-  if (!receipts) return ''
+  if (!receipts || !receipts.departments.length && !receipts.marketingCenter) return ''
   if (receipts.marketingCenter?.breakdown) return receiptBreakdown(receipts.marketingCenter)
   if (!receipts.departments.every(department => department.breakdown)) return ''
   return receiptBreakdown({ id: 'marketing', amounts: [], breakdown: { fulfillment: receipts.departments.flatMap(department => department.breakdown!.fulfillment), fullPaymentStock: receipts.departments.flatMap(department => department.breakdown!.fullPaymentStock) } })
@@ -245,7 +283,7 @@ async function openReceipts(month: string, department?: string, ownerId?: string
     const to = monthEnd < today ? monthEnd : today
     if (from > to) return
     await router.push({ name: 'RoleWorkbenchReceipts', params: { role }, query: { from, to, warehouse: 'ALL', chartId: 'salesperson_receipts', ...(department ? { department } : {}), ...(ownerId ? { ownerId } : {}) } })
-  } catch (cause) { if (id === requestId) { pendingData.value = undefined; error.value = fopAccessError(cause, zh.value) } }
+  } catch (cause) { if (id === requestId) { data.value = undefined; pendingData.value = undefined; error.value = fopAccessError(cause, zh.value) } }
 }
 function selectReceipt(event: ChartClick, employees: boolean) {
   if (!employees || !canDetails('salesperson_receipts')) return
@@ -262,11 +300,11 @@ const salespersonOption = computed(() => collectionsOption(salespersonSeries.val
   <AppLayout>
     <main class="app-page fop-dashboard" :aria-busy="busy">
       <header class="dashboard-heading">
-        <div><p class="eyebrow">HYPERZONE · DASHBOARD</p><h1>Dashboard <span class="mock-badge">{{ data?.source === 'mock' ? 'MOCK · DEMO' : text('业务概览', 'BUSINESS OVERVIEW') }}</span></h1></div>
+        <div><p class="eyebrow">HYPERZONE · DASHBOARD</p><h1>Dashboard <span class="mock-badge">{{ text('业务概览', 'BUSINESS OVERVIEW') }}</span></h1></div>
       </header>
-      <FopDataAccessNotice :busy="busy" @recheck="refresh(true)" />
+      <div v-if="dashboardMode === 'local'" class="panel-top dashboard-footnote"><span>按当前账号权限展示 · 更新 {{ updated }} · UTC+8</span><button :disabled="busy" @click="refresh(true)">{{ busy ? '查询中…' : '刷新数据' }}</button></div>
+      <FopDataAccessNotice v-else-if="dashboardMode === 'remote'" :busy="busy" @recheck="refresh(true)" />
       <p v-if="data?.analyticsUnavailable" class="dashboard-footnote" role="alert">{{ text('统计图表加载失败，待办统计以各卡片显示为准。', 'Analytics failed to load. Pending counts are shown on each card.') }}</p>
-      <p v-if="data?.analyticsConfigured === false" class="dashboard-footnote">{{ text('分析图表尚未接入，待办统计以各卡片显示为准。', 'Analytics are not connected. Pending counts are shown on each card.') }}</p>
       <p v-if="error" class="error-message" role="alert">{{ error }}</p>
 
       <section class="summary-grid" :aria-label="text('履约概览', 'Fulfillment overview')">
@@ -286,14 +324,14 @@ const salespersonOption = computed(() => collectionsOption(salespersonSeries.val
       </section>
 
       <div class="insights-grid">
-        <section v-if="visible('registrations')" class="dashboard-panel registration-panel">
+        <section v-if="!data?.localAnalytics && visible('registrations')" class="dashboard-panel registration-panel">
           <div class="panel-top statistics-heading"><h2><Users :size="17" />{{ text('每日注册会员统计', 'Daily registrations') }}</h2><div class="statistics-filters">
-            <label class="year-filter">{{ text('统计维度', 'Dimension') }}<select v-model="registrationScope" :disabled="busy" :aria-label="text('注册统计维度', 'Registration dimension')"><option value="marketing">{{ text('营销中心', 'Marketing center') }}</option><option v-for="department in data?.registrationDepartments" :key="department.id" :value="department.id">{{ department.name }}</option></select></label>
+            <label class="year-filter">{{ text('统计维度', 'Dimension') }}<select v-model="registrationScope" :disabled="chartBusy.registrations" :aria-label="text('注册统计维度', 'Registration dimension')"><option value="marketing">{{ text('营销中心', 'Marketing center') }}</option><option v-for="department in data?.registrationDepartments" :key="department.id" :value="department.id">{{ department.name }}</option></select></label>
           </div></div>
-          <form class="date-filter" @submit.prevent="refresh()">
-            <label><span>{{ text('开始日期', 'Start date') }}</span><input v-model="from" type="date" required :max="to || localDate(today)" :aria-label="text('开始日期', 'Start date')" /></label><span class="date-dash">—</span>
+          <form class="date-filter" @submit.prevent="refreshChart('registrations',true)">
+            <label><span>{{ text('开始日期', 'Start date') }}</span><input v-model="from" type="date" required :min="BUSINESS_START_DATE" :max="to || localDate(today)" :aria-label="text('开始日期', 'Start date')" /></label><span class="date-dash">—</span>
             <label><span>{{ text('结束日期', 'End date') }}</span><input v-model="to" type="date" required :min="from" :max="localDate(today)" :aria-label="text('结束日期', 'End date')" /></label>
-            <button class="query-button" :disabled="busy" type="submit">{{ text('查询', 'Apply') }}</button>
+            <button class="query-button" :disabled="chartBusy.registrations" type="submit">{{ text('查询', 'Apply') }}</button>
           </form>
 
           <div class="chart-summary"><strong>{{ registrationSeries.length ? number(registrationTotal) : '—' }}</strong><span>{{ registrationScopeName }} · {{ text('区间新增会员', 'new members in range') }}</span><small>{{ appliedRange }}</small></div>
@@ -302,14 +340,9 @@ const salespersonOption = computed(() => collectionsOption(salespersonSeries.val
             <div class="registration-list-heading"><h3>{{ text('注册会员数据清单', 'Registration data') }}</h3><span>{{ text('合计与成员平级展示，合计不重复累加', 'Totals and members are peers; totals are counted once') }}</span></div>
             <div class="table-scroll"><table><thead><tr><th>{{ text('统计对象', 'Department / salesperson') }}</th><th>{{ text('区间合计', 'Period total') }}</th><th v-for="item in data?.registrations" :key="item.date">{{ item.date.slice(5) }}</th></tr></thead><tbody><tr v-for="series in registrationSeries" :key="series.id" :class="{ 'aggregate-cell': series === registrationSeries[0] }"><td>{{ series.name }}</td><td>{{ number(series.counts.reduce((sum, count) => sum + count, 0)) }}</td><td v-for="(item, index) in data?.registrations" :key="item.date">{{ number(series.counts[index] ?? 0) }}</td></tr></tbody><TableTotals><th scope="row">{{ text('合计', 'Total') }}</th><td>{{ number(registrationTotal) }}</td><td v-for="(item, index) in data?.registrations" :key="item.date">{{ number(registrationSeries[0]?.counts[index] ?? 0) }}</td></TableTotals></table></div>
           </div>
-        </section>
+        <p v-if="chartErrors.registrations" role="alert">{{ chartErrors.registrations }}</p></section>
 
         <div class="activity-column">
-          <section class="dashboard-panel exception-panel">
-            <div class="panel-top"><h2><AlertCircle :size="17" />{{ text('异常订单', 'Order exceptions') }}<RouterLink :to="workbenchOrderLocation('exceptions')" class="count-badge" :aria-label="text('查看全部异常订单', 'View all order exceptions')">{{ data ? data.exceptions.length : '—' }}</RouterLink></h2><span class="subtle-label">{{ text('待处理异常', 'ACTION REQUIRED') }}</span></div>
-            <div class="activity-list"><RouterLink v-for="item in data?.exceptions.slice(0, 5)" :key="item.id" :to="workbenchOrderLocation('exceptions', { orderNumber: item.id })" class="exception-row"><span class="status-dot" /><div><p class="row-heading">{{ item.id }} <span>{{ item.customer }}</span></p><p class="row-description">{{ item.type ? taskStatusLabels[item.type][zh ? 0 : 1] : '—' }}<template v-if="item.reason"> · {{ item.reason }}</template></p></div><span class="age-badge">{{ item.hours }}h</span></RouterLink><p v-if="data && !data.exceptions.length" class="empty-message">{{ text('暂无异常订单', 'No order exceptions') }}</p></div>
-            <footer>{{ text('更新时间', 'Updated') }} {{ updated }} · UTC+8<RouterLink v-if="data && data.exceptions.length > 5" :to="workbenchOrderLocation('exceptions')" class="ml-3 text-indigo-600">{{ text(`查看全部 ${data.exceptions.length} 笔异常`, `View all ${data.exceptions.length} exceptions`) }}</RouterLink></footer>
-          </section>
           <section class="dashboard-panel task-panel">
             <div class="panel-top"><h2><Clock3 :size="17" />{{ text('履约待办', 'Fulfillment Tasks') }}</h2><span class="subtle-label">{{ text('按优先级处理', 'PRIORITY QUEUE') }}</span></div>
             <div class="activity-list">
@@ -325,35 +358,52 @@ const salespersonOption = computed(() => collectionsOption(salespersonSeries.val
             </div>
             <footer>{{ text('点击任务查看对应履约订单清单。', 'Select a task to view its fulfillment orders.') }}</footer>
           </section>
+          <DashboardExceptions v-if="!error" :key="exceptionRevision" :force-refresh="exceptionRevision > 0" />
         </div>
       </div>
 
-      <section v-if="visible('department_receipts')" class="dashboard-panel receipts-panel">
-        <div class="panel-top receipts-heading statistics-heading"><div><h2><Wallet :size="17" />{{ text('部门月度回款分析', 'Monthly collections by department') }}</h2></div><div class="statistics-filters"><label class="year-filter">{{ text('年份', 'Year') }}<select v-model.number="year" :aria-label="text('回款年份', 'Collections year')" :disabled="busy" @change="refresh()"><option v-for="item in years" :key="item" :value="item">{{ item }}</option></select></label><label class="mom-filter"><input v-model="departmentMom" type="checkbox" aria-label="部门回款上月环比">{{ text('上月环比', 'Month-over-month') }}</label></div></div>
+      <section v-if="!data?.localAnalytics && visible('department_receipts')" class="dashboard-panel receipts-panel">
+        <div class="panel-top receipts-heading statistics-heading"><div><h2><Wallet :size="17" />{{ text('部门月度回款分析', 'Monthly collections by department') }}</h2></div><div class="statistics-filters"><label class="year-filter">{{ text('年份', 'Year') }}<select v-model.number="year" :aria-label="text('回款年份', 'Collections year')" :disabled="chartBusy.department_receipts" @change="refreshChart('department_receipts')"><option v-for="item in years" :key="item" :value="item">{{ item }}</option></select></label><label class="mom-filter"><input v-model="departmentMom" type="checkbox" aria-label="部门回款上月环比">{{ text('上月环比', 'Month-over-month') }}</label></div></div>
         <div v-if="departmentMom" class="receipt-summary mom-summary"><span>{{ latestReceiptMonth }} · {{ text('营销中心较上月', 'Marketing center change') }}</span><ReceiptChangeValue :value="latestMarketingChange" /><small>{{ momHint }}</small></div>
         <div v-else class="receipt-summary"><span>{{ appliedYear }} {{ text('年部门回款合计', 'department collections total') }}</span><strong>{{ data?.departmentReceipts.departments.length ? money(receiptTotal) : '—' }}</strong><small>{{ marketingBreakdown }}{{ marketingBreakdown ? ' · ' : '' }}{{ text('默认展示最近 6 个月，可向左拖动查看历史；全年合计不重复累加。', 'Latest 6 months shown; drag left for earlier months. Annual totals are counted once.') }}</small></div>
         <div class="receipts-chart"><p v-if="!data?.departmentReceipts.departments.length" class="empty-message">{{ text('暂无可查看的回款统计', 'No collections statistics available') }}</p><EChart v-else :option="receiptOption" :can-export="chart('department_receipts')?.canExport === true" :label="text('各部门月度回款对比柱状图', 'Monthly collections by department')" /></div>
         <details :open="departmentDetailsOpen" class="data-details" @toggle="departmentDetailsOpen = ($event.target as HTMLDetailsElement).open"><summary>{{ departmentMom ? text('部门环比明细 · 差额 / 比例', 'Department changes · Amount / Rate') : text('查看回款明细数据', 'View collections data') }}</summary><div class="table-scroll"><table class="receipt-table" :style="{ minWidth: `${160 + receiptSeries.length * 132}px` }"><colgroup><col class="receipt-month-column"><col v-for="item in receiptSeries" :key="item.id"></colgroup><thead><tr><th>{{ text('月份', 'Month') }}</th><th v-for="dept in receiptSeries" :key="dept.id" :class="{ 'aggregate-cell': dept.id === data?.departmentReceipts.marketingCenter?.id }">{{ dept.name || departments[dept.id] || dept.id }}</th></tr></thead><tbody><tr v-for="{ month, index } in receiptRows" :key="month"><td>{{ month }}</td><td v-for="dept in receiptSeries" :key="dept.id" :class="{ 'aggregate-cell': dept.id === data?.departmentReceipts.marketingCenter?.id }"><ReceiptChangeValue v-if="departmentMom" :value="changesFor(dept)[index]" /><span v-else class="receipt-amount" :title="receiptBreakdown(dept, index)">{{ money(dept.amounts[index] ?? 0) }}</span></td></tr></tbody><TableTotals><th scope="row">{{ departmentMom ? text('差额合计（可比月份）', 'Total change (comparable months)') : text('合计（所选年份）', 'Total (selected year)') }}</th><td v-for="dept in receiptSeries" :key="dept.id"><ReceiptChangeValue v-if="departmentMom" :value="changeTotalFor(dept)" /><span v-else class="receipt-amount">{{ money(sumMoney(dept.amounts)) }}</span></td></TableTotals></table></div></details><p class="mom-note" :class="{ 'mom-note-hidden': !departmentMom }" :aria-hidden="!departmentMom">{{ text('合计比例 = 差额合计 ÷ 对应上月金额合计；缺少上月数据的月份不计入合计。上月为 0 时，非零差额不计算比例。', 'Total rate = total change ÷ total prior-month amounts; missing comparisons are excluded. Nonzero changes from zero have no percentage rate.') }}</p>
-      </section>
-      <section v-if="visible('salesperson_receipts')" class="dashboard-panel receipts-panel salesperson-panel">
+      <p v-if="chartErrors.department_receipts" role="alert">{{ chartErrors.department_receipts }}</p></section>
+      <section v-if="!data?.localAnalytics && visible('salesperson_receipts')" class="dashboard-panel receipts-panel salesperson-panel">
         <div class="panel-top receipts-heading statistics-heading">
           <div><h2><Users :size="17" />{{ text('业务员月度回款分析', 'Monthly collections by salesperson') }}</h2></div>
-          <div class="statistics-filters"><label v-if="!visible('department_receipts')" class="year-filter">{{ text('年份', 'Year') }}<select v-model.number="year" aria-label="回款年份" :disabled="busy" @change="refresh()"><option v-for="item in years" :key="item" :value="item">{{ item }}</option></select></label><label class="year-filter">{{ text('部门', 'Department') }}<select v-model="selectedDepartmentId" :disabled="busy || !data?.receipts.departments.length" :aria-label="text('业务员回款部门', 'Salesperson collections department')"><option v-for="department in data?.receipts.departments" :key="department.id" :value="department.id">{{ department.name || departments[department.id] || department.id }}</option></select></label><label class="mom-filter"><input v-model="salespersonMom" type="checkbox" aria-label="业务员回款上月环比">{{ text('上月环比', 'Month-over-month') }}</label></div>
+          <div class="statistics-filters"><label class="year-filter">{{ text('年份', 'Year') }}<select v-model.number="salespersonYear" aria-label="业务员回款年份" :disabled="chartBusy.salesperson_receipts" @change="refreshChart('salesperson_receipts')"><option v-for="item in years" :key="item" :value="item">{{ item }}</option></select></label><label class="year-filter">{{ text('部门', 'Department') }}<select v-model="selectedDepartmentId" :disabled="chartBusy.salesperson_receipts || !data?.receipts.departments.length" :aria-label="text('业务员回款部门', 'Salesperson collections department')"><option v-for="department in data?.receipts.departments" :key="department.id" :value="department.id">{{ department.name || departments[department.id] || department.id }}</option></select></label><label class="mom-filter"><input v-model="salespersonMom" type="checkbox" aria-label="业务员回款上月环比">{{ text('上月环比', 'Month-over-month') }}</label></div>
         </div>
         <div v-if="salespersonMom" class="receipt-summary mom-summary"><span>{{ latestReceiptMonth }} · {{ selectedDepartment?.name }} · {{ text('较上月', 'Change from prior month') }}</span><ReceiptChangeValue :value="latestDepartmentChange" /><small>{{ momHint }}</small></div>
         <div v-else class="receipt-summary"><span>{{ selectedDepartment?.name || text('所选部门', 'Selected department') }} · {{ text('所选年份回款合计', 'selected year total') }}</span><strong>{{ selectedDepartment ? money(selectedDepartmentTotal) : '—' }}</strong><small>{{ receiptBreakdown(selectedDepartment) }}{{ selectedDepartment?.breakdown ? ' · ' : '' }}{{ text('蓝紫色为当前成员合计，不与个人数据重复累加；年份与上方同步。', 'Periwinkle indicates the current members total, counted once; year follows the chart above.') }}</small></div>
         <div class="receipts-chart"><EChart v-if="salespersonSeries.length" :option="salespersonOption" :can-export="chart('salesperson_receipts')?.canExport === true" :label="text('业务员月度回款对比柱状图', 'Monthly collections comparison by salesperson')" @select="event => selectReceipt(event, true)" /><p v-else class="empty-message">{{ selectedDepartment ? text('该部门在所选年份暂无业务员回款数据', 'No salesperson collections for this department and year') : text('暂无可查看的业务员回款统计', 'No salesperson collections statistics available') }}</p></div>
         <p v-if="selectedDepartment && !salespeople.length" class="detail-empty-note">{{ text('该部门在所选年份暂无业务员回款数据', 'No salesperson collections for this department and year') }}</p>
         <details v-if="salespersonSeries.length" :open="salespersonDetailsOpen" class="data-details" @toggle="salespersonDetailsOpen = ($event.target as HTMLDetailsElement).open"><summary>{{ salespersonMom ? text('部门与业务员环比明细 · 差额 / 比例', 'Department and salesperson changes · Amount / Rate') : text('部门与业务员回款明细', 'Department and salesperson collections data') }}</summary><div class="table-scroll"><table class="receipt-table" :style="{ minWidth: `${160 + salespersonSeries.length * 132}px` }"><colgroup><col class="receipt-month-column"><col v-for="item in salespersonSeries" :key="item.id"></colgroup><thead><tr><th>{{ text('月份', 'Month') }}</th><th v-for="(person, personIndex) in salespersonSeries" :key="person.id" :class="{ 'aggregate-cell': personIndex === 0 }">{{ person.name }}</th></tr></thead><tbody><tr v-for="{ month, index } in salespersonReceiptRows" :key="month"><td>{{ month }}</td><td v-for="(person, personIndex) in salespersonSeries" :key="person.id" :class="{ 'aggregate-cell': personIndex === 0 }"><ReceiptChangeValue v-if="salespersonMom" :value="changesFor(person)[index]" /><button v-else :disabled="!canDetails('salesperson_receipts')" class="receipt-amount receipt-link" :title="receiptBreakdown(person, index)" @click="openReceipts(month, selectedDepartmentId, personIndex === 0 ? undefined : person.id)">{{ money(person.amounts[index] ?? 0) }}</button></td></tr></tbody><TableTotals><th scope="row">{{ salespersonMom ? text('差额合计（可比月份）', 'Total change (comparable months)') : text('合计（所选年份）', 'Total (selected year)') }}</th><td v-for="person in salespersonSeries" :key="person.id"><ReceiptChangeValue v-if="salespersonMom" :value="changeTotalFor(person)" /><span v-else class="receipt-amount">{{ money(sumMoney(person.amounts)) }}</span></td></TableTotals></table></div></details><p class="mom-note" :class="{ 'mom-note-hidden': !salespersonMom }" :aria-hidden="!salespersonMom">{{ text('合计比例 = 差额合计 ÷ 对应上月金额合计；缺少上月数据的月份不计入合计。上月为 0 时，非零差额不计算比例。', 'Total rate = total change ÷ total prior-month amounts; missing comparisons are excluded. Nonzero changes from zero have no percentage rate.') }}</p>
-      </section>
-      <template v-if="data?.analyticsConfigured !== false">
-        <OrderVolumeAnalysis v-if="visible('order_volume')" :revision="orderVolumeRevision" />
-        <OrderVolumeAnalysis v-if="visible('customer_orders')" customer :revision="orderVolumeRevision" />
-        <FreightAnalysis v-if="visible('freight')" :revision="orderVolumeRevision" />
+      <p v-if="chartErrors.salesperson_receipts" role="alert">{{ chartErrors.salesperson_receipts }}</p></section>
+      <template v-if="data?.localAnalytics">
+        <LocalDashboardAnalytics v-if="visible('registrations')" chart-id="registrations" title="客户注册统计" :available-window="data?.registrationWindow" />
+        <LocalDashboardAnalytics v-if="visible('department_receipts')" chart-id="department_receipts" title="部门业绩分析" />
+        <LocalDashboardAnalytics v-if="visible('salesperson_receipts')" chart-id="salesperson_receipts" title="业务员业绩分析" />
+        <LocalDashboardAnalytics v-if="visible('order_volume')" chart-id="order_volume" title="订单量分析" />
+        <LocalDashboardAnalytics v-if="visible('customer_orders')" chart-id="customer_orders" title="客户订单分析" />
       </template>
-      <p v-else class="dashboard-footnote">{{ text('分析图表尚未接入，待办统计以各卡片显示为准。', 'Analytics are not connected. Pending counts are shown on each card.') }}</p>
-      <p v-if="data?.source === 'mock'" class="dashboard-footnote">{{ text('MOCK 演示数据 · 组织、员工与订单相互关联 · 日期筛选用于注册趋势，年份筛选用于回款分析。', 'MOCK demo data · Linked organization, employees and orders · Dates filter registrations; year filters collections.') }}</p>
-      <p v-else class="dashboard-footnote">{{ text('日期筛选用于注册趋势，年份筛选用于回款分析。', 'Dates filter registrations; year filters collections.') }}</p>
+      <template v-if="!data?.localAnalytics && data?.analyticsConfigured === false">
+        <template v-for="panel in [
+          { id: 'order_volume' as const, title: text('订单量分析', 'Order volume analysis') },
+          { id: 'customer_orders' as const, title: text('客户订单分析', 'Customer order analysis') },
+        ]" :key="panel.id">
+          <section v-if="visible(panel.id)" class="dashboard-panel receipts-panel" :data-analytics-empty="panel.id">
+            <header class="panel-top"><h2>{{ panel.title }}</h2></header>
+            <div class="receipts-chart"><p class="empty-message">{{ text('暂无可展示的数据', 'No data available') }}</p></div>
+          </section>
+        </template>
+      </template>
+      <template v-if="!data?.localAnalytics && data?.analyticsConfigured !== false">
+        <OrderVolumeAnalysis v-if="visible('order_volume')" />
+        <OrderVolumeAnalysis v-if="visible('customer_orders')" customer />
+      </template>
+      <p v-else-if="!data?.localAnalytics" class="dashboard-footnote">{{ text('日期筛选用于注册趋势，年份筛选用于回款分析。', 'Dates filter registrations; year filters collections.') }}</p>
+      <FreightAnalysis v-if="visible('freight')" />
     </main>
   </AppLayout>
 </template>
@@ -393,7 +443,7 @@ button:disabled { opacity: .5; cursor: wait; }
 .task-queues { display: flex; flex-wrap: wrap; gap: 6px 12px; margin-top: 6px; font-size: 11px; }.task-queues a { color: #6366f1; text-decoration: underline; text-underline-offset: 3px; }
 .summary-card p { font-size: 11px; line-height: 1.65; min-height: 36px; opacity: .95; }.card-decoration { position: absolute; width: 100px; height: 100px; border: 18px solid #ffffff12; border-radius: 50%; right: -29px; bottom: -40px; }
 
-.insights-grid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 20px; align-items: stretch; }.dashboard-panel { min-width: 0; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 8px; box-shadow: 0 2px 6px #27395004; overflow: hidden; }.panel-top { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 19px 20px; border-bottom: 1px solid var(--color-border); }.panel-top h2 { display: flex; align-items: center; gap: 8px; color: #576bd3; font-size: 13px; font-weight: 650; }.subtle-label { font-size: 9px; color: #97a1b1; letter-spacing: .04em; }.date-filter { display: flex; align-items: end; gap: 8px; padding: 18px 20px 0; flex-wrap: wrap; }.date-filter label > span { display: block; font-size: 10px; color: #8a95a7; margin-bottom: 5px; }.date-filter input, .year-filter select { color: inherit; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 5px; padding: 7px 9px; font-size: 11px; }.date-dash { padding-bottom: 7px; color: #b7c0ce; }.query-button { color: #fff; background: #5873d4; padding: 8px 16px; }.chart-summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; padding: 20px 22px 0; }.chart-summary strong { font-size: 28px; font-weight: 700; letter-spacing: -.04em; }.chart-summary span { font-size: 11px; color: #8490a3; }.chart-summary small { margin-left: auto; font-size: 10px; color: #9aa4b4; }.registration-chart { height: 285px; padding: 0 10px; }.activity-column { display: grid; gap: 18px; }.activity-list { padding: 0 20px; max-height: 260px; overflow-y: auto; }.exception-row, .task-row { display: flex; align-items: center; gap: 10px; padding: 15px 0; border-bottom: 1px solid var(--color-border); }.exception-row:last-child, .task-row:last-child { border-bottom: 0; }.exception-row > div, .task-row > div { flex: 1; min-width: 0; }.row-heading { font-size: 11px; font-weight: 600; }.row-heading span { display: block; color: #8d98a9; font-weight: 400; font-size: 10px; margin-top: 3px; }.row-description { color: #8b95a6; font-size: 10px; margin-top: 5px; }.status-dot { width: 6px; height: 6px; border-radius: 50%; background: #f2a24c; flex-shrink: 0; }.age-badge { padding: 3px 7px; font-size: 10px; color: #d68b2e; background: #fff7e8; border-radius: 4px; }.count-badge { font-size: 10px; color: #e1a041; background: #fff5e4; border-radius: 4px; padding: 2px 6px; }.dashboard-panel footer { border-top: 1px solid var(--color-border); padding: 10px 20px; font-size: 9px; color: #9aa4b4; }.task-time { color: #8c97a9; font-size: 11px; width: 42px; font-variant-numeric: tabular-nums; }.priority { font-size: 9px; padding: 3px 7px; border-radius: 4px; }.priority.high { color: #e48858; background: #fff2ea; }.priority.normal { color: #7c8caa; background: #eff3fa; }
+.insights-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; align-items: stretch; }.dashboard-panel { min-width: 0; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 8px; box-shadow: 0 2px 6px #27395004; overflow: hidden; }.panel-top { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 19px 20px; border-bottom: 1px solid var(--color-border); }.panel-top h2 { display: flex; align-items: center; gap: 8px; color: #576bd3; font-size: 13px; font-weight: 650; }.subtle-label { font-size: 9px; color: #97a1b1; letter-spacing: .04em; }.date-filter { display: flex; align-items: end; gap: 8px; padding: 18px 20px 0; flex-wrap: wrap; }.date-filter label > span { display: block; font-size: 10px; color: #8a95a7; margin-bottom: 5px; }.date-filter input, .year-filter select { color: inherit; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 5px; padding: 7px 9px; font-size: 11px; }.date-dash { padding-bottom: 7px; color: #b7c0ce; }.query-button { color: #fff; background: #5873d4; padding: 8px 16px; }.chart-summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; padding: 20px 22px 0; }.chart-summary strong { font-size: 28px; font-weight: 700; letter-spacing: -.04em; }.chart-summary span { font-size: 11px; color: #8490a3; }.chart-summary small { margin-left: auto; font-size: 10px; color: #9aa4b4; }.registration-chart { height: 285px; padding: 0 10px; }.activity-column { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; order: -1; }.activity-column > .dashboard-panel { height: 340px; display: flex; flex-direction: column; }.activity-column .panel-top, .activity-column footer { flex: 0 0 auto; }.activity-column .activity-list { flex: 1; min-height: 0; max-height: none; }.activity-column .empty-message:only-child { height: 100%; display: grid; place-content: center; margin: 0; }.activity-list { padding: 0 20px; max-height: 260px; overflow-y: auto; }.exception-row, .task-row { display: flex; align-items: center; gap: 10px; padding: 15px 0; border-bottom: 1px solid var(--color-border); }.exception-row:last-child, .task-row:last-child { border-bottom: 0; }.exception-row > div, .task-row > div { flex: 1; min-width: 0; }.row-heading { font-size: 11px; font-weight: 600; }.row-heading span { display: block; color: #8d98a9; font-weight: 400; font-size: 10px; margin-top: 3px; }.row-description { color: #8b95a6; font-size: 10px; margin-top: 5px; }.status-dot { width: 6px; height: 6px; border-radius: 50%; background: #f2a24c; flex-shrink: 0; }.age-badge { padding: 3px 7px; font-size: 10px; color: #d68b2e; background: #fff7e8; border-radius: 4px; }.count-badge { font-size: 10px; color: #e1a041; background: #fff5e4; border-radius: 4px; padding: 2px 6px; }.dashboard-panel footer { border-top: 1px solid var(--color-border); padding: 10px 20px; font-size: 9px; color: #9aa4b4; }.task-time { color: #8c97a9; font-size: 11px; width: 42px; font-variant-numeric: tabular-nums; }.priority { font-size: 9px; padding: 3px 7px; border-radius: 4px; }.priority.high { color: #e48858; background: #fff2ea; }.priority.normal { color: #7c8caa; background: #eff3fa; }
 .receipts-panel { margin-top: 20px; }.receipts-heading > div > p { color: #9aa4b4; font-size: 10px; margin-top: 6px; }.year-filter { display: flex; align-items: center; gap: 8px; font-size: 11px; color: #8d98a9; }.receipt-summary { display: flex; align-items: baseline; flex-wrap: wrap; gap: 12px; padding: 18px 20px 10px; }.receipt-summary > span { color: #8a95a6; font-size: 11px; }.receipt-summary strong { font-size: 23px; font-weight: 700; letter-spacing: -.03em; }.receipt-summary small { margin-left: auto; font-size: 10px; color: #98a3b3; }.receipts-chart { height: 355px; padding: 10px 15px 0; }.dashboard-footnote { font-size: 10px; color: #98a3b3; margin-top: 16px; line-height: 1.8; }.data-details { padding: 10px 20px; font-size: 10px; color: #8290a5; border-top: 1px solid var(--color-border); }.data-details summary { cursor: pointer; }.table-scroll { max-height: 240px; overflow: auto; margin-top: 8px; }table { width: 100%; border-collapse: collapse; white-space: nowrap; }th, td { padding: 8px; text-align: right; border-bottom: 1px solid var(--color-border); }th:first-child, td:first-child { text-align: left; }.error-message { color: #dc2626; padding: 12px; background: #fef2f2; border-radius: 6px; margin-bottom: 16px; font-size: 12px; }.empty-message { padding: 30px; text-align: center; color: #8a95a6; font-size: 12px; }
 .dark .mock-badge { background: #382b17; border-color: #60491f; color: #f5c76c; }.dark .age-badge, .dark .count-badge, .dark .priority.high { background: #352b22; }.dark .priority.normal { background: #263145; }
 @media (max-width: 1280px) { .summary-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }.work-calendar-card { grid-column: 1 / -1; }.subtle-label { display: none; } }

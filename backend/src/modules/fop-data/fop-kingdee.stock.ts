@@ -62,11 +62,11 @@ export class KingdeeStockDecoder {
   }
   order(value: unknown, identity: FopIdentity, scope: BusinessScope, organizations: readonly string[]): FopStockOrderCandidate {
     const row = object(value)
-    if (!['1', '2'].includes(String(row.stockType)) || !['1', '2'].includes(String(row.orderStatus)) || !['A', 'B', 'C', 'D', 'Z'].includes(String(row.billStatus)) || !Array.isArray(row.items)) throw new Error('Invalid Kingdee stock status')
+    if (!['1', '2'].includes(String(row.stockType)) || !['0', '1', '2'].includes(String(row.orderStatus)) || !['A', 'B', 'C', 'D', 'Z'].includes(String(row.billStatus)) || !Array.isArray(row.items)) throw new Error('Invalid Kingdee stock status')
     const purchaseStatuses = { '0': 'unpurchased', '1': 'partial', '2': 'in_progress', '3': 'received', '4': 'shipped' } as const
     const result: FopStockOrderCandidate = { ...this.ownership(row, identity, scope, organizations, true), id: id(row.id), stockNumber: text(row.stockNumber),
-      stockType: String(row.stockType) === '1' ? 'full_payment' : 'deposit', cancelled: false,
-      paymentStatus: String(row.orderStatus) === '2' ? 'paid' : 'unpaid', reviewStatus: row.billStatus === 'C' ? 'approved' : 'pending',
+      stockType: String(row.stockType) === '1' ? 'full_payment' : 'deposit', cancelled: String(row.orderStatus) === '0', rawOrderStatus: String(row.orderStatus), rawBillStatus: String(row.billStatus),
+      paymentStatus: String(row.orderStatus) === '2' ? 'paid' : String(row.orderStatus) === '1' ? 'unpaid' : 'unknown', reviewStatus: row.billStatus === 'C' ? 'approved' : ['A','B'].includes(String(row.billStatus)) ? 'pending' : 'unknown',
       amount: number(row.amount), currency: text(row.currency), paidAt: timestamp(row.paidAt), createdAt: timestamp(row.createdAt),
       procurementPaidAt: timestamp(row.procurementPaidAt), storeName: row.storeName === null ? null : text(row.storeName, true),
       purchaseStatus: purchaseStatuses[String(row.purchaseStatus) as keyof typeof purchaseStatuses] ?? 'unknown',

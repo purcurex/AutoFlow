@@ -18,7 +18,7 @@ export function demoStockOrders(orders: readonly FopOrderCandidate[], now = new 
       owner: order.owner!, department: order.department!, departmentPathIds: order.departmentPathIds, salesDepartmentCode: order.salesDepartmentCode,
       storeName: order.storeName, warehouseCode: type ? 'SZ' : 'HZ', warehouse: type ? '深圳仓' : '杭州仓',
       items: order.items.map(item => ({ ...item, quantity: 20 + item.quantity * 10 })), amount: Math.round(order.amount * (type ? 3 : 10) * 100) / 100, currency: 'USD',
-      paymentStatus: index % 7 === 0 ? 'unpaid' : 'paid', reviewStatus: index % 7 === 0 || index % 11 === 0 ? 'pending' : 'approved',
+      paymentStatus: index % 7 === 0 ? 'unpaid' : 'paid', reviewStatus: index % 7 === 0 || index % 11 === 0 ? 'pending' : 'approved', rawBillStatus: index % 7 === 0 ? 'A' : index % 11 === 0 ? 'B' : 'C',
       paidAt: index % 7 === 0 ? null : order.paidAt ?? order.createdAt, createdAt: order.createdAt,
       purchaseStatus, procurementPaidAt, cancelled: false }
   }))
@@ -31,7 +31,7 @@ export function demoStockOrders(orders: readonly FopOrderCandidate[], now = new 
     return { ...base, id: `${base.id}:lifecycle:${period}:${stage}`, stockNumber: `BH${date}${String(800000 + ownerIndex * 12 + period * 3 + stage).padStart(6, '0')}`,
       stockType: (period + stage) % 2 ? 'deposit' : 'full_payment', createdAt,
       paidAt: stage === 0 ? null : new Date(Date.parse(createdAt) + 3600000).toISOString(),
-      paymentStatus: stage === 0 ? 'unpaid' : 'paid', reviewStatus: stage === 0 || stage === 1 && period % 2 ? 'pending' : 'approved',
+      paymentStatus: stage === 0 ? 'unpaid' : 'paid', reviewStatus: stage === 0 || stage === 1 && period % 2 ? 'pending' : 'approved', rawBillStatus: stage === 0 ? 'A' : stage === 1 && period % 2 ? 'B' : 'C',
       purchaseStatus: stage === 2 ? 'received' : 'unpurchased', procurementPaidAt: null }
   })))
   return [...rows, ...samples]

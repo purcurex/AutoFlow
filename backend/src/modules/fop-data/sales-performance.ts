@@ -1,5 +1,5 @@
 import { BadRequestException } from '@nestjs/common'
-import { businessDate, BUSINESS_TIME_ZONE, DAY_MS, validBusinessDay } from './fop-business-time'
+import { BUSINESS_START_DATE, businessDate, BUSINESS_TIME_ZONE, DAY_MS, validBusinessDay } from './fop-business-time'
 import { FopReceipt, SALES_DEPARTMENTS } from './fop-data.types'
 import { convertFreightAmount } from './fop-freight'
 import { moneyToCents } from './fop-order-totals'
@@ -67,7 +67,7 @@ export function publicProfit(row: FopProfit): FopProfit {
 }
 
 export function performancePeriods(query: PerformanceQuery, now = new Date()): Period[] {
-  if (!validBusinessDay(query.from) || !validBusinessDay(query.to) || query.from < '2020-01-01' || query.from > query.to
+  if (!validBusinessDay(query.from) || !validBusinessDay(query.to) || query.from < BUSINESS_START_DATE || query.from > query.to
     || query.to > businessDate(now) || time(query.to) - time(query.from) > 365 * DAY_MS || !['month', 'week', 'day'].includes(query.grain)
     || (query.ownerId !== undefined && (typeof query.ownerId !== 'string' || !query.ownerId.trim() || query.ownerId.length > 128))
     || (query.ownerScope !== undefined && (query.ownerScope !== 'all' || query.ownerId !== undefined))) throw new BadRequestException('Invalid sales performance query')

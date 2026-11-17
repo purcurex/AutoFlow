@@ -6,7 +6,7 @@
 
 工作台清单与相关导出默认读取 PostgreSQL 本地单据表及查询投影，前端通过本项目 API 查询；即时库存与审核仍为独立按需能力。FOP 共享副本写入源当前为 UnconfiguredReplicaChangeSource，未实现历史初始化编排，现有增量任务／发布器不能替代首次导入。Mock 库可查询与真实 FOP 可初始化分开判断。
 
-当前状态、数据库缺口与执行条件见 [集成核查](integrations/HyperZoneFOP集成核查与初始化条件.html)；字段、来源与未接入项见 [字段对照表](integrations/HyperZone待办清单数据字段对照表.html)。旧直查适配代码用于诊断及独立能力，不作为本地查询失败回退。
+当前状态、数据库缺口与执行条件见 [集成核查](requirements/HyperZone智能办公平台项目开发需求说明书.html)；字段、来源与未接入项见 [字段对照表](requirements/HyperZone智能办公平台项目开发需求说明书.html)。旧直查适配代码用于诊断及独立能力，不作为本地查询失败回退。
 
 ## 01 架构总览
 

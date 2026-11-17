@@ -1,7 +1,9 @@
+import { warehouseCodes } from './warehouse-codes'
+import { localDispatchFailureSql, localOrderDispatchTaskSql } from './local-workbench-logistics'
 import { CollectedWorkbenchService } from './collected-workbench.service'
 import { ReceiptNoticesQueryDto } from './receipt-notices.dto'
 import { receiptNoticeProgress } from './receipt-notices'
-import { localDispatchDocumentsSql, localLogisticsSql, localDispatchLogisticsSql, localWarehouseLogisticsSql, localReviewLogisticsSql, localProcurementPaidAtSql } from './local-workbench-logistics'
+import { localDispatchDocumentsSql, localPendingDispatchLogisticsSql, localLogisticsSql, localReviewLogisticsSql, localProcurementPaidAtSql } from './local-workbench-logistics'
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException, Optional, ServiceUnavailableException, UnauthorizedException } from '@nestjs/common'
 import { ReplicaAuthorizationService } from './replica-authorization.service'
 import { ConfigService } from '@nestjs/config'
@@ -9,7 +11,7 @@ import { DataSource, EntityManager } from 'typeorm'
 import { UsersService } from '../users/users.service'
 import { User } from '../users/user.entity'
 import { businessScope } from '../users/business-scope'
-import { WORKBENCH_ROLES, WorkbenchRole } from '../users/workbench-role'
+import { effectiveWorkbenchRoles, WorkbenchRole } from '../users/workbench-role'
 import { FULFILLMENT_QUEUE_ROLES, ListFulfillmentOrdersDto } from '../users/dto/workbench.dto'
 import { LocalWorkbenchOrganization } from '../users/local-workbench-organization'
 import { localDepartments, localEmployeeFilter, localOwnership, localSalespeople } from '../fop-data/local-workbench-scope'
@@ -53,7 +55,7 @@ export class LocalWorkbenchService {
     if (!user || user.accountDisabled) throw new UnauthorizedException('Account no longer exists')
     const business = businessScope(user)
     if (business.role === 'none') throw new ForbiddenException('Business data access is disabled')
-    const roles = user.role === 'admin' || business.role === 'admin' ? [...WORKBENCH_ROLES] : user.workbenchRoles ?? []
+    const roles = effectiveWorkbenchRoles(user)
     if (role && !roles.includes(role)) throw new ForbiddenException('Workbench access denied')
     return user
   }
@@ -90,7 +92,7 @@ export class LocalWorkbenchService {
 
   private async organization(manager: Pick<EntityManager, 'query'>, user: User, company: CompanyRow): Promise<LocalWorkbenchOrganization> {
     const nodes: LocalRow[] = await manager.query('SELECT id,parent_id,name,kind FROM organization_nodes WHERE owner_user_id = $1 ORDER BY id', [company.workspace_owner_id])
-    const employees: LocalRow[] = await manager.query(`SELECT e.id,e.department_id,e.account_id,e.name,e.archived_at,u.account_disabled,u.fop_tenant_id,u.fop_binding_details,
+    const employees: LocalRow[] = await manager.query(`SELECT e.id,e.department_id,e.account_id,e.name,e.directory_profile->>'englishName' AS english_name,e.archived_at,u.account_disabled,u.fop_tenant_id,u.fop_binding_details,
       b.id AS binding_id,b.enabled AS binding_enabled,b.state AS binding_state,b.employee_master_id,b.person_record_id,b.employee_number,b.directory_verified_at
       FROM organization_employees e LEFT JOIN users u ON u.id = e.account_id
       LEFT JOIN hz_fop_employee_bindings b ON b.local_account_id = u.id AND b.connection_id = $2
@@ -192,7 +194,7 @@ export class LocalWorkbenchService {
   // carrier_name ← hzkj_logistics_company; tracking_number ← hzkj_waybill_number (domestic inbound parcel).
   // Do not join fulfillment/dispatch channels or substitute their suppliers, warehouses or tracking numbers.
   async getReceiptNotices(userId: string, query: ReceiptNoticesQueryDto) {
-    if(this.collected?.enabled)return this.collected.unavailable(userId,query,'warehouse')
+    if(this.collected?.enabled)return this.collected.receiptNotices(userId,query)
     return this.read(async manager => {
       const context = await this.context(manager, userId, 'warehouse', query, 'receipt_notices')
       const values: unknown[] = [JSON.stringify(context.scopes.map(s => ({ connection_id: s.connectionId, company_id: s.companyId, dataset_id: s.datasetId, employee_ids: s.employeeIds })))]
@@ -217,7 +219,7 @@ export class LocalWorkbenchService {
         conditions.push(`(concat_ws(' ',sd.document_number,supplier.name,r.tracking_number) ILIKE ${search} ESCAPE '\\'
           OR EXISTS (SELECT 1 FROM jsonb_array_elements(p.lines) line WHERE concat_ws(' ',line->>'sku',line->>'name',line->>'variant') ILIKE ${search} ESCAPE '\\'))`)
       }
-      if (query.warehouseCode) conditions.push(`warehouse.code=${bind(query.warehouseCode)}`)
+      if (query.warehouseCode) conditions.push(`warehouse.code=ANY(${bind(warehouseCodes(query.warehouseCode))}::text[])`)
       if (query.status) conditions.push(query.status === 'partial' ? 'p.inbound_quantity>0' : 'p.inbound_quantity=0')
       const where = conditions.join(' AND ')
       const [invalidLines] = await manager.query(`SELECT count(*)::int AS n ${from}
@@ -262,10 +264,10 @@ export class LocalWorkbenchService {
       const completeness: LocalRow[] = await manager.query(`SELECT count(*)::text AS unknown_count ${sql.from} WHERE ${sql.completenessWhere}
         AND (${!stock && ['dispatch','procurement','allocation','allocation_review'].includes(query.queue) ? 'delivery.incomplete OR' : ''} ${!stock && query.queue==='shipping' ? "native.raw_delivery_status IS NULL OR native.raw_delivery_status NOT IN ('0','1','2') OR" : !stock && ['procurement','procurement_shipping'].includes(query.queue) ? "native.raw_purchase_status IS NULL OR native.raw_purchase_status NOT IN ('0','1','2','3','4') OR" : ''} o.readiness <> 'ready' OR o.published_at IS NULL OR o.total_amount IS NULL OR o.total_quantity IS NULL OR sd.validation_state <> 'verified'
           OR o.ownership_verified_at IS NULL OR o.ownership_verified_at < CURRENT_TIMESTAMP - INTERVAL '60 seconds' OR o.ownership_verified_at > CURRENT_TIMESTAMP OR o.ownership_version IS NULL
-          OR m.classification_state IS NULL OR m.classification_state = 'unknown' OR m.projection_revision <> o.projection_revision OR m.rule_version <> o.rule_version
+          OR ${query.queue==='exceptions' ? `NOT ${localDispatchFailureSql} AND` : ''} (m.classification_state IS NULL OR m.classification_state = 'unknown' OR m.projection_revision <> o.projection_revision OR m.rule_version <> o.rule_version)
           OR EXISTS (SELECT 1 FROM hz_fop_workbench_order_lines invalid_line WHERE invalid_line.order_document_id = o.document_id AND invalid_line.company_id = o.company_id AND invalid_line.dataset_id = o.dataset_id AND invalid_line.projection_revision <> o.projection_revision))`, sql.completenessValues)
       if (Number(completeness[0]?.unknown_count) > 0) throw new ServiceUnavailableException({ code: 'workbench_replica_incomplete', queueState: 'incomplete', total: null, message: 'Authorized candidates contain unknown or incomplete queue classifications' })
-      const memberWhere = `${sql.where} AND o.readiness = 'ready' AND m.classification_state = 'member' AND m.projection_revision = o.projection_revision`
+      const memberWhere = `${sql.where} AND o.readiness = 'ready' AND ${query.queue==='exceptions' ? `(${localDispatchFailureSql} OR (m.classification_state = 'member' AND m.projection_revision = o.projection_revision))` : "m.classification_state = 'member' AND m.projection_revision = o.projection_revision"}`
       const aggregate: LocalRow[] = await manager.query(`SELECT count(*)::text AS case_count, count(DISTINCT o.document_id)::text AS order_count, COALESCE(max(o.projection_revision),0)::text AS revision, max(o.published_at) AS source_synced_at ${sql.from} WHERE ${memberWhere}`, sql.values)
       const monies: LocalRow[] = await manager.query(`SELECT currency_code AS currency,sum(total_amount)::text AS amount,sum(total_quantity)::text AS quantity FROM (SELECT DISTINCT o.document_id,o.currency_code,o.total_amount,o.total_quantity ${sql.from} WHERE ${memberWhere}) amounts GROUP BY currency_code ORDER BY currency_code NULLS LAST`, sql.values)
       let shippingCountries:string[]|undefined
@@ -275,8 +277,9 @@ export class LocalWorkbenchService {
         shippingCountries=countries.map(row=>row.country_code)
       }
       const page = query.page ?? 1, pageSize = query.pageSize ?? 20
-      const rows: LocalRow[] = query.projection === 'count' ? [] : await manager.query(`SELECT o.*, ${!stock && ['shipping','procurement','procurement_shipping'].includes(query.queue) ? `native.raw_purchase_status AS source_purchase_status,native.raw_delivery_status AS source_outbound_status,${query.queue==='shipping' ? "CASE native.raw_delivery_status WHEN '0' THEN 'pending' WHEN '1' THEN 'partial' WHEN '2' THEN 'completed' ELSE 'unknown' END AS outbound_state," : ''}` : ''} ${query.queue === 'rma' ? 'rm.rma_document_id AS selected_rma_id,' : ''} sd.source_id, sd.source_audited_at, m.queue_code, m.phase_completed_at, ${query.queue === 'allocation_review' && query.completed ? 'allocation_approval.review_state AS allocation_review_state,allocation_approval.audited_at AS allocation_audited_at,' : ''} ${query.queue === 'shipping' ? localWarehouseLogisticsSql : query.queue === 'dispatch' ? localDispatchLogisticsSql : query.queue === 'review' && !query.completed ? localReviewLogisticsSql : localLogisticsSql} AS logistics_packages,
-        ${query.queue === 'dispatch' ? "delivery.task_state AS dispatch_task_state,CASE WHEN delivery.task_state='dispatch_synced' THEN 'synced' WHEN delivery.task_state='unknown' THEN 'unknown' ELSE 'pending' END AS shopify_sync_state,delivery.audited_at AS dispatch_audited_at," : ''}
+      const rows: LocalRow[] = query.projection === 'count' ? [] : await manager.query(`SELECT o.*, ${!stock && ['shipping','procurement','procurement_shipping'].includes(query.queue) ? `native.raw_purchase_status AS source_purchase_status,native.raw_delivery_status AS source_outbound_status,${query.queue==='shipping' ? "CASE native.raw_delivery_status WHEN '0' THEN 'pending' WHEN '1' THEN 'partial' WHEN '2' THEN 'completed' ELSE 'unknown' END AS outbound_state," : ''}` : ''} ${query.queue === 'rma' ? 'rm.rma_document_id AS selected_rma_id,' : ''} sd.source_id, sd.raw_bill_status, sd.source_audited_at, m.queue_code, m.phase_completed_at, ${query.queue === 'allocation_review' && query.completed ? 'allocation_approval.review_state AS allocation_review_state,allocation_approval.audited_at AS allocation_audited_at,' : ''} ${query.queue === 'dispatch' && !query.completed ? localPendingDispatchLogisticsSql : query.queue === 'review' && !query.completed ? localReviewLogisticsSql : localLogisticsSql} AS logistics_packages,
+        ${query.queue === 'exceptions' ? `${localDispatchFailureSql} AS dispatch_sync_failed,native.raw_order_status AS native_order_status,` : ''}
+        ${query.queue === 'dispatch' ? `native.raw_order_status AS native_order_status,${localOrderDispatchTaskSql} AS dispatch_task_state,CASE WHEN native.raw_order_status IN ('4','5') THEN 'synced' ELSE 'pending' END AS shopify_sync_state,delivery.audited_at AS dispatch_audited_at,` : ''}
         (SELECT f.custom_channel_name FROM hz_fop_fulfillment_orders f WHERE f.document_id=o.document_id AND f.company_id=o.company_id AND f.dataset_id=o.dataset_id) AS custom_channel_name,
         ${localProcurementPaidAtSql} AS procurement_paid_at,
         (SELECT jsonb_agg(jsonb_build_object('id',a_sd.source_id,'number',a_sd.document_number))->0 FROM hz_fop_document_relations ar JOIN hz_fop_allocations a ON a.document_id=ar.to_document_id AND a.company_id=o.company_id AND a.dataset_id=o.dataset_id JOIN hz_fop_source_documents a_sd ON a_sd.id=a.document_id WHERE ar.from_document_id=o.document_id AND ar.company_id=o.company_id AND ar.dataset_id=o.dataset_id AND ar.relation_type='allocation' AND ar.resolution_state='resolved' AND ar.removed_at IS NULL AND a_sd.deleted_at IS NULL AND a_sd.validation_state='verified' HAVING count(*)=1) AS allocation_document,
@@ -346,11 +349,15 @@ export class LocalWorkbenchService {
   }
 
   /** These projections require verified source mappings before local delivery; never delegate to a live provider. */
+  async getRmaOrder(userId:string,caseId:string){
+    if(this.collected?.enabled)return this.collected.rmaDetail(userId,caseId)
+    throw new ServiceUnavailableException('RMA detail requires the collected local dataset')
+  }
   async getRmaOrders(userId: string, query: RmaQueryDto) { return this.orders(userId, { ...query, queue: 'rma', rmaType: query.type, rmaFlowStatus: query.flowStatus }, 'sales', false) }
   async getPurchaseGroups(userId: string, query: PurchaseGroupQueryDto) { return this.purchaseGroups(userId, query) }
   async getPurchaseGroupDetails(userId: string, groupId: string, query: PurchaseGroupQueryDto) { return this.purchaseGroups(userId, query, groupId) }
   private async purchaseGroups(userId: string, query: PurchaseGroupQueryDto, groupId?: string): Promise<any> {
-    if(this.collected?.enabled)return this.collected.unavailable(userId,query,'procurement',groupId)
+    if(this.collected?.enabled)return this.collected.purchaseGroups(userId,query,groupId)
     if(query.purchaseStage && query.purchaseStage!=='uncreated'&&!this.mock) throw unconfigured('Purchase payment/placement stage filters need a normalized standalone purchase status projection')
     return this.read(async manager=>{
       const context=await this.context(manager,userId,'procurement',query,['orders','purchases'])
@@ -364,6 +371,7 @@ export class LocalWorkbenchService {
       if(Number(broken[0]?.n)>0)throw new ServiceUnavailableException({code:'workbench_replica_incomplete',message:'Exact procurement demand, allocation, cancellation or return coverage is incomplete',total:null})
       const mockStage:Record<string,string>={placement_pending:"sf.raw_platform_status='pending'",payment_pending:"sf.raw_platform_status='placed' AND sf.raw_trade_status IN ('unpaid','partial')",refund_pending:"sf.raw_trade_status='refunded'"}
       const groupFilter=query.purchaseStage==='uncreated'?"WHERE b.group_id='uncreated'":this.mock&&query.purchaseStage&&mockStage[query.purchaseStage]?`WHERE EXISTS (SELECT 1 FROM hz_fop_purchase_orders sf WHERE sf.document_id=b.purchase_document_id AND sf.company_id=o.company_id AND sf.dataset_id=o.dataset_id AND ${mockStage[query.purchaseStage]})`:''
+      // Amounts/counts use authorized allocations; completion still requires the whole supplier purchase to ship.
       const obligations=`WITH scoped AS (${scoped}), obligations AS (
         SELECT a.order_document_id,a.order_line_id,a.purchase_line_id,a.purchase_document_id,('purchase:'||a.purchase_document_id::text) AS group_id,a.allocated_requirement_quantity AS quantity,a.supplier_shipped_quantity AS shipped
         FROM hz_fop_workbench_purchase_allocations a JOIN scoped o ON o.document_id=a.order_document_id AND o.company_id=a.company_id AND o.dataset_id=a.dataset_id AND o.projection_revision=a.projection_revision
@@ -372,48 +380,58 @@ export class LocalWorkbenchService {
         UNION ALL SELECT d.order_document_id,d.order_line_id,NULL::uuid,NULL::uuid,'uncreated',d.unassigned_quantity,0::numeric
         FROM hz_fop_workbench_procurement_demands d JOIN scoped o ON o.document_id=d.order_document_id AND o.company_id=d.company_id AND o.dataset_id=d.dataset_id AND o.projection_revision=d.projection_revision
         WHERE d.unassigned_quantity>0 ${query.completed || query.queue==='procurement_shipping' ? 'AND FALSE' : ''}
-      ), linked_groups AS (SELECT b.group_id,count(DISTINCT b.order_document_id)::int AS detail_order_count,count(DISTINCT NULLIF(btrim(l.sku_code),''))::int AS sku_count,sum(b.quantity) AS quantity,sum(b.shipped) AS shipped_quantity,sum(b.quantity-b.shipped) AS pending_quantity,max(o.customer_paid_at) AS latest_paid_at,min(o.customer_paid_at) AS earliest_paid_at
+      ), linked_groups AS (SELECT b.group_id,count(*)::int AS detail_line_count,count(DISTINCT b.order_document_id)::int AS detail_order_count,count(DISTINCT NULLIF(btrim(l.sku_code),''))::int AS sku_count,sum(b.quantity) AS quantity,sum(b.shipped) AS shipped_quantity,sum(b.quantity-b.shipped) AS pending_quantity,max(o.customer_paid_at) AS latest_paid_at,min(o.customer_paid_at) AS earliest_paid_at
         FROM obligations b JOIN scoped o ON o.document_id=b.order_document_id
         JOIN hz_fop_source_lines l ON l.id=b.order_line_id AND l.document_id=o.document_id AND l.company_id=o.company_id AND l.dataset_id=o.dataset_id
         ${groupFilter} GROUP BY b.group_id), purchase_entries AS (
-        SELECT g.group_id,l.id,l.sku_code,d.sales_order_number,d.ordered_quantity,d.supplier_shipped_quantity,d.cancelled_quantity,
-          EXISTS(SELECT 1 FROM hz_fop_workbench_purchase_allocations a WHERE a.purchase_line_id=l.id AND a.purchase_document_id=l.document_id AND a.company_id=l.company_id AND a.dataset_id=l.dataset_id) AS has_source,
-          EXISTS(SELECT 1 FROM hz_fop_workbench_purchase_allocations a
-            LEFT JOIN hz_fop_workbench_orders linked_order ON linked_order.document_id=a.order_document_id AND linked_order.company_id=a.company_id AND linked_order.dataset_id=a.dataset_id
-            LEFT JOIN hz_fop_source_documents linked_sd ON linked_sd.id=linked_order.document_id AND linked_sd.company_id=a.company_id AND linked_sd.dataset_id=a.dataset_id
-            WHERE a.purchase_line_id=l.id AND a.purchase_document_id=l.document_id AND a.company_id=l.company_id AND a.dataset_id=l.dataset_id
-              AND (linked_order.document_id IS NULL OR linked_sd.deleted_at IS NOT NULL OR linked_sd.validation_state IS DISTINCT FROM 'verified'
-                OR linked_order.readiness IS DISTINCT FROM 'ready' OR linked_order.ownership_verified_at IS NULL OR linked_order.ownership_verified_at<CURRENT_TIMESTAMP-INTERVAL '60 seconds'
-                OR linked_order.ownership_verified_at>CURRENT_TIMESTAMP OR linked_order.ownership_version IS NULL
-                OR a.allocation_state IS DISTINCT FROM 'known' OR a.projection_revision IS DISTINCT FROM linked_order.projection_revision
-                OR NOT ${localResourceGrantSql('orders','linked_sd.source_id','linked_order.company_id','linked_order.connection_id')}
-                OR NOT EXISTS(SELECT 1 FROM jsonb_to_recordset($1::jsonb) AS allowed_scope(connection_id uuid,company_id uuid,dataset_id uuid,employee_ids text[])
-                  WHERE allowed_scope.connection_id=linked_order.connection_id AND allowed_scope.company_id=linked_order.company_id AND allowed_scope.dataset_id=linked_order.dataset_id
-                    AND (allowed_scope.employee_ids IS NULL OR linked_order.owner_employee_id=ANY(allowed_scope.employee_ids))))) AS source_unavailable
-        FROM linked_groups g JOIN hz_fop_source_documents pd ON pd.id=CASE WHEN g.group_id='uncreated' THEN NULL ELSE substring(g.group_id FROM 10)::uuid END
-        JOIN hz_fop_source_lines l ON l.document_id=pd.id AND l.company_id=pd.company_id AND l.dataset_id=pd.dataset_id AND l.removed_at IS NULL
+        SELECT b.group_id,l.id,l.sku_code,d.sales_order_number,b.quantity AS ordered_quantity,b.shipped AS supplier_shipped_quantity,
+          d.cancelled_quantity,l.id IS NOT NULL AND d.line_id IS NOT NULL AS has_source
+        FROM obligations b JOIN scoped o ON o.document_id=b.order_document_id
+        LEFT JOIN hz_fop_source_lines l ON l.id=b.purchase_line_id AND l.document_id=b.purchase_document_id
+          AND l.company_id=o.company_id AND l.dataset_id=o.dataset_id AND l.removed_at IS NULL
         LEFT JOIN hz_fop_procurement_line_details d ON d.line_id=l.id AND d.company_id=l.company_id AND d.dataset_id=l.dataset_id
+        WHERE b.purchase_document_id IS NOT NULL
       ), purchase_totals AS (
         SELECT group_id,count(DISTINCT NULLIF(btrim(sales_order_number),''))::int AS order_count,count(DISTINCT NULLIF(btrim(sku_code),''))::int AS sku_count,
           sum(ordered_quantity) AS quantity,sum(supplier_shipped_quantity) AS shipped_quantity,sum(ordered_quantity-supplier_shipped_quantity) AS pending_quantity,
-          bool_or(sales_order_number IS NULL OR NULLIF(btrim(sku_code),'') IS NULL OR ordered_quantity IS NULL OR ordered_quantity<=0
-            OR supplier_shipped_quantity IS NULL OR supplier_shipped_quantity<0 OR supplier_shipped_quantity>ordered_quantity OR cancelled_quantity IS DISTINCT FROM 0 OR NOT has_source OR source_unavailable) AS incomplete
+          bool_or(NULLIF(btrim(sales_order_number),'') IS NULL OR NULLIF(btrim(sku_code),'') IS NULL OR ordered_quantity IS NULL OR ordered_quantity<=0
+            OR supplier_shipped_quantity IS NULL OR supplier_shipped_quantity<0 OR supplier_shipped_quantity>ordered_quantity OR cancelled_quantity IS DISTINCT FROM 0 OR NOT has_source) AS incomplete
         FROM purchase_entries GROUP BY group_id
+      ), purchase_completion AS (
+        SELECT g.group_id,count(l.id)>0 AND bool_and(d.ordered_quantity>0 AND d.supplier_shipped_quantity=d.ordered_quantity
+          AND d.cancelled_quantity=0) AND count(d.ordered_quantity)=count(l.id)
+          AND count(d.supplier_shipped_quantity)=count(l.id) AND count(d.cancelled_quantity)=count(l.id) AS all_shipped
+        FROM linked_groups g JOIN hz_fop_source_documents pd ON pd.id=CASE WHEN g.group_id='uncreated' THEN NULL ELSE substring(g.group_id FROM 10)::uuid END
+        LEFT JOIN hz_fop_source_lines l ON l.document_id=pd.id AND l.company_id=pd.company_id AND l.dataset_id=pd.dataset_id AND l.removed_at IS NULL
+        LEFT JOIN hz_fop_procurement_line_details d ON d.line_id=l.id AND d.company_id=l.company_id AND d.dataset_id=l.dataset_id
+        GROUP BY g.group_id
       ), all_groups AS (
-        SELECT g.group_id,g.detail_order_count,g.latest_paid_at,g.earliest_paid_at,
+        SELECT g.group_id,g.detail_order_count,g.detail_line_count,g.latest_paid_at,g.earliest_paid_at,pc.all_shipped,
           CASE WHEN g.group_id='uncreated' THEN g.detail_order_count ELSE p.order_count END AS order_count,
           CASE WHEN g.group_id='uncreated' THEN g.sku_count ELSE p.sku_count END AS sku_count,
           CASE WHEN g.group_id='uncreated' THEN g.quantity ELSE p.quantity END AS quantity,
           CASE WHEN g.group_id='uncreated' THEN g.shipped_quantity ELSE p.shipped_quantity END AS shipped_quantity,
           CASE WHEN g.group_id='uncreated' THEN g.pending_quantity ELSE p.pending_quantity END AS pending_quantity,
           g.group_id<>'uncreated' AND (p.group_id IS NULL OR p.incomplete) AS incomplete
-        FROM linked_groups g LEFT JOIN purchase_totals p ON p.group_id=g.group_id
-      ), groups AS (SELECT * FROM all_groups WHERE ${query.completed ? "group_id<>'uncreated' AND pending_quantity=0 AND quantity>0" : 'pending_quantity>0'})`
+        FROM linked_groups g LEFT JOIN purchase_totals p ON p.group_id=g.group_id LEFT JOIN purchase_completion pc ON pc.group_id=g.group_id
+      ), groups AS (SELECT * FROM all_groups WHERE ${query.completed ? "group_id<>'uncreated' AND all_shipped AND pending_quantity=0 AND quantity>0" : 'pending_quantity>0'})`
       const invalidGroups:LocalRow[]=await manager.query(`${obligations} SELECT count(*)::int AS n FROM all_groups WHERE incomplete`,sql.values)
-      if(Number(invalidGroups[0]?.n)>0)throw new ServiceUnavailableException({code:'workbench_replica_incomplete',total:null,message:'Whole purchase entries, source sales numbers or full document authorization are incomplete'})
+      if(Number(invalidGroups[0]?.n)>0)throw new ServiceUnavailableException({code:'workbench_replica_incomplete',total:null,message:'Authorized purchase allocations or source sales numbers are incomplete'})
       const stats:LocalRow[]=await manager.query(`${obligations} SELECT count(*)::int AS group_count,count(*) FILTER (WHERE group_id<>'uncreated')::int AS purchase_count,COALESCE(sum(pending_quantity),0) AS pending_quantity FROM groups`,sql.values)
       const orderStats:LocalRow[]=await manager.query(`${obligations} SELECT count(DISTINCT b.order_document_id)::int AS order_count,count(DISTINCT b.order_document_id) FILTER (WHERE b.group_id='uncreated')::int AS uncreated_count FROM obligations b JOIN groups g ON g.group_id=b.group_id`,sql.values)
-      const groupRows:LocalRow[]=await manager.query(`${obligations} SELECT g.*,pd.source_id AS purchase_source_id,pd.document_number,p.purchase_type,p.platform_code,p.supplier_id,p.raw_trade_status,p.raw_platform_status,
+      const groupRows:LocalRow[]=await manager.query(`${obligations} SELECT g.*,
+        (SELECT jsonb_agg(preview.line ORDER BY preview.ordinal) FROM (
+          SELECT jsonb_build_object('fulfillmentLineId',l.source_entry_id,'purchaseLineId',pl.source_entry_id,
+            'sku',COALESCE(l.sku_code,''),'name',COALESCE(l.product_name,''),'imageUrl',l.image_url,'variant',COALESCE(l.variant,''),
+            'quantity',b.quantity::text,'shippedQuantity',b.shipped::text) AS line,
+            row_number() OVER (ORDER BY o.customer_paid_at ${query.sortOrder==='asc'?'ASC':'DESC'} NULLS LAST,o.document_id,l.sequence,pl.source_entry_id) AS ordinal
+          FROM obligations b JOIN scoped o ON o.document_id=b.order_document_id
+          JOIN hz_fop_source_lines l ON l.id=b.order_line_id AND l.document_id=o.document_id AND l.company_id=o.company_id AND l.dataset_id=o.dataset_id
+          LEFT JOIN hz_fop_source_lines pl ON pl.id=b.purchase_line_id AND pl.document_id=b.purchase_document_id AND pl.company_id=o.company_id AND pl.dataset_id=o.dataset_id
+          WHERE b.group_id=g.group_id
+          ORDER BY o.customer_paid_at ${query.sortOrder==='asc'?'ASC':'DESC'} NULLS LAST,o.document_id,l.sequence,pl.source_entry_id
+          LIMIT CASE WHEN g.detail_line_count<=2 THEN 2 ELSE 1 END
+        ) preview) AS preview_lines,pd.source_id AS purchase_source_id,pd.document_number,p.purchase_type,p.platform_code,p.supplier_id,p.raw_trade_status,p.raw_platform_status,
         (SELECT po.external_order_id FROM hz_fop_platform_orders po WHERE po.purchase_document_id=pd.id AND po.company_id=pd.company_id AND po.dataset_id=pd.dataset_id AND po.removed_at IS NULL LIMIT 1) AS platform_order_number,
         p.paid_at AS purchase_paid_at,
         (SELECT ri.name FROM hz_fop_reference_items ri WHERE ri.connection_id=pd.connection_id AND ri.company_id=pd.company_id AND ri.resource_type='supplier' AND ri.source_id=p.supplier_id AND ri.deleted_at IS NULL LIMIT 1) AS supplier_name
@@ -422,7 +440,7 @@ export class LocalWorkbenchService {
         ${groupId ? `WHERE g.group_id=$${sql.values.length+1}` : ''} ORDER BY (g.group_id='uncreated') DESC,g.latest_paid_at ${query.sortOrder==='asc'?'ASC':'DESC'} NULLS LAST,g.group_id
         LIMIT $${sql.values.length+(groupId?2:1)} OFFSET $${sql.values.length+(groupId?3:2)}`,[...sql.values,...(groupId?[groupId]:[]),groupId?1:query.pageSize,groupId?0:(query.page-1)*query.pageSize])
       if(groupId && !groupRows.length)throw new NotFoundException('Purchase group unavailable')
-      const summaries=groupRows.map(row=>({id:row.group_id,kind:row.group_id==='uncreated'?'uncreated':'purchase',purchase:row.group_id==='uncreated'?null:{id:row.purchase_source_id,number:row.document_number??'',purchaseType:row.purchase_type??'unknown',platform:row.platform_code==='1688'?'1688':row.platform_code?'other':null,supplier:{id:row.supplier_id??'',name:row.supplier_name??''},platformOrderNumber:row.platform_order_number??null,payment:this.mock&&['paid','unpaid','partial','refunded'].includes(row.raw_trade_status)?row.raw_trade_status:'unknown',placement:this.mock&&['pending','placed'].includes(row.raw_platform_status)?row.raw_platform_status:'unknown',paidAt:row.purchase_paid_at?new Date(row.purchase_paid_at).toISOString():null},orderCount:row.order_count,skuCount:row.sku_count,quantity:localNumber(row.quantity,'procurement quantity'),shippedQuantity:localNumber(row.shipped_quantity,'supplier shipped quantity'),pendingQuantity:localNumber(row.pending_quantity,'pending procurement quantity'),shipment:row.group_id==='uncreated'?'unknown':Number(row.shipped_quantity)===0?'pending':Number(row.pending_quantity)===0?'shipped':'partial',earliestReceiptAt:row.earliest_paid_at?new Date(row.earliest_paid_at).toISOString():null,latestConsumerPaidAt:row.latest_paid_at?new Date(row.latest_paid_at).toISOString():null}))
+      const summaries=groupRows.map(row=>({id:row.group_id,detailLineCount:row.detail_line_count,previewLines:(row.preview_lines??[]).map((line:LocalRow)=>({...line,quantity:localNumber(line.quantity,'requirement quantity'),shippedQuantity:localNumber(line.shippedQuantity,'shipped quantity')})),kind:row.group_id==='uncreated'?'uncreated':'purchase',purchase:row.group_id==='uncreated'?null:{id:row.purchase_source_id,number:row.document_number??'',purchaseType:row.purchase_type??'unknown',platform:row.platform_code==='1688'?'1688':row.platform_code?'other':null,supplier:{id:row.supplier_id??'',name:row.supplier_name??''},platformOrderNumber:row.platform_order_number??null,payment:this.mock&&['paid','unpaid','partial','refunded'].includes(row.raw_trade_status)?row.raw_trade_status:'unknown',placement:this.mock&&['pending','placed'].includes(row.raw_platform_status)?row.raw_platform_status:'unknown',paidAt:row.purchase_paid_at?new Date(row.purchase_paid_at).toISOString():null},orderCount:row.order_count,skuCount:row.sku_count,quantity:localNumber(row.quantity,'procurement quantity'),shippedQuantity:localNumber(row.shipped_quantity,'supplier shipped quantity'),pendingQuantity:localNumber(row.pending_quantity,'pending procurement quantity'),shipment:row.group_id==='uncreated'?'unknown':Number(row.shipped_quantity)===0?'pending':Number(row.pending_quantity)===0?'shipped':'partial',earliestReceiptAt:row.earliest_paid_at?new Date(row.earliest_paid_at).toISOString():null,latestConsumerPaidAt:row.latest_paid_at?new Date(row.latest_paid_at).toISOString():null}))
       if(groupId){
         const values=[...sql.values,groupId]
         const details:LocalRow[]=await manager.query(`${obligations} SELECT o.*,b.order_line_id,pl.source_entry_id AS purchase_entry_id,b.quantity AS obligation_quantity,b.shipped AS shipped_quantity,l.source_entry_id,l.sku_code,l.product_name,l.image_url,l.variant
@@ -441,7 +459,7 @@ export class LocalWorkbenchService {
     })
   }
   async getPurchaseReturns(userId: string, query: PurchaseReturnQueryDto) {
-    if(this.collected?.enabled)return this.collected.unavailable(userId,query,query.workbenchRole)
+    if(this.collected?.enabled)return this.collected.unavailable(userId,{...query,queue:'purchase_returns'},query.workbenchRole)
     if(!['procurement','warehouse'].includes(query.workbenchRole))throw new BadRequestException('Invalid purchase return role')
     if(query.status && query.status!=='unknown'&&!this.mock)throw unconfigured('Physical return progress requires a normalized physical-state projection; platform refund state cannot substitute')
     return this.orders(userId,{...query,queue:'purchase_returns',...(this.mock?{returnStatus:query.status}:{})},query.workbenchRole,false)

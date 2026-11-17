@@ -33,10 +33,8 @@ describe('collected workbench contract', () => {
     const wrapper = mount(OrderAmountTotals, { global, props: { totals: { orderCount: 0, itemQuantity: null, amountsByCurrency: [], complete: false } } })
     expect(wrapper.text()).toBe('—')
   })
-  it('distinguishes uncollected entities from an empty complete list', () => {
+  it('keeps the task heading concise while unavailable explanations belong to the list empty state', () => {
     const wrapper = mount(WorkbenchTaskHeading, { global, props: { title: '备货清单', replica, dataAvailability: { ...availability, missingDatasets: ['stock_orders'], reason: '备货单尚未采集，待提供接口' } } })
-    expect(wrapper.text()).toContain('备货单尚未采集，待提供接口')
-    expect(wrapper.text()).toContain('只读')
-    expect(wrapper.text()).toContain('2026/11/12 09:00')
+    expect(wrapper.text()).toBe('备货清单')
   })
 })

@@ -1,3 +1,5 @@
+// Business/authorization assertions inspect source tables; shared single-sheet output has independent roundtrip coverage.
+jest.mock('../workbench-export/single-sheet',()=>({...jest.requireActual('../workbench-export/single-sheet'),singleSheetWorkbook:jest.fn()}))
 import { validate } from 'class-validator'
 import { StockFiltersDto } from './fop-stock.dto'
 import { FopDataService } from './fop-data.service'
@@ -20,7 +22,7 @@ it('filters stock lifecycle stages without hiding intermediate stages from all r
   ]
   provider.grant.allowedStockOrderIds = provider.orders.map(r => r.id)
   expect((await service.getStockOrders('u', query)).total).toBe(8)
-  for (const [lifecycle, expected] of [['unpaid', ['unpaid']], ['pending_procurement', ['paid', 'partial', 'purchased']], ['received', ['received']]] as const) {
+  for (const [lifecycle, expected] of [['unpaid', ['contradictory','unpaid']], ['pending_procurement', ['paid', 'partial', 'purchased']], ['received', ['received']]] as const) {
     const filters = { lifecycle }
     const page = await service.getStockOrders('u', { ...query, ...filters, pageSize: 1 })
     expect(page.total).toBe(expected.length)
@@ -142,10 +144,10 @@ it('returns actual procurement payment time separately, leaving missing or inval
   }
 })
 it.each([
-  ['unpaid', 'pending', 'unpaid'], ['paid', 'pending', 'paid'], ['paid', 'approved', 'approved'],
-  ['paid', 'unknown', null], ['unknown', 'approved', null], ['unpaid', 'approved', null],
+  ['unpaid', 'pending', 'unpaid'], ['paid', 'pending', 'paid'], ['paid', 'approved', 'paid'],
+  ['paid', 'unknown', 'paid'], ['unknown', 'approved', null], ['unpaid', 'approved', 'unpaid'],
   [undefined, undefined, null],
-] as const)('derives stock status from payment %s and review %s without guessing from payment time', (paymentStatus, reviewStatus, expected) => {
+] as const)('keeps stock order status independent of review (%s / %s)', (paymentStatus, reviewStatus, expected) => {
   expect(publicStockOrder(order('1', { paymentStatus, reviewStatus }))).toMatchObject({ orderStatus: expected })
 })
 it('filters stock status before totals/paging and exports the same status scope', async () => {
@@ -156,7 +158,7 @@ it('filters stock status before totals/paging and exports the same status scope'
   const filter = { orderStatus: 'paid' as const }
   const page = await service.getStockOrders('u', { ...query, ...filter, pageSize: 1 })
   expect(page.items.map(row => row.id)).toEqual(['1'])
-  expect(page.total).toBe(2); expect(page.totals.amounts).toEqual([{ currency: 'USD', amount: 200 }])
+  expect(page.total).toBe(3); expect(page.totals.amounts).toEqual([{ currency: 'USD', amount: 300 }])
   expect((await service.getStockOrders('u', { ...query, ...filter, stockType: 'deposit', warehouseCode: 'HZ', departmentId: 'd1', search: 'alice' })).items.map(row => row.id)).toEqual(['2'])
   for (const mode of ['selected', 'filtered'] as const) {
     const book = new ExcelJS.Workbook()
@@ -166,19 +168,19 @@ it('filters stock status before totals/paging and exports the same status scope'
     const statusColumn = headings.indexOf('备货订单状态')
     expect(statusColumn).toBeGreaterThan(0)
     expect(sheet.getCell(2, statusColumn).value).toBe('已支付')
-    expect(sheet.rowCount).toBe(mode === 'selected' ? 3 : 4)
-    expect(JSON.stringify(sheet.getSheetValues())).not.toContain('BH2610283')
+    expect(sheet.rowCount).toBe(mode === 'selected' ? 3 : 5)
+    if(mode==='filtered')expect(JSON.stringify(sheet.getSheetValues())).toContain('BH2610283')
   }
-  await expect(service.exportStockOrders('u', { ...filter, mode: 'selected', orderIds: ['3'] })).rejects.toMatchObject({ status: 409 })
+  await expect(service.exportStockOrders('u', { ...filter, mode: 'selected', orderIds: ['4'] })).rejects.toMatchObject({ status: 409 })
 })
-it('includes unpaid/completed stock orders and both types, excludes cancelled, strips private/fulfillment fields', async () => {
+it('includes unpaid/completed stock orders and both types, includes cancelled, strips private/fulfillment fields', async () => {
   Object.assign(provider.orders[0], { shopifyOrderNumber: '#SECRET', privateInfo: 'hidden' })
   const page = await service.getStockOrders('u', query)
-  expect(page.items.map(row => row.id)).toEqual(['1', '2'])
+  expect(page.items.map(row => row.id)).toEqual(['1', '2', '3'])
   expect(page.items[0]).not.toHaveProperty('tenantId')
   expect(page.items[0]).not.toHaveProperty('shopifyOrderNumber')
   expect(page.items[0]).not.toHaveProperty('privateInfo')
-  expect(page.totals.amounts).toEqual([{ currency: 'USD', amount: 200 }])
+  expect(page.totals.amounts).toEqual([{ currency: 'USD', amount: 300 }])
 })
 it('applies independent grants, tenant and local scope before options, totals and paging', async () => {
   provider.orders.push(order('4', { owner: { id: 'e2', name: 'Bob' }, department: { id: 'd2', name: '业务二部' }, departmentPathIds: ['d2'] }), order('5', { tenantId: 'other' }))
@@ -220,6 +222,7 @@ it('returns explicit zero stock, rejects invalid balances and duplicate authoriz
   await expect(service.getStockInventory('u', { ...query, customerId: 'c1' })).rejects.toMatchObject({ status: 503 })
 })
 it('rejects unassigned roles and in-flight ownership changes', async () => {
+  user.businessRole = 'department_manager'
   user.workbenchRoles = ['procurement']
   await expect(service.getStockOrders('u', query)).rejects.toMatchObject({ status: 403 })
   user.workbenchRoles = ['sales']
@@ -232,10 +235,10 @@ it('exports selected and filtered orders, preserves identifiers, currency totals
   const book = new ExcelJS.Workbook()
   await book.xlsx.load(await service.exportStockOrders('u', { mode: 'filtered' }) as never)
   const sheet = book.getWorksheet('备货清单')!
-  expect(sheet.rowCount).toBe(5)
+  expect(sheet.rowCount).toBe(6)
   expect(sheet.getRow(1).values).not.toEqual(expect.arrayContaining(['Shopify 单号', 'Customer', '物流服务商']))
   expect(sheet.getCell('B2').value).toContain('=1+1')
-  expect(sheet.getCell('D4').value).toBe(100); expect(sheet.getCell('D5').value).toBe(100)
+  expect(sheet.getCell('D5').value).toBe(100); expect(sheet.getCell('D6').value).toBe(200)
   const selected = new ExcelJS.Workbook()
   await selected.xlsx.load(await service.exportStockOrders('u', { mode: 'selected', orderIds: ['2'] }) as never)
   expect(selected.getWorksheet('备货清单')!.getCell('A2').value).toBe(provider.orders[1].stockNumber)
@@ -254,7 +257,7 @@ it('keeps every stock SKU in a separate detail sheet and filters only data rows,
   await book.xlsx.load(await service.exportStockOrders('u', { mode: 'selected', orderIds: [provider.orders[0].id] }) as never)
   const list = book.getWorksheet('备货清单')!, detail = book.getWorksheet('商品明细')!
   expect(list.getCell('B2').text).toContain('完整内容见商品明细')
-  expect(list.autoFilter).toBe('A1:L2')
+  expect(list.autoFilter).toBe('A1:M2')
   expect(detail).toBeDefined()
   expect(detail.rowCount).toBe(31)
   expect(detail.getCell('C31').value).toBe('00029')
@@ -296,6 +299,7 @@ it('includes purchased stock awaiting shipment in the procurement queue and both
     expect(sheet.getCell(2, (sheet.getRow(1).values as string[]).indexOf('采购状态')).value).toBe('供应商待发货')
   }
   await expect(service.exportStockOrders('u', { mode: 'selected', queue: 'procurement', orderIds: ['9'] })).rejects.toMatchObject({ status: 409 })
+  user.businessRole = 'department_manager'
   await expect(service.getStockOrders('u', query)).rejects.toMatchObject({ status: 403 })
   user.workbenchRoles = ['sales']
   await expect(service.getStockOrders('u', { ...query, queue: 'procurement' })).rejects.toMatchObject({ status: 403 })
@@ -317,7 +321,7 @@ it('fuzzy-searches all authorized customers and SKU together before paging, with
 
 it.each(['orderStatus', 'purchaseStatus'] as const)('sorts %s by business stage before pagination and both exports, with stable ties and unknowns last', async sortBy => {
   const states = sortBy === 'orderStatus'
-    ? [{ paymentStatus: 'unpaid', reviewStatus: 'pending' }, { paymentStatus: 'paid', reviewStatus: 'pending' }, { paymentStatus: 'paid', reviewStatus: 'approved' }]
+    ? [{ cancelled:true }, { paymentStatus: 'unpaid', reviewStatus: 'pending' }, { paymentStatus: 'paid', reviewStatus: 'approved' }]
     : [{ purchaseStatus: 'unpurchased' }, { purchaseStatus: 'partial' }, { purchaseStatus: 'purchased' }, { purchaseStatus: 'shipped' }, { purchaseStatus: 'received' }]
   provider.orders = states.map((state, i) => order(`stage-${i}`, { ...state, paidAt: `2026-10-0${5 - i}T01:00:00Z` } as Partial<FopStockOrderCandidate>))
   provider.orders.push(order('tie-b', { ...states[1], paidAt: '2026-10-01T01:00:00Z' } as Partial<FopStockOrderCandidate>),
@@ -375,6 +379,7 @@ it('rejects the whole selected-stock request if an order is cancelled, foreign o
   await expect(service.getStockInventory('u', selected)).rejects.toMatchObject({ status: 409 })
 })
 it('checks procurement selection against its current queue and role, while keeping independent inventory authorization', async () => {
+  user.businessRole = 'department_manager'
   user.workbenchRoles = ['procurement']
   provider.orders = [order('1', { paymentStatus: 'paid', reviewStatus: 'approved' })]
   const selected = { ...query, queue: 'procurement' as const, orderIds: ['1'] }

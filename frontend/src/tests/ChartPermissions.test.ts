@@ -1,3 +1,5 @@
+// Cache policy is covered separately; these fixtures exercise chart interactions.
+vi.mock('@/api/analytics-cache-scope', () => ({ getAnalyticsCacheScope: vi.fn(async () => ({ cacheable: false })) }))
 import { flushPromises, mount } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import { createMemoryHistory, createRouter } from 'vue-router'

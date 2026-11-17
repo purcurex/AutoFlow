@@ -18,19 +18,21 @@ test('provides a reusable request builder and read-only runner', () => {
   assert.equal(typeof api.runQuery, 'function')
 })
 
-test('constructs the November 10 company-scoped lists and ID-based details', () => {
+test('constructs company-scoped lists and ID-based details with the current required time bounds', () => {
   for (const operation of ['order-detail', 'outbound']) {
     assert.deepEqual(api.buildRequest(operation, { id: request.id }).body, { data: { id: request.id }, pageNo: 1, pageSize: 10 })
     assert.throws(() => api.buildRequest(operation, { billno: 'OUT-1' }), /invalid-request/)
   }
   for (const operation of ['order-list', 'allocation', 'dispatch', 'delivery-notice', 'outbound-list', 'purchase-requisition', 'purchase', 'receipt-notice', 'inbound', 'receipt-adjustment', 'receipt', 'payment', 'stock']) {
-    assert.deepEqual(api.buildRequest(operation, { orgNumber: 'hyperzone', billno: 'TEST-42', id: '123', pageNo: 2, pageSize: 5 }).body,
-      { data: { org_number: 'hyperzone', billno: 'TEST-42', id: '123' }, pageNo: 2, pageSize: 5 })
+    const times=api.modificationWindowOperations.includes(operation)?{startModifytime:'2026-11-01 00:00:00',endModifytime:'2026-11-16 00:00:00'}:{}
+    const sourceTimes=times.startModifytime?{start_modifytime:times.startModifytime,end_modifytime:times.endModifytime}:{}
+    assert.deepEqual(api.buildRequest(operation, { orgNumber: 'hyperzone', billno: 'TEST-42', id: '123', ...times, pageNo: 2, pageSize: 5 }).body,
+      { data: { org_number: 'hyperzone', billno: 'TEST-42', id: '123', ...sourceTimes }, pageNo: 2, pageSize: 5 })
     assert.throws(() => api.buildRequest(operation), /invalid-request/)
     assert.throws(() => api.buildRequest(operation, { orgNumber: '*' }), /invalid-request/)
   }
   assert.deepEqual(api.buildRequest('stock', { orgNumber: 'hyperzone' }).body.data, { org_number: 'hyperzone' })
-  assert.deepEqual(api.parseArgs(['--operation', 'order-list', '--org-number', 'hyperzone']), { operation: 'order-list', orgNumber: 'hyperzone' })
+  assert.deepEqual(api.parseArgs(['--operation', 'stock', '--org-number', 'hyperzone']), { operation: 'stock', orgNumber: 'hyperzone' })
   assert.deepEqual(api.buildRequest('rma', { customerId: '123' }).body.data, { hzkj_payingcustomer_id: '123' })
 })
 
@@ -202,3 +204,10 @@ test('pause blocks workbench queries before token or transport', async () => {
   await assert.rejects(api.runQuery({ FOP_QUERIES_PAUSED: 'true' }, { operation: 'order-list', orgNumber: '100' }, async () => { calls++; throw new Error('must not call') }), /fop_queries_paused/)
   assert.equal(calls, 0)
 })
+
+ test('builds the supplied company-scoped purchase refund query without treating it as physical returns', () => {
+  const query = api.buildRequest('purchase-return', {orgNumber:'hyperzone.test',pageSize:100})
+  assert.equal(query.path, '/kapi/v2/hzkj/hzkj_einkauf/hzkj_purorderbill/queryPurchaseReturn')
+  assert.deepEqual(query.body, {data:{org_number:'hyperzone.test'},pageNo:1,pageSize:100})
+  assert.throws(() => api.buildRequest('purchase-return', {orgNumber:'hyperzone.test',status:'completed'}), /invalid-request/)
+ })

@@ -1,3 +1,5 @@
+// Business/authorization assertions inspect source tables; shared single-sheet output has independent roundtrip coverage.
+jest.mock('../workbench-export/single-sheet',()=>({...jest.requireActual('../workbench-export/single-sheet'),singleSheetWorkbook:jest.fn()}))
 import { KingdeeWorkbenchDiagnosticProvider as KingdeeFopDataProvider } from './fop-kingdee.diagnostic'
 import { isStageCompleted } from './completed-orders'
 const identity = { tenantId: 'test', userId: '100' }

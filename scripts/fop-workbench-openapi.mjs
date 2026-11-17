@@ -18,6 +18,7 @@ const routes = Object.freeze({
   'outbound-list': '/kapi/v2/hzkj/im/im_saloutbill/queryOutboundList',
   'purchase-requisition': '/kapi/v2/hzkj/hzkj_einkauf/hzkj_purapplybill/queryPurchaseRequisition',
   purchase: '/kapi/v2/hzkj/hzkj_einkauf/hzkj_purorderbill/queryPurchase',
+  'purchase-return': '/kapi/v2/hzkj/hzkj_einkauf/hzkj_purorderbill/queryPurchaseReturn',
   'receipt-notice': '/kapi/v2/hzkj/hzkj_einkauf/hzkj_receiptnotice/queryReceiptNotice',
   inbound: '/kapi/v2/hzkj/im/im_purinbill/queryInbound',
   'receipt-adjustment': '/kapi/v2/hzkj/hzkj_fund/hzkj_adjust_bill/queryReceiptAdjustment',
@@ -25,7 +26,11 @@ const routes = Object.freeze({
   payment: '/kapi/v2/hzkj/hzkj_fund/hzkj_pay_cost_bill/queryPayment',
   rma: '/kapi/v2/hzkj/hzkj_ordercenter/hzkj_after_sale_orders/queryAfterSaleOrders',
   stock: '/kapi/v2/hzkj/hzkj_ordercenter/hzkj_stock_order_new/queryStockOrder',
+  'customer-registrations': '/kapi/v2/hzkj/hzkj_member/hzkj_member_customer/queryCustomerRegistrations',
+  'purchase-refund-application': '/kapi/v2/hzkj/hzkj_einkauf/hzkj_purrefundapplybill/queryPurchaseRefundApplication',
+  'freight-exception': '/kapi/v2/hzkj/hzkj_logistics/hzkj_freight_exception/queryFreightException',
 })
+export const modificationWindowOperations = Object.freeze(['order-list','allocation','dispatch','delivery-notice'])
 class QueryError extends Error {
   constructor(category) { super(category); this.category = category }
 }
@@ -52,6 +57,17 @@ function date(value) {
 function range(options, from, to) {
   if (options[from] !== undefined && options[to] !== undefined && Date.parse(options[from]) > Date.parse(options[to])) fail('invalid-request')
 }
+function sourceDateTime(value) {
+  if(typeof value!=='string'||!/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(value))fail('invalid-request')
+  const utc=value.replace(' ','T')+'Z',parsed=new Date(utc)
+  if(!Number.isFinite(parsed.valueOf())||parsed.toISOString().slice(0,19)!==utc.slice(0,19))fail('invalid-request')
+  return value
+}
+function timeBounds(from,to) {
+  const start=sourceDateTime(from),end=sourceDateTime(to)
+  if(start>=end)fail('invalid-request')
+  return [start,end]
+}
 function page(value, fallback, max) {
   if (value === undefined) return fallback
   if (!Number.isInteger(value) || value < 1 || value > max) fail('invalid-request')
@@ -64,7 +80,13 @@ export function buildRequest(operation, options = {}) {
   if (!object(options)) fail('invalid-request')
   const data = {}
   const allowed = ['pageNo', 'pageSize']
-  if (operation === 'order-detail' || operation === 'outbound') {
+  if(operation==='customer-registrations'){
+    allowed.push('from','toExclusive');[data.from,data.toExclusive]=timeBounds(options.from,options.toExclusive)
+  } else if(operation==='freight-exception'){
+    allowed.push('orderNumber');data.hzkj_sale_order_no=exact(options.orderNumber)
+  } else if(operation==='purchase-refund-application'){
+    allowed.push('orgNumber');data.org_number=exact(options.orgNumber)
+  } else if (operation === 'order-detail' || operation === 'outbound') {
     allowed.push('id'); data.id = id(options.id)
   } else if (operation === 'rma') {
     allowed.push('customerId', 'shopId', 'salesType', 'startDate', 'endDate', 'orderNumber', 'orderStatus', 'reasonId')
@@ -84,6 +106,22 @@ export function buildRequest(operation, options = {}) {
     data.org_number = exact(options.orgNumber)
     if (options.billno !== undefined) data.billno = exact(options.billno)
     if (options.id !== undefined) data.id = id(options.id)
+  }
+  if(modificationWindowOperations.includes(operation)){
+    allowed.push('startModifytime','endModifytime')
+    if(options.startModifytime===undefined||options.endModifytime===undefined)fail('modification_window_required')
+    ;[data.start_modifytime,data.end_modifytime]=timeBounds(options.startModifytime,options.endModifytime)
+  }
+  const relatedFilters={
+    purchase:{sourceStockBillno:'source_stock_billno'},
+    'receipt-notice':{purchaseOrderNumber:'hzkj_purchase_order_numbe',purchase1688OrderNumber:'purchase_1688_order_no'},
+    payment:{purchaseOrderNumber:'hzkj_purorder_no'},
+    inbound:{sourceBillNumber:'srcbillnumber'},'outbound-list':{sourceBillNumber:'srcbillnumber'},'purchase-requisition':{sourceBillNumber:'srcbillnumber'},
+    dispatch:{orderNumber:'hzkj_order_no'},'delivery-notice':{dispatchNumber:'hzkj_deliver_billno'},
+    allocation:{orderNumber:'hzkj_order_no',packageNumber:'hzkj_pkg_no'},
+  }
+  for(const [key,field] of Object.entries(relatedFilters[operation]??{})){
+    allowed.push(key);if(options[key]!==undefined)data[field]=exact(options[key])
   }
   if (Object.keys(options).some(key => !allowed.includes(key))) fail('invalid-request')
   return { path: routes[operation], body: { data, pageNo: page(options.pageNo, 1, 1000), pageSize: page(options.pageSize, 10, 100) } }
@@ -175,7 +213,11 @@ export async function runQuery(config, options = {}, fetcher = fetch) {
   } catch (error) { return failure(error.category) }
   report.httpStatus = result.status
   const raw = saveResponse ? result.raw : null
-  if (!result.ok) return failure('http-error', raw)
+  if (!result.ok) {
+    let errorCode
+    try { errorCode = String(JSON.parse(result.raw)?.errorCode) } catch { /* no untrusted response text in reports */ }
+    return failure(result.status===519&&errorCode==='2505'?'api-not-subscribed':'http-error',raw)
+  }
   let json
   try { json = JSON.parse(result.raw) } catch { return failure('invalid-json', raw) }
   const category = validate(json, body)
@@ -188,6 +230,9 @@ const cliNames = {
   'page-no': 'pageNo', 'page-size': 'pageSize', 'shop-id': 'shopId', 'sales-type': 'salesType',
   'start-date': 'startDate', 'end-date': 'endDate', 'order-number': 'orderNumber', 'order-status': 'orderStatus',
   'reason-id': 'reasonId', 'org-number': 'orgNumber',
+  from:'from','to-exclusive':'toExclusive','start-modifytime':'startModifytime','end-modifytime':'endModifytime',
+  'source-stock-billno':'sourceStockBillno','purchase-order-number':'purchaseOrderNumber','purchase-1688-order-number':'purchase1688OrderNumber',
+  'source-bill-number':'sourceBillNumber','dispatch-number':'dispatchNumber','package-number':'packageNumber',
 }
 export function parseArgs(args) {
   const options = {}

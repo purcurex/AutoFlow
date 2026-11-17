@@ -8,6 +8,7 @@ import { FopDataService } from './fop-data.service'
 import { ApprovalPreviewDto, ApprovalSubmitDto } from './fop-approval.dto'
 import { ApprovalQueue, ApprovalTarget, ApprovalRowResult, approvalEntity, approvalVersion } from './fop-approval.types'
 import { getDispatchCompletionStatus } from './workbench-status'
+import { persistApprovalReadback } from './fop-approval-readback'
 
 @Injectable()
 export class FopApprovalService {
@@ -22,6 +23,8 @@ export class FopApprovalService {
     }
     const latest = await this.data.approvalContext(userId, queue, orderId, sessionVersion)
     if (JSON.stringify(latest.identity) !== JSON.stringify(context.identity)) throw new ServiceUnavailableException('审核身份已变化，请重新查询')
+    // A realtime context includes the latest target state; never pair it with an older target proof.
+    targets = latest.targets ?? targets
     const validText = (value: unknown) => typeof value === 'string' && !!value.trim() && value.length <= 500
     if (!Array.isArray(targets) || targets.length !== 1 || new Set(targets.map(d => d?.id)).size !== targets.length
       || queue === 'review' && (targets.length !== 1 || targets[0].id !== orderId)
@@ -64,6 +67,10 @@ export class FopApprovalService {
         row.orderNumber = context.order.orderNumber
         if (context.targets.every(d => d.status === 'C')) {
           row.status = 'already_approved'; row.message = '单据已审核，无需重复操作'
+          if (this.db && context.sourcePage) {
+            try { await persistApprovalReadback(this.db, { tenantId: context.identity.tenantId, companyId: context.sourcePage.items[0].hzkj_org.id, orderId: selected.orderId, entity: context.targets[0].entity, documentId: context.targets[0].id, capturedAt: new Date().toISOString(), page: context.sourcePage }) }
+            catch { row.message += '；本地刷新未完成，请稍后同步' }
+          }
         } else if (!context.inQueue || approvalVersion(context.targets) !== selected.version) {
           row.message = '单据或状态已变化，请重新选择并核对'
         } else {
@@ -77,11 +84,21 @@ export class FopApprovalService {
             if (!current.inQueue || JSON.stringify(current.identity) !== JSON.stringify(context.identity)
               || query.queue === 'allocation_review' && (getDispatchCompletionStatus(current.order.dispatchDocuments) !== 'dispatch_complete'
                 || current.order.allocationDocument?.id !== document.id || current.order.allocationDocument?.number !== document.number)) throw new Error('Scope or dispatch state changed')
+            const currentTargets = current.targets ?? await this.provider.approvalTargets(current.identity, query.queue, selected.orderId)
+            if (!Array.isArray(currentTargets) || currentTargets.length !== 1 || !currentTargets[0]
+              || currentTargets[0].tenantId !== current.identity.tenantId || currentTargets[0].orderId !== selected.orderId
+              || currentTargets[0].number !== document.number || approvalVersion(currentTargets) !== approvalVersion([document])) {
+              throw new Error('Approval document state or version changed')
+            }
             const idempotencyKey = createHash('sha256').update(JSON.stringify([context.identity, userId, query.requestId, document.entity, document.id])).digest('hex')
             try {
               const outcome = await this.provider.approveDocument(context.identity, { ...document, operation: 'audit', idempotencyKey, requestId: query.requestId, actorAccountId: userId, ...(current.currentScope ? { currentScope: current.currentScope } : {}) })
               if (!outcome || !['approved', 'already_approved', 'blocked', 'failed', 'unknown'].includes(outcome.status) || typeof outcome.message !== 'string'
                 || (outcome.warning !== null && typeof outcome.warning !== 'string')) throw new Error('Invalid audit response')
+              if (outcome.status === 'approved' && outcome.readback && this.db) {
+                try { if (!await persistApprovalReadback(this.db, outcome.readback)) outcome.warning = [outcome.warning, 'FOP 已审核，本地清单等待同步'].filter(Boolean).join('；') }
+                catch { outcome.warning = [outcome.warning, 'FOP 已审核，本地刷新未完成，请稍后同步'].filter(Boolean).join('；') }
+              }
               row.documents.push({ id: document.id, number: document.number, status: outcome.status, message: outcome.message.slice(0, 1000), warning: outcome.warning?.slice(0, 1000) ?? null })
             } catch (error) {
               if (error instanceof FopIntegrationUnavailableError && ['fop_approval_not_configured', 'fop_queries_paused'].includes(error.code)) {

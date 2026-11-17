@@ -1,0 +1,42 @@
+{
+  "operation": "queryPurchaseReturn",
+  "sourceEntity": "hzkj_purorderbill",
+  "semanticType": "purchase_refund_candidates",
+  "physicalReturnIntegration": false,
+  "companyId": "100000",
+  "orgNumber": "hyperzone.test",
+  "capturedAt": "2026-11-13T03:01:13.127Z",
+  "finishedAt": "2026-11-13T03:01:13.216Z",
+  "complete": false,
+  "consistentSnapshot": false,
+  "rowCount": 0,
+  "sourceFailure": {
+    "httpStatus": 519,
+    "category": "http-error",
+    "pageNo": 1
+  },
+  "error": "source_query_failed",
+  "businessDate": "2026-11-12",
+  "upstreamCalled": true,
+  "businessQueryAttempts": 1,
+  "successfulPages": 0,
+  "importedPhysicalReturns": 0,
+  "automaticCallsEnabled": false,
+  "persistentPauseUnchanged": true,
+  "definitionSha256": "0958c9ea0abe6d45ba884f8858a7642512cfc30e17bfb13251f418db9029ee7e",
+  "responseFields": [
+    "id",
+    "hzkj_pay_status",
+    "hzkj_1688_order_n",
+    "billno",
+    "hzkj_biztime",
+    "hzkj_pay_status_title",
+    "hzkj_refund_amount"
+  ],
+  "fixedRefundStatuses": [
+    "3",
+    "4"
+  ],
+  "physicalReturnSource": "pending",
+  "userDecision": "Continue physical returns; wait for formal physical-return details API."
+}

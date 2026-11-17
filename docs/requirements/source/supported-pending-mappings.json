@@ -1,0 +1,65 @@
+{
+  "state": "native_parent_scope_collected",
+  "entity": "hzkj_alloc_bill",
+  "queues": [
+    "allocation-allocation",
+    "allocation-allocation_review",
+    "allocation-completed"
+  ],
+  "storage": "hz_fop_collected_entities entity_type=allocation; display + raw; source_id=id",
+  "scope": "指定集成账号、tenant/company与实际报文一致；employee-orders/page rawWorkbenchFacts=true,queue=allocation，449页44855父单完整游标扫描，12643配货单。full_parent_scan只证明这些履约父单关联范围，不冒充配货独立全公司快照。",
+  "fields": [
+    {
+      "source": "id",
+      "local": "source_id / display.id",
+      "requirement": "稳定十进制内码字符串"
+    },
+    {
+      "source": "org_id",
+      "local": "batch.company_id / source scope validation",
+      "requirement": "严格匹配已授权公司，不能从请求参数补造来源公司"
+    },
+    {
+      "source": "billno",
+      "local": "display.number",
+      "requirement": "真实且非空配货单号"
+    },
+    {
+      "source": "hzkj_order_id",
+      "local": "display.sourceOrderId",
+      "requirement": "同一活跃批次中的精确履约来源内码"
+    },
+    {
+      "source": "hzkj_operator_id",
+      "local": "display.sourceOperatorId",
+      "requirement": "保留来源操作员，不假定等于当前履约业务员；查询仍按当前本地权限"
+    },
+    {
+      "source": "billstatus",
+      "local": "display.rawBillStatus",
+      "requirement": "保留A/B/C/D，未知留null并阻断该清单归类"
+    },
+    {
+      "source": "hzkj_alloc_status",
+      "local": "display.rawAllocationStatus",
+      "requirement": "仅接受pending/available/completed/error/voided，不从界面标签反推"
+    },
+    {
+      "source": "auditdate",
+      "local": "display.approvedAt → allocationApprovedAt",
+      "requirement": "源时间按UTC+8解析，非法/缺失留空；多单时间全部已知才取最近审核时间"
+    },
+    {
+      "source": "hzkj_complete_time",
+      "local": "display.readyAt → allocationReadyAt",
+      "requirement": "源时间按UTC+8解析，非法/缺失留空；多单时间全部已知才取最近齐套时间"
+    }
+  ],
+  "evidence": [
+    "backend/src/modules/fop-data/collected-allocation.ts",
+    "backend/src/modules/workbench-replica/collected-allocation-query.ts",
+    "scripts/workbench-collected-allocation-import.cjs",
+    "backend/src/modules/fop-data/collected-native-facts.ts",
+    "scripts/workbench-collected-native-import.cjs"
+  ]
+}

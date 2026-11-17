@@ -68,6 +68,7 @@ export const mockFopOrders: FopOrder[] = stages.flatMap((stage, stageIndex) => A
     createdAt: `2026-10-${String(15 + index % 7).padStart(2, '0')}T08:30:00Z`,
     wmsCreatedAt: stage === 'shipping' ? `2026-10-${String(15 + index % 7).padStart(2, '0')}T12:30:00Z` : null,
     reviewedAt: `2026-10-${String(15 + index % 7).padStart(2, '0')}T09:30:00Z`,
+    sourceOrderPaidAt: `2026-10-${String(15 + index % 7).padStart(2, '0')}T08:00:00Z`,
     consumerPaidAt: paid ? `2026-10-${String(15 + index % 7).padStart(2, '0')}T09:00:00Z` : null,
     paidAt: paid ? `2026-10-${String(15 + index % 7).padStart(2, '0')}T09:00:00Z` : null,
     cancelled: false, exception,

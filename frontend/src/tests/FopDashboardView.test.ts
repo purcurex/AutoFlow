@@ -1,19 +1,23 @@
+import { clearDashboardExceptionCache } from '@/utils/dashboard-exception-cache'
+import { getFopOrders } from '@/api/fop-orders'
+vi.mock('@/api/fop-orders',()=>({getFopOrders:vi.fn()}))
 import { flushPromises, mount, RouterLinkStub, type VueWrapper } from '@vue/test-utils'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { createI18n } from 'vue-i18n'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import FopDashboardView from '@/views/autoflow/FopDashboardView.vue'
 import { getFopDataAccess } from '@/api/fop-access'
 import { chartAccessFixture } from './chart-access-fixtures'
-import { getFopDashboard, type FopDashboardData } from '@/api/fop-dashboard'
+import { getFopDashboard, getFopDashboardCharts, type FopDashboardData } from '@/api/fop-dashboard'
 
 vi.mock('@/composables/useWorkbenchAccess', () => ({ refreshWorkbenchAccess: vi.fn().mockResolvedValue({ roles: ['allocation'] }) }))
 vi.mock('@/components/order-volume/OrderVolumeAnalysis.vue', () => ({ default: { template: '<div />' } }))
-vi.mock('@/components/freight/FreightAnalysis.vue', () => ({ default: { template: '<div />' } }))
+vi.mock('@/components/charts/LocalDashboardAnalytics.vue', () => ({ default: { props:['chartId','title'], template: '<section data-local-analytics>{{ title }}</section>' } }))
+vi.mock('@/components/freight/LocalFreightAnalysis.vue', () => ({ default: { props: { mock: Boolean, mockAccess: Object }, template: '<section data-freight-analysis :data-mock="mock">物流运费分析</section>' } }))
 vi.mock('@/components/layout', () => ({ AppLayout: { template: '<div><slot /></div>' } }))
 vi.mock('@/api/fop-access', async importOriginal => ({ ...await importOriginal<object>(), getFopDataAccess: vi.fn().mockResolvedValue({ source: 'fop', status: 'ready', binding: { tenantId: 't', userId: 'u' } }) }))
 vi.mock('@/components/charts/EChart.vue', () => ({ default: { name: 'EChart', props: ['option', 'label'], template: '<div class="chart-stub" />' } }))
-vi.mock('@/api/fop-dashboard', async importOriginal => ({ ...await importOriginal<object>(), getFopDashboard: vi.fn() }))
+vi.mock('@/api/fop-dashboard', async importOriginal => ({ ...await importOriginal<object>(), getFopDashboard: vi.fn(), getFopDashboardCharts: vi.fn() }))
 const sample: FopDashboardData = {
   chartAccess: chartAccessFixture().charts, departmentReceipts: { currency: 'USD', months: [], departments: [] },
   source: 'fop', updatedAt: '2026-10-21T12:00:00Z',
@@ -29,14 +33,61 @@ function mountView() {
   return mount(FopDashboardView, { global: { plugins: [router, createI18n({ legacy: false, locale: 'zh-CN', messages: {} })], stubs: { RouterLink: RouterLinkStub } } })
 }
 describe('FOP Dashboard interactions', () => {
-  beforeEach(() => { vi.mocked(getFopDataAccess).mockClear(); vi.mocked(getFopDashboard).mockReset().mockResolvedValue(dashboardFixture(structuredClone(sample))) })
+  afterEach(() => vi.useRealTimers())
+  beforeEach(() => { vi.mocked(getFopDashboardCharts).mockReset().mockResolvedValue(dashboardFixture(structuredClone(sample))); clearDashboardExceptionCache(); vi.mocked(getFopOrders).mockReset().mockResolvedValue({total:1,items:[{id:"authorized",orderNumber:"AUTHORIZED-ORDER",exception:{type:"allocation_exception",reason:"需要跟进配货"}}]} as never); vi.mocked(getFopDataAccess).mockClear(); vi.mocked(getFopDashboard).mockReset().mockResolvedValue(dashboardFixture(structuredClone(sample))) })
+  it('loads exceptions without waiting for dashboard aggregates', async () => {
+    vi.mocked(getFopDashboard).mockImplementationOnce(() => new Promise(() => {}))
+    const wrapper = mountView(); await flushPromises()
+    expect(getFopOrders).toHaveBeenCalledTimes(1)
+    expect(wrapper.text()).toContain('AUTHORIZED-ORDER')
+    wrapper.unmount()
+  })
+  it('automatically refreshes legacy registration dates without submitting the form', async () => {
+    vi.useFakeTimers(); vi.setSystemTime(new Date('2026-11-17T00:00:00Z'))
+    const wrapper = mountView(); await flushPromises()
+    await wrapper.find('input[aria-label="开始日期"]').setValue('2026-09-01')
+    await wrapper.find('input[aria-label="结束日期"]').setValue('2026-09-30')
+    await vi.advanceTimersByTimeAsync(400); await flushPromises()
+    expect(getFopDashboard).toHaveBeenCalledTimes(1)
+    expect(getFopDashboardCharts).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(getFopDashboardCharts).mock.lastCall?.[0]).toMatchObject({ from: '2026-09-01', to: '2026-09-30' })
+    wrapper.unmount()
+  })
+  it('mounts local charts without requesting legacy FOP access', async () => {
+    vi.mocked(getFopDashboard).mockResolvedValue({ ...dashboardFixture(sample), localAnalytics:true, analyticsConfigured:false })
+    const wrapper=mountView(); await flushPromises()
+    expect(wrapper.findAll('[data-local-analytics]').length).toBe(5)
+    expect(wrapper.get('[data-freight-analysis]').attributes('data-mock')).toBe('false')
+    expect(wrapper.text()).toContain('客户注册统计')
+    expect(wrapper.find('.registration-panel').exists()).toBe(false)
+    expect(getFopDataAccess).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('部门业绩分析')
+    expect(wrapper.text()).not.toContain('分析图表尚未接入')
+    wrapper.unmount()
+  })
+  it('retains authorized analysis panels when analytics is not connected', async () => {
+    vi.mocked(getFopDashboard).mockResolvedValue({ ...dashboardFixture(sample), analyticsConfigured: false })
+    const wrapper = mountView(); await flushPromises()
+    for (const title of ['订单量分析', '客户订单分析', '物流运费分析']) expect(wrapper.text()).toContain(title)
+    expect(wrapper.findAll('[data-analytics-empty]').length).toBe(2)
+    expect(wrapper.get('[data-freight-analysis]').attributes('data-mock')).toBe('false')
+    expect(wrapper.text()).not.toContain('履约订单 $0.00')
+    wrapper.unmount()
+  })
+  it('does not show a denied panel in the disconnected analytics shell', async () => {
+    vi.mocked(getFopDashboard).mockResolvedValue({ ...dashboardFixture(sample), analyticsConfigured: false, chartAccess: sample.chartAccess.map(c => ({ ...c, visible: c.chartId !== 'freight' })) })
+    const wrapper = mountView(); await flushPromises()
+    expect(wrapper.find('[data-analytics-empty="freight"]').exists()).toBe(false)
+    expect(wrapper.find('[data-freight-analysis]').exists()).toBe(false)
+    wrapper.unmount()
+  })
   it('shows unintegrated queues explicitly while retaining the live pending review count', async () => {
     vi.mocked(getFopDashboard).mockResolvedValue({ ...dashboardFixture(sample), analyticsConfigured: false, integratedQueues: ['review'],
       queues: { procurement: null, review: 32, allocation: null, dispatch: null, shipping: null }, tasks: [], exceptions: [] })
     const wrapper = mountView(); await flushPromises()
     const cards = wrapper.findAll('.summary-card')
     expect(cards[0]!.find('strong').text()).toBe('32')
-    expect(cards.slice(1).every(card => card.find('strong').text() === '未接入')).toBe(true)
+    expect(cards.slice(1).every(card => card.find('strong').text() === '—')).toBe(true)
     expect(wrapper.find('.dashboard-footnote').text()).not.toContain('仅接入待审核')
     wrapper.unmount()
   })
@@ -47,7 +98,7 @@ describe('FOP Dashboard interactions', () => {
     } as FopDashboardData)
     const wrapper = mountView(); await flushPromises()
     const cards = wrapper.findAll('.summary-card')
-    expect(cards.map(card => card.find('strong').text())).toEqual(['0', '3', '无权限', '加载失败', '未接入'])
+    expect(cards.map(card => card.find('strong').text())).toEqual(['0', '3', '无权限', '加载失败', '—'])
     expect(cards[0]!.findComponent(RouterLinkStub).props('to')).toMatchObject({ params: { role: 'sales' }, query: { queue: 'review' } })
     expect(cards.slice(2).every(card => !card.findComponent(RouterLinkStub).exists())).toBe(true)
     expect(cards[1]!.text()).not.toContain('已审核')
@@ -212,17 +263,20 @@ describe('FOP Dashboard interactions', () => {
     wrapper.unmount()
   })
   it('forwards date and year filters to the authorized aggregate provider', async () => {
+    vi.useFakeTimers({toFake:['Date']});vi.setSystemTime(new Date('2027-11-17T00:00:00Z'))
     const wrapper = mountView()
     await flushPromises()
     const end = (wrapper.findAll('input[type=date]')[1]!.element as HTMLInputElement).value
     await wrapper.findAll('input[type=date]')[0]!.setValue(end)
     await wrapper.find('form').trigger('submit')
     await flushPromises()
-    expect(getFopDashboard).toHaveBeenLastCalledWith({ from: end, to: end, year: new Date().getFullYear() }, undefined, expect.any(Function))
+    expect(getFopDashboardCharts).toHaveBeenLastCalledWith({ from:end,to:end,year:2027 }, {force:true})
     await wrapper.find('select[aria-label="回款年份"]').setValue(String(new Date().getFullYear() - 1))
     await flushPromises()
-    expect(getFopDashboard).toHaveBeenLastCalledWith({ from: end, to: end, year: new Date().getFullYear() - 1 }, undefined, expect.any(Function))
-    wrapper.unmount()
+    expect(getFopDashboardCharts).toHaveBeenLastCalledWith({ from:'2026-01-01',to:'2026-12-31',year:2026 }, {force:false})
+    expect((wrapper.get('select[aria-label="业务员回款年份"]').element as HTMLSelectElement).value).toBe('2027')
+    expect(getFopDashboard).toHaveBeenCalledTimes(1)
+    wrapper.unmount();vi.useRealTimers()
   })
   it('renders mock analytics using API department names and registration values', async () => {
     vi.mocked(getFopDashboard).mockResolvedValueOnce(dashboardFixture({ ...sample, source: 'mock',
@@ -232,7 +286,7 @@ describe('FOP Dashboard interactions', () => {
     }))
     const wrapper = mountView()
     await flushPromises()
-    expect(wrapper.text()).toContain('MOCK · DEMO')
+    expect(wrapper.text()).not.toContain('MOCK · DEMO')
     const charts = wrapper.findAllComponents({ name: 'EChart' })
     expect(charts[0]!.props('option').series[0].data).toEqual([21, 34])
     expect(charts[1]!.props('option').series[0]).toMatchObject({ name: '业务一部', data: [12345] })
@@ -298,6 +352,7 @@ describe('FOP Dashboard interactions', () => {
       { id: 'sales4', name: '业务四部', counts: [0, 0], salespeople: [] },
     ] }
     vi.mocked(getFopDashboard).mockResolvedValue(dashboardFixture(payload))
+    vi.mocked(getFopDashboardCharts).mockResolvedValue(dashboardFixture(payload))
     const wrapper = mountView()
     await flushPromises()
     const chart = () => wrapper.findAllComponents({ name: 'EChart' }).find(item => item.props('label') === '每日注册会员趋势图')!
@@ -346,12 +401,12 @@ describe('FOP Dashboard interactions', () => {
   it('clears previous counts and customer data when authorization is revoked', async () => {
     const wrapper = mountView()
     await flushPromises()
-    expect(wrapper.text()).toContain('My customer')
+    expect(wrapper.text()).toContain('AUTHORIZED-ORDER')
     vi.mocked(getFopDashboard).mockRejectedValueOnce({ code: 'fop_binding_required' })
     await wrapper.find('[data-testid="refresh-data-status"]').trigger('click')
     await flushPromises()
     expect(wrapper.find('[role=alert]').text()).toContain('业务数据暂不可查看')
-    expect(wrapper.text()).not.toContain('My customer')
+    expect(wrapper.text()).not.toContain('AUTHORIZED-ORDER')
     expect(wrapper.findAll('.summary-card strong').map(node => node.text())).toEqual(['—', '—', '—', '—', '—'])
     expect(wrapper.findAll('.task-row')).toHaveLength(0)
     wrapper.unmount()

@@ -53,3 +53,11 @@ it('shows independent full and last-mile dispatch numbers with suffix types', as
  await wrapper.get('button[aria-label="复制物流跟踪号 000LAST"]').trigger('click');expect(copy).toHaveBeenCalledWith('000LAST')
  wrapper.unmount()
 })
+
+it.each([false,true])('displays the FOP package tracking directly without Shopify selection (all=%s)',showAllTracking=>{
+ const wrapper=mount(OrderLogisticsInfo,{props:{showAllTracking,groups:[{carrierName:null,channelName:'云途全球专线挂号（特惠普货）',packageTrackingNumber:'YT2631300715756034',shopifyTracking:null} as LogisticsInfo]},global:{plugins:[createI18n({legacy:false,locale:'zh-CN',messages:{}})]}})
+ expect(wrapper.text()).toContain('云途全球专线挂号（特惠普货）')
+ expect(wrapper.text()).toContain('YT2631300715756034')
+ expect(wrapper.find('.tracking-type').exists()).toBe(false)
+ wrapper.unmount()
+})

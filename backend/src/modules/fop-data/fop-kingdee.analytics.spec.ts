@@ -7,14 +7,14 @@ import { ServiceUnavailableException } from '@nestjs/common'
 
 const identity = { tenantId: 'offline-test', userId: '100' }
 const scope = { role: 'admin' as const, departmentId: null, employeeId: null }
-const at = '2025-10-03T02:00:00Z'
+const at = '2026-10-03T02:00:00Z'
 const ref = (id: string, name = `Name-${id}`) => ({ id, name, number: `N-${id}` })
 const dimensions = { organization: ref('10'), department: ref('400'), owner: ref('501'), customer: ref('200', 'Customer'), warehouse: ref('600'), carrier: ref('700') }
 const items = [{ sku: 'SKU-1', name: 'Product', variant: 'Blue', quantity: '2' }]
 const order = { ...dimensions, id: '1001', orderNumber: 'ORDER-1001', shopifyOrderNumber: '#1001', storeName: 'Shop', amount: '100.00', currency: 'USD', createdAt: at, paidAt: at, items }
 const receipt = { ...dimensions, id: '2001:1', sourceType: 'fulfillment', documentId: '1001', documentNumber: 'ORDER-1001', amount: '97.00', orderAmount: '100.00', handlingFee: '3.00', currency: 'USD', paidAt: at, items }
 const stock = { ...receipt, id: '2002:1', sourceType: 'full_payment_stock', documentId: '1002', documentNumber: 'STOCK-1002', carrier: null, amount: '50.00', orderAmount: '50.00', handlingFee: '0.00' }
-const freight = { ...dimensions, id: '3001', documentNumber: 'SHIP-3001', orderNumber: 'ORDER-1001', trackingNumber: 'TRACK-1', channelName: 'Test Channel', originalAmount: '70.00', originalCurrency: 'CNY', fxRateToUsd: '0.14', fxRateDate: '2025-10-03', fxRateSource: 'kingdee_exrate_table:800', amount: '9.80', confirmedAt: at }
+const freight = { ...dimensions, id: '3001', documentNumber: 'SHIP-3001', orderNumber: 'ORDER-1001', trackingNumber: 'TRACK-1', channelName: 'Test Channel', originalAmount: '70.00', originalCurrency: 'CNY', fxRateToUsd: '0.14', fxRateDate: '2026-10-03', fxRateSource: 'kingdee_exrate_table:800', amount: '9.80', confirmedAt: at }
 const registration = { ...dimensions, id: '4001', registeredAt: at }
 const settings: Record<string, string> = {
   FOP_KINGDEE_QUERY_URL: 'https://offline.test/review', FOP_KINGDEE_SUMMARY_URL: 'https://offline.test/summary',
@@ -23,6 +23,7 @@ const settings: Record<string, string> = {
   FOP_KINGDEE_ACCESS_TOKEN: 'offline-only', FOP_KINGDEE_IDENTITY: 'offline-only', FOP_KINGDEE_OPENAPI_SIGN: 'offline-only',
   FOP_KINGDEE_STOCK_WAREHOUSE_CODE_MAP: 'unused-invalid-stock-config',
   FOP_KINGDEE_DEPARTMENT_MAP: '{"400":"sales1"}', FOP_KINGDEE_WAREHOUSE_MAP: '{"600":"HZ"}', FOP_KINGDEE_CARRIER_MAP: '{"700":"YT"}', FOP_KINGDEE_EXRATE_TABLE_ID: '800',
+  FOP_KINGDEE_LOCAL_ORGANIZATION: 'true',
 }
 type Query = { resource: FopAnalyticsResource; from: string; to: string; page: number; pageSize: number; keyword?: string }
 type Records = Record<FopAnalyticsResource, unknown[]>
@@ -50,18 +51,31 @@ function setup(options: { records?: Records; grants?: Partial<Record<FopAnalytic
   const provider = new KingdeeFopDataProvider({ get: key => config[key] }, request)
   const user = { id: 'local', role: 'admin', businessRole: 'admin', businessDepartmentId: null, businessEmployeeId: null, fopTenantId: identity.tenantId, fopUserId: identity.userId, workbenchRoles: ['sales'],
     fopBindingDetails: { username: 'offline-user', name: '测试职员', employeeRecordId: identity.userId, employeeMasterId: identity.userId, departmentId: '10', organizationId: '10', localEmployeeId: null, localDepartmentId: null, verifiedAt: '2026-10-29T00:00:00Z' } } as User
-  const users = { findById: jest.fn().mockResolvedValue(user) }
+  const users = { findById: jest.fn().mockResolvedValue(user), localWorkbenchOrganization: async () => ({
+    version: 'current-local-members', employeeIds: null, departmentId: null, employeeId: null,
+    departments: [
+      { id: 'marketing', name: '营销中心', parentId: 'company', pathIds: ['company', 'marketing'] },
+      { id: 'local-sales1', name: '业务一部', parentId: 'marketing', pathIds: ['company', 'marketing', 'local-sales1'] },
+    ],
+    members: ['501', '502'].map(employeeId => ({ employeeId, localEmployeeId: `employee-${employeeId}`, departmentId: 'local-sales1', name: `Name-${employeeId}` })),
+  }) }
   const service = new FopDataService(users as unknown as UsersService, provider)
   return { provider, service, request, user, users }
 }
 
 describe('Kingdee nine analytics integration, offline transport', () => {
+  it('blocks legacy analytics when local organization filtering is disabled even for an administrator', async () => {
+    const { service, request } = setup({ config: { FOP_KINGDEE_LOCAL_ORGANIZATION: 'false' } })
+    await expect(service.getOrderVolume('local', { category: 'customer', grain: 'month', year: 2026, warehouse: 'ALL' })).rejects.toMatchObject({ status: 503, response: { code: 'local_analytics_scope_required' } })
+    await expect(service.getDashboard('local', { from: '2026-10-01', to: '2026-10-04', year: 2026 })).rejects.toMatchObject({ status: 503, response: { code: 'local_analytics_scope_required' } })
+    expect(request).not.toHaveBeenCalled()
+  })
   it('applies the merged chart denials before requesting live registration or receipt facts', async () => {
     const { service, user, request } = setup()
     user.role = 'user' as User['role']
     user.chartPermissions = (['registrations', 'salesperson_receipts'] as const).map(chartId => ({ chartId,
       visibility: 'deny', dataScope: 'inherit', summaryMode: 'inherit', summaryDepartments: [], details: 'inherit', export: 'inherit' }))
-    const result = await service.getDashboard('local', { from: '2025-10-01', to: '2025-10-04', year: 2025 })
+    const result = await service.getDashboard('local', { from: '2026-10-01', to: '2026-10-04', year: 2026 })
     expect(result.chartAccess.filter(chart => ['registrations', 'salesperson_receipts'].includes(chart.chartId)).every(chart => !chart.visible)).toBe(true)
     expect(result.registrations).toEqual([])
     expect(result.receipts.departments).toEqual([])
@@ -73,7 +87,7 @@ describe('Kingdee nine analytics integration, offline transport', () => {
     user.role = 'user' as User['role']
     user.businessEmployeeId = '501'
     user.chartPermissions = [{ chartId: 'salesperson_receipts', visibility: 'inherit', dataScope: 'self', summaryMode: 'inherit', summaryDepartments: [], details: 'inherit', export: 'inherit' }]
-    const result = await service.getDashboard('local', { from: '2025-10-01', to: '2025-10-04', year: 2025 })
+    const result = await service.getDashboard('local', { from: '2026-10-01', to: '2026-10-04', year: 2026 })
     expect(result.receipts.marketingCenter!.amounts[9]).toBe(147)
     expect(result.receipts.marketingCenter!.name).toBe('本人回款合计')
     expect(result.receipts.departments[0].salespeople.map(person => person.id)).toEqual(['501'])
@@ -82,7 +96,7 @@ describe('Kingdee nine analytics integration, offline transport', () => {
   it('aggregates daily registrations, department and salesperson actual collections, preserving source breakdown', async () => {
     const { service, request } = setup()
     const local = { enabled: true, getOrders: jest.fn(async (_id: string, query: { queue: string }) => { if (query.queue !== 'review') throw new ServiceUnavailableException({ code: 'fop_feature_not_configured' }); return { total: 11 } }) }
-    const dashboard = await (service.getDashboard as any)('local', { from: '2025-10-01', to: '2025-10-04', year: 2025 }, local)
+    const dashboard = await (service.getDashboard as any)('local', { from: '2026-10-01', to: '2026-10-04', year: 2026 }, local)
     expect('analyticsConfigured' in dashboard && dashboard.analyticsConfigured).toBe(true)
     expect(dashboard.registrations.map((row: { count: number }) => row.count)).toEqual([0, 0, 2, 0])
     expect(dashboard.registrationDepartments[0].salespeople[0].counts).toEqual([0, 0, 2, 0])
@@ -97,7 +111,7 @@ describe('Kingdee nine analytics integration, offline transport', () => {
 
   it('leaves queues unconfigured without the local replica and never probes historical lists', async () => {
     const { service, request } = setup()
-    const dashboard = await service.getDashboard('local', { from: '2025-10-01', to: '2025-10-04', year: 2025 })
+    const dashboard = await service.getDashboard('local', { from: '2026-10-01', to: '2026-10-04', year: 2026 })
     expect(dashboard.queues).toEqual({ review: null, procurement: null, allocation: null, dispatch: null, shipping: null })
     expect(dashboard.queueStates.review).toBe('not_configured')
     expect(request.mock.calls.some(call => [settings.FOP_KINGDEE_QUERY_URL, settings.FOP_KINGDEE_SUMMARY_URL].includes(String(call[0])))).toBe(false)
@@ -105,14 +119,14 @@ describe('Kingdee nine analytics integration, offline transport', () => {
 
   it('connects business order volumes, customer ranking, customer search and single customer trend', async () => {
     const { service, request } = setup()
-    const base = { grain: 'month' as const, year: 2025, warehouse: 'ALL' as const }
+    const base = { grain: 'month' as const, year: 2026, warehouse: 'ALL' as const }
     const volume = await service.getOrderVolume('local', { ...base, category: 'organization' })
     expect(volume.total).toBe(2)
     const ranking = await service.getOrderVolume('local', { ...base, category: 'customer' })
     expect(ranking.series.find(s => s.entityId === '200')?.amounts?.total).toBe(147)
     const search = await service.searchOrderCustomers('local', { keyword: 'Customer', page: 1, pageSize: 10 })
     expect(search.items.map(row => row.id)).toEqual(['200'])
-    const trend = await service.getOrderVolume('local', { category: 'customer', customerId: '200', from: '2025-10-01', to: '2025-10-04', warehouse: 'HZ' })
+    const trend = await service.getOrderVolume('local', { category: 'customer', customerId: '200', from: '2026-10-01', to: '2026-10-04', warehouse: 'HZ' })
     expect(trend.total).toBe(2)
     expect(trend.series[0].amounts?.total).toBe(147)
     expect(request.mock.calls.some(call => String(call[1]?.body).includes('"keyword":"Customer"'))).toBe(true)
@@ -120,46 +134,46 @@ describe('Kingdee nine analytics integration, offline transport', () => {
 
   it('connects actual freight analysis and single carrier trend, keeping historical conversion and prior periods', async () => {
     const { service, request } = setup()
-    const freightData = await service.getFreight('local', { grain: 'month', year: 2025, warehouse: 'ALL' })
+    const freightData = await service.getFreight('local', { grain: 'month', year: 2026, warehouse: 'ALL' })
     expect(freightData.totals.amount).toBe(9.8)
-    const carrier = await service.getFreight('local', { grain: 'year', year: 2025, warehouse: 'HZ', carrierCode: 'YT' })
+    const carrier = await service.getFreight('local', { grain: 'year', year: 2026, warehouse: 'HZ', carrierCode: 'YT' })
     expect(carrier.billCount).toBe(1)
     expect(carrier.totals.amount).toBe(9.8)
     const bodies = request.mock.calls.map(call => JSON.parse(String(call[1]?.body)) as { query: Query & { exchangeRateTableId?: string } })
-    expect(bodies.some(body => body.query.resource === 'freight' && body.query.from === '2024-12-01' && body.query.exchangeRateTableId === '800')).toBe(true)
+    expect(bodies.some(body => body.query.resource === 'freight' && body.query.from === '2025-12-01' && body.query.exchangeRateTableId === '800')).toBe(true)
   })
 
   it('returns paginated order, receipt and freight details with complete totals rather than page totals', async () => {
     const { service } = setup()
-    const query = { category: 'customer' as const, grain: 'month' as const, year: 2025, warehouse: 'ALL' as const, workbenchRole: 'sales' as const, page: 1, pageSize: 1 }
+    const query = { category: 'customer' as const, grain: 'month' as const, year: 2026, warehouse: 'ALL' as const, workbenchRole: 'sales' as const, page: 1, pageSize: 1 }
     const orders = await service.getOrderVolumeDetails('local', query)
     expect(orders.total).toBe(2); expect(orders.items).toHaveLength(1)
     expect(orders.totals.orderCount).toBe(2)
     const receipts = await service.getOrderVolumeReceipts('local', query)
     expect(receipts.total).toBe(2); expect(receipts.items).toHaveLength(1)
     expect(receipts.totals.amount).toBe(147)
-    const direct = await service.getReceipts('local', { from: '2025-10-01', to: '2025-10-04', warehouse: 'HZ', sourceType: 'full_payment_stock', workbenchRole: 'sales', page: 1, pageSize: 20 })
+    const direct = await service.getReceipts('local', { from: '2026-10-01', to: '2026-10-04', warehouse: 'HZ', sourceType: 'full_payment_stock', workbenchRole: 'sales', page: 1, pageSize: 20 })
     expect(direct.totals.amount).toBe(50)
-    const costs = await service.getFreightDetails('local', { grain: 'month', year: 2025, warehouse: 'ALL', workbenchRole: 'sales', page: 1, pageSize: 1, periodId: '2025-10' })
+    const costs = await service.getFreightDetails('local', { grain: 'month', year: 2026, warehouse: 'ALL', workbenchRole: 'sales', page: 1, pageSize: 1, periodId: '2026-10' })
     expect(costs.totals).toEqual({ billCount: 1, amount: 9.8, originalAmounts: [{ currency: 'CNY', amount: 70 }] })
-    expect(costs.items[0].fxRateDate).toBe('2025-10-03')
+    expect(costs.items[0].fxRateDate).toBe('2026-10-03')
     expect(costs.items[0]).not.toHaveProperty('tenantId')
   })
 
   it('reads every upstream page without truncating the report and rejects duplicate facts across pages', async () => {
     const data = records(); data.orders = Array.from({ length: 101 }, (_, i) => ({ ...order, id: String(5000 + i) }))
     const { service, request } = setup({ records: data })
-    expect((await service.getOrderVolume('local', { category: 'organization', grain: 'month', year: 2025, warehouse: 'ALL' })).total).toBe(101)
+    expect((await service.getOrderVolume('local', { category: 'organization', grain: 'month', year: 2026, warehouse: 'ALL' })).total).toBe(101)
     expect(request.mock.calls.filter(call => String(call[1]?.body).includes('"resource":"orders"'))).toHaveLength(2)
     const invalid = setup({ transform: (value, query) => ({ ...value, items: [order], hasMore: query.page === 1 }) })
-    await expect(invalid.service.getOrderVolume('local', { category: 'organization', grain: 'month', year: 2025, warehouse: 'ALL' })).rejects.toMatchObject({ response: { code: 'fop_unavailable' } })
+    await expect(invalid.service.getOrderVolume('local', { category: 'organization', grain: 'month', year: 2026, warehouse: 'ALL' })).rejects.toMatchObject({ response: { code: 'fop_unavailable' } })
   })
 
   it.each(['receipts', 'freight', 'orders'] as const)('does not infer %s access from another resource', async resource => {
     const { provider, request } = setup({ grants: { [resource]: [] } })
     const permission = await provider.resolvePermissions(identity, scope)
     const calls = request.mock.calls.length
-    await expect(provider.readAnalytics(identity, permission, scope, resource, { from: '2025-01-01', to: '2025-12-31' })).rejects.toBeInstanceOf(FopPermissionDeniedError)
+    await expect(provider.readAnalytics(identity, permission, scope, resource, { from: '2026-01-01', to: '2026-10-31' })).rejects.toBeInstanceOf(FopPermissionDeniedError)
     expect(request).toHaveBeenCalledTimes(calls)
   })
 
@@ -170,24 +184,24 @@ describe('Kingdee nine analytics integration, offline transport', () => {
     ['pagination', (value: Record<string, unknown>) => ({ ...value, page: 8 })],
   ])('rejects incorrect upstream %s without returning partial totals', async (_name, transform) => {
     const { service } = setup({ transform })
-    await expect(service.getOrderVolume('local', { category: 'organization', grain: 'month', year: 2025, warehouse: 'ALL' })).rejects.toThrow()
+    await expect(service.getOrderVolume('local', { category: 'organization', grain: 'month', year: 2026, warehouse: 'ALL' })).rejects.toThrow()
   })
 
   it('rejects unmapped dimensions, a wrong historical conversion and scope changes during reads', async () => {
     const missing = setup({ config: { FOP_KINGDEE_WAREHOUSE_MAP: '{}' } })
-    await expect(missing.service.getOrderVolume('local', { category: 'organization', grain: 'month', year: 2025, warehouse: 'ALL' })).rejects.toMatchObject({ response: { code: 'fop_mapping_required' } })
+    await expect(missing.service.getOrderVolume('local', { category: 'organization', grain: 'month', year: 2026, warehouse: 'ALL' })).rejects.toMatchObject({ response: { code: 'fop_mapping_required' } })
     const data = records(); data.freight = [{ ...freight, amount: '10.00' }]
     const wrong = setup({ records: data })
-    await expect(wrong.service.getFreight('local', { grain: 'month', year: 2025, warehouse: 'ALL' })).rejects.toMatchObject({ response: { code: 'fop_unavailable' } })
+    await expect(wrong.service.getFreight('local', { grain: 'month', year: 2026, warehouse: 'ALL' })).rejects.toMatchObject({ response: { code: 'fop_unavailable' } })
     const changed = setup()
     changed.users.findById.mockImplementation(async () => ({ ...changed.user, fopUserId: changed.request.mock.calls.some(call => String(call[0]).endsWith('/read')) ? '999' : identity.userId }))
-    await expect(changed.service.getOrderVolume('local', { category: 'organization', grain: 'month', year: 2025, warehouse: 'ALL' })).rejects.toMatchObject({ response: { code: 'fop_binding_changed' } })
+    await expect(changed.service.getOrderVolume('local', { category: 'organization', grain: 'month', year: 2026, warehouse: 'ALL' })).rejects.toMatchObject({ response: { code: 'fop_binding_changed' } })
   })
 
   it('does not let extra runtime properties in a range replace trusted identity or organizations', async () => {
     const { provider, request } = setup()
     const permission = await provider.resolvePermissions(identity, scope)
-    await provider.readAnalytics(identity, permission, scope, 'orders', Object.assign({ from: '2025-01-01', to: '2025-12-31' }, { userId: '999', organizationIds: ['999'], scopeRole: 'none' }))
+    await provider.readAnalytics(identity, permission, scope, 'orders', Object.assign({ from: '2026-01-01', to: '2026-10-31' }, { userId: '999', organizationIds: ['999'], scopeRole: 'none' }))
     expect(JSON.parse(String(request.mock.calls[1][1]?.body))).toMatchObject({ query: { userId: '100', organizationIds: ['10', '20'], scopeRole: 'admin' } })
   })
 
@@ -196,19 +210,19 @@ describe('Kingdee nine analytics integration, offline transport', () => {
       ? { ...value, items: [{ ...order, department: ref('401'), departmentPathIds: ['10', '400', '401'] }] } : value })
     const manager = { role: 'department_manager' as const, departmentId: '400', employeeId: '501' }
     const grant = await selected.provider.resolvePermissions(identity, manager)
-    await expect(selected.provider.readAnalytics(identity, grant, manager, 'orders', { from: '2025-01-01', to: '2025-12-31' })).rejects.toThrow('outside authorized scope')
+    await expect(selected.provider.readAnalytics(identity, grant, manager, 'orders', { from: '2026-01-01', to: '2026-10-31' })).rejects.toThrow('outside authorized scope')
   })
 
   it('fails explicitly for an oversized upstream page instead of returning incomplete totals', async () => {
     const { service } = setup({ transform: value => ({ ...value, extra: 'x'.repeat(4 * 1024 * 1024) }) })
-    await expect(service.getOrderVolume('local', { category: 'organization', grain: 'month', year: 2025, warehouse: 'ALL' })).rejects.toMatchObject({ response: { code: 'fop_result_too_large' } })
+    await expect(service.getOrderVolume('local', { category: 'organization', grain: 'month', year: 2026, warehouse: 'ALL' })).rejects.toMatchObject({ response: { code: 'fop_result_too_large' } })
   })
 
   it('reports missing historical rates distinctly and does not retry a business failure', async () => {
     const { provider, request } = setup()
     const permission = await provider.resolvePermissions(identity, scope)
     request.mockResolvedValueOnce(new Response(JSON.stringify({ status: false, errorCode: 'failure', message: 'FOP_FX_MISSING: no historical rate' })))
-    await expect(provider.readAnalytics(identity, permission, scope, 'freight', { from: '2025-01-01', to: '2025-12-31' })).rejects.toMatchObject({ code: 'fop_fx_missing' })
+    await expect(provider.readAnalytics(identity, permission, scope, 'freight', { from: '2026-01-01', to: '2026-10-31' })).rejects.toMatchObject({ code: 'fop_fx_missing' })
     expect(request).toHaveBeenCalledTimes(2)
   })
 
@@ -216,7 +230,7 @@ describe('Kingdee nine analytics integration, offline transport', () => {
     const started = Date.now(), clock = jest.spyOn(Date, 'now').mockReturnValue(started)
     try {
       const { service } = setup({ transform: value => { clock.mockReturnValue(started + 60_001); return value } })
-      await expect(service.getOrderVolume('local', { category: 'organization', grain: 'month', year: 2025, warehouse: 'ALL' })).rejects.toMatchObject({ response: { code: 'fop_result_too_large' } })
+      await expect(service.getOrderVolume('local', { category: 'organization', grain: 'month', year: 2026, warehouse: 'ALL' })).rejects.toMatchObject({ response: { code: 'fop_result_too_large' } })
     } finally { clock.mockRestore() }
   })
 })

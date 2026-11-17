@@ -1,3 +1,4 @@
+import { analyticsQuery, type AnalyticsQueryOptions } from '@/utils/analytics-cache'
 import type { EffectiveChartAccess } from './fop-chart-access'
 import api from './index'
 import type { WorkbenchRole } from '@/utils/workbench'
@@ -44,5 +45,5 @@ export interface FreightPage {
   totals: { billCount: number; amount: number; originalAmounts: { currency: string; amount: number }[] }
   range: { from: string; to: string }
 }
-export const getFopFreight = (query: FreightQuery): Promise<FreightData> => api.get('/autoflow/integrations/fop/freight', { params: query, timeout: 180000 })
+export const getFopFreight = (query: FreightQuery, options?: AnalyticsQueryOptions): Promise<FreightData> => analyticsQuery('/autoflow/integrations/fop/freight', query, () => api.get('/autoflow/integrations/fop/freight', { params: query, timeout: 180000 }), options)
 export const getFopFreightDetails = (query: FreightDetailsQuery): Promise<FreightPage> => api.get('/autoflow/integrations/fop/freight/details', { params: query, timeout: 180000 })

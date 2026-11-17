@@ -19,9 +19,9 @@ const initializing = ref(false)
 const bootstrapRequest = ref<{companyId:string;requestKey:string}>()
 const initializationReason = computed(() => {
   const value = status.value?.bootstrap
-  if (value?.configured === false) return text('FOP 同步服务未配置，暂不能初始化。', 'FOP synchronization services are not configured.')
-  if (value?.blockers?.includes('fop_queries_paused')) return text('FOP 调用已暂停，初始化暂不可用。', 'FOP access is paused. Initialization is unavailable.')
-  if (value?.blockers?.includes('workbench_bootstrap_mock_forbidden')) return text('当前为模拟环境，不能初始化真实业务数据。', 'Real initialization is unavailable in the demo environment.')
+  if (value?.configured === false) return text('初始化暂不可用', 'Initialization unavailable')
+  if (value?.blockers?.includes('fop_queries_paused')) return text('初始化暂不可用', 'Initialization unavailable')
+  if (value?.blockers?.includes('workbench_bootstrap_mock_forbidden')) return text('初始化暂不可用', 'Initialization unavailable')
   return ''
 })
 const route = inject(routeLocationKey, undefined), router = inject(routerKey, undefined)
@@ -146,8 +146,7 @@ onBeforeUnmount(() => { disposed = true; cancel(); off() })
       <span v-if="initializationReason" class="replica-error">{{ initializationReason }}</span>
     </template>
     <button class="replica-sync" data-testid="sync-workbench" :title="buttonTitle" :disabled="collected || disabled || syncing || status?.paused || !status?.initialized || status?.syncConfigured === false || statusUnavailable" @click="synchronize()"><RefreshCw :size="12" :class="{ spinning: syncing }" />{{ syncing ? text('同步中…', 'Syncing…') : text('同步数据', 'Sync data') }}</button>
-    <span class="replica-time">{{ collected ? text('采集时点', 'Source as of') : text('最近同步', 'Last synced') }} {{ formatTime(sourceSyncedAt) }}</span>
-    <span v-if="collected" class="replica-time">{{ text('已采集 · 只读 · 正式同步待接入', 'Collected · Read-only · Full sync pending') }}</span>
+    <span class="replica-time">{{ text('最近同步', 'Last synced') }} {{ formatTime(sourceSyncedAt) }}</span>
     <span v-if="feedback" :class="feedbackError ? 'replica-error' : 'replica-announcement'" :role="feedbackError ? 'alert' : 'status'">{{ feedback }}</span>
   </div>
 </template>

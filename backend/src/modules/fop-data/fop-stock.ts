@@ -6,10 +6,9 @@ import { FopStockOrderCandidate, FopStockInventoryCandidate, FopStockOrder, Stoc
 
 const string = (value: unknown): value is string => typeof value === 'string' && !!value.trim()
 function stockOrderStatus(row: FopStockOrderCandidate): FopStockOrder['orderStatus'] {
-  if (row.paymentStatus === 'unpaid' && row.reviewStatus !== 'approved') return 'unpaid'
-  if (row.paymentStatus === 'paid' && row.reviewStatus === 'pending') return 'paid'
-  if (row.paymentStatus === 'paid' && row.reviewStatus === 'approved') return 'approved'
-  return null
+  if (row.rawOrderStatus !== undefined) return ({'0':'cancelled','1':'unpaid','2':'paid'} as const)[row.rawOrderStatus ?? ''] ?? null
+  if (row.cancelled) return 'cancelled'
+  return row.paymentStatus === 'paid' || row.paymentStatus === 'unpaid' ? row.paymentStatus : null
 }
 function ownership(row: StockOwnership) {
   if (!string(row.customerId) || !string(row.customerName) || typeof row.customerCode !== 'string' || !string(row.owner?.id) || !string(row.owner?.name) || !string(row.department?.id) || !string(row.department?.name)) throw new Error('Invalid stock ownership')
@@ -28,7 +27,7 @@ export function publicStockOrder(row: FopStockOrderCandidate): FopStockOrder {
     if (!string(item.sku) || !string(item.name) || !Number.isFinite(item.quantity) || item.quantity <= 0 || item.quantity > Number.MAX_SAFE_INTEGER || typeof item.variant !== 'string' || item.imageUrl !== null && typeof item.imageUrl !== 'string') throw new Error('Invalid stock product')
     return { sku: item.sku, name: item.name, imageUrl: item.imageUrl, variant: item.variant, quantity: item.quantity }
   })
-  return { ...ownership(row), id: row.id, stockNumber: row.stockNumber, stockType: row.stockType, storeName: row.storeName, items, amount: row.amount, currency: row.currency, paidAt, createdAt: normalizeBusinessTimestamp(row.createdAt), paymentStatus: row.paymentStatus ?? 'unknown', reviewStatus: row.reviewStatus ?? 'unknown', orderStatus: stockOrderStatus(row), purchaseStatus: row.purchaseStatus, procurementPaidAt: normalizeBusinessTimestamp(row.procurementPaidAt), warehouseCode: row.warehouseCode, warehouse: row.warehouse }
+  return { ...ownership(row), id: row.id, stockNumber: row.stockNumber, stockType: row.stockType, storeName: row.storeName, items, amount: row.amount, currency: row.currency, paidAt, createdAt: normalizeBusinessTimestamp(row.createdAt), paymentStatus: row.paymentStatus ?? 'unknown', reviewStatus: row.reviewStatus ?? 'unknown', rawBillStatus: row.rawBillStatus ?? null, orderStatus: stockOrderStatus(row), purchaseStatus: row.purchaseStatus, procurementPaidAt: normalizeBusinessTimestamp(row.procurementPaidAt), warehouseCode: row.warehouseCode, warehouse: row.warehouse }
 }
 function balance(value: StockBalance) {
   if (!value || [value.available, value.locked].some(qty => !Number.isFinite(qty) || qty < 0 || qty > Number.MAX_SAFE_INTEGER)) throw new Error('Invalid inventory quantity')
@@ -54,18 +53,18 @@ export function stockDepartments(rows: StockOwnership[]) {
 export function filterStockOrders(rows: FopStockOrderCandidate[], query: StockFilters, now = Date.now()): FopStockOrder[] {
   const search = query.search?.trim().toLowerCase()
   const inPaymentRange = consumerPaymentRange(query.timeRange, now)
-  return rows.filter(row => !row.cancelled && (query.queue !== 'procurement' || row.paymentStatus === 'paid' && row.reviewStatus === 'approved' && ['unpurchased', 'partial', 'in_progress', 'purchased'].includes(row.purchaseStatus)) && stockScopeMatches(row, query) && (!query.stockType || row.stockType === query.stockType) && (!query.purchaseStatus || row.purchaseStatus === query.purchaseStatus)
+  return rows.filter(row => (query.queue !== 'procurement' || !row.cancelled && row.paymentStatus === 'paid' && row.reviewStatus === 'approved' && ['unpurchased', 'partial', 'in_progress', 'purchased'].includes(row.purchaseStatus)) && stockScopeMatches(row, query) && (!query.stockType || row.stockType === query.stockType) && (!query.purchaseStatus || row.purchaseStatus === query.purchaseStatus)
     && (!search || [row.stockNumber, row.customerCode, row.customerName, row.storeName ?? '', row.owner.name, ...row.items.flatMap(i => [i.sku, i.name])].some(v => v.toLowerCase().includes(search))))
-    .map(publicStockOrder).filter(row => (!query.orderStatus || row.orderStatus === query.orderStatus) && inPaymentRange(row.paidAt)
+    .map(publicStockOrder).filter(row => (!query.reviewStatus || row.reviewStatus === query.reviewStatus) && (!query.orderStatus || row.orderStatus === query.orderStatus) && inPaymentRange(row.paidAt)
       && (!query.lifecycle || (query.lifecycle === 'unpaid' ? row.orderStatus === 'unpaid'
-        : query.lifecycle === 'pending_procurement' ? row.paymentStatus === 'paid' && ['unpurchased', 'partial', 'in_progress', 'purchased'].includes(row.purchaseStatus)
-          : row.orderStatus === 'approved' && row.purchaseStatus === 'received'))).sort((a, b) => {
+        : query.lifecycle === 'pending_procurement' ? row.orderStatus === 'paid' && ['unpurchased', 'partial', 'in_progress', 'purchased'].includes(row.purchaseStatus)
+          : row.orderStatus === 'paid' && row.reviewStatus === 'approved' && row.purchaseStatus === 'received'))).sort((a, b) => {
       const statusSort = query.sortBy === 'orderStatus' || query.sortBy === 'purchaseStatus'
       const direction = query.sortOrder === 'asc' || query.sortOrder === undefined && statusSort ? 1 : -1
       const field = query.sortBy ?? 'createdAt'
       if (field === 'orderStatus' || field === 'purchaseStatus') {
         const stages: readonly (string | null)[] = field === 'orderStatus'
-          ? ['unpaid', 'paid', 'approved'] : ['unpurchased', 'partial', 'in_progress', 'purchased', 'shipped', 'received']
+          ? ['cancelled', 'unpaid', 'paid'] : ['unpurchased', 'partial', 'in_progress', 'purchased', 'shipped', 'received']
         const left = stages.indexOf(a[field]), right = stages.indexOf(b[field])
         // Unknown facts remain last in either direction, never a business stage.
         if (left < 0 || right < 0) {

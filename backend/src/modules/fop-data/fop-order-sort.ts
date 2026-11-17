@@ -1,5 +1,6 @@
+import { getTaskStatus } from './workbench-status'
 import { completedAt } from './completed-orders'
-import { getDispatchTaskStatus, getDispatchCompletionStatus } from './workbench-status'
+import { getDispatchCompletionStatus } from './workbench-status'
 import type { FulfillmentOrderFiltersDto, FulfillmentSortBy } from '../users/dto/workbench.dto'
 import type { FopOrder } from './fop-data.types'
 import { normalizeBusinessTimestamp } from './fop-business-time'
@@ -49,7 +50,7 @@ export function fulfillmentSortField<T extends string>(query: { sortBy?: T; comp
 function statusRank(order: FopOrder, field: Exclude<FulfillmentSortBy, 'completedAt' | 'paidAt' | 'consumerPaidAt' | 'reviewedAt'>): number {
   if (field === 'dispatchDocumentStatus') {
     const ranks: Record<string, number> = { dispatch_missing: 0, dispatch_draft: 1, dispatch_submitted: 2, dispatch_approved: 3, dispatch_pending: 1, dispatch_tracking: 2, dispatch_updating: 3, dispatch_cancelled: 4, dispatch_synced: 5 }
-    return ranks[order.dispatchTaskStatus ?? getDispatchTaskStatus(order.dispatchDocuments, order.fulfillmentProgress.shopifySync)] ?? Infinity
+    return ranks[getTaskStatus(order, 'dispatch')] ?? Infinity
   }
   const progress = order.fulfillmentProgress
   if (field === 'stockReadiness') return ({ incomplete: 0, ready: 1, unknown: Infinity })[progress.stockReadiness]
@@ -80,7 +81,9 @@ export function compareFulfillmentOrders(left: FopOrder, right: FopOrder, query:
   const field = fulfillmentSortField(query)
   if (field === 'completedAt') return compareKnown(completedAt(left, query.queue) ? Date.parse(completedAt(left, query.queue)!) : Infinity, completedAt(right, query.queue) ? Date.parse(completedAt(right, query.queue)!) : Infinity, direction) || left.id.localeCompare(right.id)
   if (field === 'paidAt') return comparePaymentTime(left, right, direction)
-  if (field === 'consumerPaidAt') return compareConsumerPaymentTime(left, right, direction)
+  if (field === 'consumerPaidAt') return query.queue === 'unpaid'
+    ? compareConsumerPaymentTime({id:left.id,consumerPaidAt:left.sourceOrderPaidAt},{id:right.id,consumerPaidAt:right.sourceOrderPaidAt},direction)
+    : compareConsumerPaymentTime(left, right, direction)
   if (field === 'reviewedAt') {
     const leftTime = field === 'reviewedAt' ? normalizeBusinessTimestamp(left.reviewedAt) : normalizeConsumerPaidAt(left.consumerPaidAt)
     const rightTime = field === 'reviewedAt' ? normalizeBusinessTimestamp(right.reviewedAt) : normalizeConsumerPaidAt(right.consumerPaidAt)

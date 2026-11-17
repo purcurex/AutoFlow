@@ -1,16 +1,11 @@
 <script setup lang="ts">
+import WorkbenchAnalytics from '@/components/charts/WorkbenchAnalytics.vue'
 import { completedNames } from '@/utils/completed-orders'
 import { computed, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ArrowUpRight, BriefcaseBusiness, Boxes, PackageCheck, Send, Warehouse } from 'lucide-vue-next'
 import { AppLayout } from '@/components/layout'
-import SalesOverview from './DashboardView.vue'
-import OrderVolumeOrdersView from './OrderVolumeOrdersView.vue'
-import OrderVolumeAnalysis from '@/components/order-volume/OrderVolumeAnalysis.vue'
-import FopReceiptsView from './FopReceiptsView.vue'
-import FopFreightView from './FopFreightView.vue'
-import SalesPerformanceView from './SalesPerformanceView.vue'
 import FopOrdersView from './FopOrdersView.vue'
 import StockOrdersView from './StockOrdersView.vue'
 import ReceiptNoticesView from './ReceiptNoticesView.vue'
@@ -30,16 +25,13 @@ const router = useRouter()
 const { locale } = useI18n()
 const zh = computed(() => String(locale.value).startsWith('zh'))
 const text = (cn: string, en: string) => zh.value ? cn : en
-const { roles, access: workbenchAccess } = useWorkbenchAccess()
+const { roles, isAdmin, access: workbenchAccess } = useWorkbenchAccess()
 // Older backends omit the display hint; all data endpoints still enforce access.
-const chartVisible = (id: import('@/api/fop-chart-access').ChartId) => workbenchAccess?.value?.chartVisibility === undefined || workbenchAccess.value.chartVisibility[id] === true
+const chartVisible = (id: import('@/api/fop-chart-access').ChartId) => isAdmin.value && (workbenchAccess?.value?.chartVisibility === undefined || workbenchAccess.value.chartVisibility[id] === true)
 const analyticsAllowed = computed(() => {
   const page = choice.value
   if (page === 'performance' || page === 'overview') return chartVisible('sales_performance')
-  if (page === 'freight') return chartVisible('freight')
   if (page === 'receipts') return chartVisible('salesperson_receipts')
-  if (page === 'order-volume') return chartVisible('order_volume')
-  if (page === 'order-analysis') return chartVisible('order_volume') || chartVisible('customer_orders')
   return true
 })
 const dataRevision = ref(0)
@@ -65,13 +57,13 @@ watch(() => route.fullPath, path => {
 })
 const role = computed(() => route.name === 'Dashboard' ? 'sales' : isWorkbenchRole(route.params.role) ? route.params.role : undefined)
 const allowed = computed(() => role.value && roles.value.includes(role.value))
-const choice = computed(() => route.name === 'RoleWorkbenchFreight' ? 'freight' : route.name === 'RoleWorkbenchReceipts' ? 'receipts' : route.query.queue ?? (role.value ? defaultWorkbenchQueue(role.value) : undefined))
+const choice = computed(() => route.name === 'RoleWorkbenchReceipts' ? 'receipts' : route.query.queue ?? (role.value ? defaultWorkbenchQueue(role.value) : undefined))
 const validChoice = computed(() => role.value && (choice.value === 'completed' || choice.value === 'rma' && role.value === 'sales' || choice.value === 'purchase_returns' && ['procurement', 'warehouse'].includes(role.value) || role.value === 'sales' && choice.value === 'overview' || workbenchQueues[role.value].some(queue => queue === choice.value)))
 const icons = { sales: BriefcaseBusiness, procurement: Boxes, allocation: PackageCheck, dispatch: Send, warehouse: Warehouse }
 const departmentQuery = computed(() => typeof route.query.departmentId === 'string' && route.query.departmentId ? { departmentId: route.query.departmentId } : {})
 const todoScopeQuery = computed(() => ({ ...departmentQuery.value, ...(typeof route.query.ownerId === 'string' && route.query.ownerId ? { ownerId: route.query.ownerId } : {}) }))
 function roleLink(value: WorkbenchRole) { return { name: 'RoleWorkbench', params: { role: value }, query: todoScopeQuery.value } }
-function queueLink(value: string) { return { name: 'RoleWorkbench', params: { role: role.value }, query: { ...(role.value === 'procurement' && ['fulfillment', 'purchase'].includes(String(route.query.view)) ? { view: route.query.view } : {}), ...(['stock', 'stock_procurement', 'completed', 'purchase_returns', 'rma', 'receipt_notices'].includes(value) || role.value && workbenchQueues[role.value].some(queue => queue === value) ? todoScopeQuery.value : departmentQuery.value), queue: value, ...(value === 'completed' ? { timeRange: '1w' } : {}) } } }
+function queueLink(value: string) { return { name: 'RoleWorkbench', params: { role: role.value }, query: { ...(role.value === 'procurement' && ['fulfillment', 'purchase'].includes(String(route.query.view)) ? { view: route.query.view } : {}), ...(['stock', 'stock_procurement', 'completed', 'purchase_returns', 'rma', 'receipt_notices'].includes(value) || role.value && workbenchQueues[role.value].some(queue => queue === value) ? todoScopeQuery.value : departmentQuery.value), queue: value, ...(['completed', 'unpaid', 'stock'].includes(value) ? { timeRange: '1m' } : {}) } } }
 </script>
 
 <template>
@@ -91,22 +83,15 @@ function queueLink(value: string) { return { name: 'RoleWorkbench', params: { ro
           </template>
           <RouterLink v-if="role === 'procurement' || role === 'warehouse'" :to="queueLink('purchase_returns')" :class="{ active: choice === 'purchase_returns' }">{{ text('采购退货清单', 'Purchase returns') }}</RouterLink>
           <RouterLink :to="queueLink('completed')" :class="{ active: choice === 'completed' }">{{ completedNames[role][zh ? 0 : 1] }}</RouterLink>
-          <RouterLink v-if="role === 'sales' && chartVisible('sales_performance')" :to="queueLink('performance')" :class="{ active: choice === 'performance' }">{{ text('个人收款与毛利', 'Personal receipts and profit') }}</RouterLink>
-          <RouterLink v-if="chartVisible('order_volume') || chartVisible('customer_orders')" :to="queueLink('order-analysis')" :class="{ active: choice === 'order-analysis' || choice === 'order-volume' || choice === 'receipts' }">{{ text('订单分析', 'Order analysis') }}</RouterLink>
-          <RouterLink v-if="chartVisible('freight')" :to="queueLink('freight')" :class="{ active: choice === 'freight' }">{{ text('物流运费', 'Actual freight') }}</RouterLink>
+          <RouterLink v-if="role === 'sales' && chartVisible('sales_performance')" :to="queueLink('performance')" :class="{ active: choice === 'performance' }">{{ text('业绩收入与毛利', 'Revenue and profit') }}</RouterLink>
           <RouterLink v-if="role === 'sales' && chartVisible('sales_performance')" :to="queueLink('overview')" :class="{ active: choice === 'overview' }">{{ text('客户开发概览', 'Prospecting overview') }}</RouterLink>
         </nav>
         <div v-if="!analyticsAllowed" class="access-message" role="alert">{{ text('暂无此功能权限，请选择其他工作台功能。', 'This feature is not available for your account.') }}</div>
-        <SalesOverview v-else-if="choice === 'overview' && role === 'sales'" />
-        <SalesPerformanceView v-else-if="choice === 'performance' && role === 'sales'" :key="dataRevision" />
+        <WorkbenchAnalytics v-else-if="['overview','performance','receipts'].includes(String(choice))" :key="String(choice)" :page="String(choice)" />
         <StockOrdersView v-else-if="choice === 'stock' && role === 'sales' || choice === 'stock_procurement' && role === 'procurement'" :key="`${dataRevision}-${choice}`" :procurement="role === 'procurement'" @filter-labels="updateFilterLabels" />
         <RmaOrdersView v-else-if="choice === 'rma' && role === 'sales'" :key="dataRevision" @filter-labels="updateFilterLabels" />
         <ReceiptNoticesView v-else-if="choice === 'receipt_notices' && role === 'warehouse'" :key="dataRevision" @filter-labels="updateFilterLabels" />
         <PurchaseReturnsView v-else-if="choice === 'purchase_returns' && (role === 'procurement' || role === 'warehouse')" :key="`${role}-${dataRevision}`" @filter-labels="updateFilterLabels" />
-        <FopFreightView v-else-if="choice === 'freight'" :key="dataRevision" />
-        <FopReceiptsView v-else-if="choice === 'receipts'" :key="dataRevision" />
-        <OrderVolumeOrdersView v-else-if="choice === 'order-volume'" :key="dataRevision" />
-        <div v-else-if="choice === 'order-analysis'"><OrderVolumeAnalysis v-if="chartVisible('order_volume')" :revision="dataRevision" /><OrderVolumeAnalysis v-if="chartVisible('customer_orders')" customer :revision="dataRevision" /></div>
         <ProcurementOrdersView :key="dataRevision" :search-recovery="searchRecovery" :recover-page="recoverOrderPage" @clear-search-recovery="clearSearchRecovery" v-else-if="validChoice && role === 'procurement' && (choice === 'procurement' || choice === 'procurement_shipping' || choice === 'completed')" @filter-labels="updateFilterLabels" />
         <FopOrdersView @filter-labels="updateFilterLabels" v-else-if="validChoice" :key="dataRevision" :search-recovery="searchRecovery" :recover-page="recoverOrderPage" @clear-search-recovery="clearSearchRecovery" />
         <div v-else class="access-message" role="alert">{{ text('该清单不属于当前工作台，请选择上方功能。', 'This list does not belong to the selected workbench. Choose a function above.') }}</div>

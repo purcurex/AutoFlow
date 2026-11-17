@@ -1,5 +1,5 @@
 import { BadRequestException } from '@nestjs/common'
-import { businessDate, BUSINESS_TIME_ZONE, DAY_MS, validBusinessDay } from './fop-business-time'
+import { BUSINESS_START_DATE, FIRST_BUSINESS_YEAR, businessDate, BUSINESS_TIME_ZONE, DAY_MS, validBusinessDay } from './fop-business-time'
 import { FOP_CARRIERS } from './fop-carriers'
 import { moneyToCents } from './fop-order-totals'
 import { FopFreight, FreightDetailsQuery, FreightPeriod, FreightQuery, FreightSeries, FreightValue } from './fop-freight.types'
@@ -57,12 +57,15 @@ const time = (date: string) => Date.parse(`${date}T00:00:00Z`)
 function monthRange(year: number, month: number): [string, string] { return [iso(Date.UTC(year, month, 1)), iso(Date.UTC(year, month + 1, 0))] }
 export function freightPeriods(query: FreightQuery, now = new Date()): { query: FreightQuery; periods: FreightPeriod[] } {
   const today = businessDate(now), currentYear = Number(today.slice(0, 4))
-  if (!['month', 'week', 'year'].includes(query.grain) || !Number.isInteger(query.year) || query.year < 2020 || query.year > currentYear
+  if (!['month', 'week', 'year'].includes(query.grain) || !Number.isInteger(query.year) || query.year < FIRST_BUSINESS_YEAR || query.year > currentYear
     || !['ALL', 'HZ', 'SZ'].includes(query.warehouse) || (query.carrierCode && !FOP_CARRIERS.some(c => c.id === query.carrierCode))
     || (query.weekOf !== undefined && query.grain !== 'week')) throw new BadRequestException('Invalid freight query')
   const normalized = { ...query }, periods: FreightPeriod[] = []
   const push = (id: string, label: string, range: [string, string], previous: [string, string]) => {
-    const [from, end] = range
+    const [start, end] = range
+    if (end < BUSINESS_START_DATE) return
+    const from = start < BUSINESS_START_DATE ? BUSINESS_START_DATE : start
+    if (start !== from) { id = from; label = `${from.slice(5)} — ${end.slice(5)}` }
     periods.push({ id, label, from, to: end > today ? today : end, partial: end > today || today === end, previousFrom: previous[0], previousTo: previous[1] })
   }
   if (query.grain === 'month') {
@@ -81,13 +84,13 @@ export function freightPeriods(query: FreightQuery, now = new Date()): { query: 
       push(iso(start), `${iso(start).slice(5)} — ${iso(start + 6 * DAY_MS).slice(5)}`, [iso(start), iso(start + 6 * DAY_MS)], [iso(start - 7 * DAY_MS), iso(start - DAY_MS)])
     }
   } else {
-    for (let year = Math.max(2020, query.year - 4); year <= query.year; year++) push(String(year), String(year), [`${year}-01-01`, `${year}-12-31`], [`${year - 1}-01-01`, `${year - 1}-12-31`])
+    for (let year = Math.max(FIRST_BUSINESS_YEAR, query.year - 4); year <= query.year; year++) push(String(year), String(year), [`${year}-01-01`, `${year}-12-31`], [`${year - 1}-01-01`, `${year - 1}-12-31`])
   }
   return { query: normalized, periods }
 }
 function eligible(records: readonly FopFreight[], query: FreightQuery, now: Date) {
   return records.filter(r => r.reviewStatus === 'approved' && r.costStatus === 'confirmed' && r.amount > 0 && r.originalAmount > 0 && r.confirmedAt && businessDate(r.confirmedAt)
-    && Date.parse(r.confirmedAt) <= now.getTime() && (query.warehouse === 'ALL' || r.warehouseCode === query.warehouse) && (!query.carrierCode || r.carrierCode === query.carrierCode))
+    && businessDate(r.confirmedAt) >= BUSINESS_START_DATE && Date.parse(r.confirmedAt) <= now.getTime() && (query.warehouse === 'ALL' || r.warehouseCode === query.warehouse) && (!query.carrierCode || r.carrierCode === query.carrierCode))
 }
 function sum(values: number[]) {
   let cents = 0

@@ -30,9 +30,9 @@ describe('sales performance period contributions', () => {
   })
   it.each([{ from: '2026-02-30' }, { from: '2019-12-31' }, { to: '2026-03-16' }, { from: '2026-02-01' }, { grain: 'year' }, { from: '2024-01-01', to: '2025-01-01' }])('rejects invalid or oversized ranges %j', extra => expect(() => performancePeriods({ ...query, ...extra } as PerformanceQuery, now)).toThrow())
   it('counts actual receipts by source without recreating stock product receipts on fulfillment', () => {
-    const rows = [receipt('fulfillment', { amount: 60, orderAmount: 1000 }), receipt('stock', { sourceType: 'full_payment_stock', carrierCode: null, paidAt: '2025-12-10T00:00:00Z', amount: 1000 }), receipt('deposit', { sourceType: 'deposit_stock', carrierCode: null, amount: 9000 }), receipt('pending', { receiptReviewStatus: 'pending' })]
+    const rows = [receipt('fulfillment', { amount: 60, orderAmount: 1000 }), receipt('stock', { sourceType: 'full_payment_stock', carrierCode: null, paidAt: '2026-02-10T00:00:00Z', amount: 1000 }), receipt('deposit', { sourceType: 'deposit_stock', carrierCode: null, amount: 9000 }), receipt('pending', { receiptReviewStatus: 'pending' })]
     expect(aggregateSalesPerformance(rows, [], query, now).totals).toMatchObject({ orderAmount: 60, stockAmount: 0, collectionsAmount: 60, receiptCount: 1 })
-    expect(aggregateSalesPerformance(rows, [], { ...query, from: '2025-12-01' }, now).totals).toMatchObject({ orderAmount: 60, stockAmount: 1000, collectionsAmount: 1060, receiptCount: 2 })
+    expect(aggregateSalesPerformance(rows, [], { ...query, to: '2026-02-28' }, now).totals).toMatchObject({ orderAmount: 60, stockAmount: 1000, collectionsAmount: 1060, receiptCount: 2 })
   })
   it('rejects non-USD and subcent receipts and sums cents exactly', () => {
     expect(() => aggregateSalesPerformance([receipt('fx', { currency: 'CNY' })], [], query, now)).toThrow()

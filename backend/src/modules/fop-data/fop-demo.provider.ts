@@ -1,4 +1,5 @@
 import { demoStockSupplierFollowUps } from './stock-supplier-follow-up'
+import { marketingDepartments } from '../users/marketing-departments'
 import { demoRmaCases } from './rma-orders-demo'
 import { demoPurchaseReturns } from './purchase-returns-demo'
 import { demoShipmentOrders } from './supplier-shipment-demo'
@@ -25,18 +26,14 @@ interface DemoWorkspace {
 }
 interface WorkspaceReader { getWorkspace(ownerUserId: string): Promise<DemoWorkspace> }
 
-function salesDepartmentNodeFor(workspace: DemoWorkspace, departmentId: string, directOnly = false): { node: DemoWorkspace['nodes'][number]; code: SalesDepartmentCode } | undefined {
-  const nodes = new Map(workspace.nodes.map(node => [node.id, node]))
-  let node = nodes.get(departmentId)
-  const seen = new Set<string>()
-  while (node && node.kind !== 'organization' && !seen.has(node.id)) {
-    const department = SALES_DEPARTMENTS.find(item => item.name === node!.name)
-    const parent = nodes.get(node.parentId ?? '')
-    if (department && parent?.name === '营销中心' && nodes.get(parent.parentId ?? '')?.kind === 'organization') return { node, code: department.id }
-    if (directOnly) return undefined
-    seen.add(node.id)
-    node = node.parentId ? nodes.get(node.parentId) : undefined
-  }
+function salesDepartmentNodeFor(workspace: DemoWorkspace, departmentId: string): { node: DemoWorkspace['nodes'][number]; code: SalesDepartmentCode } | undefined {
+  const marketing = marketingDepartments(workspace.nodes.filter(node => node.kind === 'department'))
+  if (!marketing.departmentIds.includes(departmentId)) return undefined
+  const root = workspace.nodes.find(node => node.id === marketing.rootId)
+  if (!workspace.nodes.some(node => node.id === root?.parentId && node.kind === 'organization' && node.parentId === null)) return undefined
+  const node = workspace.nodes.find(node => node.id === departmentId)
+  const department = SALES_DEPARTMENTS.find(item => item.name === node?.name)
+  return node && department ? { node, code: department.id } : undefined
 }
 
 function salesDepartmentFor(workspace: DemoWorkspace, departmentId: string): SalesDepartmentCode | undefined {
@@ -134,7 +131,7 @@ export class DemoFopDataProvider extends FopDataProvider {
     this.assertIdentity(identity)
     const workspace = await this.organizations.getWorkspace(identity.userId)
     const departments = SALES_DEPARTMENTS.flatMap(d => {
-      const node = workspace.nodes.find(node => node.kind === 'department' && node.name === d.name && salesDepartmentNodeFor(workspace, node.id, true)?.code === d.id)
+      const node = workspace.nodes.find(node => node.kind === 'department' && node.name === d.name && salesDepartmentNodeFor(workspace, node.id)?.code === d.id)
       return node ? [{ code: d.id, departmentId: node.id, departmentPathIds: departmentPath(workspace, node.id) }] : []
     })
     const organizationSummaries = (['registrations', 'department_receipts', 'order_volume'] as const).map(chartId => ({ chartId, departments }))
@@ -290,7 +287,7 @@ export class DemoFopDataProvider extends FopDataProvider {
   private async orders(identity: Readonly<FopIdentity>): Promise<FopOrderCandidate[]> {
     const workspace = await this.organizations.getWorkspace(identity.userId)
     // Customers belong to salespeople. Collaboration roles process those orders through their business scope.
-    const employees = workspace.employees.filter(employee => employee.workbenchRoles.includes('sales') && employee.salesOwner !== false)
+    const employees = workspace.employees.filter(employee => employee.workbenchRoles.includes('sales') && employee.salesOwner !== false && salesDepartmentNodeFor(workspace, employee.departmentId))
       .sort((a, b) => a.code.localeCompare(b.code) || a.id.localeCompare(b.id))
     if (!employees.length) return []
     const nodes = new Map(workspace.nodes.map(node => [node.id, node]))
@@ -303,7 +300,7 @@ export class DemoFopDataProvider extends FopDataProvider {
     const make = (index: number, createdAt: number, completed: boolean, stage = index % 6, awaitingPayment = false) => {
       const owner = employees[index % employees.length]
       // Report by the direct business department; retain the full employee ancestry below for permissions.
-      const department = salesDepartmentNodeFor(workspace, owner.departmentId)?.node ?? nodes.get(owner.departmentId)
+      const department = salesDepartmentNodeFor(workspace, owner.departmentId)?.node
       if (!department) return
       const salesDepartmentCode = owner.workbenchRoles.includes('sales') ? salesDepartmentFor(workspace, owner.departmentId) : undefined
       let organization = department
@@ -415,7 +412,7 @@ export class DemoFopDataProvider extends FopDataProvider {
         allocationApprovedAt: completed || stage === 4 ? new Date(createdAt + 120 * 60_000).toISOString() : null,
         outboundCompletedAt: completed ? new Date(createdAt + 180 * 60_000).toISOString() : null,
         reviewedAt: completed || stage !== 0 ? new Date(createdAt + 30 * 60_000).toISOString() : null,
-        salesperson: owner.name, consumerPaidAt: paid ? new Date(createdAt + 15 * 60_000).toISOString() : null, createdAt: new Date(createdAt).toISOString(), paidAt: paid ? new Date(createdAt + 15 * 60_000).toISOString() : null,
+        salesperson: owner.name, sourceOrderPaidAt: new Date(createdAt - 30 * 60_000).toISOString(), consumerPaidAt: paid ? new Date(createdAt + 15 * 60_000).toISOString() : null, createdAt: new Date(createdAt).toISOString(), paidAt: paid ? new Date(createdAt + 15 * 60_000).toISOString() : null,
         cancelled: false, exception: (stage === 5 || index % 13 === 0) ? { type: FOP_EXCEPTION_TYPES[Math.floor(index / 6) % 5], reason: null, hours: 3 + index % 47 } : null,
       })
     }

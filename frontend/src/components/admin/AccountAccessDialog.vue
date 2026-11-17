@@ -19,7 +19,7 @@ const scope = ref<BusinessScope>({ ...(props.account.businessScope ?? { role: 's
 const benches = ref([...props.account.workbenchRoles])
 const advanced = ref(false)
 const scoped = computed(() => ['department_manager', 'salesperson'].includes(scope.value.role))
-const input = computed(() => ({ accountRole: role.value, businessScope: { role: scope.value.role, departmentId: scope.value.departmentId?.trim() || null, employeeId: scope.value.employeeId?.trim() || null }, workbenchRoles: [...benches.value] }))
+const input = computed(() => ({ accountRole: role.value, businessScope: { role: scope.value.role, departmentId: scope.value.departmentId?.trim() || null, employeeId: scope.value.employeeId?.trim() || null }, workbenchRoles: ['admin','salesperson'].includes(scope.value.role) ? [...workbenchRoles] : [...benches.value] }))
 const original = JSON.stringify(input.value)
 const changed = computed(() => JSON.stringify(input.value) !== original)
 const templateChanged = computed(() => role.value !== getAccountRole(props.account) || props.account.businessScope?.role === 'none' && scope.value.role !== 'none')
@@ -80,7 +80,7 @@ onBeforeUnmount(() => { active = false; off(); dialog.value?.close?.(); if (open
         <details :open="advanced" @toggle="advanced = ($event.target as HTMLDetailsElement).open"><summary>{{ text('高级配置', 'Advanced settings') }}</summary><div class="advanced-content">
           <div class="assignment-fields"><label class="access-field">{{ text('业务部门 ID', 'Business department ID') }}<input v-model="scope.departmentId" class="input" maxlength="128" :disabled="busy" aria-label="业务部门 ID" /></label><label class="access-field">{{ text('业务员 ID', 'Salesperson ID') }}<input v-model="scope.employeeId" class="input" maxlength="128" :disabled="busy" aria-label="业务员 ID" /></label></div>
           <div class="access-section-title"><h3>{{ text('工作台访问', 'Workbench access') }}</h3><InfoTip>{{ text('ID 使用当前组织目录或已映射的 FOP 内码。调整不修改员工档案。', 'Use directory IDs or mapped FOP IDs. Changes do not edit employee profiles.') }}</InfoTip></div>
-          <div class="bench-options"><label v-for="bench in workbenchRoles" :key="bench"><input v-if="scope.role === 'admin'" type="checkbox" checked disabled :aria-label="text(...workbenchNames[bench])" /><input v-else v-model="benches" type="checkbox" :value="bench" :disabled="busy" :aria-label="text(...workbenchNames[bench])" />{{ text(...workbenchNames[bench]) }}</label></div>
+          <div class="bench-options"><label v-for="bench in workbenchRoles" :key="bench"><input v-if="['admin','salesperson'].includes(scope.role)" type="checkbox" checked disabled :aria-label="text(...workbenchNames[bench])" /><input v-else v-model="benches" type="checkbox" :value="bench" :disabled="busy" :aria-label="text(...workbenchNames[bench])" />{{ text(...workbenchNames[bench]) }}</label></div>
         </div></details>
       </div>
       <footer class="access-footer"><button type="button" class="btn btn-secondary" :disabled="busy" @click="emit('close')">{{ text('取消', 'Cancel') }}</button><button type="submit" data-save-access class="btn workbench-primary" :disabled="busy || !changed">{{ busy ? text('保存中…', 'Saving…') : text('保存权限', 'Save changes') }}</button></footer>

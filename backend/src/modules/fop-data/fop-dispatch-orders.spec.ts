@@ -64,10 +64,15 @@ describe('待履约真实分页接口', () => {
     await expect(provider.queryOrders(identity, grant, manager, { queue: 'dispatch', page: 1, pageSize: 10 })).resolves.toMatchObject({ total: 1 })
     await expect(provider.queryOrders(identity, grant, { ...manager, departmentId: '999' }, { queue: 'dispatch', page: 1, pageSize: 10 })).rejects.toThrow()
   })
-  it('将状态、仓库、部门和排序完整交给金蝶分页前执行', async () => {
+  it('将仓库、部门和排序完整交给诊断分页入口执行', async () => {
     const { service, request, user } = setup('dispatch_missing')
-    await service.getOrders(user.id, { queue: 'dispatch', page: 1, pageSize: 10, departmentId: '400', warehouseCode: 'HZ', taskStatus: 'dispatch_missing', sortBy: 'dispatchDocumentStatus', sortOrder: 'desc' })
-    expect(JSON.parse(String(request.mock.calls[0][1]?.body)).query).toMatchObject({ departmentId: '400', warehouseIds: ['600'], taskStatus: 'dispatch_missing', sortBy: 'dispatchDocumentStatus', sortOrder: 'desc' })
+    await service.getOrders(user.id, { queue: 'dispatch', page: 1, pageSize: 10, departmentId: '400', warehouseCode: 'HZ', sortBy: 'dispatchDocumentStatus', sortOrder: 'desc' })
+    expect(JSON.parse(String(request.mock.calls[0][1]?.body)).query).toMatchObject({ departmentId: '400', warehouseIds: ['600'], sortBy: 'dispatchDocumentStatus', sortOrder: 'desc' })
+  })
+  it.each(['dispatch_missing', 'dispatch_draft', 'dispatch_submitted', 'dispatch_approved'] as const)('旧发运单审核阶段%s不能作为待履约状态筛选', async taskStatus => {
+    const { service, user, request } = setup(taskStatus)
+    await expect(service.getOrders(user.id, { queue: 'dispatch', page: 1, pageSize: 10, taskStatus })).rejects.toMatchObject({ response: { code: 'fop_feature_not_configured' } })
+    expect(request).not.toHaveBeenCalled()
   })
   it('未发布交付状态筛选时明确拒绝，不能沿用旧审核状态代替', async () => {
     const {service,user,request}=setup('dispatch_approved')

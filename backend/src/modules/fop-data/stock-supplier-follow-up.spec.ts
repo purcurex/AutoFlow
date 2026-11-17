@@ -44,7 +44,7 @@ it.each(['unpurchased', 'partial', 'in_progress', 'shipped', 'received'] as cons
 it('rejects foreign stock ownership and missing procurement access', async () => {
   provider.orders[0].owner.id = 'other'
   await expect(list()).rejects.toMatchObject({ status: 404 })
-  provider.orders[0].owner.id = 'e1'; user.workbenchRoles = ['sales']
+  provider.orders[0].owner.id = 'e1'; user.businessRole = 'department_manager'; user.workbenchRoles = ['sales']
   await expect(list()).rejects.toMatchObject({ status: 403 })
 })
 it('rechecks purchase grants and stock shipment state after fetching contacts', async () => {

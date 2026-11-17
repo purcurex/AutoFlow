@@ -4,6 +4,42 @@ import { ConfigService } from '@nestjs/config'
 
 const req = { user: { userId: 'account', sessionVersion: 2 } } as any
 describe('workbench query routing', () => {
+  it('routes every ordinary list, detail and export locally across all five workbenches', async () => {
+    const upstream = jest.fn(() => { throw new Error('ordinary query reached FOP') })
+    const data = new Proxy({}, { get: () => upstream })
+    const methods = ['getOrders', 'getStockOrders', 'getRmaOrders', 'getPurchaseReturns', 'getPurchaseGroups', 'getPurchaseGroupDetails', 'getReceiptNotices',
+      'exportOrders', 'exportStockOrders', 'exportRmaOrders', 'exportPurchaseReturns', 'exportPurchaseGroups']
+    const local: any = { enabled: true, mock: false }
+    for (const method of methods) local[method] = jest.fn(async () => method.startsWith('export') ? Buffer.from('local export') : { source: 'local' })
+    const controller = new FulfillmentOrdersController(data as any, {} as any, local)
+    for (const queue of ['unpaid', 'review', 'dispatch', 'procurement', 'procurement_shipping', 'allocation', 'allocation_review', 'shipping', 'exceptions']) {
+      const query = { queue, page: 1, pageSize: 50 }
+      expect(await controller.getOrders(req, query as any)).toEqual({ source: 'local' })
+      expect(local.getOrders).toHaveBeenLastCalledWith('account', query)
+    }
+    for (const method of methods.filter(name => name !== 'getOrders' && name !== 'getPurchaseGroupDetails')) {
+      await (controller as any)[method](req, { mode: 'filtered' })
+      expect(local[method]).toHaveBeenCalledWith('account', { mode: 'filtered' }, ...(method.startsWith('export') ? [2] : []))
+    }
+    await controller.getPurchaseGroupDetails(req, 'purchase-1', {} as any)
+    expect(local.getPurchaseGroupDetails).toHaveBeenCalledWith('account', 'purchase-1', {})
+    expect(upstream).not.toHaveBeenCalled()
+    local.getOrders.mockRejectedValueOnce(new Error('local unavailable'))
+    await expect(controller.getOrders(req, { queue: 'review', page: 1, pageSize: 50 })).rejects.toThrow('local unavailable')
+    expect(upstream).not.toHaveBeenCalled()
+  })
+  it('keeps audit preview and submission on the execution service without writing local business state', async () => {
+    const localAccess = jest.fn(() => { throw new Error('audit touched local query state') })
+    const local = new Proxy({}, { get: () => localAccess })
+    const approvals = { preview: jest.fn(async () => ({ source: 'fop' })), submit: jest.fn(async () => ({ source: 'fop' })) }
+    const controller = new FulfillmentOrdersController({} as any, approvals as any, local as any)
+    const preview = { queue: 'review', orderIds: ['o1'] }, submit = { queue: 'review', requestId: 'request-1', items: [] }
+    expect(await controller.previewApproval(req, preview as any)).toEqual({ source: 'fop' })
+    expect(await controller.submitApproval(req, submit as any)).toEqual({ source: 'fop' })
+    expect(approvals.preview).toHaveBeenCalledWith('account', preview, 2)
+    expect(approvals.submit).toHaveBeenCalledWith('account', submit, 2)
+    expect(localAccess).not.toHaveBeenCalled()
+  })
   it.each([undefined, { enabled: false }])('fails closed for missing/disabled local replica and never invokes historical list APIs', async local => {
     const old = jest.fn(() => { throw new Error('historical source accessed') })
     const controller = new FulfillmentOrdersController({ getOrders: old, getRmaOrders: old, getStockOrders: old, exportOrders: old } as any, {} as any, local as any)

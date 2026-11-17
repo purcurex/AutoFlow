@@ -1,0 +1,43 @@
+import { dashboardAnalyticsQuery } from './dashboard-analytics-query'
+const input = { batchId:'b', companyId:'100000', employeeIds:['70'], members:[], start:'2026-11-01',end:'2026-12-01',chartId:'order_volume',summaryOnly:false }
+it.each([undefined,'USD','CNY'])('keeps department performance in USD even with a legacy %s currency filter',currency=>{
+ const q=dashboardAnalyticsQuery({...input,chartId:'department_receipts',currency})
+ expect(q.params[7]).toBe('USD')
+ expect(q.sql.indexOf('currency=$8')).toBeLessThan(q.sql.indexOf('sum(order_amount)'))
+ expect(dashboardAnalyticsQuery({...input,chartId:'salesperson_receipts',currency:'CNY'}).params[7]).toBe('CNY')
+})
+it('aggregates source orders once, filters before grouping, and preserves numeric precision',()=>{
+ const q=dashboardAnalyticsQuery({...input,chartId:'department_receipts',warehouseCode:"WH'1",currency:'USD'})
+ expect(q.params).toContainEqual(["WH'1"]);expect(q.sql).not.toContain("WH'1")
+ expect(q.sql).toContain('paid_at >=');expect(q.sql).toContain('owner_employee_id = ANY')
+ expect(q.sql).toContain("WHEN f.entity_type='fulfillment' THEN 'hzkj_total_amount'");expect(q.sql).not.toContain('hzkj_curtotalamount')
+ expect(q.sql).toContain('sum(order_amount)::text');expect(q.sql).toContain("CASE WHEN count(*)=1");expect(q.sql).toContain("GROUP BY l->>'hzkj_src_order'")
+})
+it('does not expose salesperson or customer grouping for collaboration summaries',()=>{
+ const q=dashboardAnalyticsQuery({...input,chartId:'customer_orders',summaryOnly:true})
+ expect(q.sql).not.toContain("('customer',");expect(q.sql).not.toContain("('person',")
+})
+it('uses the confirmed USD contract only for missing fulfillment currency in the confirmed company',()=>{
+ const q=dashboardAnalyticsQuery({...input,chartId:'salesperson_receipts'})
+ expect(q.sql).toContain("f.company_id='100000' AND f.entity_type='fulfillment'")
+ expect(q.sql).toContain("IS NULL THEN 'USD'")
+ expect(q.sql).toContain("'amountsByCurrency'")
+ expect(q.sql).toContain("'person'")
+})
+it('counts customer creations through exact current UserField/account IDs, filtering before grouping',()=>{
+ const q=dashboardAnalyticsQuery({...input,chartId:'registrations',members:[{employeeId:'70',fopUserId:'700',name:'Alex'}]})
+ expect(q.sql).toContain('hz_fop_collected_customer_registrations')
+ expect(q.sql).toContain('m."fopUserId"=f.source_owner_user_id')
+ expect(q.sql).toContain('m."employeeId"=ANY($3::text[])')
+ expect(q.sql).toContain('created_at >= $4::timestamptz AND created_at < $5::timestamptz')
+ expect(q.sql).toContain('WHERE x."fopUserId"=m."fopUserId")=1')
+ expect(q.sql).not.toContain('paid_at >=')
+ expect(q.sql).not.toContain('hzkj_biz_user_name')
+ expect(q.sql).toContain("'registrationCount'")
+ expect(q.sql).toContain("('day',to_char(created_at AT TIME ZONE 'Asia/Shanghai','YYYY-MM-DD')")
+ expect(q.params[2]).toEqual(['70'])
+ const summary=dashboardAnalyticsQuery({...input,chartId:'registrations',summaryOnly:true})
+ expect(summary.sql).not.toContain("('person',")
+ expect(summary.sql).not.toContain("('month',")
+ expect(summary.sql).not.toContain("('day',")
+})

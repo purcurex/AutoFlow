@@ -42,14 +42,14 @@ it.each([['pending', true], ['partial', true], ['unknown', false], ['completed',
   expect(matchesQueue(row, 'allocation_review')).toBe(expected)
 })
 
-it('keeps paid unsynced work visible before sales approval and despite an independent exception', () => {
+it('keeps unapproved paid orders in sales review, not dispatch or procurement', () => {
   const row = order()
   row.reviewStatus = 'pending'
   row.exception = { type: 'allocation_exception', reason: null, hours: 2 }
-  expect(matchesQueue(row, 'dispatch')).toBe(true)
+  expect(matchesQueue(row, 'dispatch')).toBe(false)
   expect(matchesQueue(row, 'review')).toBe(true)
   expect(matchesQueue(row, 'exceptions')).toBe(true)
-  expect(matchesQueue(row, 'procurement_shipping')).toBe(true)
+  expect(matchesQueue(row, 'procurement_shipping')).toBe(false)
   expect(isStageCompleted(row, 'procurement')).toBe(false)
   row.paymentStatus = 'unpaid'
   expect(matchesQueue(row, 'dispatch')).toBe(false)
@@ -93,4 +93,30 @@ it('keeps native purchased refund follow-up when an old shipment projection says
   row.sourcePurchaseStatus='4'
   expect(matchesQueue(row,'procurement')).toBe(false)
   expect(isStageCompleted(row,'procurement')).toBe(true)
+})
+
+it.each(['refunded','voided','expired','unpaid'])('excludes source payment %s from unpaid only',sourcePaymentStatus=>{
+ expect(matchesQueue({...order(),paymentStatus:'unpaid',sourcePaymentStatus},'unpaid')).toBe(false)
+ expect(matchesQueue({...order(),paymentStatus:'paid',reviewStatus:'pending',sourcePaymentStatus},'review')).toBe(true)
+})
+it.each(['paid','pending','partially_refunded',null])('retains nonexcluded source payment %s',sourcePaymentStatus=>{
+ expect(matchesQueue({...order(),paymentStatus:'unpaid',sourcePaymentStatus},'unpaid')).toBe(true)
+})
+
+it.each(['paid','processing','fulfillment_cancelled','partial_fulfilled','fulfilled','cancelled'])('routes native %s exclusively between pending and fulfilled lists',state=>{
+ const row={...order(),reviewStatus:'approved',businessStatus:{order:state}} as unknown as FopOrder
+ expect(matchesQueue(row,'dispatch')).toBe(['paid','processing','fulfillment_cancelled'].includes(state))
+ expect(isStageCompleted(row,'dispatch')).toBe(['partial_fulfilled','fulfilled'].includes(state))
+})
+
+it('routes sync failures exclusively to dispatch exceptions until successful native writeback',()=>{
+ const row={...order(),reviewStatus:'approved',exception:null,businessStatus:{order:'paid'},dispatchDocuments:[{id:'d',number:'FY',status:'approved',association:{state:'verified'},deliveryStatus:'SYNC_FAILED',trackingNumbers:[{type:'full',number:'TRACK'}]}]} as unknown as FopOrder
+ expect(matchesQueue(row,'exceptions')).toBe(true)
+ expect(matchesQueue(row,'dispatch')).toBe(false)
+ expect(isStageCompleted(row,'dispatch')).toBe(false)
+ row.businessStatus!.order='fulfilled'
+ expect(isStageCompleted(row,'dispatch')).toBe(false)
+ row.dispatchDocuments![0].deliveryStatus='FULFILLED'
+ expect(matchesQueue(row,'exceptions')).toBe(false)
+ expect(isStageCompleted(row,'dispatch')).toBe(true)
 })

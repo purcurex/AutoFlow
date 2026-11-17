@@ -115,6 +115,9 @@ export interface FopAnalyticsData {
 }
 
 export interface FopOrderItem {
+  /** Verified FOP virtual-product classification; null/absent remains unknown. */
+  isVirtual?: boolean | null
+  purchaseState?: string
   id?: string
   parentId?: string
   rowType?: number
@@ -150,6 +153,7 @@ export interface ProcurementProgress {
 
 /** Effective linked dispatch documents; never inferred from customer payment or Shopify sync. */
 export interface DispatchDocument {
+  trackingNumbers?: LogisticsTrackingNumber[] | null
   deliveryStatus?: string | null
   id: string
   number: string
@@ -172,6 +176,9 @@ export interface LogisticsChannel { name: string | null; code: string | null }
 
 export interface LogisticsTrackingNumber { type: 'full' | 'first_mile' | 'last_mile'; number: string }
 export interface LogisticsInfo {
+  /** Authoritative tracking written back on this fulfillment package; no route inference. */
+  packageTrackingNumber?: string | null
+  packageNumber?: string | null
   /** Actual channel for this same package; never inferred by array position. */
   channelName?: string | null
   channelCode?: string | null
@@ -207,6 +214,10 @@ export interface FopOrder {
   reviewedAt?: string | null
   /** 履约订单收款日期 paidAt 的兼容展示字段；未知不以源单或阶段日期回退。 */
   consumerPaidAt?: string | null
+  /** C端付款时间：FOP源单付款时间hzkj_datetimefield；禁止回退到收款日期。 */
+  sourceOrderPaidAt?: string | null
+  /** FOP源单付款状态hzkj_sourcepayststus，与本公司收款状态独立。 */
+  sourcePaymentStatus?: string | null
   /** Earliest actual payment among effective paid purchase obligations still awaiting supplier shipment. */
   procurementPaidAt?: string | null
   /** Current existing allocation completion time; cleared when allocation becomes incomplete. */
@@ -244,6 +255,7 @@ export interface FopOrder {
   paymentStatus: 'paid' | 'unpaid' | 'refunded'
   reviewStatus: 'pending' | 'approved'
   /** FOP fulfillment header hzkj_purchase_status / hzkj_delivery_status; null means unknown. */
+  businessStatus?: { version: number; order: string; purchase: string; outbound: string; sourceShipment: string; missingFields: string[] }
   sourcePurchaseStatus?: '0' | '1' | '2' | '3' | '4' | null
   sourceOutboundStatus?: '0' | '1' | '2' | null
   procurementStatus: 'pending' | 'purchased' | 'not_required' | 'unknown'
@@ -340,7 +352,7 @@ export abstract class FopDataProvider {
   readonly queriedRma: boolean = false
   readonly supportsEmployeeBinding: boolean = false
   get usesLocalWorkbenchOrganization(): boolean { return false }
-  async administratorIdentity(): Promise<FopIdentity | null> { return null }
+  async administratorIdentity(_forApproval = false): Promise<FopIdentity | null> { return null }
   /** 管理员专用目录及验证入口；未接通的适配器不能伪造真实员工绑定。 */
   async listBindingEmployees(_cursor?: string, _scopeVersion?: string): Promise<FopBindingEmployeePage> {
     throw new FopIntegrationUnavailableError('fop_feature_not_configured')

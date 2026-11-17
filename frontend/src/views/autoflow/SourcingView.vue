@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import { currencyLabel } from '@/utils/currency'
 import {
   AlertTriangle,
   BadgeCheck,
@@ -477,7 +478,7 @@ function offerLink(offer: SourcingOffer) {
                 <p class="text-xs font-semibold text-slate-500">{{ t('sourcing.price') }}</p>
                 <p class="mt-1 font-bold text-slate-950 dark:text-white">
                   <template v-if="offerPriceParts(offer).minimum">
-                    {{ offerPriceParts(offer).currency }}
+                    {{ currencyLabel(offerPriceParts(offer).currency) }}
                     {{ offerPriceParts(offer).minimum }}
                     <template v-if="offerPriceParts(offer).maximum"> - {{ offerPriceParts(offer).maximum }}</template>
                   </template>

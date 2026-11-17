@@ -1,4 +1,9 @@
 <script setup lang="ts">
+import { warehouseName } from '@/utils/warehouse'
+import { workbenchTimeRange } from '@/utils/workbench-time-range'
+import { isVirtualProduct, physicalProductsFirst } from '@/utils/product-display'
+import ProductExpansionButton from '@/components/autoflow/ProductExpansionButton.vue'
+import CollapsibleProductLines from '@/components/autoflow/CollapsibleProductLines.vue'
 import { isUncollectedPage } from '@/utils/workbench-data'
 import { useWorkbenchDepartment } from '@/composables/useWorkbenchDepartment'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
@@ -25,11 +30,11 @@ const route = useRoute(), router = useRouter(), { locale } = useI18n()
 const zh = computed(() => String(locale.value).startsWith('zh')), t = (cn: string, en: string) => zh.value ? cn : en
 const scalar = (key: string) => typeof route.query[key] === 'string' ? route.query[key] as string : ''
 const completed = computed(() => route.query.queue === 'completed')
-const filters = computed<PurchaseFilters>(() => ({ ...(completed.value ? { completed: true, timeRange: (route.query.timeRange === '1m' || route.query.timeRange === '3m' ? route.query.timeRange : '1w') as '1w' | '1m' | '3m' } : {}), purchaseStage: !completed.value && route.query.queue !== 'procurement_shipping' && isPurchaseStage(route.query.purchaseStage) ? route.query.purchaseStage : undefined, queue: route.query.queue === 'procurement_shipping' ? 'procurement_shipping' : 'procurement', search: scalar('search') || undefined, departmentId: scalar('departmentId') || undefined, ownerId: scalar('ownerId') || undefined, warehouseCode: scalar('warehouseCode') || undefined, sortOrder: scalar('sortOrder') === 'desc' ? 'desc' : scalar('sortOrder') === 'asc' ? 'asc' : 'desc' }))
+const filters = computed<PurchaseFilters>(() => ({ ...(completed.value ? { completed: true, timeRange: workbenchTimeRange(route.query.timeRange) } : {}), purchaseStage: !completed.value && route.query.queue !== 'procurement_shipping' && isPurchaseStage(route.query.purchaseStage) ? route.query.purchaseStage : undefined, queue: route.query.queue === 'procurement_shipping' ? 'procurement_shipping' : 'procurement', search: scalar('search') || undefined, departmentId: scalar('departmentId') || undefined, ownerId: scalar('ownerId') || undefined, warehouseCode: scalar('warehouseCode') || undefined, sortOrder: scalar('sortOrder') === 'desc' ? 'desc' : scalar('sortOrder') === 'asc' ? 'asc' : 'desc' }))
 const query = computed<PurchaseQuery>(() => ({ ...filters.value, page: Math.max(1, Number(scalar('page')) || 1), pageSize: [20, 50, 100].includes(Number(scalar('pageSize'))) ? Number(scalar('pageSize')) : 50 }))
 const search = ref(scalar('search')), result = ref<PurchasePage>(), loading = ref(false), error = ref(''), now = ref(Date.now())
 const unavailable = computed(() => isUncollectedPage(result.value))
-const expanded = ref<string[]>([]), selected = ref<string[]>([]), details = ref<Record<string, PurchaseDetails>>({}), detailErrors = ref<Record<string, string>>({}), detailBusy = ref<Record<string, boolean>>({})
+const expanded = ref<string[]>([]), relatedExpanded = ref<string[]>([]), selected = ref<string[]>([]), details = ref<Record<string, PurchaseDetails>>({}), detailErrors = ref<Record<string, string>>({}), detailBusy = ref<Record<string, boolean>>({})
 const followUp = ref<{ orderId: string; orderNumber: string; purchaseOrderId: string }>(), exporting = ref(false), exportError = ref('')
 let generation = 0, disposed = false, sessionClosed = false, exportController: AbortController | undefined
 let listController: AbortController | undefined
@@ -37,10 +42,12 @@ const detailControllers = new Map<string, AbortController>()
 function cancelListReads() { listController?.abort(); for (const controller of detailControllers.values()) controller.abort(); detailControllers.clear() }
 const detailTickets = new Map<string, number>()
 const pages = computed(() => Math.max(1, Math.ceil((result.value?.total ?? 0) / query.value.pageSize)))
-const allExpanded = computed(() => !!result.value?.items.length && result.value.items.every(g => expanded.value.includes(g.id)))
+const canExpandGroup = (group: PurchaseGroup) => group.detailLineCount == null || group.detailLineCount >= 3 || !!group.previewLines?.length && group.previewLines.every(isVirtualProduct)
+const expandableGroups = computed(() => result.value?.items.filter(canExpandGroup) ?? [])
+const allExpanded = computed(() => !!expandableGroups.value.length && expandableGroups.value.every(g => expanded.value.includes(g.id)))
 const allSelected = computed(() => !!result.value?.items.length && result.value.items.every(g => selected.value.includes(g.id)))
 const date = (v: string | null) => v ? new Date(v).toLocaleString(zh.value ? 'zh-CN' : 'en-US', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'
-const number = (v: number | null) => v === null ? '—' : v.toLocaleString(zh.value ? 'zh-CN' : 'en-US', { maximumFractionDigits: 8 })
+const number = (v: number | null) => v == null || !Number.isFinite(v) ? '—' : v.toLocaleString(zh.value ? 'zh-CN' : 'en-US', { maximumFractionDigits: 8 })
 const payments = { paid: ['已付款', 'Paid'], unpaid: ['待付款', 'Unpaid'], partial: ['部分付款', 'Partly paid'], refunded: ['已退款待处理', 'Refunded'], unknown: ['付款待确认', 'Payment unknown'] }
 const shipments = { pending: ['供应商待发货', 'Awaiting shipment'], partial: ['供应商部分发货', 'Partly shipped'], shipped: ['供应商已发货', 'Shipped'], unknown: ['发货待确认', 'Shipment unknown'] }
 function update(values: Record<string, string | number | undefined>) { return router.replace({ query: { ...route.query, page: undefined, ...values } }) }
@@ -59,23 +66,29 @@ async function loadDetails(id: string, page = 1) {
     details.value[id] = next
     // Refresh the group header with the same snapshot as the expanded rows.
     if (result.value) result.value.items = result.value.items.map(g => g.id === id ? next.group : g)
+    if (!canExpandGroup(next.group)) expanded.value = expanded.value.filter(value => value !== id)
+    else if (relatedExpanded.value.includes(id)) {
+      relatedExpanded.value = relatedExpanded.value.filter(value => value !== id)
+      if (!expanded.value.includes(id)) expanded.value.push(id)
+    }
   } catch (cause) { if (!disposed && current === generation && isCurrentSession(session) && detailTickets.get(id) === ticket) detailErrors.value[id] = fopAccessError(cause, zh.value) }
   finally { if (!disposed && current === generation && detailTickets.get(id) === ticket) detailBusy.value[id] = false }
 }
-function toggle(id: string) { if (expanded.value.includes(id)) expanded.value = expanded.value.filter(x => x !== id); else { expanded.value.push(id); void loadDetails(id) } }
+function toggleRelated(id: string) { if (relatedExpanded.value.includes(id)) relatedExpanded.value = relatedExpanded.value.filter(value => value !== id); else { relatedExpanded.value.push(id); if (!details.value[id] && !detailBusy.value[id]) void loadDetails(id) } }
+function toggle(id: string) { if (expanded.value.includes(id)) expanded.value = expanded.value.filter(x => x !== id); else { expanded.value.push(id); if (!details.value[id] && !detailBusy.value[id]) void loadDetails(id) } }
 // Bound parallel detail reads when a page has up to 100 groups.
 async function loadExpanded(ids: string[], ticket = generation) {
   let cursor = 0
   await Promise.all(Array.from({ length: Math.min(4, ids.length) }, async () => {
     while (!disposed && !sessionClosed && ticket === generation && cursor < ids.length) {
       const id = ids[cursor++]!
-      if (expanded.value.includes(id)) await loadDetails(id)
+      if ((expanded.value.includes(id) || relatedExpanded.value.includes(id)) && !details.value[id] && !detailBusy.value[id]) await loadDetails(id)
     }
   }))
 }
 function toggleAll() {
   if (allExpanded.value) { expanded.value = []; return }
-  const ids = result.value?.items.map(g => g.id) ?? []
+  const ids = expandableGroups.value.map(g => g.id)
   const newIds = ids.filter(id => !expanded.value.includes(id))
   expanded.value = ids
   void loadExpanded(newIds)
@@ -83,10 +96,10 @@ function toggleAll() {
 function followPurchase(group: PurchaseGroup) {
   if (group.purchase) followUp.value = { orderId: group.id, orderNumber: group.purchase.number, purchaseOrderId: group.purchase.id }
 }
-function reloadReplica() { selected.value = []; expanded.value = []; exportController?.abort(); exporting.value = false; exportError.value = ''; void load() }
+function reloadReplica() { selected.value = []; expanded.value = []; relatedExpanded.value = []; exportController?.abort(); exporting.value = false; exportError.value = ''; void load() }
 async function load() {
   if (disposed || sessionClosed) return
-  const ticket = ++generation, session = captureSession(), prior = [...expanded.value]
+  const ticket = ++generation, session = captureSession(), prior = [...expanded.value], priorRelated = [...relatedExpanded.value]
   cancelListReads(); listController = new AbortController()
   now.value = Date.now(); loading.value = true; error.value = ''; result.value = undefined; details.value = {}; detailErrors.value = {}; detailBusy.value = {}; followUp.value = undefined
   try {
@@ -96,9 +109,10 @@ async function load() {
     if (query.value.page > lastPage) { await update({ page: lastPage }); return }
     result.value = next; emit('filter-labels', next.departments)
     selected.value = selected.value.filter(id => next.items.some(g => g.id === id))
-    expanded.value = prior.filter(id => next.items.some(g => g.id === id))
-    void loadExpanded([...expanded.value], ticket)
-  } catch (cause) { if (!disposed && ticket === generation && isCurrentSession(session)) { error.value = fopAccessError(cause, zh.value); selected.value = []; expanded.value = [] } }
+    expanded.value = prior.filter(id => next.items.some(g => g.id === id && canExpandGroup(g)))
+    relatedExpanded.value = priorRelated.filter(id => next.items.some(g => g.id === id && !canExpandGroup(g)))
+    void loadExpanded([...expanded.value, ...relatedExpanded.value], ticket)
+  } catch (cause) { if (!disposed && ticket === generation && isCurrentSession(session)) { error.value = fopAccessError(cause, zh.value); selected.value = []; expanded.value = []; relatedExpanded.value = [] } }
   finally { if (!disposed && ticket === generation && isCurrentSession(session)) loading.value = false }
 }
 function selectAll() { selected.value = allSelected.value ? [] : result.value?.items.map(g => g.id) ?? [] }
@@ -112,8 +126,8 @@ async function download() {
   } catch (cause) { if (!disposed && current === generation && isCurrentSession(session) && !controller.signal.aborted) exportError.value = fopExportError(cause, zh.value) }
   finally { if (exportController === controller) exporting.value = false }
 }
-watch(query, () => { search.value = scalar('search'); selected.value = []; expanded.value = []; exportController?.abort(); exporting.value = false; exportError.value = ''; void load() }, { immediate: true })
-const off = onSessionReset(() => { sessionClosed = true; cancelListReads(); generation++; result.value = undefined; details.value = {}; detailErrors.value = {}; detailBusy.value = {}; selected.value = []; expanded.value = []; followUp.value = undefined; exportController?.abort() })
+watch(query, () => { search.value = scalar('search'); selected.value = []; expanded.value = []; relatedExpanded.value = []; exportController?.abort(); exporting.value = false; exportError.value = ''; void load() }, { immediate: true })
+const off = onSessionReset(() => { sessionClosed = true; cancelListReads(); generation++; result.value = undefined; details.value = {}; detailErrors.value = {}; detailBusy.value = {}; selected.value = []; expanded.value = []; relatedExpanded.value = []; followUp.value = undefined; exportController?.abort() })
 onBeforeUnmount(() => { disposed = true; cancelListReads(); generation++; exportController?.abort(); off() })
 </script>
 <template>
@@ -130,7 +144,7 @@ onBeforeUnmount(() => { disposed = true; cancelListReads(); generation++; export
         <div class="workbench-filter-main">
           <div class="workbench-filter-search"><div class="workbench-search-field"><Search :size="16" /><input v-model="search" type="search" maxlength="200" :aria-label="t('搜索采购分组', 'Search purchase groups')" :placeholder="t('采购单 / 供应商 / 履约单 / 客户 / 业务员 / SKU', 'Purchase / supplier / fulfillment / customer / salesperson / SKU')" /></div><button class="workbench-button workbench-primary" :disabled="loading">{{ t('查询', 'Search') }}</button></div>
           <label>{{ t('业务部门', 'Department') }}<select class="workbench-filter-select" :value="filters.departmentId || ''" @change="choose($event, 'departmentId')"><option :value="defaultDepartmentValue(result?.departments, filters.departmentId)">{{ defaultDepartmentLabel }}</option><option v-for="d in departmentOptions(result?.departments)" :key="d.id" :value="d.id">{{ d.name }}</option></select></label>
-          <label>{{ t('发货仓库', 'Warehouse') }}<select class="workbench-filter-select" :value="filters.warehouseCode || ''" @change="choose($event, 'warehouseCode')"><option value="">{{ t('全部', 'All') }}</option><option value="HZ">{{ t('杭州仓', 'Hangzhou') }}</option><option value="SZ">{{ t('深圳仓', 'Shenzhen') }}</option></select></label>
+          <label>{{ t('发货仓库', 'Warehouse') }}<select class="workbench-filter-select" :value="filters.warehouseCode || ''" @change="choose($event, 'warehouseCode')"><option value="">{{ t('全部', 'All') }}</option><option value="HZ">{{ 'HangZhou' }}</option><option value="SZ">{{ 'ShenZhen' }}</option></select></label>
         </div>
         <div class="workbench-filter-secondary">
           <label v-if="completed">{{ t('客户付款时间', 'Customer payment time') }}<select class="workbench-filter-select" :value="filters.timeRange" :disabled="loading" :aria-label="t('客户付款时间范围', 'Customer payment time range')" @change="choose($event, 'timeRange')"><option value="1w">{{ t('近一周', 'Last week') }}</option><option value="1m">{{ t('近一月', 'Last month') }}</option><option value="3m">{{ t('近三月', 'Last three months') }}</option></select></label>
@@ -138,12 +152,12 @@ onBeforeUnmount(() => { disposed = true; cancelListReads(); generation++; export
           <button class="workbench-button" type="button" @click="update({sortOrder:filters.sortOrder === 'asc' ? 'desc' : 'asc'})">{{ filters.sortOrder === 'asc' ? t('最早客户付款优先', 'Oldest customer payment first') : t('最新客户付款优先', 'Newest customer payment first') }}</button>
           <button v-if="filters.ownerId" class="workbench-button" type="button" @click="update({ownerId:undefined})">{{ t('清除业务员筛选', 'Clear salesperson filter') }}</button>
           <span class="result-count" aria-live="polite" :title="!unavailable && result ? t(`关联履约单 ${result.totals.orderCount ?? '—'} 笔（去重）`, `${result.totals.orderCount ?? '—'} unique fulfillment orders`) : undefined">
-            {{ unavailable ? t('— · 待接入', '— · Not connected') : result ? t(`共 ${result.totals.purchaseCount ?? '—'} 张采购单`, `${result.totals.purchaseCount ?? '—'} purchase orders`) : '—' }}<template v-if="result?.totals.uncreatedCount"> · {{ t(`待建 ${result.totals.uncreatedCount ?? '—'} 笔`, `${result.totals.uncreatedCount ?? '—'} awaiting creation`) }}</template>
+            {{ unavailable ? '—' : result ? t(`共 ${result.totals.purchaseCount ?? '—'} 张采购单`, `${result.totals.purchaseCount ?? '—'} purchase orders`) : '—' }}<template v-if="result?.totals.uncreatedCount"> · {{ t(`待建 ${result.totals.uncreatedCount ?? '—'} 笔`, `${result.totals.uncreatedCount ?? '—'} awaiting creation`) }}</template>
           </span>
         </div>
       </form>
       <WorkbenchListActions :selected-count="selected.length" @clear="selected = []">
-        <button type="button" class="workbench-button expand-all" :disabled="loading || !result?.items.length" @click="toggleAll">{{ allExpanded ? t('全部收起（本页）', 'Collapse all on page') : t('全部展开（本页）', 'Expand all on page') }}</button>
+        <ProductExpansionButton class="expand-all" :expanded="allExpanded" :disabled="loading || !expandableGroups.length" @toggle="toggleAll" />
         <input type="checkbox" :checked="allSelected" :disabled="loading" :aria-label="t('选择本页采购组', 'Select purchase groups on this page')" @change="selectAll" />
         <template #export><WorkbenchExportButton :selected-count="selected.length" :total="result?.total ?? 0" :disabled="loading" :busy="exporting" @export="download" /></template>
       </WorkbenchListActions>
@@ -152,12 +166,12 @@ onBeforeUnmount(() => { disposed = true; cancelListReads(); generation++; export
         <header class="group-head">
           <div class="group-select">
             <input v-model="selected" type="checkbox" :value="group.id" :aria-label="t('选择采购组 ', 'Select group ') + (group.purchase?.number || group.id)" />
-            <button class="group-expand" :aria-expanded="expanded.includes(group.id)" :aria-label="t('展开采购组 ', 'Expand group ') + (group.purchase?.number || group.id)" @click="toggle(group.id)"><ChevronDown v-if="expanded.includes(group.id)" :size="16" /><ChevronRight v-else :size="16" /></button>
+            <button v-if="group.detailLineCount == null" class="group-expand" :aria-expanded="expanded.includes(group.id)" :aria-label="t('展开采购组 ', 'Expand group ') + (group.purchase?.number || group.id)" @click="toggle(group.id)"><ChevronDown v-if="expanded.includes(group.id)" :size="16" /><ChevronRight v-else :size="16" /></button>
           </div>
           <div class="group-identity">
             <div class="purchase-number"><StockCopy v-if="group.purchase" :value="group.purchase.number" /><strong v-else>{{ t('待创建采购单', 'Purchase not created') }}</strong></div>
             <small v-if="!group.purchase">{{ t('履约订单采购需求汇总', 'Fulfillment purchase demand') }}</small>
-            <div v-if="group.purchase" class="supplier-line"><span class="supplier-name" :title="group.purchase.supplier.name">{{ group.purchase.supplier.name }}</span><span class="purchase-channel">{{ group.purchase.purchaseType === 'offline' ? t('线下采购', 'Offline') : group.purchase.platform === '1688' ? t('线上 · 1688', 'Online · 1688') : t('线上 · 其他平台', 'Online · Other') }}</span></div>
+            <div v-if="group.purchase" class="supplier-line"><span class="supplier-name" :title="group.purchase.supplier.name">{{ group.purchase.supplier.name }}</span><span class="purchase-channel">{{ group.purchase.purchaseType === 'unknown' ? '—' : group.purchase.purchaseType === 'offline' ? t('线下采购', 'Offline') : group.purchase.platform === '1688' ? t('线上 · 1688', 'Online · 1688') : t('线上 · 其他平台', 'Online · Other') }}</span></div>
             <div v-if="group.purchase?.platformOrderNumber" class="platform-number"><span class="platform-label">{{ group.purchase.platform === '1688' ? '1688' : t('平台订单', 'Platform order') }}</span><StockCopy :value="group.purchase.platformOrderNumber" /></div>
           </div>
           <div v-if="group.purchase" class="group-status">
@@ -173,8 +187,8 @@ onBeforeUnmount(() => { disposed = true; cancelListReads(); generation++; export
           </div>
           <div class="group-counts">
             <div class="group-counts-heading">
-              <span class="group-source-count">{{ group.orderCount }} {{ t('笔履约', 'orders') }} <span class="count-divider">/</span> {{ group.skuCount }} SKU</span>
-              <button v-if="group.purchase?.purchaseType === 'online' && group.purchase.platform === '1688' && filters.queue === 'procurement_shipping'" type="button" class="group-follow-up" :aria-label="t('采购催办 ', 'Follow up purchase ') + group.purchase.number" @click="followPurchase(group)">{{ t('采购催办', 'Follow up') }}</button>
+              <span class="group-source-count">{{ group.orderCount ?? '—' }} {{ t('笔履约', 'orders') }} <span class="count-divider">/</span> {{ group.skuCount ?? '—' }} SKU</span>
+              <button v-if="result?.replica?.dataMode !== 'collected' && group.purchase?.purchaseType === 'online' && group.purchase.platform === '1688' && filters.queue === 'procurement_shipping'" type="button" class="group-follow-up" :aria-label="t('采购催办 ', 'Follow up purchase ') + group.purchase.number" @click="followPurchase(group)">{{ t('采购催办', 'Follow up') }}</button>
               <span v-else-if="group.purchase && filters.queue === 'procurement_shipping'" class="group-fop-follow-up">{{ t('请在 FOP 催办', 'Follow up in FOP') }}</span>
             </div>
             <span v-if="!group.purchase">{{ t('待采购数量', 'Quantity to purchase') }} <strong>{{ number(group.quantity) }}</strong></span>
@@ -182,13 +196,17 @@ onBeforeUnmount(() => { disposed = true; cancelListReads(); generation++; export
             <small>{{ t('客户付款', 'Customer payment') }} {{ date(group.latestConsumerPaidAt ?? null) }}</small>
           </div>
         </header>
-        <div v-if="expanded.includes(group.id)" class="group-body">
+        <CollapsibleProductLines v-if="group.previewLines" class="purchase-preview" :items="group.previewLines" :line-count="group.detailLineCount" :total-quantity="group.quantity" :label="group.purchase?.number || group.id" :expanded="expanded.includes(group.id)" @update:expanded="toggle(group.id)" v-slot="{ item: line }">
+          <div v-if="!expanded.includes(group.id)" class="linked-product"><OrderProductImage :src="line.imageUrl" :name="line.name" /><div><p :title="line.name">{{ line.name || '—' }}</p><StockCopy :value="line.sku" /><small>{{ line.variant || '—' }} · × {{ number(line.quantity) }}</small></div></div>
+        </CollapsibleProductLines>
+        <div v-if="!canExpandGroup(group)" class="related-details-action"><button type="button" class="workbench-button related-details-toggle" :aria-expanded="relatedExpanded.includes(group.id)" :aria-controls="`purchase-details-${encodeURIComponent(group.id)}`" @click="toggleRelated(group.id)">{{ relatedExpanded.includes(group.id) ? t('收起关联履约明细', 'Hide linked fulfillment details') : t('查看关联履约明细', 'View linked fulfillment details') }}</button></div>
+        <div v-if="expanded.includes(group.id) || relatedExpanded.includes(group.id)" :id="`purchase-details-${encodeURIComponent(group.id)}`" class="group-body">
           <p v-if="detailBusy[group.id]" class="group-message">{{ t('正在加载履约明细…', 'Loading fulfillment details…') }}</p>
           <div v-else-if="detailErrors[group.id]" class="group-error" role="alert">{{ detailErrors[group.id] }} <button class="workbench-button" @click="loadDetails(group.id)">{{ t('重试', 'Retry') }}</button></div>
-          <template v-else-if="details[group.id]"><div class="group-table-wrap"><table><thead><tr><th>{{ t('履约订单', 'Fulfillment order') }}</th><th>{{ t('关联商品 / SKU', 'Linked products / SKU') }}</th><th>{{ t('客户 / 店铺', 'Customer / store') }}</th><th>{{ t('业务员 / 部门', 'Salesperson / department') }}</th><th>{{ completed ? t('发货仓库 / 采购完成时间', 'Warehouse / purchase completion') : t('发货仓库 / 客户付款时间', 'Warehouse / customer payment time') }}</th></tr></thead><tbody><tr v-for="row in details[group.id]!.items" :key="row.orderId"><td class="fulfillment-cell"><StockCopy :value="row.orderNumber" /><small><StockCopy :value="row.shopifyOrderNumber" /></small></td><td><div v-for="line in row.lines" :key="line.fulfillmentLineId + ':' + line.purchaseLineId" class="linked-product"><OrderProductImage :src="line.imageUrl" :name="line.name" /><div><p :title="line.name">{{ line.name }}</p><StockCopy :value="line.sku" /><small>{{ line.variant }}</small><small v-if="!group.purchase">{{ t('待采购数量', 'Quantity to purchase') }} {{ number(line.quantity) }}</small><small v-else>{{ t('采购', 'Purchased') }} {{ number(line.quantity) }} · {{ t('已发', 'Shipped') }} {{ number(line.shippedQuantity) }} · {{ t('未发', 'Unshipped') }} {{ number(Number((line.quantity-line.shippedQuantity).toFixed(8))) }}</small></div></div></td><td>{{ row.customerName }}<small>{{ row.storeName }}</small></td><td>{{ row.ownerName }}<small>{{ row.departmentName }}</small></td><td>{{ row.warehouse }}<small>{{ date(completed ? row.completedAt ?? null : row.consumerPaidAt ?? null) }}</small></td></tr></tbody></table></div><div v-if="details[group.id]!.total > 20" class="detail-pagination"><span>{{ t('履约明细', 'Fulfillment details') }} {{ details[group.id]!.page }} / {{ Math.ceil(details[group.id]!.total / 20) }}</span><button class="workbench-button" :disabled="details[group.id]!.page <= 1" @click="loadDetails(group.id, details[group.id]!.page-1)">{{ t('上一页', 'Previous') }}</button><button class="workbench-button" :disabled="details[group.id]!.page * 20 >= details[group.id]!.total" @click="loadDetails(group.id, details[group.id]!.page+1)">{{ t('下一页', 'Next') }}</button></div></template>
+          <template v-else-if="details[group.id]"><div class="group-table-wrap"><table><thead><tr><th>{{ t('履约订单', 'Fulfillment order') }}</th><th>{{ t('关联商品 / SKU', 'Linked products / SKU') }}</th><th>{{ t('客户 / 店铺', 'Customer / store') }}</th><th>{{ t('业务员 / 部门', 'Salesperson / department') }}</th><th>{{ completed ? t('发货仓库 / 采购完成时间', 'Warehouse / purchase completion') : t('发货仓库 / 客户付款时间', 'Warehouse / customer payment time') }}</th></tr></thead><tbody><tr v-for="row in details[group.id]!.items" :key="row.orderId || row.orderNumber"><td class="fulfillment-cell"><StockCopy :value="row.orderNumber" /><small><StockCopy :value="row.shopifyOrderNumber" /></small></td><td><div v-for="(line, lineIndex) in physicalProductsFirst(row.lines)" :key="lineIndex" class="linked-product"><OrderProductImage :src="line.imageUrl" :name="line.name" /><div><p :title="line.name">{{ line.name || '—' }}</p><StockCopy :value="line.sku" /><small>{{ line.variant }}</small><small v-if="!group.purchase">{{ t('待采购数量', 'Quantity to purchase') }} {{ number(line.quantity) }}</small><small v-else>{{ t('采购', 'Purchased') }} {{ number(line.quantity) }} · {{ t('已发', 'Shipped') }} {{ number(line.shippedQuantity) }} · {{ t('未发', 'Unshipped') }} {{ number(line.quantity == null || line.shippedQuantity == null ? null : Number((line.quantity-line.shippedQuantity).toFixed(8))) }}</small></div></div></td><td>{{ row.customerName || '—' }}<small>{{ row.storeName }}</small></td><td>{{ row.ownerName || '—' }}<small>{{ row.departmentName }}</small></td><td>{{ warehouseName(row.warehouse) }}<small>{{ date(completed ? row.completedAt ?? null : row.paidAt ?? null) }}</small></td></tr></tbody></table></div><div v-if="details[group.id]!.total > 20" class="detail-pagination"><span>{{ t('履约明细', 'Fulfillment details') }} {{ details[group.id]!.page }} / {{ Math.ceil(details[group.id]!.total / 20) }}</span><button class="workbench-button" :disabled="details[group.id]!.page <= 1" @click="loadDetails(group.id, details[group.id]!.page-1)">{{ t('上一页', 'Previous') }}</button><button class="workbench-button" :disabled="details[group.id]!.page * 20 >= details[group.id]!.total" @click="loadDetails(group.id, details[group.id]!.page+1)">{{ t('下一页', 'Next') }}</button></div></template>
         </div>
       </article>
-      <p v-if="!result?.items.length" class="group-message">{{ loading ? t('正在查询…', 'Loading…') : error ? t('请刷新重试', 'Refresh to retry') : unavailable ? t('采购数据尚未接入', 'Procurement data is not connected') : t('暂无符合条件的采购待办', 'No matching purchase tasks') }}</p>
+      <p v-if="!result?.items.length" class="group-message">{{ loading ? t('正在查询…', 'Loading…') : error ? t('请刷新重试', 'Refresh to retry') : unavailable ? '' : t('暂无符合条件的采购待办', 'No matching purchase tasks') }}</p>
       <footer class="group-pagination"><label>{{ t('每页采购组', 'Groups per page') }}<select class="workbench-filter-select" :value="query.pageSize" @change="choose($event, 'pageSize')"><option v-for="size in [20,50,100]" :key="size" :value="size">{{ size }}</option></select></label><span>{{ query.page }} / {{ pages }}</span><button class="workbench-button" :disabled="loading || query.page <= 1" @click="update({page:query.page-1})">{{ t('上一页', 'Previous') }}</button><button class="workbench-button" :disabled="loading || query.page >= pages" @click="update({page:query.page+1})">{{ t('下一页', 'Next') }}</button></footer>
     </div>
     <SupplierFollowUpDialog v-if="followUp" :order-id="followUp.orderId" :order-number="followUp.orderNumber" :purchase-order-id="followUp.purchaseOrderId" :group-filters="filters" @close="followUp = undefined" />
@@ -223,6 +241,9 @@ small { color: var(--color-text-secondary); font-size: 11px; }
 .group-source-count { font-size: 12px; color: var(--color-text); }
 .group-counts strong { color: var(--color-text); font-weight: 600; }
 .count-divider { padding: 0 4px; color: var(--color-text-secondary); opacity: .6; }
+.related-details-action { padding: 0 20px 16px 89px; }
+.purchase-preview { padding: 12px 20px 16px 62px; }
+.purchase-preview small { display: block; margin-top: 5px; }
 .group-body { background: var(--color-surface); padding: 0 20px 0 62px; }
 .group-table-wrap { min-width: 0; }
 table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 12px; }
@@ -246,14 +267,14 @@ input[type=checkbox] { accent-color: var(--color-chart-link); }
 @media (max-width: 1150px) {
   .group-head { grid-template-columns: 32px minmax(205px, 1fr) minmax(180px, 1fr); gap: 12px; }
   .group-status { grid-column: 2; grid-row: 2; }.group-counts { grid-column: 3; grid-row: 1 / 3; }
-  .group-body { padding-left: 48px; }
+  .group-body, .purchase-preview { padding-left: 48px; }.related-details-action { padding-left: 75px; }
 }
 @media (max-width: 700px) {
   .refresh-controls { justify-content: flex-start; gap: 10px; }.refresh-status { font-size: 10px; }
   .group-head { grid-template-columns: 28px minmax(0, 1fr); padding: 15px 14px; gap: 10px; }
   .group-status, .group-counts { grid-column: 2; grid-row: auto; }.group-counts { text-align: left; }
   .group-counts-heading { justify-content: flex-start; }
-  .group-body { padding: 0 14px 0 28px; } thead { display: none; }
+  .group-body { padding: 0 14px 0 28px; }.purchase-preview { padding: 10px 14px 14px 28px; }.related-details-action { padding-left: 55px; } thead { display: none; }
   tr { display: grid; grid-template-columns: 1fr 1fr; border-bottom: 1px solid var(--color-border); } tr:last-child { border: 0; }
   td { min-width: 0; padding: 10px 8px; border: 0; } td:first-child { padding-left: 8px; } td:nth-child(2) { grid-column: 1 / -1; grid-row: 2; }
   .group-filters .input { min-width: 180px; }.group-filters { padding: 12px 14px; }

@@ -25,7 +25,7 @@ import { StockFilters, StockPageQuery, StockInventoryQuery } from './fop-stock.t
 import { ExportStockOrdersDto, StockScopeDto } from './fop-stock.dto'
 import { buildStockWorkbook } from './fop-stock-export'
 import { normalizeConsumerPaidAt } from './consumer-payment-time'
-import { normalizeBusinessTimestamp } from './fop-business-time'
+import { BUSINESS_START_DATE, FIRST_BUSINESS_YEAR, normalizeBusinessTimestamp } from './fop-business-time'
 import { normalizeCustomLogisticsChannelName, normalizeLogisticsChannels } from './logistics-channels'
 import { normalizeShippingCountry } from './shipping-country'
 import { consumerPaymentRange } from './consumer-payment-range'
@@ -42,7 +42,7 @@ import { aggregateFreight, freightDetails, freightPeriods, publicFreight } from 
 import type { FopFreight, FreightQuery, FreightDetailsQuery } from './fop-freight.types'
 import { BadRequestException, ConflictException, NotFoundException, ForbiddenException, Inject, Injectable, ServiceUnavailableException, UnauthorizedException } from '@nestjs/common'
 import { UsersService } from '../users/users.service'
-import { isWorkbenchRole, WORKBENCH_ROLES, WorkbenchRole } from '../users/workbench-role'
+import { effectiveWorkbenchRoles, WorkbenchRole } from '../users/workbench-role'
 import { FULFILLMENT_QUEUE_ROLES, ExportFulfillmentOrdersDto, FulfillmentOrderFiltersDto, ListFulfillmentOrdersDto } from '../users/dto/workbench.dto'
 import { buildFulfillmentWorkbook } from './fop-order-export'
 import { FopDashboardQueryDto } from './fop-data.dto'
@@ -63,7 +63,7 @@ import { ConfirmFopConnectionDto } from './fop-connection.dto'
 import type { FopRealtimeScope, FopRealtimeApprovalContext } from './fop-realtime.types'
 import type { LocalWorkbenchService } from '../workbench-replica/local-workbench.service'
 
-type Scope = { localOrganization?: LocalWorkbenchOrganization; binding: FopIdentity | null; bindingVersion?: string; employeeMasterId?: string; roles: WorkbenchRole[]; business: BusinessScope; charts: EffectiveChartAccess[]; summaryPolicies: Record<ChartId, ChartSummaryPolicy>; customerAttribution?: { current: number; historical: number; assignments: Map<string, string> } }
+type Scope = { organizationMode?: true | 'analytics'; localOrganization?: LocalWorkbenchOrganization; binding: FopIdentity | null; bindingVersion?: string; employeeMasterId?: string; roles: WorkbenchRole[]; business: BusinessScope; charts: EffectiveChartAccess[]; summaryPolicies: Record<ChartId, ChartSummaryPolicy>; customerAttribution?: { current: number; historical: number; assignments: Map<string, string> } }
 type ChartContext = { initial: Scope; permission: FopPermissionGrant; access: EffectiveChartAccess; chartId: ChartId }
 
 function sameIdentity(left: Pick<FopIdentity, 'tenantId' | 'userId'> | null | undefined, right: Pick<FopIdentity, 'tenantId' | 'userId'> | null | undefined): boolean {
@@ -159,6 +159,7 @@ function publicOrder(order: FopOrderCandidate): FopOrder {
     outboundCompletedAt: isStageCompleted(order, 'shipping') ? normalizeBusinessTimestamp(order.outboundCompletedAt) : null,
     reviewedAt: order.reviewStatus === 'approved' ? normalizeBusinessTimestamp(order.reviewedAt) : null,
     consumerPaidAt: normalizeConsumerPaidAt(order.consumerPaidAt),
+    sourceOrderPaidAt: normalizeConsumerPaidAt(order.sourceOrderPaidAt),
     procurementPaidAt: normalizeBusinessTimestamp(order.procurementPaidAt),
     wmsCreatedAt: normalizeBusinessTimestamp(order.wmsCreatedAt),
     allocationReadyAt: progress.allocationCreated === true && progress.stockReadiness === 'ready' ? normalizeBusinessTimestamp(order.allocationReadyAt) : null,
@@ -187,6 +188,12 @@ export class FopDataService {
     private readonly users: UsersService,
     @Inject(FOP_DATA_PROVIDER) private readonly provider: FopDataProvider,
   ) {}
+
+  async requireWorkbenchAnalyticsAdmin(userId: string) {
+    const user = await this.users.findById(userId)
+    if (!user || user.accountDisabled) throw new UnauthorizedException()
+    if (user.role !== 'admin') throw new ForbiddenException('Administrator access required')
+  }
 
   /** 仅当前系统管理员且具有全部业务数据角色时提供连接入口，不让其他账号继承代理用户身份。 */
   private async requireConnectionAdmin(userId: string) {
@@ -220,13 +227,16 @@ export class FopDataService {
     return this.users.connectCurrentAdminFop(userId, binding, connection.subject)
   }
 
-  private async scope(userId: string, workbench = false): Promise<Scope> {
+  private async scope(userId: string, workbench: boolean | 'analytics' = false, forApproval = false): Promise<Scope> {
     const user = await this.users.findById(userId)
     if (!user || user.accountDisabled) throw new UnauthorizedException('Account no longer exists')
+    if (workbench === 'analytics' && this.provider.supportsEmployeeBinding && !this.provider.usesLocalWorkbenchOrganization) {
+      throw new ServiceUnavailableException({ code: 'local_analytics_scope_required', message: 'Legacy analytics requires the current local marketing organization scope' })
+    }
     const business = effectiveBusinessScope(user), details = user.fopBindingDetails
     // A system administrator uses an explicitly enabled company service context.
     // Employee bindings remain unique and are never copied from another account.
-    const administrator = user.role === 'admin' ? await this.providerCall(() => this.provider.administratorIdentity?.() ?? Promise.resolve(null)) : null
+    const administrator = user.role === 'admin' ? await this.providerCall(() => this.provider.administratorIdentity?.(forApproval) ?? Promise.resolve(null)) : null
     // 本地UUID保留给组织管理；金蝶查询只使用本次绑定验证过的masterId及任职部门ID。
     if (this.provider.supportsEmployeeBinding && details) {
       if (details.localEmployeeId && business.employeeId === details.localEmployeeId) business.employeeId = details.employeeMasterId
@@ -243,11 +253,15 @@ export class FopDataService {
       ? await this.users.localWorkbenchOrganization(user, administrator?.[FOP_ADMIN_CONTEXT]
         ? { tenantId: administrator.tenantId, organizationId: administrator[FOP_ADMIN_CONTEXT]!.organizationId } : undefined) : undefined
     if (localOrganization) {
-      business.departmentId = localOrganization.departmentId
-      business.employeeId = business.role === 'admin' ? null : localOrganization.employeeId ?? details?.employeeMasterId ?? null
-      business.localOrganization = { employeeIds: localOrganization.employeeIds, version: localOrganization.version }
+      // Legacy analytics still sends verified source IDs to its provider; the local owner cap is additional.
+      if (workbench === true) {
+        business.departmentId = localOrganization.departmentId
+        business.employeeId = business.role === 'admin' ? null : localOrganization.employeeId ?? details?.employeeMasterId ?? null
+      }
+      business.localOrganization = localEmployeeFilter(localOrganization, {})
     }
     return {
+      organizationMode: localOrganization && workbench ? workbench : undefined,
       localOrganization,
       business,
       employeeMasterId: details?.employeeMasterId,
@@ -255,12 +269,12 @@ export class FopDataService {
       charts: resolveChartAccess(chartUser),
       summaryPolicies: Object.fromEntries(CHART_IDS.map(chartId => [chartId, resolveChartSummaryPolicy(chartUser, chartId)])) as Record<ChartId, ChartSummaryPolicy>,
       binding: administrator ?? this.provider.demoIdentity?.(userId) ?? (verified && user.fopTenantId && user.fopUserId ? { tenantId: user.fopTenantId, userId: user.fopUserId } : null),
-      roles: businessScope(user).role === 'none' ? [] : businessScope(user).role === 'admin' ? [...WORKBENCH_ROLES] : (user.workbenchRoles ?? []).filter(isWorkbenchRole),
+      roles: effectiveWorkbenchRoles(user),
     }
   }
 
-  private async assertUnchanged(userId: string, initial: Scope): Promise<void> {
-    const current = await this.scope(userId, !!initial.localOrganization)
+  private async assertUnchanged(userId: string, initial: Scope, forApproval = false): Promise<void> {
+    const current = await this.scope(userId, initial.organizationMode ?? false, forApproval)
     if (JSON.stringify(current.charts) !== JSON.stringify(initial.charts) || JSON.stringify(current.summaryPolicies) !== JSON.stringify(initial.summaryPolicies)
       || current.bindingVersion !== initial.bindingVersion || current.localOrganization?.version !== initial.localOrganization?.version
       || JSON.stringify(current.business) !== JSON.stringify(initial.business)
@@ -271,8 +285,8 @@ export class FopDataService {
   }
 
   /** No legacy list/analytics permissions are resolved for realtime operations. */
-  private async realtimeContext(userId: string, required: readonly WorkbenchRole[], query: { departmentId?: string; ownerId?: string } = {}) {
-    const initial = await this.scope(userId, true)
+  private async realtimeContext(userId: string, required: readonly WorkbenchRole[], query: { departmentId?: string; ownerId?: string } = {}, forApproval = false) {
+    const initial = await this.scope(userId, true, forApproval)
     if (!required.some(role => initial.roles.includes(role)) || initial.business.role === 'none') throw new ForbiddenException('Realtime workbench access denied')
     if (!initial.binding) throw new ForbiddenException({ code: 'fop_binding_required', message: 'FOP integration identity is required' })
     if (initial.business.role === 'salesperson' && !initial.business.employeeId || initial.business.role === 'department_manager' && !initial.business.departmentId) throw new ForbiddenException('Current business scope is required')
@@ -290,7 +304,9 @@ export class FopDataService {
     if (!await this.providerCall(async () => this.provider.isConfigured())) throw new ServiceUnavailableException({ code: 'fop_not_configured', message: 'FOP data integration is not configured' })
     if ((initial.business.role === 'department_manager' && !initial.business.departmentId) || (initial.business.role === 'salesperson' && !initial.business.employeeId)) throw new ForbiddenException({ code: 'business_scope_required', message: 'Configure this account department or employee data scope first' })
     const identity = Object.freeze({ ...initial.binding })
-    const grant = await this.providerCall(() => stock && this.provider.queriedStock ? this.provider.resolveStockPermissions(identity, initial.business) : this.provider.resolvePermissions(identity, initial.business))
+    // Independent analytics grants do not require the legacy workbench employee-filter capability.
+    const providerScope = initial.organizationMode === 'analytics' ? publicBusinessScope(initial.business) : initial.business
+    const grant = await this.providerCall(() => stock && this.provider.queriedStock ? this.provider.resolveStockPermissions(identity, providerScope) : this.provider.resolvePermissions(identity, providerScope))
     await this.assertUnchanged(userId, initial)
     if (!sameIdentity(grant?.subject, identity) || !Array.isArray(grant?.allowedOrderIds)
       || grant.allowedOrderIds.some((id) => typeof id !== 'string' || !id.trim())) {
@@ -346,7 +362,10 @@ export class FopDataService {
     return initial.charts.map(local => {
       if (!initial.roles.length || local.chartId === 'sales_performance' && !initial.roles.includes('sales')) return { ...local, visible: false, dataScope: 'none', scopeLabel: '尚未分配工作台岗位', summaryDepartments: [], summaryOnly: false, canViewDetails: false, canExport: false }
       const policy = initial.summaryPolicies[local.chartId]
-      const granted = permission.organizationSummaries?.find(g => g.chartId === local.chartId)?.departments ?? []
+      // Peer summaries are assembled by the collected Dashboard using its verified local hierarchy.
+      // Legacy FOP grants do not prove peer membership; retain their direct-department boundary.
+      const granted = (permission.organizationSummaries?.find(g => g.chartId === local.chartId)?.departments ?? [])
+        .filter(d => initial.business.role !== 'department_manager' || d.departmentId === initial.business.departmentId)
       const summaryDepartments = !local.visible ? [] : granted.filter(d => policy.mode === 'marketing'
         || policy.mode === 'selected' && policy.departments.includes(d.code)
         || policy.mode === 'department' && !!initial.business.departmentId && d.departmentId === initial.business.departmentId).map(d => d.code)
@@ -373,7 +392,7 @@ export class FopDataService {
   }
 
   private async chartContext(userId: string, chartId: ChartId, details = false, requiredRole?: WorkbenchRole): Promise<ChartContext> {
-    const initial = await this.scope(userId)
+    const initial = await this.scope(userId, 'analytics')
     if (!initial.charts.find(c => c.chartId === chartId)?.visible || (requiredRole && !initial.roles.includes(requiredRole))) throw new ForbiddenException({ code: 'chart_access_denied', message: 'Chart access denied' })
     const permission = await this.permissions(userId, initial)
     const access = this.effectiveCharts(initial, permission).find(c => c.chartId === chartId)!
@@ -621,13 +640,17 @@ export class FopDataService {
   private async analytics(userId: string, scoped: { permission: FopPermissionGrant; initial: Scope }, resource: FopAnalyticsResource, range: FopAnalyticsRange) {
     if (!scoped.permission.analyticsQuery?.[resource]?.length) throw new ForbiddenException({ code: 'fop_permission_denied', message: 'Analytics resource access denied' })
     if (range.from > businessDate(new Date())) return emptyAnalyticsData()
-    const result = await this.providerCall(() => this.provider.readAnalytics(scoped.permission.subject, scoped.permission, scoped.initial.business, resource, range))
+    const result = await this.providerCall(() => this.provider.readAnalytics(scoped.permission.subject, scoped.permission, publicBusinessScope(scoped.initial.business), resource, range))
     await this.assertUnchanged(userId, scoped.initial)
-    return result
+    return this.providerCall(async () => {
+      const allowed = (record: { owner?: { id: string }; department?: { id: string }; departmentPathIds?: readonly string[] }) => matchesBusinessScope(scoped.initial.business, record)
+      return { orders: result.orders.filter(allowed), receipts: result.receipts.filter(allowed),
+        freight: result.freight.filter(allowed), registrations: result.registrations.filter(allowed) }
+    })
   }
 
   private async scopedOrders(userId: string, requiredRole?: WorkbenchRole, context?: ChartContext, range?: FopAnalyticsRange, includeManagedDepartments = false): Promise<{ orders: FopOrder[]; departmentPaths: Map<string, readonly string[]>; roles: WorkbenchRole[]; permission: FopPermissionGrant; initial: Scope; range?: FopAnalyticsRange }> {
-    const initial = context?.initial ?? await this.scope(userId, !context && !range)
+    const initial = context?.initial ?? await this.scope(userId, range ? 'analytics' : true)
     if (requiredRole ? !initial.roles.includes(requiredRole) : initial.roles.length === 0) {
       throw new ForbiddenException('Workbench access denied')
     }
@@ -669,11 +692,11 @@ export class FopDataService {
   async approvalContext(userId: string, queue: ApprovalQueue, orderId: string, sessionVersion = 0): Promise<Omit<FopRealtimeApprovalContext, 'targets' | 'currentScope'> & Partial<Pick<FopRealtimeApprovalContext, 'targets' | 'currentScope'>>> {
     if (!['review', 'allocation_review'].includes(queue)) throw new BadRequestException('Invalid approval queue')
     if (this.provider.source === 'fop') {
-      const context = await this.realtimeContext(userId, [queue === 'review' ? 'sales' : 'allocation'])
+      const context = await this.realtimeContext(userId, [queue === 'review' ? 'sales' : 'allocation'], {}, true)
       const assertSession = async () => { const account = await this.users.findById(userId); if (!account || account.accountDisabled || (account.sessionVersion ?? 0) !== sessionVersion) throw new UnauthorizedException('Account disabled or session expired') }
       await assertSession()
       const result = await this.providerCall(() => this.provider.readApprovalContext(context.identity, context.currentScope, queue, orderId))
-      await this.assertUnchanged(userId, context.initial); await assertSession()
+      await this.assertUnchanged(userId, context.initial, true); await assertSession()
       if (!sameIdentity(result?.identity, context.identity) || result.order?.id !== orderId || JSON.stringify(result.currentScope) !== JSON.stringify(context.currentScope)) throw new ForbiddenException('Current approval identity or scope mismatch')
       return result
     }
@@ -841,7 +864,7 @@ export class FopDataService {
 
   async getReceipts(userId: string, query: ReceiptQueryDto) {
     if (query.chartId && query.chartId !== 'salesperson_receipts') throw new ForbiddenException({ code: 'chart_access_denied', message: 'Organization summaries do not grant receipt details' })
-    if (!validBusinessDay(query.from) || !validBusinessDay(query.to) || query.from < '2020-01-01' || query.from > query.to || query.to > businessDate(new Date())) throw new BadRequestException('Invalid receipt date range')
+    if (!validBusinessDay(query.from) || !validBusinessDay(query.to) || query.from < BUSINESS_START_DATE || query.from > query.to || query.to > businessDate(new Date())) throw new BadRequestException('Invalid receipt date range')
     const context = await this.chartContext(userId, 'salesperson_receipts', true, query.workbenchRole)
     const records = await this.scopedReceipts(userId, { ...context, range: { from: query.from, to: query.to } }, context)
     const rows = eligibleReceipts(records).filter(r => businessDate(r.paidAt!) >= query.from && businessDate(r.paidAt!) <= query.to
@@ -1000,7 +1023,7 @@ export class FopDataService {
       .sort((a, b) => a.name.localeCompare(b.name, 'zh-CN') || a.id.localeCompare(b.id))
     const search = query.search?.trim().toLowerCase()
     const candidates = departmentOrders.filter((order) => (query.completed ? isStageCompleted(order, query.queue) : matchesQueue(order, query.queue, query.warehouseStage))
-      && inTimeRange(order.consumerPaidAt)
+      && inTimeRange(query.queue === 'unpaid' ? order.sourceOrderPaidAt : order.consumerPaidAt)
       && (!query.taskStatus || matchesTaskStatus(order, query.queue, query.taskStatus))
       && (!query.procurementStage || getProcurementStage(order.procurementProgress, order.fulfillmentProgress.supplierShipment) === query.procurementStage)
       && (!query.warehouseCode || order.warehouseCode === query.warehouseCode)
@@ -1180,7 +1203,7 @@ export class FopDataService {
         publicStockOrder(row)
         if (seen.has(row.id)) throw new Error('Duplicate stock document')
         seen.add(row.id)
-        return !row.cancelled
+        return role === 'sales' || !row.cancelled
       })
     })
     return { ...context, orders }
@@ -1291,7 +1314,7 @@ export class FopDataService {
       await this.assertUnchanged(userId, selected.initial)
       const ids = new Set(query.orderIds)
       const currentAllowed = new Set(permission.allowedStockOrderIds ?? [])
-      const orders = filterStockOrders(selected.orders, { queue: query.queue }).filter(row => ids.has(row.id) && (this.provider.queriedStock && !!permission.stockQuery?.orders.length || currentAllowed.has(row.id)))
+      const orders = filterStockOrders(selected.orders.filter(row => !row.cancelled), { queue: query.queue }).filter(row => ids.has(row.id) && (this.provider.queriedStock && !!permission.stockQuery?.orders.length || currentAllowed.has(row.id)))
       if (orders.length !== ids.size) throw new ConflictException({ code: 'stock_inventory_orders_changed', message: 'Selected stock orders changed; refresh and select again' })
       // Keep each customer's SKU set separate; never cross-join customers and SKUs.
       pairs = new Set(orders.flatMap(row => row.items.map(item => JSON.stringify([row.customerId, item.sku]))))
@@ -1452,7 +1475,7 @@ export class FopDataService {
 
   async searchOrderCustomers(userId: string, query: OrderCustomerSearchDto) {
     const context = await this.chartContext(userId, 'customer_orders')
-    const scoped = await this.scopedOrders(userId, undefined, context, { from: '2020-01-01', to: businessDate(new Date()), keyword: query.keyword })
+    const scoped = await this.scopedOrders(userId, undefined, context, { from: BUSINESS_START_DATE, to: businessDate(new Date()), keyword: query.keyword })
     const receipts = await this.scopedReceipts(userId, scoped, context)
     const result = searchOrderCustomers(scoped.orders, query, receipts)
     await this.assertUnchanged(userId, scoped.initial)
@@ -1477,11 +1500,11 @@ export class FopDataService {
     const day = 86_400_000
     if (!Number.isFinite(start) || !Number.isFinite(end)
       || new Date(start).toISOString().slice(0, 10) !== query.from || new Date(end).toISOString().slice(0, 10) !== query.to
-      || start > end || end - start > 365 * day || query.to > businessDate(now) || query.year > Number(businessDate(now).slice(0, 4))) {
+      || query.from < BUSINESS_START_DATE || query.year < FIRST_BUSINESS_YEAR || start > end || end - start > 365 * day || query.to > businessDate(now) || query.year > Number(businessDate(now).slice(0, 4))) {
       throw new BadRequestException('Invalid dashboard date range or year')
     }
     if (this.provider.pagedOrders) {
-      const initial = await this.scope(userId)
+      const initial = await this.scope(userId, 'analytics')
       if (!initial.roles.length) throw new ForbiddenException('Workbench access denied')
       const permission = await this.permissions(userId, initial)
       const chartAccess = this.effectiveCharts(initial, permission)

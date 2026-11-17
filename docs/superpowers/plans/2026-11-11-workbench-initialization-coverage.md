@@ -8,7 +8,7 @@
 
 **Tech Stack:** NestJS、TypeORM/PostgreSQL、Vue 3、Jest/Vitest、Python 本地数据分析。
 
-**Spec:** docs/integrations/HyperZone智能办公平台项目FOP扩展开发需求.html；agent.md；本轮用户要求。
+**Spec:** ../../requirements/HyperZone智能办公平台项目开发需求说明书.html；agent.md；本轮用户要求。
 
 ## Global Constraints
 

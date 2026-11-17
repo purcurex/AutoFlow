@@ -33,7 +33,7 @@ integration('local workbench PostgreSQL query integration', () => {
     await runner.query(`INSERT INTO hz_fop_datasets (id,connection_id,company_id,state,validated_at,activated_at) VALUES ($1,$2,$3,'active',now(),now())`, [dataset, connection, company])
     for (const resource of ['orders','stock_orders','rma']) await runner.query(`INSERT INTO hz_fop_resource_grants (id,connection_id,company_id,resource_type,target_key,decision,verified_at,source_as_of,expires_at) VALUES ($1,$2,$3,$4,'*','allow',now(),now(),now()+interval '60 seconds')`, [randomUUID(),connection,company,resource])
     const account = { id: randomUUID(), role: 'admin', businessRole: 'none', organizationWorkspaceOwnerId: owner, workbenchRoles: [], accountDisabled: false }
-    const users = { findById: async () => account, localWorkbenchOrganization: async () => ({ version: 'current-org', departments: [], members: [], employeeIds, employeeId: null, departmentId: null }) }
+    const users = { findById: async () => account, localWorkbenchOrganization: async () => ({ version: 'current-org', departments: [{id:'marketing',name:'营销中心',parentId:null,pathIds:['marketing']},{id:'sales',name:'业务一部',parentId:'marketing',pathIds:['marketing','sales']}], members: ['10','20'].map(employeeId=>({employeeId,localEmployeeId:employeeId,departmentId:'sales',name:employeeId})), employeeIds, employeeId: null, departmentId: null }) }
     const manager = { query: (sql: string, values?: unknown[]) => sql === 'SET TRANSACTION READ ONLY' ? Promise.resolve([]) : runner.query(sql.includes('FROM hz_fop_connections') ? sql.replace('WHERE c.workspace_owner_id = $1', `WHERE c.workspace_owner_id = $1 AND co.id = '${company}'`) : sql, values) }
     const transactionDb = { transaction: async (_isolation: string, run: (manager: any) => Promise<any>) => run(manager), query: manager.query }
     service = new LocalWorkbenchService(transactionDb as unknown as DataSource, users as unknown as UsersService, new ConfigService({WORKBENCH_READ_MODE:'local'}))
@@ -85,7 +85,7 @@ integration('local workbench PostgreSQL query integration', () => {
     const exported=await collectReplicaPages<any>(page=>service.getOrders(owner,{...query,taskStatus:'dispatch_incomplete',page}) as any)
     const workbook=new Workbook()
     await workbook.xlsx.load(await buildFulfillmentWorkbook(exported.items,{...query,taskStatus:'dispatch_incomplete'} as any,'fop') as any)
-    const values=JSON.stringify(workbook.getWorksheet('订单清单')!.getSheetValues())
+    const values=JSON.stringify(workbook.worksheets[0].getSheetValues())
     for(const source of ['draft','empty','mixed','submitted','unknown']) expect(values).toContain('TO'+source)
     expect(values).not.toContain('TOall-approved')
   })
@@ -148,7 +148,7 @@ integration('local workbench PostgreSQL query integration', () => {
     const done=await service.getOrders(owner,{queue:'shipping',completed:true,timeRange:'all',page:1,pageSize:20})
     expect(done.items[0]).toMatchObject({sourcePurchaseStatus:'3',sourceOutboundStatus:'2',fulfillmentProgress:{outbound:'completed'}})
     expect((await service.getOrders(owner,{queue:'shipping',timeRange:'all',page:1,pageSize:20})).total).toBe(0)
-    const purchased=await service.getOrders(owner,{queue:'procurement',completed:true,timeRange:'all',page:1,pageSize:20})
+    const purchased=await service.getOrders(owner,{queue:'procurement',completed:true,timeRange:'1m',page:1,pageSize:20})
     expect(purchased.total).toBe(1);expect(purchased.items[0]).toMatchObject({sourcePurchaseStatus:'3'})
     await runner.query(`UPDATE hz_fop_fulfillment_orders SET raw_delivery_status='1' WHERE document_id=$1`,[id])
     const partial=await service.getOrders(owner,{queue:'shipping',taskStatus:'outbound_pending',timeRange:'all',page:1,pageSize:20})
@@ -199,8 +199,34 @@ integration('local workbench PostgreSQL query integration', () => {
     expect(details.total).toBe(1)
     expect(details.items[0]).toMatchObject({orderNumber:'TO1'})
     expect(details.items[0].lines).toHaveLength(1)
+    expect(response.items[0]).toMatchObject({detailLineCount:1,previewLines:details.items[0].lines})
+    expect(details.group.previewLines).toEqual(response.items[0].previewLines)
   })
-  it('uses whole purchase entries for SKU, quantity and sales-number counts independently of detail paging', async () => {
+  it.each([2,3])('previews %i authorized demand lines across fulfillment pages without counting hidden owners', async count => {
+    employeeIds=['10']
+    await runner.query(`INSERT INTO hz_fop_resource_grants(id,connection_id,company_id,resource_type,target_key,decision,verified_at,source_as_of,expires_at) VALUES($1,$2,$3,'purchases','*','allow',now(),now(),now()+interval '60 seconds')`,[randomUUID(),connection,company])
+    for(let i=0;i<=count;i++){
+      const id=await order('preview-'+i,i===count?'20':'10','12.30',7,'member',`2026-11-10T0${i}:00:00Z`)
+      await runner.query(`INSERT INTO hz_fop_workbench_memberships(id,connection_id,company_id,dataset_id,order_document_id,queue_code,classification_state,projection_revision,rule_version,published_at) VALUES($1,$2,$3,$4,$5,'procurement','member',1,1,now())`,[randomUUID(),connection,company,dataset,id])
+      const line=(await runner.query('SELECT id FROM hz_fop_source_lines WHERE document_id=$1 ORDER BY source_entry_id LIMIT 1',[id]))[0].id
+      await runner.query(`UPDATE hz_fop_source_lines SET sku_code='SAME',product_name=$2 WHERE id=$1`,[line,'Preview '+i])
+      await runner.query(`INSERT INTO hz_fop_workbench_procurement_demands(id,connection_id,company_id,dataset_id,order_document_id,order_line_id,effective_order_quantity,stock_covered_quantity,required_quantity,allocated_quantity,unassigned_quantity,calculation_state,projection_revision) VALUES($1,$2,$3,$4,$5,$6,7,0,7,0,7,'known',1)`,[randomUUID(),connection,company,dataset,id,line])
+    }
+    for(const sortOrder of ['asc','desc'] as const){
+      const query={queue:'procurement' as const,page:1,pageSize:1,sortOrder}
+      const list=await service.getPurchaseGroups(owner,query)
+      const detail=await service.getPurchaseGroupDetails(owner,'uncreated',query)
+      const second=await service.getPurchaseGroupDetails(owner,'uncreated',{...query,page:2})
+      expect(list.items[0]).toMatchObject({detailLineCount:count,skuCount:1,quantity:count*7})
+      expect(list.items[0].previewLines).toHaveLength(count===2?2:1)
+      expect(list.items[0].previewLines[0]).toEqual(detail.items[0].lines[0])
+      if(count===2)expect(list.items[0].previewLines[1]).toEqual(second.items[0].lines[0])
+      expect(detail.total).toBe(count);expect(detail.items).toHaveLength(1)
+      expect(second.group.detailLineCount).toBe(count)
+      expect(JSON.stringify(list)).not.toContain('Preview '+count)
+    }
+  })
+  it('counts authorized purchase allocations independently of detail paging and clips shared purchase entries', async () => {
     const id=await order('purchase-whole','10','12.30',2), purchase=randomUUID()
     await runner.query(`INSERT INTO hz_fop_resource_grants(id,connection_id,company_id,resource_type,target_key,decision,verified_at,source_as_of,expires_at) VALUES($1,$2,$3,'purchases','*','allow',now(),now(),now()+interval '60 seconds')`,[randomUUID(),connection,company])
     for(const queue of ['procurement','procurement_completed'])await runner.query(`INSERT INTO hz_fop_workbench_memberships(id,connection_id,company_id,dataset_id,order_document_id,queue_code,classification_state,projection_revision,rule_version,published_at) VALUES($1,$2,$3,$4,$5,$6,'member',1,1,now())`,[randomUUID(),connection,company,dataset,id,queue])
@@ -216,7 +242,7 @@ integration('local workbench PostgreSQL query integration', () => {
       await runner.query(`INSERT INTO hz_fop_workbench_purchase_allocations(id,connection_id,company_id,dataset_id,order_document_id,order_line_id,purchase_document_id,purchase_line_id,allocated_requirement_quantity,supplier_shipped_quantity,cancelled_quantity,returned_quantity,allocation_state,projection_revision) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,0,0,'known',1)`,[randomUUID(),connection,company,dataset,id,sourceLine,purchase,line,index===2?1:quantity,shipped])
     }
     const result=await service.getPurchaseGroups(owner,{queue:'procurement',search:'MATCH',page:1,pageSize:20})
-    expect(result.items[0]).toMatchObject({orderCount:2,skuCount:2,quantity:5,shippedQuantity:3,pendingQuantity:2,purchase:{platformOrderNumber:'1688-WHOLE'}})
+    expect(result.items[0]).toMatchObject({orderCount:2,skuCount:2,quantity:4,shippedQuantity:3,pendingQuantity:1,purchase:{platformOrderNumber:'1688-WHOLE'}})
     expect((await service.getPurchaseGroups(owner,{queue:'procurement',search:'PO-WHOLE',page:1,pageSize:20})).total).toBe(1)
     expect((await service.getPurchaseGroups(owner,{queue:'procurement',search:'1688-WHOLE',page:1,pageSize:20})).total).toBe(1)
     const details=await service.getPurchaseGroupDetails(owner,'purchase:'+purchase,{queue:'procurement',page:1,pageSize:20})
@@ -224,20 +250,29 @@ integration('local workbench PostgreSQL query integration', () => {
     expect(new Set(details.items[0].lines.map((line:any)=>line.purchaseLineId)).size).toBe(3)
     expect(details.items[0].lines.every((line:any)=>line.purchaseLineId !== null)).toBe(true)
     expect(details.group.orderCount).toBe(2)
+    expect(result.items[0]).toMatchObject({detailLineCount:3,previewLines:details.items[0].lines.slice(0,1)})
+    expect(details.group.previewLines).toEqual(result.items[0].previewLines)
     const hidden=await order('purchase-hidden','20','12.30',2)
     const hiddenLine=(await runner.query('SELECT id FROM hz_fop_source_lines WHERE document_id=$1 LIMIT 1',[hidden]))[0].id
     const purchaseLine=(await runner.query('SELECT id FROM hz_fop_source_lines WHERE document_id=$1 LIMIT 1',[purchase]))[0].id
     const hiddenAllocation=randomUUID()
-    await runner.query(`INSERT INTO hz_fop_workbench_purchase_allocations(id,connection_id,company_id,dataset_id,order_document_id,order_line_id,purchase_document_id,purchase_line_id,allocated_requirement_quantity,supplier_shipped_quantity,cancelled_quantity,returned_quantity,allocation_state,projection_revision) VALUES($1,$2,$3,$4,$5,$6,$7,$8,0,0,0,0,'known',1)`,[hiddenAllocation,connection,company,dataset,hidden,hiddenLine,purchase,purchaseLine])
+    await runner.query(`INSERT INTO hz_fop_workbench_purchase_allocations(id,connection_id,company_id,dataset_id,order_document_id,order_line_id,purchase_document_id,purchase_line_id,allocated_requirement_quantity,supplier_shipped_quantity,cancelled_quantity,returned_quantity,allocation_state,projection_revision) VALUES($1,$2,$3,$4,$5,$6,$7,$8,9,4,0,0,'known',1)`,[hiddenAllocation,connection,company,dataset,hidden,hiddenLine,purchase,purchaseLine])
+    await runner.query('UPDATE hz_fop_procurement_line_details SET ordered_quantity=ordered_quantity+9,supplier_shipped_quantity=supplier_shipped_quantity+4 WHERE line_id=$1',[purchaseLine])
     employeeIds=['10']
-    await expect(service.getPurchaseGroups(owner,{queue:'procurement',page:1,pageSize:20})).rejects.toMatchObject({response:{code:'workbench_replica_incomplete'}})
-    await runner.query('DELETE FROM hz_fop_workbench_purchase_allocations WHERE id=$1',[hiddenAllocation])
+    const clipped=await service.getPurchaseGroups(owner,{queue:'procurement',page:1,pageSize:20})
+    expect(clipped.items[0]).toMatchObject({orderCount:2,skuCount:2,quantity:4,shippedQuantity:3,pendingQuantity:1})
+    expect(JSON.stringify(clipped)).not.toContain('purchase-hidden')
+    const clippedDetails=await service.getPurchaseGroupDetails(owner,'purchase:'+purchase,{queue:'procurement',page:1,pageSize:20})
+    expect(clippedDetails.total).toBe(1)
+    expect(clippedDetails.items[0].lines.reduce((sum:number,line:any)=>sum+line.quantity,0)).toBe(4)
+    await runner.query('UPDATE hz_fop_workbench_purchase_allocations SET supplier_shipped_quantity=allocated_requirement_quantity WHERE order_document_id=$1',[id])
+    expect((await service.getPurchaseGroups(owner,{queue:'procurement',completed:true,timeRange:'1m',page:1,pageSize:20})).total).toBe(0)
     await runner.query('UPDATE hz_fop_procurement_line_details SET supplier_shipped_quantity=ordered_quantity WHERE company_id=$1',[company])
-    const completed=await service.getPurchaseGroups(owner,{queue:'procurement',completed:true,timeRange:'1w',page:1,pageSize:20})
-    expect(completed.items[0]).toMatchObject({quantity:5,shippedQuantity:5,pendingQuantity:0})
+    const completed=await service.getPurchaseGroups(owner,{queue:'procurement',completed:true,timeRange:'1m',page:1,pageSize:20})
+    expect(completed.items[0]).toMatchObject({quantity:4,shippedQuantity:4,pendingQuantity:0})
     expect((await service.getPurchaseGroups(owner,{queue:'procurement',page:1,pageSize:20})).total).toBe(0)
     await runner.query('UPDATE hz_fop_procurement_line_details SET sales_order_number=NULL WHERE company_id=$1',[company])
-    await expect(service.getPurchaseGroups(owner,{queue:'procurement',completed:true,page:1,pageSize:20})).rejects.toMatchObject({response:{code:'workbench_replica_incomplete'}})
+    await expect(service.getPurchaseGroups(owner,{queue:'procurement',completed:true,timeRange:'1m',page:1,pageSize:20})).rejects.toMatchObject({response:{code:'workbench_replica_incomplete'}})
   })
   it('reads an unambiguous physical return by fulfillment order with independent grants', async () => {
     const id=await order('1','10','12.30',2),purchase=randomUUID(),ret=randomUUID(),retLine=randomUUID()
@@ -281,26 +316,31 @@ integration('local workbench PostgreSQL query integration', () => {
     await runner.query(`DELETE FROM hz_fop_resource_grants WHERE company_id=$1 AND resource_type='rma'`,[company])
     await expect(service.getRmaOrders(owner,{flowStatus:'active',page:1,pageSize:20})).rejects.toMatchObject({response:{code:'workbench_replica_authorization_stale'}})
   })
-  it('uses dispatch delivery and actual route facts independently of order packages and bill approval', async () => {
+  it('uses dispatch header tracking before fulfillment and package tracking after fulfillment', async () => {
     const id=await order('dispatch-source','10','12.30',2),dispatch=randomUUID()
+    await runner.query("UPDATE hz_fop_source_documents SET raw_bill_status='C' WHERE id=$1",[id])
+    await runner.query("UPDATE hz_fop_fulfillment_orders SET raw_order_status='3' WHERE document_id=$1",[id])
     await runner.query(`INSERT INTO hz_fop_source_documents(id,connection_id,company_id,dataset_id,entity_code,source_id,document_number,validation_state,raw_bill_status,source_audited_at) VALUES($1,$2,$3,$4,'hzkj_deliver_bill','D1','FY1','verified','C',now())`,[dispatch,connection,company,dataset])
     await runner.query(`INSERT INTO hz_fop_dispatches(document_id,company_id,dataset_id,actual_channel_id,raw_delivery_status) VALUES($1,$2,$3,'dispatch-route','TRACKING_OBTAINED')`,[dispatch,company,dataset])
     await runner.query(`INSERT INTO hz_fop_reference_items(id,connection_id,company_id,resource_type,source_id,name) VALUES($1,$2,$3,'actual_channel','dispatch-route','Changed dispatch channel')`,[randomUUID(),connection,company])
     await runner.query(`INSERT INTO hz_fop_document_relations(id,connection_id,company_id,dataset_id,from_document_id,to_document_id,relation_type,holder_document_id,relation_grain,resolution_state) VALUES($1,$2,$3,$4,$5,$6,'dispatch',$6,'document','resolved')`,[randomUUID(),connection,company,dataset,id,dispatch])
     for(const queue of ['dispatch','dispatch_completed'])await runner.query(`INSERT INTO hz_fop_workbench_memberships(id,connection_id,company_id,dataset_id,order_document_id,queue_code,classification_state,projection_revision,rule_version,published_at) VALUES($1,$2,$3,$4,$5,$6,'member',1,1,now())`,[randomUUID(),connection,company,dataset,id,queue])
     for(const type of ['full','last_mile'])await runner.query(`INSERT INTO hz_fop_tracking_numbers(id,connection_id,company_id,dataset_id,dispatch_document_id,tracking_type,number,shopify_selected,source_version) VALUES($1,$2,$3,$4,$5,$6,$7,false,1)`,[randomUUID(),connection,company,dataset,dispatch,type,'000-'+type])
+    await runner.query(`INSERT INTO hz_fop_order_packages(id,connection_id,company_id,dataset_id,order_document_id,source_package_key,channel_id,tracking_number,expected_active,source_version) VALUES($1,$2,$3,$4,$5,'1','dispatch-route','PACKAGE-TRACK',true,1)`,[randomUUID(),connection,company,dataset,id])
     const pending=await service.getOrders(owner,{queue:'dispatch',timeRange:'all',page:1,pageSize:20})
     expect(pending.total).toBe(1)
-    expect(pending.items[0]).toMatchObject({dispatchTaskStatus:'dispatch_tracking',logisticsInfo:[{channelName:'Changed dispatch channel',trackingNumbers:[{type:'full',number:'000-full'},{type:'last_mile',number:'000-last_mile'}]}]})
+    expect(pending.items[0]).toMatchObject({dispatchTaskStatus:'dispatch_tracking',logisticsInfo:[{channelName:'Changed dispatch channel',trackingNumbers:[{type:'full',number:'000-full'}]}]})
     expect((await service.getOrders(owner,{queue:'dispatch',completed:true,timeRange:'all',page:1,pageSize:20})).total).toBe(0)
     await runner.query(`UPDATE hz_fop_dispatches SET raw_delivery_status='FULFILLED' WHERE document_id=$1`,[dispatch])
+    await runner.query("UPDATE hz_fop_fulfillment_orders SET raw_order_status='4' WHERE document_id=$1",[id])
     expect((await service.getOrders(owner,{queue:'dispatch',timeRange:'all',page:1,pageSize:20})).total).toBe(0)
     const complete=await service.getOrders(owner,{queue:'dispatch',completed:true,timeRange:'all',page:1,pageSize:20})
     expect(complete.total).toBe(1); expect((complete.items[0] as any).dispatchApprovedAt).toBeTruthy()
+    expect(complete.items[0]).toMatchObject({logisticsInfo:[{packageTrackingNumber:'PACKAGE-TRACK'}]})
   })
 
 
-  it.each([false,true])('warehouse completed=%s keeps one fulfillment row and only approved dispatch logistics', async completed => {
+  it.each([false,true])('warehouse completed=%s displays native package facts without re-proving through dispatch approval', async completed => {
     const id=await order('warehouse-logistics','10','12.30',2)
     await runner.query('UPDATE hz_fop_fulfillment_orders SET raw_delivery_status=$2 WHERE document_id=$1',[id,completed?'2':'0'])
     for(const queue of ['shipping','warehouse_completed'])await runner.query(`INSERT INTO hz_fop_workbench_memberships(id,connection_id,company_id,dataset_id,order_document_id,queue_code,classification_state,projection_revision,rule_version,published_at) VALUES($1,$2,$3,$4,$5,$6,'member',1,1,now())`,[randomUUID(),connection,company,dataset,id,queue])
@@ -313,14 +353,15 @@ integration('local workbench PostgreSQL query integration', () => {
       await runner.query(`INSERT INTO hz_fop_document_relations(id,connection_id,company_id,dataset_id,from_document_id,to_document_id,relation_type,holder_document_id,relation_grain,resolution_state) VALUES($1,$2,$3,$4,$5,$6,'dispatch',$6,'document','resolved')`,[randomUUID(),connection,company,dataset,id,doc])
       for(const type of ['full','last_mile'])await runner.query(`INSERT INTO hz_fop_tracking_numbers(id,connection_id,company_id,dataset_id,dispatch_document_id,tracking_type,number,shopify_selected,source_version) VALUES($1,$2,$3,$4,$5,$6,$7,false,1)`,[randomUUID(),connection,company,dataset,doc,type,'TRACK-'+index+'-'+type])
     }
+    await runner.query(`INSERT INTO hz_fop_order_packages(id,connection_id,company_id,dataset_id,order_document_id,source_package_key,channel_id,tracking_number,expected_active,source_version) VALUES($1,$2,$3,$4,$5,'1','route0','PACKAGE-TRACK',true,1)`,[randomUUID(),connection,company,dataset,id])
     const query={queue:'shipping' as const,completed,timeRange:'all' as const,page:1,pageSize:20}
     const page=await service.getOrders(owner,query)
     expect(page.total).toBe(1);expect(page.items).toHaveLength(1);expect(page.items[0].items).toHaveLength(2)
-    expect((page.items[0] as any).logisticsInfo).toMatchObject([0,1].map(i=>({channelName:'Dispatch route '+i,trackingNumbers:[{type:'full',number:'TRACK-'+i+'-full'},{type:'last_mile',number:'TRACK-'+i+'-last_mile'}]})))
+    expect((page.items[0] as any).logisticsInfo).toMatchObject([{channelName:'Dispatch route 0',packageTrackingNumber:'PACKAGE-TRACK'}])
     await runner.query(`UPDATE hz_fop_source_documents SET raw_bill_status='B' WHERE id=$1`,[docs[0]])
     await runner.query(`UPDATE hz_fop_document_relations SET removed_at=now() WHERE to_document_id=$1`,[docs[1]])
     const cleared=await service.getOrders(owner,query)
-    expect(cleared.total).toBe(1);expect((cleared.items[0] as any).logisticsInfo).toEqual([])
+    expect(cleared.total).toBe(1);expect((cleared.items[0] as any).logisticsInfo).toMatchObject([{channelName:'Dispatch route 0',packageTrackingNumber:'PACKAGE-TRACK'}])
   })
 
   it('hides deleted or unlinked dispatch tracking and reads only recreated dispatch numbers', async () => {
@@ -357,7 +398,8 @@ integration('local workbench PostgreSQL query integration', () => {
     await runner.query(`INSERT INTO hz_fop_source_documents(id,connection_id,company_id,dataset_id,entity_code,source_id,validation_state) VALUES($1,$2,$3,$4,'hzkj_deliver_bill','approved-dispatch','verified')`,[dispatch,connection,company,dataset])
     await runner.query(`INSERT INTO hz_fop_document_relations(id,connection_id,company_id,dataset_id,from_document_id,to_document_id,relation_type,holder_document_id,relation_grain,resolution_state) VALUES($1,$2,$3,$4,$5,$6,'dispatch',$6,'document','resolved')`,[randomUUID(),connection,company,dataset,orderId,dispatch])
     await runner.query(`INSERT INTO hz_fop_tracking_numbers(id,connection_id,company_id,dataset_id,dispatch_document_id,package_id,tracking_type,number,provider_id,shopify_selected,source_version) VALUES($1,$2,$3,$4,$5,$6,'full','APPROVED-TRACK','provider',true,1)`,[randomUUID(),connection,company,dataset,dispatch,packageId])
-    expect((await service.getOrders(owner,{queue:'review',completed:true,timeRange:'all',page:1,pageSize:20})).items[0]).toMatchObject({trackingNumber:'APPROVED-TRACK'})
+    await runner.query('UPDATE hz_fop_order_packages SET tracking_number=$2 WHERE id=$1',[packageId,'PACKAGE-APPROVED-TRACK'])
+    expect((await service.getOrders(owner,{queue:'review',completed:true,timeRange:'all',page:1,pageSize:20})).items[0]).toMatchObject({trackingNumber:'PACKAGE-APPROVED-TRACK'})
   })
 
   it('reads allocation approval and audit time from the live allocation document', async()=>{

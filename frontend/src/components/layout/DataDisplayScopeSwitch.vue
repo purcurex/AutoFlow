@@ -19,7 +19,7 @@ async function change(event: Event) {
 </script>
 <template>
   <div v-if="manager" class="relative" :aria-busy="saving">
-    <select :value="users.user?.dataDisplayScope ?? 'self'" :disabled="saving" :aria-label="zh ? '全局数据展示范围' : 'Global data scope'" :title="zh ? '保存后对首页、工作台和统计全局生效' : 'Applies to home, workbenches and analytics'" class="h-9 max-w-32 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-2 text-xs text-[var(--color-text)]" @change="change">
+    <select :value="users.user?.dataDisplayScope ?? 'self'" :disabled="saving" :aria-label="zh ? '全局数据展示范围' : 'Global data scope'" :title="zh ? '控制待办及业务记录范围；Dashboard分析按图表权限展示' : 'Controls tasks and business records; Dashboard analytics follows chart permissions'" class="h-9 max-w-32 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-2 text-xs text-[var(--color-text)]" @change="change">
       <option value="self">{{ zh ? '个人数据' : 'Personal' }}</option>
       <option value="department">{{ zh ? '部门数据' : 'Department' }}</option>
     </select>

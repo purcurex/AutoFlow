@@ -1,3 +1,5 @@
+// Verify source field/filter/permission contracts independently of the shared layout, tested in single-sheet.spec.ts.
+jest.mock('../workbench-export/single-sheet',()=>({...jest.requireActual('../workbench-export/single-sheet'),singleSheetWorkbook:jest.fn()}))
 import * as ExcelJS from 'exceljs'
 import { buildPurchaseGroupWorkbook } from './procurement-groups-export'
 import type { PurchaseGroup } from './procurement-groups.types'
@@ -33,7 +35,7 @@ it('separates uncreated demand from purchase and shipment quantities in mixed ex
   expect(cell(sheet, 3, '发货时效').value).toBe('超过48小时')
   expect(sheet.autoFilter).toBe('A1:Z3')
 })
-it('preserves long identifiers, literal text, consumer payment time, store and variants and records export filters', async () => {
+it('preserves long identifiers, literal text, customer payment time, store and variants and records export filters', async () => {
   const book = await read([group]), sheet = book.getWorksheet('采购关联明细')!
   expect(cell(sheet, 2, '平台订单号').value).toBe('5127833916176022434')
   expect(cell(sheet, 2, '平台订单号').type).toBe(ExcelJS.ValueType.String)
@@ -42,7 +44,7 @@ it('preserves long identifiers, literal text, consumer payment time, store and v
   expect(cell(sheet, 2, 'SKU').value).toBe('00001')
   expect(cell(sheet, 2, '店铺').value).toBe('Store')
   expect(cell(sheet, 2, '规格').value).toBe('Blue')
-  expect(cell(sheet, 2, '客户付款时间（UTC+8）').value).toBe('2026-10-26 07:00:00')
+  expect(cell(sheet, 2, '客户付款时间（UTC+8）').value).toBe('2026-10-27 07:00:00')
   const notes = JSON.stringify(book.getWorksheet('说明')!.getSheetValues())
   for (const text of ['演示数据', '待创建采购单', 'Lamp', '降序', '杭州仓', '跨分页']) expect(notes).toContain(text)
 })
@@ -59,7 +61,7 @@ it('exports customer-payment range and sort metadata while retaining purchase co
   const completed = { ...group, completedAt: '2026-10-29T00:00:00Z', rows: group.rows.map(row => ({ ...row, completedAt: '2026-10-29T00:00:00Z' })) }
   await book.xlsx.load(await buildPurchaseGroupWorkbook([completed], { queue: 'procurement', completed: true, timeRange: '1m', sortOrder: 'desc', mode: 'filtered' }, 'mock', now) as never)
   const sheet = book.getWorksheet('采购关联明细')!
-  expect(cell(sheet, 2, '客户付款时间（UTC+8）').value).toBe('2026-10-26 07:00:00')
+  expect(cell(sheet, 2, '客户付款时间（UTC+8）').value).toBe('2026-10-27 07:00:00')
   expect(cell(sheet, 2, '采购完成时间（UTC+8）').value).toBe('2026-10-29 08:00:00')
   const notes = book.getWorksheet('说明')!.getSheetValues() as (string[] | undefined)[]
   expect(notes.find(row => row?.[1] === '客户付款时间范围')?.[2]).toBe('近一月')

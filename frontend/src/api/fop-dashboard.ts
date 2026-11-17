@@ -1,3 +1,4 @@
+import { analyticsQuery, type AnalyticsQueryOptions } from '@/utils/analytics-cache'
 import { getWorkbenchDashboardCounts, isWorkbenchScopeError } from './workbench-dashboard'
 import { assertCurrentSession, captureSession } from '@/utils/session'
 import type { FopExceptionType } from './fop-orders'
@@ -17,6 +18,8 @@ export interface FopDashboardData {
   queueStates?: Partial<Record<DashboardQueue, DashboardQueueState>>
   queueBreakdown?: Partial<Record<DashboardQueue, { queue: FopOrderQueue; count: number | null; state: DashboardQueueState }[]>>
   integratedQueues?: string[]
+  localAnalytics?: boolean
+  registrationWindow?: { from: string; to: string; asOf: string }
   analyticsConfigured?: boolean
   analyticsUnavailable?: boolean
   rates: { currency: string; cnyPerUnit: number }[]
@@ -39,20 +42,24 @@ function parseDay(value: string): number {
   return timestamp
 }
 
-export async function getFopDashboard(query: FopDashboardQuery, now = new Date(), onPending?: (pending: import('./workbench-dashboard').DashboardPending) => void): Promise<FopDashboardData> {
+export async function getFopDashboardCharts(query: FopDashboardQuery, options?: AnalyticsQueryOptions): Promise<FopDashboardData> {
+  const { default: api } = await import('./index')
+  const params = { from: query.from, to: query.to, year: query.year, includeQueues: false }
+  return analyticsQuery('/autoflow/integrations/fop/dashboard', params, () => api.get<FopDashboardData, FopDashboardData>('/autoflow/integrations/fop/dashboard', { params, timeout: 180000 }), options)
+}
+
+export async function getFopDashboard(query: FopDashboardQuery, now = new Date(), onPending?: (pending: import('./workbench-dashboard').DashboardPending) => void, options?: AnalyticsQueryOptions): Promise<FopDashboardData> {
   const start = parseDay(query.from)
   const end = parseDay(query.to)
   const day = 86_400_000
   if (start > end || (end - start) / day > 365 || query.to > localDate(now)) throw new Error('Invalid date range')
   if (!Number.isInteger(query.year) || query.year < 2020 || query.year > Number(localDate(now).slice(0, 4))) throw new Error('Invalid year')
-  const { default: api } = await import('./index')
-  const { from, to, year } = query
   // 真实统计包含权限核对及多页事实汇总，使用独立超时，不改变其他业务接口。
   const session = captureSession()
   let active = true
   try {
     const [analytics, pending] = await Promise.all([
-      api.get<FopDashboardData, FopDashboardData>('/autoflow/integrations/fop/dashboard', { params: { from, to, year, includeQueues: false }, timeout: 180000 }).catch((cause: unknown) => {
+      getFopDashboardCharts(query, options).catch((cause: unknown) => {
         if (isWorkbenchScopeError(cause)) throw cause
         // Pending lists remain useful when an independent chart source is unavailable.
         return { source: 'fop', updatedAt: new Date().toISOString(), analyticsUnavailable: true,

@@ -1,0 +1,172 @@
+{
+  "schemaVersion": "fop-timestamp-sync/1",
+  "status": "four-entity-local-publication-implemented-source-full-sync-unverified",
+  "consistency": "eventual-with-full-reconciliation",
+  "preferred": true,
+  "runtimeEnabled": false,
+  "upstreamCalledForThisRevision": true,
+  "localImplementation": {
+    "engine": true,
+    "durablePostgres": true,
+    "transactionalWatermark": true,
+    "manualCli": "npm run workbench:timestamp-sync",
+    "automaticScheduler": false,
+    "sourceLiveVerified": false,
+    "primaryFulfillmentProjection": "ordinary pages: current verified fields with linked re-evaluation; strict keyset legacy restrictions retained",
+    "linkedSnapshotPublication": "four entities: transactional local display, ownership, analytics and graph refresh; incomplete records pending",
+    "otherEntityProjection": "other entity timestamp acquisition pending; existing dependent projections revalidated",
+    "ownershipChangeFence": "cleared only after verified parent and all pending projection tasks resolved",
+    "migrationAppliedToBusinessDatabase": true,
+    "ordinaryModifiedPages": {
+      "implemented": true,
+      "profile": "fop-timestamp-paged-profile.example.json",
+      "apis": [
+        "queryOrderList",
+        "queryAllocation",
+        "queryDispatch",
+        "queryDeliveryNotice"
+      ],
+      "liveSampleVerified": true,
+      "liveFullSyncVerified": false,
+      "publication": "transactional_four_entity_local_projection_with_per_record_pending",
+      "clock": "local_utc_minus_safety_lag_not_source_clock",
+      "timezone": "Asia/Shanghai",
+      "precision": "seconds",
+      "initialization": "full_modifytime_range_then_incremental",
+      "reconciliation": "full_modifytime_range_required_within_24h_no_deletion_inference",
+      "identity": "configuration_and_authenticated_connection_context"
+    }
+  },
+  "reuse": [
+    "existing-business-query-api",
+    "integration-account",
+    "tenant",
+    "company",
+    "authentication"
+  ],
+  "capabilities": {
+    "TIME_QUERY": {
+      "status": "four-modifytime-page-apis-sampled-keyset-and-create-window-pending",
+      "url": null,
+      "requestConcepts": [
+        "tenantId",
+        "companyId",
+        "entityCode",
+        "timeField",
+        "fromInclusive",
+        "toExclusive",
+        "afterTime",
+        "afterId",
+        "limit"
+      ],
+      "timeFields": [
+        "createtime",
+        "modifytime"
+      ],
+      "order": [
+        "timeField ASC",
+        "id ASC"
+      ],
+      "predicate": "L <= t AND t < U AND (cursor is null OR t > afterTime OR (t = afterTime AND id > afterId))",
+      "responseConcepts": [
+        "scope",
+        "rows",
+        "nextCursor",
+        "complete",
+        "sourceServerTime"
+      ],
+      "wireMapping": "Use each published FOP OpenAPI parameter mapping; these names are capability concepts, not verified endpoint parameters."
+    },
+    "FULL_DETAIL": {
+      "status": "pending-entity-completeness-verification",
+      "url": null,
+      "requestConcepts": [
+        "tenantId",
+        "companyId",
+        "entityCode",
+        "ids"
+      ],
+      "responseConcepts": [
+        "id",
+        "companyId",
+        "createtime",
+        "modifytime",
+        "header",
+        "entries",
+        "relations",
+        "ownerEmployeeId",
+        "linesComplete",
+        "relationsComplete",
+        "fieldPresence"
+      ],
+      "optionalWhenTimeQueryContainsCompleteDetails": true
+    },
+    "RECONCILE": {
+      "status": "pending-full-scope-and-existence-verification",
+      "url": null,
+      "reuse": [
+        "full-id-query",
+        "full-detail",
+        "platform-deletion-records-if-available"
+      ],
+      "requirements": [
+        "all-business-states",
+        "stable-id-keyset",
+        "explicit-not-found-versus-denied-versus-failure",
+        "per-id-content-comparison",
+        "confirm-missing-before-invalidating",
+        "protect-records-changing-during-scan"
+      ]
+    }
+  },
+  "window": {
+    "checkpointScope": [
+      "tenantId",
+      "companyId",
+      "entityCode"
+    ],
+    "lowerBound": "previousSuccessfulUpperBound - overlap",
+    "upperBound": "sourceServerTime - safetyLag",
+    "interval": "[L,U)",
+    "proposedOverlapSeconds": 600,
+    "proposedSafetyLagSeconds": 120,
+    "defaultsRequireMeasuredValidation": true,
+    "preserveSourcePrecision": true,
+    "sourceTimezoneMustBeExplicit": true,
+    "clockRegression": "do not regress checkpoint when U <= W; diagnose source clock",
+    "advanceCheckpoint": "Capture U only after both streams, full details, raw documents and durable projection tasks commit atomically; this is not a display publication watermark",
+    "failure": "retain W; replay whole window",
+    "emptyWindow": "advance only on explicit successful complete response for the verified scope"
+  },
+  "merge": {
+    "serialization": "one writer per entity and tenant; no overlapping sync/reconciliation writers",
+    "identity": "tenant+entity+stableId; include company only if source IDs are company-scoped",
+    "classification": "upsert by identity, not by creation date",
+    "sameTimestamp": "compare canonical business content; equal timestamp is not equal version",
+    "olderTimestamp": "quarantine conflict; source-authoritative re-read/reconciliation required before replacement",
+    "completeChildren": "replace complete entries and relations atomically; never delete based on partial response",
+    "missingFields": "preserve field presence; omitted is unknown, explicit null clears, unknown is not zero",
+    "detailNewerThanWindow": "retain actual source time; do not label the row a snapshot at U",
+    "dependencies": "ordinary pages: rebuild old/new local relationships, permissions, procurement facts and analytics in capture transaction; missing facts remain unknown"
+  },
+  "compensation": {
+    "initialization": "record source T0 before full stable-ID traversal, then replay from T0-overlap and reconcile",
+    "fullContentCycle": "proposed daily, partitionable, tune after load validation; includes closed and historical documents",
+    "hardDelete": "platform tombstone if available, otherwise full-ID diff plus authoritative per-ID existence confirmation",
+    "lateCommitAndBackfill": "full-content reconciliation repairs changes outside overlap or without timestamp updates",
+    "guarantee": "No transaction-history or atomic cross-document snapshot guarantee; convergence requires complete source queries and successful compensation cycles."
+  },
+  "runtimeGaps": [
+    "verify-or-publish-per-entity-time-filters-and-keyset-paging",
+    "verify-standard-and-custom-write-path-timestamp-updates",
+    "verify-complete-details-and-delete-or-existence-semantics",
+    "run-controlled-end-to-end-acceptance-before-enabling-schedule",
+    "provide-missing-outbound-and-line-stage-fields-before-complete-workbench-incremental-acceptance",
+    "map-other-entity-timestamp-apis-after-source-capabilities-provided"
+  ],
+  "optionalStrictProtocol": {
+    "contract": "fop-replica-service-contract.json",
+    "requiredForFirstPhase": false,
+    "timestampMayImpersonateTransactionCursorOrVersion": false
+  }
+}

@@ -34,12 +34,12 @@ describe('actual confirmed carrier freight', () => {
   ])('rejects unusable authorized cost snapshots: %j', bad => {
     expect(() => publicFreight({ ...row('a'), ...bad } as FopFreightCandidate)).toThrow()
   })
-  it('groups UTC+8 cross-year confirmation and uses prior December as January baseline', () => {
+  it('groups UTC+8 confirmation from the first business year and excludes earlier baselines', () => {
     const data = aggregateFreight([row('dec', { amount: 50, originalAmount: 350, confirmedAt: '2025-12-15T00:00:00Z' }), row('jan', { confirmedAt: '2025-12-31T16:00:00Z' })], query, now)
     expect(data.periods).toHaveLength(10)
     expect(data.periods[9].partial).toBe(true)
     expect(data.series.map(s => s.id)).toEqual(['total', 'carrier:YT', 'carrier:4PX', 'carrier:WB', 'carrier:YW', 'carrier:JS', 'carrier:OTHER'])
-    expect(data.series[0].values[0]).toEqual({ amount: 100, previousAmount: 50, delta: 50, percent: 100 })
+    expect(data.series[0].values[0]).toEqual({ amount: 100, previousAmount: 0, delta: 100, percent: null })
     expect(data.totals.amount).toBe(100)
   })
   it('does not infer free cost from pending/zero costs or count unapproved and future facts', () => {
@@ -49,13 +49,13 @@ describe('actual confirmed carrier freight', () => {
     expect(data.series[0].values[0].percent).toBeNull()
     expect(data.series[0].values[2].percent).toBe(0)
   })
-  it('uses four Monday weeks including cross-year baselines and five year buckets', () => {
+  it('clips first-year weeks and annual buckets at 2026', () => {
     const weeks = aggregateFreight([], { grain: 'week', year: 2026, weekOf: '2026-01-02', warehouse: 'ALL' }, now)
-    expect(weeks.periods).toHaveLength(4)
-    expect(weeks.periods[3]).toMatchObject({ id: '2025-12-29', from: '2025-12-29', to: '2026-01-04', previousFrom: '2025-12-22', previousTo: '2025-12-28' })
+    expect(weeks.periods).toHaveLength(1)
+    expect(weeks.periods[0]).toMatchObject({ id: '2026-01-01', from: '2026-01-01', to: '2026-01-04', previousFrom: '2025-12-22', previousTo: '2025-12-28' })
     const years = aggregateFreight([], { ...query, grain: 'year' }, now)
-    expect(years.periods.map(p => p.id)).toEqual(['2022', '2023', '2024', '2025', '2026'])
-    expect(years.periods[0].previousFrom).toBe('2021-01-01')
+    expect(years.periods.map(p => p.id)).toEqual(['2026'])
+    expect(years.periods[0].previousFrom).toBe('2025-01-01')
   })
   it('reconciles carrier/warehouse totals and all-page drill amounts, including baseline drill', () => {
     const records = [row('a'), row('b', { carrierCode: '4PX', warehouseCode: 'SZ' }), row('c'), row('prior', { confirmedAt: '2025-12-15T00:00:00Z' })]
@@ -65,10 +65,10 @@ describe('actual confirmed carrier freight', () => {
     expect(detail.items).toHaveLength(1)
     expect(detail.total).toBe(2)
     expect(detail.totals).toEqual({ billCount: 2, amount: 200, originalAmounts: [{ currency: 'CNY', amount: 1400 }] })
-    expect(freightDetails(records, { ...query, periodId: '2026-01', comparisonPeriod: 'previous', workbenchRole: 'dispatch', page: 1, pageSize: 20 }, now).totals.amount).toBe(100)
+    expect(freightDetails(records, { ...query, periodId: '2026-01', comparisonPeriod: 'previous', workbenchRole: 'dispatch', page: 1, pageSize: 20 }, now).totals.amount).toBe(0)
     expect(aggregateFreight(records, { ...query, warehouse: 'SZ' }, now).totals.amount).toBe(100)
   })
-  it.each([{ year: 2027 }, { grain: 'week', weekOf: '2026-02-30' }, { grain: 'week', weekOf: '2027-01-01' }, { grain: 'week', weekOf: '2025-01-01' }])('rejects invalid/future or inconsistent period queries: %j', patch => {
+  it.each([{year:2025}, { year: 2027 }, { grain: 'week', weekOf: '2026-02-30' }, { grain: 'week', weekOf: '2027-01-01' }, { grain: 'week', weekOf: '2025-01-01' }])('rejects invalid/future or inconsistent period queries: %j', patch => {
     expect(() => aggregateFreight([], { ...query, ...patch } as FreightQuery, now)).toThrow()
   })
   it('rejects a period ID outside the returned window rather than broadening the detail query', () => {
@@ -80,7 +80,7 @@ describe('independent freight resource authorization', () => {
   beforeEach(() => { jest.useFakeTimers(); jest.setSystemTime(now) })
   afterEach(() => jest.useRealTimers())
   const setup = (records = [row('a')], extraGrant = {}, extraUser = {}) => {
-    const user = { id: 'u', businessRole: 'admin', workbenchRoles: ['dispatch'], fopTenantId: 'tenant', fopUserId: 'fop-user', ...extraUser }
+    const user = { id: 'u', role: 'admin', businessRole: 'admin', workbenchRoles: ['dispatch'], fopTenantId: 'tenant', fopUserId: 'fop-user', ...extraUser }
     const provider = { source: 'mock', isConfigured: () => true, administratorIdentity: async () => null,
       resolvePermissions: async () => ({ subject: { tenantId: 'tenant', userId: 'fop-user' }, allowedOrderIds: [], allowedFreightIds: records.map(r => r.id), analyticsScopes: ['freight'], ...extraGrant }),
       listFreight: jest.fn(async () => records), listOrders: jest.fn(async () => { throw new Error('Orders not needed') }),
@@ -100,14 +100,12 @@ describe('independent freight resource authorization', () => {
     expect((await empty.service.getFreight('u', query)).billCount).toBe(0)
     expect(empty.provider.listFreight).not.toHaveBeenCalled()
   })
-  it('intersects tenant, allowed IDs and employee scope before computing amounts', async () => {
-    const { service } = setup([row('good'), row('other', { owner: { id: 'e2', name: 'Other' } }), row('cross', { tenantId: 'elsewhere' }), row('not-granted')], { allowedFreightIds: ['good', 'other', 'cross'] }, { businessRole: 'salesperson', businessEmployeeId: 'e1' })
-    expect((await service.getFreight('u', query)).totals.amount).toBe(100)
-  })
-  it('uses the analytics direct department boundary and blocks nonadministrators with closed business access', async () => {
-    const scoped = setup([row('good', { departmentPathIds: ['parent', 'd1'] }), row('child', { department: { id: 'child', name: 'Child' }, departmentPathIds: ['parent', 'd1', 'child'] }), row('other', { department: { id: 'd2', name: 'Other' } })], {}, { businessRole: 'department_manager', dataDisplayScope: 'department' as const, businessDepartmentId: 'd1' })
-    expect((await scoped.service.getFreight('u', query)).billCount).toBe(1)
-    await expect(setup(undefined, {}, { role: 'user', businessRole: 'none' }).service.getFreight('u', query)).rejects.toMatchObject({ status: 403 })
+  it.each(['salesperson','department_manager','admin'])('denies a nonadministrator %s before fetching freight even with an explicit chart grant', businessRole => {
+    const {service,provider}=setup(undefined,{}, {role:'user',businessRole,businessEmployeeId:'e1',businessDepartmentId:'d1',chartPermissions:[{chartId:'freight',visibility:'allow',dataScope:'inherit',summaryMode:'inherit',summaryDepartments:[],details:'allow',export:'allow'}]})
+    return Promise.all([
+      expect(service.getFreight('u',query)).rejects.toMatchObject({status:403}),
+      expect(service.getFreightDetails('u',{...query,workbenchRole:'dispatch',page:1,pageSize:20})).rejects.toMatchObject({status:403}),
+    ]).then(()=>{expect(provider.listFreight).not.toHaveBeenCalled()})
   })
   it('gives system administrators company scope while retaining independent freight grants', async () => {
     const records = [row('own'), row('other', { owner: { id: 'e2', name: 'Other' } }), row('not-granted'), row('foreign', { tenantId: 'another' })]
@@ -127,12 +125,14 @@ describe('independent freight resource authorization', () => {
   })
   it('discards data when business authorization changes while fetching costs', async () => {
     const s = setup()
-    s.provider.listFreight.mockImplementation(async () => { s.user.businessRole = 'none'; return [row('a')] })
+    s.provider.listFreight.mockImplementation(async () => { s.user.role = 'user'; s.user.businessRole = 'none'; return [row('a')] })
     await expect(s.service.getFreight('u', query)).rejects.toMatchObject({ status: 403 })
   })
-  it('requires an authorized workbench role for paginated detail', async () => {
-    const s = setup(undefined, {}, { businessRole: 'salesperson', businessEmployeeId: 'e1' })
-    await expect(s.service.getFreightDetails('u', { ...query, workbenchRole: 'sales', page: 1, pageSize: 20 })).rejects.toMatchObject({ status: 403 })
+  it('allows administrator detail and rejects a nonadministrator with the same workbench role', async () => {
+    const s = setup()
     expect((await s.service.getFreightDetails('u', { ...query, workbenchRole: 'dispatch', page: 1, pageSize: 20 })).totals.amount).toBe(100)
+    const nonadmin=setup(undefined, {}, { role:'user',businessRole:'admin' })
+    await expect(nonadmin.service.getFreightDetails('u', { ...query, workbenchRole: 'dispatch', page: 1, pageSize: 20 })).rejects.toMatchObject({ status: 403 })
+    expect(nonadmin.provider.listFreight).not.toHaveBeenCalled()
   })
 })

@@ -1,0 +1,12 @@
+{
+  "version": 2,
+  "protocol": "ordinary_modified_pages",
+  "packageVersion": "2026-11-16",
+  "tenantId": "待填写原租户",
+  "companyId": "100000",
+  "orgNumber": "hyperzone.test",
+  "entityCode": "hzkj_orders",
+  "readOnly": true,
+  "acknowledgeEventualConsistency": false,
+  "instructions": "仅支持履约、配货、发运、发货通知四实体修改时间普通分页。填写原租户并确认最终一致边界后才可手动执行；不修改暂停配置；仅--execute --authorize-one-shot且WORKBENCH_SYNC_ENABLED=false、WORKBENCH_AUTOMATIC_CALLS_ENABLED=false时在执行内存解除查询暂停。执行前核对profile租户与KINGDEE/REPLICA原配置，再经getConnectionContext验证租户、集成用户和当前公司；身份验证不等于稳定范围证明。OpenAPI token仅执行期获取一次并在内存复用。采集W使用本地时钟、120秒安全滞后、600秒重叠；24小时全量补偿必须人工另行安排，无新增定时任务。创建时间仅返回，不伪造创建窗口。删除/范围证明/子表变更推进主表时间仍待提供。四实体成功采集后在同一事务更新本地展示、关系和分析；完整原生字段及必需关联字段缺失的记录保留pending，其他确定记录可发布。无一致快照/删除完备性保证，不代表全工作台刷新。"
+}

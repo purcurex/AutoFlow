@@ -1,3 +1,5 @@
+import { hasDispatchSyncFailure } from './order-dispatch-status'
+import { matchesCollectedAllocation } from './collected-allocation'
 import { isProcurementCompleted } from './workbench-queue-rules'
 import type { FopOrder, FopOrderQueue } from '@/api/fop-orders'
 import type { WorkbenchRole } from './workbench'
@@ -18,8 +20,18 @@ export function completionTime(order: FopOrder, role: WorkbenchRole): string | n
 }
 /** Validate archive responses against completion facts, independently of pending queue rules. */
 export function matchesCompletedQueue(order: FopOrder, queue: FopOrderQueue): boolean {
+  if (queue === 'dispatch' && hasDispatchSyncFailure(order)) return false
+  if (order.businessStatus && queue === 'dispatch') return order.reviewStatus === 'approved' && ['fulfilled','partial_fulfilled'].includes(order.businessStatus.order)
+  if (order.businessStatus && queue === 'shipping') return order.businessStatus.outbound === 'completed'
   if (queue === 'review') return order.reviewStatus === 'approved'
+  // The source header proves outbound completion even when unrelated collected facts are absent.
+  if (queue === 'shipping' && order.dataQuality?.mode === 'collected' && order.dataQuality.readOnly) return order.sourceOutboundStatus === '2'
+  if (matchesCollectedAllocation(order, queue, true)) return true
   if (order.cancelled || order.paymentStatus !== 'paid') return false
+  if (order.dataQuality?.mode === 'collected' && order.dataQuality.readOnly) {
+    if (queue === 'dispatch' && order.nativeFactsCaptured) return order.dispatchTaskStatus === 'dispatch_synced'
+    if (queue === 'procurement' && order.nativeProcurementCaptured) return order.procurementStage === 'shipped'
+  }
   if (queue !== 'procurement' && order.reviewStatus !== 'approved') return false
   const progress = order.fulfillmentProgress
   if (queue === 'dispatch') return progress.shopifySync === 'synced'

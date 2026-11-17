@@ -2,19 +2,17 @@
 
 HyperZone 是面向公司领导、销售、采购、订单、发运、仓库及 IT 人员的内部办公平台。以 Dashboard、分岗位工作台、用户级业务数据隔离和组织管理为基础，连接客户开发、履约协同与经营分析。AutoFlow 保留为工程名称及客户开发模块名称。
 
-> 当前基线：2026-10-22。Dashboard 和履约分析已具备服务端 Mock 数据、前后端契约及权限校验；FOP 是基于金蝶云苍穹平台自研的 HyperZone 应用，后台源码位于 `/Library/VSCode/dtr5b`。真实用户授权、业务数据和组织同步网络适配器仍待接入。不要将演示数据视为真实经营结果。
+> 当前数据基线：2026-11-12。五工作台已读取真实采集的本地业务数据；Dashboard 旧分析链尚未全部迁移到本地。FOP 是基于金蝶云苍穹平台自研的 HyperZone 应用，后台源码位于 `/Library/VSCode/dtr5b`。页面存在、Mock通过与真实指标可用分别记录。
 
 ## FOP 本地集成核验
 
 当前五工作台清单与导出采用本地查询库；新服务身份适配器、独立授权续验和可恢复历史初始化入口已实现。FOP 测试环境访问保持暂停；六项同步API和专用实时契约仍待FOP提供，现有普通分页地址不能直接代替。
 
-- [当前字段对照表](docs/integrations/HyperZone待办清单数据字段对照表.html)
-- [同步与查询方案](docs/solutions/HyperZoneFOP数据同步与查询方案.html)
-- [集成核查与初始化条件](docs/integrations/HyperZoneFOP集成核查与初始化条件.html)
-- [HyperZone智能办公平台项目FOP扩展开发需求](docs/integrations/HyperZone智能办公平台项目FOP扩展开发需求.html)
-- [工作台初始化与业务待办覆盖诊断](docs/integrations/HyperZone工作台初始化与业务待办覆盖诊断.html)
+- [项目开发需求说明书（含字段、接口、FOP开发及核查结论）](docs/requirements/HyperZone智能办公平台项目开发需求说明书.html)
 - 本地只读预检：`npm run workbench:preflight -- --env-file backend/.env.workbench.local`；原真实副本加 `--database autoflow_local_demo`。命令不连接 FOP、不迁移、不导入。
-- 对照表重建：`python3 scripts/fop-local-field-matrix/generate.py`；验证：`python3 scripts/fop-local-field-matrix/validate.py`。
+- FOP同步服务执行稿重建：`python3 scripts/build-unified-requirements.py`；验证：`python3 scripts/validate-unified-requirements.py`（含六项服务契约、链接及交付包校验）。
+
+　　Dashboard 与五岗位数据分析的新需求见唯一说明书第07节。已补充本地分析投影，并完成一次履约45,529、备货164、采购3,141、发运15,292、收款3,968条真实数据补采；`GET /api/workbench/analytics` 已通过本地SQL与HTTP验证。原待办与补采分别保留源时点，自动调用仍暂停。收款币种、结算与成本缺项不推算为收入/利润；新增UI及旧分析接口本地化待实施。下方既有分析资料仅作为历史实现参考，口径以统一说明书为准。
 
 ## 当前功能
 
@@ -67,7 +65,7 @@ HyperZone 是面向公司领导、销售、采购、订单、发运、仓库及 
 - [HyperZone FOP 源码字段与适配证据](docs/analytics/HYPERZONE_FOP_SOURCE_MAPPING.md)
 - [后续待办与人工核对清单 · 优先级、责任、资料和验收](docs/analytics/FOLLOW_UP_CHECKLIST.md)
 
-既有细分约定：[Dashboard](docs/FOP_DASHBOARD_INTEGRATION.md)、[订单统计](docs/FOP_ORDER_VOLUME_API.md)、[用户数据权限](docs/FOP_USER_DATA_ACCESS.md)、[全局合计](docs/TABLE_TOTALS.md)、[控件交互](docs/UI_CONTROLS.md)。最新综合诊断优先说明当前行为及已知差距；历史方案不等同于生产实现。
+既有细分约定：[Dashboard](docs/FOP_DASHBOARD_INTEGRATION.md)、[订单统计](docs/FOP_ORDER_VOLUME_API.md)、[用户数据权限](docs/requirements/HyperZone智能办公平台项目开发需求说明书.html)、[全局合计](docs/TABLE_TOTALS.md)、[控件交互](docs/UI_CONTROLS.md)。最新综合诊断优先说明当前行为及已知差距；历史方案不等同于生产实现。
 
 ## 技术栈与目录
 

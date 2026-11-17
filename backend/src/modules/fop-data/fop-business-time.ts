@@ -1,3 +1,5 @@
+export const FIRST_BUSINESS_YEAR = 2026
+export const BUSINESS_START_DATE = `${FIRST_BUSINESS_YEAR}-01-01`
 export const BUSINESS_TIME_ZONE = 'UTC+8' as const
 export const DAY_MS = 86_400_000
 /** Only complete ISO instants with an explicit zone and valid calendar date. */

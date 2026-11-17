@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { warehouseName } from '@/utils/warehouse'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { PackageSearch, RefreshCw, Search } from 'lucide-vue-next'
@@ -48,13 +49,13 @@ onBeforeUnmount(() => { closed = true; request++; off() })
     <form class="inventory-toolbar" @submit.prevent="submit">
       <label v-if="!selectedMode" class="inventory-search"><Search :size="16" /><input v-model="search" type="search" :aria-label="text('搜索库存 SKU', 'Search inventory SKU')" :placeholder="text('输入 SKU，支持模糊查询', 'Enter SKU text')" /></label>
       <button v-if="!selectedMode" class="btn workbench-primary" :disabled="loading || !search.trim()">{{ text('查询', 'Search') }}</button>
-      <label class="inventory-warehouse">{{ text('仓库', 'Warehouse') }}<select v-model="warehouse" class="input" :aria-label="text('库存仓库', 'Inventory warehouse')"><option value="">{{ text('全部', 'All') }}</option><option value="HZ">{{ text('杭州仓', 'Hangzhou') }}</option><option value="SZ">{{ text('深圳仓', 'Shenzhen') }}</option></select></label>
+      <label class="inventory-warehouse">{{ text('仓库', 'Warehouse') }}<select v-model="warehouse" class="input" :aria-label="text('库存仓库', 'Inventory warehouse')"><option value="">{{ text('全部', 'All') }}</option><option value="HZ">{{ 'HangZhou' }}</option><option value="SZ">{{ 'ShenZhen' }}</option></select></label>
       <button type="button" class="btn btn-secondary workbench-refresh" :disabled="loading || !selectedMode && !applied" @click="load"><RefreshCw :size="14" :class="{ 'animate-spin': loading }" />{{ text('刷新', 'Refresh') }}</button>
     </form>
     <div class="inventory-results" :aria-busy="loading">
       <p v-if="error" class="inventory-error" role="alert">{{ error }}</p>
       <table v-else-if="result?.items.length"><colgroup><col style="width:28%" /><col style="width:12%" /><col style="width:24%" /><col style="width:12%" /><col style="width:12%" /><col style="width:12%" /></colgroup><thead><tr><th>{{ text('商品 / SKU', 'Product / SKU') }}</th><th>{{ text('仓库', 'Warehouse') }}</th><th>{{ text('库存归属', 'Inventory owner') }}</th><th>{{ text('在库数量', 'On hand') }}</th><th>{{ text('配货占用', 'Allocated') }}</th><th>{{ text('实物余量', 'Physical balance') }}</th></tr></thead>
-        <tbody><tr v-for="row in result.items" :key="row.id"><td><p class="product-name" :title="row.name">{{ row.name }}</p><StockCopy :value="row.sku" /></td><td>{{ row.warehouse }}</td><td><span class="pool-tag" :class="{ dedicated: row.customer }">{{ row.customer ? text('客户专属', 'Customer stock') : text('公共库存', 'Public inventory') }}</span><p v-if="row.customer" class="customer-name">{{ row.customer.name }}</p></td><td class="quantity">{{ row.onHand.toLocaleString() }}</td><td class="quantity muted">{{ row.occupied.toLocaleString() }}</td><td class="quantity balance" :class="{ zero: row.free === 0 }">{{ row.free.toLocaleString() }}</td></tr></tbody>
+        <tbody><tr v-for="row in result.items" :key="row.id"><td><p class="product-name" :title="row.name">{{ row.name }}</p><StockCopy :value="row.sku" /></td><td>{{ warehouseName(row.warehouse) }}</td><td><span class="pool-tag" :class="{ dedicated: row.customer }">{{ row.customer ? text('客户专属', 'Customer stock') : text('公共库存', 'Public inventory') }}</span><p v-if="row.customer" class="customer-name">{{ row.customer.name }}</p></td><td class="quantity">{{ row.onHand.toLocaleString() }}</td><td class="quantity muted">{{ row.occupied.toLocaleString() }}</td><td class="quantity balance" :class="{ zero: row.free === 0 }">{{ row.free.toLocaleString() }}</td></tr></tbody>
       </table>
       <div v-else class="inventory-empty"><PackageSearch :size="30" /><p>{{ loading ? text('正在查询库存…', 'Loading inventory…') : result ? text('没有符合条件的库存项目', 'No matching inventory scopes') : text('输入 SKU 后查询库存', 'Enter a SKU to query inventory') }}</p></div>
     </div>

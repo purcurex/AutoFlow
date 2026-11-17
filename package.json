@@ -33,7 +33,9 @@
     "workbench:mock:seed": "node scripts/seed-workbench-mock.cjs",
     "workbench:mock:repair-logistics": "node scripts/repair-workbench-mock-logistics.cjs",
     "workbench:preflight": "node scripts/workbench-preflight.cjs",
-    "workbench:initialize": "node scripts/workbench-initialize.mjs"
+    "workbench:initialize": "node scripts/workbench-initialize.mjs",
+    "workbench:chain:rebuild": "node scripts/workbench-chain-rebuild.cjs",
+    "workbench:timestamp-sync": "node scripts/workbench-timestamp-sync.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

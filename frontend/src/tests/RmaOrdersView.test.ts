@@ -30,13 +30,13 @@ describe('sales RMA workbench', () => {
   it('distinguishes an unconnected RMA integration from a genuine empty list', async () => {
     vi.mocked(getRmaOrders).mockRejectedValue({ code: 'fop_rma_not_configured' })
     const { wrapper } = await setup()
-    expect(wrapper.get('[role="alert"]').text()).toContain('RMA售后清单尚未接通')
+    expect(wrapper.get('[role="alert"]').text()).toContain('业务数据暂不可用')
     expect(wrapper.find('.rma-empty').exists()).toBe(false)
     expect(wrapper.find('.result-count').exists()).toBe(false)
     expect(wrapper.find('tbody').exists()).toBe(false)
   })
   it.each([
-    ['workbench_replica_not_initialized', '本地工作台尚未初始化'],
+    ['workbench_replica_not_initialized', '业务数据暂不可用'],
     ['workbench_replica_incomplete', '本地工作台数据尚不完整'],
   ])('keeps unavailable local data distinct from a genuine empty list for %s', async (code, message) => {
     vi.mocked(getRmaOrders).mockRejectedValue({ code })
@@ -115,7 +115,7 @@ it('allows different closed historical RMA types while rejecting simultaneous ac
 it('shows missing settlement currency without inventing a yuan or dollar amount', async () => {
   vi.mocked(getRmaOrders).mockResolvedValue({ ...page, totals: { ...page.totals, amountsByCurrency: [] }, items: page.items.map(row => ({ ...row, currency: 'XXX' })) })
   const { wrapper } = await setup()
-  expect(wrapper.text()).toContain('币种未提供')
+  expect(wrapper.text()).not.toContain('币种未提供')
   expect(wrapper.text()).not.toContain('¤')
 })
 
@@ -139,8 +139,51 @@ it('does not query on timers, focus, visibility changes or network reconnection'
 it('labels uncollected counts and empty states without implying a business zero', async () => {
   vi.mocked(getRmaOrders).mockResolvedValue({ ...page, items: [], total: 0, dataAvailability: { mode: 'collected', complete: false, missingDatasets: ['rma'] } })
   const { wrapper } = await setup()
-  expect(wrapper.get('.result-count').text()).toBe('— · 待接入')
-  expect(wrapper.text()).toContain('售后数据尚未接入')
+  expect(wrapper.get('.result-count').text()).toBe('—')
+  expect(wrapper.text()).not.toContain('售后数据尚未接入')
   expect(wrapper.text()).not.toContain('暂无符合条件')
   wrapper.unmount()
+})
+
+it('labels partial captured coverage when filters return zero without implying company-wide zero or dollar totals', async () => {
+  vi.mocked(getRmaOrders).mockResolvedValue({ ...page, items: [], total: 0, totals: { ...page.totals, orderCount: 0, caseCount: 0, complete: false, amountsByCurrency: [] }, dataAvailability: { mode: 'collected', complete: false, queueAvailable: true, coverage: 'partial_customer_scan', reason: '部分付款客户覆盖' } } as RmaPage)
+  const { wrapper } = await setup()
+  expect(wrapper.get('.result-count').text()).toContain('共 0')
+  expect(wrapper.get('.rma-empty').text()).toContain('暂无符合条件的售后订单')
+  expect(wrapper.text()).not.toContain('$0.00')
+})
+it('preserves unknown native types and status in captured rows and never invents currency', async () => {
+  vi.mocked(getRmaOrders).mockResolvedValue({ ...page, items: [{ ...page.items[0]!, currency: null, rmaCases: [{ ...page.items[0]!.rmaCases[0]!, type: 'unknown', rawType: 'Z', rawStatus: '9', isOpen: null }] }] } as RmaPage)
+  const { wrapper } = await setup('/workbench/sales?queue=rma&flowStatus=all')
+  expect(wrapper.get('.rma-types').text()).toContain('RMA-001')
+  expect(wrapper.get('.rma-types').text()).not.toContain('类型未提供')
+  expect(wrapper.get('.rma-types').text()).not.toContain('状态未提供')
+  expect(wrapper.get('.rma-amount').text()).not.toContain('币种未提供')
+  expect(wrapper.get('.rma-amount').text()).not.toContain('$')
+})
+it('collapses repeated SKU source lines within one RMA without changing selection or requesting details', async () => {
+ vi.mocked(getRmaOrders).mockResolvedValue({...page,items:[{...page.items[0]!,items:[1,2,3].map(i=>({...page.items[0]!.items[0]!,name:`RMA line ${i}`}))}]})
+ const {wrapper}=await setup()
+ expect(wrapper.findAll('.rma-product')).toHaveLength(1)
+ await wrapper.get('.product-lines-toggle').trigger('click')
+ expect(wrapper.findAll('.rma-product')).toHaveLength(3)
+ expect(wrapper.get('[data-testid=toggle-all-products]').text()).toContain('全部收起')
+ await wrapper.get('[data-testid=toggle-all-products]').trigger('click')
+ expect(wrapper.findAll('.rma-product')).toHaveLength(1)
+ expect(wrapper.get('[data-testid=toggle-all-products]').text()).toContain('全部展开')
+ await wrapper.get('[data-testid=toggle-all-products]').trigger('click')
+ expect(wrapper.findAll('.rma-product')).toHaveLength(3)
+
+ expect(wrapper.get('tbody input[type=checkbox]').element).toHaveProperty('checked',false)
+ expect(getRmaOrders).toHaveBeenCalledTimes(1)
+})
+
+it('automatically reloads when its warehouse dropdown changes',async()=>{
+vi.mocked(getRmaOrders).mockResolvedValue(page)
+ const {wrapper}=await setup()
+ const select=wrapper.findAll('select').find(s=>s.find('option[value="SZ"]').exists())!
+ expect(select.text()).toContain('HangZhou');expect(select.text()).toContain('ShenZhen')
+ await select.setValue('SZ');await flushPromises()
+ expect(getRmaOrders).toHaveBeenLastCalledWith(expect.objectContaining({warehouseCode:'SZ',page:1}),expect.any(AbortSignal))
+ wrapper.unmount()
 })

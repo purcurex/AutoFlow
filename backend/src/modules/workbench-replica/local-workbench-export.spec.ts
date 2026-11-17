@@ -1,3 +1,5 @@
+// Verify source field/filter/permission contracts independently of the shared layout, tested in single-sheet.spec.ts.
+jest.mock('../workbench-export/single-sheet',()=>({...jest.requireActual('../workbench-export/single-sheet'),singleSheetWorkbook:jest.fn()}))
 import { ConfigService } from '@nestjs/config'
 import * as ExcelJS from 'exceljs'
 import { LocalWorkbenchService } from './local-workbench.service'

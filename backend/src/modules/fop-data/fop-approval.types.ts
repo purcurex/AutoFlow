@@ -8,7 +8,8 @@ export interface ApprovalTarget {
 }
 export interface ApprovalCommand extends ApprovalTarget { operation: 'audit'; idempotencyKey: string; requestId: string; actorAccountId: string; currentScope?: import('./fop-realtime.types').FopRealtimeScope }
 export type ApprovalStatus = 'approved' | 'already_approved' | 'blocked' | 'failed' | 'unknown'
-export interface ApprovalOutcome { status: ApprovalStatus; message: string; warning: string | null }
+export interface ApprovalReadback { tenantId: string; companyId: string; orderId: string; entity: string; documentId: string; capturedAt: string; page: Record<string, any> }
+export interface ApprovalOutcome { status: ApprovalStatus; message: string; warning: string | null; readback?: ApprovalReadback }
 export type ApprovalUnavailableCode = 'fop_approval_not_configured' | 'fop_queries_paused'
 export interface ApprovalDocumentResult extends ApprovalOutcome { id: string; number: string; code?: ApprovalUnavailableCode }
 export interface ApprovalRowResult { orderId: string; orderNumber: string; status: ApprovalStatus | 'partial'; message: string; documents: ApprovalDocumentResult[]; code?: ApprovalUnavailableCode }

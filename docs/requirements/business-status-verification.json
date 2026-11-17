@@ -1,0 +1,72 @@
+{
+  "mode": "apply",
+  "rows": 44855,
+  "changed": 44855,
+  "purchase": {
+    "received": 10190,
+    "unpurchased": 30265,
+    "purchasing": 448,
+    "unknown": 74,
+    "partial_shipped": 4,
+    "partial_received": 158,
+    "not_required": 97,
+    "shipped": 564,
+    "purchased": 3017,
+    "partial_purchased": 38
+  },
+  "outbound": {
+    "unknown": 211,
+    "completed": 13761,
+    "pending": 30786,
+    "not_required": 97
+  },
+  "order": {
+    "fulfilled": 14878,
+    "unpaid": 17533,
+    "sku_unlinked": 11498,
+    "cancelled": 520,
+    "processing": 197,
+    "paid": 228,
+    "partial_fulfilled": 1
+  },
+  "missingFields": {
+    "lineOutboundStatus": 44756,
+    "supplierPaymentStatus": 581
+  },
+  "queues": {
+    "dispatch_pending": 341,
+    "dispatch_completed": 14878,
+    "shipping_pending": 518,
+    "shipping_completed": 13761
+  },
+  "fopRequests": 0,
+  "rawSha256": "a4e5f20a0a37099d48cacaf78457bd7419acfa47ee11f08192973ed66dac2775",
+  "rawUnchanged": true,
+  "localProjectionOnly": true,
+  "fopSourceModified": false,
+  "automaticCallsEnabled": false,
+  "syncEnabled": false,
+  "remaining": [
+    "FOP application creation and supplier payment writeback",
+    "line inbound/outbound quantities and physical classification API fields",
+    "manual source classification API field",
+    "FOP outbound aggregation virtual exclusion"
+  ],
+  "validation": {
+    "backendTests": 186,
+    "frontendTests": 147,
+    "builds": [
+      "backend",
+      "frontend"
+    ],
+    "fopRequests": 0,
+    "browser": {
+      "queue": "dispatch",
+      "total": 341,
+      "orderAndLineStatusesVisible": true,
+      "automaticSyncDisabled": true,
+      "screenshot": ".runtime/business-status/dispatch-statuses.png"
+    }
+  },
+  "idempotentDryRunChanges": 0
+}

@@ -1,7 +1,7 @@
 import api from './index'
 
 export interface WorkbenchDataAvailability {
-  mode: 'collected'; complete: false; reason?: string; missingFields?: string[]; missingDatasets?: string[]
+  mode: 'collected'; complete: false; coverage?: 'partial_customer_scan' | 'full_company_scan' | 'full_parent_scan'; capturedAt?: string; provesBusinessZero?: boolean; executionAvailable?: boolean; queueAvailable?: boolean; unclassifiedCount?: number; reason?: string; missingFields?: string[]; missingDatasets?: string[]
 }
 export interface WorkbenchReplicaSnapshot {
   dataMode?: 'collected'

@@ -1,0 +1,1135 @@
+{
+  "checkedAt": "2026-11-12T11:50:13.763Z",
+  "verificationStage": "real_api_capture_persisted_local_http_browser_verified",
+  "database": "autoflow_local_demo",
+  "fulfillmentOrders": 44855,
+  "stockOrders": 153,
+  "upstreamCalledThisAudit": true,
+  "scope": "本轮用户授权受控只读初始化；23本地HTTP及23浏览器页面。页面完成清单默认近一周客户付款；HTTP清单表为管理员全历史。缺失字段留空，严格未知阶段不冒充完成。",
+  "nativeEntities": [
+    {
+      "entity_type": "allocation",
+      "total": 12643
+    },
+    {
+      "entity_type": "delivery_notice",
+      "total": 14258
+    },
+    {
+      "entity_type": "dispatch",
+      "total": 15149
+    },
+    {
+      "entity_type": "native_links",
+      "total": 3
+    },
+    {
+      "entity_type": "outbound",
+      "total": 10995
+    },
+    {
+      "entity_type": "product",
+      "total": 2503
+    },
+    {
+      "entity_type": "purchase",
+      "total": 2929
+    },
+    {
+      "entity_type": "purchase_application",
+      "total": 11802
+    },
+    {
+      "entity_type": "purchase_demand",
+      "total": 1
+    },
+    {
+      "entity_type": "receipt_notice",
+      "total": 3165
+    },
+    {
+      "entity_type": "rma",
+      "total": 313
+    },
+    {
+      "entity_type": "stock_orders",
+      "total": 153
+    }
+  ],
+  "unfinishedCoverage": {
+    "not_fully_outbound": 31094,
+    "regular_pending": 30554,
+    "exception_fallback_only": 540,
+    "covered": 31094,
+    "omitted": 0
+  },
+  "sourceCoverage": {
+    "native": "full_parent_scan",
+    "rma": "partial_customer_scan",
+    "consistentSnapshot": false
+  },
+  "rmaVerification": {
+    "total": 297,
+    "returned": 297,
+    "unique": 297,
+    "detailHttp": 200,
+    "detailExact": true,
+    "selectedExportHttp": 200,
+    "selectedExportRows": 1,
+    "quarantinedDetailHttp": 404,
+    "quarantinedExportHttp": 403
+  },
+  "ownerVerification": {
+    "listHttp": 200,
+    "expected": 84,
+    "total": 84,
+    "rows": 84,
+    "ownOnly": true,
+    "foreignDetailHttp": 404
+  },
+  "purchaseVerification": {
+    "listHttp": 200,
+    "unknownTotal": 2806,
+    "detailHttp": 200,
+    "detailGroupExact": true,
+    "detailRows": 1,
+    "selectedHttp": 200,
+    "selectedRows": 1,
+    "selectedLines": 1,
+    "filteredHttp": 200,
+    "filteredRows": 1,
+    "filteredLines": 1,
+    "foreignOwnerHttp": 403
+  },
+  "checks": {
+    "stockPaginationUnique": true,
+    "stockPaginationComplete": true,
+    "stockSharedFacts": true,
+    "foreignOwnerHttp": 403,
+    "pause": "true",
+    "autoCalls": "false",
+    "syncEnabled": "false"
+  },
+  "lists": [
+    {
+      "id": "sales-unpaid",
+      "label": "销售待支付",
+      "path": "fulfillment-orders?queue=unpaid",
+      "http": 200,
+      "total": 29038,
+      "rows": 20,
+      "mode": "collected",
+      "availability": {
+        "mode": "collected",
+        "complete": false,
+        "reason": "已采集 API 数据已入本地库；缺失字段留空，下游状态待核查，自动调用已暂停。"
+      },
+      "uiRoute": "/workbench/sales?queue=unpaid",
+      "browser": {
+        "id": "sales-unpaid",
+        "uiRoute": "/workbench/sales?queue=unpaid",
+        "cases": 0,
+        "counts": [
+          "共 29038 笔订单",
+          "筛选合计 · 29,038 笔订单"
+        ],
+        "error": false,
+        "groups": 0,
+        "rows": 50,
+        "unavailable": false
+      },
+      "integrationState": "real_data_displayed"
+    },
+    {
+      "id": "sales-review",
+      "label": "销售待审核",
+      "path": "fulfillment-orders?queue=review",
+      "http": 200,
+      "total": 35,
+      "rows": 20,
+      "mode": "collected",
+      "availability": {
+        "mode": "collected",
+        "complete": false,
+        "reason": "已采集 API 数据已入本地库；缺失字段留空，下游状态待核查，自动调用已暂停。"
+      },
+      "uiRoute": "/workbench/sales?queue=review",
+      "browser": {
+        "id": "sales-review",
+        "uiRoute": "/workbench/sales?queue=review",
+        "cases": 0,
+        "counts": [
+          "共 35 笔订单",
+          "筛选合计 · 35 笔订单"
+        ],
+        "error": false,
+        "groups": 0,
+        "rows": 35,
+        "unavailable": false
+      },
+      "integrationState": "real_data_displayed"
+    },
+    {
+      "id": "sales-stock",
+      "label": "销售备货",
+      "path": "stock-orders?queue=all",
+      "http": 200,
+      "total": 153,
+      "rows": 20,
+      "mode": "collected",
+      "availability": {
+        "mode": "collected",
+        "complete": false,
+        "reason": "备货订单已采集入库；缺失字段留空，自动调用已暂停。",
+        "capturedAt": "2026-11-12T09:43:57.635Z"
+      },
+      "uiRoute": "/workbench/sales?queue=stock",
+      "browser": {
+        "id": "sales-stock",
+        "uiRoute": "/workbench/sales?queue=stock",
+        "cases": 0,
+        "counts": [
+          "共 153 笔"
+        ],
+        "error": false,
+        "groups": 0,
+        "rows": 50,
+        "unavailable": false
+      },
+      "integrationState": "real_data_displayed"
+    },
+    {
+      "id": "sales-rma",
+      "label": "销售RMA",
+      "path": "rma-orders?flowStatus=all",
+      "http": 200,
+      "total": 297,
+      "rows": 20,
+      "mode": "collected",
+      "availability": {
+        "mode": "collected",
+        "complete": false,
+        "queueAvailable": true,
+        "capturedAt": "2026-11-12T10:57:32.441Z",
+        "coverage": "partial_customer_scan",
+        "quarantinedCount": 16,
+        "provesBusinessZero": false,
+        "executionAvailable": false,
+        "reason": "已采集付款客户范围内的真实售后单；当前为部分客户覆盖，计数仅指当前权限和筛选内已采集记录，不代表公司全部售后或业务零。关联异常仅供管理员核查，自动调用暂停，执行仍须 FOP 实时接口。"
+      },
+      "uiRoute": "/workbench/sales?queue=rma&flowStatus=all",
+      "browser": {
+        "id": "sales-rma",
+        "uiRoute": "/workbench/sales?queue=rma&flowStatus=all",
+        "cases": 50,
+        "counts": [
+          "已采集范围内 297 张售后单"
+        ],
+        "error": false,
+        "groups": 0,
+        "rows": 50,
+        "unavailable": false
+      },
+      "integrationState": "real_data_displayed"
+    },
+    {
+      "id": "sales-exceptions",
+      "label": "销售异常",
+      "path": "fulfillment-orders?queue=exceptions",
+      "http": 200,
+      "total": 757,
+      "rows": 20,
+      "mode": "collected",
+      "availability": {
+        "mode": "collected",
+        "complete": false,
+        "reason": "已采集 API 数据已入本地库；缺失字段留空，下游状态待核查，自动调用已暂停。"
+      },
+      "uiRoute": "/workbench/sales?queue=exceptions",
+      "browser": {
+        "id": "sales-exceptions",
+        "uiRoute": "/workbench/sales?queue=exceptions",
+        "cases": 0,
+        "counts": [
+          "共 757 笔订单"
+        ],
+        "error": false,
+        "groups": 0,
+        "rows": 50,
+        "unavailable": false,
+        "capture": "采集时点 2026/11/12 17:11 ",
+        "verifiedAt": "2026-11-12T11:38:38.824Z"
+      },
+      "integrationState": "real_data_displayed"
+    },
+    {
+      "id": "sales-completed",
+      "label": "销售已审核",
+      "path": "fulfillment-orders?queue=review&completed=true",
+      "http": 200,
+      "total": 15321,
+      "rows": 20,
+      "mode": "collected",
+      "availability": {
+        "mode": "collected",
+        "complete": false,
+        "reason": "已采集 API 数据已入本地库；缺失字段留空，下游状态待核查，自动调用已暂停。"
+      },
+      "uiRoute": "/workbench/sales?queue=completed",
+      "browser": {
+        "id": "sales-completed",
+        "uiRoute": "/workbench/sales?queue=completed",
+        "cases": 0,
+        "counts": [
+          "共 1456 笔订单",
+          "筛选合计 · 1,456 笔订单"
+        ],
+        "error": false,
+        "groups": 0,
+        "rows": 50,
+        "unavailable": false
+      },
+      "integrationState": "real_data_displayed"
+    },
+    {
+      "id": "dispatch-pending",
+      "label": "发运待履约",
+      "path": "fulfillment-orders?queue=dispatch",
+      "http": 200,
+      "total": 7879,
+      "rows": 20,
+      "mode": "collected",
+      "availability": {
+        "mode": "collected",
+        "complete": false,
+        "queueAvailable": true,
+        "capturedAt": "2026-11-12T11:01:39.100Z",
+        "coverage": "full_parent_scan",
+        "executionAvailable": false,
+        "reason": "已采集完整履约扫描关联事实，本地按当前权限分类；不代表独立单据公司全集。未知状态保留核查，缺失字段留空。"
+      },
+      "uiRoute": "/workbench/dispatch?queue=dispatch",
+      "browser": {
+        "id": "dispatch-pending",
+        "uiRoute": "/workbench/dispatch?queue=dispatch",
+        "counts": [
+          "共 7879 笔订单",
+          "筛选合计 · 7,879 笔订单"
+        ],
+        "error": false,
+        "groups": 0,
+        "rows": 50,
+        "unavailable": false,
+        "unknownLink": false
+      },
+      "integrationState": "real_data_displayed"
+    },
+    {
+      "id": "dispatch-completed",
+      "label": "发运已履约",
+      "path": "fulfillment-orders?queue=dispatch&completed=true",
+      "http": 200,
+      "total": 6136,
+      "rows": 20,
+      "mode": "collected",
+      "availability": {
+        "mode": "collected",
+        "complete": false,
+        "queueAvailable": true,
+        "capturedAt": "2026-11-12T11:01:39.100Z",
+        "coverage": "full_parent_scan",
+        "executionAvailable": false,
+        "reason": "已采集完整履约扫描关联事实，本地按当前权限分类；不代表独立单据公司全集。未知状态保留核查，缺失字段留空。"
+      },
+      "uiRoute": "/workbench/dispatch?queue=completed",
+      "browser": {
+        "id": "dispatch-completed",
+        "uiRoute": "/workbench/dispatch?queue=completed",
+        "counts": [
+          "共 1214 笔订单",
+          "筛选合计 · 1,214 笔订单"
+        ],
+        "error": false,
+        "groups": 0,
+        "rows": 50,
+        "unavailable": false,
+        "unknownLink": false
+      },
+      "integrationState": "real_data_displayed"
+    },
+    {
+      "id": "proc-fulfill-procurement",
+      "label": "履约单待采购",
+      "path": "fulfillment-orders?queue=procurement",
+      "http": 200,
+      "total": 1320,
+      "rows": 20,
+      "mode": "collected",
+      "availability": {
+        "mode": "collected",
+        "complete": false,
+        "queueAvailable": true,
+        "capturedAt": "2026-11-12T11:05:41.259Z",
+        "coverage": "full_parent_scan",
+        "executionAvailable": false,
+        "reason": "已采集完整履约扫描关联事实，本地按当前权限分类；不代表独立单据公司全集。未知状态保留核查，缺失字段留空。"
+      },
+      "uiRoute": "/workbench/procurement?queue=procurement&view=fulfillment",
+      "browser": {
+        "id": "proc-fulfill-procurement",
+        "uiRoute": "/workbench/procurement?queue=procurement&view=fulfillment",
+        "counts": [
+          "共 1320 笔订单"
+        ],
+        "error": false,
+        "groups": 0,
+        "rows": 50,
+        "unavailable": false,
+        "unknownLink": false,
+        "capture": "采集时点 2026/11/12 19:05 ",
+        "verifiedAt": "2026-11-12T11:38:39.513Z"
+      },
+      "integrationState": "real_data_displayed"
+    },
+    {
+      "id": "proc-fulfill-procurement_shipping",
+      "label": "履约单待供应商发货",
+      "path": "fulfillment-orders?queue=procurement_shipping",
+      "http": 200,
+      "total": 514,
+      "rows": 20,
+      "mode": "collected",
+      "availability": {
+        "mode": "collected",
+        "complete": false,
+        "queueAvailable": true,
+        "capturedAt": "2026-11-12T11:05:41.259Z",
+        "coverage": "full_parent_scan",
+        "executionAvailable": false,
+        "reason": "已采集完整履约扫描关联事实，本地按当前权限分类；不代表独立单据公司全集。未知状态保留核查，缺失字段留空。"
+      },
+      "uiRoute": "/workbench/procurement?queue=procurement_shipping&view=fulfillment",
+      "browser": {
+        "id": "proc-fulfill-procurement_shipping",
+        "uiRoute": "/workbench/procurement?queue=procurement_shipping&view=fulfillment",
+        "counts": [
+          "共 514 笔订单",
+          "筛选合计 · 514 笔订单"
+        ],
+        "error": false,
+        "groups": 0,
+        "rows": 50,
+        "unavailable": false,
+        "unknownLink": false
+      },
+      "integrationState": "real_data_displayed"
+    },
+    {
+      "id": "proc-fulfill-completed",
+      "label": "履约单采购完成",
+      "path": "fulfillment-orders?queue=procurement&completed=true",
+      "http": 200,
+      "total": 10312,
+      "rows": 20,
+      "mode": "collected",
+      "availability": {
+        "mode": "collected",
+        "complete": false,
+        "queueAvailable": true,
+        "capturedAt": "2026-11-12T11:05:41.259Z",
+        "coverage": "full_parent_scan",
+        "executionAvailable": false,
+        "reason": "已采集完整履约扫描关联事实，本地按当前权限分类；不代表独立单据公司全集。未知状态保留核查，缺失字段留空。"
+      },
+      "uiRoute": "/workbench/procurement?queue=completed&view=fulfillment",
+      "browser": {
+        "id": "proc-fulfill-completed",
+        "uiRoute": "/workbench/procurement?queue=completed&view=fulfillment",
+        "counts": [
+          "共 492 笔订单"
+        ],
+        "error": false,
+        "groups": 0,
+        "rows": 50,
+        "unavailable": false,
+        "unknownLink": false,
+        "capture": "采集时点 2026/11/12 19:05 ",
+        "verifiedAt": "2026-11-12T11:38:39.780Z"
+      },
+      "integrationState": "real_data_displayed"
+    },
+    {
+      "id": "proc-purchase-procurement",
+      "label": "采购单待采购",
+      "path": "purchase-groups?queue=procurement",
+      "http": 200,
+      "total": 120,
+      "rows": 20,
+      "mode": "collected",
+      "availability": {
+        "mode": "collected",
+        "complete": false,
+        "queueAvailable": true,
+        "capturedAt": "2026-11-12T11:05:41.259Z",
+        "coverage": "full_parent_scan",
+        "unclassifiedCount": 2806,
+        "executionAvailable": false,
+        "reason": "已采集履约关联采购单；按本地权限先裁剪关联行再汇总。供应商发货量未提供时留空，状态未知的单据可选择“待核查”查看，不计为采购完成。"
+      },
+      "uiRoute": "/workbench/procurement?queue=procurement&view=purchase",
+      "browser": {
+        "id": "proc-purchase-procurement",
+        "uiRoute": "/workbench/procurement?queue=procurement&view=purchase",
+        "counts": [
+          "共 119 张采购单 · 待建 1 笔"
+        ],
+        "error": false,
+        "groups": 50,
+        "rows": 0,
+        "unavailable": false,
+        "unknownLink": true
+      },
+      "integrationState": "real_data_displayed"
+    },
+    {
+      "id": "proc-purchase-procurement_shipping",
+      "label": "采购单待供应商发货",
+      "path": "purchase-groups?queue=procurement_shipping",
+      "http": 200,
+      "total": 0,
+      "rows": 0,
+      "mode": "collected",
+      "availability": {
+        "mode": "collected",
+        "complete": false,
+        "queueAvailable": true,
+        "capturedAt": "2026-11-12T11:05:41.259Z",
+        "coverage": "full_parent_scan",
+        "unclassifiedCount": 2806,
+        "executionAvailable": false,
+        "reason": "已采集履约关联采购单；按本地权限先裁剪关联行再汇总。供应商发货量未提供时留空，状态未知的单据可选择“待核查”查看，不计为采购完成。"
+      },
+      "uiRoute": "/workbench/procurement?queue=procurement_shipping&view=purchase",
+      "browser": {
+        "id": "proc-purchase-procurement_shipping",
+        "uiRoute": "/workbench/procurement?queue=procurement_shipping&view=purchase",
+        "counts": [
+          "共 0 张采购单"
+        ],
+        "error": false,
+        "groups": 0,
+        "rows": 0,
+        "unavailable": false,
+        "unknownLink": true
+      },
+      "integrationState": "local_query_connected_state_unproven"
+    },
+    {
+      "id": "proc-purchase-completed",
+      "label": "采购单采购完成",
+      "path": "purchase-groups?queue=procurement&completed=true",
+      "http": 200,
+      "total": 0,
+      "rows": 0,
+      "mode": "collected",
+      "availability": {
+        "mode": "collected",
+        "complete": false,
+        "queueAvailable": true,
+        "capturedAt": "2026-11-12T11:05:41.259Z",
+        "coverage": "full_parent_scan",
+        "unclassifiedCount": 2806,
+        "executionAvailable": false,
+        "reason": "已采集履约关联采购单；按本地权限先裁剪关联行再汇总。供应商发货量未提供时留空，状态未知的单据可选择“待核查”查看，不计为采购完成。"
+      },
+      "uiRoute": "/workbench/procurement?queue=completed&view=purchase",
+      "browser": {
+        "id": "proc-purchase-completed",
+        "uiRoute": "/workbench/procurement?queue=completed&view=purchase",
+        "counts": [
+          "共 0 张采购单"
+        ],
+        "error": false,
+        "groups": 0,
+        "rows": 0,
+        "unavailable": false,
+        "unknownLink": true
+      },
+      "integrationState": "local_query_connected_state_unproven"
+    },
+    {
+      "id": "proc-stock",
+      "label": "采购备货",
+      "path": "stock-orders?queue=procurement",
+      "http": 200,
+      "total": 24,
+      "rows": 20,
+      "mode": "collected",
+      "availability": {
+        "mode": "collected",
+        "complete": false,
+        "reason": "备货订单已采集入库；缺失字段留空，自动调用已暂停。",
+        "capturedAt": "2026-11-12T09:43:57.635Z"
+      },
+      "uiRoute": "/workbench/procurement?queue=stock_procurement",
+      "browser": {
+        "id": "proc-stock",
+        "uiRoute": "/workbench/procurement?queue=stock_procurement",
+        "counts": [
+          "共 24 笔"
+        ],
+        "error": false,
+        "groups": 0,
+        "rows": 24,
+        "unavailable": false,
+        "unknownLink": false
+      },
+      "integrationState": "real_data_displayed"
+    },
+    {
+      "id": "proc-returns",
+      "label": "采购退货",
+      "path": "purchase-returns?workbenchRole=procurement",
+      "http": 200,
+      "total": 0,
+      "rows": 0,
+      "mode": "collected",
+      "availability": {
+        "mode": "collected",
+        "complete": false,
+        "missingDatasets": [
+          "inventory",
+          "interception"
+        ],
+        "reason": "正式采购实物退货实体与 API 待 FOP 提供；采购退款申请不能替代实物退货。 本项目采集过渡层还需实现对应来源入库、业务归属与明确关联、清单分类查询及详情导出；仅补源端数据不会自动开通本清单。",
+        "queueAvailable": false,
+        "missingFields": [
+          "physical_purchase_return_entity"
+        ],
+        "localImplementation": {
+          "state": "not_implemented",
+          "required": [
+            "source_normalization_and_import",
+            "independent_scope_and_relations",
+            "queue_classification_and_query",
+            "detail_and_export"
+          ]
+        },
+        "sourceEvidence": {
+          "state": "source_contract_pending",
+          "provesBusinessZero": false,
+          "provesAuthorizationFailure": false,
+          "evidence": "all-queues-integration-20261112"
+        }
+      },
+      "uiRoute": "/workbench/procurement?queue=purchase_returns",
+      "browser": {
+        "id": "proc-returns",
+        "uiRoute": "/workbench/procurement?queue=purchase_returns",
+        "counts": [],
+        "emptyText": true,
+        "error": false,
+        "groups": 0,
+        "rows": 0,
+        "unavailable": true
+      },
+      "integrationState": "source_contract_missing"
+    },
+    {
+      "id": "allocation-allocation",
+      "label": "配货未齐套",
+      "path": "fulfillment-orders?queue=allocation",
+      "http": 200,
+      "total": 724,
+      "rows": 20,
+      "mode": "collected",
+      "availability": {
+        "mode": "collected",
+        "complete": false,
+        "queueAvailable": true,
+        "capturedAt": "2026-11-12T11:01:39.100Z",
+        "reason": "按完整履约扫描关联的有效配货单的原生齐套及审核状态展示；非一致快照，执行前仍需实时核验。"
+      },
+      "uiRoute": "/workbench/allocation?queue=allocation",
+      "browser": {
+        "id": "allocation-allocation",
+        "uiRoute": "/workbench/allocation?queue=allocation",
+        "counts": [
+          "共 724 笔订单",
+          "筛选合计 · 724 笔订单"
+        ],
+        "emptyText": false,
+        "error": false,
+        "groups": 0,
+        "rows": 50,
+        "unavailable": false
+      },
+      "integrationState": "real_data_displayed"
+    },
+    {
+      "id": "allocation-allocation_review",
+      "label": "配货齐套待审",
+      "path": "fulfillment-orders?queue=allocation_review",
+      "http": 200,
+      "total": 66,
+      "rows": 20,
+      "mode": "collected",
+      "availability": {
+        "mode": "collected",
+        "complete": false,
+        "queueAvailable": true,
+        "capturedAt": "2026-11-12T11:01:39.100Z",
+        "reason": "按完整履约扫描关联的有效配货单的原生齐套及审核状态展示；非一致快照，执行前仍需实时核验。"
+      },
+      "uiRoute": "/workbench/allocation?queue=allocation_review",
+      "browser": {
+        "id": "allocation-allocation_review",
+        "uiRoute": "/workbench/allocation?queue=allocation_review",
+        "counts": [
+          "共 66 笔订单",
+          "筛选合计 · 66 笔订单"
+        ],
+        "emptyText": false,
+        "error": false,
+        "groups": 0,
+        "rows": 50,
+        "unavailable": false
+      },
+      "integrationState": "real_data_displayed"
+    },
+    {
+      "id": "allocation-completed",
+      "label": "配货完成",
+      "path": "fulfillment-orders?queue=allocation_review&completed=true",
+      "http": 200,
+      "total": 11820,
+      "rows": 20,
+      "mode": "collected",
+      "availability": {
+        "mode": "collected",
+        "complete": false,
+        "queueAvailable": true,
+        "capturedAt": "2026-11-12T11:01:39.100Z",
+        "reason": "按完整履约扫描关联的有效配货单的原生齐套及审核状态展示；非一致快照，执行前仍需实时核验。"
+      },
+      "uiRoute": "/workbench/allocation?queue=completed",
+      "browser": {
+        "id": "allocation-completed",
+        "uiRoute": "/workbench/allocation?queue=completed",
+        "counts": [
+          "共 905 笔订单",
+          "筛选合计 · 905 笔订单"
+        ],
+        "emptyText": false,
+        "error": false,
+        "groups": 0,
+        "rows": 50,
+        "unavailable": false
+      },
+      "integrationState": "real_data_displayed"
+    },
+    {
+      "id": "warehouse-inbound",
+      "label": "仓库待入库",
+      "path": "receipt-notices",
+      "http": 200,
+      "total": 3165,
+      "rows": 20,
+      "mode": "collected",
+      "availability": {
+        "mode": "collected",
+        "complete": false,
+        "queueAvailable": true,
+        "capturedAt": "2026-11-12T11:05:41.259Z",
+        "coverage": "full_parent_scan",
+        "executionAvailable": false,
+        "missingFields": [
+          "wmsStatus",
+          "inboundQuantity",
+          "noticeWarehouse",
+          "noticeSupplier"
+        ],
+        "reason": "显示已采集履约关联的真实收货通知；全部状态包含待核查通知。原生 WMS、审核及入库进度未提供时保持未知，不能据此视为可执行待入库。"
+      },
+      "uiRoute": "/workbench/warehouse?queue=receipt_notices",
+      "browser": {
+        "id": "warehouse-inbound",
+        "uiRoute": "/workbench/warehouse?queue=receipt_notices",
+        "counts": [
+          "共 3165 张收货通知单"
+        ],
+        "emptyText": false,
+        "error": false,
+        "groups": 0,
+        "rows": 20,
+        "unavailable": false,
+        "capture": "采集时点 2026/11/12 19:05 ",
+        "verifiedAt": "2026-11-12T11:38:40.095Z"
+      },
+      "integrationState": "real_data_displayed"
+    },
+    {
+      "id": "warehouse-outbound",
+      "label": "仓库待出库",
+      "path": "fulfillment-orders?queue=shipping",
+      "http": 200,
+      "total": 521,
+      "rows": 20,
+      "mode": "collected",
+      "availability": {
+        "mode": "collected",
+        "complete": false,
+        "queueAvailable": true,
+        "missingFields": [
+          "shipmentInterceptStatus",
+          "dispatchDocuments"
+        ],
+        "reason": "按真实已齐套且已审核配货单、有效审核发运单关联展示待出库；拦截状态未知，执行仍须 FOP 实时门禁。"
+      },
+      "uiRoute": "/workbench/warehouse?queue=shipping",
+      "browser": {
+        "id": "warehouse-outbound",
+        "uiRoute": "/workbench/warehouse?queue=shipping",
+        "counts": [
+          "共 521 笔订单"
+        ],
+        "emptyText": false,
+        "error": false,
+        "groups": 0,
+        "rows": 50,
+        "unavailable": false,
+        "capture": "采集时点 2026/11/12 19:01 ",
+        "verifiedAt": "2026-11-12T11:38:40.397Z"
+      },
+      "integrationState": "real_data_displayed"
+    },
+    {
+      "id": "warehouse-completed",
+      "label": "仓库已出库",
+      "path": "fulfillment-orders?queue=shipping&completed=true",
+      "http": 200,
+      "total": 13761,
+      "rows": 20,
+      "mode": "collected",
+      "availability": {
+        "mode": "collected",
+        "complete": false,
+        "queueAvailable": true,
+        "missingFields": [
+          "dispatchDocuments"
+        ],
+        "reason": "按本单原生已出库状态展示；缺失物流关联留空。"
+      },
+      "uiRoute": "/workbench/warehouse?queue=completed",
+      "browser": {
+        "id": "warehouse-completed",
+        "uiRoute": "/workbench/warehouse?queue=completed",
+        "counts": [
+          "共 406 笔订单",
+          "筛选合计 · 406 笔订单"
+        ],
+        "emptyText": false,
+        "error": false,
+        "groups": 0,
+        "rows": 50,
+        "unavailable": false
+      },
+      "integrationState": "real_data_displayed"
+    },
+    {
+      "id": "warehouse-returns",
+      "label": "仓库采购退货",
+      "path": "purchase-returns?workbenchRole=warehouse",
+      "http": 200,
+      "total": 0,
+      "rows": 0,
+      "mode": "collected",
+      "availability": {
+        "mode": "collected",
+        "complete": false,
+        "missingDatasets": [
+          "inventory",
+          "interception"
+        ],
+        "reason": "正式采购实物退货实体与 API 待 FOP 提供；采购退款申请不能替代实物退货。 本项目采集过渡层还需实现对应来源入库、业务归属与明确关联、清单分类查询及详情导出；仅补源端数据不会自动开通本清单。",
+        "queueAvailable": false,
+        "missingFields": [
+          "physical_purchase_return_entity"
+        ],
+        "localImplementation": {
+          "state": "not_implemented",
+          "required": [
+            "source_normalization_and_import",
+            "independent_scope_and_relations",
+            "queue_classification_and_query",
+            "detail_and_export"
+          ]
+        },
+        "sourceEvidence": {
+          "state": "source_contract_pending",
+          "provesBusinessZero": false,
+          "provesAuthorizationFailure": false,
+          "evidence": "all-queues-integration-20261112"
+        }
+      },
+      "uiRoute": "/workbench/warehouse?queue=purchase_returns",
+      "browser": {
+        "id": "warehouse-returns",
+        "uiRoute": "/workbench/warehouse?queue=purchase_returns",
+        "counts": [],
+        "emptyText": true,
+        "error": false,
+        "groups": 0,
+        "rows": 0,
+        "unavailable": true
+      },
+      "integrationState": "source_contract_missing"
+    }
+  ],
+  "manualReview": [
+    {
+      "id": "未全出库异常兜底",
+      "count": 540,
+      "recommendation": "逐单核实当前业务环节、取消或历史遗留；保留异常，不自动创建或办理FOP单据。"
+    },
+    {
+      "id": "审核后缺有效配货",
+      "count": 223,
+      "recommendation": "核实异步建单任务、作废重建和来源关联；现行规则应审核后有配货，不能视为合法正常缺单。"
+    },
+    {
+      "id": "配货报错",
+      "count": 26,
+      "recommendation": "核实FOP配货错误原因及恢复结果；保持异常，不从库存余额推齐套。"
+    },
+    {
+      "id": "发运枚举待确认",
+      "count": 1289,
+      "recommendation": "核实空值及LOCAL_ONLY/SYNC_FAILED/CANCEL_UNKNOWN对应业务含义；不当已履约。与其他核查项有交集。"
+    },
+    {
+      "id": "采购状态待核查",
+      "count": 2806,
+      "recommendation": "采购单已真实入库，可通过待核查筛选查看；补供应商发货状态/量和准确付款/渠道语义后再分类，不能把0个已完成当公司没有已完成采购。"
+    },
+    {
+      "id": "采购关系不完整",
+      "count": 48,
+      "recommendation": "补稳定原履约/商品行关联；只展示已验证分摊，未核实部分管理员核查，禁止猜测业务员。"
+    },
+    {
+      "id": "收货通知关系待核查",
+      "count": 52,
+      "recommendation": "补通知行→采购行→履约行关联；本单WMS、仓库、供应商和实际入库量缺失另补，不复制父单字段。"
+    },
+    {
+      "id": "RMA来源隔离",
+      "count": 16,
+      "recommendation": "补RMA来源实体、稳定内码及IO/TO到履约映射；保留原报文，不能证明公司/归属的案件不进入普通清单。"
+    },
+    {
+      "id": "独立对象完整覆盖",
+      "count": "待确认",
+      "recommendation": "本轮下游事实覆盖44855父单关联范围，RMA覆盖本地发现的207付款客户；无履约关联采购/通知、历史客户售后和实物退货尚无全集证明。"
+    },
+    {
+      "id": "实物采购退货",
+      "count": "待提供",
+      "recommendation": "FOP提供正式实物退货实体/行/API/状态及履约分摊。采购和仓库两清单共用此缺口，退款申请不能替代。"
+    }
+  ],
+  "filteredAndExceptionExportVerification": {
+    "allocation": [
+      {
+        "queue": "allocation",
+        "status": "dispatch_complete",
+        "http": 200,
+        "total": 609,
+        "expected": 609,
+        "exportHttp": 200,
+        "exportRows": 609
+      },
+      {
+        "queue": "allocation",
+        "status": "dispatch_incomplete",
+        "http": 200,
+        "total": 115,
+        "expected": 115,
+        "exportHttp": 200,
+        "exportRows": 115
+      },
+      {
+        "queue": "allocation_review",
+        "status": "dispatch_complete",
+        "http": 200,
+        "total": 57,
+        "expected": 57,
+        "exportHttp": 200,
+        "exportRows": 57
+      },
+      {
+        "queue": "allocation_review",
+        "status": "dispatch_incomplete",
+        "http": 200,
+        "total": 9,
+        "expected": 9,
+        "exportHttp": 200,
+        "exportRows": 9
+      }
+    ],
+    "partialPurchase": [
+      {
+        "stage": "unknown",
+        "mode": "selected",
+        "http": 200,
+        "groups": 46,
+        "lines": 541
+      },
+      {
+        "stage": "unknown",
+        "mode": "filtered",
+        "http": 200,
+        "groups": 1,
+        "lines": 1
+      },
+      {
+        "stage": "refund_pending",
+        "mode": "selected",
+        "http": 200,
+        "groups": 2,
+        "lines": 95
+      },
+      {
+        "stage": "refund_pending",
+        "mode": "filtered",
+        "http": 200,
+        "groups": 1,
+        "lines": 1
+      }
+    ]
+  },
+  "allocationFilterBrowserVerification": [
+    {
+      "queue": "allocation",
+      "status": "dispatch_complete",
+      "counts": [
+        "共 609 笔订单"
+      ],
+      "error": false,
+      "rows": 50
+    },
+    {
+      "queue": "allocation",
+      "status": "dispatch_incomplete",
+      "counts": [
+        "共 115 笔订单"
+      ],
+      "error": false,
+      "rows": 50
+    },
+    {
+      "queue": "allocation_review",
+      "status": "dispatch_complete",
+      "counts": [
+        "共 57 笔订单"
+      ],
+      "error": false,
+      "rows": 50
+    },
+    {
+      "queue": "allocation_review",
+      "status": "dispatch_incomplete",
+      "counts": [
+        "共 9 笔订单"
+      ],
+      "error": false,
+      "rows": 9
+    }
+  ],
+  "organizationCodeVerification": {
+    "checkedAt": "2026-11-13T02:03:40.882Z",
+    "organizationNumber": "hyperzone.test",
+    "companyId": "100000",
+    "queries": [
+      {
+        "operation": "allocation",
+        "success": true,
+        "httpStatus": 200,
+        "rowCount": 1,
+        "errorCategory": null,
+        "total": 12737,
+        "filter": "[org in (100000) AND 1 = 1 AND org.number = 'hyperzone.test']",
+        "organizationIds": [
+          "100000"
+        ],
+        "organizationNumbers": [
+          "hyperzone.test"
+        ]
+      },
+      {
+        "operation": "dispatch",
+        "success": true,
+        "httpStatus": 200,
+        "rowCount": 1,
+        "errorCategory": null,
+        "total": 15292,
+        "filter": "[org in (100000) AND 1 = 1 AND org.number = 'hyperzone.test']",
+        "organizationIds": [
+          "100000"
+        ],
+        "organizationNumbers": [
+          "hyperzone.test"
+        ]
+      },
+      {
+        "operation": "order-list",
+        "success": true,
+        "httpStatus": 200,
+        "rowCount": 1,
+        "errorCategory": null,
+        "total": 45529,
+        "filter": "[org in (100000) AND 1 = 1 AND org.number = 'hyperzone.test' AND hzkj_billtype.number = 'hzkj_orders_BT']",
+        "organizationIds": [],
+        "organizationNumbers": []
+      },
+      {
+        "operation": "purchase",
+        "success": true,
+        "httpStatus": 200,
+        "rowCount": 1,
+        "errorCategory": null,
+        "total": 3141,
+        "filter": "[org in (100000) AND 1 = 1 AND org.number = 'hyperzone.test']",
+        "organizationIds": [],
+        "organizationNumbers": []
+      },
+      {
+        "operation": "receipt-notice",
+        "success": true,
+        "httpStatus": 200,
+        "rowCount": 1,
+        "errorCategory": null,
+        "total": 3443,
+        "filter": "[1 = 1 AND org.number = 'hyperzone.test']",
+        "organizationIds": [
+          "100000"
+        ],
+        "organizationNumbers": [
+          "hyperzone.test"
+        ]
+      },
+      {
+        "operation": "stock",
+        "success": true,
+        "httpStatus": 200,
+        "rowCount": 1,
+        "errorCategory": null,
+        "total": 164,
+        "filter": "[org in (100000) AND 1 = 1 AND org.number = 'hyperzone.test']"
+      }
+    ],
+    "automaticCallsPaused": true,
+    "scope": "one page, one row per API; upstream totals only, no full capture or business database writes",
+    "result": "org_number corrected to hyperzone.test; six generic list APIs return actual data"
+  }
+}

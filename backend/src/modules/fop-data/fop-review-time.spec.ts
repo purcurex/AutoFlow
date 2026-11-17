@@ -1,3 +1,5 @@
+// Business/authorization assertions inspect source tables; shared single-sheet output has independent roundtrip coverage.
+jest.mock('../workbench-export/single-sheet',()=>({...jest.requireActual('../workbench-export/single-sheet'),singleSheetWorkbook:jest.fn()}))
 import { compareFulfillmentOrders, canSortFulfillmentQueue } from './fop-order-sort'
 import type { FopOrder } from './fop-data.types'
 import { buildFulfillmentWorkbook } from './fop-order-export'
@@ -30,7 +32,17 @@ it('exports approval date in UTC+8 and never substitutes creation time', async (
   expect(ws.getRow(3).getCell(col).value).toBe('—')
 })
 
-it.each(['unpaid', 'review', 'exceptions', 'dispatch', 'procurement', 'procurement_shipping', 'allocation', 'allocation_review', 'shipping'] as const)('defaults %s to newest consumer payment first without receipt fallback', queue => {
+it.each(['review', 'exceptions', 'dispatch', 'procurement', 'procurement_shipping', 'allocation', 'allocation_review', 'shipping'] as const)('defaults %s to the newest customer-payment alias without a separate field fallback', queue => {
   const rows = [{ ...fixture, id: 'old', consumerPaidAt: '2026-10-01T00:00:00Z', paidAt: '2026-10-03T00:00:00Z' }, { ...fixture, id: 'missing', consumerPaidAt: null, paidAt: '2026-11-01T00:00:00Z' }, { ...fixture, id: 'new', consumerPaidAt: '2026-10-02T00:00:00Z', paidAt: '2026-10-01T00:00:00Z' }]
   expect(rows.sort((a, b) => compareFulfillmentOrders(a, b, { queue })).map(row => row.id)).toEqual(['new', 'old', 'missing'])
+})
+
+it.each([undefined, 'consumerPaidAt'] as const)('sorts unpaid by source-order payment for %s without borrowing customer payment or receipt dates', sortBy => {
+  const rows = [
+    { ...fixture, id: 'old', sourceOrderPaidAt: '2026-10-01T00:00:00Z', consumerPaidAt: '2026-11-02T00:00:00Z', paidAt: '2026-11-02T00:00:00Z' },
+    { ...fixture, id: 'missing', sourceOrderPaidAt: null, consumerPaidAt: '2026-12-01T00:00:00Z', paidAt: '2026-12-01T00:00:00Z' },
+    { ...fixture, id: 'new', sourceOrderPaidAt: '2026-10-02T00:00:00Z', consumerPaidAt: '2026-09-01T00:00:00Z', paidAt: '2026-09-01T00:00:00Z' },
+  ]
+  expect([...rows].sort((a, b) => compareFulfillmentOrders(a, b, { queue: 'unpaid', sortBy })).map(row => row.id)).toEqual(['new', 'old', 'missing'])
+  expect([...rows].sort((a, b) => compareFulfillmentOrders(a, b, { queue: 'unpaid', sortBy, sortOrder: 'asc' })).map(row => row.id)).toEqual(['old', 'new', 'missing'])
 })

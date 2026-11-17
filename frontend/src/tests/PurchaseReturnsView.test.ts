@@ -101,8 +101,35 @@ it.each(['procurement', 'warehouse'])('opens the selected return contact in %s a
 it('labels uncollected counts and empty states without implying a business zero', async () => {
   vi.mocked(getPurchaseReturns).mockResolvedValue({ ...page, items: [], total: 0, dataAvailability: { mode: 'collected', complete: false, missingDatasets: ['returns'] } })
   const { wrapper } = await setup()
-  expect(wrapper.get('.result-count').text()).toBe('— · 待接入')
-  expect(wrapper.text()).toContain('采购退货数据尚未接入')
+  expect(wrapper.get('.result-count').text()).toBe('—')
+  expect(wrapper.text()).not.toContain('采购退货数据尚未接入')
   expect(wrapper.text()).not.toContain('暂无符合条件')
   wrapper.unmount()
+})
+it('collapses return product lines while preserving supplier actions and local selection', async () => {
+ vi.mocked(getPurchaseReturns).mockResolvedValue({...page,items:[{...page.items[0]!,items:[1,2,3].map(i=>({...page.items[0]!.items[0]!,name:`Return line ${i}`}))}]})
+ const {wrapper}=await setup()
+ expect(wrapper.findAll('.product')).toHaveLength(1)
+ await wrapper.get('.product-lines-toggle').trigger('click')
+ expect(wrapper.findAll('.product')).toHaveLength(3)
+ expect(wrapper.get('[data-testid=toggle-all-products]').text()).toContain('全部收起')
+ await wrapper.get('[data-testid=toggle-all-products]').trigger('click')
+ expect(wrapper.findAll('.product')).toHaveLength(1)
+ expect(wrapper.get('[data-testid=toggle-all-products]').text()).toContain('全部展开')
+ await wrapper.get('[data-testid=toggle-all-products]').trigger('click')
+ expect(wrapper.findAll('.product')).toHaveLength(3)
+
+ expect(wrapper.get('tbody input[type=checkbox]').element).toHaveProperty('checked',false)
+ expect(wrapper.find('.return-supplier-contact').exists()).toBe(true)
+ expect(getPurchaseReturns).toHaveBeenCalledTimes(1)
+})
+
+it('automatically reloads when its warehouse dropdown changes',async()=>{
+vi.mocked(getPurchaseReturns).mockResolvedValue(page)
+ const {wrapper}=await setup()
+ const select=wrapper.findAll('select').find(s=>s.find('option[value="SZ"]').exists())!
+ expect(select.text()).toContain('HangZhou');expect(select.text()).toContain('ShenZhen')
+ await select.setValue('SZ');await flushPromises()
+ expect(getPurchaseReturns).toHaveBeenLastCalledWith(expect.objectContaining({warehouseCode:'SZ',page:1}),expect.any(AbortSignal))
+ wrapper.unmount()
 })

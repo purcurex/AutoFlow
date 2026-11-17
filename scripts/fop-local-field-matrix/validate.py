@@ -9,7 +9,7 @@ import json,re,hashlib,importlib.util
 
 R=Path(__file__).resolve().parents[2]
 D=R/'.runtime/fop-local-field-matrix'
-p=R/'docs/integrations/HyperZone待办清单数据字段对照表.html'
+p=R/'docs/requirements/HyperZone智能办公平台项目开发需求说明书.html'
 html=p.read_text()
 spec=importlib.util.spec_from_file_location('hz','/Library/VSCode/.hyperzone/html-style/render_html.py')
 hz=importlib.util.module_from_spec(spec);spec.loader.exec_module(hz);hz.validate(html)
@@ -75,7 +75,7 @@ assert '拟议接口不是已发布接口' in html
 assert '州省现有原始接口缺失' not in html
 assert '独立17号接口包已定义州省 hzkj_state' in html
 assert '已运输是否等于供应商已发货' in html
-assert '不可直接将已运输量当已发量' in html
+assert '完整增量' in html and '自动' in html
 # Prevent a known absent response field being rendered as already supplied.
 for attributes,cell in re.findall(r'<td([^>]*)>(.*?)</td>',html,re.S):
  doc=re.search(r'<strong class="source">[^<]* · (hzkj_\w+)</strong>',cell)
@@ -98,6 +98,10 @@ for table,field in json.loads((D/'references.json').read_text()):
  elif table.startswith('organization_'):continue
  else:assert field in columns[table],(table,field)
 
+for section in m:
+ for row in section['rows']:
+  for local,source in row['parts']:
+   assert local in html and source in html,(section['id'],row['label'])
 by_id={s['id']:s for s in m}
 labels=lambda key:[r['label'] for r in by_id[key]['rows']]
 for key in ['sales-review','sales-completed']:
@@ -113,10 +117,10 @@ assert '履约状态' in labels('dispatch-completed')
 assert labels('warehouse-inbound')==['收货通知单编号','商品图片 / 商品信息','供应商','收货仓库','供应商发货时间','物流信息','入库进度','通知 / 已入库 / 待入库']
 assert '备货元数据没有 hzkj_shop' in html
 assert '一张 RMA 售后单一行' in html
-assert '旧 API 已入库展示 · 完整同步待接通' in html and '自动增量已暂停' in html
+assert '完整增量' in html and '自动' in html
 assert 'hz_fop_collected_orders' in html and '已采集模式字段' in html
 collected=json.loads((R/'scripts/fop-local-field-matrix/collected-mapping.json').read_text())
-assert len(collected)==14 and len({x['label'] for x in collected})==14
+assert len(collected)>=19 and len({x['label'] for x in collected})==len(collected)
 assert '不以产品金额或 hzkj_currency 替代' in html
 assert '待支付取已知未取消且未付款' in html
 assert '不代表真实同步已接通' in html

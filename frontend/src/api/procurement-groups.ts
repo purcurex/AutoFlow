@@ -1,20 +1,22 @@
 import type { WorkbenchDataAvailability, WorkbenchReplicaSnapshot } from './workbench-replica'
 import api from './index'
 export interface PurchaseHeader {
-  purchaseType: 'offline' | 'online'; platform: '1688' | 'other' | null
+  purchaseType: 'offline' | 'online' | 'unknown'; platform: '1688' | 'other' | null
   id: string; number: string; supplier: { id: string; name: string }; platformOrderNumber: string | null
   payment: 'unpaid' | 'partial' | 'paid' | 'refunded' | 'unknown'; placement: 'pending' | 'placed' | 'unknown'; paidAt: string | null
 }
 export interface PurchaseGroup {
   id: string; kind: 'purchase' | 'uncreated'; purchase: PurchaseHeader | null
-  orderCount: number; skuCount: number; quantity: number | null; shippedQuantity: number | null; pendingQuantity: number | null
+  detailLineCount?: number | null; previewLines?: PurchaseGroupRow['lines']
+  orderCount: number | null; skuCount: number | null; quantity: number | null; shippedQuantity: number | null; pendingQuantity: number | null
   shipment: 'pending' | 'partial' | 'shipped' | 'unknown'; earliestReceiptAt: string | null; latestConsumerPaidAt?: string | null; completedAt?: string | null
 }
 export interface PurchaseGroupRow {
   orderId: string; orderNumber: string; shopifyOrderNumber: string; customerName: string; storeName: string; ownerName: string; departmentName: string; warehouse: string; paidAt: string | null; consumerPaidAt?: string | null; completedAt?: string | null
-  lines: { fulfillmentLineId: string; purchaseLineId: string | null; sku: string; name: string; imageUrl: string | null; variant: string; quantity: number; shippedQuantity: number }[]
+  lines: { fulfillmentLineId: string; purchaseLineId: string | null; sku: string; name: string; imageUrl: string | null; variant: string; quantity: number | null; shippedQuantity: number | null; isVirtual?: boolean | null }[]
 }
 export const purchaseStageLabels = {
+  unknown: ['待核查', 'Unconfirmed'],
   uncreated: ['待创建采购单', 'Purchase not created'],
   placement_pending: ['待下单 / 推单', 'Placement pending'],
   payment_pending: ['待支付采购款', 'Purchase payment pending'],

@@ -11,6 +11,7 @@ export class StockScopeDto {
 export class StockFiltersDto extends StockScopeDto {
   @IsOptional() @IsIn(['all', 'procurement']) queue?: 'all' | 'procurement'
   @IsOptional() @IsIn(STOCK_TYPES) stockType?: StockType
+  @ValidateIf((_object, value) => value !== undefined) @IsIn(['pending', 'approved']) reviewStatus?: 'pending' | 'approved'
   @IsOptional() @IsIn(STOCK_PURCHASE_STATUSES) purchaseStatus?: StockPurchaseStatus
   @ValidateIf((_object, value) => value !== undefined) @IsIn(STOCK_ORDER_STATUSES) orderStatus?: StockOrderStatus
   @ValidateIf((_object, value) => value !== undefined) @IsIn(STOCK_SORT_FIELDS) sortBy?: StockSortField

@@ -55,6 +55,7 @@ it('lets warehouse-only users query selected pending outbound orders and SKU inv
   expect(search.items).toEqual(selected.items)
 })
 it('keeps queue roles and independent inventory authorization separate', async () => {
+  user.businessRole = 'department_manager'
   const shipping = { ...query, queue: 'shipping' } as AllocationInventoryQueryDto
   await expect(service.getAllocationInventory('u', shipping)).rejects.toThrow()
   user.workbenchRoles = ['warehouse']

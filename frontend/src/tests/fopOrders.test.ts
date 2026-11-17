@@ -53,7 +53,7 @@ describe('fulfillment queue response validation', () => {
     const waiting = { ...base, fulfillmentProgress: { allocationCreated: true, shopifySync: 'pending', supplierShipment: 'partial', stockReadiness: 'incomplete', allocationReview: 'pending', outbound: 'pending' } as const }
     for (const queue of ['dispatch', 'procurement', 'allocation'] as const) expect(matchesFopQueue(waiting, queue)).toBe(true)
     expect(matchesFopQueue(waiting, 'shipping')).toBe(false)
-    expect(matchesFopQueue({ ...waiting, reviewStatus: 'pending' }, 'dispatch')).toBe(true)
+    expect(matchesFopQueue({ ...waiting, reviewStatus: 'pending' }, 'dispatch')).toBe(false)
     expect(matchesFopQueue({ ...waiting, reviewStatus: 'pending' }, 'review')).toBe(true)
     expect(matchesFopQueue({ ...waiting, paymentStatus: 'unpaid' }, 'dispatch')).toBe(false)
     const unsupportedSync = structuredClone(waiting)
@@ -130,4 +130,20 @@ it('uses native purchased state for refund follow-up despite an old shipped proj
   expect(matchesFopQueue(row,'procurement')).toBe(true)
   expect(matchesFopQueue(row,'procurement',undefined,true)).toBe(false)
   expect(matchesFopQueue({...row,sourcePurchaseStatus:'4'},'procurement')).toBe(false)
+})
+
+it('accepts proven collected outbound completion without fabricating unrelated allocation or payment facts', () => {
+  const row = { ...mockFopOrders[0]!, sourceOutboundStatus: '2' as const, paymentStatus: 'unknown' as const, reviewStatus: 'unknown' as const, cancelled: true,
+    dataQuality: { mode: 'collected' as const, readOnly: true as const, missingFields: ['allocation'], reasons: ['linked_workbench_facts_not_provided'] },
+    fulfillmentProgress: { ...mockFopOrders[0]!.fulfillmentProgress, allocationCreated: null, allocationReview: 'unknown' as const, stockReadiness: 'unknown' as const, outbound: 'completed' as const } }
+  expect(matchesFopQueue(row, 'shipping', undefined, true)).toBe(true)
+  expect(matchesFopQueue({ ...row, sourceOutboundStatus: '0' }, 'shipping', undefined, true)).toBe(false)
+  expect(matchesFopQueue({ ...row, sourceOutboundStatus: '0' }, 'shipping')).toBe(false)
+})
+
+it.each(['refunded','voided','expired','unpaid'])('excludes source payment %s from unpaid',sourcePaymentStatus=>{
+ expect(matchesFopQueue({...mockFopOrders[0]!,cancelled:false,paymentStatus:'unpaid',sourcePaymentStatus},'unpaid')).toBe(false)
+})
+it.each(['paid','pending','partially_refunded',null])('keeps source payment %s in unpaid',sourcePaymentStatus=>{
+ expect(matchesFopQueue({...mockFopOrders[0]!,cancelled:false,paymentStatus:'unpaid',sourcePaymentStatus},'unpaid')).toBe(true)
 })

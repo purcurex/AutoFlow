@@ -1,3 +1,4 @@
+import { analyticsQuery, type AnalyticsQueryOptions } from '@/utils/analytics-cache'
 import type { EffectiveChartAccess } from './fop-chart-access'
 import api from './index'
 import type { FopReceipt } from './fop-receipts'
@@ -36,5 +37,5 @@ export interface PerformancePage {
   receipts: FopReceipt[]; profits: FopProfit[]; totals: PerformanceMetrics
   range: { from: string; to: string }; unallocatedSettlements: PerformanceUnallocated[]
 }
-export const getSalesPerformance = (query: PerformanceQuery): Promise<PerformanceData> => api.get('/autoflow/integrations/fop/sales-performance', { params: query })
+export const getSalesPerformance = (query: PerformanceQuery, options?: AnalyticsQueryOptions): Promise<PerformanceData> => analyticsQuery('/autoflow/integrations/fop/sales-performance', query, () => api.get('/autoflow/integrations/fop/sales-performance', { params: query }), options)
 export const getSalesPerformanceDetails = (query: PerformanceDetailsQuery): Promise<PerformancePage> => api.get('/autoflow/integrations/fop/sales-performance/details', { params: query })

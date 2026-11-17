@@ -1,3 +1,5 @@
+// Cache policy is covered separately; these fixtures exercise chart interactions.
+vi.mock('@/api/analytics-cache-scope', () => ({ getAnalyticsCacheScope: vi.fn(async () => ({ cacheable: false })) }))
 vi.mock('@/api/fop-chart-access', async importOriginal => { const { chartAccessFixture } = await import('./chart-access-fixtures'); return { ...await importOriginal<object>(), getChartAccess: vi.fn(async () => chartAccessFixture()) } })
 import { chartAccessFixture } from './chart-access-fixtures'
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
@@ -18,6 +20,7 @@ const series = (id: string, label: string, kind: 'total' | 'detail' | 'other', t
 }
 function result(query: OrderVolumeQuery): OrderVolumeData { return { chartAccess: { ...chartAccessFixture().charts.find(item => item.chartId === (query.category === 'customer' ? 'customer_orders' : 'order_volume'))! }, source: 'mock', query, timeZone: 'Asia/Shanghai', asOf: '2026-10-22T00:00:00Z', total: 12, customerCount: 11, periods: [{ id: '2026-10', label: '10月', from: '2026-10-01', to: '2026-10-31', future: false }], series: query.customerId ? [series('total', '客户合计', 'total', 5)] : [series('total', '合计', 'total', 12), series('customer:c1', 'Northstar', 'detail', 5, 'c1'), series('other', '其他客户', 'other', 7)], options: { departments: [{ id: 'sales1', label: '业务一部' }], objects: [] } } }
 enableAutoUnmount(afterEach)
+afterEach(() => vi.useRealTimers())
 // jsdom does not implement the native dialog top layer.
 beforeAll(() => {
   Object.defineProperty(HTMLDialogElement.prototype, 'showModal', { configurable: true, value() { this.setAttribute('open', '') } })
@@ -32,6 +35,17 @@ async function setup(teleportStub = true, customer = true) {
 }
 describe('customer order analysis', () => {
   beforeEach(() => { vi.mocked(refreshWorkbenchAccess).mockReset().mockResolvedValue({ roles: ['allocation'], isAdmin: false }); vi.mocked(getOrderVolume).mockReset().mockImplementation(async q => result(q)); vi.mocked(searchOrderCustomers).mockReset() })
+  it('automatically queries customer dates without submitting and uses them in the detail link', async () => {
+    vi.useFakeTimers(); vi.setSystemTime(new Date('2026-11-17T00:00:00Z'))
+    const { wrapper, router } = await setup()
+    await wrapper.find('input[aria-label="客户订单开始日期"]').setValue('2026-09-01')
+    await wrapper.find('input[aria-label="客户订单结束日期"]').setValue('2026-09-30')
+    await vi.advanceTimersByTimeAsync(400); await flushPromises()
+    expect(getOrderVolume).toHaveBeenCalledTimes(2)
+    expect(vi.mocked(getOrderVolume).mock.lastCall?.[0]).toMatchObject({ from: '2026-09-01', to: '2026-09-30' })
+    await wrapper.find('tfoot button').trigger('click'); await flushPromises()
+    expect(router.currentRoute.value.query).toMatchObject({ from: '2026-09-01', to: '2026-09-30' })
+  })
   it.each([true, false])('offers only supported warehouse choices for customer mode %s', async customer => {
     const { wrapper } = await setup(true, customer)
     expect(wrapper.find('select[aria-label="订单量仓库"]').findAll('option').map(option => option.attributes('value'))).toEqual(['ALL', 'HZ', 'SZ'])
@@ -58,14 +72,14 @@ describe('customer order analysis', () => {
     expect(wrapper.find('select[aria-label="客户订单时间轴"]').exists()).toBe(false)
     expect(wrapper.find('select[aria-label="订单量年份"]').exists()).toBe(false)
     expect(wrapper.find('select[aria-label="客户订单部门"]').text()).not.toContain('授权范围')
-    await wrapper.find('input[aria-label="客户订单开始日期"]').setValue('2025-12-31')
+    await wrapper.find('input[aria-label="客户订单开始日期"]').setValue('2026-01-01')
     await wrapper.find('input[aria-label="客户订单结束日期"]').setValue('2026-01-02')
     await wrapper.find('.ov-filters').trigger('submit'); await flushPromises()
     const query = vi.mocked(getOrderVolume).mock.calls.at(-1)![0]
-    expect(query).toMatchObject({ category: 'customer', from: '2025-12-31', to: '2026-01-02' })
+    expect(query).toMatchObject({ category: 'customer', from: '2026-01-01', to: '2026-01-02' })
     expect(query).not.toHaveProperty('grain'); expect(query).not.toHaveProperty('year')
     await wrapper.find('tfoot button').trigger('click'); await flushPromises()
-    expect(router.currentRoute.value.query).toMatchObject({ from: '2025-12-31', to: '2026-01-02' })
+    expect(router.currentRoute.value.query).toMatchObject({ from: '2026-01-01', to: '2026-01-02' })
     expect(router.currentRoute.value.query).not.toHaveProperty('grain')
     wrapper.unmount()
   })
@@ -87,7 +101,7 @@ describe('customer order analysis', () => {
     expect(wrapper.find('.ov-selected').exists()).toBe(false)
     await wrapper.findAll('button').find(b => b.text() === '趋势')!.trigger('click'); await flushPromises()
     expect(wrapper.find('.ov-selected').text()).toContain('Northstar')
-    expect(getOrderVolume).toHaveBeenLastCalledWith(expect.objectContaining({ customerId: 'c1' }))
+    expect(getOrderVolume).toHaveBeenLastCalledWith(expect.objectContaining({ customerId: 'c1' }), { force: false })
     await wrapper.find('input[aria-label="客户名称或编码"]').setValue('C999')
     expect(wrapper.find('.ov-selected').exists()).toBe(false)
     expect(wrapper.text()).toContain('其他客户')

@@ -10,7 +10,7 @@ it('normalizes domain facts with scope-isolated deterministic ids and exact deci
  expect(normalizeReplicaGroup({...scope,datasetId:'00000000-0000-4000-a000-000000000004'},group()).events[0].localDocumentId).not.toBe(a.events[0].localDocumentId)
  expect(a.events[0].rows.find(r=>r.table==='hz_fop_source_lines')?.values.quantity).toBe('1.00000001')
  const projection=a.projections[0].rows.find(r=>r.table==='hz_fop_workbench_orders')!.values
- expect(projection.customer_paid_at).toBe('2026-11-11T01:00:00+08:00');expect(projection.consumer_paid_at).toBe(projection.customer_paid_at)
+ expect(projection.customer_paid_at).toBe('2026-11-11T01:00:00+08:00');expect(projection.consumer_paid_at).toBe(doc().header.consumerPaidAt??null)
  expect(projection.order_review_state).toBe('approved');expect(projection.supplier_payment_state).toBe('unknown');expect(projection.readiness).toBe('incomplete')
 })
 it('rejects SQL/table injection, numeric IDs/versions, incomplete entries and unsupported entities',()=>{
@@ -60,4 +60,12 @@ it('allows stock projections with explicit applicable facts and keeps inapplicab
  const g=completeFulfillmentDomainFixture() as any,d=g.documents[0]
  d.entityCode='hzkj_stock_order_new';d.header={customerId:'customer',ownerEmployeeId:'owner',warehouseId:'warehouse',stockType:'full_payment',totalAmount:'10',settlementCurrency:'USD',businessCreatedAt:'2026-11-11T01:00:00Z',rawPurchaseStatus:'0'};d.workbench={ownerEmployeeIds:['owner'],ownershipVersion:'v1',ownershipVerifiedAt:'2026-11-11T01:00:00Z',cancelled:false,customerPaymentState:'unpaid',purchaseCoverageState:'not_ordered',platformOrderState:'not_pushed',supplierPaymentState:'unpaid',supplierShipmentState:'pending'}
  const out=normalizeReplicaGroup(scope,g);expect(out.projections[0].rows[0].values).toMatchObject({readiness:'ready',outbound_state:'unknown',stock_type:'full_payment'})
+})
+
+it.each(['2','3','4','5','6'])('uses native header %s for exclusive fulfillment memberships',status=>{
+ const g=completeFulfillmentDomainFixture() as any
+ g.documents[0].sourceFields.rawBillStatus='C';g.documents[0].header.rawOrderStatus=status
+ const memberships=normalizeReplicaGroup(scope,g).projections[0].rows.filter(r=>r.table==='hz_fop_workbench_memberships')
+ for(const [queue,expected] of [['dispatch',['2','3','6'].includes(status)],['dispatch_completed',['4','5'].includes(status)]] as const)
+  expect(memberships.find(r=>r.values.queue_code===queue)?.values.classification_state).toBe(expected?'member':'non_member')
 })

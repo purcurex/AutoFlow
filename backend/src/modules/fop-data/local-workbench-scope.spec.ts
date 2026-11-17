@@ -1,3 +1,5 @@
+// Business/authorization assertions inspect source tables; shared single-sheet output has independent roundtrip coverage.
+jest.mock('../workbench-export/single-sheet',()=>({...jest.requireActual('../workbench-export/single-sheet'),singleSheetWorkbook:jest.fn()}))
 import { ConflictException, ForbiddenException, ServiceUnavailableException } from '@nestjs/common'
 import { FopDataService } from './fop-data.service'
 import { FopDataProvider, FopOrder, FopOrderPageQuery } from './fop-data.types'
@@ -66,11 +68,9 @@ it('rejects a directory change while an upstream page is being read', async () =
   x.queryOrders.mockImplementation(async (...args) => { const result = await original(...args); x.setOrg({ ...directory(), version: 'v2' }); return result })
   await expect(x.service.getOrders('local-user', query)).rejects.toMatchObject({ response: { code: 'fop_binding_changed' } })
 })
-it('retains an unmapped historical order for admin without displaying the FOP department', async () => {
+it('rejects unmapped historical orders outside the marketing default', async () => {
   const x = setup(); x.row.owner = { id: '202', name: '历史业务员' }
-  const result = await x.service.getOrders('local-user', query)
-  expect(result.items).toHaveLength(1)
-  expect(result.items[0].department).toEqual({ id: 'local:unmapped', name: '未关联本地部门' })
+  await expect(x.service.getOrders('local-user', query)).rejects.toMatchObject({ status: 403 })
 })
 it('rejects upstream rows outside the translated member set instead of filtering one page', async () => {
   const x = setup(); x.row.owner = { id: '202', name: 'Other' }
@@ -162,7 +162,7 @@ it('keeps a successful local review count when dispatch is unavailable', async (
 })
 it('allows a dispatch-only account to read its local dashboard without granting sales data', async () => {
   const x = setup()
-  x.user.role = UserRole.USER; x.user.businessRole = 'salesperson'; x.user.workbenchRoles = ['dispatch']; x.user.businessEmployeeId = '101'
+  x.user.role = UserRole.USER; x.user.businessRole = 'department_manager'; x.user.workbenchRoles = ['dispatch']; x.user.businessEmployeeId = '101'
   x.setOrg({ ...directory(), employeeIds: ['101'] })
   const data = await x.service.getDashboard('local-user', dashboardQuery, x.local as any)
   expect(data.queues).toMatchObject({ review: null, dispatch: 37 }); expect(data).toHaveProperty('queueStates.review', 'forbidden')
@@ -262,5 +262,5 @@ it('limits business department choices to Marketing and Sales I–IV in business
     { id: 'three', name: '业务三部', parentId: 'marketing', pathIds: ['root','marketing','three'] })
   expect(localDepartments(org).map(d => d.name)).toEqual(['营销中心','业务一部','业务二部','业务三部','业务四部'])
   expect(() => localEmployeeFilter(org, { departmentId: 'ops' })).toThrow('业务部门不在当前账号范围内')
-  expect(localEmployeeFilter(org, {}).employeeIds).toBeNull()
+  expect(localEmployeeFilter(org, {}).employeeIds).toEqual(['101'])
 })

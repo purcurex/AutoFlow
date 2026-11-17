@@ -13,7 +13,7 @@ const order = (owner: string, index: number): FopOrderCandidate => ({
 const receipt = (o: FopOrderCandidate): FopReceiptCandidate => ({
   tenantId: 't', id: `receipt-${o.id}`, sourceType: 'fulfillment', documentId: o.id, documentNumber: o.orderNumber, customerId: o.customerId!, customerCode: o.customerCode!, customerName: o.customerName, department: o.department, departmentPathIds: o.departmentPathIds, owner: o.owner, salesDepartmentCode: o.salesDepartmentCode, warehouseCode: 'HZ', warehouse: '杭州仓', carrierCode: 'YT', amount: 8, orderAmount: 10, handlingFee: 2, currency: 'USD', paidAt: o.paidAt, reviewStatus: 'approved', receiptReviewStatus: 'approved', paymentStatus: 'paid', cancelled: false, items: [],
 })
-function setup(changes: object = {}) {
+function setup(changes: object = {}, localOrganization?: unknown) {
   const account: any = { role: 'user', businessRole: 'department_manager', dataDisplayScope: 'department' as const, businessEmployeeId: 'alice', businessDepartmentId: 'd1', fopTenantId: 't', fopUserId: 'fop', workbenchRoles: ['sales'], chartPermissions: [], ...changes }
   const orders = ['alice', 'bob', 'carol'].flatMap(owner => Array.from({ length: 12 }, (_, i) => order(owner, i)))
   const receipts = orders.map(receipt)
@@ -28,10 +28,73 @@ function setup(changes: object = {}) {
     async getOrganizationSummary(subject: FopIdentity, _permission: any, query: any): Promise<any> { return { subject, chartId: query.chartId, rows: ['sales1', 'sales2'].map(salesDepartmentCode => ({ date: '2026-01-10', salesDepartmentCode, count: 24, ...(query.chartId === 'department_receipts' ? { amount: 192, currency: 'USD', sourceType: 'fulfillment' } : {}), ...(query.chartId === 'order_volume' ? { warehouseCode: 'HZ' } : {}), owner: { id: 'secret', name: 'secret' }, customerId: 'secret' })) } }
   }
   const provider = new Provider()
-  const service = new FopDataService({ findById: async () => structuredClone(account) } as unknown as UsersService, provider)
+  const service = new FopDataService({ findById: async () => structuredClone(account), localWorkbenchOrganization: async () => structuredClone(localOrganization) } as unknown as UsersService, provider)
   return { service, provider, account, orders, receipts, grant }
 }
 describe('chart authorization and scoped analytics', () => {
+  const marketingOrganization = {
+    version: 'marketing-v1', departmentId: null, employeeId: null, employeeIds: null,
+    marketingScope: { rootId: 'marketing', departmentIds: ['d1'] },
+    departments: [
+      { id: 'marketing', name: '营销中心', parentId: 'org', pathIds: ['org', 'marketing'] },
+      { id: 'd1', name: '业务一部', parentId: 'marketing', pathIds: ['org', 'marketing', 'd1'] },
+      { id: 'outside', name: '业务一部', parentId: 'org', pathIds: ['org', 'outside'] },
+    ],
+    members: [
+      { employeeId: 'alice', localEmployeeId: 'la', departmentId: 'd1', name: 'Alice' },
+      { employeeId: 'bob', localEmployeeId: 'lb', departmentId: 'outside', name: 'Bob' },
+      { employeeId: 'carol', localEmployeeId: 'lc', departmentId: 'marketing', name: 'Carol' },
+    ],
+  }
+  it('limits legacy paged reports, customer candidates and details to local marketing owners even for administrators', async () => {
+    const { service, provider, grant, orders, receipts } = setup({ role: 'admin', businessRole: 'admin' }, marketingOrganization)
+    Object.defineProperties(provider, { pagedOrders: { value: true }, usesLocalWorkbenchOrganization: { value: true } })
+    grant.analyticsQuery = { orders: ['100000'], receipts: ['100000'] }
+    provider.readAnalytics = async () => ({ orders: [...orders, { ...orders[0], id: 'unmapped', owner: undefined }], receipts, registrations: [], freight: [] })
+    expect((await service.getOrderVolume('u', volume)).total).toBe(12)
+    expect((await service.searchOrderCustomers('u', { keyword: 'bob', page: 1, pageSize: 10 })).total).toBe(0)
+    const details = await service.getOrderVolumeDetails('u', { ...volume, workbenchRole: 'sales', page: 1, pageSize: 100 })
+    expect(details.total).toBe(12)
+    expect(details.items.every(row => row.owner?.id === 'alice')).toBe(true)
+    const paymentDetails = await service.getOrderVolumeReceipts('u', { ...volume, workbenchRole: 'sales', page: 1, pageSize: 100 })
+    expect(paymentDetails.total).toBe(12)
+    expect(paymentDetails.items.every(row => row.owner?.id === 'alice')).toBe(true)
+  })
+  it('scopes legacy paged dashboard registrations and receipts before administrator totals', async () => {
+    const { service, provider, grant, orders, receipts } = setup({ role: 'admin', businessRole: 'admin' }, marketingOrganization)
+    Object.defineProperties(provider, { pagedOrders: { value: true }, usesLocalWorkbenchOrganization: { value: true } })
+    grant.analyticsQuery = { orders: ['100000'], receipts: ['100000'], registrations: ['100000'] }
+    provider.readAnalytics = async () => ({ orders, receipts, freight: [], registrations: orders.map(o => ({ id: o.id, registeredAt: o.paidAt!, organization: o.organization!, department: o.department!, owner: o.owner!, salesDepartmentCode: o.salesDepartmentCode! })) })
+    const result = await service.getDashboard('u', { ...period, includeQueues: false })
+    expect(result.registrations.reduce((total, row) => total + row.count, 0)).toBe(12)
+    expect(result.receipts.departments.flatMap(d => d.salespeople).map(person => person.id)).toEqual(['alice'])
+  })
+  it('keeps an empty local marketing scope empty in legacy administrator analysis', async () => {
+    const { service, provider, grant, orders, receipts } = setup({ role: 'admin', businessRole: 'admin' }, { ...marketingOrganization, marketingScope: { rootId: null, departmentIds: [] } })
+    Object.defineProperties(provider, { pagedOrders: { value: true }, usesLocalWorkbenchOrganization: { value: true } })
+    grant.analyticsQuery = { orders: ['100000'], receipts: ['100000'] }
+    provider.readAnalytics = async () => ({ orders, receipts, registrations: [], freight: [] })
+    expect((await service.getOrderVolume('u', volume)).total).toBe(0)
+    expect((await service.searchOrderCustomers('u', { keyword: 'alice', page: 1, pageSize: 10 })).total).toBe(0)
+  })
+  it('filters legacy freight and its drilldown by local marketing owners', async () => {
+    const { service, provider, grant } = setup({ role: 'admin', businessRole: 'admin' }, marketingOrganization)
+    Object.defineProperties(provider, { pagedOrders: { value: true }, usesLocalWorkbenchOrganization: { value: true } })
+    grant.analyticsQuery = { freight: ['100000'] }; grant.analyticsScopes.push('freight')
+    const freight = ['alice', 'bob', 'carol'].map(owner => ({
+      id: owner, tenantId: 't', documentNumber: owner, orderNumber: owner, trackingNumber: owner,
+      carrierCode: 'YT' as const, carrierName: '云途', channelName: '标准专线', warehouseCode: 'HZ' as const, warehouse: '杭州仓',
+      customerId: owner, customerCode: owner, customerName: owner, department: { id: 'd1', name: '业务一部' }, owner: { id: owner, name: owner },
+      originalAmount: 100, originalCurrency: 'USD', fxRateToUsd: 1, fxRateDate: '2026-01-01', fxRateSource: 'fixture', amount: 100, currency: 'USD' as const,
+      confirmedAt: '2026-01-15T01:00:00Z', reviewStatus: 'approved' as const, costStatus: 'confirmed' as const,
+    }))
+    provider.readAnalytics = async () => ({ orders: [], receipts: [], registrations: [], freight })
+    const query = { grain: 'month' as const, year: 2026, warehouse: 'ALL' as const }
+    expect((await service.getFreight('u', query)).totals.amount).toBe(100)
+    const details = await service.getFreightDetails('u', { ...query, workbenchRole: 'sales', page: 1, pageSize: 100 })
+    expect(details.total).toBe(1)
+    expect(details.items[0].owner?.id).toBe('alice')
+  })
   it('keeps operational orders accessible while restricting analytics to anonymous department aggregates', async () => {
     const { service, provider } = setup({ businessRole: 'admin', chartPermissions: [
       ...['registrations', 'department_receipts', 'order_volume'].map(id => override(id, { dataScope: 'none', summaryMode: 'marketing', details: 'deny' })),

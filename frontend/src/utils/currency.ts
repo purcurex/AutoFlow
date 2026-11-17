@@ -4,6 +4,10 @@ export function currencyCode(value?: string | null): string {
   const code = value?.trim().toUpperCase()
   return code && /^[A-Z]{3}$/.test(code) ? code : DEFAULT_CURRENCY
 }
+/** Presentation only: retain source codes in data and show dollars for USD. */
+export function currencyLabel(currency?: string | null): string {
+  return currency?.trim().toUpperCase() === 'USD' ? '$' : currency ?? ''
+}
 export function formatCurrency(amount: number, currency?: string | null, locale = 'zh-CN'): string {
   return new Intl.NumberFormat(locale, { style: 'currency', currency: currencyCode(currency), currencyDisplay: currencyCode(currency) === 'USD' ? 'narrowSymbol' : 'symbol', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount)
 }
@@ -18,7 +22,7 @@ export function formatUsdExchangeRate(fxRateToUsd: number, originalCurrency: str
   const quoteCurrency = originalCurrency?.trim().toUpperCase()
   if (!/^[A-Z]{3}$/.test(quoteCurrency) || !Number.isFinite(fxRateToUsd) || fxRateToUsd <= 0) return '—'
   const rate = 1 / fxRateToUsd
-  return Number.isFinite(rate) ? `USD/${quoteCurrency} ${rate.toFixed(4)}` : '—'
+  return Number.isFinite(rate) ? `$/${currencyLabel(quoteCurrency)} ${rate.toFixed(4)}` : '—'
 }
 
 /** Source monetary fields never acquire a default currency or a fabricated zero. */

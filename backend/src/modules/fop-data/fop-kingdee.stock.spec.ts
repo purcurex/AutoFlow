@@ -1,3 +1,5 @@
+// Business/authorization assertions inspect source tables; shared single-sheet output has independent roundtrip coverage.
+jest.mock('../workbench-export/single-sheet',()=>({...jest.requireActual('../workbench-export/single-sheet'),singleSheetWorkbook:jest.fn()}))
 import { KingdeeWorkbenchDiagnosticProvider as KingdeeFopDataProvider } from './fop-kingdee.diagnostic'
 import { FopDataService } from './fop-data.service'
 import type { UsersService } from '../users/users.service'
@@ -82,7 +84,7 @@ it('maps both stock types and payment/audit stages without hiding received recor
   expect(page.total).toBe(4); expect(page.totals.orderCount).toBe(4); expect(page.totals.amounts).toEqual([{ currency: 'USD', amount: 493.8 }])
   const paid = await service.getStockOrders('local', { page: 1, pageSize: 50, orderStatus: 'paid', stockType: 'deposit', purchaseStatus: 'partial' })
   expect(paid.items.map(row => row.id)).toEqual(['1001'])
-  expect((await service.getStockOrders('local', { page: 1, pageSize: 50, orderStatus: 'approved', purchaseStatus: 'received' })).items.map(row => row.id)).toEqual(['1002'])
+  expect((await service.getStockOrders('local', { page: 1, pageSize: 50, orderStatus: 'paid', purchaseStatus: 'received' })).items.map(row => row.id)).toEqual(['1002'])
 })
 
 it('exports selected real-adapter stock orders and preserves all SKU quantities', async () => {
@@ -236,7 +238,7 @@ it.each([
 it.each([
   { subject: { tenantId: 'other', userId: '100' } }, { organizationIds: ['20'] }, { page: 2 }, { pageSize: 101 },
   { hasMore: true }, { items: [order('1000'), order('1000')] }, { items: [order('1000', { id: 1000 })] },
-  { items: [order('1000', { stockType: '9' })] }, { items: [order('1000', { orderStatus: '0' })] },
+  { items: [order('1000', { stockType: '9' })] }, { items: [order('1000', { orderStatus: '9' })] },
   { items: [order('1000', { amount: '-1' })] }, { items: [order('1000', { paidAt: '2026-10-01 12:00:00' })] },
 ])('rejects invalid or changed stock pages instead of reporting partial totals: %j', async invalid => {
   const { service } = setup({ page: () => invalid })

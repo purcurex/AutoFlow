@@ -125,7 +125,10 @@ export function buildPurchaseGroups(orders: FopOrder[], paths: Map<string, reado
   return [...groups.values()].filter(matchesStage).sort((a, b) => Number(b.kind === 'uncreated') - Number(a.kind === 'uncreated')
     || compareDate(a.latestConsumerPaidAt ?? null, b.latestConsumerPaidAt ?? null, query.sortOrder === 'asc' ? 1 : -1) || a.id.localeCompare(b.id))
 }
-export function purchaseGroupSummary({ rows: _rows, ...group }: PurchaseGroup) { return group }
+export function purchaseGroupSummary({ rows, ...group }: PurchaseGroup) {
+  const lines = rows.flatMap(row => row.lines)
+  return { ...group, detailLineCount: lines.length, previewLines: lines.slice(0, lines.length <= 2 ? 2 : 1) }
+}
 export function purchaseGroupTotals(groups: PurchaseGroup[]) {
   return { groupCount: groups.length, purchaseCount: groups.filter(g => g.kind === 'purchase').length, orderCount: new Set(groups.flatMap(g => g.rows.map(r => r.orderId))).size,
     uncreatedCount: groups.filter(g => g.kind === 'uncreated').reduce((n, g) => n + g.orderCount, 0),

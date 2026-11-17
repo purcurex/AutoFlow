@@ -21,8 +21,8 @@ describe('local workbench source synchronization', () => {
   it('labels collection as read-only rather than full initialization and keeps sync paused', async () => {
     vi.mocked(api.get).mockResolvedValue({ ...ready, state: 'collected', paused: true, automaticCallsEnabled: false, collected: { batchId: 'batch', sourceAsOf: ready.sourceSyncedAt, rowCount: 44855, pageCount: 449, missingDatasets: ['allocations'] } })
     const wrapper = setup(); await flushPromises()
-    expect(wrapper.text()).toContain('已采集 · 只读 · 正式同步待接入')
-    expect(wrapper.text()).toContain('采集时点')
+    expect(wrapper.text()).not.toContain('已采集 · 只读 · 正式同步待接入')
+    expect(wrapper.text()).toContain('最近同步')
     expect(wrapper.text()).not.toContain('初始化完成')
     expect(wrapper.find('[data-testid="initialize-workbench"]').exists()).toBe(false)
     expect(wrapper.get('[data-testid="sync-workbench"]').attributes('disabled')).toBeDefined()
@@ -32,7 +32,7 @@ describe('local workbench source synchronization', () => {
     vi.mocked(api.get).mockResolvedValue({ ...ready, initialized: false, bootstrap: { allowed: true, executable: false, configured: false, blockers: ['workbench_replica_sync_not_configured'] } })
     const wrapper = setup(); await flushPromises()
     expect(wrapper.get('[data-testid="initialize-workbench"]').attributes('disabled')).toBeDefined()
-    expect(wrapper.text()).toContain('FOP 同步服务未配置')
+    expect(wrapper.text()).toContain('初始化暂不可用')
     expect(api.post).not.toHaveBeenCalled()
   })
 

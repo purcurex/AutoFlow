@@ -57,6 +57,13 @@ interface RemoteImageBytes {
  */
 @Injectable()
 export class SourcingImageResolverService {
+  /** Public-URL-only thumbnail path; reuses pinned DNS, redirect and size checks. */
+  async resolveExportThumbnail(url: string): Promise<Buffer> {
+    const remote = await this.downloadRemoteImage(url)
+    return sharp(remote.bytes, { limitInputPixels: MAX_SOURCE_IMAGE_PIXELS })
+      .rotate().resize(80, 80, { fit: 'contain', background: '#ffffff' }).png().toBuffer()
+  }
+
   async resolve(workflow: WorkflowRunEntity): Promise<ResolvedSourcingImage> {
     if (workflow.seedType !== 'image') {
       throw this.invalidRequest('Only image workflows can resolve a sourcing image.')

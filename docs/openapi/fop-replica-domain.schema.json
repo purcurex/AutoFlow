@@ -2513,6 +2513,7 @@
                     ]
                   },
                   "consumerPaidAt": {
+                    "description": "C端源单付款时间，对应履约hzkj_datetimefield；缺失为null，不回退customerPaidAt。",
                     "anyOf": [
                       {
                         "type": "string",

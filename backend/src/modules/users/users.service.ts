@@ -11,7 +11,7 @@ import * as bcrypt from 'bcrypt'
 import { User, UserRole } from './user.entity'
 import type { UpdateProfileDto } from './dto/update-profile.dto'
 import type { ListWorkbenchAccountsDto } from './dto/workbench.dto'
-import { WORKBENCH_ROLES, type WorkbenchRole } from './workbench-role'
+import { WORKBENCH_ROLES, effectiveWorkbenchRoles, type WorkbenchRole } from './workbench-role'
 import type { FopIdentity } from '../fop-data/fop-data.types'
 import { ChartPermissionOverride, collaborationChartPermissions, validateChartPermissions } from './chart-permissions'
 import { accountRole } from './account-role'
@@ -20,7 +20,7 @@ import { buildLocalWorkbenchOrganization, LocalWorkbenchOrganization, type Local
 
 function workbenchAccount(user: User) {
   return {
-    id: user.id, displayId: user.displayId, email: user.email, username: user.username, role: user.role, workbenchRoles: user.workbenchRoles,
+    id: user.id, displayId: user.displayId, email: user.email, username: user.username, role: user.role, workbenchRoles: effectiveWorkbenchRoles(user),
     businessScope: businessScope(user),
     accountRole: accountRole(user),
     chartPermissions: user.chartPermissions ?? [],
@@ -51,7 +51,7 @@ export class UsersService {
       password: hashedPassword,
       role,
       displayId,
-      workbenchRoles: ['sales'],
+      workbenchRoles: [...WORKBENCH_ROLES],
       chartPermissions: [],
     })
     return this.usersRepository.save(user)
@@ -84,7 +84,7 @@ export class UsersService {
     const user = await this.findById(id)
     if (!user) throw new NotFoundException('用户不存在')
     // A partial update cannot overwrite concurrently changed account identity fields.
-    await this.usersRepository.update(id, { workbenchRoles: [...workbenchRoles] })
+    await this.usersRepository.update(id, { workbenchRoles: effectiveWorkbenchRoles({ ...user, workbenchRoles }) })
     const updated = await this.findById(id)
     if (!updated) throw new NotFoundException('用户不存在')
     return workbenchAccount(updated)
@@ -194,7 +194,7 @@ export class UsersService {
       await repository.update(id, {
         role, businessRole: scope.role, businessDepartmentId: scope.departmentId, businessEmployeeId: scope.employeeId,
         ...(input.accountRole === 'department_manager' && accountRole(target) !== 'department_manager' ? { dataDisplayScope: 'self' as const } : {}),
-        workbenchRoles: input.accountRole === 'administrator' ? [...WORKBENCH_ROLES] : [...input.workbenchRoles],
+        workbenchRoles: ['administrator', 'salesperson'].includes(input.accountRole) ? [...WORKBENCH_ROLES] : [...input.workbenchRoles],
         ...(resetTemplate ? { chartPermissions: input.accountRole === 'collaboration' ? collaborationChartPermissions() : [] } : {}),
       })
       return workbenchAccount((await repository.findOne({ where: { id } }))!)

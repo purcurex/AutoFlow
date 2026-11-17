@@ -38,7 +38,7 @@ describe('role workbench navigation', () => {
   })
 
   it('guards receipt detail routes with the same role and login access as workbenches', async () => {
-    vi.mocked(getWorkbenchAccess).mockResolvedValue({ roles: ['allocation'], isAdmin: false })
+    vi.mocked(getWorkbenchAccess).mockResolvedValue({ roles: ['allocation'], isAdmin: true })
     await router.push('/workbench/allocation/receipts?from=2026-10-01&to=2026-10-31')
     expect(router.currentRoute.value.name).toBe('RoleWorkbenchReceipts')
     await router.push('/workbench/sales/receipts')
@@ -53,15 +53,26 @@ describe('role workbench navigation', () => {
     await router.push('/')
     expect(router.currentRoute.value.params.role).toBe('allocation')
   })
-  it('requires an assigned role and login for freight details', async () => {
-    vi.mocked(getWorkbenchAccess).mockResolvedValue({ roles: ['dispatch'], isAdmin: false })
-    await router.push('/workbench/dispatch/freight?grain=month&year=2026&warehouse=HZ')
-    expect(router.currentRoute.value.name).toBe('RoleWorkbenchFreight')
-    await router.push('/workbench/sales/freight')
-    expect(router.currentRoute.value.name).toBe('WorkbenchAccessDenied')
+  it.each(['sales', 'dispatch', 'procurement', 'allocation', 'warehouse'])('redirects retired %s analytics links to authorized Dashboard charts', async role => {
+    for (const isAdmin of [false, true]) {
+      vi.mocked(getWorkbenchAccess).mockResolvedValue({ roles: ['sales'], isAdmin })
+      for (const suffix of ['/freight', '?queue=freight', '?queue=order-analysis', '?queue=order-volume']) {
+        const separator = suffix.includes('?') ? '&' : '?'
+        await router.push(`/workbench/${role}${suffix}${separator}departmentId=outside&ownerId=someone&page=3`)
+        expect(router.currentRoute.value.name).toBe('FopDashboard')
+        expect(router.currentRoute.value.query).toEqual({})
+      }
+    }
+  })
+  it('keeps retired links authenticated and rechecks Dashboard business access', async () => {
+    await router.push('/workbench/sales')
     localStorage.clear()
     await router.push('/workbench/dispatch/freight')
     expect(router.currentRoute.value.name).toBe('Login')
+    localStorage.setItem('user', JSON.stringify({ role: 'admin' }))
+    vi.mocked(getWorkbenchAccess).mockResolvedValue({ roles: [], isAdmin: false, businessRole: 'none' })
+    await router.push('/workbench/dispatch?queue=order-analysis')
+    expect(router.currentRoute.value.name).toBe('WorkbenchAccessDenied')
   })
   it('routes a management-only administrator to account settings and denies business deep links', async () => {
     vi.mocked(getWorkbenchAccess).mockResolvedValue({ roles: [], isAdmin: true, businessRole: 'none' })

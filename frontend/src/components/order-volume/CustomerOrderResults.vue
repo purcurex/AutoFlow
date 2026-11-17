@@ -25,7 +25,7 @@ const chartMetrics = computed(() => total.value?.amounts ? metrics : ['orders'] 
 const hasResults = computed(() => props.data.total > 0 || (total.value?.amounts?.total ?? 0) > 0)
 const ranking = computed(() => props.data.series.filter(s => s.kind !== 'total'))
 const tableRows = computed(() => props.rankingOnly ? ranking.value : total.value ? [total.value] : [])
-const warehouseName = (code: VolumeWarehouse) => code === 'HZ' ? t('杭州仓', 'Hangzhou') : code === 'SZ' ? t('深圳仓', 'Shenzhen') : t('未分配仓库', 'Unassigned')
+const warehouseName = (code: VolumeWarehouse) => code === 'HZ' ? 'HangZhou' : code === 'SZ' ? 'ShenZhen' : t('未分配仓库', 'Unassigned')
 const warehouseColor = { HZ: '#79B7D2', SZ: '#A996D1', UNASSIGNED: '#B5BFCE' }
 const warehouses = computed<VolumeWarehouse[]>(() => ['HZ', 'SZ', ...(total.value?.warehouses.UNASSIGNED.some(value => (value ?? 0) > 0) ? ['UNASSIGNED'] : [])] as VolumeWarehouse[])
 const axis = computed(() => isDark.value ? '#99A8BE' : '#8693A8')
@@ -112,11 +112,11 @@ function syncZoom(event: ChartZoom) { for (const chart of charts.value) chart.zo
     </div>
     <p v-if="total?.amounts?.breakdown" class="ov-scope customer-amount-note">{{ breakdown(total) }} · {{ t('按支付当月计入，押金备货不计入；使用备货库存时不重复计款。', 'Counted in the payment month; deposits excluded and stocked inventory is not counted again.') }}</p>
     <p v-if="!total?.amounts" class="ov-scope customer-amount-note">{{ t('回款金额暂不可查看，仍可查看履约订单量。', 'Receipt amounts are unavailable; fulfillment counts remain available.') }}</p>
-    <p v-if="total?.amounts?.excludedOrderCount" class="ov-scope customer-amount-note">{{ t(`回款仅汇总美元收款；${total.amounts.excludedOrderCount} 笔非美元收款未计入回款合计。`, `Amounts include USD receipts only; ${total.amounts.excludedOrderCount} non-USD receipts are excluded.`) }}</p>
+    <p v-if="total?.amounts?.excludedOrderCount" class="ov-scope customer-amount-note">{{ t(`回款仅汇总美元收款；${total.amounts.excludedOrderCount} 笔非美元收款未计入回款合计。`, `Amounts include US dollar receipts only; ${total.amounts.excludedOrderCount} receipts in other currencies are excluded.`) }}</p>
     <p v-if="!hasResults" class="ov-empty">{{ t('当前条件下暂无履约订单或回款。', 'No fulfillment orders or receipts match these filters.') }}</p>
     <div v-else class="customer-metric-charts" :class="{ 'customer-ranking-charts': rankingOnly }">
       <section v-for="metric in chartMetrics" :key="metric" class="customer-metric-chart" :data-chart-metric="metric">
-        <h3>{{ metric === 'orders' ? (rankingOnly ? t('履约订单量排名 · 前十＋其他', 'Fulfillment ranking · Top 10 + Other') : t('履约订单量趋势', 'Fulfillment order trend')) : (rankingOnly ? t('回款业绩金额对比 · $', 'Collections comparison · $') : t('回款业绩金额趋势 · $', 'Collections trend · $')) }}<small>{{ split ? t('杭州仓 / 深圳仓', 'Hangzhou / Shenzhen') : rankingOnly ? t('同一客户顺序', 'Same customer order') : t('所选时间范围', 'Selected dates') }}</small></h3>
+        <h3>{{ metric === 'orders' ? (rankingOnly ? t('履约订单量排名 · 前十＋其他', 'Fulfillment ranking · Top 10 + Other') : t('履约订单量趋势', 'Fulfillment order trend')) : (rankingOnly ? t('回款业绩金额对比 · $', 'Collections comparison · $') : t('回款业绩金额趋势 · $', 'Collections trend · $')) }}<small>{{ split ? 'HangZhou / ShenZhen' : rankingOnly ? t('同一客户顺序', 'Same customer order') : t('所选时间范围', 'Selected dates') }}</small></h3>
         <div :style="{ height: rankingOnly ? `${Math.max(300, ranking.length * (split ? 54 : 35) + 60)}px` : '300px' }"><EChart ref="charts" :option="rankingOnly ? rankingOption(metric) : trendOption(metric)" :label="metricLabel(metric)" @select="event => selectChart(event, metric)" @zoom="syncZoom" /></div>
       </section>
     </div>

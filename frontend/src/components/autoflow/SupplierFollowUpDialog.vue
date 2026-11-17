@@ -19,7 +19,7 @@ const off = onSessionReset(close)
 onBeforeUnmount(() => { active = false; generation++; off() })
 function errorText(cause: unknown) {
   const code = (cause as { code?: unknown })?.code
-  if (code === 'workbench_replica_feature_not_configured' || code === 'fop_supplier_contacts_not_configured') return t('供应商联系人服务尚未接通，请在 FOP 联系供应商。', 'Supplier contacts are not connected yet. Contact the supplier in FOP.')
+  if (code === 'workbench_replica_feature_not_configured' || code === 'fop_supplier_contacts_not_configured') return t('暂无法获取联系人，请在 FOP 联系供应商。', 'Contacts are unavailable. Contact the supplier in FOP.')
   if (code === 'fop_queries_paused') return t('FOP 测试环境访问已暂停，暂时无法核对供应商联系人。', 'FOP test access is paused; supplier contacts cannot be verified.')
   const message = (cause as { message?: unknown })?.message
   return typeof message === 'string' && /[\u4e00-\u9fff]/.test(message) ? message : t('暂时无法获取供应商信息，请刷新重试。', 'Supplier details are unavailable. Refresh to try again.')

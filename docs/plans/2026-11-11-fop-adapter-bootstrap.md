@@ -8,7 +8,7 @@
 
 **Tech Stack:** NestJS / TypeScript / PostgreSQL / Jest / Python HTML 生成器。
 
-**Spec:** `docs/integrations/source/sync-query-solution.body.html`（V2.3）及 `agent.md` 最新业务更正。
+**Spec:** `docs/requirements/HyperZone智能办公平台项目开发需求说明书.html`（V2.3）及 `agent.md` 最新业务更正。
 
 ## 约束与决定
 

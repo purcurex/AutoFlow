@@ -188,7 +188,7 @@ onBeforeUnmount(() => { requestId++; offSession() })
 
 <template>
   <AppLayout><main class="app-page org-page">
-    <header class="org-heading"><div><p class="page-eyebrow">HYPERZONE · ORGANIZATION</p><h1 class="page-title">{{ text('组织架构', 'Organization') }} <span class="demo-badge">MOCK</span></h1></div><div class="department-actions"><button class="btn btn-secondary" :disabled="busy" @click="load"><RefreshCw :size="15" />{{ text('刷新', 'Refresh') }}</button></div></header>
+    <header class="org-heading"><div><p class="page-eyebrow">HYPERZONE · ORGANIZATION</p><h1 class="page-title">{{ text('组织架构', 'Organization') }} </h1></div><div class="department-actions"><button class="btn btn-secondary" :disabled="busy" @click="load"><RefreshCw :size="15" />{{ text('刷新', 'Refresh') }}</button></div></header>
     <p v-if="error" role="alert" class="notice border-red-500 bg-red-50 text-red-700">{{ error }}</p><p v-if="success" role="status" class="notice border-emerald-500 bg-emerald-50 text-emerald-700">{{ success }}</p>
     <div class="org-stats"><article><Building2 :size="19" /><div><strong>{{ root?.name ?? '—' }}</strong><span>{{ text('所属组织', 'Organization') }}</span></div></article><article><GitBranch :size="19" /><div><strong>{{ workspace ? nodes.length - 1 : '—' }}</strong><span>{{ text('自定义部门', 'Departments') }}</span></div></article><article><Users :size="19" /><div><strong>{{ workspace?.employees.length ?? '—' }}</strong><span>{{ text('员工', 'Employees') }}</span></div></article></div>
     <p v-if="!workspace" class="panel empty-state">{{ busy ? text('正在加载组织…', 'Loading organization…') : text('暂时无法显示组织架构', 'Organization unavailable') }}</p>

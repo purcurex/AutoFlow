@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { warehouseName } from '@/utils/warehouse'
+import { workbenchTimeRange } from '@/utils/workbench-time-range'
 import { rmaTypeLabels } from '@/api/rma-orders'
 import { purchaseReturnLabels } from '@/api/purchase-returns'
 import { completedNames } from '@/utils/completed-orders'
@@ -19,16 +21,14 @@ const route = useRoute(), { locale } = useI18n()
 const zh = computed(() => String(locale.value).startsWith('zh'))
 const text = (cn: string, en: string) => zh.value ? cn : en
 const val = (key: string) => typeof route.query[key] === 'string' ? route.query[key] as string : ''
+const timeLabel = (allowAll: boolean) => { const range = allowAll ? workbenchTimeRange(route.query.timeRange, true) : workbenchTimeRange(route.query.timeRange); return range === 'all' ? text('全部', 'All') : range === '1w' ? text('近一周', 'Last week') : range === '3m' ? text('近三月', 'Last three months') : text('近一月', 'Last month') }
 const stock = computed(() => ['stock', 'stock_procurement'].includes(props.queue))
 // Charts apply their own filters. Describe their scope without presenting leftover
 // todo parameters as if they filtered the charts.
 const analysisPages = computed<Record<string, { title: string; scope: string }>>(() => ({
-  'order-analysis': { title: text('订单分析', 'Order analysis'), scope: text('履约订单量与客户回款分析；各图按已应用的日期、仓库及统计维度展示。', 'Fulfillment volume and customer collections; each chart uses its applied dates, warehouse and dimensions.') },
-  'order-volume': { title: text('订单统计明细', 'Order details'), scope: text('展示从订单分析选定的订单明细，沿用对应统计期间与筛选条件。', 'Order details retain the reporting period and filters selected in order analysis.') },
   receipts: { title: text('回款明细', 'Receipt details'), scope: text('履约订单及全款备货实际收款，按所选支付期间统计，押金备货不计入。', 'Fulfillment and full-payment stock receipts by selected payment period; deposit stock is excluded.') },
-  freight: { title: text('物流运费', 'Logistics freight'), scope: text('展示已确认的实际物流费用，按运费确认时间归期，范围以当前筛选为准。', 'Confirmed actual logistics costs by confirmation date, within the current filters.') },
-  performance: { title: text('个人收款与毛利', 'Personal receipts and profit'), scope: text('按所选业务员及日期展示订单和全款备货收款，结算毛利、预估毛利分别统计。', 'Order and full-payment stock receipts for the selected salespeople and dates; settled and estimated profit are counted separately.') },
-  overview: { title: text('客户开发概览', 'Prospecting overview'), scope: text('汇总客户线索、开发流程与沟通跟进，点击对应模块查看明细。', 'Customer leads, prospecting workflows and follow-ups; open a module to view details.') },
+  performance: { title: text('业绩收入与毛利', 'Revenue and profit'), scope: text('按所选业务员、收款日期及业务部门统计订单金额。', 'Order amounts by salesperson, receipt date and business department.') },
+  overview: { title: text('客户开发概览', 'Prospecting overview'), scope: text('按注册日期、业务员及部门查看客户注册和订单分布。', 'Customer registrations and orders by registration date, salesperson and department.') },
 }))
 const analysis = computed(() => analysisPages.value[props.queue])
 const queueName = computed(() => analysis.value?.title ?? (props.queue === 'completed' && isWorkbenchRole(route.params.role) ? completedNames[route.params.role][zh.value ? 0 : 1] : props.queue === 'receipt_notices' ? text('待入库清单', 'Pending inbound') : props.queue === 'rma' ? text('RMA售后清单', 'RMA after-sales') : props.queue === 'purchase_returns' ? text('采购退货清单', 'Purchase returns') : props.queue === 'stock' ? text('备货清单', 'Stock orders') : props.queue === 'stock_procurement' ? text('备货待采购清单', 'Stock procurement') : queueNames[props.queue as keyof typeof queueNames]?.[zh.value ? 0 : 1] ?? text('工作台', 'Workbench')))
@@ -36,7 +36,7 @@ const summaryParts = computed(() => {
   if (analysis.value) return [analysis.value.scope]
   const parts = [
     `${text('业务部门', 'Department')}：${val('departmentId') ? props.labels?.[val('departmentId')] ?? text('所选部门', 'Selected department') : defaultDepartmentLabel.value}`,
-    `${props.queue === 'purchase_returns' ? text('出库仓库', 'Outbound warehouse') : (stock.value || props.queue === 'receipt_notices') ? text('收货仓库', 'Receiving warehouse') : text('发货仓库', 'Shipping warehouse')}：${({ HZ: text('杭州仓', 'Hangzhou'), SZ: text('深圳仓', 'Shenzhen') } as Record<string, string>)[val('warehouseCode')] ?? text('全部', 'All')}`,
+    `${props.queue === 'purchase_returns' ? text('出库仓库', 'Outbound warehouse') : (stock.value || props.queue === 'receipt_notices') ? text('收货仓库', 'Receiving warehouse') : text('发货仓库', 'Shipping warehouse')}：${val('warehouseCode') ? warehouseName(val('warehouseCode')) : text('全部', 'All')}`,
   ]
   if (val('ownerId')) parts.push(`${text('业务员', 'Salesperson')}：${props.labels?.[val('ownerId')] ?? text('所选业务员', 'Selected salesperson')}`)
   if (props.queue === 'receipt_notices') {
@@ -59,7 +59,7 @@ const summaryParts = computed(() => {
     parts.push(`${text('备货类型', 'Stock type')}：${stockTypes[val('stockType') as StockType]?.[zh.value ? 0 : 1] ?? text('全部', 'All')}`)
     if (props.queue === 'stock') {
       parts.push(`${text('备货阶段', 'Stock stage')}：${stockLifecycles[val('lifecycle') as StockLifecycle]?.[zh.value ? 0 : 1] ?? text('全部', 'All')}`)
-      parts.push(`${text('客户付款时间', 'Customer payment time')}：${val('timeRange') === '1w' ? text('近一周', 'Last week') : val('timeRange') === '1m' ? text('近一月', 'Last month') : val('timeRange') === '3m' ? text('近三月', 'Last three months') : text('全部', 'All')}`)
+      parts.push(`${text('客户付款时间', 'Customer payment time')}：${timeLabel(true)}`)
     }
     if (props.queue === 'stock_procurement') parts.push(`${text('采购状态', 'Purchase status')}：${stockStatuses[val('purchaseStatus') as StockPurchaseStatus]?.[zh.value ? 0 : 1] ?? text('全部', 'All')}`)
   } else {
@@ -67,8 +67,8 @@ const summaryParts = computed(() => {
     if (isProcurementStage(val('procurementStage'))) parts.push(`${text('采购进度', 'Purchase progress')}：${procurementStageLabels[val('procurementStage') as keyof typeof procurementStageLabels][zh.value ? 0 : 1]}`)
     if (val('warehouseStage')) parts.push(`${text('配货单状态', 'Allocation status')}：${val('warehouseStage') === 'pending_review' ? text('未审核', 'Pending approval') : text('已审核', 'Approved')}`)
   }
-  if (props.queue === 'completed') parts.push(`${text('客户付款时间', 'Customer payment time')}：${val('timeRange') === '1m' ? text('近一月', 'Last month') : val('timeRange') === '3m' ? text('近三月', 'Last three months') : text('近一周', 'Last week')}`)
-  if (props.queue === 'unpaid') parts.push(`${text('客户付款时间', 'Customer payment time')}：${val('timeRange') === '1w' ? text('近一周', 'Last week') : val('timeRange') === '1m' ? text('近一月', 'Last month') : val('timeRange') === '3m' ? text('近三月', 'Last three months') : text('全部', 'All')}`)
+  if (props.queue === 'completed') parts.push(`${text('客户付款时间', 'Customer payment time')}：${timeLabel(false)}`)
+  if (props.queue === 'unpaid') parts.push(`${text('C端付款时间', 'Buyer payment time')}：${timeLabel(true)}`)
   if (props.queue === 'review' || props.queue === 'completed' && route.params.role === 'sales') parts.push(`${text('发货国家', 'Shipping country')}：${normalizeShippingCountry(val('shippingCountryCode')) ?? text('全部', 'All')}`)
   if (props.queue === 'procurement' && isPurchaseStage(val('purchaseStage'))) parts.push(`${text('采购进度', 'Purchase progress')}：${purchaseStageLabels[val('purchaseStage') as keyof typeof purchaseStageLabels][zh.value ? 0 : 1]}`)
   if (val('search')) parts.push(`${text('关键词', 'Keyword')}：${val('search')}`)
@@ -85,8 +85,8 @@ const summaryFields = computed(() => {
   const slots: Record<string, { choices?: string[]; width?: string }> = {
     [text('业务部门', 'Department')]: { width: zh.value ? '5em' : '20ch' },
     [text('业务员', 'Salesperson')]: { width: zh.value ? '8em' : '24ch' },
-    [text('收货仓库', 'Receiving warehouse')]: { choices: [all, text('杭州仓', 'Hangzhou'), text('深圳仓', 'Shenzhen')] },
-    [text('发货仓库', 'Shipping warehouse')]: { choices: [all, text('杭州仓', 'Hangzhou'), text('深圳仓', 'Shenzhen')] },
+    [text('收货仓库', 'Receiving warehouse')]: { choices: [all, 'HangZhou', 'ShenZhen'] },
+    [text('发货仓库', 'Shipping warehouse')]: { choices: [all, 'HangZhou', 'ShenZhen'] },
     [text('备货类型', 'Stock type')]: { choices: [all, ...names(stockTypes)] },
     [text('备货阶段', 'Stock stage')]: { choices: [all, ...names(stockLifecycles)] },
     [text('采购状态', 'Purchase status')]: { choices: [all, ...names(stockStatuses)] },
@@ -96,7 +96,7 @@ const summaryFields = computed(() => {
     [text('售后类型', 'RMA type')]: { choices: [all, ...names(rmaTypeLabels)] },
     [text('流程状态', 'Flow status')]: { choices: [all, text('进行中', 'Active'), text('已结束', 'Closed')] },
     [text('退货进度', 'Return progress')]: { choices: [all, ...names(purchaseReturnLabels)] },
-    [text('出库仓库', 'Outbound warehouse')]: { choices: [all, text('杭州仓', 'Hangzhou'), text('深圳仓', 'Shenzhen')] },
+    [text('出库仓库', 'Outbound warehouse')]: { choices: [all, 'HangZhou', 'ShenZhen'] },
     [text('发货国家', 'Shipping country')]: { choices: [all, 'WW'] },
     [text('关键词', 'Keyword')]: { width: '16em' },
     [text('订单编号', 'Order number')]: { width: '24ch' },

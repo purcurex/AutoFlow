@@ -1,3 +1,4 @@
+import { FIRST_BUSINESS_YEAR } from './fop-business-time'
 import { Transform, Type } from 'class-transformer'
 import { IsBoolean, IsOptional, IsInt, IsString, Matches, Max, Min } from 'class-validator'
 
@@ -19,7 +20,7 @@ export class FopDashboardQueryDto {
 
   @Type(() => Number)
   @IsInt()
-  @Min(2020)
+  @Min(FIRST_BUSINESS_YEAR)
   @Max(9999)
   year: number
 }

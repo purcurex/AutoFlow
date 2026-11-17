@@ -38,7 +38,7 @@ describe('RMA integration state', () => {
   })
   it('keeps workbench authorization checks before integration state', async () => {
     const { service, account } = setup()
-    account.workbenchRoles = ['warehouse']
+    account.businessRole = 'department_manager'; account.workbenchRoles = ['warehouse']
     await expect(service.getRmaOrders('local', query)).rejects.toMatchObject({ status: 403 })
   })
   it('does not accept a missing RMA contract on the final authorization read', async () => {

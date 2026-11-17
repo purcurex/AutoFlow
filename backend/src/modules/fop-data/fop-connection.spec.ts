@@ -1,3 +1,4 @@
+import { CollectedWorkbenchService } from '../workbench-replica/collected-workbench.service'
 import { ForbiddenException, INestApplication, UnauthorizedException, ValidationPipe } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
 import * as request from 'supertest'
@@ -193,6 +194,7 @@ describe('current-admin connection HTTP contract', () => {
   beforeAll(async () => {
     const module = await Test.createTestingModule({ controllers: [FulfillmentOrdersController], providers: [FopDataService,
       { provide: LocalWorkbenchService, useValue: { enabled: false } },
+      { provide: CollectedWorkbenchService, useValue: { enabled: false } },
       { provide: UsersService, useValue: users }, { provide: FOP_DATA_PROVIDER, useValue: provider }, { provide: FopApprovalService, useValue: {} }] })
       .overrideGuard(JwtAuthGuard).useValue({ canActivate: (context: { switchToHttp(): { getRequest(): { headers: Record<string, string>; user?: { userId: string } } } }) => {
         const req = context.switchToHttp().getRequest()

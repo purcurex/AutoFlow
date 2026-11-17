@@ -1,20 +1,25 @@
+import { employeeDisplayName } from '../organization/employee-display-name'
 import type { User } from './user.entity'
 import type { OrganizationEmployeeEntity } from '../organization/organization-employee.entity'
 import type { OrganizationNodeEntity } from '../organization/organization-node.entity'
 import { ForbiddenException } from '@nestjs/common'
 import { createHash } from 'node:crypto'
 import { effectiveBusinessScope } from './business-scope'
+import { marketingDepartments, type MarketingScope } from './marketing-departments'
 
 export interface LocalWorkbenchOrganization {
+  /** Server-only verified directory for independent manager chart summaries. Never a record grant. */
+  analyticsPeers?: Pick<LocalWorkbenchOrganization, 'departments' | 'members'>
   version: string
+  marketingScope?: MarketingScope
   departments: { id: string; name: string; parentId: string | null; pathIds: string[] }[]
-  members: { employeeId: string; localEmployeeId: string; departmentId: string; name: string }[]
+  members: { employeeId: string; localEmployeeId: string; departmentId: string; name: string; englishName?: string; fopUserId?: string }[]
   employeeIds: string[] | null
   departmentId: string | null
   employeeId: string | null
 }
 export type LocalOrganizationNode = Pick<OrganizationNodeEntity, 'id' | 'ownerUserId' | 'parentId' | 'name' | 'kind'>
-export type LocalOrganizationEmployee = Pick<OrganizationEmployeeEntity, 'id' | 'ownerUserId' | 'departmentId' | 'name' | 'accountId' | 'archivedAt'>
+export type LocalOrganizationEmployee = Pick<OrganizationEmployeeEntity, 'id' | 'ownerUserId' | 'departmentId' | 'name' | 'accountId' | 'archivedAt'> & Partial<Pick<OrganizationEmployeeEntity, 'directoryProfile'>>
 export type LocalOrganizationAccount = Pick<User, 'id' | 'accountDisabled' | 'fopTenantId' | 'fopUserId' | 'fopBindingDetails'>
 export interface LocalWorkbenchCompany { tenantId: string; organizationId: string }
 
@@ -66,7 +71,7 @@ export function buildLocalWorkbenchOrganization(user: User, ownerUserId: string,
       || !binding.username?.trim() || !Number.isFinite(Date.parse(binding.verifiedAt))) continue
     if (masterIds.has(binding.employeeMasterId)) deny('Ambiguous FOP business employee mapping')
     masterIds.add(binding.employeeMasterId)
-    members.push({ employeeId: binding.employeeMasterId, localEmployeeId: employee.id, departmentId: employee.departmentId, name: employee.name })
+    members.push({ employeeId: binding.employeeMasterId, localEmployeeId: employee.id, departmentId: employee.departmentId, name: employeeDisplayName(employee.name, employee.directoryProfile?.englishName) })
   }
   let departmentId: string | null = null, employeeId: string | null = null
   let allowed = nodes.filter(node => node.kind === 'department'), visibleMembers = members
@@ -91,9 +96,9 @@ export function buildLocalWorkbenchOrganization(user: User, ownerUserId: string,
   const version = createHash('sha256').update(JSON.stringify([
     ownerUserId, user.id, tenantId, company ? null : user.fopUserId, organizationId, scope,
     ordered(nodes).map(node => [node.id, node.parentId, node.name, node.kind]),
-    ordered(employees).map(employee => [employee.id, employee.departmentId, employee.name, employee.accountId, employee.archivedAt]),
+    ordered(employees).map(employee => [employee.id, employee.departmentId, employeeDisplayName(employee.name, employee.directoryProfile?.englishName), employee.accountId, employee.archivedAt]),
     ordered(accounts).map(account => { const binding = account.fopBindingDetails; return [account.id, account.accountDisabled, account.fopTenantId, account.fopUserId,
       binding && [binding.employeeNumber, binding.username, binding.name, binding.employeeRecordId, binding.employeeMasterId, binding.organizationId, binding.departmentId, binding.localEmployeeId, binding.localDepartmentId, binding.verifiedAt]] }),
   ])).digest('hex')
-  return { version, departments, members: visibleMembers, employeeIds: scope.role === 'admin' ? null : visibleMembers.map(member => member.employeeId).sort(), departmentId, employeeId }
+  return { version, marketingScope: marketingDepartments(nodes.filter(node => node.kind === 'department')), departments, members: visibleMembers, employeeIds: scope.role === 'admin' ? null : visibleMembers.map(member => member.employeeId).sort(), departmentId, employeeId }
 }

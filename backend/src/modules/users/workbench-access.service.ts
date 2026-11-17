@@ -2,7 +2,7 @@ import { businessScope, BusinessRole } from './business-scope'
 import { BadRequestException, ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common'
 import { UsersService } from './users.service'
 import { UserRole } from './user.entity'
-import { isWorkbenchRole, WORKBENCH_ROLES, WorkbenchRole } from './workbench-role'
+import { isWorkbenchRole, effectiveWorkbenchRoles, WorkbenchRole } from './workbench-role'
 import { ListWorkbenchAccountsDto } from './dto/workbench.dto'
 import { ChartId, resolveChartAccess } from './chart-permissions'
 
@@ -23,11 +23,11 @@ export class WorkbenchAccessService {
   // revocations and administrator demotions take effect on the next request.
   async getAccess(userId: string): Promise<WorkbenchAccess> {
     const user = await this.usersService.findById(userId)
-    if (!user) throw new UnauthorizedException('Account no longer exists')
+    if (!user || user.accountDisabled) throw new UnauthorizedException('Account no longer exists')
     const isAdmin = user.role === UserRole.ADMIN
     const businessRole = businessScope(user).role
     return {
-      roles: businessRole === 'none' ? [] : businessRole === 'admin' ? [...WORKBENCH_ROLES] : (user.workbenchRoles ?? []).filter(isWorkbenchRole),
+      roles: effectiveWorkbenchRoles(user),
       isAdmin,
       businessRole,
       businessDepartment: await this.usersService.workbenchDepartment(user),

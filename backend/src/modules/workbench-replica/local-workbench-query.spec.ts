@@ -71,3 +71,41 @@ it('preserves synced tracking with its carrier and does not fabricate missing re
 it('sorts dispatch audit time by the same linked value shown on the page',()=>{expect(buildLocalOrderQuery(scopes,{queue:'dispatch',completed:true,sortBy:'completedAt',sortOrder:'desc'}).orderBy).toMatch(/^delivery.audited_at DESC/)})
 
 it('preserves the actual sales approval time instead of a projection completion timestamp',()=>{expect(localOrder({...row(),queue_code:'sales_completed',source_audited_at:'2026-11-10T10:00:00Z',phase_completed_at:'2026-11-11T10:00:00Z'},[]).reviewedAt).toBe('2026-11-10T10:00:00.000Z')})
+
+it('keeps source checkout independent for unpaid date range, sort and response',()=>{
+ const q=buildLocalOrderQuery(scopes,{queue:'unpaid',timeRange:'1w',sortBy:'consumerPaidAt'})
+ expect(q.where).toContain('o.consumer_paid_at >=')
+ expect(q.orderBy).toMatch(/^o.consumer_paid_at DESC/)
+ expect(localOrder({...row(),customer_paid_at:'2026-10-01T00:00:00Z',consumer_paid_at:'2026-09-01T00:00:00Z'},[]).sourceOrderPaidAt).toBe('2026-09-01T00:00:00.000Z')
+ expect(localOrder({...row(),consumer_paid_at:null},[]).sourceOrderPaidAt).toBeNull()
+})
+
+it('uses the same unnumbered grouping in the formal local replica',()=>{
+ const q=buildLocalOrderQuery(scopes,{queue:'dispatch',taskStatus:'dispatch_pending'})
+ expect(q.where).toContain("delivery.has_tracking")
+ expect(q.where).toContain("native.raw_order_status IN ('2','3','6')")
+ expect(q.values).toContain('dispatch_pending')
+ expect(q.where).toContain('owner_employee_id = ANY')
+})
+
+it('keeps native sync failures in dispatch exceptions and out of both dispatch queues with scope intact',()=>{
+ for(const completed of [false,true]){
+  const q=buildLocalOrderQuery(scopes,{queue:'dispatch',completed})
+  expect(q.where).toContain("d.raw_delivery_status='SYNC_FAILED'")
+  expect(q.where).toContain('NOT (sd.raw_bill_status')
+  expect(q.where).toContain('owner_employee_id = ANY')
+ }
+ const q=buildLocalOrderQuery(scopes,{queue:'exceptions',taskStatus:'dispatch_exception'})
+ expect(q.from).toContain('hz_fop_fulfillment_orders native')
+ expect(q.where).toContain("d.raw_delivery_status='SYNC_FAILED'")
+ expect(q.where).toContain("r.removed_at IS NULL")
+ expect(q.values).toContain('dispatch_exception')
+})
+
+ it('uses the native package tracking independently of Shopify selection and keeps explicit blanks',()=>{
+  for(const number of ['PKG-001',null]) {
+   const result=localOrder({...row(),logistics_packages:[{channelName:'实际中文渠道',packageTrackingNumber:number,shopifyTracking:{type:'full',number:'OTHER'}}]},[])
+   expect(result.logisticsInfo?.[0].packageTrackingNumber).toBe(number)
+   expect(result.trackingNumber).toBe(number)
+  }
+ })

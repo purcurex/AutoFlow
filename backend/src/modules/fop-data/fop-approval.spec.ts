@@ -1,5 +1,5 @@
 import { FopApprovalService } from './fop-approval.service'
-import { approvalVersion } from './fop-approval.types'
+import { ApprovalQueue, ApprovalTarget, approvalVersion } from './fop-approval.types'
 import { ServiceUnavailableException } from '@nestjs/common'
 import { FopIntegrationUnavailableError } from './fop-data.types'
 
@@ -14,6 +14,40 @@ describe('workbench approval', () => {
     service = new FopApprovalService(data, provider)
   })
   const request = () => ({ queue: 'allocation_review' as const, requestId: '12345678-1234-4234-8234-123456789abc', items: [{ orderId: 'o', version: approvalVersion([doc]) }] })
+  describe.each<ApprovalQueue>(['review', 'allocation_review'])('%s submitted-state gate', queue => {
+    const target = (): ApprovalTarget => ({ ...doc, ...(queue === 'review' ? { id: 'o', number: 'TO261028036138', entity: 'hzkj_orders' } : {}) })
+    const context = (document = target()) => ({ identity, order, inQueue: true, targets: [document] })
+    it.each(['A', 'B', 'C'] as const)('only audits B even when FOP eligibility is true for %s', async status => {
+      data.approvalContext.mockResolvedValue(context({ ...target(), status }))
+      const preview = await service.preview('account', { queue, orderIds: ['o'] })
+      expect(preview.items[0].eligible).toBe(status === 'B')
+      const result = await service.submit('account', { ...request(), queue, items: [{ orderId: 'o', version: preview.items[0].version }] })
+      expect(result.items[0].status).toBe(status === 'B' ? 'approved' : status === 'C' ? 'already_approved' : 'blocked')
+      expect(provider.approveDocument).toHaveBeenCalledTimes(status === 'B' ? 1 : 0)
+      if (status === 'B') expect(provider.approveDocument.mock.calls[0][1]).toMatchObject({ entity: target().entity, id: target().id, status: 'B', operation: 'audit' })
+      expect(provider.approvalTargets).not.toHaveBeenCalled()
+    })
+    it('uses the latest submitted-state proof when preparing the preview', async () => {
+      data.approvalContext.mockResolvedValueOnce(context()).mockResolvedValue(context({ ...target(), status: 'A' }))
+      const preview = await service.preview('account', { queue, orderIds: ['o'] })
+      expect(preview.items[0].documents[0]).toMatchObject({ status: 'A', eligible: false })
+      expect(preview.items[0].eligible).toBe(false)
+      expect(provider.approveDocument).not.toHaveBeenCalled()
+    })
+    it.each([{ status: 'A' as const }, { status: 'C' as const }, { eligible: false }, { version: 'v2' }])('does not write when the final realtime proof changes: %j', async change => {
+      data.approvalContext.mockResolvedValueOnce(context()).mockResolvedValueOnce(context()).mockResolvedValue(context({ ...target(), ...change }))
+      const result = await service.submit('account', { ...request(), queue, items: [{ orderId: 'o', version: approvalVersion([target()]) }] })
+      expect(result.items[0].status).toBe('blocked')
+      expect(provider.approveDocument).not.toHaveBeenCalled()
+    })
+    it.each([{ inQueue: false }, { targets: [{ ...target(), eligible: false, reason: '业务条件不满足' }] }])('rejects failed business prerequisites even for a submitted document: %j', async change => {
+      data.approvalContext.mockResolvedValue({ ...context(), ...change })
+      const preview = await service.preview('account', { queue, orderIds: ['o'] })
+      expect(preview.items[0].eligible).toBe(false)
+      await service.submit('account', { ...request(), queue, items: [{ orderId: 'o', version: preview.items[0].version }] })
+      expect(provider.approveDocument).not.toHaveBeenCalled()
+    })
+  })
   it('blocks unfinished dispatches even if the upstream target claims eligibility', async () => {
     data.approvalContext.mockResolvedValue({ identity, order: { ...order, dispatchDocuments: [] }, inQueue: true })
     const preview = await service.preview('account', { queue: 'allocation_review', orderIds: ['o'] })

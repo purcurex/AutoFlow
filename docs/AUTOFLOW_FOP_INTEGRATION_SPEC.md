@@ -1,8 +1,8 @@
-# AutoFlow FOP Integration Spec
+# AutoFlow Product Pricing, Freight And CRM Integration Contract
 
 ## 1. Purpose
 
-This document is the canonical boundary and contract specification between AutoFlow and the existing FOP system built on Kingdee Cloud Cosmic.
+This document defines the product pricing, freight quotation and CRM handoff contracts with FOP. Workbench facts, permissions, lists and execution requirements are governed by the [unified project requirements](requirements/HyperZone智能办公平台项目开发需求说明书.html).
 
 It intentionally defines stable AutoFlow ports and business payloads without inventing FOP URLs, bill identifiers, authentication fields, or Kingdee Cloud Cosmic plug-in APIs that have not yet been inventoried.
 

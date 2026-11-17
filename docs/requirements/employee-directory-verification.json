@@ -1,0 +1,69 @@
+{
+  "at": "2026-11-16T05:23:52.958Z",
+  "remoteApiCalls": 0,
+  "mappedLocalEmployees": 32,
+  "targetNameRestored": true,
+  "targetDepartmentRestored": true,
+  "salespersonFiveWorkbenchRoles": 5,
+  "ownScopeOnly": true,
+  "foreignDepartmentDenied": true,
+  "englishSearchMatchesChinese": 7,
+  "departmentFilterVerified": true,
+  "analyticsReadVerified": true,
+  "orderCoverage": {
+    "total": 44855,
+    "mapped": 44855,
+    "unmapped_owners": 0
+  },
+  "analyticsPendingOwnerReassociation": [],
+  "automaticCallsEnabled": false,
+  "backupIndependentRestoreVerified": true,
+  "analyticsOwnershipRepaired": {
+    "fulfillment": 298,
+    "stock": 1
+  },
+  "analyticsRepairIdempotenceAndRollbackVerified": true,
+  "verification": {
+    "backend": {
+      "passed": 1839,
+      "skipped": 45,
+      "failed": 0
+    },
+    "frontend": {
+      "passed": 745,
+      "failed": 0
+    },
+    "directoryPostgres": {
+      "passed": 8,
+      "failed": 0
+    },
+    "backendBuild": true,
+    "frontendBuild": true
+  },
+  "implementationFiles": [
+    "backend/src/modules/users/workbench-role.ts",
+    "backend/src/modules/users/workbench-access.service.ts",
+    "backend/src/modules/users/users.service.ts",
+    "backend/src/modules/organization/employee-display-name.ts",
+    "backend/src/modules/users/local-workbench-organization.ts",
+    "backend/src/modules/workbench-replica/local-workbench-organization.ts",
+    "backend/src/modules/workbench-replica/local-workbench.service.ts",
+    "backend/src/modules/workbench-replica/collected-organization-query.ts",
+    "backend/src/modules/workbench-replica/captured-employee-bindings.ts",
+    "backend/src/modules/workbench-replica/collected-workbench.service.ts",
+    "backend/src/modules/workbench-replica/collected-workbench-query.ts",
+    "backend/src/modules/workbench-replica/collected-stock-query.ts",
+    "backend/src/modules/workbench-replica/collected-rma-query.ts",
+    "backend/src/modules/fop-data/fop-data.service.ts",
+    "scripts/workbench-reconcile-employees.cjs",
+    "scripts/workbench-analytics-import.cjs",
+    "frontend/src/components/admin/AccountAccessDialog.vue",
+    "frontend/src/views/autoflow/FopOrdersView.vue",
+    "frontend/src/views/autoflow/StockOrdersView.vue"
+  ],
+  "limitations": [
+    "人员目录持续更新与正式FOP增量仍待联调，自动调用保持暂停。",
+    "来源缺少稳定业务员的历史记录不按名称分配权限。",
+    "目录核验不代表个人FOP操作身份已认证，审核和库存继续独立授权。"
+  ]
+}

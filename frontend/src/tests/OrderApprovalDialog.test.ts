@@ -6,7 +6,7 @@ import { previewOrderApproval, submitOrderApproval } from '@/api/fop-approvals'
 import { invalidateSession } from '@/utils/session'
 vi.mock('@/api/fop-approvals', () => ({ previewOrderApproval: vi.fn(), submitOrderApproval: vi.fn() }))
 const item = { orderId: 'o', orderNumber: 'SO-1', version: 'a'.repeat(64), eligible: true, documents: [{ id: 'd', number: 'AO261028000404', status: 'B', eligible: true, reason: null }] }
-function setup() { return mount(OrderApprovalDialog, { props: { queue: 'allocation_review', orderIds: ['o'] }, global: { plugins: [createI18n({ legacy: false, locale: 'zh-CN' })], stubs: { OrganizationModal: { template: '<section><slot /><slot name="footer" /></section>' } } } }) }
+function setup(queue: 'review' | 'allocation_review' = 'allocation_review') { return mount(OrderApprovalDialog, { props: { queue, orderIds: ['o'] }, global: { plugins: [createI18n({ legacy: false, locale: 'zh-CN' })], stubs: { OrganizationModal: { template: '<section><slot /><slot name="footer" /></section>' } } } }) }
 describe('approval confirmation', () => {
   it('does not submit a preview from a previous login session', async () => {
     const wrapper = setup(); await flushPromises()
@@ -43,12 +43,22 @@ describe('approval confirmation', () => {
     expect(wrapper.text()).toContain('勿重复提交'); expect(wrapper.find('[data-testid="confirm-approval"]').exists()).toBe(false)
     expect(submitOrderApproval).toHaveBeenCalledTimes(1)
   })
-  it('distinguishes source approval from the local replica awaiting synchronization', async () => {
+  it.each(['review', 'allocation_review'] as const)('disables confirmation for an unsubmitted document in %s', async queue => {
+    vi.mocked(previewOrderApproval).mockResolvedValue({ source: 'fop', queue, items: [{ ...item, eligible: false,
+      documents: [{ ...item.documents[0]!, status: 'A', eligible: false, reason: '单据尚未提交，请先在 FOP 完成提交' }] }] })
+    const wrapper = setup(queue); await flushPromises()
+    expect(wrapper.text()).toContain('单据尚未提交，请先在 FOP 完成提交')
+    expect(wrapper.get('[data-testid="confirm-approval"]').attributes('disabled')).toBeDefined()
+    await wrapper.get('[data-testid="confirm-approval"]').trigger('click'); await flushPromises()
+    expect(submitOrderApproval).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+  it('explains confirmed readback refresh and keeps an incomplete refresh explicit', async () => {
     vi.mocked(submitOrderApproval).mockResolvedValue({ source: 'fop', requestId: 'r', completedAt: '', items: [{ orderId: 'o', orderNumber: 'SO-1', status: 'approved', message: '审核完成', documents: [] }] })
     const wrapper = setup(); await flushPromises(); await wrapper.get('[data-testid="confirm-approval"]').trigger('click'); await flushPromises()
-    expect(wrapper.text()).toContain('FOP 已确认审核')
-    expect(wrapper.text()).toContain('本地清单待同步')
-    expect(wrapper.text()).toContain('同步数据')
+    expect(wrapper.text()).toContain('按 FOP 回读结果刷新清单')
+    expect(wrapper.text()).toContain('如提示本地刷新未完成，请稍后同步')
+    expect(wrapper.text()).toContain('待核对结果请在 FOP 查证，勿重复提交')
     expect(wrapper.text()).not.toContain('清单将刷新已确认的最新状态')
     expect(wrapper.find('[data-testid="confirm-approval"]').exists()).toBe(false)
   })

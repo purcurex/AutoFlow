@@ -1,0 +1,103 @@
+{
+  "datasetId": "73da277b-da9f-54f7-ad78-0a9651d33ec1",
+  "reused": false,
+  "documents": 120971,
+  "lines": 172292,
+  "relations": 114393,
+  "paths": 114393,
+  "issues": 5253,
+  "unresolvedConflicts": 0,
+  "byKind": {
+    "allocation": 12643,
+    "delivery_notice": 14258,
+    "dispatch": 15292,
+    "fulfillment": 45543,
+    "outbound": 10995,
+    "purchase_application": 11802,
+    "purchase": 3141,
+    "receipt_notice": 3165,
+    "receipt": 3968,
+    "stock": 164
+  },
+  "relationTypes": {
+    "demand_purchase": 27618,
+    "allocation": 12643,
+    "dispatch": 15245,
+    "delivery_notice": 14258,
+    "outbound": 13480,
+    "purchase_receipt": 13180,
+    "receipt": 17969
+  },
+  "sourceVersionsVerified": false,
+  "consistentSnapshot": false,
+  "upstreamCalled": false,
+  "verifiedAt": "2026-11-13T03:14:30.581484+00:00",
+  "operation": "offline-normalization-of-collected-sources",
+  "database": "autoflow_local_demo",
+  "mappingVersion": 2,
+  "backupRestoreVerified": true,
+  "scope": "existing local collected batch; no remote requests",
+  "migrations": [
+    "1794580000000-CollectedBusinessChain",
+    "1794581000000-BusinessChainRelationIndexes"
+  ],
+  "verification": {
+    "targetedTestsPassed": 39,
+    "targetedTestSuites": 4,
+    "build": "passed",
+    "lint": {
+      "errors": 0,
+      "unrelatedWarnings": 1
+    },
+    "postgres": {
+      "rebuildPassed": true,
+      "identicalInputReused": true,
+      "oldRelationAndEntryRemovalPassed": true,
+      "removalTestRolledBack": true,
+      "currentOwnerIsolationPassed": true,
+      "sharedDocumentIsolationPassed": true,
+      "emptyScopeDenied": true,
+      "staleCaptureRejected": true
+    },
+    "http": {
+      "account": "administrator",
+      "success": 200,
+      "anonymous": 401,
+      "unknownOrder": 404,
+      "cacheControl": "private, no-store",
+      "sampleElapsedMsIncludingNegativeChecks": 19
+    },
+    "fullBackendSuite": {
+      "passed": 1726,
+      "skipped": 34,
+      "failed": 7,
+      "failedFiles": [
+        "collected-native-service.spec.ts",
+        "procurement-groups.spec.ts"
+      ],
+      "reason": "Existing purchase-preview expectations detailLineCount/previewLines are not implemented in the current worktree; not changed by this task."
+    }
+  },
+  "limitations": [
+    "Non-consistent independent captures; source version and deletion change feed unverified.",
+    "RMA, inbound, payment, receipt-adjustment and purchase-return chain mapping not implemented in this offline normalizer.",
+    "No frontend business-chain viewer added.",
+    "No automatic normalization job; changed capture metadata makes the API stale until explicit rebuild."
+  ],
+  "implementationFiles": [
+    "backend/src/database/migrations/1794580000000-CollectedBusinessChain.ts",
+    "backend/src/database/migrations/1794581000000-BusinessChainRelationIndexes.ts",
+    "backend/src/modules/workbench-replica/collected-business-chain.ts",
+    "backend/src/modules/workbench-replica/collected-business-chain.spec.ts",
+    "backend/src/modules/workbench-replica/collected-chain-inputs.ts",
+    "backend/src/modules/workbench-replica/collected-chain-inputs.spec.ts",
+    "backend/src/modules/workbench-replica/collected-chain-storage.ts",
+    "backend/src/modules/workbench-replica/collected-chain-query.ts",
+    "backend/src/modules/workbench-replica/collected-chain-query.spec.ts",
+    "backend/src/modules/workbench-replica/collected-workbench.service.ts",
+    "backend/src/modules/workbench-replica/collected-workbench.service.spec.ts",
+    "backend/src/modules/users/workbench.controller.ts",
+    "scripts/workbench-chain-rebuild.cjs",
+    "package.json"
+  ]
+}

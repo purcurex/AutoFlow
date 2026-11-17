@@ -115,12 +115,12 @@ it.each(['procurement', 'warehouse'] as const)('uses the selected return supplie
   expect(open).toHaveBeenCalledOnce()
 })
 
-it('explains that a proposed dedicated supplier endpoint is awaiting FOP configuration', async () => {
+it('shows unavailable contacts with the FOP contact fallback when the supplier endpoint is not configured', async () => {
   const open = vi.spyOn(chat, 'openSupplierChat').mockImplementation(() => {})
   vi.mocked(api.get).mockRejectedValue({ code: 'fop_supplier_contacts_not_configured' })
   wrapper = mount(SupplierFollowUpDialog, { props: { orderId: 'o1', orderNumber: 'ORDER-1' }, global: { plugins: [createI18n({ legacy: false, locale: 'zh-CN', messages: {} })], stubs: { Teleport: true } } })
   await flushPromises()
-  expect(wrapper.text()).toContain('供应商联系人服务尚未接通')
+  expect(wrapper.text()).toContain('暂无法获取联系人，请在 FOP 联系供应商。')
   expect(wrapper.text()).toContain('FOP 联系供应商')
   expect(wrapper.find('.open-chat').exists()).toBe(false)
   expect(open).not.toHaveBeenCalled()

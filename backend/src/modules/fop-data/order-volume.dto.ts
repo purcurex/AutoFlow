@@ -1,3 +1,4 @@
+import { FIRST_BUSINESS_YEAR } from './fop-business-time'
 import { Type, Transform } from 'class-transformer'
 import { IsIn, IsInt, IsOptional, IsString, Matches, Max, MaxLength, Min, MinLength } from 'class-validator'
 import { WORKBENCH_ROLES, WorkbenchRole } from '../users/workbench-role'
@@ -6,7 +7,7 @@ export class OrderVolumeQueryDto {
   @IsOptional() @IsIn(['records', 'summary']) view?: 'records' | 'summary'
   @IsIn(['carrier', 'organization', 'salesperson', 'customer']) category: 'carrier' | 'organization' | 'salesperson' | 'customer'
   @IsOptional() @IsIn(['month', 'week', 'day']) grain?: 'month' | 'week' | 'day'
-  @IsOptional() @Type(() => Number) @IsInt() @Min(2020) @Max(9999) year?: number
+  @IsOptional() @Type(() => Number) @IsInt() @Min(FIRST_BUSINESS_YEAR) @Max(9999) year?: number
   @IsOptional() @IsString() @Matches(/^\d{4}-\d{2}-\d{2}$/) from?: string
   @IsOptional() @IsString() @Matches(/^\d{4}-\d{2}-\d{2}$/) to?: string
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(12) month?: number

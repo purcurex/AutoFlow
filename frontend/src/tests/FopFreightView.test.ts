@@ -32,10 +32,10 @@ describe('actual freight workbench details', () => {
     expect(wrapper.text()).toContain('TRACK-001')
     expect(wrapper.text()).toContain('2026/10/1')
     expect(wrapper.text()).toContain('FOP daily USD rate')
-    expect(wrapper.find('tbody tr').findAll('td')[6]!.text()).toContain('USD/CNY 7.0000')
+    expect(wrapper.find('tbody tr').findAll('td')[6]!.text()).toContain('$/CNY 7.0000')
     expect(wrapper.find('tfoot').text()).toContain('$600.00')
     expect(wrapper.find('tfoot').text()).toContain('CNY 1,400.00')
-    expect(wrapper.find('tfoot').text()).toContain('USD 400.00')
+    expect(wrapper.find('tfoot').text()).toContain('$400.00')
     expect(get).toHaveBeenLastCalledWith('/autoflow/integrations/fop/freight/details', { params: { grain: 'month', year: 2026, warehouse: 'HZ', carrierCode: 'YT', periodId: '2026-10', comparisonPeriod: 'current', workbenchRole: 'dispatch', page: 1, pageSize: 20 }, timeout: 180000 })
   })
   it('preserves comparison and week scope during pagination, and resets page when changing carrier', async () => {

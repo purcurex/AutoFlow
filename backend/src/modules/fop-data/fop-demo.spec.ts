@@ -1,3 +1,5 @@
+// Business/authorization assertions inspect source tables; shared single-sheet output has independent roundtrip coverage.
+jest.mock('../workbench-export/single-sheet',()=>({...jest.requireActual('../workbench-export/single-sheet'),singleSheetWorkbook:jest.fn()}))
 import * as ExcelJS from 'exceljs'
 import { FopApprovalService } from './fop-approval.service'
 import { ORGANIZATION_EMPLOYEE_SEEDS, ORGANIZATION_NODE_SEEDS } from '../organization/organization.seed'
@@ -61,8 +63,8 @@ const workspace = {
     { id: 'sales-1', name: '业务一部', kind: 'department' as const, parentId: 'marketing', sortOrder: 1 },
     { id: 'sales-2', name: '业务二部', kind: 'department' as const, parentId: 'marketing', sortOrder: 2 },
     { id: 'dept-2', name: 'Europe', kind: 'department' as const, parentId: 'sales-2', sortOrder: 1 }],
-  employees: [{ id: 'employee-1', name: 'Alice Chen', code: 'EMP001', email: 'alice@example.test', departmentId: 'dept-1', workbenchRoles: ['sales'] },
-    { id: 'employee-2', name: 'Ben Wu', code: 'EMP002', email: 'ben@example.test', departmentId: 'dept-2', workbenchRoles: ['sales'] }],
+  employees: [{ id: 'employee-1', name: 'Alice Chen', code: 'EMP001', email: 'alice@example.test', departmentId: 'sales-1', workbenchRoles: ['sales'] },
+    { id: 'employee-2', name: 'Ben Wu', code: 'EMP002', email: 'ben@example.test', departmentId: 'sales-2', workbenchRoles: ['sales'] }],
 }
 const organizations = { getWorkspace: async (_id: string) => workspace }
 const env = { FOP_DATA_MODE: 'demo', NODE_ENV: 'development' }
@@ -193,7 +195,7 @@ describe('isolated mock FOP dataset', () => {
   })
   beforeEach(() => { jest.useFakeTimers().setSystemTime(new Date('2026-10-21T12:00:00Z')) })
   afterEach(() => jest.useRealTimers())
-  it('uses the direct sales department for same-named descendants while retaining permission ancestry', async () => {
+  it('excludes same-named descendants rather than assigning them to a direct marketing department', async () => {
     const nested = { ...workspace, nodes: [{ id: 'nested', name: '业务一部', kind: 'department' as const, parentId: 'sales-1', sortOrder: 0 }, ...workspace.nodes], employees: [{ ...workspace.employees[0], departmentId: 'nested' }, workspace.employees[1]] }
     const provider = new DemoFopDataProvider({ getWorkspace: async () => nested }, env)
     const identity = provider.demoIdentity('alice')!
@@ -201,21 +203,32 @@ describe('isolated mock FOP dataset', () => {
     expect(grant.organizationSummaries?.[0].departments.map(d => d.departmentId)).toEqual(['sales-1', 'sales-2'])
     const orders = await provider.listOrders(identity, grant)
     const mine = orders.filter(row => row.owner?.id === 'employee-1')
-    expect(mine.length).toBeGreaterThan(0)
-    expect(mine.every(row => row.department?.id === 'sales-1' && row.departmentPathIds?.includes('nested'))).toBe(true)
+    expect(mine.length).toBe(0)
     const result = await new FopDataService(users, provider).getOrders('alice', { queue: 'review', page: 1, pageSize: 50 })
-    expect(result.departments.map(d => d.id)).toEqual(['sales-1', 'sales-2'])
-    expect((await new FopDataService(users, provider).getOrders('alice', { queue: 'review', departmentId: 'sales-1', page: 1, pageSize: 50 })).total).toBeGreaterThan(0)
+    expect(result.departments.map(d => d.id)).toEqual(['sales-2'])
+    expect((await new FopDataService(users, provider).getOrders('alice', { queue: 'review', departmentId: 'sales-1', page: 1, pageSize: 50 })).total).toBe(0)
   })
-  it('does not map same-named departments outside Marketing Center to a sales code', async () => {
+  it('excludes same-named departments outside Marketing Center from administrator orders', async () => {
     const outside = { ...workspace, nodes: [{ id: 'outside-sales', name: '业务一部', kind: 'department' as const, parentId: 'org-1', sortOrder: 5 }, ...workspace.nodes], employees: [...workspace.employees, { ...workspace.employees[0], id: 'outside', departmentId: 'outside-sales' }] }
     const provider = new DemoFopDataProvider({ getWorkspace: async () => outside }, env)
     const identity = provider.demoIdentity('alice')!
     const grant = await provider.resolvePermissions(identity)
     expect(grant.organizationSummaries?.[0].departments.map(d => d.departmentId)).toEqual(['sales-1', 'sales-2'])
     const orders = await provider.listOrders(identity, grant)
-    expect(orders.filter(row => row.owner?.id === 'outside').every(row => !row.salesDepartmentCode)).toBe(true)
+    expect(orders.some(row => row.owner?.id === 'outside')).toBe(false)
     expect(orders.some(row => row.salesDepartmentCode === 'sales1')).toBe(true)
+  })
+  it.each(['missing', 'duplicate', 'detached'] as const)('returns no demo business facts for a %s Marketing Center hierarchy', async state => {
+    const nodes = state === 'missing' ? workspace.nodes.filter(node => node.id !== 'marketing')
+      : state === 'detached' ? workspace.nodes.map(node => node.id === 'marketing' ? { ...node, parentId: 'missing-company' } : node)
+      : [...workspace.nodes, { id: 'duplicate-marketing', name: '营销中心', kind: 'department' as const, parentId: 'org-1', sortOrder: 0 }]
+    const provider = new DemoFopDataProvider({ getWorkspace: async () => ({ ...workspace, nodes }) }, env)
+    const identity = provider.demoIdentity('alice')!, permission = await provider.resolvePermissions(identity)
+    expect((await provider.listOrders(identity, permission)).length).toBe(0)
+    expect(permission.organizationSummaries!.every(summary => !summary.departments.length)).toBe(true)
+    const analytics = await provider.getAnalytics(identity, permission, query)
+    expect(analytics.registrationEntries).toEqual([])
+    expect(analytics.registrations.every(row => row.count === 0)).toBe(true)
   })
   it('keeps demo customer display names free of salesperson suffixes', async () => {
     const provider = new DemoFopDataProvider(organizations, env)
@@ -378,7 +391,7 @@ describe('isolated mock FOP dataset', () => {
     expect(new Set(result.items.flatMap(row => row.dispatchDocuments?.map(doc => doc.status) ?? []))).toEqual(new Set(['draft', 'submitted', 'approved']))
     expect(result.items.some(row => (row.dispatchDocuments?.length ?? 0) > 1)).toBe(true)
     expect(result.items.every(row => row.paymentStatus === 'paid' && row.fulfillmentProgress.shopifySync === 'pending')).toBe(true)
-    expect(result.items.some(row => row.reviewStatus === 'pending')).toBe(true)
+    expect(result.items.every(row => row.reviewStatus === 'approved')).toBe(true)
   })
   it('rejects an unsupported partial Shopify status instead of counting it as a pending task', async () => {
     const provider = new DemoFopDataProvider(organizations, env)
@@ -448,14 +461,14 @@ describe('isolated mock FOP dataset', () => {
       return [...rows, rows[2]]
     }
     const data = new FopDataService(users, provider)
-    const expected = { review: ['PAID-REVIEW'], dispatch: ['PAID-REVIEW', 'OVERLAP', 'PARTIAL'], procurement: ['OVERLAP', 'PARTIAL'], allocation: ['OVERLAP', 'PARTIAL'], allocation_review: ['READY-REVIEW'], shipping: ['READY-OUTBOUND', 'PARTIAL-OUTBOUND'] }
+    const expected = { review: ['PAID-REVIEW'], dispatch: ['OVERLAP', 'PARTIAL'], procurement: ['OVERLAP', 'PARTIAL'], allocation: ['OVERLAP', 'PARTIAL'], allocation_review: ['READY-REVIEW'], shipping: ['READY-OUTBOUND', 'PARTIAL-OUTBOUND'] }
     for (const queue of Object.keys(expected) as (keyof typeof expected)[]) {
       const result = await data.getOrders('alice', { queue, page: 1, pageSize: 100 })
       expect(result.items.map(row => row.orderNumber).sort()).toEqual(expected[queue].sort())
       expect(result.totals.orderCount).toBe(expected[queue].length)
     }
     const dashboard = await data.getDashboard('alice', query)
-    expect(dashboard.queues).toEqual({ review: 1, dispatch: 3, procurement: 2, allocation: 3, shipping: 2 })
+    expect(dashboard.queues).toEqual({ review: 1, dispatch: 2, procurement: 2, allocation: 3, shipping: 2 })
     expect(dashboard.tasks.map(task => task.kind)).toEqual(['review', 'dispatch', 'procurement', 'allocation', 'shipping'])
   })
   it('fails closed for missing or invalid progress instead of inventing pending counts', async () => {
@@ -545,7 +558,7 @@ describe('isolated mock FOP dataset', () => {
     const grant = await provider.resolvePermissions(identity)
     const old = (await provider.listOrders(identity, grant)).find(order => order.owner?.id === 'employee-1')!
     current.employees[0].name = 'Alice Renamed'
-    current.employees[0].departmentId = 'dept-2'
+    current.employees[0].departmentId = 'sales-2'
     const updated = (await provider.listOrders(identity, grant)).find(order => order.id === old.id)!
     expect(updated).toMatchObject({ owner: { name: 'Alice Renamed' }, department: { id: 'sales-2', name: '业务二部' }, salesDepartmentCode: 'sales2' })
     const receipt = (await provider.listReceipts(identity, grant)).find(row => row.owner?.id === 'employee-1')!
@@ -555,11 +568,12 @@ describe('isolated mock FOP dataset', () => {
     const provider = new DemoFopDataProvider(organizations, env)
     const data = new FopDataService(users, provider)
     const first = await data.getDashboard('alice', query)
-    const second = await data.getDashboard('alice', { from: '2026-10-10', to: '2026-10-12', year: 2025 })
+    const second = await data.getDashboard('alice', { from: '2026-10-10', to: '2026-10-12', year: 2026 })
     expect(second.registrations).toHaveLength(3)
     expect(second.registrations).toEqual(first.registrations.slice(9, 12))
     expect(second.queues).toEqual(first.queues)
-    expect(second.receipts.months).toHaveLength(12)
+    expect(second.receipts.months).toHaveLength(10)
+    await expect(data.getDashboard('alice', {...query,year:2025})).rejects.toThrow('Invalid dashboard date range or year')
     const identity = { tenantId: 'demo:alice', userId: 'alice' }
     const receipts = await provider.listReceipts(identity, await provider.resolvePermissions(identity))
     const paid = receipts.filter(receipt => receipt.paymentStatus === 'paid' && receipt.reviewStatus === 'approved' && receipt.receiptReviewStatus === 'approved' && receipt.sourceType !== 'deposit_stock' && !receipt.cancelled && receipt.currency === 'USD' && receipt.paidAt?.startsWith('2026'))
@@ -643,7 +657,7 @@ describe('isolated mock FOP dataset', () => {
     expect(details.profits.every(row => Date.parse(row.knownAt) <= Date.now())).toBe(true)
   })
   it('still enforces local workbench roles in demo mode', async () => {
-    const restricted = { findById: async () => ({ role: UserRole.USER, businessRole: 'salesperson', businessEmployeeId: 'employee-1', workbenchRoles: ['sales'], fopTenantId: null, fopUserId: null }) } as unknown as UsersService
+    const restricted = { findById: async () => ({ role: UserRole.USER, businessRole: 'department_manager', businessEmployeeId: 'employee-1', workbenchRoles: ['sales'], fopTenantId: null, fopUserId: null }) } as unknown as UsersService
     const data = new FopDataService(restricted, new DemoFopDataProvider(organizations, env))
     await expect(data.getOrders('alice', { queue: 'shipping', page: 1, pageSize: 20 })).rejects.toThrow('Workbench access denied')
     const dash = await data.getDashboard('alice', query)

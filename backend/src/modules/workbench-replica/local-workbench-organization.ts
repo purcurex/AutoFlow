@@ -1,14 +1,17 @@
 import { ForbiddenException } from '@nestjs/common'
 import { createHash } from 'node:crypto'
 import { User } from '../users/user.entity'
-import { effectiveBusinessScope } from '../users/business-scope'
+import { businessScope, effectiveBusinessScope } from '../users/business-scope'
 import { LocalWorkbenchOrganization } from '../users/local-workbench-organization'
 import { LocalRow } from './local-workbench-mapping'
+import { employeeDisplayName } from '../organization/employee-display-name'
+import { marketingDepartments } from '../users/marketing-departments'
 
 /** Business-directory verification is independent of FOP authentication-proxy verification. */
-export function buildReplicaOrganization(user: User, workspaceOwner: string, nodes: LocalRow[], employees: LocalRow[], company: { tenant_id: string; source_company_id: string }): LocalWorkbenchOrganization {
+export function buildReplicaOrganization(user: User, workspaceOwner: string, nodes: LocalRow[], employees: LocalRow[], company: { tenant_id: string; source_company_id: string }, options: { managerAnalytics?: boolean } = {}): LocalWorkbenchOrganization {
   const deny=(message: string): never=>{throw new ForbiddenException({code:'local_organization_scope_required',message})}
-  const scope=effectiveBusinessScope(user)
+  const managerAnalytics=options.managerAnalytics&&businessScope(user).role==='department_manager'
+  const scope=managerAnalytics?businessScope(user):effectiveBusinessScope(user)
   if(user.accountDisabled || scope.role==='none') deny('Local business access is disabled')
   const byId=new Map(nodes.map(node=>[node.id,node])), paths=new Map<string,string[]>()
   if(byId.size!==nodes.length || nodes.length && nodes.filter(node=>node.parent_id===null && node.kind==='organization').length!==1) deny('Invalid local organization root')
@@ -47,8 +50,15 @@ export function buildReplicaOrganization(user: User, workspaceOwner: string, nod
     if(!master)continue
     if(seenMaster.has(master))deny('Ambiguous FOP business employee mapping')
     seenMaster.add(master)
-    members.push({employeeId:master,localEmployeeId:employee.id,departmentId:employee.department_id,name:employee.name})
+    members.push({employeeId:master,localEmployeeId:employee.id,departmentId:employee.department_id,name:employeeDisplayName(employee.name,employee.english_name),
+      ...employee.english_name?.trim()?{englishName:employee.english_name.trim()}:{},
+      ...employee.fop_tenant_id===company.tenant_id&&numeric(employee.fop_user_id)?{fopUserId:employee.fop_user_id}:{}})
   }
+  // A customer UserField is not an employee master ID. Ambiguity must be resolved
+  // before permission narrowing; a self-only view must not hide a duplicate mapping.
+  const userCounts=new Map<string,number>()
+  for(const member of members)if(member.fopUserId)userCounts.set(member.fopUserId,(userCounts.get(member.fopUserId)??0)+1)
+  for(const member of members)if(member.fopUserId&&userCounts.get(member.fopUserId)!==1)delete member.fopUserId
   let departments=nodes.filter(node=>node.kind==='department'), visible=members, departmentId:string|null=null, employeeId:string|null=null
   if(scope.role==='department_manager') {
     departmentId=scope.departmentId
@@ -60,7 +70,13 @@ export function buildReplicaOrganization(user: User, workspaceOwner: string, nod
     if(!member)deny('Verified local employee directory mapping is required')
     departmentId=member!.departmentId;employeeId=member!.employeeId;visible=[member!];departments=departments.filter(node=>node.id===departmentId)
   }
-  const version=createHash('sha256').update(JSON.stringify([workspaceOwner,user.id,company.tenant_id,company.source_company_id,user.role,user.businessRole,user.businessDepartmentId,user.dataDisplayScope,nodes,members,own.map(e=>[e.id,e.department_id])])).digest('hex')
-  return { version,departments:departments.map(node=>({id:node.id,name:node.name,parentId:node.parent_id,pathIds:paths.get(node.id)!})),members:visible,
+  const version=createHash('sha256').update(JSON.stringify([workspaceOwner,user.id,company.tenant_id,company.source_company_id,user.role,user.businessRole,user.businessDepartmentId,user.dataDisplayScope,!!managerAnalytics,nodes,members,own.map(e=>[e.id,e.department_id])])).digest('hex')
+  const marketingScope=marketingDepartments(nodes.filter(node=>node.kind==='department').map(node=>({id:node.id,name:node.name,parentId:node.parent_id})))
+  const analyticsPeers=managerAnalytics&&departmentId&&marketingScope.departmentIds.includes(departmentId)?{
+    departments:nodes.filter(node=>node.id===marketingScope.rootId||marketingScope.departmentIds.includes(node.id)).map(node=>({id:node.id,name:node.name,parentId:node.parent_id,pathIds:paths.get(node.id)!})),
+    members:members.filter(member=>marketingScope.departmentIds.includes(member.departmentId)),
+  }:undefined
+  return { version,marketingScope,departments:departments.map(node=>({id:node.id,name:node.name,parentId:node.parent_id,pathIds:paths.get(node.id)!})),members:visible,
+    ...analyticsPeers?{analyticsPeers}:{},
     employeeIds:scope.role==='admin'?null:visible.map(member=>member.employeeId).sort(),departmentId,employeeId }
 }

@@ -1,0 +1,282 @@
+{
+  "checkedAt": "2026-11-12T10:43:50.694Z",
+  "upstreamCalled": false,
+  "fulfillment": [
+    {
+      "sourceField": "billstatus",
+      "total": 44855,
+      "key_present": 44855,
+      "value_present": 44855,
+      "states": [
+        {
+          "value": "A",
+          "count": 29176
+        },
+        {
+          "value": "C",
+          "count": 15321
+        },
+        {
+          "value": "B",
+          "count": 358
+        }
+      ]
+    },
+    {
+      "sourceField": "hzkj_orderstatus",
+      "total": 44855,
+      "key_present": 44855,
+      "value_present": 44855,
+      "states": [
+        {
+          "value": "1",
+          "count": 17533
+        },
+        {
+          "value": "4",
+          "count": 14878
+        },
+        {
+          "value": "no",
+          "count": 11498
+        },
+        {
+          "value": "0",
+          "count": 520
+        },
+        {
+          "value": "2",
+          "count": 228
+        },
+        {
+          "value": "3",
+          "count": 197
+        },
+        {
+          "value": "5",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "sourceField": "hzkj_receipt_status",
+      "total": 44855,
+      "key_present": 44855,
+      "value_present": 44855,
+      "states": [
+        {
+          "value": "0",
+          "count": 29558
+        },
+        {
+          "value": "1",
+          "count": 15297
+        }
+      ]
+    },
+    {
+      "sourceField": "hzkj_purchase_status",
+      "total": 44855,
+      "key_present": 0,
+      "value_present": 0,
+      "states": [
+        {
+          "value": null,
+          "count": 44855
+        }
+      ]
+    },
+    {
+      "sourceField": "hzkj_delivery_status",
+      "total": 44855,
+      "key_present": 44855,
+      "value_present": 44803,
+      "states": [
+        {
+          "value": "0",
+          "count": 30883
+        },
+        {
+          "value": "2",
+          "count": 13761
+        },
+        {
+          "value": "1",
+          "count": 159
+        },
+        {
+          "value": "",
+          "count": 52
+        }
+      ]
+    }
+  ],
+  "stock": [
+    {
+      "field": "purchaseStatus",
+      "states": [
+        {
+          "value": "received",
+          "count": 98
+        },
+        {
+          "value": "unpurchased",
+          "count": 34
+        },
+        {
+          "value": "in_progress",
+          "count": 13
+        },
+        {
+          "value": "shipped",
+          "count": 6
+        },
+        {
+          "value": "partial",
+          "count": 2
+        }
+      ]
+    },
+    {
+      "field": "paymentStatus",
+      "states": [
+        {
+          "value": "paid",
+          "count": 133
+        },
+        {
+          "value": "unpaid",
+          "count": 20
+        }
+      ]
+    },
+    {
+      "field": "reviewStatus",
+      "states": [
+        {
+          "value": "approved",
+          "count": 127
+        },
+        {
+          "value": "pending",
+          "count": 26
+        }
+      ]
+    },
+    {
+      "field": "orderStatus",
+      "states": [
+        {
+          "value": "approved",
+          "count": 127
+        },
+        {
+          "value": "unpaid",
+          "count": 20
+        },
+        {
+          "value": "paid",
+          "count": 6
+        }
+      ]
+    }
+  ],
+  "tables": [
+    {
+      "table_name": "hz_fop_collected_orders",
+      "column_name": "display",
+      "data_type": "jsonb"
+    },
+    {
+      "table_name": "hz_fop_collected_orders",
+      "column_name": "raw",
+      "data_type": "jsonb"
+    },
+    {
+      "table_name": "hz_fop_collected_orders",
+      "column_name": "raw_bill_status",
+      "data_type": "text"
+    },
+    {
+      "table_name": "hz_fop_collected_orders",
+      "column_name": "raw_delivery_status",
+      "data_type": "text"
+    },
+    {
+      "table_name": "hz_fop_collected_orders",
+      "column_name": "raw_order_status",
+      "data_type": "text"
+    },
+    {
+      "table_name": "hz_fop_collected_orders",
+      "column_name": "raw_payment_status",
+      "data_type": "text"
+    },
+    {
+      "table_name": "hz_fop_delivery_notices",
+      "column_name": "raw_order_status",
+      "data_type": "character varying"
+    },
+    {
+      "table_name": "hz_fop_dispatches",
+      "column_name": "raw_delivery_status",
+      "data_type": "character varying"
+    },
+    {
+      "table_name": "hz_fop_fulfillment_orders",
+      "column_name": "raw_delivery_status",
+      "data_type": "character varying"
+    },
+    {
+      "table_name": "hz_fop_fulfillment_orders",
+      "column_name": "raw_order_status",
+      "data_type": "character varying"
+    },
+    {
+      "table_name": "hz_fop_fulfillment_orders",
+      "column_name": "raw_payment_status",
+      "data_type": "character varying"
+    },
+    {
+      "table_name": "hz_fop_fulfillment_orders",
+      "column_name": "raw_purchase_status",
+      "data_type": "character varying"
+    },
+    {
+      "table_name": "hz_fop_order_line_details",
+      "column_name": "raw_purchase_status",
+      "data_type": "character varying"
+    },
+    {
+      "table_name": "hz_fop_payments",
+      "column_name": "raw_payment_status",
+      "data_type": "character varying"
+    },
+    {
+      "table_name": "hz_fop_source_documents",
+      "column_name": "raw_bill_status",
+      "data_type": "character varying"
+    },
+    {
+      "table_name": "hz_fop_stock_orders",
+      "column_name": "raw_order_status",
+      "data_type": "character varying"
+    },
+    {
+      "table_name": "hz_fop_stock_orders",
+      "column_name": "raw_payment_status",
+      "data_type": "character varying"
+    },
+    {
+      "table_name": "hz_fop_stock_orders",
+      "column_name": "raw_purchase_status",
+      "data_type": "character varying"
+    }
+  ],
+  "projection": {
+    "purchase_display_present": 0,
+    "outbound_display_present": 44803,
+    "bill_mismatch": 0,
+    "outbound_mismatch": 52
+  }
+}

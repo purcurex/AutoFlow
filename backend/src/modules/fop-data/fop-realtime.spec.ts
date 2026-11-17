@@ -108,6 +108,15 @@ describe('dedicated realtime FOP boundaries (offline only)', () => {
     const sent = JSON.parse(String(request.mock.calls[0][1]?.body))
     expect(sent.query).toMatchObject({ version: 'v1', idempotencyKey: 'a'.repeat(64), currentScope })
   })
+  it.each([
+    { status: 'A', eligible: true }, { status: 'C', eligible: true }, { status: 'B', eligible: false },
+  ])('never sends a non-submitted or ineligible audit to FOP: %j', async gate => {
+    const { provider, request } = setup({})
+    const command = { tenantId: 'tenant', orderId: 'o1', id: 'o1', number: 'TO1', entity: 'hzkj_orders', version: 'v1', reason: null,
+      operation: 'audit', idempotencyKey: 'a'.repeat(64), requestId: 'request', actorAccountId: 'account', currentScope, ...gate }
+    await expect(provider.approveDocument(identity, command)).rejects.toThrow()
+    expect(request).not.toHaveBeenCalled()
+  })
   it('uses the dedicated approval context and refuses an unrelated action grant', async () => {
     const result = { action: 'review', actionAllowed: true, inQueue: true, order: { id: 'o1', orderNumber: 'TO1', allocationDocument: null, dispatchDocuments: [] },
       targets: [{ tenantId: 'tenant', orderId: 'o1', id: 'o1', number: 'TO1', entity: 'hzkj_orders', version: 'v1', status: 'B', eligible: true, reason: null }] }
@@ -296,4 +305,34 @@ it('does not launch or fall back if the proposed dedicated launch URL is missing
   const { provider, request } = setup({}, { FOP_KINGDEE_SUPPLIER_CHAT_URL: '' })
   await expect(provider.launchSupplierChat(identity, currentScope, { ...followContext, purchaseOrderId: 'p1', contactVersion: 'a'.repeat(64) })).rejects.toMatchObject({ code: 'fop_supplier_contacts_not_configured' })
   expect(request).not.toHaveBeenCalled()
+})
+
+describe('manual approval transport isolation', () => {
+  it.each(['true', 'false'])('blocks native approval when its own switch is off, regardless of global pause %s', async paused => {
+    const { provider, request } = setup({}, { FOP_KINGDEE_APPROVAL_MODE: 'native', FOP_MANUAL_APPROVAL_ENABLED: 'false', FOP_QUERIES_PAUSED: paused })
+    await expect(provider.readApprovalContext(identity, currentScope, 'review', '1001')).rejects.toMatchObject({ code: 'fop_approval_not_configured' })
+    await expect(provider.approveDocument(identity, {})).rejects.toMatchObject({ code: 'fop_approval_not_configured' })
+    await expect(provider.administratorIdentity(true)).rejects.toMatchObject({ code: 'fop_approval_not_configured' })
+    expect(request).not.toHaveBeenCalled()
+  })
+  it('keeps other APIs paused when explicit manual approval is enabled', async () => {
+    const target = { tenantId:'tenant',orderId:'o1',id:'o1',number:'TO1',entity:'hzkj_orders',version:'v1',status:'B',eligible:true,reason:null }
+    const { provider, request } = setup(envelope('approval_context', { action:'review',actionAllowed:true,inQueue:true,order:{id:'o1',orderNumber:'TO1',allocationDocument:null,dispatchDocuments:null},targets:[target] }), { FOP_QUERIES_PAUSED:'true',FOP_MANUAL_APPROVAL_ENABLED:'true' })
+    expect((await provider.readApprovalContext(identity,currentScope,'review','o1')).targets[0].status).toBe('B')
+    await expect(provider.queryCurrentInventory(identity,currentScope,{mode:'search',search:'SKU',page:1,pageSize:50})).rejects.toMatchObject({code:'fop_queries_paused'})
+    expect(request).toHaveBeenCalledTimes(1)
+  })
+  it('encodes a 256-bit key within the published 48-character gateway limit', async () => {
+    const { provider, request } = setup({}, { FOP_KINGDEE_FULFILLMENT_AUDIT_URL:'https://offline.test/audit' })
+    const key='ab'.repeat(32)
+    await provider.performCall('FOP_KINGDEE_FULFILLMENT_AUDIT_URL',{},undefined,false,key)
+    const header=(request.mock.calls[0][1]!.headers as Record<string,string>)['Idempotency-Key']
+    expect(header).toHaveLength(43);expect(Buffer.from(header,'base64url').toString('hex')).toBe(key)
+  })
+  it('retains standard per-document failures even when the envelope status is false', async () => {
+    const { provider, request } = setup({}, { FOP_KINGDEE_FULFILLMENT_AUDIT_URL:'https://offline.test/audit' })
+    request.mockResolvedValue(new Response(JSON.stringify({status:false,errorCode:'603',message:'地址校验未通过',data:{failCount:'1',successCount:'0',totalCount:'1',result:[{id:'1001',number:'TO1',billStatus:false,errors:[]}]}})))
+    expect(await provider.performCall('FOP_KINGDEE_FULFILLMENT_AUDIT_URL',{},undefined,false,'a'.repeat(64))).toMatchObject({operationStatus:false,operationMessage:'地址校验未通过',failCount:'1'})
+    expect(request).toHaveBeenCalledTimes(1)
+  })
 })

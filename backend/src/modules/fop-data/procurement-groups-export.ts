@@ -1,3 +1,4 @@
+import { singleSheetWorkbook } from '../workbench-export/single-sheet'
 import * as ExcelJS from 'exceljs'
 import { PayloadTooLargeException } from '@nestjs/common'
 import type { PurchaseGroup } from './procurement-groups.types'
@@ -10,7 +11,7 @@ const dateText = (value: string | null) => {
 }
 const payments = { paid: '已付款', unpaid: '待付款', partial: '部分付款', refunded: '已退款待处理', unknown: '付款待确认' }
 const shipments = { pending: '供应商待发货', partial: '供应商部分发货', shipped: '供应商已发货', unknown: '发货待确认' }
-const stages = { uncreated: '待创建采购单', placement_pending: '待下单 / 推单', payment_pending: '待支付采购款', refund_pending: '采购退款待跟进' }
+const stages = { unknown: '待核查', uncreated: '待创建采购单', placement_pending: '待下单 / 推单', payment_pending: '待支付采购款', refund_pending: '采购退款待跟进' }
 function shipmentAging(group: PurchaseGroup, now: Date) {
   if (group.purchase?.payment !== 'paid' || !['pending', 'partial'].includes(group.shipment)) return ''
   const paidAt = normalizeBusinessTimestamp(group.purchase.paidAt)
@@ -25,7 +26,7 @@ export async function buildPurchaseGroupWorkbook(groups: PurchaseGroup[], query?
   const book = new ExcelJS.Workbook()
   book.creator = 'HyperZone'; book.created = now
   const sheet = book.addWorksheet('采购关联明细', { views: [{ state: 'frozen', ySplit: 1, xSplit: 2 }] })
-  sheet.columns = ['采购订单号', '供应商', '平台订单号', '采购付款状态', '采购付款时间（UTC+8）', '履约订单号', 'Shopify单号', '客户', '业务员', '部门', '仓库', 'SKU', '商品', '采购数量', '供应商已发数量', '供应商待发数量', '采购单状态', '采购类型', '采购平台', '待采购数量', '采购下单状态', '供应商发货状态', '店铺', '规格', '客户付款时间（UTC+8）', '发货时效', ...(query?.completed ? ['采购完成时间（UTC+8）'] : [])].map((header, i) => ({ header, key: String(i), width: [3, 13, 14, 15, 19].includes(i) ? 18 : 26 }))
+  sheet.columns = ['采购订单号', '供应商', '平台订单号', '采购付款状态', '采购付款时间（UTC+8）', '履约订单号', 'Shopify单号', '客户', '业务员', '部门', '仓库', 'SKU', '商品', '采购数量', '供应商已发数量', '供应商待发数量', '采购单状态', '采购类型', '采购平台', '待采购数量', '采购下单状态', '供应商发货状态', '店铺', '规格', '客户付款时间（UTC+8）', '发货时效', ...(query?.completed ? ['采购完成时间（UTC+8）'] : []), '商品图片'].map((header, i) => ({ header, key: String(i), width: [3, 13, 14, 15, 19].includes(i) ? 18 : 26 }))
   for (const group of groups) for (const row of group.rows) for (const line of row.lines.length ? row.lines : [null]) {
     const purchase = group.purchase
     sheet.addRow([purchase?.number ?? '', purchase?.supplier.name ?? '', purchase?.platformOrderNumber ?? '', purchase ? payments[purchase.payment] : '', dateText(purchase?.paidAt ?? null),
@@ -33,7 +34,7 @@ export async function buildPurchaseGroupWorkbook(groups: PurchaseGroup[], query?
       purchase ? line?.quantity ?? '' : '', purchase ? line?.shippedQuantity ?? '' : '', purchase && line ? Number((line.quantity - line.shippedQuantity).toFixed(8)) : '',
       group.kind === 'uncreated' ? '待创建采购单' : '已创建', purchase ? purchase.purchaseType === 'offline' ? '线下' : '线上' : '', purchase?.platform === '1688' ? '1688' : purchase?.platform === 'other' ? '其他平台' : '',
       !purchase ? line?.quantity ?? '' : '', purchase ? purchase.placement === 'placed' ? '已下单' : purchase.placement === 'unknown' ? '下单待确认' : purchase.platform === '1688' ? '待推1688采购' : '待下单' : '',
-      purchase ? shipments[group.shipment] : '', row.storeName, line?.variant ?? '', dateText(row.consumerPaidAt ?? null), shipmentAging(group, now), ...(query?.completed ? [dateText(row.completedAt ?? null)] : [])])
+      purchase ? shipments[group.shipment] : '', row.storeName, line?.variant ?? '', dateText(row.paidAt ?? null), shipmentAging(group, now), ...(query?.completed ? [dateText(row.completedAt ?? null)] : []), line?.imageUrl ?? ''])
   }
   sheet.eachRow((row, i) => {
     row.height = i === 1 ? 32 : 44
@@ -80,5 +81,6 @@ export async function buildPurchaseGroupWorkbook(groups: PurchaseGroup[], query?
     ['数据时效', '按生成时刻计算发货时效，导出后不会自动更新。'],
   ])
   notes.eachRow(row => row.eachCell(cell => { cell.numFmt = '@'; cell.alignment = { vertical: 'middle', wrapText: true } }))
+  await singleSheetWorkbook(book,{main:'采购单汇总',details:['采购关联明细']})
   return Buffer.from(await book.xlsx.writeBuffer())
 }

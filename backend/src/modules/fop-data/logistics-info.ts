@@ -15,6 +15,10 @@ export function normalizeLogisticsInfo(value: unknown, allTracking = false): Log
     const shopifyTracking: LogisticsTrackingNumber | null = number && trackingTypes.has(selected?.type)
       ? { type: selected.type, number } : null
     const channelName = text(group.channelName), channelCode = text(group.channelCode)
+    if ('packageTrackingNumber' in group) {
+      groups.push({ carrierName, channelName, channelCode, packageTrackingNumber: text(group.packageTrackingNumber) })
+      continue
+    }
     const trackingNumbers: LogisticsTrackingNumber[] = allTracking && Array.isArray(group.trackingNumbers) ? group.trackingNumbers.filter((t: any) => ['full','last_mile'].includes(t?.type) && text(t?.number)).map((t: any) => ({type:t.type,number:text(t.number)!})) : []
     if (carrierName || channelName || shopifyTracking || trackingNumbers.length) groups.push({ carrierName, channelName, channelCode, shopifyTracking, ...(allTracking ? {trackingNumbers} : {}) })
   }
@@ -25,5 +29,5 @@ export function logisticsInfoText(groups: unknown, _carrier?: string | null, _tr
   const normalized = normalizeLogisticsInfo(groups, allTracking)
   if (!normalized) return channels?.length ? channels.map(c => `${text(c.name) || '—'}\n${missingTracking}`).join('\n\n') : missingTracking === '—' ? '—' : `—\n${missingTracking}`
   return normalized.map(group => [group.channelName || (normalized.length === 1 && channels?.length === 1 ? text(channels[0].name) : null) || '—',
-    (allTracking ? group.trackingNumbers?.map(t => `${t.number} ${t.type==='full'?'QC':'WC'}`).join('\n') : group.shopifyTracking?.number) || missingTracking].join('\n')).join('\n\n')
+    ('packageTrackingNumber' in group ? group.packageTrackingNumber : allTracking ? group.trackingNumbers?.map(t => `${t.number} ${t.type==='full'?'QC':'WC'}`).join('\n') : group.shopifyTracking?.number) || missingTracking].join('\n')).join('\n\n')
 }

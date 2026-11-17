@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { DEFAULT_CURRENCY, formatCurrency } from '@/utils/currency'
+import { DEFAULT_CURRENCY, currencyLabel, formatCurrency } from '@/utils/currency'
 import { sumCompleteMoney } from '@/utils/tableTotals'
 import TableTotals from '@/components/ui/TableTotals.vue'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
@@ -462,7 +462,7 @@ onMounted(loadCapabilities)
           </label>
           <label>
             <span class="field-label">{{ t('quotes.currency') }}</span>
-            <select v-model="currency" class="input"><option>USD</option><option>EUR</option><option>GBP</option></select>
+            <select v-model="currency" class="input"><option value="USD">$</option><option>EUR</option><option>GBP</option></select>
           </label>
           <label>
             <span class="field-label">{{ t('quotes.productProfitMargin') }}</span>
@@ -492,13 +492,13 @@ onMounted(loadCapabilities)
                 <td>
                   <div class="relative min-w-36">
                     <input :value="tier.purchaseCost" readonly class="input bg-slate-50 pr-14 dark:bg-[#11151a]" :placeholder="t('quotes.pendingFop')" />
-                    <span class="absolute right-3 top-3 text-xs font-semibold text-slate-400">{{ currency }}</span>
+                    <span class="absolute right-3 top-3 text-xs font-semibold text-slate-400">{{ currencyLabel(currency) }}</span>
                   </div>
                 </td>
                 <td>
                   <div class="relative min-w-36">
-                    <input v-model="tier.customerUnitPrice" inputmode="decimal" class="input pr-14" :placeholder="currency" />
-                    <span class="absolute right-3 top-3 text-xs font-semibold text-slate-400">{{ currency }}</span>
+                    <input v-model="tier.customerUnitPrice" inputmode="decimal" class="input pr-14" :placeholder="currencyLabel(currency)" />
+                    <span class="absolute right-3 top-3 text-xs font-semibold text-slate-400">{{ currencyLabel(currency) }}</span>
                   </div>
                 </td>
                 <td>

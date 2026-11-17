@@ -1,3 +1,4 @@
+import { hasDispatchSyncFailure } from './order-dispatch-status'
 import type { FopOrder, ProcurementProgress } from './fop-data.types'
 import type { FULFILLMENT_QUEUE_ROLES, ListFulfillmentOrdersDto } from '../users/dto/workbench.dto'
 
@@ -10,16 +11,20 @@ export function isProcurementReady(purchase: ProcurementProgress | undefined): b
 }
 
 export function matchesQueue(order: FopOrder, queue: Queue, warehouseStage?: ListFulfillmentOrdersDto['warehouseStage']): boolean {
+  if (queue === 'dispatch' && hasDispatchSyncFailure(order)) return false
+  if (queue === 'exceptions' && hasDispatchSyncFailure(order)) return true
+  if (queue === 'dispatch' && order.businessStatus) return order.reviewStatus === 'approved' && ['paid','processing','fulfillment_cancelled'].includes(order.businessStatus.order)
   if (order.cancelled) return false
   if (queue === 'exceptions') return order.exception != null
-  if (queue === 'unpaid') return order.paymentStatus === 'unpaid'
+  if (queue === 'unpaid') return order.paymentStatus === 'unpaid' && !['refunded', 'voided', 'expired', 'unpaid'].includes(order.sourcePaymentStatus ?? '')
   if (order.paymentStatus !== 'paid') return false
   if (queue === 'review') return order.reviewStatus === 'pending'
   const progress = order.fulfillmentProgress
   if (!progress) return false
-  // 客户已支付但 Shopify 跟踪号未同步的订单均待履约，不以内部审核状态作为前置条件。
-  if (queue === 'dispatch') return progress.shopifySync === 'pending'
+  // 已审核且待同步履约；真实采集以履约本单订单状态为准。
+  if (queue === 'dispatch') return order.reviewStatus === 'approved' && progress.shopifySync === 'pending'
   if (queue === 'procurement' || queue === 'procurement_shipping') {
+    if (order.reviewStatus !== 'approved') return false
     if (order.sourcePurchaseStatus !== undefined && !['0','1','2'].includes(order.sourcePurchaseStatus ?? '')) return false
     const purchase = order.procurementProgress
     if (!purchase || purchase.purchaseOrder === 'not_required' || (order.sourcePurchaseStatus === undefined && progress.supplierShipment === 'shipped')) return false

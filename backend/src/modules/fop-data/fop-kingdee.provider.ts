@@ -17,6 +17,7 @@ import { emptyAnalyticsData, KingdeeAnalyticsDecoder } from './fop-kingdee.analy
 import type { FopAnalyticsData, FopAnalyticsRange, FopAnalyticsResource, FopAnalyticsScope, FopConnectionContext } from './fop-data.types'
 import { FOP_ADMIN_CONTEXT, FopDataProvider, FopIdentity, FopIntegrationUnavailableError, FopOrder, FopOrderPage, FopOrderPageQuery, FopPermissionDeniedError, FopPermissionGrant } from './fop-data.types'
 import type { FopBindingEmployee, FopBindingEmployeePage, FopEmployeeBindingDetails, VerifiedFopEmployeeBinding } from './fop-employee-binding'
+import { KingdeeNativeApprovalAdapter } from './fop-kingdee.approval'
 import { KingdeeRealtimeAdapter } from './fop-kingdee.realtime'
 import type { FopRealtimeScope, FopRealtimeApprovalContext, FopRealtimePage, CurrentInventoryRow, ReservedInventoryRow } from './fop-realtime.types'
 import type { ApprovalQueue, ApprovalCommand, ApprovalOutcome } from './fop-approval.types'
@@ -90,18 +91,35 @@ export class KingdeeFopDataProvider extends FopDataProvider {
     this.configuredOrganizations = (config.get('FOP_KINGDEE_ORGANIZATION_IDS') ?? '').split(',').map(value => value.trim()).filter(Boolean)
   }
 
+  private manualApprovalProvider?: KingdeeFopDataProvider
+  private assertManualApprovalEnabled() {
+    if (this.config.get('FOP_KINGDEE_APPROVAL_MODE') === 'native' && this.config.get('FOP_MANUAL_APPROVAL_ENABLED') !== 'true') throw new FopIntegrationUnavailableError('fop_approval_not_configured')
+  }
+  private approvalProvider(): KingdeeFopDataProvider | null {
+    if (this.config.get('FOP_MANUAL_APPROVAL_ENABLED') !== 'true' || this.config.get('FOP_MANUAL_APPROVAL_CONTEXT') === 'true') return null
+    this.manualApprovalProvider ??= new KingdeeFopDataProvider({ get: key => key === 'FOP_QUERIES_PAUSED' ? 'false' : key === 'FOP_MANUAL_APPROVAL_CONTEXT' ? 'true' : this.config.get(key) }, this.request, this.resolveBinding)
+    return this.manualApprovalProvider
+  }
+  private nativeApprovalAdapter() {
+    return new KingdeeNativeApprovalAdapter(this.organizationIds, this.config.get('FOP_KINGDEE_APPROVAL_ORG_NUMBER') || '',
+      (key, body, mutate, idempotencyKey) => this.performCall(key, body, undefined, !mutate, idempotencyKey))
+  }
   private realtimeAdapter() {
     return new KingdeeRealtimeAdapter(this.config, this.organizationIds, (key, body, mutate) => this.performCall(key, body, undefined, !mutate))
   }
   async readApprovalContext(identity: Readonly<FopIdentity>, scope: FopRealtimeScope, queue: ApprovalQueue, orderId: string): Promise<FopRealtimeApprovalContext> {
+    this.assertManualApprovalEnabled()
+    const manual = this.approvalProvider(); if (manual) return manual.readApprovalContext(identity, scope, queue, orderId)
     this.assertQueriesEnabled()
     if (this.resolveBinding) return (await this.userProvider(identity)).readApprovalContext(identity, scope, queue, orderId)
-    return this.realtimeAdapter().approval(identity, scope, queue, orderId)
+    return this.config.get('FOP_KINGDEE_APPROVAL_MODE') === 'native' ? this.nativeApprovalAdapter().context(identity, scope, queue, orderId) : this.realtimeAdapter().approval(identity, scope, queue, orderId)
   }
   async approveDocument(identity: Readonly<FopIdentity>, command: ApprovalCommand): Promise<ApprovalOutcome> {
+    this.assertManualApprovalEnabled()
+    const manual = this.approvalProvider(); if (manual) return manual.approveDocument(identity, command)
     this.assertQueriesEnabled()
     if (this.resolveBinding) return (await this.userProvider(identity)).approveDocument(identity, command)
-    return this.realtimeAdapter().approve(identity, command)
+    return this.config.get('FOP_KINGDEE_APPROVAL_MODE') === 'native' ? this.nativeApprovalAdapter().approve(identity, command) : this.realtimeAdapter().approve(identity, command)
   }
   async queryCurrentInventory(identity: Readonly<FopIdentity>, scope: FopRealtimeScope, query: AllocationInventoryQueryDto): Promise<FopRealtimePage<CurrentInventoryRow>> {
     this.assertQueriesEnabled()
@@ -300,7 +318,9 @@ export class KingdeeFopDataProvider extends FopDataProvider {
     return (await this.connectionGrant()).connection
   }
 
-  async administratorIdentity(): Promise<FopIdentity | null> {
+  async administratorIdentity(forApproval = false): Promise<FopIdentity | null> {
+    if (forApproval) this.assertManualApprovalEnabled()
+    const manual = forApproval ? this.approvalProvider() : null; if (manual) return manual.administratorIdentity()
     if (this.config.get('FOP_KINGDEE_ADMIN_SERVICE_ACCESS') !== 'true') return null
     this.serviceProvider ??= new KingdeeFopDataProvider(this.config, this.request)
     const connection = this.serviceProvider.connection ?? await this.serviceProvider.getConnectionContext()
@@ -986,7 +1006,7 @@ export class KingdeeFopDataProvider extends FopDataProvider {
   }
 
   /** 只读网络/5xx失败至多重试一次；认证失效至多重取一次，不能形成循环或重放业务写入。 */
-  private async performCall(key: string, body: unknown, deadline?: number, readOnly = true): Promise<unknown> {
+  private async performCall(key: string, body: unknown, deadline?: number, readOnly = true, idempotencyKey?: string): Promise<unknown> {
     this.assertQueriesEnabled()
     const endpoint = this.endpoint(key), timeout = this.requestTimeout()
     let token = await this.accessToken(), retries = 0, refreshed = false
@@ -997,7 +1017,7 @@ export class KingdeeFopDataProvider extends FopDataProvider {
       let response: Response
       try {
         response = await this.request(endpoint, { method: 'POST', redirect: 'error', signal: AbortSignal.timeout(Math.min(timeout, remaining)),
-          headers: { 'content-type': 'application/json', access_token: token,
+          headers: { 'content-type': 'application/json', access_token: token, ...(!readOnly && idempotencyKey ? { 'Idempotency-Key': Buffer.from(idempotencyKey, 'hex').toString('base64url') } : {}),
             'x-acgw-identity': this.config.get('FOP_KINGDEE_IDENTITY')! }, body: JSON.stringify(body) })
       } catch {
         if (deadline !== undefined && Date.now() >= deadline) throw new FopIntegrationUnavailableError('fop_result_too_large')
@@ -1022,6 +1042,8 @@ export class KingdeeFopDataProvider extends FopDataProvider {
       if (!response.ok || !response.body) throw new Error('Kingdee query unavailable')
       const envelope = await this.responseEnvelope(response, 4 * 1024 * 1024)
       if (envelope.status !== true || String(envelope.errorCode) !== '0') {
+        // Standard audit reports business-validation failures with status=false and a per-document receipt.
+        if (!readOnly && key === 'FOP_KINGDEE_FULFILLMENT_AUDIT_URL' && envelope.data && typeof envelope.data === 'object' && Array.isArray((envelope.data as JsonObject).result)) return { ...(envelope.data as JsonObject), operationStatus: false, operationMessage: typeof envelope.message === 'string' ? envelope.message.slice(0, 1000) : '' }
         if (['2504', '2505'].includes(String(envelope.errorCode))) throw new FopPermissionDeniedError('金蝶应用尚未授权当前接口，请核对自建API授权', 'fop_api_not_authorized')
         // 金蝶可能以HTTP 200返回认证失败，不能把这种响应当作取数成功或普通业务异常。
         if (String(envelope.errorCode) === '401' || String(envelope.errorCode) === '612') {

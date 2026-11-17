@@ -1,3 +1,5 @@
+// Cache policy is covered separately; these fixtures exercise chart interactions.
+vi.mock('@/api/analytics-cache-scope', () => ({ getAnalyticsCacheScope: vi.fn(async () => ({ cacheable: false })) }))
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { getWorkbenchDashboardCounts } from '@/api/workbench-dashboard'
 import { getFopDashboard, localDate } from '@/api/fop-dashboard'

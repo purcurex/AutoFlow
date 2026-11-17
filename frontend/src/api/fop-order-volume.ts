@@ -1,3 +1,4 @@
+import { analyticsQuery, type AnalyticsQueryOptions } from '@/utils/analytics-cache'
 import type { EffectiveChartAccess } from './fop-chart-access'
 import api from './index'
 import type { FopReceiptPage } from './fop-receipts'
@@ -29,7 +30,7 @@ export interface OrderCustomer { id: string; code: string; name: string; departm
 export interface OrderCustomerPage { chartAccess: EffectiveChartAccess; source: 'mock' | 'fop'; items: OrderCustomer[]; total: number; page: number; pageSize: number }
 export interface OrderVolumeDetailsQuery extends OrderVolumeQuery { workbenchRole: WorkbenchRole; detailWarehouse?: VolumeWarehouse; seriesId?: string; periodId?: string; page: number; pageSize: number }
 const root = '/autoflow/integrations/fop/order-volume'
-export const getOrderVolume = (query: OrderVolumeQuery): Promise<OrderVolumeData> => api.get(root, { params: query, timeout: 180000 })
+export const getOrderVolume = (query: OrderVolumeQuery, options?: AnalyticsQueryOptions): Promise<OrderVolumeData> => analyticsQuery(root, query, () => api.get(root, { params: query, timeout: 180000 }), options)
 export const searchOrderCustomers = (query: { keyword: string; department?: string; page: number; pageSize: number }): Promise<OrderCustomerPage> => api.get(`${root}/customers`, { params: query, timeout: 180000 })
 export const getOrderVolumeDetails = (query: OrderVolumeDetailsQuery): Promise<FopOrderPage> => api.get(`${root}/orders`, { params: query, timeout: 180000 })
 

@@ -15,6 +15,8 @@ export interface FopRealtimeApprovalContext {
   inQueue: boolean
   targets: ApprovalTarget[]
   currentScope: FopRealtimeScope
+  /** Internal source proof; never included in browser preview responses. */
+  sourcePage?: Record<string, any>
 }
 export type CurrentInventoryRow = ReturnType<typeof import('./allocation-inventory').inventorySnapshot>[number]
 export type ReservedInventoryRow = ReturnType<typeof import('./fop-stock').publicStockInventory>

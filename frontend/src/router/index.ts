@@ -28,7 +28,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/workbench/:role/freight',
     name: 'RoleWorkbenchFreight',
-    component: () => import('@/views/autoflow/WorkbenchView.vue'),
+    redirect: () => ({ name: 'FopDashboard', params: {}, query: {}, hash: '' }),
     meta: { requiresAuth: true }
   },
   {
@@ -169,6 +169,8 @@ router.beforeEach(async (to, _from, next) => {
   const hasSession = Boolean(localStorage.getItem('user'))
   if (to.meta.requiresAuth && !hasSession) return next({ name: 'Login', query: { redirect: to.fullPath } })
   if (to.meta.guest && hasSession) return next({ name: 'Dashboard' })
+  // Retired workbench analytics use Dashboard's own chart grants and filters.
+  if (['Dashboard', 'RoleWorkbench'].includes(String(to.name)) && ['order-analysis', 'order-volume', 'freight'].includes(String(to.query.queue))) return next({ name: 'FopDashboard', query: {}, replace: true })
   if (!to.meta.requiresAuth) return next()
   if (to.name === 'WorkbenchAccessDenied') return next()
   try {
@@ -179,7 +181,8 @@ router.beforeEach(async (to, _from, next) => {
       return next({ name: access.isAdmin ? 'WorkbenchRoleAdmin' : 'WorkbenchAccessDenied' })
     }
     if (to.meta.requiresAdmin && (!access.isAdmin || access.businessRole !== 'admin')) return next({ name: 'Dashboard' })
-    if (['Dashboard', 'RoleWorkbench', 'RoleWorkbenchReceipts', 'RoleWorkbenchFreight'].includes(String(to.name))) {
+    if (['Dashboard', 'RoleWorkbench', 'RoleWorkbenchReceipts'].includes(String(to.name))) {
+      if (!access.isAdmin && (to.name === 'RoleWorkbenchReceipts' || ['performance','overview','receipts'].includes(String(to.query.queue)))) return next({ name: 'WorkbenchAccessDenied' })
       const requested = to.name === 'Dashboard' ? (access.roles.includes('sales') ? 'sales' : access.roles[0]) : to.params.role
       if (!isWorkbenchRole(requested) || !access.roles.includes(requested)) return next({ name: 'WorkbenchAccessDenied' })
       if (to.name === 'Dashboard' && requested !== 'sales') return next({ name: 'RoleWorkbench', params: { role: requested } })

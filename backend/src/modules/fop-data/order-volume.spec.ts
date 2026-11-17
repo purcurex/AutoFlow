@@ -94,16 +94,16 @@ describe('authorized order volume aggregation', () => {
     expect(empty.series.every(s => s.total === 0)).toBe(true)
   })
   it('filters customer date ranges inclusively in Shanghai time and carries the same range into details', () => {
-    const range = { category: 'customer', from: '2025-12-31', to: '2026-01-02', warehouse: 'ALL' } as const
+    const range = { category: 'customer', from: '2026-01-01', to: '2026-01-02', warehouse: 'ALL' } as const
     const rows = [
-      order(1, { paidAt: '2025-12-30T15:59:59Z' }),
-      order(2, { paidAt: '2025-12-30T16:00:00Z' }),
+      order(1, { paidAt: '2025-12-31T15:59:59Z' }),
+      order(2, { paidAt: '2025-12-31T16:00:00Z' }),
       order(3, { paidAt: '2026-01-02T15:59:59Z' }),
       order(4, { paidAt: '2026-01-02T16:00:00Z' }),
     ]
     const result = aggregateOrderVolume(rows, range, now)
-    expect(result.periods.map(p => p.id)).toEqual(['2025-12-31', '2026-01-01', '2026-01-02'])
-    expect(result.series[0].values).toEqual([1, 0, 1])
+    expect(result.periods.map(p => p.id)).toEqual(['2026-01-01', '2026-01-02'])
+    expect(result.series[0].values).toEqual([1, 1])
     expect(result.total).toBe(2)
     expect(result.query).toEqual(range)
     expect(orderVolumeDetails(rows, { ...range, periodId: '2026-01-02' }, now).map(o => o.id)).toEqual(['3'])
@@ -130,10 +130,10 @@ describe('authorized order volume aggregation', () => {
   it('returns current months, cross-year Monday weeks, leap days, and null future dates', () => {
     expect(orderVolumePeriods(query, now)).toHaveLength(10)
     const weeks = orderVolumePeriods({ ...query, grain: 'week', weekOf: '2026-01-01' }, now)
-    expect(weeks).toHaveLength(4)
-    expect(weeks[3].from).toBe('2025-12-29')
-    expect(weeks[3].to).toBe('2026-01-04')
-    expect(orderVolumePeriods({ ...query, grain: 'day', year: 2024, month: 2 }, now)).toHaveLength(29)
+    expect(weeks).toHaveLength(1)
+    expect(weeks[0].from).toBe('2026-01-01')
+    expect(weeks[0].to).toBe('2026-01-04')
+    expect(orderVolumePeriods({ ...query, grain: 'day', year: 2028, month: 2 }, new Date('2028-03-01T00:00:00Z'))).toHaveLength(29)
     const daily = aggregateOrderVolume([order(1)], { ...query, grain: 'day', month: 10 }, now)
     expect(daily.periods).toHaveLength(31)
     expect(daily.series[0].values[22]).toBeNull()

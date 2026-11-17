@@ -1,5 +1,8 @@
 <script setup lang="ts">
+import { BUSINESS_START_DATE } from '@/utils/business-years'
+import { useAnalyticsRefresh } from '@/composables/useAnalyticsRefresh'
 import { useChartAccess } from '@/composables/useChartAccess'
+import { useDateRangeQuery } from '@/composables/useDateRangeQuery'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ChartNoAxesCombined } from 'lucide-vue-next'
@@ -64,7 +67,9 @@ function closeDetails() { selectedDetail.value = undefined }
 function clear() {
   clearChartAccess(); requestId++; data.value = undefined; owners.value = []; canSelectOwner.value = false; error.value = ''; busy.value = false; closeDetails()
 }
-async function load() {
+let forceNextQuery = false
+const chartRefresh = useAnalyticsRefresh(() => load(true), () => busy.value)
+async function load(force = false) {
   const id = ++requestId
   data.value = undefined; owners.value = []; canSelectOwner.value = false; error.value = ''; busy.value = true; tablePage.value = 1; closeDetails()
   try {
@@ -72,18 +77,20 @@ async function load() {
     if (id !== requestId || !capability?.visible) return
     const submitted = { ...query.value }
     if (capability.dataScope === 'self') { delete submitted.ownerId; delete submitted.ownerScope }
-    const result = await getSalesPerformance(submitted)
+    const result = await getSalesPerformance(submitted, { force })
     if (id !== requestId) return
     if (!applyChartResponse(result)) return
-    data.value = result; owners.value = result.owners; canSelectOwner.value = result.canSelectOwner
+    data.value = result; chartRefresh.updated(result); owners.value = result.owners; canSelectOwner.value = result.canSelectOwner
   } catch (cause) {
     if (id !== requestId) return
     clearChartAccess(); owners.value = []; canSelectOwner.value = false; error.value = fopAccessError(cause, String(locale.value).startsWith('zh'))
   } finally { if (id === requestId) busy.value = false }
 }
-function applyFilters() {
+const dateQuery = useDateRangeQuery(from, to, () => applyFilters(false), () => ({ min: BUSINESS_START_DATE, max: today, maxDays: 366 }))
+function applyFilters(force = false) {
+  dateQuery.cancel()
   const validDate = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value) && Number.isFinite(Date.parse(value)) && new Date(value).toISOString().slice(0, 10) === value
-  if (!validDate(from.value) || !validDate(to.value) || from.value < '2020-01-01' || from.value > to.value || to.value > today) {
+  if (!validDate(from.value) || !validDate(to.value) || from.value < BUSINESS_START_DATE || from.value > to.value || to.value > today) {
     dateError.value = t('请选择有效日期，结束日期不能早于开始日期或晚于今天。', 'Choose valid dates, in order and no later than today.'); return
   }
   if ((Date.parse(to.value) - Date.parse(from.value)) / 86400_000 >= 366) {
@@ -91,8 +98,9 @@ function applyFilters() {
   }
   sessionReset = false
   dateError.value = ''
-  if (from.value !== appliedRange.value.from || to.value !== appliedRange.value.to) appliedRange.value = { from: from.value, to: to.value }
-  else void load()
+  dateQuery.markApplied()
+  if (from.value !== appliedRange.value.from || to.value !== appliedRange.value.to) { forceNextQuery = force; appliedRange.value = { from: from.value, to: to.value } }
+  else void load(force)
 }
 function openDetails(kind: 'receipts' | 'profit', period?: PerformancePeriod) {
   if (!data.value || (!data.value.selectedOwner && !allOwners.value) || !canViewDetails.value) return
@@ -102,7 +110,7 @@ function detailFailed() {
   requestId++; data.value = undefined; owners.value = []; canSelectOwner.value = false; busy.value = false
   if (selectedDetail.value) selectedDetail.value.owner = ''
 }
-watch(query, () => { if (!sessionReset) void load() }, { immediate: true })
+watch(query, () => { const force = forceNextQuery; forceNextQuery = false; if (!sessionReset) void load(force) }, { immediate: true })
 const off = onSessionReset(() => { sessionReset = true; clear(); ownerId.value = ''; dateError.value = '' })
 onBeforeUnmount(() => { off(); clear() })
 </script>
@@ -110,10 +118,10 @@ onBeforeUnmount(() => { off(); clear() })
 <template>
   <section v-if="chartVisible" class="ov-panel performance-panel">
     <header class="ov-header">
-      <div class="ov-heading"><h2><ChartNoAxesCombined :size="19" />{{ t('个人收款与毛利', 'Personal receipts and profit') }}<span v-if="data?.source === 'mock'" class="ov-badge">MOCK</span></h2></div>
-      <form class="ov-filters" @submit.prevent="applyFilters">
-        <label>{{ t('开始日期', 'Start date') }}<input v-model="from" type="date" min="2020-01-01" :max="to || today" aria-label="开始日期" required></label>
-        <label>{{ t('结束日期', 'End date') }}<input v-model="to" type="date" :min="from || '2020-01-01'" :max="today" aria-label="结束日期" required></label>
+      <div class="ov-heading"><h2><ChartNoAxesCombined :size="19" />{{ t('个人收款与毛利', 'Personal receipts and profit') }}</h2></div>
+      <form class="ov-filters" @submit.prevent="applyFilters(true)">
+        <label>{{ t('开始日期', 'Start date') }}<input v-model="from" type="date" :min="BUSINESS_START_DATE" :max="to || today" aria-label="开始日期" required></label>
+        <label>{{ t('结束日期', 'End date') }}<input v-model="to" type="date" :min="from || BUSINESS_START_DATE" :max="today" aria-label="结束日期" required></label>
         <label v-if="canSelectOwner" class="performance-owner-filter">{{ t('业务员', 'Salesperson') }}<select ref="ownerSelect" :value="ownerId || data?.selectedOwner?.id || ''" :disabled="busy" aria-label="业务员" @change="ownerId = ($event.target as HTMLSelectElement).value"><option v-if="!data?.selectedOwner && !ownerId" value="" disabled>{{ t('请选择业务员', 'Select a salesperson') }}</option><option value="all">{{ t('全部', 'All') }}</option><option v-for="owner in owners" :key="owner.id" :value="owner.id">{{ owner.name }}</option></select></label>
         <label>{{ t('时间轴', 'Timeline') }}<select v-model="grain" aria-label="统计粒度"><option value="month">{{ t('按月', 'Monthly') }}</option><option value="week">{{ t('按周', 'Weekly') }}</option><option value="day">{{ t('按天', 'Daily') }}</option></select></label>
         <button class="ov-primary" type="submit" :disabled="busy">{{ t('查询', 'Apply') }}</button>
@@ -122,7 +130,7 @@ onBeforeUnmount(() => { off(); clear() })
     <div class="ov-body">
       <p v-if="dateError" class="ov-error" role="alert">{{ dateError }}</p>
       <p v-if="busy" class="ov-empty" role="status">{{ t('正在统计收款与毛利…', 'Loading receipts and profit…') }}</p>
-      <p v-else-if="error" class="ov-error" role="alert">{{ error }}<button class="ov-link" @click="load">{{ t('重试', 'Retry') }}</button></p>
+      <p v-else-if="error" class="ov-error" role="alert">{{ error }}<button class="ov-link" @click="load(true)">{{ t('重试', 'Retry') }}</button></p>
       <div v-else-if="data && !data.selectedOwner && !allOwners" class="performance-owner-prompt" role="status">
         <ChartNoAxesCombined :size="28" aria-hidden="true" />
         <strong>{{ canSelectOwner && owners.length ? t('请选择业务员', 'Select a salesperson') : t('暂无可查看的业务员数据', 'No salesperson data available') }}</strong>
@@ -130,7 +138,7 @@ onBeforeUnmount(() => { off(); clear() })
         <button v-if="canSelectOwner && owners.length" type="button" class="ov-secondary" @click="ownerSelect?.focus()">{{ t('选择业务员', 'Choose salesperson') }}</button>
       </div>
       <template v-else-if="data">
-        <div class="performance-scope"><strong>{{ ownerLabel }}</strong><span>{{ appliedRange.from }} — {{ appliedRange.to }} · UTC+8 · USD ($)</span><small>{{ t('截至', 'As of') }} {{ date(data.asOf) }}</small></div>
+        <div class="performance-scope"><strong>{{ ownerLabel }}</strong><span>{{ appliedRange.from }} — {{ appliedRange.to }} · UTC+8 · $</span><small>{{ t('截至', 'As of') }} {{ date(data.asOf) }}</small></div>
         <div class="performance-kpis" data-testid="performance-kpis">
           <div><span>{{ t('订单收款', 'Order receipts') }}</span><strong>{{ money(data.totals.orderAmount) }}</strong></div>
           <div><span>{{ t('全款备货收款', 'Full-payment stocking') }}</span><strong>{{ money(data.totals.stockAmount) }}</strong></div>
@@ -141,8 +149,8 @@ onBeforeUnmount(() => { off(); clear() })
 
         <div v-if="data.unallocatedSettlements.length" class="performance-unallocated" data-testid="unallocated"><strong>{{ t('待补充分期明细 · 整月参考', 'Allocation pending · Full-month reference') }}</strong><p>{{ t('以下月结尚无可靠的日归属，未分摊至周或天，也未计入当前分期合计。', 'These monthly settlements have no reliable daily allocation and are excluded from the period totals.') }}</p><span v-for="item in data.unallocatedSettlements" :key="item.month">{{ item.month }} · {{ money(item.amount) }} · {{ item.count }} {{ t('笔', 'entries') }}</span></div>
         <div v-if="data.selectedOwner || allOwners" class="performance-charts">
-          <section><h3>{{ t('收款趋势', 'Receipts trend') }}<small>USD ($)</small></h3><EChart :option="receiptChart" :label="t('个人收款趋势', 'Personal receipts trend')" /></section>
-          <section><h3>{{ t('毛利趋势', 'Profit trend') }}<small>{{ t('净毛利 · USD ($)', 'Net profit · USD ($)') }}</small></h3><EChart :option="profitChart" :label="t('个人毛利趋势', 'Personal profit trend')" /></section>
+          <section><h3>{{ t('收款趋势', 'Receipts trend') }}<small>$</small></h3><EChart :option="receiptChart" :label="t('个人收款趋势', 'Personal receipts trend')" /></section>
+          <section><h3>{{ t('毛利趋势', 'Profit trend') }}<small>{{ t('净毛利 · $', 'Net profit · $') }}</small></h3><EChart :option="profitChart" :label="t('个人毛利趋势', 'Personal profit trend')" /></section>
         </div>
         <div class="performance-table-heading"><h3>{{ t('分期统计', 'Period summary') }}</h3><span>{{ t('最近期间在前', 'Latest periods first') }}</span></div>
         <div class="ov-table-scroll"><table class="ov-table performance-table"><colgroup><col style="width: 150px"><col v-for="i in 5" :key="i" style="width: 145px"><col style="width: 150px"><col style="width: 180px"></colgroup><thead><tr><th>{{ t('期间', 'Period') }}</th><th>{{ t('订单收款', 'Order receipts') }}</th><th>{{ t('全款备货收款', 'Stocking receipts') }}</th><th>{{ t('收款合计', 'Total receipts') }}</th><th>{{ t('结算毛利', 'Settled profit') }}</th><th>{{ t('预估毛利', 'Estimated profit') }}</th><th>{{ t('毛利状态', 'Profit status') }}</th><th>{{ t('查看明细', 'Details') }}</th></tr></thead>
@@ -154,7 +162,7 @@ onBeforeUnmount(() => { off(); clear() })
     </div>
     <SalesPerformanceDetails v-if="selectedDetail && canViewDetails" :query="selectedDetail.query" :scope="selectedDetail.label" :owner="selectedDetail.owner" @close="closeDetails" @failure="detailFailed" />
   </section>
-  <p v-else-if="error" class="ov-error" role="alert">{{ error }}<button class="ov-link" @click="load">{{ t('重试', 'Retry') }}</button></p>
+  <p v-else-if="error" class="ov-error" role="alert">{{ error }}<button class="ov-link" @click="load(true)">{{ t('重试', 'Retry') }}</button></p>
 </template>
 
 <style scoped>

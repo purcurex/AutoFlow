@@ -20,19 +20,42 @@ vi.mock('@/api/index', () => ({ default: { get: vi.fn(async (_path, { params }) 
 }) } }))
 
 describe('role workbench content', () => {
-  async function setup(path: string, roles = ['sales', 'procurement', 'allocation', 'dispatch', 'warehouse'], chartVisibility?: any) {
-    vi.mocked(getWorkbenchAccess).mockResolvedValue({ roles: roles as never, isAdmin: false, chartVisibility })
+  async function setup(path: string, roles = ['sales', 'procurement', 'allocation', 'dispatch', 'warehouse'], chartVisibility?: any, isAdmin = false) {
+    vi.mocked(getWorkbenchAccess).mockResolvedValue({ roles: roles as never, isAdmin, chartVisibility })
     await refreshWorkbenchAccess()
     const router = createRouter({ history: createMemoryHistory(), routes: [
       { path: '/workbench/:role', name: 'RoleWorkbench', component: WorkbenchView },
       { path: '/dashboard', name: 'FopDashboard', component: { template: '<div />' } },
     ] })
     await router.push(path)
-    const wrapper = mount(WorkbenchView, { global: { plugins: [router, createI18n({ legacy: false, locale: 'zh-CN', messages: {} })], stubs: { OrderVolumeAnalysis: true, SalesPerformanceView: true, FopFreightView: true, FopReceiptsView: true, OrderVolumeOrdersView: true } } })
+    const wrapper = mount(WorkbenchView, { global: { plugins: [router, createI18n({ legacy: false, locale: 'zh-CN', messages: {} })], stubs: { WorkbenchAnalytics: true, OrderVolumeAnalysis: true, SalesPerformanceView: true, FopFreightView: true, FopReceiptsView: true, OrderVolumeOrdersView: true } } })
     await vi.dynamicImportSettled()
     await flushPromises()
     return { wrapper, router }
   }
+
+  it.each(['sales','dispatch','procurement','allocation','warehouse'])('retires order and freight analysis for every account in %s', async role => {
+    for (const isAdmin of [false, true]) {
+      const { wrapper, router } = await setup(`/workbench/${role}?queue=order-analysis`, undefined, undefined, isAdmin)
+      for (const queue of ['order-analysis', 'order-volume', 'freight']) {
+        await router.push(`/workbench/${role}?queue=${queue}`); await flushPromises()
+        expect(wrapper.get('.workbench-queues').text()).not.toMatch(/订单分析|物流运费/)
+        expect(wrapper.findComponent({ name: 'WorkbenchAnalytics' }).exists()).toBe(false)
+        expect(wrapper.get('.dashboard-link').attributes('href')).toBe('/dashboard')
+      }
+      wrapper.unmount()
+    }
+  })
+
+  it('remounts analysis on tab changes so registration coverage cannot inherit order dates',async()=>{
+    const {wrapper,router}=await setup('/workbench/sales?queue=performance',undefined,undefined,true)
+    const previous=wrapper.findComponent({name:'WorkbenchAnalytics'}).vm
+    await router.push('/workbench/sales?queue=overview');await flushPromises()
+    const current=wrapper.findComponent({name:'WorkbenchAnalytics'})
+    expect(current.vm).not.toBe(previous)
+    expect(current.props('page')).toBe('overview')
+    wrapper.unmount()
+  })
 
   it('offers the same physical purchase returns page only in procurement and warehouse workbenches', async () => {
     for (const role of ['procurement', 'warehouse']) {
@@ -56,12 +79,12 @@ describe('role workbench content', () => {
 
   it('hides private analytics and prevents direct queue links from mounting denied views', async () => {
     const { wrapper, router } = await setup('/workbench/sales', undefined, { order_volume: true, customer_orders: false, sales_performance: false, salesperson_receipts: false, freight: false })
-    expect(wrapper.find('.workbench-queues').text()).toContain('订单分析')
+    expect(wrapper.find('.workbench-queues').text()).not.toContain('订单分析')
     expect(wrapper.find('.workbench-queues').text()).not.toContain('个人收款与毛利')
     expect(wrapper.find('.workbench-queues').text()).not.toContain('客户开发概览')
     expect(wrapper.find('.workbench-queues').text()).not.toContain('物流运费')
     await router.push('/workbench/sales?queue=order-analysis'); await flushPromises()
-    expect(wrapper.findAllComponents({ name: 'OrderVolumeAnalysis' })).toHaveLength(1)
+    expect(wrapper.findComponent({ name: 'WorkbenchAnalytics' }).exists()).toBe(false)
     await router.push('/workbench/sales?queue=performance'); await flushPromises()
     expect(wrapper.findComponent({ name: 'SalesPerformanceView' }).exists()).toBe(false)
     expect(wrapper.find('[role="alert"]').exists()).toBe(true)
@@ -72,7 +95,7 @@ describe('role workbench content', () => {
     const { wrapper, router } = await setup('/workbench/sales')
     const summary = wrapper.get('.workbench-filter-summary').element
     const tabs = wrapper.get('.workbench-queues').element
-    for (const queue of ['order-analysis', 'freight', 'performance', 'overview', 'receipts', 'order-volume', 'stock', 'review']) {
+    for (const queue of ['performance', 'overview', 'receipts', 'stock', 'review']) {
       await router.push(`/workbench/sales?queue=${queue}`); await flushPromises()
       expect(wrapper.get('.workbench-filter-summary').element).toBe(summary)
       expect(wrapper.get('.workbench-queues').element).toBe(tabs)
@@ -83,7 +106,7 @@ describe('role workbench content', () => {
   })
 
   it('opens sales review by default while retaining the overview and assigned workbench tabs', async () => {
-    const { wrapper, router } = await setup('/workbench/sales', ['sales'])
+    const { wrapper, router } = await setup('/workbench/sales', ['sales'], undefined, true)
     expect(wrapper.find('h1').text()).toBe('销售工作台')
     expect(wrapper.find('h2').text()).toContain('待审核清单')
     expect(wrapper.findAll('.workbench-queues a').slice(0, 6).map(a => a.text())).toEqual(['待支付清单', '待审核清单', '备货清单', 'RMA售后清单', '异常订单清单', '已审核清单'])
@@ -101,7 +124,7 @@ describe('role workbench content', () => {
     expect(wrapper.find('.workbench-queues a.active').text()).toBe('待审核清单')
     await wrapper.findAll('.workbench-queues a').find(a => a.text().includes('客户开发概览'))!.trigger('click')
     await flushPromises()
-    expect(wrapper.text()).toContain('Sales activities')
+    expect(wrapper.findComponent({ name: 'WorkbenchAnalytics' }).exists()).toBe(true)
     wrapper.unmount()
   })
 
@@ -148,20 +171,21 @@ describe('role workbench content', () => {
   })
 
   it('retains department and salesperson between todo queues and workbenches, but resets the page', async () => {
-    const { wrapper, router } = await setup('/workbench/sales?queue=review&departmentId=d1&ownerId=employee-1&page=2&search=old')
+    const { wrapper, router } = await setup('/workbench/sales?queue=review&departmentId=d1&ownerId=employee-1&page=2&search=old', undefined, undefined, true)
     const exceptions = wrapper.findAll('.workbench-queues a').find(a => a.text().includes('异常订单'))!
     await exceptions.trigger('click'); await flushPromises()
     expect(router.currentRoute.value.query).toEqual({ queue: 'exceptions', departmentId: 'd1', ownerId: 'employee-1' })
     await wrapper.findAll('.role-tabs a').find(a => a.text().includes('采购'))!.trigger('click'); await flushPromises()
     expect(router.currentRoute.value.params.role).toBe('procurement')
     expect(router.currentRoute.value.query).toEqual({ departmentId: 'd1', ownerId: 'employee-1' })
-    await wrapper.findAll('.workbench-queues a').find(a => a.text().includes('订单分析'))!.trigger('click'); await flushPromises()
+    await wrapper.get('.dashboard-link').trigger('click'); await flushPromises()
+    expect(router.currentRoute.value.name).toBe('FopDashboard')
     expect(router.currentRoute.value.query.ownerId).toBeUndefined()
     wrapper.unmount()
   })
 })
 
-it.each([['sales', '已审核清单'], ['dispatch', '已履约订单'], ['procurement', '采购完成清单'], ['allocation', '配货完成清单'], ['warehouse', '已出库清单']])('offers the %s completed tab with its default week', async (role, title) => {
+it.each([['sales', '已审核清单'], ['dispatch', '已履约订单'], ['procurement', '采购完成清单'], ['allocation', '配货完成清单'], ['warehouse', '已出库清单']])('offers the %s completed tab with its default time range', async (role, title) => {
   vi.mocked(getWorkbenchAccess).mockResolvedValue({ roles: [role as import('@/utils/workbench').WorkbenchRole], isAdmin: false })
   await refreshWorkbenchAccess()
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/workbench/:role', name: 'RoleWorkbench', component: WorkbenchView }, { path: '/dashboard', name: 'FopDashboard', component: { template: '<div />' } }] })
@@ -172,6 +196,6 @@ it.each([['sales', '已审核清单'], ['dispatch', '已履约订单'], ['procur
   expect(tab.exists()).toBe(true)
   expect(tab.attributes('class')).toContain('active')
   expect(tab.attributes('href')).toContain('queue=completed')
-  expect(tab.attributes('href')).toContain('timeRange=1w')
+  expect(tab.attributes('href')).toContain('timeRange=1m')
   wrapper.unmount()
 })

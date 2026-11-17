@@ -1,3 +1,5 @@
+// Cache policy is covered separately; these fixtures exercise chart interactions.
+vi.mock('@/api/analytics-cache-scope', () => ({ getAnalyticsCacheScope: vi.fn(async () => ({ cacheable: false })) }))
 vi.mock('@/api/fop-chart-access', async importOriginal => { const { chartAccessFixture } = await import('./chart-access-fixtures'); return { ...await importOriginal<object>(), getChartAccess: vi.fn(async () => chartAccessFixture()) } })
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import { createMemoryHistory, createRouter } from 'vue-router'
@@ -5,6 +7,8 @@ import { createI18n } from 'vue-i18n'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import FreightAnalysis from '@/components/freight/FreightAnalysis.vue'
 import { freightData } from './freight-fixtures'
+import { chartAccessFixture } from './chart-access-fixtures'
+import { getChartAccess } from '@/api/fop-chart-access'
 import { invalidateSession } from '@/utils/session'
 const { get, access } = vi.hoisted(() => ({ get: vi.fn(), access: vi.fn() }))
 vi.mock('@/api/index', () => ({ default: { get } }))
@@ -16,16 +20,38 @@ beforeAll(() => {
   Object.defineProperty(HTMLDialogElement.prototype, 'close', { configurable: true, value() { this.removeAttribute('open') } })
 })
 afterAll(() => { Reflect.deleteProperty(HTMLDialogElement.prototype, 'showModal'); Reflect.deleteProperty(HTMLDialogElement.prototype, 'close') })
-async function setup() {
+async function setup(mock = false) {
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: { template: '<div />' } }, { path: '/workbench/:role/freight', name: 'RoleWorkbenchFreight', component: { template: '<div />' } }] })
   await router.push('/')
-  const wrapper = mount(FreightAnalysis, { attachTo: document.body, global: { stubs: { teleport: false }, plugins: [router, createI18n({ legacy: false, locale: 'zh-CN', messages: {} })] } })
+  const wrapper = mount(FreightAnalysis, { props: mock ? { mock: true, mockAccess: chartAccessFixture().charts.find(chart => chart.chartId === 'freight')! } : {}, attachTo: document.body, global: { stubs: { teleport: false }, plugins: [router, createI18n({ legacy: false, locale: 'zh-CN', messages: {} })] } })
   await flushPromises(); return { wrapper, router }
 }
 describe('freight analysis', () => {
   beforeEach(() => {
     get.mockReset().mockImplementation(async (_url, { params }) => freightData(params))
     access.mockReset().mockResolvedValue({ roles: ['allocation', 'dispatch'], isAdmin: false })
+  })
+  it('isolates mock queries, filters and trends from live freight and document routes', async () => {
+    vi.mocked(getChartAccess).mockClear()
+    const { wrapper, router } = await setup(true)
+    expect(wrapper.get('[data-source="mock"]').text()).toContain('Mock')
+    expect(wrapper.text()).toContain('模拟运费合计')
+    expect(wrapper.text()).not.toContain('查看发运单明细')
+    const initial = wrapper.get('.ov-kpis strong').text()
+    await wrapper.get('select[aria-label="运费仓库"]').setValue('HZ'); await flushPromises()
+    expect(wrapper.get('.ov-kpis strong').text()).not.toBe(initial)
+    await wrapper.get('select[aria-label="运费时间轴"]').setValue('week'); await flushPromises()
+    await wrapper.get('input[aria-label="运费上期环比"]').setValue(true)
+    await wrapper.get('button[data-freight-trend="YT"]').trigger('click'); await flushPromises()
+    expect(document.querySelector('dialog[open] .chart-stub')).not.toBeNull()
+    expect(wrapper.findAll('[data-freight-detail]').every(button => button.attributes('disabled') !== undefined)).toBe(true)
+    expect(router.currentRoute.value.path).toBe('/')
+    expect(get).not.toHaveBeenCalled()
+    expect(getChartAccess).not.toHaveBeenCalled()
+    expect(access).not.toHaveBeenCalled()
+    await wrapper.setProps({ mockAccess: { ...chartAccessFixture().charts.find(chart => chart.chartId === 'freight')!, visible: false } }); await flushPromises()
+    expect(wrapper.find('[data-module="freight"]').exists()).toBe(false)
+    expect(document.querySelector('dialog')).toBeNull()
   })
   it('opens the descending statistics table for comparisons and keeps it open when disabled', async () => {
     const { wrapper } = await setup()
@@ -76,12 +102,19 @@ describe('freight analysis', () => {
     expect(wrapper.find('table').exists()).toBe(false)
   })
   it('keeps the weekly anchor within the selected year and removes it for monthly requests', async () => {
+    vi.useFakeTimers({toFake:['Date']});vi.setSystemTime(new Date('2027-11-17T00:00:00Z'))
     const { wrapper } = await setup()
-    await wrapper.find('select[aria-label="运费年份"]').setValue('2025')
+    const timeline = wrapper.get('select[aria-label="运费时间轴"]')
+    expect((timeline.element as HTMLSelectElement).value).toBe('week')
+    expect(timeline.findAll('option').map(option => option.text())).toEqual(['按周', '按月', '按年'])
+    expect(get).toHaveBeenLastCalledWith('/autoflow/integrations/fop/freight', { params: expect.objectContaining({ grain: 'week', weekOf: expect.any(String) }), timeout: 180000 })
+    expect(wrapper.find('select[aria-label="运费年份"]').findAll('option').map(o=>o.text())).toEqual(['2027','2026'])
+    await wrapper.find('select[aria-label="运费年份"]').setValue('2026')
     await wrapper.find('select[aria-label="运费时间轴"]').setValue('week'); await flushPromises()
-    expect(get).toHaveBeenLastCalledWith('/autoflow/integrations/fop/freight', { params: { grain: 'week', year: 2025, weekOf: '2025-12-31', warehouse: 'ALL' }, timeout: 180000 })
+    expect(get).toHaveBeenLastCalledWith('/autoflow/integrations/fop/freight', { params: { grain: 'week', year: 2026, weekOf: '2026-12-31', warehouse: 'ALL' }, timeout: 180000 })
     await wrapper.find('select[aria-label="运费时间轴"]').setValue('month'); await flushPromises()
-    expect(get).toHaveBeenLastCalledWith('/autoflow/integrations/fop/freight', { params: { grain: 'month', year: 2025, warehouse: 'ALL' }, timeout: 180000 })
+    expect(get).toHaveBeenLastCalledWith('/autoflow/integrations/fop/freight', { params: { grain: 'month', year: 2026, warehouse: 'ALL' }, timeout: 180000 })
+    vi.useRealTimers()
   })
   it('drills the full previous period into the available role when dispatch is unavailable', async () => {
     access.mockResolvedValueOnce({ roles: ['allocation'], isAdmin: false })

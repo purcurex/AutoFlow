@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { warehouseName } from '@/utils/warehouse'
 import { useChartAccess } from '@/composables/useChartAccess'
 import { computed, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -18,8 +19,9 @@ const dialog = ref<HTMLDialogElement>(), closeButton = ref<HTMLButtonElement>(),
 const data = ref<PerformancePage>(), busy = ref(false), error = ref(''), page = ref(1), expanded = ref('')
 const receipts = computed(() => props.query.kind === 'receipts')
 const title = computed(() => receipts.value ? t('收款明细', 'Receipt details') : t('毛利明细', 'Profit details'))
-const scopeLabel = computed(() => `${props.owner ? `${props.owner} · ` : ''}${props.scope} · UTC+8 · USD ($)`)
+const scopeLabel = computed(() => `${props.owner ? `${props.owner} · ` : ''}${props.scope} · UTC+8 · $`)
 const money = (value: number | null) => value === null ? '—' : formatChartCurrency(value, String(locale.value))
+const original = (amount: number, currency: string) => currency === 'USD' ? money(amount) : `${currency} ${amount.toLocaleString(String(locale.value), { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const date = (value: string | null) => value ? new Date(value).toLocaleString(String(locale.value), { timeZone: 'Asia/Shanghai', hour12: false }) : '—'
 function isMonthlyReference(profit: FopProfit) {
   if (profit.recognitionDate !== null) return false
@@ -61,7 +63,7 @@ onBeforeUnmount(() => {
 <template>
   <Teleport to="body">
     <dialog ref="dialog" class="ov-panel performance-dialog" aria-modal="true" :aria-labelledby="titleId" :aria-describedby="scopeId" @cancel.prevent="emit('close')" @click.self="emit('close')" @wheel.self.prevent @touchmove.self.prevent>
-      <header class="ov-header"><div class="ov-heading"><h2 :id="titleId">{{ title }}<span v-if="data?.source === 'mock'" class="ov-badge">MOCK</span></h2><p :id="scopeId" class="performance-detail-scope" :title="scopeLabel">{{ scopeLabel }}</p></div><button ref="closeButton" type="button" class="ov-secondary performance-close" :aria-label="t('关闭明细', 'Close details')" @click="emit('close')"><X :size="18" /></button></header>
+      <header class="ov-header"><div class="ov-heading"><h2 :id="titleId">{{ title }}</h2><p :id="scopeId" class="performance-detail-scope" :title="scopeLabel">{{ scopeLabel }}</p></div><button ref="closeButton" type="button" class="ov-secondary performance-close" :aria-label="t('关闭明细', 'Close details')" @click="emit('close')"><X :size="18" /></button></header>
       <div ref="scroller" class="ov-body performance-dialog-body" @wheel.capture="scrollOuterPage($event, scroller)">
         <p v-if="busy" class="ov-empty" role="status">{{ t('正在读取明细…', 'Loading details…') }}</p>
         <p v-else-if="error" class="ov-error" role="alert">{{ error }}<button class="ov-link" @click="load">{{ t('重试', 'Retry') }}</button></p>
@@ -76,7 +78,7 @@ onBeforeUnmount(() => {
               <tbody>
                 <template v-for="receipt in data.receipts" :key="receipt.id">
                   <tr><td><strong>{{ receipt.sourceType === 'fulfillment' ? t('订单收款', 'Order receipts') : t('全款备货收款', 'Full-payment stocking') }}</strong><small>{{ receipt.documentNumber }}</small></td><td>{{ receipt.customerName }}<small>{{ receipt.customerCode }}</small></td><td class="performance-detail-amount">{{ money(receipt.amount) }}</td><td>{{ date(receipt.paidAt) }}</td><td>{{ receipt.owner?.name || '—' }}<small>{{ receipt.department?.name || '—' }}</small></td><td><button class="ov-link" :aria-expanded="expanded === receipt.id" @click="expanded = expanded === receipt.id ? '' : receipt.id">{{ expanded === receipt.id ? t('收起构成', 'Hide breakdown') : t('查看构成', 'View breakdown') }}</button></td></tr>
-                  <tr v-if="expanded === receipt.id" class="performance-breakdown-row"><td colspan="6"><dl class="performance-breakdown"><div><dt>{{ t('单据金额', 'Document amount') }}</dt><dd>{{ money(receipt.orderAmount) }}</dd></div><div><dt>{{ t('手续费', 'Handling fee') }}</dt><dd>{{ money(receipt.handlingFee) }}</dd></div><div><dt>{{ t('仓库', 'Warehouse') }}</dt><dd>{{ receipt.warehouse }}</dd></div></dl></td></tr>
+                  <tr v-if="expanded === receipt.id" class="performance-breakdown-row"><td colspan="6"><dl class="performance-breakdown"><div><dt>{{ t('单据金额', 'Document amount') }}</dt><dd>{{ money(receipt.orderAmount) }}</dd></div><div><dt>{{ t('手续费', 'Handling fee') }}</dt><dd>{{ money(receipt.handlingFee) }}</dd></div><div><dt>{{ t('仓库', 'Warehouse') }}</dt><dd>{{ warehouseName(receipt.warehouse) }}</dd></div></dl></td></tr>
                 </template>
                 <tr v-if="!data.receipts.length"><td colspan="6" class="ov-empty">{{ t('当前期间暂无收款。', 'No receipts in this period.') }}</td></tr>
               </tbody>
@@ -93,7 +95,7 @@ onBeforeUnmount(() => {
                       <div v-if="isMonthlyReference(profit)"><dt>{{ t('整月参考净毛利 · 不计本期', 'Full-month reference net profit · Excluded') }}</dt><dd>{{ money(profit.amount) }}</dd></div>
                       <div><dt>{{ t('收入', 'Income') }}</dt><dd>{{ money(profit.incomeAmount) }}</dd></div><div><dt>{{ t('收入调整', 'Income adjustment') }}</dt><dd>{{ money(profit.adjustmentIncome) }}</dd></div><div><dt>{{ t('产品成本', 'Product cost') }}</dt><dd>{{ money(profit.productCost) }}</dd></div>
                       <div><dt>{{ profit.freightBasis === 'frozen' ? t('已冻结运费', 'Frozen freight') : t('预估运费', 'Estimated freight') }}</dt><dd>{{ money(profit.freightCost) }}</dd></div><div><dt>{{ t('退款', 'Refunds') }}</dt><dd>{{ money(profit.refundCost) }}</dd></div><div><dt>{{ t('退件成本', 'Return cost') }}</dt><dd>{{ money(profit.returnCost) }}</dd></div><div><dt>{{ t('其他成本', 'Other cost') }}</dt><dd>{{ money(profit.otherCost) }}</dd></div>
-                      <div><dt>{{ t('前期已确认', 'Previously recognized') }}</dt><dd>{{ money(profit.previousRecognizedProfit) }}</dd></div><div><dt>{{ t('换汇尾差', 'FX rounding') }}</dt><dd>{{ money(profit.roundingAdjustment) }}</dd></div><div><dt>{{ isMonthlyReference(profit) ? t('原币整月参考净毛利', 'Original full-month reference profit') : t('原币本期净毛利', 'Original net profit') }}</dt><dd>{{ profit.originalCurrency }} {{ profit.originalAmount.toLocaleString(String(locale), { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }}</dd></div>
+                      <div><dt>{{ t('前期已确认', 'Previously recognized') }}</dt><dd>{{ money(profit.previousRecognizedProfit) }}</dd></div><div><dt>{{ t('换汇尾差', 'FX rounding') }}</dt><dd>{{ money(profit.roundingAdjustment) }}</dd></div><div><dt>{{ isMonthlyReference(profit) ? t('原币整月参考净毛利', 'Original full-month reference profit') : t('原币本期净毛利', 'Original net profit') }}</dt><dd>{{ original(profit.originalAmount, profit.originalCurrency) }}</dd></div>
                       <div><dt>{{ t('汇率 / 日期', 'FX rate / Date') }}</dt><dd>{{ formatUsdExchangeRate(profit.fxRateToUsd, profit.originalCurrency) }} · {{ profit.fxRateDate }}<small>{{ profit.fxRateSource }}</small></dd></div><div><dt>{{ t('已知于', 'Known at') }}</dt><dd>{{ date(profit.knownAt) }}</dd></div><div><dt>{{ t('审核时间', 'Approved at') }}</dt><dd>{{ date(profit.approvedAt) }}</dd></div>
                     </dl>
                   </td></tr>

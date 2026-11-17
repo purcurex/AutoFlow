@@ -1,3 +1,4 @@
+import { hasDispatchSyncFailure } from './order-dispatch-status'
 import { isProcurementCompleted } from './workbench-queue-rules'
 import type { FopOrder } from './fop-data.types'
 import { normalizeBusinessTimestamp } from './fop-business-time'
@@ -17,6 +18,9 @@ export const completionTimeLabels: Record<CompletionQueue, readonly [string, str
 }
 export function isCompletionQueue(queue: string): queue is CompletionQueue { return Object.prototype.hasOwnProperty.call(completionFields, queue) }
 export function isStageCompleted(order: FopOrder, queue: string): boolean {
+  if (queue === 'dispatch' && hasDispatchSyncFailure(order)) return false
+  if (order.businessStatus && queue === 'dispatch') return order.reviewStatus === 'approved' && ['fulfilled','partial_fulfilled'].includes(order.businessStatus.order)
+  if (order.businessStatus && queue === 'shipping') return order.businessStatus.outbound === 'completed'
   if (queue === 'review') return order.reviewStatus === 'approved'
   if (!isCompletionQueue(queue) || order.cancelled || order.paymentStatus !== 'paid') return false
   if (queue !== 'procurement' && order.reviewStatus !== 'approved') return false

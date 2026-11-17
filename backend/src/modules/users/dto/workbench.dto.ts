@@ -62,6 +62,10 @@ export class CompletionFiltersDto {
 
 export class FulfillmentOrderFiltersDto extends CompletionFiltersDto {
   @IsOptional()
+  @IsIn(['linked', 'unlinked'])
+  skuAssociation?: 'linked' | 'unlinked'
+
+  @IsOptional()
   @IsIn(['all', '1w', '1m', '3m'])
   timeRange?: 'all' | '1w' | '1m' | '3m'
 

@@ -90,7 +90,8 @@ it('filters on the server with pagination reset', async () => {
   const w = await setup(); await w.get('input[type=search]').setValue('Alice'); await w.get('[data-filter-role="collaboration"]').trigger('click'); await flushPromises()
   expect(getWorkbenchAccounts).toHaveBeenLastCalledWith({ page: 1, pageSize: 20, search: 'Alice', accountRole: 'collaboration' })
 })
-it('preserves custom workbench grants when role stays unchanged', async () => {
+it('preserves configurable manager workbench grants when role stays unchanged', async () => {
+  current.businessScope!.role = 'department_manager'; current.accountRole = 'department_manager'
   const w = await setup(); await edit(w); await w.get('input[value=warehouse]').setValue(false); await submit(w)
   expect(updateAccountAccess).toHaveBeenCalledWith('u1', expect.objectContaining({ workbenchRoles: workbenchRoles.filter(role => role !== 'warehouse') }))
 })

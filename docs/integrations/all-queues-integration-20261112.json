@@ -1,0 +1,712 @@
+{
+  "checkedAt": "2026-11-12T09:57:17.243Z",
+  "database": "autoflow_local_demo",
+  "fulfillmentOrders": 44855,
+  "stockOrders": 153,
+  "lists": [
+    {
+      "id": "sales-unpaid",
+      "label": "销售待支付",
+      "path": "fulfillment-orders?queue=unpaid",
+      "http": 200,
+      "total": 29038,
+      "rows": 20,
+      "mode": "collected",
+      "availability": {
+        "mode": "collected",
+        "complete": false,
+        "reason": "已采集 API 数据已入本地库；缺失字段留空，下游状态待核查，自动调用已暂停。"
+      }
+    },
+    {
+      "id": "sales-review",
+      "label": "销售待审核",
+      "path": "fulfillment-orders?queue=review",
+      "http": 200,
+      "total": 35,
+      "rows": 20,
+      "mode": "collected",
+      "availability": {
+        "mode": "collected",
+        "complete": false,
+        "reason": "已采集 API 数据已入本地库；缺失字段留空，下游状态待核查，自动调用已暂停。"
+      }
+    },
+    {
+      "id": "sales-stock",
+      "label": "销售备货",
+      "path": "stock-orders?queue=all",
+      "http": 200,
+      "total": 153,
+      "rows": 20,
+      "mode": "collected",
+      "availability": {
+        "mode": "collected",
+        "complete": false,
+        "reason": "备货订单已采集入库；缺失字段留空，自动调用已暂停。",
+        "capturedAt": "2026-11-12T09:43:57.635Z"
+      }
+    },
+    {
+      "id": "sales-rma",
+      "label": "销售RMA",
+      "path": "rma-orders?flowStatus=all",
+      "http": 200,
+      "total": 0,
+      "rows": 0,
+      "mode": "collected",
+      "availability": {
+        "mode": "collected",
+        "complete": false,
+        "missingDatasets": [
+          "allocation",
+          "dispatch",
+          "procurement",
+          "rma",
+          "receipt_notices",
+          "inventory",
+          "interception"
+        ],
+        "reason": "RMA 独立授权查询本轮返回空授权与空案件；需 FOP 核验该集成身份的售后资源范围，不能按履约订单权限替代。",
+        "queueAvailable": false,
+        "missingFields": [
+          "independent_rma_resource_scope",
+          "rma_cases"
+        ]
+      }
+    },
+    {
+      "id": "sales-exceptions",
+      "label": "销售异常",
+      "path": "fulfillment-orders?queue=exceptions",
+      "http": 200,
+      "total": 2061,
+      "rows": 20,
+      "mode": "collected",
+      "availability": {
+        "mode": "collected",
+        "complete": false,
+        "reason": "已采集 API 数据已入本地库；缺失字段留空，下游状态待核查，自动调用已暂停。"
+      }
+    },
+    {
+      "id": "sales-completed",
+      "label": "销售已审核",
+      "path": "fulfillment-orders?queue=review&completed=true",
+      "http": 200,
+      "total": 15321,
+      "rows": 20,
+      "mode": "collected",
+      "availability": {
+        "mode": "collected",
+        "complete": false,
+        "reason": "已采集 API 数据已入本地库；缺失字段留空，下游状态待核查，自动调用已暂停。"
+      }
+    },
+    {
+      "id": "dispatch-pending",
+      "label": "发运待履约",
+      "path": "fulfillment-orders?queue=dispatch",
+      "http": 200,
+      "total": 0,
+      "rows": 0,
+      "mode": "collected",
+      "availability": {
+        "mode": "collected",
+        "complete": false,
+        "missingDatasets": [
+          "allocation",
+          "dispatch",
+          "procurement",
+          "rma",
+          "receipt_notices",
+          "inventory",
+          "interception"
+        ],
+        "reason": "已发布发运查询本轮返回空，需 FOP 核验组织权限、筛选与履约关联；履约采集不能证明制备、发运审核或 Shopify 履约状态。",
+        "queueAvailable": false,
+        "missingFields": [
+          "dispatchDocuments",
+          "hzkj_delivery_status"
+        ],
+        "unclassifiedCount": 1541,
+        "unclassifiedCountMeaning": "候选履约记录数，不是本清单业务单据数"
+      }
+    },
+    {
+      "id": "dispatch-completed",
+      "label": "发运已履约",
+      "path": "fulfillment-orders?queue=dispatch&completed=true",
+      "http": 200,
+      "total": 0,
+      "rows": 0,
+      "mode": "collected",
+      "availability": {
+        "mode": "collected",
+        "complete": false,
+        "missingDatasets": [
+          "allocation",
+          "dispatch",
+          "procurement",
+          "rma",
+          "receipt_notices",
+          "inventory",
+          "interception"
+        ],
+        "reason": "已发布发运查询本轮返回空，需 FOP 核验组织权限、筛选与履约关联；履约采集不能证明制备、发运审核或 Shopify 履约状态。",
+        "queueAvailable": false,
+        "missingFields": [
+          "dispatchDocuments",
+          "hzkj_delivery_status"
+        ]
+      }
+    },
+    {
+      "id": "proc-fulfill-procurement",
+      "label": "履约单待采购",
+      "path": "fulfillment-orders?queue=procurement",
+      "http": 200,
+      "total": 0,
+      "rows": 0,
+      "mode": "collected",
+      "availability": {
+        "mode": "collected",
+        "complete": false,
+        "missingDatasets": [
+          "allocation",
+          "dispatch",
+          "procurement",
+          "rma",
+          "receipt_notices",
+          "inventory",
+          "interception"
+        ],
+        "reason": "履约采集未提供采购原生状态与备货库存使用事实；已发布采购查询本轮返回空，需 FOP 核验组织权限、筛选与关联。",
+        "queueAvailable": false,
+        "missingFields": [
+          "hzkj_purchase_status",
+          "stock_usage_requires_procurement"
+        ],
+        "unclassifiedCount": 1541,
+        "unclassifiedCountMeaning": "候选履约记录数，不是本清单业务单据数"
+      }
+    },
+    {
+      "id": "proc-fulfill-procurement_shipping",
+      "label": "履约单待供应商发货",
+      "path": "fulfillment-orders?queue=procurement_shipping",
+      "http": 200,
+      "total": 0,
+      "rows": 0,
+      "mode": "collected",
+      "availability": {
+        "mode": "collected",
+        "complete": false,
+        "missingDatasets": [
+          "allocation",
+          "dispatch",
+          "procurement",
+          "rma",
+          "receipt_notices",
+          "inventory",
+          "interception"
+        ],
+        "reason": "履约采集未提供采购原生状态；已发布采购查询本轮返回空，需 FOP 核验组织权限、筛选与供应商发货事实。",
+        "queueAvailable": false,
+        "missingFields": [
+          "hzkj_purchase_status"
+        ],
+        "unclassifiedCount": 1541,
+        "unclassifiedCountMeaning": "候选履约记录数，不是本清单业务单据数"
+      }
+    },
+    {
+      "id": "proc-fulfill-completed",
+      "label": "履约单采购完成",
+      "path": "fulfillment-orders?queue=procurement&completed=true",
+      "http": 200,
+      "total": 0,
+      "rows": 0,
+      "mode": "collected",
+      "availability": {
+        "mode": "collected",
+        "complete": false,
+        "missingDatasets": [
+          "allocation",
+          "dispatch",
+          "procurement",
+          "rma",
+          "receipt_notices",
+          "inventory",
+          "interception"
+        ],
+        "reason": "履约采集未提供采购原生状态与备货库存使用事实；已发布采购查询本轮返回空，需 FOP 核验组织权限、筛选与关联。",
+        "queueAvailable": false,
+        "missingFields": [
+          "hzkj_purchase_status",
+          "stock_usage_requires_procurement"
+        ]
+      }
+    },
+    {
+      "id": "proc-purchase-procurement",
+      "label": "采购单待采购",
+      "path": "purchase-groups?queue=procurement",
+      "http": 200,
+      "total": 0,
+      "rows": 0,
+      "mode": "collected",
+      "availability": {
+        "mode": "collected",
+        "complete": false,
+        "missingDatasets": [
+          "allocation",
+          "dispatch",
+          "procurement",
+          "rma",
+          "receipt_notices",
+          "inventory",
+          "interception"
+        ],
+        "reason": "已发布采购订单查询本轮返回空，需 FOP 核验组织权限、筛选与有效采购分录关联。",
+        "queueAvailable": false,
+        "missingFields": [
+          "purchase_entity",
+          "authorized_fulfillment_relations"
+        ]
+      }
+    },
+    {
+      "id": "proc-purchase-procurement_shipping",
+      "label": "采购单待供应商发货",
+      "path": "purchase-groups?queue=procurement_shipping",
+      "http": 200,
+      "total": 0,
+      "rows": 0,
+      "mode": "collected",
+      "availability": {
+        "mode": "collected",
+        "complete": false,
+        "missingDatasets": [
+          "allocation",
+          "dispatch",
+          "procurement",
+          "rma",
+          "receipt_notices",
+          "inventory",
+          "interception"
+        ],
+        "reason": "已发布采购订单查询本轮返回空，需 FOP 核验组织权限、筛选与有效采购分录关联。",
+        "queueAvailable": false,
+        "missingFields": [
+          "purchase_entity",
+          "authorized_fulfillment_relations"
+        ]
+      }
+    },
+    {
+      "id": "proc-purchase-completed",
+      "label": "采购单采购完成",
+      "path": "purchase-groups?queue=procurement&completed=true",
+      "http": 200,
+      "total": 0,
+      "rows": 0,
+      "mode": "collected",
+      "availability": {
+        "mode": "collected",
+        "complete": false,
+        "missingDatasets": [
+          "allocation",
+          "dispatch",
+          "procurement",
+          "rma",
+          "receipt_notices",
+          "inventory",
+          "interception"
+        ],
+        "reason": "已发布采购订单查询本轮返回空，需 FOP 核验组织权限、筛选与有效采购分录关联。",
+        "queueAvailable": false,
+        "missingFields": [
+          "purchase_entity",
+          "authorized_fulfillment_relations"
+        ]
+      }
+    },
+    {
+      "id": "proc-stock",
+      "label": "采购备货",
+      "path": "stock-orders?queue=procurement",
+      "http": 200,
+      "total": 24,
+      "rows": 20,
+      "mode": "collected",
+      "availability": {
+        "mode": "collected",
+        "complete": false,
+        "reason": "备货订单已采集入库；缺失字段留空，自动调用已暂停。",
+        "capturedAt": "2026-11-12T09:43:57.635Z"
+      }
+    },
+    {
+      "id": "proc-returns",
+      "label": "采购退货",
+      "path": "purchase-returns?workbenchRole=procurement",
+      "http": 200,
+      "total": 0,
+      "rows": 0,
+      "mode": "collected",
+      "availability": {
+        "mode": "collected",
+        "complete": false,
+        "missingDatasets": [
+          "allocation",
+          "dispatch",
+          "procurement",
+          "rma",
+          "receipt_notices",
+          "inventory",
+          "interception"
+        ],
+        "reason": "正式采购实物退货实体与 API 待 FOP 提供；采购退款申请不能替代实物退货。",
+        "queueAvailable": false,
+        "missingFields": [
+          "physical_purchase_return_entity"
+        ]
+      }
+    },
+    {
+      "id": "allocation-allocation",
+      "label": "配货未齐套",
+      "path": "fulfillment-orders?queue=allocation",
+      "http": 200,
+      "total": 0,
+      "rows": 0,
+      "mode": "collected",
+      "availability": {
+        "mode": "collected",
+        "complete": false,
+        "missingDatasets": [
+          "allocation",
+          "dispatch",
+          "procurement",
+          "rma",
+          "receipt_notices",
+          "inventory",
+          "interception"
+        ],
+        "reason": "已发布配货查询本轮返回空，需 FOP 核验组织权限、筛选与履约关联；履约采集未提供配货齐套事实。",
+        "queueAvailable": false,
+        "missingFields": [
+          "allocationDocument",
+          "hzkj_alloc_status"
+        ],
+        "unclassifiedCount": 1541,
+        "unclassifiedCountMeaning": "候选履约记录数，不是本清单业务单据数"
+      }
+    },
+    {
+      "id": "allocation-allocation_review",
+      "label": "配货齐套待审",
+      "path": "fulfillment-orders?queue=allocation_review",
+      "http": 200,
+      "total": 0,
+      "rows": 0,
+      "mode": "collected",
+      "availability": {
+        "mode": "collected",
+        "complete": false,
+        "missingDatasets": [
+          "allocation",
+          "dispatch",
+          "procurement",
+          "rma",
+          "receipt_notices",
+          "inventory",
+          "interception"
+        ],
+        "reason": "已发布配货查询本轮返回空，需 FOP 核验组织权限、筛选与履约关联；履约采集未提供配货审核事实。",
+        "queueAvailable": false,
+        "missingFields": [
+          "allocationDocument",
+          "billstatus"
+        ],
+        "unclassifiedCount": 1541,
+        "unclassifiedCountMeaning": "候选履约记录数，不是本清单业务单据数"
+      }
+    },
+    {
+      "id": "allocation-completed",
+      "label": "配货完成",
+      "path": "fulfillment-orders?queue=allocation_review&completed=true",
+      "http": 200,
+      "total": 0,
+      "rows": 0,
+      "mode": "collected",
+      "availability": {
+        "mode": "collected",
+        "complete": false,
+        "missingDatasets": [
+          "allocation",
+          "dispatch",
+          "procurement",
+          "rma",
+          "receipt_notices",
+          "inventory",
+          "interception"
+        ],
+        "reason": "已发布配货查询本轮返回空，需 FOP 核验组织权限、筛选与履约关联；履约采集未提供配货审核事实。",
+        "queueAvailable": false,
+        "missingFields": [
+          "allocationDocument",
+          "billstatus"
+        ]
+      }
+    },
+    {
+      "id": "warehouse-inbound",
+      "label": "仓库待入库",
+      "path": "receipt-notices",
+      "http": 200,
+      "total": 0,
+      "rows": 0,
+      "mode": "collected",
+      "availability": {
+        "mode": "collected",
+        "complete": false,
+        "missingDatasets": [
+          "allocation",
+          "dispatch",
+          "procurement",
+          "rma",
+          "receipt_notices",
+          "inventory",
+          "interception"
+        ],
+        "reason": "已发布收货通知单查询本轮返回空，需 FOP 核验组织权限、筛选及通知单入库状态。",
+        "queueAvailable": false,
+        "missingFields": [
+          "receipt_notice_entity",
+          "receipt_notice_status"
+        ]
+      }
+    },
+    {
+      "id": "warehouse-outbound",
+      "label": "仓库待出库",
+      "path": "fulfillment-orders?queue=shipping",
+      "http": 200,
+      "total": 0,
+      "rows": 0,
+      "mode": "collected",
+      "availability": {
+        "mode": "collected",
+        "complete": false,
+        "missingDatasets": [
+          "allocation",
+          "dispatch",
+          "procurement",
+          "rma",
+          "receipt_notices",
+          "inventory",
+          "interception"
+        ],
+        "reason": "待出库还需证明配货已审核、库存齐套及未拦截；履约采集未提供这些事实，不能将所有未出库订单列为待出库。",
+        "queueAvailable": false,
+        "missingFields": [
+          "allocationDocument",
+          "allocationReview",
+          "stockReadiness",
+          "shipmentInterceptStatus"
+        ],
+        "unclassifiedCount": 31094,
+        "unclassifiedCountMeaning": "候选履约记录数，不是本清单业务单据数"
+      }
+    },
+    {
+      "id": "warehouse-completed",
+      "label": "仓库已出库",
+      "path": "fulfillment-orders?queue=shipping&completed=true",
+      "http": 200,
+      "total": 13761,
+      "rows": 20,
+      "mode": "collected",
+      "availability": {
+        "mode": "collected",
+        "complete": false,
+        "queueAvailable": true,
+        "missingFields": [
+          "dispatchDocuments"
+        ],
+        "reason": "按本单原生已出库状态展示；缺失物流关联留空。"
+      }
+    },
+    {
+      "id": "warehouse-returns",
+      "label": "仓库采购退货",
+      "path": "purchase-returns?workbenchRole=warehouse",
+      "http": 200,
+      "total": 0,
+      "rows": 0,
+      "mode": "collected",
+      "availability": {
+        "mode": "collected",
+        "complete": false,
+        "missingDatasets": [
+          "allocation",
+          "dispatch",
+          "procurement",
+          "rma",
+          "receipt_notices",
+          "inventory",
+          "interception"
+        ],
+        "reason": "正式采购实物退货实体与 API 待 FOP 提供；采购退款申请不能替代实物退货。",
+        "queueAvailable": false,
+        "missingFields": [
+          "physical_purchase_return_entity"
+        ]
+      }
+    }
+  ],
+  "checks": {
+    "stockPaginationUnique": true,
+    "stockPaginationComplete": true,
+    "stockSharedFacts": true,
+    "foreignOwnerHttp": 403,
+    "pause": "true",
+    "autoCalls": "false",
+    "syncEnabled": "false"
+  },
+  "legacyApiEvidence": {
+    "interpretation": "Successful empty legacy responses conflict with historical samples; not proof of business zero or global dataset completeness. Required org_number=hyperzone; no-org requests failed. No application automatic calls enabled.",
+    "operations": [
+      {
+        "operation": "queryStockOrder",
+        "path": "/kapi/v2/hzkj/hzkj_ordercenter/hzkj_stock_order_new/queryStockOrder",
+        "complete": true,
+        "pages": 1,
+        "rowCount": 0,
+        "capturedAt": "2026-11-12T09:45:30.677Z",
+        "consistentSnapshot": false
+      },
+      {
+        "operation": "queryPurchaseRequisition",
+        "path": "/kapi/v2/hzkj/hzkj_einkauf/hzkj_purapplybill/queryPurchaseRequisition",
+        "complete": true,
+        "pages": 1,
+        "rowCount": 0,
+        "capturedAt": "2026-11-12T09:42:11.795Z",
+        "consistentSnapshot": false
+      },
+      {
+        "operation": "queryReceiptAdjustment",
+        "path": "/kapi/v2/hzkj/hzkj_fund/hzkj_adjust_bill/queryReceiptAdjustment",
+        "complete": true,
+        "pages": 1,
+        "rowCount": 0,
+        "capturedAt": "2026-11-12T09:42:12.016Z",
+        "consistentSnapshot": false
+      },
+      {
+        "operation": "queryReceiptNotice",
+        "path": "/kapi/v2/hzkj/hzkj_einkauf/hzkj_receiptnotice/queryReceiptNotice",
+        "complete": true,
+        "pages": 1,
+        "rowCount": 0,
+        "capturedAt": "2026-11-12T09:42:10.402Z",
+        "consistentSnapshot": false
+      },
+      {
+        "operation": "queryAllocation",
+        "path": "/kapi/v2/hzkj/hzkj_ordercenter/hzkj_alloc_bill/queryAllocation",
+        "complete": true,
+        "pages": 1,
+        "rowCount": 0,
+        "capturedAt": "2026-11-12T09:42:09.673Z",
+        "consistentSnapshot": false
+      },
+      {
+        "operation": "queryOrderList",
+        "path": "/kapi/v2/hzkj/hzkj_ordercenter/hzkj_orders/queryOrderList",
+        "complete": true,
+        "pages": 1,
+        "rowCount": 0,
+        "capturedAt": "2026-11-12T09:46:50.261Z",
+        "consistentSnapshot": false
+      },
+      {
+        "operation": "queryDeliveryNotice",
+        "path": "/kapi/v2/hzkj/hzkj_ordercenter/hzkj_deliver_order/queryDeliveryNotice",
+        "complete": true,
+        "pages": 1,
+        "rowCount": 0,
+        "capturedAt": "2026-11-12T09:42:11.284Z",
+        "consistentSnapshot": false
+      },
+      {
+        "operation": "queryPayment",
+        "path": "/kapi/v2/hzkj/hzkj_fund/hzkj_pay_cost_bill/queryPayment",
+        "complete": true,
+        "pages": 1,
+        "rowCount": 0,
+        "capturedAt": "2026-11-12T09:42:12.576Z",
+        "consistentSnapshot": false
+      },
+      {
+        "operation": "queryInbound",
+        "path": "/kapi/v2/hzkj/im/im_purinbill/queryInbound",
+        "complete": true,
+        "pages": 1,
+        "rowCount": 0,
+        "capturedAt": "2026-11-12T09:42:10.845Z",
+        "consistentSnapshot": false
+      },
+      {
+        "operation": "queryOutboundList",
+        "path": "/kapi/v2/hzkj/im/im_saloutbill/queryOutboundList",
+        "complete": true,
+        "pages": 1,
+        "rowCount": 0,
+        "capturedAt": "2026-11-12T09:42:11.596Z",
+        "consistentSnapshot": false
+      },
+      {
+        "operation": "queryDispatch",
+        "path": "/kapi/v2/hzkj/hzkj_logistics/hzkj_deliver_bill/queryDispatch",
+        "complete": true,
+        "pages": 1,
+        "rowCount": 0,
+        "capturedAt": "2026-11-12T09:42:09.907Z",
+        "consistentSnapshot": false
+      },
+      {
+        "operation": "queryPurchase",
+        "path": "/kapi/v2/hzkj/hzkj_einkauf/hzkj_purorderbill/queryPurchase",
+        "complete": true,
+        "pages": 1,
+        "rowCount": 0,
+        "capturedAt": "2026-11-12T09:42:10.094Z",
+        "consistentSnapshot": false
+      },
+      {
+        "operation": "queryReceipt",
+        "path": "/kapi/v2/hzkj/hzkj_fund/hzkj_receive_bill/queryReceipt",
+        "complete": true,
+        "pages": 1,
+        "rowCount": 0,
+        "capturedAt": "2026-11-12T09:42:12.304Z",
+        "consistentSnapshot": false
+      }
+    ]
+  },
+  "browser": {
+    "salesStock": 153,
+    "procurementStock": 24,
+    "warehouseCompletedRecentWeek": 411,
+    "warehouseCompletedAll": 13761,
+    "allListPagesChecked": 23,
+    "renderErrors": 0,
+    "allPagesHaveSourceOrGapReason": true
+  },
+  "automaticFopCallsPaused": true
+}

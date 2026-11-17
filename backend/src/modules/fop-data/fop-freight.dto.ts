@@ -1,10 +1,11 @@
+import { FIRST_BUSINESS_YEAR } from './fop-business-time'
 import { Type } from 'class-transformer'
 import { IsIn, IsInt, IsOptional, IsString, Matches, Max, Min } from 'class-validator'
 import { WORKBENCH_ROLES, WorkbenchRole } from '../users/workbench-role'
 import { FreightCarrier, FreightGrain } from './fop-freight.types'
 export class FreightQueryDto {
   @IsIn(['month', 'week', 'year']) grain: FreightGrain
-  @Type(() => Number) @IsInt() @Min(2020) @Max(9999) year: number
+  @Type(() => Number) @IsInt() @Min(FIRST_BUSINESS_YEAR) @Max(9999) year: number
   @IsOptional() @IsString() @Matches(/^\d{4}-\d{2}-\d{2}$/) weekOf?: string
   @IsIn(['ALL', 'HZ', 'SZ']) warehouse: 'ALL' | 'HZ' | 'SZ' = 'ALL'
   @IsOptional() @IsIn(['YT', '4PX', 'WB', 'YW', 'JS', 'OTHER']) carrierCode?: FreightCarrier

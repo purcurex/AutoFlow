@@ -1,4 +1,6 @@
-import { buildPurchaseGroups, purchaseGroupTotals } from './procurement-groups'
+// Business/authorization assertions inspect source tables; shared single-sheet output has independent roundtrip coverage.
+jest.mock('../workbench-export/single-sheet',()=>({...jest.requireActual('../workbench-export/single-sheet'),singleSheetWorkbook:jest.fn()}))
+import { buildPurchaseGroups, purchaseGroupTotals, purchaseGroupSummary } from './procurement-groups'
 import type { PurchaseLinkSnapshot, PurchaseHeader } from './procurement-groups.types'
 import type { FopOrder } from './fop-data.types'
 const subject = { tenantId: 't', userId: 'u' }
@@ -197,4 +199,13 @@ it('sorts purchase groups and details by consumer payment, independently of rece
   const group = run(snapshot(), orders)[0]
   expect(group.rows.map(row => row.orderId)).toEqual(['o2', 'o1'])
   expect(group).toMatchObject({ latestConsumerPaidAt: '2026-10-03T00:00:00.000Z', earliestReceiptAt: '2026-10-01T00:00:00.000Z' })
+})
+
+it.each([1,2,3])('demo summary previews %i repeated-SKU detail rows, preserving complete group totals', count => {
+ const orders=Array.from({length:count},(_,i)=>order('o'+i))
+ const s:PurchaseLinkSnapshot={subject,orders:orders.map(o=>({orderId:o.id,obligations:[link('p1')]}))}
+ const group=run(s,orders)[0], summary=purchaseGroupSummary(group)
+ expect(summary).toMatchObject({detailLineCount:count,skuCount:1,quantity:count*5})
+ expect((summary as any).previewLines).toEqual(group.rows.flatMap(r=>r.lines).slice(0,count<3?count:1))
+ expect(summary).not.toHaveProperty('rows');expect(group.rows).toHaveLength(count)
 })

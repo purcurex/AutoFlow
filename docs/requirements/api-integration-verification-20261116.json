@@ -1,0 +1,2902 @@
+{
+  "schemaVersion": 1,
+  "verifiedOn": "2026-11-16",
+  "sourcePackage": {
+    "filename": "API服务(openapi_apilist)_全部应用_1E00.zip",
+    "sha256": "e2d677a2f9997a5a8f55b47045c78c8ae0415b8cc24e6bb95452b43cc492d46a",
+    "operationCount": 26
+  },
+  "automaticCallsEnabled": false,
+  "liveSamples": [
+    {
+      "operation": "customer-registrations",
+      "success": false,
+      "httpStatus": 519,
+      "rowCount": 0,
+      "errorCategory": "api-not-subscribed",
+      "errorCode": "2505",
+      "gatewayMessage": "应用未订阅此API[网关]"
+    },
+    {
+      "operation": "order-list",
+      "success": true,
+      "httpStatus": 200,
+      "rowCount": 1,
+      "errorCategory": null,
+      "errorCode": "0",
+      "gatewayMessage": null,
+      "totalCount": 15783,
+      "timeFields": {
+        "createdPresent": true,
+        "modifiedPresent": true
+      }
+    },
+    {
+      "operation": "allocation",
+      "success": true,
+      "httpStatus": 200,
+      "rowCount": 1,
+      "errorCategory": null,
+      "errorCode": "0",
+      "gatewayMessage": null,
+      "totalCount": 3422,
+      "timeFields": {
+        "createdPresent": true,
+        "modifiedPresent": true
+      }
+    },
+    {
+      "operation": "dispatch",
+      "success": true,
+      "httpStatus": 200,
+      "rowCount": 1,
+      "errorCategory": null,
+      "errorCode": "0",
+      "gatewayMessage": null,
+      "totalCount": 5314,
+      "timeFields": {
+        "createdPresent": true,
+        "modifiedPresent": true
+      }
+    },
+    {
+      "operation": "delivery-notice",
+      "success": true,
+      "httpStatus": 200,
+      "rowCount": 1,
+      "errorCategory": null,
+      "errorCode": "0",
+      "gatewayMessage": null,
+      "totalCount": 2671,
+      "timeFields": {
+        "createdPresent": true,
+        "modifiedPresent": true
+      }
+    },
+    {
+      "operation": "purchase-return",
+      "success": false,
+      "httpStatus": 519,
+      "rowCount": null,
+      "errorCategory": "api-not-subscribed",
+      "errorCode": "2505",
+      "gatewayMessage": "应用未订阅此API[网关]",
+      "totalCount": null,
+      "timeFields": null
+    },
+    {
+      "operation": "purchase-refund-application",
+      "success": false,
+      "httpStatus": 519,
+      "rowCount": null,
+      "errorCategory": "api-not-subscribed",
+      "errorCode": "2505",
+      "gatewayMessage": "应用未订阅此API[网关]",
+      "totalCount": null,
+      "timeFields": null
+    }
+  ],
+  "liveSampleScope": {
+    "companyId": "100000",
+    "organizationNumber": "hyperzone.test",
+    "mode": "read-only-one-shot",
+    "pagesPerOperation": 1,
+    "pageSize": 1,
+    "modifytimeWindow": [
+      "2026-11-01 00:00:00",
+      "2026-11-18 00:00:00"
+    ],
+    "fullScan": false,
+    "samplesImported": false
+  },
+  "customerRegistrations": {
+    "localPipelineImplemented": true,
+    "sourceFields": [
+      "id",
+      "createtime",
+      "createorg_id",
+      "createorg_name",
+      "hzkj_biz_user_id",
+      "hzkj_biz_user_name"
+    ],
+    "ownerNamespace": "bos_user; map to verified local employee and current business department",
+    "actualRowsImported": 444,
+    "reason": null,
+    "zeroMeansNoBusiness": false,
+    "importRequires": "authenticated identity + native company filter or explicit tenant-bound company catalogue confirmation + every-row company check + complete fixed creation window + hashes/counts",
+    "subscriptionRecheck": {
+      "finishedAt": "2026-11-16T10:02:22.085Z",
+      "complete": false,
+      "rows": 0,
+      "sourceFailure": {
+        "httpStatus": 519,
+        "category": "api-not-subscribed",
+        "pageNo": 1
+      },
+      "availableDocumentedCustomerApis": [
+        "queryCustomerRegistrations"
+      ],
+      "otherCustomerArchiveEndpointFound": false
+    },
+    "authorizationStatus": "verified_query_success",
+    "authorizationDiagnosis": {
+      "checkedAt": "2026-11-16T10:33:43.971Z",
+      "application": "HuaZhiQD",
+      "accountMatchesScreenshot": true,
+      "path": "/kapi/v2/hzkj/hzkj_member/hzkj_member_customer/queryCustomerRegistrations",
+      "lastFailureAt": "2026-11-16T10:02:22.085Z",
+      "screenshotGrantAt": "2026-11-16T10:07:58+00:00",
+      "grantTimeSource": "user_screenshot_2026-11-16_18:07:58_UTC+8",
+      "freshToken": true,
+      "calls": [
+        {
+          "path": "/kapi/oauth2/getToken",
+          "status": 200
+        },
+        {
+          "path": "/kapi/v2/hzkj/hzkj_member/hzkj_member_customer/queryCustomerRegistrations",
+          "status": 200
+        }
+      ],
+      "httpStatus": 200,
+      "errorCode": "0",
+      "success": true,
+      "window": {
+        "from": "2026-11-01 00:00:00",
+        "toExclusive": "2026-11-17 00:00:00",
+        "timezone": "UTC+8"
+      },
+      "pageNo": 1,
+      "pageSize": 1,
+      "rowsRead": 1,
+      "sourceTotalCount": 33,
+      "fields": [
+        "id",
+        "createtime",
+        "createorg_name",
+        "createorg_id",
+        "hzkj_biz_user_name",
+        "hzkj_biz_user_id"
+      ],
+      "sourceFilter": "[createtime >= '2026-11-01 00:00:00' AND createtime < '2026-11-17 00:00:00']",
+      "localScopeValidation": {
+        "success": false,
+        "code": "source_scope_unverified",
+        "applicationAuthorizationFailed": false
+      },
+      "conclusion": "Previous subscription failures preceded the screenshot grant; the fresh authenticated query succeeds. Company completeness/import proof remains a separate unresolved condition.",
+      "automaticCallsEnabled": false,
+      "syncEnabled": false,
+      "businessWrites": 0,
+      "importedRows": 0,
+      "supersededBy": "customerRegistrations.completedRegistrationStatistics: explicit company catalogue confirmation accepted; 444 records imported and statistics verified."
+    },
+    "companyScopeBasis": "user_confirmed_company_catalogue",
+    "completedRegistrationStatistics": {
+      "verifiedAt": "2026-11-16T10:45:39.054Z",
+      "userConfirmation": {
+        "companyId": "100000",
+        "basis": "user_confirmed_company_catalogue",
+        "tenantId": "hyperzone.test",
+        "sourceEntity": "hzkj_member_customer",
+        "confirmedOn": "2026-11-16"
+      },
+      "capture": {
+        "captureId": "bbafbc7b-1122-4bed-9e65-2799195000ca",
+        "sourceEntity": "hzkj_member_customer",
+        "companyId": "100000",
+        "capturedAt": "2026-11-16T10:41:50.513Z",
+        "from": "1970-01-01 00:00:00",
+        "toExclusive": "2026-11-17 00:00:00",
+        "complete": true,
+        "coverage": "company_creation_window",
+        "consistentSnapshot": false,
+        "rowCount": 444,
+        "finishedAt": "2026-11-16T10:41:51.410Z"
+      },
+      "pageCount": 5,
+      "backup": {
+        "bytes": 9902,
+        "sha256": "c6a25e95ed8bb9252058565c5cd7924251a3f428eaa9f9907877857f67cfd335",
+        "restoreVerified": true,
+        "registrationsBefore": 0,
+        "tables": [
+          "hz_fop_collected_customer_registrations",
+          "hz_fop_collected_batches"
+        ]
+      },
+      "importedRows": 444,
+      "missingCreatedAt": 0,
+      "year2026": 444,
+      "november2026": 33,
+      "unmatchedOwnerCount": 13,
+      "missingOwnerCount": 7,
+      "unmatchedLocalAccountRows": 6,
+      "dimensionsReconcile": true,
+      "selfScope": {
+        "passed": true,
+        "count": 12
+      },
+      "invalidDepartmentDenied": true,
+      "browserVerified": {
+        "year2026": 444,
+        "november2026": 33,
+        "monthlyChart": true
+      },
+      "verification": {
+        "frontendTestsPassed": 806,
+        "backendTestsPassed": 2067,
+        "backendTestsSkipped": 71,
+        "captureImportTestsPassed": 7,
+        "isolatedPostgresPassed": true,
+        "backendBuildPassed": true
+      },
+      "fopBusinessWrites": 0,
+      "automaticCallsEnabled": false,
+      "syncEnabled": false
+    }
+  },
+  "purchaseReturns": {
+    "candidateApi": "queryPurchaseReturn",
+    "applicationApi": "queryPurchaseRefundApplication",
+    "physicalReturnIntegrated": false,
+    "requiredFields": [
+      "hzkj_rf_kind",
+      "hzkj_rf_applyqty",
+      "physical_return_id",
+      "physical_return_entry_id",
+      "actual_return_quantity",
+      "source_purchase_entry_id",
+      "warehouse",
+      "supplier",
+      "owner",
+      "logistics",
+      "execution_status"
+    ]
+  },
+  "database": {
+    "backupBytes": 159410044,
+    "restoreVerified": true,
+    "restoredCounts": {
+      "orders": 44855,
+      "entities": 73925,
+      "users": 36
+    },
+    "restoreMigrations": [
+      "TimestampQueryReplica1794770000000",
+      "CollectedCustomerRegistrations1794830000000"
+    ],
+    "applied": [
+      "TimestampQueryReplica1794770000000",
+      "CollectedCustomerRegistrations1794830000000"
+    ],
+    "businessCountsUnchanged": true,
+    "automaticCallsEnabled": false,
+    "upstreamCalled": false,
+    "existingRawTimeCoverage": {
+      "orders": [
+        {
+          "records": 44855,
+          "created_time_present": 44855,
+          "modified_time_present": 0
+        }
+      ],
+      "entities": [
+        {
+          "entity_type": "allocation",
+          "records": 12643,
+          "created_time_present": 12643,
+          "modified_time_present": 0
+        },
+        {
+          "entity_type": "delivery_notice",
+          "records": 14258,
+          "created_time_present": 0,
+          "modified_time_present": 0
+        },
+        {
+          "entity_type": "dispatch",
+          "records": 15149,
+          "created_time_present": 15149,
+          "modified_time_present": 0
+        },
+        {
+          "entity_type": "native_links",
+          "records": 3,
+          "created_time_present": 0,
+          "modified_time_present": 0
+        },
+        {
+          "entity_type": "outbound",
+          "records": 10995,
+          "created_time_present": 0,
+          "modified_time_present": 0
+        },
+        {
+          "entity_type": "product",
+          "records": 2503,
+          "created_time_present": 0,
+          "modified_time_present": 0
+        },
+        {
+          "entity_type": "purchase",
+          "records": 2929,
+          "created_time_present": 0,
+          "modified_time_present": 0
+        },
+        {
+          "entity_type": "purchase_application",
+          "records": 11802,
+          "created_time_present": 0,
+          "modified_time_present": 0
+        },
+        {
+          "entity_type": "purchase_demand",
+          "records": 1,
+          "created_time_present": 0,
+          "modified_time_present": 0
+        },
+        {
+          "entity_type": "receipt_notice",
+          "records": 3165,
+          "created_time_present": 0,
+          "modified_time_present": 0
+        },
+        {
+          "entity_type": "rma",
+          "records": 313,
+          "created_time_present": 0,
+          "modified_time_present": 0
+        },
+        {
+          "entity_type": "stock_orders",
+          "records": 164,
+          "created_time_present": 11,
+          "modified_time_present": 11
+        }
+      ]
+    }
+  },
+  "verification": {
+    "backendFull": {
+      "passed": 2057,
+      "skipped": 71,
+      "failed": 0
+    },
+    "frontendFull": {
+      "passed": 804,
+      "failed": 0
+    },
+    "node": {
+      "passed": 55,
+      "skipped": 1,
+      "failed": 0
+    },
+    "customerIsolatedPostgres": {
+      "passed": 6,
+      "failed": 0
+    },
+    "timestampIsolatedPostgres": {
+      "passed": 26,
+      "failed": 0,
+      "publisher": 15,
+      "durability": 11
+    },
+    "browser": {
+      "registrationPanel": true,
+      "sourcePendingText": true,
+      "fakeZero": false,
+      "privateScreenshot": ".runtime/api-20261116/customer-dashboard.jpg"
+    },
+    "backendBuild": true,
+    "frontendBuild": true,
+    "localHttp": {
+      "lists": [
+        {
+          "id": "sales-unpaid",
+          "http": 200,
+          "total": 13022,
+          "rows": 20,
+          "mode": "collected"
+        },
+        {
+          "id": "sales-review",
+          "http": 200,
+          "total": 85,
+          "rows": 20,
+          "mode": "collected"
+        },
+        {
+          "id": "sales-stock",
+          "http": 200,
+          "total": 164,
+          "rows": 20,
+          "mode": "collected"
+        },
+        {
+          "id": "sales-rma",
+          "http": 200,
+          "total": 297,
+          "rows": 20,
+          "mode": "collected"
+        },
+        {
+          "id": "sales-exceptions",
+          "http": 200,
+          "total": 16781,
+          "rows": 20,
+          "mode": "collected"
+        },
+        {
+          "id": "sales-completed",
+          "http": 200,
+          "total": 2,
+          "rows": 2,
+          "mode": "collected"
+        },
+        {
+          "id": "dispatch-pending",
+          "http": 200,
+          "total": 315,
+          "rows": 20,
+          "mode": "collected"
+        },
+        {
+          "id": "dispatch-completed",
+          "http": 200,
+          "total": 14861,
+          "rows": 20,
+          "mode": "collected"
+        },
+        {
+          "id": "proc-fulfill-procurement",
+          "http": 200,
+          "total": 1263,
+          "rows": 20,
+          "mode": "collected"
+        },
+        {
+          "id": "proc-fulfill-procurement_shipping",
+          "http": 200,
+          "total": 514,
+          "rows": 20,
+          "mode": "collected"
+        },
+        {
+          "id": "proc-fulfill-completed",
+          "http": 200,
+          "total": 10312,
+          "rows": 20,
+          "mode": "collected"
+        },
+        {
+          "id": "proc-purchase-procurement",
+          "http": 200,
+          "total": 120,
+          "rows": 20,
+          "mode": "collected"
+        },
+        {
+          "id": "proc-purchase-procurement_shipping",
+          "http": 200,
+          "total": 0,
+          "rows": 0,
+          "mode": "collected"
+        },
+        {
+          "id": "proc-purchase-completed",
+          "http": 200,
+          "total": 0,
+          "rows": 0,
+          "mode": "collected"
+        },
+        {
+          "id": "proc-stock",
+          "http": 200,
+          "total": 23,
+          "rows": 20,
+          "mode": "collected"
+        },
+        {
+          "id": "proc-returns",
+          "http": 200,
+          "total": 0,
+          "rows": 0,
+          "mode": "collected"
+        },
+        {
+          "id": "allocation-allocation",
+          "http": 200,
+          "total": 724,
+          "rows": 20,
+          "mode": "collected"
+        },
+        {
+          "id": "allocation-allocation_review",
+          "http": 200,
+          "total": 66,
+          "rows": 20,
+          "mode": "collected"
+        },
+        {
+          "id": "allocation-completed",
+          "http": 200,
+          "total": 11820,
+          "rows": 20,
+          "mode": "collected"
+        },
+        {
+          "id": "warehouse-inbound",
+          "http": 200,
+          "total": 642,
+          "rows": 20,
+          "mode": "collected"
+        },
+        {
+          "id": "warehouse-outbound",
+          "http": 200,
+          "total": 518,
+          "rows": 20,
+          "mode": "collected"
+        },
+        {
+          "id": "warehouse-completed",
+          "http": 200,
+          "total": 13761,
+          "rows": 20,
+          "mode": "collected"
+        },
+        {
+          "id": "warehouse-returns",
+          "http": 200,
+          "total": 0,
+          "rows": 0,
+          "mode": "collected"
+        }
+      ],
+      "checks": {
+        "stockPaginationUnique": true,
+        "stockPaginationComplete": true,
+        "stockSharedFacts": true,
+        "foreignOwnerHttp": 403,
+        "pause": "true",
+        "autoCalls": "false",
+        "syncEnabled": "false"
+      },
+      "note": "Only already-collected scope; zero purchase returns is unavailable data, not no business. Purchase grouping zero is scoped stage result.",
+      "checkedAt": "2026-11-16T10:29:07.441Z"
+    },
+    "timestampFocused": {
+      "passed": 119,
+      "failed": 0,
+      "includesPublisherPostgres": 15
+    },
+    "realDataIsolatedRehearsal": {
+      "isolated": true,
+      "realDatabaseModified": false,
+      "upstreamCalled": false,
+      "sampleOnly": true,
+      "watermark": null,
+      "initialOrderCount": 44855,
+      "initialEntityCount": 73925,
+      "runs": [
+        {
+          "operation": "order-list",
+          "elapsedMs": 46052,
+          "changed": 1,
+          "publicationPending": false,
+          "presentation": "current_local_projection",
+          "applied": 1,
+          "blockedReasons": [],
+          "pendingProjection": 0
+        },
+        {
+          "operation": "allocation",
+          "elapsedMs": 56219,
+          "changed": 1,
+          "publicationPending": false,
+          "presentation": "current_local_projection",
+          "applied": 1,
+          "blockedReasons": [],
+          "pendingProjection": 0
+        },
+        {
+          "operation": "dispatch",
+          "elapsedMs": 45617,
+          "changed": 1,
+          "publicationPending": false,
+          "presentation": "current_local_projection",
+          "applied": 1,
+          "blockedReasons": [],
+          "pendingProjection": 0
+        },
+        {
+          "operation": "delivery-notice",
+          "elapsedMs": 44752,
+          "changed": 1,
+          "publicationPending": false,
+          "presentation": "current_local_projection",
+          "applied": 1,
+          "blockedReasons": [],
+          "pendingProjection": 0
+        }
+      ],
+      "before": {
+        "unpaid": 13022,
+        "review": 85,
+        "dispatch": 315,
+        "procurement": 1263,
+        "procurement_shipping": 514,
+        "allocation": 724,
+        "allocation_review": 66,
+        "shipping": 518,
+        "exceptions": 16781
+      },
+      "after": {
+        "unpaid": 13022,
+        "review": 85,
+        "dispatch": 315,
+        "procurement": 1263,
+        "procurement_shipping": 514,
+        "allocation": 724,
+        "allocation_review": 66,
+        "shipping": 518,
+        "exceptions": 16782
+      }
+    },
+    "review": {
+      "coreBlockingFindingsRemaining": 0,
+      "readOnlyIndependentReviewPassed": true,
+      "sourceMissingFactsRemainExplicit": true
+    },
+    "finalProjectionReplay": {
+      "isolated": true,
+      "realDatabaseModified": false,
+      "upstreamCalled": false,
+      "sampleOnly": true,
+      "watermark": null,
+      "initialOrderCount": 44855,
+      "initialEntityCount": 73925,
+      "runs": [
+        {
+          "operation": "order-list",
+          "elapsedMs": 14747,
+          "changed": 0,
+          "publicationPending": false,
+          "presentation": "current_local_projection",
+          "applied": 4,
+          "blockedReasons": [],
+          "pendingProjection": 0
+        }
+      ],
+      "before": {
+        "unpaid": 13022,
+        "review": 85,
+        "dispatch": 315,
+        "procurement": 1263,
+        "procurement_shipping": 514,
+        "allocation": 724,
+        "allocation_review": 66,
+        "shipping": 518,
+        "exceptions": 16782
+      },
+      "after": {
+        "unpaid": 13022,
+        "review": 85,
+        "dispatch": 315,
+        "procurement": 1263,
+        "procurement_shipping": 514,
+        "allocation": 724,
+        "allocation_review": 66,
+        "shipping": 518,
+        "exceptions": 16782
+      }
+    }
+  },
+  "localRemaining": [],
+  "fopRemaining": [
+    "subscribe both purchase refund APIs for original integration application",
+    "provide physical return execution facts",
+    "verify timestamp updates on all write paths and creation initialization",
+    "provide time filters for other entity types",
+    "provide source deletion/existence and full-company coverage semantics",
+    "provide missing source facts listed by 26-API field audit"
+  ],
+  "implementationFiles": [
+    "scripts/fop-workbench-openapi.mjs",
+    "scripts/fop-workbench-openapi-20261116.test.mjs",
+    "scripts/workbench-analytics-capture.mjs",
+    "scripts/workbench-customer-registrations-capture.mjs",
+    "scripts/workbench-customer-registrations-import.cjs",
+    "scripts/workbench-customer-registrations.test.cjs",
+    "scripts/workbench-purchase-return-capture.mjs",
+    "scripts/fop-purchase-refund-facts.mjs",
+    "scripts/audit-fop-api-field-gaps.py",
+    "scripts/build-fop-timestamp-capabilities.mjs",
+    "scripts/workbench-timestamp-sync.mjs",
+    "backend/src/database/migrations/1794770000000-TimestampQueryReplica.ts",
+    "backend/src/database/migrations/1794830000000-CollectedCustomerRegistrations.ts",
+    "backend/src/modules/fop-data/collected-customer-registration.ts",
+    "backend/src/modules/fop-data/collected-native-facts.ts",
+    "backend/src/modules/workbench-replica/collected-analytics.dto.ts",
+    "backend/src/modules/workbench-replica/collected-workbench.service.ts",
+    "backend/src/modules/workbench-replica/collected-organization-query.ts",
+    "backend/src/modules/workbench-replica/local-workbench-organization.ts",
+    "backend/src/modules/users/local-workbench-organization.ts",
+    "backend/src/modules/workbench-replica/customer-registration-query.ts",
+    "backend/src/modules/workbench-replica/dashboard-analytics-query.ts",
+    "backend/src/modules/workbench-replica/timestamp-paged-sync.ts",
+    "backend/src/modules/workbench-replica/timestamp-paged-source.ts",
+    "backend/src/modules/workbench-replica/timestamp-postgres.ts",
+    "backend/src/modules/workbench-replica/timestamp-status.ts",
+    "frontend/src/api/local-dashboard-analytics.ts",
+    "frontend/src/components/charts/LocalDashboardAnalytics.vue",
+    "frontend/src/views/autoflow/FopDashboardView.vue",
+    "frontend/src/views/autoflow/PurchaseReturnsView.vue",
+    "backend/src/modules/fop-data/collected-order-normalizer.ts",
+    "backend/src/modules/fop-data/collected-order-normalizer.spec.ts",
+    "backend/src/modules/workbench-replica/timestamp-projection-normalizer.ts",
+    "backend/src/modules/workbench-replica/timestamp-projection-normalizer.spec.ts",
+    "backend/src/modules/workbench-replica/timestamp-projection-publisher.ts",
+    "backend/src/modules/workbench-replica/timestamp-projection-publisher.spec.ts",
+    "backend/src/modules/workbench-replica/timestamp-procurement-projection.ts",
+    "backend/src/modules/workbench-replica/timestamp-procurement-projection.spec.ts",
+    "backend/src/modules/workbench-replica/collected-chain-inputs.ts",
+    "frontend/src/tests/timestampLocalQueueFacts.test.ts",
+    "frontend/src/views/autoflow/FopOrdersView.vue",
+    "frontend/src/views/autoflow/StockOrdersView.vue",
+    "backend/src/modules/fop-data/collected-customer-registration.spec.ts",
+    "backend/src/modules/workbench-replica/collected-analytics-service.spec.ts",
+    "backend/src/modules/users/chart-permissions.ts",
+    "backend/src/modules/users/chart-permissions.spec.ts",
+    "backend/src/modules/workbench-replica/collected-analytics-scope.ts",
+    "backend/src/modules/fop-data/fop-freight.spec.ts",
+    "frontend/src/tests/LocalDashboardAnalytics.test.ts",
+    "frontend/src/components/admin/ChartPermissionsDialog.vue",
+    "frontend/src/api/fop-dashboard.ts",
+    "backend/src/modules/users/marketing-departments.ts",
+    "backend/src/modules/fop-data/local-workbench-scope.ts",
+    "backend/src/modules/fop-data/marketing-scope.spec.ts",
+    "backend/src/modules/fop-data/fop-data.service.ts",
+    "frontend/src/composables/useWorkbenchDepartment.ts",
+    "frontend/src/components/order-volume/OrderVolumeAnalysis.vue",
+    "backend/src/modules/fop-data/fop-demo.provider.ts",
+    "backend/src/modules/workbench-replica/local-workbench.service.ts",
+    "backend/src/modules/workbench-replica/local-workbench.postgres.spec.ts",
+    "frontend/src/utils/currency.ts",
+    "frontend/src/utils/mock-dashboard-freight.ts",
+    "frontend/src/components/freight/FreightAnalysis.vue",
+    "frontend/src/components/freight/FreightResults.vue",
+    "frontend/src/tests/mock-dashboard-freight.test.ts",
+    "frontend/src/tests/FreightAnalysis.test.ts",
+    "frontend/src/tests/FopDashboardView.test.ts",
+    "frontend/src/utils/business-years.ts",
+    "frontend/src/views/autoflow/FopFreightView.vue",
+    "backend/src/modules/fop-data/fop-business-time.ts",
+    "backend/src/modules/fop-data/fop-freight.ts",
+    "backend/src/modules/fop-data/order-volume.ts",
+    "backend/src/modules/fop-data/sales-performance.ts",
+    "backend/src/modules/workbench-replica/collected-analytics-query.ts",
+    "frontend/src/utils/analytics-comparison.ts",
+    "backend/src/modules/workbench-replica/manager-dashboard-scope.ts",
+    "backend/src/modules/workbench-replica/manager-dashboard-scope.spec.ts",
+    "backend/src/modules/workbench-replica/customer-order-owner.database.spec.ts",
+    "frontend/src/components/layout/DataDisplayScopeSwitch.vue",
+    "frontend/src/router/index.ts",
+    "frontend/src/views/autoflow/WorkbenchView.vue",
+    "frontend/src/components/charts/WorkbenchAnalytics.vue",
+    "frontend/src/components/WorkbenchFilterSummary.vue",
+    "frontend/src/components/layout/Header.vue",
+    "frontend/src/tests/WorkbenchView.test.ts",
+    "frontend/src/tests/workbench-routing.test.ts",
+    "frontend/src/tests/WorkbenchAnalytics.test.ts",
+    "frontend/src/tests/WorkbenchFilterSummary.test.ts"
+  ],
+  "timestampPublication": {
+    "implemented": true,
+    "entities": [
+      "hzkj_orders",
+      "hzkj_alloc_bill",
+      "hzkj_deliver_bill",
+      "hzkj_deliver_order"
+    ],
+    "realBusinessDatabaseFullSyncExecuted": true,
+    "sourceSnapshotConsistent": false,
+    "perRecordIncompleteRelationsRemainPending": true,
+    "missingFieldsRemainUnknown": true,
+    "automaticCallsEnabled": false,
+    "limitations": [
+      "missing native outbound or line stage facts cannot prove corresponding queues",
+      "ordinary page capture is eventual, not a stable keyset or deletion proof",
+      "other entity time-window adapters require source capabilities"
+    ],
+    "displayContract": {
+      "mode": "collected",
+      "syncMode": "timestamp",
+      "readOnly": true
+    }
+  },
+  "timestampHistoricalBackfill": {
+    "completedAt": "2026-11-16T11:12:51.798Z",
+    "scope": "four provided modification-time APIs; other entity families not refreshed in this run",
+    "automaticCallsEnabled": false,
+    "consistentSnapshot": false,
+    "historicalRuns": [
+      {
+        "entity_code": "hzkj_orders",
+        "mode": "initialize",
+        "state": "applied",
+        "page_count": 456,
+        "row_count": 45587,
+        "error_code": null
+      },
+      {
+        "entity_code": "hzkj_alloc_bill",
+        "mode": "initialize",
+        "state": "applied",
+        "page_count": 128,
+        "row_count": 12737,
+        "error_code": null
+      },
+      {
+        "entity_code": "hzkj_deliver_bill",
+        "mode": "initialize",
+        "state": "applied",
+        "page_count": 151,
+        "row_count": 15092,
+        "error_code": null
+      },
+      {
+        "entity_code": "hzkj_deliver_order",
+        "mode": "initialize",
+        "state": "applied",
+        "page_count": 146,
+        "row_count": 14510,
+        "error_code": null
+      },
+      {
+        "entity_code": "hzkj_orders",
+        "mode": "incremental",
+        "state": "applied",
+        "page_count": 1,
+        "row_count": 0,
+        "error_code": null
+      },
+      {
+        "entity_code": "hzkj_alloc_bill",
+        "mode": "incremental",
+        "state": "applied",
+        "page_count": 1,
+        "row_count": 0,
+        "error_code": null
+      },
+      {
+        "entity_code": "hzkj_deliver_bill",
+        "mode": "incremental",
+        "state": "applied",
+        "page_count": 2,
+        "row_count": 200,
+        "error_code": null
+      },
+      {
+        "entity_code": "hzkj_deliver_order",
+        "mode": "incremental",
+        "state": "applied",
+        "page_count": 1,
+        "row_count": 0,
+        "error_code": null
+      }
+    ],
+    "capturedDocuments": [
+      {
+        "entity_code": "hzkj_deliver_order",
+        "records": 14510
+      },
+      {
+        "entity_code": "hzkj_orders",
+        "records": 45587
+      },
+      {
+        "entity_code": "hzkj_deliver_bill",
+        "records": 15292
+      },
+      {
+        "entity_code": "hzkj_alloc_bill",
+        "records": 12737
+      }
+    ],
+    "packages": {
+      "packages": 42812,
+      "tracking_field_returned": 42812,
+      "with_tracking": 14943,
+      "with_actual_channel": 24237
+    },
+    "pendingProjection": 0,
+    "localOrderCount": 45601,
+    "retainedOrdersNotReturnedByCurrentScan": 14,
+    "nativeFulfilledEmptyPackageTracking": 29,
+    "incrementalChanges": {
+      "hzkj_orders": 0,
+      "hzkj_alloc_bill": 0,
+      "hzkj_deliver_bill": 200,
+      "hzkj_deliver_order": 0
+    },
+    "targetsVerified": [
+      "TO261109051364",
+      "TO261109051115"
+    ],
+    "localHttpVerified": true,
+    "salesApprovedAndDispatchFulfilledUiVerified": true,
+    "excelVerified": true,
+    "evidenceDirectory": ".runtime/logistics-audit-20261116"
+  },
+  "pendingDispatchTracking": {
+    "sourceEntity": "hzkj_deliver_bill",
+    "sourceField": "hzkj_logistics_orderno",
+    "scope": "pending dispatch only; completed dispatch and approved sales keep fulfillment package tracking",
+    "orderNumber": "TO261030037472",
+    "dispatchNumber": "FY261106000398",
+    "trackingNumber": "YT2631000709107661",
+    "sourceChineseChannel": "云途全球专线挂号（特惠普货）",
+    "localApiVerified": true,
+    "uiVerified": true,
+    "excelVerified": true,
+    "targetedTests": 81,
+    "backendBuildPassed": true,
+    "upstreamCalled": false,
+    "automaticCallsEnabled": false,
+    "evidenceDirectory": ".runtime/dispatch-tracking-20261116"
+  },
+  "dashboardRegistrationLayoutAndAccess": {
+    "verifiedAt": "2026-11-16T23:45:47.612Z",
+    "readOnly": true,
+    "remoteRequests": 0,
+    "registrationWindow": {
+      "from": "1970-01-01",
+      "to": "2026-11-16",
+      "asOf": "2026-11-16T10:41:50.513Z"
+    },
+    "companyRegistrations": 444,
+    "self": {
+      "count": 19,
+      "window": {
+        "from": "1970-01-01",
+        "to": "2026-11-16",
+        "asOf": "2026-11-16T10:41:50.513Z"
+      },
+      "freightDenied": true
+    },
+    "nonadministratorAccounts": 30,
+    "nonadministratorFreightDenied": 30,
+    "roleChecks": {
+      "admin:admin": 6,
+      "user:none": 3,
+      "user:department_manager": 4,
+      "user:salesperson": 16,
+      "user:admin": 7
+    },
+    "outOfWindowRejected": true,
+    "browser": {
+      "registrationTotal": 444,
+      "to": "2026-11-16",
+      "taskHeight": 340,
+      "exceptionHeight": 340,
+      "sameTop": true,
+      "emptyExceptionPanelRetained": true
+    },
+    "verification": {
+      "frontendTestsPassed": 808,
+      "backendTestsPassed": 2084,
+      "backendTestsSkipped": 71,
+      "buildPassed": true,
+      "changedFilesLintPassed": true
+    },
+    "automaticCallsEnabled": false
+  },
+  "marketingDepartmentScope": {
+    "verifiedAt": "2026-11-17T00:05:14.075Z",
+    "readOnly": true,
+    "remoteRequests": 0,
+    "registrationWindow": {
+      "from": "1970-01-01",
+      "to": "2026-11-16",
+      "asOf": "2026-11-16T10:41:50.513Z"
+    },
+    "marketingRegistrations": 408,
+    "departmentRegistrations": [
+      {
+        "name": "业务一部",
+        "count": 73
+      },
+      {
+        "name": "业务二部",
+        "count": 129
+      },
+      {
+        "name": "业务三部",
+        "count": 150
+      },
+      {
+        "name": "业务四部",
+        "count": 56
+      }
+    ],
+    "excludedFromMarketing": 36,
+    "managerChecks": [
+      {
+        "departmentName": "业务一部",
+        "personalEmployees": 1,
+        "departmentEmployees": 5,
+        "queues": [
+          "review",
+          "dispatch",
+          "procurement",
+          "allocation_review"
+        ],
+        "defaultPersonal": true
+      },
+      {
+        "departmentName": "业务三部",
+        "personalEmployees": 1,
+        "departmentEmployees": 6,
+        "queues": [
+          "review",
+          "dispatch",
+          "procurement",
+          "allocation_review"
+        ],
+        "defaultPersonal": true
+      },
+      {
+        "departmentName": "业务二部",
+        "personalEmployees": 1,
+        "departmentEmployees": 5,
+        "queues": [
+          "review",
+          "dispatch",
+          "procurement",
+          "allocation_review"
+        ],
+        "defaultPersonal": true
+      },
+      {
+        "departmentName": "业务四部",
+        "personalEmployees": 1,
+        "departmentEmployees": 4,
+        "queues": [
+          "review",
+          "dispatch",
+          "procurement",
+          "allocation_review"
+        ],
+        "defaultPersonal": true
+      }
+    ],
+    "reviewCount": 85,
+    "self": {
+      "count": 19,
+      "window": {
+        "from": "1970-01-01",
+        "to": "2026-11-16",
+        "asOf": "2026-11-16T10:41:50.513Z"
+      },
+      "freightDenied": true
+    },
+    "nonadministratorAccounts": 30,
+    "nonadministratorFreightDenied": 30,
+    "roleChecks": {
+      "admin:admin": 6,
+      "user:none": 3,
+      "user:department_manager": 4,
+      "user:salesperson": 16,
+      "user:admin": 7
+    },
+    "outOfWindowRejected": true,
+    "browser": {
+      "marketingDefault": true,
+      "departmentChoices": [
+        "营销中心",
+        "业务一部",
+        "业务二部",
+        "业务三部",
+        "业务四部"
+      ],
+      "marketingRegistrations": 408,
+      "salesOneRegistrations": 73,
+      "unauthorizedPlaceholderRemoved": true
+    },
+    "verification": {
+      "frontendTestsPassed": 812,
+      "backendScopeTestsPassed": 90,
+      "buildPassed": true,
+      "lintErrors": 0,
+      "unrelatedBackendFailures": {
+        "file": "backend/src/modules/workbench-replica/collected-native-review.spec.ts",
+        "count": 4,
+        "reason": "现有待支付SKU关联默认口径与测试期望不一致，本轮不调整业务状态。"
+      },
+      "selectedSummaryRootBlocked": true
+    },
+    "automaticCallsEnabled": false,
+    "scope": "营销中心直属业务一至四部与账号本人/部门权限取交集；公司原始采集不删除。"
+  },
+  "unpaidQueryPerformance": {
+    "scope": "local collected unpaid query",
+    "index": "ix_collected_unpaid_time",
+    "migration": "CollectedUnpaidIndex1794831000000",
+    "beforeHttpMs": [
+      508,
+      462,
+      465
+    ],
+    "afterHttpMs": [
+      56,
+      31,
+      26
+    ],
+    "sameHttpRowsTotalsCountries": true,
+    "sourceCalls": 0,
+    "uiVerified": true,
+    "indexState": {
+      "indisvalid": true,
+      "indisready": true,
+      "size": "1504 kB"
+    },
+    "scopeEquivalence": [
+      {
+        "scenario": "default",
+        "rows": 4136,
+        "identical": true
+      },
+      {
+        "scenario": "all",
+        "rows": 6019,
+        "identical": true
+      },
+      {
+        "scenario": "unlinked",
+        "rows": 3964,
+        "identical": true
+      },
+      {
+        "scenario": "personal",
+        "rows": 5,
+        "identical": true
+      },
+      {
+        "scenario": "noPermission",
+        "rows": 0,
+        "identical": true
+      },
+      {
+        "scenario": "country",
+        "rows": 435,
+        "identical": true
+      },
+      {
+        "scenario": "warehouse",
+        "rows": 5465,
+        "identical": true
+      },
+      {
+        "scenario": "search",
+        "rows": 2907,
+        "identical": true
+      },
+      {
+        "scenario": "selected",
+        "rows": 0,
+        "identical": true
+      }
+    ],
+    "evidenceDirectory": ".runtime/unpaid-performance-20261116",
+    "measurementBoundary": "Three sequential local HTTP samples, not end-to-end browser render or production SLA."
+  },
+  "businessDisplayScope20261116": {
+    "checkedAt": "2026-11-17T00:21:33.403Z",
+    "fopRequests": 0,
+    "automaticCallsEnabled": false,
+    "allowedDepartmentNames": [
+      "营销中心",
+      "业务一部",
+      "业务二部",
+      "业务三部",
+      "业务四部"
+    ],
+    "allowedEmployees": 20,
+    "queues": [
+      {
+        "query": {
+          "queue": "unpaid"
+        },
+        "status": 200,
+        "total": 5981,
+        "checkedRows": 100,
+        "eligibleSqlTotal": 5981,
+        "queueState": "ready"
+      },
+      {
+        "query": {
+          "queue": "review"
+        },
+        "status": 200,
+        "total": 85,
+        "checkedRows": 85,
+        "eligibleSqlTotal": 85,
+        "queueState": "ready"
+      },
+      {
+        "query": {
+          "queue": "exceptions"
+        },
+        "status": 200,
+        "total": 45178,
+        "checkedRows": 100,
+        "eligibleSqlTotal": 45178,
+        "queueState": "ready"
+      },
+      {
+        "query": {
+          "queue": "dispatch"
+        },
+        "status": 200,
+        "total": 315,
+        "checkedRows": 100,
+        "eligibleSqlTotal": 315,
+        "queueState": "ready"
+      },
+      {
+        "query": {
+          "queue": "procurement"
+        },
+        "status": 200,
+        "total": 6,
+        "checkedRows": 6,
+        "eligibleSqlTotal": 6,
+        "queueState": "ready"
+      },
+      {
+        "query": {
+          "queue": "procurement_shipping"
+        },
+        "status": 200,
+        "total": 0,
+        "checkedRows": 0,
+        "eligibleSqlTotal": 0,
+        "queueState": "ready"
+      },
+      {
+        "query": {
+          "queue": "allocation"
+        },
+        "status": 200,
+        "total": 0,
+        "checkedRows": 0,
+        "eligibleSqlTotal": 0,
+        "queueState": "ready"
+      },
+      {
+        "query": {
+          "queue": "allocation_review"
+        },
+        "status": 200,
+        "total": 0,
+        "checkedRows": 0,
+        "eligibleSqlTotal": 0,
+        "queueState": "ready"
+      },
+      {
+        "query": {
+          "queue": "shipping"
+        },
+        "status": 200,
+        "total": 0,
+        "checkedRows": 0,
+        "eligibleSqlTotal": 0,
+        "queueState": "ready"
+      },
+      {
+        "query": {
+          "queue": "review",
+          "completed": true,
+          "timeRange": "1m"
+        },
+        "status": 200,
+        "total": 6023,
+        "checkedRows": 100,
+        "eligibleSqlTotal": 6023,
+        "queueState": "ready"
+      },
+      {
+        "query": {
+          "queue": "dispatch",
+          "completed": true,
+          "timeRange": "1m"
+        },
+        "status": 200,
+        "total": 5815,
+        "checkedRows": 100,
+        "eligibleSqlTotal": 5815,
+        "queueState": "ready"
+      },
+      {
+        "query": {
+          "queue": "procurement",
+          "completed": true,
+          "timeRange": "1m"
+        },
+        "status": 200,
+        "total": 0,
+        "checkedRows": 0,
+        "eligibleSqlTotal": 0,
+        "queueState": "ready"
+      },
+      {
+        "query": {
+          "queue": "allocation",
+          "completed": true,
+          "timeRange": "1m"
+        },
+        "status": 200,
+        "total": 5276,
+        "checkedRows": 100,
+        "eligibleSqlTotal": 5276,
+        "queueState": "ready"
+      },
+      {
+        "query": {
+          "queue": "shipping",
+          "completed": true,
+          "timeRange": "1m"
+        },
+        "status": 200,
+        "total": 0,
+        "checkedRows": 0,
+        "eligibleSqlTotal": 0,
+        "queueState": "ready"
+      },
+      {
+        "route": "stock-orders",
+        "query": {
+          "queue": "all",
+          "timeRange": "all"
+        },
+        "status": 200,
+        "total": 157,
+        "checkedRows": 100,
+        "queueState": "ready"
+      },
+      {
+        "route": "stock-orders",
+        "query": {
+          "queue": "procurement"
+        },
+        "status": 200,
+        "total": 23,
+        "checkedRows": 23,
+        "queueState": "ready"
+      },
+      {
+        "route": "rma-orders",
+        "query": {},
+        "status": 200,
+        "total": 12,
+        "checkedRows": 12,
+        "queueState": "ready"
+      },
+      {
+        "route": "receipt-notices",
+        "query": {},
+        "status": 200,
+        "total": 0,
+        "checkedRows": 0,
+        "queueState": true
+      },
+      {
+        "route": "purchase-returns",
+        "query": {
+          "workbenchRole": "procurement"
+        },
+        "status": 200,
+        "total": 0,
+        "checkedRows": 0,
+        "queueState": "ready"
+      },
+      {
+        "route": "purchase-returns",
+        "query": {
+          "workbenchRole": "warehouse"
+        },
+        "status": 200,
+        "total": 0,
+        "checkedRows": 0,
+        "queueState": "ready"
+      },
+      {
+        "route": "purchase-groups",
+        "query": {
+          "queue": "procurement"
+        },
+        "status": 200,
+        "total": 4,
+        "checkedRows": 4,
+        "queueState": true
+      },
+      {
+        "route": "purchase-groups",
+        "query": {
+          "queue": "procurement_shipping"
+        },
+        "status": 200,
+        "total": 0,
+        "checkedRows": 0,
+        "queueState": true
+      },
+      {
+        "route": "purchase-groups",
+        "query": {
+          "queue": "procurement",
+          "completed": true,
+          "timeRange": "1m"
+        },
+        "status": 200,
+        "total": 0,
+        "checkedRows": 0,
+        "queueState": true
+      }
+    ],
+    "charts": [
+      {
+        "chartId": "department_receipts",
+        "status": 200,
+        "orderCount": 15119,
+        "unmatchedOwnerCount": 0,
+        "amountsByCurrency": [
+          {
+            "amount": "323632.53514",
+            "currency": "USD",
+            "orderCount": 15119
+          }
+        ]
+      },
+      {
+        "chartId": "salesperson_receipts",
+        "status": 200,
+        "orderCount": 15119,
+        "unmatchedOwnerCount": 0,
+        "amountsByCurrency": [
+          {
+            "amount": "323632.53514",
+            "currency": "USD",
+            "orderCount": 15119
+          }
+        ]
+      },
+      {
+        "chartId": "order_volume",
+        "status": 200,
+        "orderCount": 15119,
+        "unmatchedOwnerCount": 0,
+        "amountsByCurrency": []
+      },
+      {
+        "chartId": "customer_orders",
+        "status": 200,
+        "orderCount": 15119,
+        "unmatchedOwnerCount": 0,
+        "amountsByCurrency": []
+      },
+      {
+        "chartId": "registrations",
+        "status": 200,
+        "orderCount": 408,
+        "unmatchedOwnerCount": 0,
+        "amountsByCurrency": []
+      }
+    ],
+    "exports": [
+      {
+        "queue": "review",
+        "status": 200,
+        "rows": 85,
+        "orders": 85,
+        "departmentsVerified": true
+      }
+    ],
+    "outsideDepartmentStatus": 403,
+    "unknownOwnerStatus": 403,
+    "analyticsCount": 45193,
+    "eligibleOrderCount": 45193,
+    "paused": true,
+    "validation": {
+      "focusedBackend": {
+        "testsPassed": 138,
+        "testsFailed": 0
+      },
+      "isolatedPostgres": {
+        "testsPassed": 28,
+        "testsFailed": 0,
+        "businessDatabaseWritten": false
+      },
+      "frontend": {
+        "testsPassed": 62,
+        "testsFailed": 0,
+        "buildPassed": true
+      },
+      "fullBackendBaseline": {
+        "testsPassed": 2090,
+        "testsFailed": 4,
+        "testsSkipped": 71,
+        "failingFile": "backend/src/modules/workbench-replica/collected-native-review.spec.ts",
+        "reason": "既有未关联SKU状态no用例与当前待支付原生状态条件不一致，未修改该业务规则"
+      },
+      "browser": {
+        "departmentDefault": "department",
+        "departmentDimensions": [
+          "department",
+          "month"
+        ],
+        "salespersonDimensions": [
+          "person",
+          "department",
+          "month"
+        ],
+        "dollarAmountsVisible": true
+      },
+      "legacyAnalyticsScope": {
+        "suitesPassed": 4,
+        "testsPassed": 145,
+        "testsFailed": 0,
+        "fopRequests": 0
+      },
+      "backendBuildPassed": true,
+      "localBackendRestartVerified": true
+    }
+  },
+  "automaticDateQueries": {
+    "verifiedOn": "2026-11-17",
+    "scope": "全部图表及清单已有日期/时间范围筛选；不新增日期业务字段、不调整队列口径或权限",
+    "implementation": "useDateRangeQuery: 完整有效范围350ms合并查询；覆盖上下限与366天上限；手动查询、销毁及会话重置取消待发请求",
+    "existingImmediateFilters": "订单量/运费年、月、周及待办时间范围下拉已自动查询，清单分页回到第1页",
+    "tests": {
+      "frontendFiles": 92,
+      "frontendPassed": 823,
+      "covered": [
+        "五类本地图表自动查询",
+        "连续日期合并",
+        "空值/倒置/覆盖越界不查询",
+        "个人收款366天限制",
+        "重复日期与手动提交去重",
+        "退出和账号切换取消查询",
+        "旧响应不覆盖新结果",
+        "待办时间范围及导出一致"
+      ]
+    },
+    "browser": {
+      "page": "http://localhost:5173/dashboard",
+      "queryButtonClicked": false,
+      "department": "营销中心",
+      "registrations": [
+        {
+          "from": "2026-01-01",
+          "to": "2026-11-16",
+          "count": 408
+        },
+        {
+          "from": "2026-11-01",
+          "to": "2026-11-16",
+          "count": 32
+        },
+        {
+          "from": "2026-11-01",
+          "to": "2026-11-05",
+          "count": 16
+        }
+      ],
+      "screenshot": ".runtime/date-auto-query/registration-date-result.png"
+    },
+    "upstreamCalled": false,
+    "automaticSyncChanged": false
+  },
+  "customerOrderOwnerTooltip": {
+    "verifiedOn": "2026-11-17",
+    "interface": "GET /api/workbench/analytics/dashboard chartId=customer_orders rows[].customerOwnerName",
+    "source": "同batch_id、company_id与客户source_id的客户档案source_owner_user_id（FOP hzkj_biz_user）；唯一fopUserId匹配本地员工name，并与当前employeeIds相交",
+    "display": "横轴客户名称不变；客户维度tooltip为业务员名称与订单数；商品件数模式额外显示件数；缺失、歧义和越权归属为空；summaryOnly不返回人员",
+    "database": {
+      "readOnly": true,
+      "remoteRequests": 0,
+      "orderCount": 15119,
+      "customerGroups": 143,
+      "ownerNames": 143,
+      "missingOwnerNames": 0,
+      "countsUnchanged": true
+    },
+    "tests": {
+      "backendTargetedPassed": 36,
+      "frontendTargetedPassed": 27,
+      "buildPassed": true,
+      "fullFrontendRemaining": [
+        "FopDashboardView: links fulfillment cards and tasks; clears data after authorization revoked",
+        "OrderVolumeAnalysis: ranked-customer query signature"
+      ],
+      "remainingScope": "并行刷新/异常面板改造中的测试，未改本轮以外实现"
+    },
+    "browser": {
+      "xAxis": "客户名",
+      "tooltip": "业务员：童梦强（Alex）；订单数：1,384",
+      "screenshot": ".runtime/customer-order-tooltip/customer-owner-tooltip.png"
+    },
+    "upstreamCalled": false,
+    "automaticSyncChanged": false
+  },
+  "dashboardFreightMock": {
+    "scope": "Dashboard.freight only",
+    "source": "mock",
+    "dataGeneration": "deterministic daily aggregates; month/week/year and warehouse totals reconcile",
+    "otherChartsSource": "local business data",
+    "workbenchFreightSourceChanged": false,
+    "businessDatabaseWritten": false,
+    "freightApiCalls": 0,
+    "permission": "existing freight visibility; administrator only",
+    "canOpenRealDocuments": false,
+    "canExport": false,
+    "sourceBadge": "Mock",
+    "validation": {
+      "focusedTestsPassed": 50,
+      "dashboardIsolationTestsPassed": 3,
+      "dashboardOtherTestsSkipped": 23,
+      "frontendBuildPassed": true,
+      "browserVerified": true,
+      "broaderRun": {
+        "testsPassed": 74,
+        "testsFailed": 2,
+        "file": "frontend/src/tests/FopDashboardView.test.ts",
+        "failures": [
+          "links fulfillment cards and tasks to workbenches, and exceptions to an authorized order",
+          "clears previous counts and customer data when authorization is revoked"
+        ],
+        "observedCause": "异常订单面板改为独立加载后，原测试仍从Dashboard主响应期待客户记录；不属于本次Mock切换。"
+      }
+    },
+    "layout": {
+      "title": "16px / 600, same text color as other analysis titles, no leading icon",
+      "filters": "below title, left aligned; year / warehouse / query, then timeline / week date / comparison",
+      "controlFont": "12px",
+      "themesVerified": [
+        "light",
+        "dark"
+      ],
+      "usesThemeSurfaceTokens": true,
+      "originalThemeRestored": true,
+      "relatedTestsPassed": 42
+    }
+  },
+  "freightTimeline": {
+    "verifiedOn": "2026-11-17",
+    "options": [
+      "week",
+      "month",
+      "year"
+    ],
+    "default": "week",
+    "scope": "共用FreightAnalysis，Dashboard及工作台分析入口",
+    "verification": "FreightAnalysis交互测试9项通过；请求含week及所选年份周日期，切至月度移除weekOf",
+    "businessLogicChanged": false,
+    "upstreamCalled": false
+  },
+  "dashboardReceiptDateAudit": {
+    "verifiedAt": "2026-11-17T01:09:12.148Z",
+    "scope": "Local active batch; 20 verified employees in the four marketing departments; no upstream calls",
+    "mapping": {
+      "source": "hzkj_orders.hzkj_receipt_date",
+      "local": "hz_fop_collected_analytics_facts.paid_at",
+      "separateCendField": "hzkj_datetimefield -> source_paid_at",
+      "receiptStatus": {
+        "0": "unreceived",
+        "1": "received"
+      }
+    },
+    "counts": {
+      "scopedFulfillmentOrders": 45179,
+      "withReceiptDate": 15119,
+      "withoutReceiptDate": 30060,
+      "unpaidWithoutReceiptDate": 29938,
+      "paidWithoutReceiptDate": 122,
+      "unknownStatusWithoutReceiptDate": 0,
+      "missingSourceFieldKeys": 0,
+      "rawDateNotProjected": 0,
+      "rawAndProjectionDateMismatch": 0,
+      "mainOrderAndAnalyticsDateMismatch": 0
+    },
+    "paidMissingStatusBreakdown": {
+      "orderStatus4": 120,
+      "orderStatus3": 1,
+      "orderStatus5": 1
+    },
+    "finding": "Source captures contain empty receipt dates. Mapping is correct. The previous notice conflated unpaid orders with paid orders missing dates and ignored warehouse/currency filters.",
+    "implemented": "Keep receipt-date aggregates. Split undated orders into unpaid/paid/unknown after non-date filters. Only paid/unknown cases are flagged for review. No fallback to C-end or other dates.",
+    "remaining": "122 paid orders have no receipt date in the local source capture. FOP source investigation/correction and controlled resync are pending; no date or source status has been fabricated.",
+    "tests": {
+      "backend": {
+        "suites": 5,
+        "passed": 51
+      },
+      "frontend": {
+        "suites": 1,
+        "passed": 30
+      },
+      "redReproduction": {
+        "backendFailedBeforeFix": 3,
+        "frontendFailedBeforeFix": 2
+      }
+    },
+    "http": {
+      "httpStatus": 200,
+      "source": "local",
+      "timeBasis": "customer_paid_at",
+      "orderCount": 15119,
+      "missingPaidAtCount": 30060,
+      "missingPaidAtBreakdown": {
+        "paid": 122,
+        "unpaid": 29938,
+        "unknown": 0
+      }
+    },
+    "build": {
+      "backend": "passed",
+      "frontend": "passed"
+    },
+    "browser": {
+      "verified": true,
+      "orderCount": 15119,
+      "unpaid": 29938,
+      "paidMissingDate": 122,
+      "oldCombinedWarningRemoved": true
+    }
+  },
+  "businessYearAndCustomerSalesperson": {
+    "verifiedOn": "2026-11-17",
+    "firstYear": 2026,
+    "yearOptions": "2026 through the current UTC+8 year; descending; next year appears at the year boundary",
+    "dateMinimum": "2026-01-01",
+    "registrationCaptureWindowStillRequired": true,
+    "customerDimensionOrder": [
+      "customer",
+      "person",
+      "department",
+      "month"
+    ],
+    "salespersonBasis": "Same-batch same-company customer archive hzkj_biz_user uniquely mapped to the local employee ID; existing authorized order scope is preserved",
+    "unresolvedOwner": "Unknown group retains counts; no identity outside current scope; summary-only response has no customer or person dimension",
+    "sourceReference": "dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/customer/plugin/operate/CustomerRecordAuditPlugin.java:226",
+    "localReadOnlyVerification": {
+      "personGroups": 19,
+      "personOrderCount": 15119,
+      "readOnly": true,
+      "remoteRequests": 0,
+      "orderCount": 15119,
+      "customerGroups": 143,
+      "ownerNames": 143,
+      "missingOwnerNames": 0,
+      "countsUnchanged": true
+    },
+    "validation": {
+      "targetFrontend": 118,
+      "fullFrontendPassed": 858,
+      "fullFrontendSkipped": 1,
+      "targetBackend": 98,
+      "legacyAnalyticsBackend": 96,
+      "demoYearFilter": 1,
+      "build": "passed",
+      "lint": "no errors; existing unused businessScope warning",
+      "fullBackendInitial": {
+        "passed": 2090,
+        "failed": 18,
+        "skipped": 74
+      },
+      "yearFixtureFailuresResolved": 14,
+      "remainingUnrelatedFailures": {
+        "file": "backend/src/modules/workbench-replica/collected-native-review.spec.ts",
+        "count": 4,
+        "reason": "Unpaid queue native state assertions; no queue rule changes in this task"
+      }
+    },
+    "ui": {
+      "freightYearOptions": [
+        2026
+      ],
+      "salespersonDimensionSecond": true,
+      "screenshot": ".runtime/business-years/salesperson-orders.png"
+    },
+    "upstreamCalled": false,
+    "automaticSyncResumed": false,
+    "rawSourceDataChanged": false
+  },
+  "salespersonRevenueGrouping": {
+    "verifiedAt": "2026-11-17T01:21:52.497Z",
+    "view": "salesperson_receipts / person only",
+    "groupOrder": [
+      "sales1",
+      "sales2",
+      "sales3",
+      "sales4"
+    ],
+    "summarySource": "Same scoped backend department rows; not summed again in headline totals",
+    "identitySource": "Local employee directory english_name; current stable employee/department IDs",
+    "ui": "Department subtotal first, personal bars descending by amount, gaps between groups, English axis labels, complete membership with horizontal overflow",
+    "summaryPermission": "No personal rows or English name fields returned",
+    "http": {
+      "httpStatus": 200,
+      "departments": [
+        {
+          "department": "业务一部",
+          "currency": "USD",
+          "people": 4,
+          "totalMatches": true
+        },
+        {
+          "department": "业务四部",
+          "currency": "USD",
+          "people": 4,
+          "totalMatches": true
+        },
+        {
+          "department": "业务二部",
+          "currency": "USD",
+          "people": 5,
+          "totalMatches": true
+        },
+        {
+          "department": "业务三部",
+          "currency": "USD",
+          "people": 6,
+          "totalMatches": true
+        }
+      ],
+      "peopleCount": 19,
+      "allEnglishNamesPresent": true,
+      "allPeopleAssociated": true,
+      "totals": [
+        {
+          "amount": "323632.53514",
+          "currency": "USD",
+          "orderCount": 15119
+        }
+      ]
+    },
+    "tests": {
+      "backend": {
+        "passed": 78,
+        "suites": 8
+      },
+      "frontend": {
+        "passed": 33,
+        "suites": 1
+      }
+    },
+    "build": {
+      "backend": "passed",
+      "frontend": "passed"
+    },
+    "upstreamCalls": 0,
+    "browser": {
+      "verified": true,
+      "dimension": "person",
+      "departmentOrder": [
+        "sales1",
+        "sales2",
+        "sales3",
+        "sales4"
+      ],
+      "departmentColumns": 4,
+      "personalColumns": 19,
+      "englishAxisLabels": true,
+      "departmentGaps": true,
+      "horizontalScrollbar": true,
+      "headlineIncomeUnchanged": true
+    },
+    "documentation": {
+      "unifiedRequirementsUpdated": true,
+      "buildAndValidation": "passed"
+    }
+  },
+  "customerOrderComparisonTooltip": {
+    "verifiedOn": "2026-11-17",
+    "rootCause": "comparisonChart returns before the normal customer tooltip formatter; its generic formatter used the customer axis label",
+    "fix": "Customer and salesperson comparison tooltips show the complete owner name and prior/current order counts; quantity mode also shows quantities without replacing missing data with zero",
+    "identity": "Stable customer ID; prior-only customer supported; unresolved current owner does not borrow previous identity",
+    "scope": "Frontend tooltip only; no query, permissions or source data changes",
+    "tests": {
+      "newRegressions": 4,
+      "targetedFrontendPassed": 51,
+      "build": "passed",
+      "lint": "passed"
+    },
+    "upstreamCalled": false,
+    "ui": {
+      "verified": true,
+      "period": "2026-11-02 through 2026-11-08 vs 2026-10-26 through 2026-11-01",
+      "tooltipShowsCompleteOwner": true,
+      "priorOrderCount": 203,
+      "currentOrderCount": 208,
+      "screenshot": ".runtime/customer-comparison-tooltip/customer-hover.png"
+    }
+  },
+  "registrationSalespersonGrouping": {
+    "view": "registrations / person",
+    "layout": "Business departments 1-4; department subtotal first with department name only; people sorted by registration count descending with English names; gaps and horizontal scrolling; no top-20 truncation",
+    "source": "Existing local customer registrations; current verified user-to-employee and department mapping",
+    "permissions": "Department subtotals and people use the same authorized creation-time-filtered source. Summary-only responses exclude personal rows and identity metadata.",
+    "comparison": "Current and prior periods retain department grouping, prior-only people and departments; missing period records display zero, not omitted.",
+    "verification": {
+      "backend": {
+        "suites": 4,
+        "tests": 42,
+        "result": "passed"
+      },
+      "frontend": {
+        "suites": 2,
+        "tests": 55,
+        "result": "passed"
+      },
+      "backendBuild": "passed",
+      "frontendBuild": "passed",
+      "http": {
+        "source": "local",
+        "total": 408,
+        "groups": [
+          {
+            "department": "业务一部",
+            "count": 73,
+            "people": 5,
+            "personalSum": 73
+          },
+          {
+            "department": "业务四部",
+            "count": 56,
+            "people": 4,
+            "personalSum": 56
+          },
+          {
+            "department": "业务二部",
+            "count": 129,
+            "people": 5,
+            "personalSum": 129
+          },
+          {
+            "department": "业务三部",
+            "count": 150,
+            "people": 6,
+            "personalSum": 150
+          }
+        ],
+        "people": 20,
+        "allEnglishNamesPresent": true,
+        "allDepartmentSumsMatch": true,
+        "comparisonAvailable": true,
+        "comparisonMetadataPresent": true
+      },
+      "browser": "Verified person view with all 4 departments and 20 English names, count 408, department totals, horizontal overflow and monthly comparison; restored full-year non-comparison person view.",
+      "upstreamCalls": 0,
+      "databaseBusinessWrites": 0
+    }
+  },
+  "salesApprovedPurchaseHeader": {
+    "scope": "销售工作台已审核清单的订单层级采购状态",
+    "source": "履约订单表头 hzkj_purchase_status；若提供 hzkj_purchase_status_title 则优先原生名称",
+    "rule": "直接展示表头，不以 businessStatus.purchase 或商品行聚合结果替代；商品行状态独立保留；表头缺值不推定",
+    "sample": {
+      "orderNumber": "TO261110051407",
+      "nativePurchaseStatus": "0",
+      "display": "采购：未采购",
+      "browserVerified": true
+    },
+    "verification": {
+      "regressionRedFailures": 4,
+      "orderListTestsPassed": 160,
+      "frontendSuite": {
+        "passed": 889,
+        "failed": 2,
+        "skipped": 1,
+        "unrelatedFailures": [
+          "FopDashboardView.test.ts > mounts local charts without requesting legacy FOP access",
+          "FopDashboardView.test.ts > retains authorized analysis panels when analytics is not connected"
+        ],
+        "reason": "两项均未找到 data-freight-analysis；本次未修改 Dashboard 或运费组件"
+      },
+      "build": "passed frontend, backend and packaging",
+      "targetedLint": "passed",
+      "requirementsBuildAndValidation": "passed"
+    },
+    "apiOrDatabaseMutation": false,
+    "upstreamCalled": false,
+    "automaticSyncEnabled": false,
+    "screenshot": ".runtime/sales-header-purchase/verified.png"
+  },
+  "fulfilledDispatchColumns": {
+    "scope": "发运工作台已履约清单",
+    "removed": "发运单审核时间列及窄屏排序入口",
+    "layout": "14列，商品、物流、客户、店铺、仓库和付款时间按内容重新分配宽度；其余清单保留原布局",
+    "apiChanged": false,
+    "upstreamCalled": false,
+    "verification": {
+      "orderListTests": 160,
+      "frontendSuitePassed": 895,
+      "frontendSuiteSkipped": 1,
+      "build": "passed",
+      "lint": "passed",
+      "desktopViewport": 2200,
+      "desktopTableWidth": 1867,
+      "narrowViewport": 1280,
+      "pageOverflow": false,
+      "headerBodyFooterAligned": true
+    },
+    "screenshot": ".runtime/fulfilled-columns/verified.png"
+  },
+  "approvalIntegrationAudit": {
+    "verifiedOn": "2026-11-16",
+    "scope": [
+      "review",
+      "allocation_review"
+    ],
+    "upstreamCalled": false,
+    "businessDataMutated": false,
+    "frontendChanged": false,
+    "integrationStatus": "local_logic_verified_fop_dedicated_endpoints_pending",
+    "configuredDedicatedEndpoints": {
+      "FOP_KINGDEE_APPROVAL_CONTEXT_URL": false,
+      "FOP_KINGDEE_OPERATION_URL": false
+    },
+    "localConfiguration": {
+      "FOP_QUERIES_PAUSED": true,
+      "WORKBENCH_READ_MODE": "local",
+      "FOP_DATA_MODE": "kingdee",
+      "WORKBENCH_MOCK_ENABLED": false,
+      "WORKBENCH_SYNC_ENABLED": false,
+      "WORKBENCH_AUTOMATIC_CALLS_ENABLED": false
+    },
+    "rules": {
+      "billStatus": "B",
+      "draft": "block_no_automatic_submit",
+      "audited": "already_approved_no_write",
+      "sales": "paid fulfillment order and current action permission",
+      "allocation": "one allocation per fulfillment; ready inventory; valid associated dispatch audited; current action permission"
+    },
+    "defect": {
+      "reproduced": true,
+      "regressionsInitiallyFailed": 10,
+      "description": "Realtime context was refreshed but earlier targets were reused; the final current target state, eligibility and version were not compared before sending the operation.",
+      "fixed": "Prefer latest context targets; before every write verify the current unique target tenant, order, document number, entity, ID, version, status and eligibility."
+    },
+    "backend": {
+      "passed": 202,
+      "failed": 0,
+      "suites": [
+        "fop-approval.spec.ts",
+        "fop-realtime.spec.ts",
+        "fop-connection.spec.ts",
+        "fop-demo.spec.ts"
+      ]
+    },
+    "frontend": {
+      "passed": 169,
+      "failed": 0,
+      "suites": [
+        "OrderApprovalDialog.test.ts",
+        "FopOrdersView.test.ts"
+      ],
+      "finalDialogRerunPassed": 9
+    },
+    "build": {
+      "backend": "passed"
+    },
+    "targetedLint": "passed",
+    "diffCheck": "passed",
+    "fopSourceReview": {
+      "dedicatedApprovalContextOrOperationImplementationFound": false,
+      "metadata": [
+        "datamodel/hzkj_CRM/1.5/main/hzkj_ordercenter/metadata/hzkj_orders.dym",
+        "datamodel/hzkj_CRM/1.5/main/hzkj_ordercenter/metadata/hzkj_alloc_bill.dym"
+      ],
+      "confirmed": [
+        "FOP sales standard audit has address/warehouse/logistics and business plugins; post-audit allocation creation is asynchronous.",
+        "FOP allocation audit rechecks readiness, stock occupation and an effective audited dispatch; delivery-notice post-action warnings must survive a successful audit."
+      ],
+      "boundary": "B-only framework rule confirmed by user; inherited platform validator/runtime behavior still needs real endpoint acceptance."
+    },
+    "pending": [
+      "Publish and configure dedicated approval context and operation APIs.",
+      "Verify delegated account action/data permissions and payment/readiness gates atomically in FOP standard audit; never write billstatus directly or automatically submit A.",
+      "Verify real single/batch success, A/B/C states, concurrent withdrawal, failed prerequisites, idempotency and timeout reconciliation, plus confirmed-result replica refresh before enabling actions on collected read-only rows."
+    ],
+    "files": {
+      "backend/src/modules/fop-data/fop-approval.service.ts": "88f540df4edc2804f324713bd102868765bf65aa05b29946f6e1d082b20d317b",
+      "backend/src/modules/fop-data/fop-approval.spec.ts": "c4960d9c53e5c1006a76d30cf4996cc3fe6c88891e0ca8d50ae2280154f20951",
+      "backend/src/modules/fop-data/fop-realtime.spec.ts": "282086c7bee38b55092e14b8531550c325915a1bb18bf5e7111924714c8e294d",
+      "frontend/src/tests/OrderApprovalDialog.test.ts": "ab91593a3e915d756d2ba891e1f754d57779f067912f891afb73be0db181025d"
+    },
+    "configurationVerifiedUsing": "Nest envFilePath file precedence; only endpoint-presence booleans and non-secret mode switches inspected",
+    "requirementsBuild": "passed",
+    "requirementsValidation": "passed",
+    "supersededBy": "nativeApprovalIntegration (published API packages and live runtime verified; dedicated proposed endpoints are not needed for this integration)"
+  },
+  "dashboardSalespersonGrouping": {
+    "scope": "Every existing salesperson dimension on the six Dashboard cards: registrations, salesperson_receipts, customer_orders and freight/owner. No new dimension added to department_receipts or order_volume.",
+    "departmentOrder": [
+      "业务一部",
+      "业务二部",
+      "业务三部",
+      "业务四部"
+    ],
+    "layout": "Department subtotal first; blue department bars, teal personal bars, English personal names, gaps, all people retained with horizontal scrolling. Axis department labels have no summary suffix.",
+    "customerOrders": "Person department totals use the same customer archive owner and current employee department as personal counts; normal order-owner department aggregation is preserved for the department dimension. Ambiguous mappings retain an anonymous unknown bucket.",
+    "freight": "Groups authorized local native dispatch facts by the current employee department. Original currency, current-period amounts and existing change comparison are preserved. Department totals use exact decimal aggregation and are not counted again in headline totals.",
+    "permissions": "Existing scopes preserved; summary-only customer analytics do not return personal rows or identity metadata.",
+    "verification": {
+      "frontend": {
+        "suites": 3,
+        "tests": 65,
+        "result": "passed"
+      },
+      "backend": {
+        "suites": 6,
+        "tests": 53,
+        "result": "passed",
+        "databaseCases": "Customer-owner cross-department, ambiguous and unauthorized mapping; registration and revenue grouping."
+      },
+      "backendBuild": "passed",
+      "frontendBuild": "passed",
+      "http": {
+        "charts": [
+          {
+            "chartId": "registrations",
+            "total": 408,
+            "people": 20,
+            "groups": [
+              {
+                "department": "业务一部",
+                "count": 73,
+                "people": 5,
+                "personalCount": 73
+              },
+              {
+                "department": "业务四部",
+                "count": 56,
+                "people": 4,
+                "personalCount": 56
+              },
+              {
+                "department": "业务二部",
+                "count": 129,
+                "people": 5,
+                "personalCount": 129
+              },
+              {
+                "department": "业务三部",
+                "count": 150,
+                "people": 6,
+                "personalCount": 150
+              }
+            ],
+            "allDepartmentCountsMatch": true,
+            "allEnglishNamesPresent": true
+          },
+          {
+            "chartId": "salesperson_receipts",
+            "total": 15119,
+            "people": 19,
+            "groups": [
+              {
+                "department": "业务一部",
+                "count": 3643,
+                "people": 4,
+                "personalCount": 3643
+              },
+              {
+                "department": "业务四部",
+                "count": 360,
+                "people": 4,
+                "personalCount": 360
+              },
+              {
+                "department": "业务二部",
+                "count": 3788,
+                "people": 5,
+                "personalCount": 3788
+              },
+              {
+                "department": "业务三部",
+                "count": 7328,
+                "people": 6,
+                "personalCount": 7328
+              }
+            ],
+            "allDepartmentCountsMatch": true,
+            "allEnglishNamesPresent": true
+          },
+          {
+            "chartId": "customer_orders",
+            "total": 15119,
+            "people": 19,
+            "groups": [
+              {
+                "department": "业务一部",
+                "count": 3643,
+                "people": 4,
+                "personalCount": 3643
+              },
+              {
+                "department": "业务四部",
+                "count": 360,
+                "people": 4,
+                "personalCount": 360
+              },
+              {
+                "department": "业务二部",
+                "count": 3788,
+                "people": 5,
+                "personalCount": 3788
+              },
+              {
+                "department": "业务三部",
+                "count": 7328,
+                "people": 6,
+                "personalCount": 7328
+              }
+            ],
+            "allDepartmentCountsMatch": true,
+            "allEnglishNamesPresent": true
+          }
+        ],
+        "customerOrderComparison": {
+          "available": true,
+          "current": 2868,
+          "previous": 2151,
+          "previousDepartmentSubtotalsMatch": true
+        },
+        "source": "local",
+        "upstreamCalls": 0,
+        "freight": {
+          "status": 200,
+          "currency": "CNY",
+          "total": "773085.97",
+          "billCount": 12862,
+          "people": 18,
+          "allEnglishNamesPresent": true,
+          "groups": [
+            {
+              "department": "业务一部",
+              "people": 3,
+              "amount": "172950.54",
+              "personalTotal": "172950.54"
+            },
+            {
+              "department": "业务二部",
+              "people": 5,
+              "amount": "191470.51",
+              "personalTotal": "191470.51"
+            },
+            {
+              "department": "业务三部",
+              "people": 6,
+              "amount": "389796.99",
+              "personalTotal": "389796.99"
+            },
+            {
+              "department": "业务四部",
+              "people": 4,
+              "amount": "18867.93",
+              "personalTotal": "18867.93"
+            }
+          ],
+          "departmentAndPersonalAmountsMatch": true,
+          "departmentAndPersonalDeltasMatch": true
+        }
+      },
+      "browser": {
+        "customerOrders": "Confirmed all four department labels in order, 19 English personal labels and 15,119 orders unchanged.",
+        "freight": "Confirmed four departments in order, 18 English personal labels, year view with original-currency total 773085.97 and 12862 dispatches.",
+        "screenshot": ".runtime/local-demo/dashboard-salesperson-grouping.png"
+      },
+      "upstreamCalls": 0,
+      "databaseBusinessWrites": 0
+    }
+  },
+  "dashboardDepartmentDimensionMerge": {
+    "charts": [
+      "registrations",
+      "salesperson_receipts",
+      "order_volume",
+      "customer_orders"
+    ],
+    "dimensions": {
+      "registrations": [
+        "day",
+        "person",
+        "month"
+      ],
+      "salesperson_receipts": [
+        "person",
+        "month"
+      ],
+      "order_volume": [
+        "month",
+        "person",
+        "country",
+        "warehouse"
+      ],
+      "customer_orders": [
+        "customer",
+        "person",
+        "month"
+      ]
+    },
+    "defaultsUnchanged": true,
+    "departmentFilterRetained": true,
+    "grouping": "Department subtotal and all authorized salespeople share the person view, ordered business departments 1/2/3/4 with English personal labels. Count, quantity and revenue totals remain unchanged and are not summed twice.",
+    "orderVolumeSource": "New person aggregates use the order owner stable employee ID and current employee department; customer-order person aggregates still use the customer archive owner. No new FOP request or database migration.",
+    "summaryOnly": "The four charts keep internal department-only aggregates, hide dimension switching and never expose personal rows or identity fields.",
+    "verification": {
+      "frontend": {
+        "suites": 2,
+        "tests": 67,
+        "result": "passed"
+      },
+      "backend": {
+        "suites": 5,
+        "tests": 47,
+        "result": "passed"
+      },
+      "build": {
+        "backend": "passed",
+        "frontend": "passed"
+      },
+      "http": {
+        "checks": [
+          {
+            "chartId": "registrations",
+            "status": 200,
+            "from": "2026-01-01",
+            "to": "2026-11-16",
+            "total": 408,
+            "people": 20,
+            "groups": [
+              {
+                "department": "业务一部",
+                "count": 73,
+                "personalCount": 73,
+                "people": 5,
+                "quantity": null,
+                "personalQuantity": null
+              },
+              {
+                "department": "业务四部",
+                "count": 56,
+                "personalCount": 56,
+                "people": 4,
+                "quantity": null,
+                "personalQuantity": null
+              },
+              {
+                "department": "业务二部",
+                "count": 129,
+                "personalCount": 129,
+                "people": 5,
+                "quantity": null,
+                "personalQuantity": null
+              },
+              {
+                "department": "业务三部",
+                "count": 150,
+                "personalCount": 150,
+                "people": 6,
+                "quantity": null,
+                "personalQuantity": null
+              }
+            ],
+            "allSubtotalsMatch": true
+          },
+          {
+            "chartId": "salesperson_receipts",
+            "status": 200,
+            "from": "2026-01-01",
+            "to": "2026-11-17",
+            "total": 15119,
+            "people": 19,
+            "groups": [
+              {
+                "department": "业务一部",
+                "count": 3643,
+                "personalCount": 3643,
+                "people": 4,
+                "quantity": "6709",
+                "personalQuantity": 6709
+              },
+              {
+                "department": "业务四部",
+                "count": 360,
+                "personalCount": 360,
+                "people": 4,
+                "quantity": "592",
+                "personalQuantity": 592
+              },
+              {
+                "department": "业务二部",
+                "count": 3788,
+                "personalCount": 3788,
+                "people": 5,
+                "quantity": "7055",
+                "personalQuantity": 7055
+              },
+              {
+                "department": "业务三部",
+                "count": 7328,
+                "personalCount": 7328,
+                "people": 6,
+                "quantity": "13703",
+                "personalQuantity": 13703
+              }
+            ],
+            "allSubtotalsMatch": true
+          },
+          {
+            "chartId": "order_volume",
+            "status": 200,
+            "from": "2026-01-01",
+            "to": "2026-11-17",
+            "total": 15119,
+            "people": 19,
+            "groups": [
+              {
+                "department": "业务一部",
+                "count": 3643,
+                "personalCount": 3643,
+                "people": 4,
+                "quantity": "6709",
+                "personalQuantity": 6709
+              },
+              {
+                "department": "业务四部",
+                "count": 360,
+                "personalCount": 360,
+                "people": 4,
+                "quantity": "592",
+                "personalQuantity": 592
+              },
+              {
+                "department": "业务二部",
+                "count": 3788,
+                "personalCount": 3788,
+                "people": 5,
+                "quantity": "7055",
+                "personalQuantity": 7055
+              },
+              {
+                "department": "业务三部",
+                "count": 7328,
+                "personalCount": 7328,
+                "people": 6,
+                "quantity": "13703",
+                "personalQuantity": 13703
+              }
+            ],
+            "allSubtotalsMatch": true
+          },
+          {
+            "chartId": "customer_orders",
+            "status": 200,
+            "from": "2026-01-01",
+            "to": "2026-11-17",
+            "total": 15119,
+            "people": 19,
+            "groups": [
+              {
+                "department": "业务一部",
+                "count": 3643,
+                "personalCount": 3643,
+                "people": 4,
+                "quantity": "6709",
+                "personalQuantity": 6709
+              },
+              {
+                "department": "业务四部",
+                "count": 360,
+                "personalCount": 360,
+                "people": 4,
+                "quantity": "592",
+                "personalQuantity": 592
+              },
+              {
+                "department": "业务二部",
+                "count": 3788,
+                "personalCount": 3788,
+                "people": 5,
+                "quantity": "7055",
+                "personalQuantity": 7055
+              },
+              {
+                "department": "业务三部",
+                "count": 7328,
+                "personalCount": 7328,
+                "people": 6,
+                "quantity": "13703",
+                "personalQuantity": 13703
+              }
+            ],
+            "allSubtotalsMatch": true
+          }
+        ],
+        "source": "local",
+        "upstreamCalls": 0
+      },
+      "browser": {
+        "dimensionOptionsChecked": true,
+        "allFourDepartmentGroupsPresent": true,
+        "departmentFilterRetained": true,
+        "screenshot": ".runtime/local-demo/merged-department-dimensions.png"
+      },
+      "upstreamCalls": 0,
+      "databaseBusinessWrites": 0
+    }
+  },
+  "nativeApprovalIntegration": {
+    "verifiedAt": "2026-11-17T03:40:05.946416+00:00",
+    "source": "authorized test environment hyperzone.test / company 100000",
+    "upstreamCalled": true,
+    "businessDataMutated": true,
+    "mode": "published_native_apis",
+    "manualApprovalEnabled": true,
+    "automaticSyncResumed": false,
+    "routes": {
+      "fulfillment": "/kapi/v2/hzkj/hzkj_ordercenter/hzkj_orders/auditFulfillmentOrder",
+      "allocationPreview": "/kapi/v2/hzkj/ocbsoc/employee-orders/allocation-approval-targets",
+      "allocationAudit": "/kapi/v2/hzkj/ocbsoc/employee-orders/allocation-approve"
+    },
+    "approved": {
+      "fulfillment": [
+        "TO261109051116",
+        "TO261109051114"
+      ],
+      "allocation": [
+        "AO260920000044",
+        "AO260920000325"
+      ]
+    },
+    "businessRejected": [
+      {
+        "number": "TO260907015034",
+        "reason": "FOP收货信息校验：详细地址未识别到有效门牌号"
+      },
+      {
+        "number": "AO261016000196",
+        "reason": "配货标准审核返回failed，平台未提供详细校验原因"
+      }
+    ],
+    "gatewayCorrection": "First request rejected before audit because hex key length64 exceeds48; preserve256bits by base64url43.",
+    "readback": {
+      "sourceConfirmedC": true,
+      "localTargetedRefresh": true,
+      "repeatVerificationWrites": 0,
+      "httpPreview": [
+        201,
+        201
+      ],
+      "httpPendingQueuesAfterRefresh": [
+        {
+          "queue": "review",
+          "number": "TO261109051116",
+          "total": 0
+        },
+        {
+          "queue": "allocation_review",
+          "orderNumber": "TO260920018946",
+          "allocationNumber": "AO260920000325",
+          "total": 0
+        }
+      ]
+    },
+    "rules": [
+      "B only; no automatic submit",
+      "Fresh bound identity, company and current local employee scope",
+      "Sales paid + pending review; allocation ready + valid audited dispatch + unique allocation",
+      "Revalidate state/version before standard audit; platform owns final transaction/business gates",
+      "No mutation retry; stop remaining batch on unconfirmed result",
+      "Explicit native failure is failed, not unknown",
+      "C readback required before success; merge confirmed source facts only; preserve amounts/products",
+      "Native manual-approval switch remains a hard gate even if general queries resume",
+      "Cancelled dispatches excluded by hzkj_ship_block_state",
+      "Complete verified allocation readback detaches obsolete parent relations only within the current batch/order, preserving raw history and newer captures"
+    ],
+    "pending": [
+      "Non-admin bound-employee real mutation regression not performed",
+      "Concurrency/timeout boundary covered offline, not fault-injected into live FOP",
+      "Standard fulfillment audit API has no expectedVersion atomic CAS parameter; platform business validators remain final gate",
+      "Deployed EmployeeOrderController allocation implementation absent from current dtr5b checkout; runtime verified, matching source still to be supplied",
+      "AO261016000196 failed receipt lacks detailed business validation message; FOP should return platform operation validation reasons"
+    ],
+    "evidenceDirectory": ".runtime/approval-live (private, untracked; raw captures and pre-readback backup)",
+    "verification": {
+      "backend": {
+        "suites": 5,
+        "tests": 151,
+        "passed": true
+      },
+      "frontend": {
+        "suites": 2,
+        "tests": 178,
+        "passed": true
+      },
+      "build": {
+        "backend": true,
+        "frontend": true
+      },
+      "targetedLint": true,
+      "requirementsBuild": true,
+      "requirementsValidation": true,
+      "review": "Read-only reviewer rechecked fixes; no remaining P1/P2 in reviewed scope",
+      "liveReadbackAfterReview": {
+        "allocationNumber": "AO260920000325",
+        "status": "already_approved",
+        "auditWrites": 0
+      }
+    }
+  },
+  "managerChartPeerSummaries": {
+    "verifiedAt": "2026-11-17T03:39:17.260Z",
+    "implementation": "部门经理图表按角色显示本部门成员／客户数据，其他营销业务部门仅部门汇总；独立图表拒绝或收窄配置仍生效。待办范围不扩大。",
+    "source": "已同步本地数据；本次未调用 FOP、未修改业务数据或账号权限记录。",
+    "checks": {
+      "verifiedAt": "2026-11-17T03:39:17.260Z",
+      "source": "local",
+      "managers": [
+        {
+          "account": "cici",
+          "department": "业务一部",
+          "charts": [
+            {
+              "chart": "registrations",
+              "ownPersonalBars": 5,
+              "departmentBars": 4,
+              "ownRecordCount": 73,
+              "peerRecordsRedacted": true
+            },
+            {
+              "chart": "department_receipts",
+              "ownPersonalBars": 0,
+              "departmentBars": 4,
+              "ownRecordCount": 15119,
+              "peerRecordsRedacted": true
+            },
+            {
+              "chart": "salesperson_receipts",
+              "ownPersonalBars": 4,
+              "departmentBars": 4,
+              "ownRecordCount": 3643,
+              "peerRecordsRedacted": true
+            },
+            {
+              "chart": "order_volume",
+              "ownPersonalBars": 4,
+              "departmentBars": 4,
+              "ownRecordCount": 3643,
+              "peerRecordsRedacted": true
+            },
+            {
+              "chart": "customer_orders",
+              "ownPersonalBars": 4,
+              "departmentBars": 4,
+              "ownRecordCount": 3643,
+              "peerRecordsRedacted": true
+            }
+          ],
+          "comparisonAndForbiddenChecksPassed": true
+        },
+        {
+          "account": "dolly",
+          "department": "业务二部",
+          "charts": [
+            {
+              "chart": "registrations",
+              "ownPersonalBars": 5,
+              "departmentBars": 4,
+              "ownRecordCount": 129,
+              "peerRecordsRedacted": true
+            },
+            {
+              "chart": "department_receipts",
+              "ownPersonalBars": 0,
+              "departmentBars": 4,
+              "ownRecordCount": 15119,
+              "peerRecordsRedacted": true
+            },
+            {
+              "chart": "salesperson_receipts",
+              "ownPersonalBars": 5,
+              "departmentBars": 4,
+              "ownRecordCount": 3788,
+              "peerRecordsRedacted": true
+            },
+            {
+              "chart": "order_volume",
+              "ownPersonalBars": 5,
+              "departmentBars": 4,
+              "ownRecordCount": 3788,
+              "peerRecordsRedacted": true
+            },
+            {
+              "chart": "customer_orders",
+              "ownPersonalBars": 5,
+              "departmentBars": 4,
+              "ownRecordCount": 3788,
+              "peerRecordsRedacted": true
+            }
+          ],
+          "comparisonAndForbiddenChecksPassed": true
+        },
+        {
+          "account": "wendy",
+          "department": "业务三部",
+          "charts": [
+            {
+              "chart": "registrations",
+              "ownPersonalBars": 6,
+              "departmentBars": 4,
+              "ownRecordCount": 150,
+              "peerRecordsRedacted": true
+            },
+            {
+              "chart": "department_receipts",
+              "ownPersonalBars": 0,
+              "departmentBars": 4,
+              "ownRecordCount": 15119,
+              "peerRecordsRedacted": true
+            },
+            {
+              "chart": "salesperson_receipts",
+              "ownPersonalBars": 6,
+              "departmentBars": 4,
+              "ownRecordCount": 7328,
+              "peerRecordsRedacted": true
+            },
+            {
+              "chart": "order_volume",
+              "ownPersonalBars": 6,
+              "departmentBars": 4,
+              "ownRecordCount": 7328,
+              "peerRecordsRedacted": true
+            },
+            {
+              "chart": "customer_orders",
+              "ownPersonalBars": 6,
+              "departmentBars": 4,
+              "ownRecordCount": 7328,
+              "peerRecordsRedacted": true
+            }
+          ],
+          "comparisonAndForbiddenChecksPassed": true
+        },
+        {
+          "account": "eileen",
+          "department": "业务四部",
+          "charts": [
+            {
+              "chart": "registrations",
+              "ownPersonalBars": 4,
+              "departmentBars": 4,
+              "ownRecordCount": 56,
+              "peerRecordsRedacted": true
+            },
+            {
+              "chart": "department_receipts",
+              "ownPersonalBars": 0,
+              "departmentBars": 4,
+              "ownRecordCount": 15119,
+              "peerRecordsRedacted": true
+            },
+            {
+              "chart": "salesperson_receipts",
+              "ownPersonalBars": 4,
+              "departmentBars": 4,
+              "ownRecordCount": 360,
+              "peerRecordsRedacted": true
+            },
+            {
+              "chart": "order_volume",
+              "ownPersonalBars": 4,
+              "departmentBars": 4,
+              "ownRecordCount": 360,
+              "peerRecordsRedacted": true
+            },
+            {
+              "chart": "customer_orders",
+              "ownPersonalBars": 4,
+              "departmentBars": 4,
+              "ownRecordCount": 360,
+              "peerRecordsRedacted": true
+            }
+          ],
+          "comparisonAndForbiddenChecksPassed": true
+        }
+      ],
+      "regressions": {
+        "ordinarySalespersonSelfOnly": true,
+        "collaborationSummaryOnly": true,
+        "adminPersonalBars": 19,
+        "externalApiCalls": 0
+      }
+    },
+    "sqlPerformance": {
+      "query": "Cici customer_orders own-department aggregate",
+      "beforeMs": 10835,
+      "afterMs": 985,
+      "resultUnchanged": true,
+      "change": "将已授权客户归属映射一次物化，避免对每笔订单反复关联客户档案。"
+    },
+    "verification": {
+      "backendPermissionAndQueryTests": 128,
+      "backendLegacyAndAccountRegressionTests": 60,
+      "frontendChartTests": 79,
+      "frontendCacheTests": 13,
+      "frontendIntegrationTest": "1项环境型测试未启用；另已通过四经理真实本地 HTTP 验证。",
+      "backendBuild": "passed",
+      "frontendBuild": "passed",
+      "targetedLint": "passed"
+    },
+    "browser": {
+      "account": "Cici",
+      "ownPeople": [
+        "Coco",
+        "Alex",
+        "Cici",
+        "Betty"
+      ],
+      "peerDepartment": "业务二部",
+      "peerHasPersonDimension": false,
+      "restoredAccount": "Admin",
+      "screenshots": [
+        ".runtime/local-demo/cici-chart-permissions.png",
+        ".runtime/local-demo/cici-peer-summary.png"
+      ]
+    },
+    "privacy": "其他部门个人／客户身份不进入响应；当前与上期按同一数据库快照分别聚合；跨部门个人及订单请求拒绝；缓存包含授权版本。旧 FOP 汇总仍受原授权边界限制。"
+  },
+  "workbenchAnalyticsRetirement": {
+    "scope": "五个工作台移除订单分析、物流运费页签及渲染；统一使用 Dashboard 图表。",
+    "legacyRoutes": "queue=order-analysis/order-volume/freight 与 /workbench/:role/freight 转 /dashboard，清空旧参数；登录及业务权限继续检查。",
+    "access": "首页按账号、真实营销四部及独立图表授权在服务端过滤；经理本部门个人及客户数据＋其他部门汇总；协同仅授权汇总，运费仅系统管理员。既有销售其他分析入口权限不变。",
+    "upstreamCalled": false,
+    "verification": {
+      "frontendTests": 168,
+      "frontendSuites": 7,
+      "backendTests": 88,
+      "backendSuites": 5,
+      "frontendBuild": "passed",
+      "targetedLint": "passed",
+      "browser": "Admin 五个工作台无两个已退役页签；运费路径、订单分析参数旧链接转到首页且不带旧过滤。",
+      "browserScreenshot": ".runtime/local-demo/workbench-tabs-retired.png",
+      "liveHttp": "Cici、Dolly、Wendy、Eileen 四位经理五图的本部门成员／其他部门汇总、周／月环比及越权拒绝通过；普通业务员、协同岗、管理员边界通过。",
+      "liveHttpEvidence": ".runtime/local-demo/manager-analytics-verification.json"
+    }
+  }
+}

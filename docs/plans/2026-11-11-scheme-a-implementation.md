@@ -8,7 +8,7 @@
 
 **技术：** PostgreSQL 16、TypeORM 版本化迁移、NestJS、Vue 3、Vitest/Jest。
 
-**依据：** `docs/designs/workbench-database/schema-design.json` V1.2、`docs/solutions/HyperZoneFOP数据同步与查询方案.html` V2.1、`agent.md`。
+**依据：** `docs/designs/workbench-database/schema-design.json` V1.2、`../requirements/HyperZone智能办公平台项目开发需求说明书.html` V2.1、`agent.md`。
 
 ## 全局约束
 

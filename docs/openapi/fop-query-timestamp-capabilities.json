@@ -1,0 +1,966 @@
+{
+  "version": 1,
+  "packageVersion": "2026-11-16",
+  "evidence": "用户提供26项DTS导出配置；源码与配置均不代表已部署或成功联调",
+  "automaticCallsEnabled": false,
+  "upstreamCalled": false,
+  "protocol": "ordinary_modified_pages",
+  "consistency": "eventual",
+  "watermark": "local_capture_cutoff_not_source_transaction_version",
+  "capture": {
+    "fixedUpperBound": true,
+    "overlapSeconds": 600,
+    "safetyLagSeconds": 120,
+    "fullCompensationSeconds": 86400,
+    "fullCompensation": "manual_required_before_more_incremental_when_overdue",
+    "failureAdvancesWatermark": false,
+    "missingRowsAreDeletions": false,
+    "publication": "four_entity_transactional_local_projection_with_per_record_pending",
+    "localDerivedViews": "only_current_source_and_verified_local_relationship_facts; missing_fields_unknown",
+    "publicationInManualCaptureTransaction": true,
+    "fullWorkbenchComplete": false
+  },
+  "sourceImplementationEvidence": [
+    "/Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/ordercenter/service/OrderBatchModifyService.java",
+    "/Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/ordercenter/allocation/AllocationService.java"
+  ],
+  "gaps": [
+    "创建时间窗口未覆盖四项修改时间接口",
+    "全部子表/关联/原生状态变更是否推进主单modifytime未确认",
+    "普通分页移动可能漏行，必须全量补偿；补偿仍非一致快照",
+    "删除/解除关联需真实当前状态或显式存在性证据；普通分页缺行不得删单",
+    "集成账号公司全量覆盖、时钟偏差、时间格式与范围边界待真实联调",
+    "四实体本地投影已实现；新payload未返回的业务状态、无法证实的派生需求及其他实体更新仍不构成全工作台增量完备"
+  ],
+  "apis": [
+    {
+      "api": "auditFulfillmentOrder",
+      "entity": "hzkj_orders",
+      "responseTimes": [],
+      "timeFilters": [],
+      "ordering": [],
+      "entries": [],
+      "ordinaryModifiedCapture": false,
+      "creationWindowCaptureInTimestampEngine": false,
+      "creationRangeFilterAvailable": false,
+      "modifiedRangeFilterAvailable": false,
+      "keyset": false,
+      "sourceClock": false,
+      "scopeProof": false,
+      "deletionProof": false,
+      "childChangeUpdatesModifytime": "待FOP确认",
+      "status": "no_time_window_filter",
+      "constantFilters": [
+        {
+          "field": "hzkj_billtype.number",
+          "value": "\"hzkj_orders_BT\""
+        }
+      ],
+      "packageSha256": "a2cb3869848a1408491a99ca483194624e21862b7c1b3d73e02ddcfd97d61f5a"
+    },
+    {
+      "api": "queryAfterSaleOrders",
+      "entity": "hzkj_after_sale_orders",
+      "responseTimes": [
+        {
+          "source": "createtime",
+          "response": "createtime"
+        },
+        {
+          "source": "modifytime",
+          "response": "modifytime"
+        }
+      ],
+      "timeFilters": [
+        {
+          "field": "createtime",
+          "comparison": "GREATER",
+          "filterValue": "start_date",
+          "requestParameter": "start_date"
+        },
+        {
+          "field": "createtime",
+          "comparison": "LESS",
+          "filterValue": "end_date",
+          "requestParameter": "end_date"
+        }
+      ],
+      "ordering": [
+        {
+          "field": "createtime",
+          "direction": "desc"
+        }
+      ],
+      "entries": [
+        "hzkj_after_entryentity"
+      ],
+      "ordinaryModifiedCapture": false,
+      "creationWindowCaptureInTimestampEngine": false,
+      "creationRangeFilterAvailable": true,
+      "modifiedRangeFilterAvailable": false,
+      "keyset": false,
+      "sourceClock": false,
+      "scopeProof": false,
+      "deletionProof": false,
+      "childChangeUpdatesModifytime": "待FOP确认",
+      "status": "creation_filter_only_not_modify_incremental",
+      "constantFilters": [
+        {
+          "field": "enable",
+          "value": "1"
+        }
+      ],
+      "packageSha256": "08449e5f61ab04c8b85297838111dac5e9bff9f04b21552fe0269dfe9b38e4fa"
+    },
+    {
+      "api": "queryAllocation",
+      "entity": "hzkj_alloc_bill",
+      "responseTimes": [
+        {
+          "source": "modifytime",
+          "response": "modifytime"
+        },
+        {
+          "source": "createtime",
+          "response": "createtime"
+        }
+      ],
+      "timeFilters": [
+        {
+          "field": "modifytime",
+          "comparison": "EQUAL",
+          "filterValue": "modifytime",
+          "requestParameter": "modifytime"
+        },
+        {
+          "field": "createtime",
+          "comparison": "EQUAL",
+          "filterValue": "createtime",
+          "requestParameter": "createtime"
+        },
+        {
+          "field": "modifytime",
+          "comparison": "GREATEROREQUAL",
+          "filterValue": "start_modifytime",
+          "requestParameter": "start_modifytime"
+        },
+        {
+          "field": "modifytime",
+          "comparison": "LESS",
+          "filterValue": "end_modifytime",
+          "requestParameter": "end_modifytime"
+        }
+      ],
+      "ordering": [
+        {
+          "field": "modifytime",
+          "direction": "asc"
+        },
+        {
+          "field": "id",
+          "direction": "asc"
+        }
+      ],
+      "entries": [
+        "hzkj_alloc_entry"
+      ],
+      "ordinaryModifiedCapture": true,
+      "creationWindowCaptureInTimestampEngine": false,
+      "creationRangeFilterAvailable": false,
+      "modifiedRangeFilterAvailable": true,
+      "keyset": false,
+      "sourceClock": false,
+      "scopeProof": false,
+      "deletionProof": false,
+      "childChangeUpdatesModifytime": "待FOP确认",
+      "status": "local_adapter_implemented_not_live_verified",
+      "constantFilters": [],
+      "packageSha256": "5bd33ffbec1f78fe18765056cc17037a4da01ddfd9f7ac2aee48289706b0379d"
+    },
+    {
+      "api": "queryCustomerRegistrations",
+      "entity": "hzkj_member_customer",
+      "responseTimes": [
+        {
+          "source": "createtime",
+          "response": "createtime"
+        }
+      ],
+      "timeFilters": [
+        {
+          "field": "createtime",
+          "comparison": "GREATEROREQUAL",
+          "filterValue": "from",
+          "requestParameter": "from"
+        },
+        {
+          "field": "createtime",
+          "comparison": "LESS",
+          "filterValue": "toExclusive",
+          "requestParameter": "toExclusive"
+        }
+      ],
+      "ordering": [
+        {
+          "field": "id",
+          "direction": "asc"
+        }
+      ],
+      "entries": [],
+      "ordinaryModifiedCapture": false,
+      "creationWindowCaptureInTimestampEngine": false,
+      "creationRangeFilterAvailable": true,
+      "modifiedRangeFilterAvailable": false,
+      "keyset": false,
+      "sourceClock": false,
+      "scopeProof": false,
+      "deletionProof": false,
+      "childChangeUpdatesModifytime": "待FOP确认",
+      "status": "creation_filter_only_not_modify_incremental",
+      "constantFilters": [],
+      "packageSha256": "d5b7036d2aa6d7981b8f83235dbcd856e7c9dfb6b86976b59d420195b9859fa1"
+    },
+    {
+      "api": "queryDeliveryNotice",
+      "entity": "hzkj_deliver_order",
+      "responseTimes": [
+        {
+          "source": "modifytime",
+          "response": "modifytime"
+        },
+        {
+          "source": "createtime",
+          "response": "createtime"
+        }
+      ],
+      "timeFilters": [
+        {
+          "field": "modifytime",
+          "comparison": "GREATEROREQUAL",
+          "filterValue": "modifytime",
+          "requestParameter": "start_modifytime"
+        },
+        {
+          "field": "modifytime",
+          "comparison": "LESS",
+          "filterValue": "end_modifytime",
+          "requestParameter": "end_modifytime"
+        }
+      ],
+      "ordering": [
+        {
+          "field": "modifytime",
+          "direction": "asc"
+        },
+        {
+          "field": "id",
+          "direction": "asc"
+        }
+      ],
+      "entries": [
+        "entryentity"
+      ],
+      "ordinaryModifiedCapture": true,
+      "creationWindowCaptureInTimestampEngine": false,
+      "creationRangeFilterAvailable": false,
+      "modifiedRangeFilterAvailable": true,
+      "keyset": false,
+      "sourceClock": false,
+      "scopeProof": false,
+      "deletionProof": false,
+      "childChangeUpdatesModifytime": "待FOP确认",
+      "status": "local_adapter_implemented_not_live_verified",
+      "constantFilters": [],
+      "packageSha256": "c4a40b530effe884fcf563ecb6f8ee0943e2b49c7ab94795b0774c98512eaedd"
+    },
+    {
+      "api": "queryDeliveryNoticeByNo",
+      "entity": "hzkj_deliver_order",
+      "responseTimes": [],
+      "timeFilters": [],
+      "ordering": [],
+      "entries": [
+        "entryentity"
+      ],
+      "ordinaryModifiedCapture": false,
+      "creationWindowCaptureInTimestampEngine": false,
+      "creationRangeFilterAvailable": false,
+      "modifiedRangeFilterAvailable": false,
+      "keyset": false,
+      "sourceClock": false,
+      "scopeProof": false,
+      "deletionProof": false,
+      "childChangeUpdatesModifytime": "待FOP确认",
+      "status": "no_time_window_filter",
+      "constantFilters": [],
+      "packageSha256": "f9c66b56fdd05f65a1add81166e52e6b661d0b45a2f2d536b80366897ae133a9"
+    },
+    {
+      "api": "queryDispatch",
+      "entity": "hzkj_deliver_bill",
+      "responseTimes": [
+        {
+          "source": "modifytime",
+          "response": "modifytime"
+        },
+        {
+          "source": "createtime",
+          "response": "createtime"
+        }
+      ],
+      "timeFilters": [
+        {
+          "field": "modifytime",
+          "comparison": "GREATEROREQUAL",
+          "filterValue": "start_modifytime",
+          "requestParameter": "start_modifytime"
+        },
+        {
+          "field": "modifytime",
+          "comparison": "LESS",
+          "filterValue": "end_modifytime",
+          "requestParameter": "end_modifytime"
+        }
+      ],
+      "ordering": [
+        {
+          "field": "modifytime",
+          "direction": "asc"
+        },
+        {
+          "field": "id",
+          "direction": "asc"
+        }
+      ],
+      "entries": [
+        "hzkj_logisticstrackentry"
+      ],
+      "ordinaryModifiedCapture": true,
+      "creationWindowCaptureInTimestampEngine": false,
+      "creationRangeFilterAvailable": false,
+      "modifiedRangeFilterAvailable": true,
+      "keyset": false,
+      "sourceClock": false,
+      "scopeProof": false,
+      "deletionProof": false,
+      "childChangeUpdatesModifytime": "待FOP确认",
+      "status": "local_adapter_implemented_not_live_verified",
+      "constantFilters": [],
+      "packageSha256": "07e3763107a1bdd8785ba3326de6a63488eb6d2a44e2f3eb8b0d6a84d706726e"
+    },
+    {
+      "api": "queryFreightException",
+      "entity": "hzkj_freight_exception",
+      "responseTimes": [
+        {
+          "source": "modifytime",
+          "response": "modifytime"
+        },
+        {
+          "source": "createtime",
+          "response": "createtime"
+        }
+      ],
+      "timeFilters": [],
+      "ordering": [],
+      "entries": [],
+      "ordinaryModifiedCapture": false,
+      "creationWindowCaptureInTimestampEngine": false,
+      "creationRangeFilterAvailable": false,
+      "modifiedRangeFilterAvailable": false,
+      "keyset": false,
+      "sourceClock": false,
+      "scopeProof": false,
+      "deletionProof": false,
+      "childChangeUpdatesModifytime": "待FOP确认",
+      "status": "no_time_window_filter",
+      "constantFilters": [],
+      "packageSha256": "014acf73ddac8ff2cb5b7bc4ea21460ba64bca956d61e5a2bb859a114d45c42f"
+    },
+    {
+      "api": "queryInbound",
+      "entity": "im_purinbill",
+      "responseTimes": [
+        {
+          "source": "modifytime",
+          "response": "modifytime"
+        },
+        {
+          "source": "createtime",
+          "response": "createtime"
+        }
+      ],
+      "timeFilters": [],
+      "ordering": [
+        {
+          "field": "id",
+          "direction": "asc"
+        }
+      ],
+      "entries": [
+        "billentry"
+      ],
+      "ordinaryModifiedCapture": false,
+      "creationWindowCaptureInTimestampEngine": false,
+      "creationRangeFilterAvailable": false,
+      "modifiedRangeFilterAvailable": false,
+      "keyset": false,
+      "sourceClock": false,
+      "scopeProof": false,
+      "deletionProof": false,
+      "childChangeUpdatesModifytime": "待FOP确认",
+      "status": "no_time_window_filter",
+      "constantFilters": [],
+      "packageSha256": "c18ad83287dacd6cec647857ab83cdb27fe43e8698d4b6463145fcd5d584435e"
+    },
+    {
+      "api": "queryOrderDetail",
+      "entity": "hzkj_orders",
+      "responseTimes": [
+        {
+          "source": "modifytime",
+          "response": "modifytime"
+        },
+        {
+          "source": "createtime",
+          "response": "createtime"
+        }
+      ],
+      "timeFilters": [],
+      "ordering": [],
+      "entries": [
+        "hzkj_orders_billentry"
+      ],
+      "ordinaryModifiedCapture": false,
+      "creationWindowCaptureInTimestampEngine": false,
+      "creationRangeFilterAvailable": false,
+      "modifiedRangeFilterAvailable": false,
+      "keyset": false,
+      "sourceClock": false,
+      "scopeProof": false,
+      "deletionProof": false,
+      "childChangeUpdatesModifytime": "待FOP确认",
+      "status": "no_time_window_filter",
+      "constantFilters": [],
+      "packageSha256": "465b9cb9b76d632086b5965eadd815875f2600be17d835c0aac2d7e1746c60d2"
+    },
+    {
+      "api": "queryOrderList",
+      "entity": "hzkj_orders",
+      "responseTimes": [
+        {
+          "source": "modifytime",
+          "response": "modifytime"
+        },
+        {
+          "source": "createtime",
+          "response": "createtime"
+        }
+      ],
+      "timeFilters": [
+        {
+          "field": "modifytime",
+          "comparison": "GREATEROREQUAL",
+          "filterValue": "modifytime",
+          "requestParameter": "start_modifytime"
+        },
+        {
+          "field": "modifytime",
+          "comparison": "LESS",
+          "filterValue": "end_modifytime",
+          "requestParameter": "end_modifytime"
+        }
+      ],
+      "ordering": [
+        {
+          "field": "modifytime",
+          "direction": "asc"
+        },
+        {
+          "field": "id",
+          "direction": "asc"
+        }
+      ],
+      "entries": [
+        "hzkj_orders_billentry",
+        "hzkj_logistics_info"
+      ],
+      "ordinaryModifiedCapture": true,
+      "creationWindowCaptureInTimestampEngine": false,
+      "creationRangeFilterAvailable": false,
+      "modifiedRangeFilterAvailable": true,
+      "keyset": false,
+      "sourceClock": false,
+      "scopeProof": false,
+      "deletionProof": false,
+      "childChangeUpdatesModifytime": "待FOP确认",
+      "status": "local_adapter_implemented_not_live_verified",
+      "constantFilters": [
+        {
+          "field": "hzkj_billtype.number",
+          "value": "\"hzkj_orders_BT\""
+        }
+      ],
+      "packageSha256": "8fc90d2f947cb1e27d1a13030c9460d19154ba81dcbc07ef7525ee7e931db896"
+    },
+    {
+      "api": "queryOutbound",
+      "entity": "im_saloutbill",
+      "responseTimes": [
+        {
+          "source": "modifytime",
+          "response": "modifytime"
+        },
+        {
+          "source": "createtime",
+          "response": "createtime"
+        }
+      ],
+      "timeFilters": [],
+      "ordering": [],
+      "entries": [
+        "billentry"
+      ],
+      "ordinaryModifiedCapture": false,
+      "creationWindowCaptureInTimestampEngine": false,
+      "creationRangeFilterAvailable": false,
+      "modifiedRangeFilterAvailable": false,
+      "keyset": false,
+      "sourceClock": false,
+      "scopeProof": false,
+      "deletionProof": false,
+      "childChangeUpdatesModifytime": "待FOP确认",
+      "status": "no_time_window_filter",
+      "constantFilters": [],
+      "packageSha256": "602a8aba8825352f1188f087c311b5e5cc5e9814c3428c098998775933e3c491"
+    },
+    {
+      "api": "queryOutboundList",
+      "entity": "im_saloutbill",
+      "responseTimes": [
+        {
+          "source": "modifytime",
+          "response": "modifytime"
+        },
+        {
+          "source": "createtime",
+          "response": "createtime"
+        }
+      ],
+      "timeFilters": [],
+      "ordering": [
+        {
+          "field": "id",
+          "direction": "asc"
+        }
+      ],
+      "entries": [
+        "billentry"
+      ],
+      "ordinaryModifiedCapture": false,
+      "creationWindowCaptureInTimestampEngine": false,
+      "creationRangeFilterAvailable": false,
+      "modifiedRangeFilterAvailable": false,
+      "keyset": false,
+      "sourceClock": false,
+      "scopeProof": false,
+      "deletionProof": false,
+      "childChangeUpdatesModifytime": "待FOP确认",
+      "status": "no_time_window_filter",
+      "constantFilters": [],
+      "packageSha256": "f23c88b207ddca470bfd65c536c7563ee79537aad7484d7b6605718b1fd69cd8"
+    },
+    {
+      "api": "queryPayment",
+      "entity": "hzkj_pay_cost_bill",
+      "responseTimes": [
+        {
+          "source": "modifytime",
+          "response": "modifytime"
+        },
+        {
+          "source": "createtime",
+          "response": "createtime"
+        }
+      ],
+      "timeFilters": [],
+      "ordering": [
+        {
+          "field": "id",
+          "direction": "asc"
+        }
+      ],
+      "entries": [
+        "entryentity"
+      ],
+      "ordinaryModifiedCapture": false,
+      "creationWindowCaptureInTimestampEngine": false,
+      "creationRangeFilterAvailable": false,
+      "modifiedRangeFilterAvailable": false,
+      "keyset": false,
+      "sourceClock": false,
+      "scopeProof": false,
+      "deletionProof": false,
+      "childChangeUpdatesModifytime": "待FOP确认",
+      "status": "no_time_window_filter",
+      "constantFilters": [],
+      "packageSha256": "ec1ae37db5a49a4b850f5d1fad1124f73095c987c21b38731fe995dd401f8645"
+    },
+    {
+      "api": "queryPurchase",
+      "entity": "hzkj_purorderbill",
+      "responseTimes": [
+        {
+          "source": "modifytime",
+          "response": "modifytime"
+        },
+        {
+          "source": "createtime",
+          "response": "createtime"
+        }
+      ],
+      "timeFilters": [],
+      "ordering": [
+        {
+          "field": "id",
+          "direction": "asc"
+        }
+      ],
+      "entries": [
+        "entryentity",
+        "hzkj_billentry"
+      ],
+      "ordinaryModifiedCapture": false,
+      "creationWindowCaptureInTimestampEngine": false,
+      "creationRangeFilterAvailable": false,
+      "modifiedRangeFilterAvailable": false,
+      "keyset": false,
+      "sourceClock": false,
+      "scopeProof": false,
+      "deletionProof": false,
+      "childChangeUpdatesModifytime": "待FOP确认",
+      "status": "no_time_window_filter",
+      "constantFilters": [],
+      "packageSha256": "26b2987b11847ace680bf665c27fd510d09a8b03d692bd4aa2c09d5c5493a2e8"
+    },
+    {
+      "api": "queryPurchaseRefundApplication",
+      "entity": "hzkj_purrefundapplybill",
+      "responseTimes": [],
+      "timeFilters": [],
+      "ordering": [],
+      "entries": [
+        "entryentity"
+      ],
+      "ordinaryModifiedCapture": false,
+      "creationWindowCaptureInTimestampEngine": false,
+      "creationRangeFilterAvailable": false,
+      "modifiedRangeFilterAvailable": false,
+      "keyset": false,
+      "sourceClock": false,
+      "scopeProof": false,
+      "deletionProof": false,
+      "childChangeUpdatesModifytime": "待FOP确认",
+      "status": "no_time_window_filter",
+      "constantFilters": [],
+      "packageSha256": "9b0f10fe2a554ef77e77d13d57c808174ffb403a8457546fee1bb1ffeeacb5bb"
+    },
+    {
+      "api": "queryPurchaseRequisition",
+      "entity": "hzkj_purapplybill",
+      "responseTimes": [
+        {
+          "source": "modifytime",
+          "response": "modifytime"
+        },
+        {
+          "source": "createtime",
+          "response": "createtime"
+        }
+      ],
+      "timeFilters": [],
+      "ordering": [
+        {
+          "field": "id",
+          "direction": "asc"
+        }
+      ],
+      "entries": [
+        "entryentity"
+      ],
+      "ordinaryModifiedCapture": false,
+      "creationWindowCaptureInTimestampEngine": false,
+      "creationRangeFilterAvailable": false,
+      "modifiedRangeFilterAvailable": false,
+      "keyset": false,
+      "sourceClock": false,
+      "scopeProof": false,
+      "deletionProof": false,
+      "childChangeUpdatesModifytime": "待FOP确认",
+      "status": "no_time_window_filter",
+      "constantFilters": [],
+      "packageSha256": "d77f7677f0ba1ba2ea7eb9a340fb6ae5e52a40ac1bca84e78f508987e18539af"
+    },
+    {
+      "api": "queryPurchaseReturn",
+      "entity": "hzkj_purorderbill",
+      "responseTimes": [],
+      "timeFilters": [],
+      "ordering": [
+        {
+          "field": "id",
+          "direction": "asc"
+        }
+      ],
+      "entries": [],
+      "ordinaryModifiedCapture": false,
+      "creationWindowCaptureInTimestampEngine": false,
+      "creationRangeFilterAvailable": false,
+      "modifiedRangeFilterAvailable": false,
+      "keyset": false,
+      "sourceClock": false,
+      "scopeProof": false,
+      "deletionProof": false,
+      "childChangeUpdatesModifytime": "待FOP确认",
+      "status": "no_time_window_filter",
+      "constantFilters": [
+        {
+          "field": "hzkj_pay_status",
+          "value": "3"
+        },
+        {
+          "field": "hzkj_pay_status",
+          "value": "4"
+        }
+      ],
+      "packageSha256": "ac39c8ae3f8f20e10b570cca65779fd0f6d89b56aaf325ee9f47f539291507e1"
+    },
+    {
+      "api": "queryReceipt",
+      "entity": "hzkj_receive_bill",
+      "responseTimes": [
+        {
+          "source": "modifytime",
+          "response": "modifytime"
+        },
+        {
+          "source": "createtime",
+          "response": "createtime"
+        }
+      ],
+      "timeFilters": [],
+      "ordering": [
+        {
+          "field": "id",
+          "direction": "asc"
+        }
+      ],
+      "entries": [
+        "entryentity"
+      ],
+      "ordinaryModifiedCapture": false,
+      "creationWindowCaptureInTimestampEngine": false,
+      "creationRangeFilterAvailable": false,
+      "modifiedRangeFilterAvailable": false,
+      "keyset": false,
+      "sourceClock": false,
+      "scopeProof": false,
+      "deletionProof": false,
+      "childChangeUpdatesModifytime": "待FOP确认",
+      "status": "no_time_window_filter",
+      "constantFilters": [],
+      "packageSha256": "e9a9c39d50fc95b27d4ece007b64501e66284b3b01b5cccfb157c9235780c905"
+    },
+    {
+      "api": "queryReceiptAdjustment",
+      "entity": "hzkj_adjust_bill",
+      "responseTimes": [
+        {
+          "source": "modifytime",
+          "response": "modifytime"
+        },
+        {
+          "source": "createtime",
+          "response": "createtime"
+        }
+      ],
+      "timeFilters": [],
+      "ordering": [
+        {
+          "field": "id",
+          "direction": "asc"
+        }
+      ],
+      "entries": [
+        "hzkj_entryentity"
+      ],
+      "ordinaryModifiedCapture": false,
+      "creationWindowCaptureInTimestampEngine": false,
+      "creationRangeFilterAvailable": false,
+      "modifiedRangeFilterAvailable": false,
+      "keyset": false,
+      "sourceClock": false,
+      "scopeProof": false,
+      "deletionProof": false,
+      "childChangeUpdatesModifytime": "待FOP确认",
+      "status": "no_time_window_filter",
+      "constantFilters": [],
+      "packageSha256": "a8b0e1bbdb770cf8f970d45e963753d55f7bcdd16195bd6f6bd24eaf7d7bd810"
+    },
+    {
+      "api": "queryReceiptNotice",
+      "entity": "hzkj_receiptnotice",
+      "responseTimes": [
+        {
+          "source": "modifytime",
+          "response": "modifytime"
+        },
+        {
+          "source": "createtime",
+          "response": "createtime"
+        }
+      ],
+      "timeFilters": [],
+      "ordering": [
+        {
+          "field": "id",
+          "direction": "asc"
+        }
+      ],
+      "entries": [
+        "entryentity",
+        "entryentity_lk"
+      ],
+      "ordinaryModifiedCapture": false,
+      "creationWindowCaptureInTimestampEngine": false,
+      "creationRangeFilterAvailable": false,
+      "modifiedRangeFilterAvailable": false,
+      "keyset": false,
+      "sourceClock": false,
+      "scopeProof": false,
+      "deletionProof": false,
+      "childChangeUpdatesModifytime": "待FOP确认",
+      "status": "no_time_window_filter",
+      "constantFilters": [],
+      "packageSha256": "ee3770f5069d2ae66953ba84b363b89ac7088dc8133d0c3b5da7e99ed8ae169e"
+    },
+    {
+      "api": "queryStockOrder",
+      "entity": "hzkj_stock_order_new",
+      "responseTimes": [
+        {
+          "source": "modifytime",
+          "response": "modifytime"
+        },
+        {
+          "source": "createtime",
+          "response": "createtime"
+        }
+      ],
+      "timeFilters": [],
+      "ordering": [
+        {
+          "field": "id",
+          "direction": "asc"
+        }
+      ],
+      "entries": [
+        "hzkj_orders_billentry",
+        "hzkj_sale_order_use",
+        "hzkj_stock_purc_sub"
+      ],
+      "ordinaryModifiedCapture": false,
+      "creationWindowCaptureInTimestampEngine": false,
+      "creationRangeFilterAvailable": false,
+      "modifiedRangeFilterAvailable": false,
+      "keyset": false,
+      "sourceClock": false,
+      "scopeProof": false,
+      "deletionProof": false,
+      "childChangeUpdatesModifytime": "待FOP确认",
+      "status": "no_time_window_filter",
+      "constantFilters": [],
+      "packageSha256": "5c59cbc1d84e124ba6ad358eaa00c739e33845fe089dbb071b43cdba70395056"
+    },
+    {
+      "api": "queryWorkbenchAllocationBalance",
+      "entity": "hzkj_alloc_balance",
+      "responseTimes": [],
+      "timeFilters": [],
+      "ordering": [],
+      "entries": [],
+      "ordinaryModifiedCapture": false,
+      "creationWindowCaptureInTimestampEngine": false,
+      "creationRangeFilterAvailable": false,
+      "modifiedRangeFilterAvailable": false,
+      "keyset": false,
+      "sourceClock": false,
+      "scopeProof": false,
+      "deletionProof": false,
+      "childChangeUpdatesModifytime": "待FOP确认",
+      "status": "no_time_window_filter",
+      "constantFilters": [],
+      "packageSha256": "107c25d0a3affdbdba023713ad4fa99ec49a0b2cc2c46e51211682c079a64f66"
+    },
+    {
+      "api": "queryWorkbenchInventoryBalance",
+      "entity": "im_inv_realbalance",
+      "responseTimes": [],
+      "timeFilters": [],
+      "ordering": [],
+      "entries": [],
+      "ordinaryModifiedCapture": false,
+      "creationWindowCaptureInTimestampEngine": false,
+      "creationRangeFilterAvailable": false,
+      "modifiedRangeFilterAvailable": false,
+      "keyset": false,
+      "sourceClock": false,
+      "scopeProof": false,
+      "deletionProof": false,
+      "childChangeUpdatesModifytime": "待FOP确认",
+      "status": "no_time_window_filter",
+      "constantFilters": [],
+      "packageSha256": "d333bd65f9a7f08ed9ebb350df2d076cb89514be42f14390cbfec9355b3560dc"
+    },
+    {
+      "api": "queryWorkbenchReservedStock",
+      "entity": "hzkj_stock_inventory_data",
+      "responseTimes": [],
+      "timeFilters": [],
+      "ordering": [],
+      "entries": [],
+      "ordinaryModifiedCapture": false,
+      "creationWindowCaptureInTimestampEngine": false,
+      "creationRangeFilterAvailable": false,
+      "modifiedRangeFilterAvailable": false,
+      "keyset": false,
+      "sourceClock": false,
+      "scopeProof": false,
+      "deletionProof": false,
+      "childChangeUpdatesModifytime": "待FOP确认",
+      "status": "no_time_window_filter",
+      "constantFilters": [],
+      "packageSha256": "3002a0e220539eec325f4377f23577e51de7e0dd3cadddd1b6c7e7bfa9748b53"
+    },
+    {
+      "api": "queryWorkbenchSkuMaterial",
+      "entity": "hzkj_sku_record",
+      "responseTimes": [],
+      "timeFilters": [],
+      "ordering": [],
+      "entries": [],
+      "ordinaryModifiedCapture": false,
+      "creationWindowCaptureInTimestampEngine": false,
+      "creationRangeFilterAvailable": false,
+      "modifiedRangeFilterAvailable": false,
+      "keyset": false,
+      "sourceClock": false,
+      "scopeProof": false,
+      "deletionProof": false,
+      "childChangeUpdatesModifytime": "待FOP确认",
+      "status": "no_time_window_filter",
+      "constantFilters": [],
+      "packageSha256": "2d14740e234b201e953037667e10bffb8d669911090d18be9cad9f258ad9e6b1"
+    }
+  ]
+}

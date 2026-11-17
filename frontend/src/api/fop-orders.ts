@@ -1,3 +1,5 @@
+import { hasDispatchSyncFailure } from '@/utils/order-dispatch-status'
+import { matchesCollectedAllocation } from '@/utils/collected-allocation'
 import type { WorkbenchDataAvailability, WorkbenchReplicaSnapshot } from './workbench-replica'
 import { beginWorkbenchCount } from '@/utils/workbench-counts'
 import { isProcurementReady } from '@/utils/workbench-queue-rules'
@@ -9,6 +11,9 @@ export type FopExceptionType = typeof FOP_EXCEPTION_TYPES[number]
 export const fopOrderQueues = ['unpaid', 'review', 'procurement', 'procurement_shipping', 'allocation', 'allocation_review', 'dispatch', 'shipping', 'exceptions'] as const
 export type FopOrderQueue = typeof fopOrderQueues[number]
 export interface FopOrderItem {
+  /** Verified FOP virtual-product classification; null/absent remains unknown. */
+  isVirtual?: boolean | null
+  purchaseState?: string
   id?: string
   parentId?: string
   rowType?: number
@@ -43,6 +48,9 @@ export interface ProcurementProgress {
 
 /** Effective linked dispatch documents; never inferred from customer payment or Shopify sync. */
 export interface DispatchDocument {
+  trackingNumbers?: LogisticsTrackingNumber[] | null
+  rawInterceptStatus?: string | null
+  association?: { state: string }
   deliveryStatus?: string | null
   id: string
   number: string
@@ -65,6 +73,9 @@ export interface LogisticsChannel { name: string | null; code: string | null }
 
 export interface LogisticsTrackingNumber { type: 'full' | 'first_mile' | 'last_mile'; number: string }
 export interface LogisticsInfo {
+  /** FOP fulfillment-package tracking; independent of local Shopify selection evidence. */
+  packageTrackingNumber?: string | null
+  packageNumber?: string | null
   /** Actual channel for this same package; never inferred by array position. */
   channelName?: string | null
   channelCode?: string | null
@@ -75,14 +86,20 @@ export interface LogisticsInfo {
   trackingNumbers?: LogisticsTrackingNumber[]
 }
 
-export interface AllocationDocumentReference { id: string; number: string }
+export interface AllocationDocumentReference { id: string; number: string; rawBillStatus?: 'A' | 'B' | 'C' | 'D' | null; rawAllocationStatus?: 'pending' | 'available' | 'completed' | 'error' | 'voided' | null }
 
 export interface FopOrder {
+  nativeFactsCaptured?: boolean
+  nativeProcurementCaptured?: boolean
+  nativeShippingReady?: boolean
+  procurementStage?: string
+
   dataQuality?: { mode: 'collected'; readOnly: true; missingFields: string[]; reasons: string[] }
   /** 服务端按未完成期望包裹聚合，避免缺包裹被已有发运单掩盖。 */
   dispatchTaskStatus?: 'dispatch_pending' | 'dispatch_tracking' | 'dispatch_updating' | 'dispatch_cancelled' | 'dispatch_missing' | 'dispatch_draft' | 'dispatch_submitted' | 'dispatch_approved' | 'dispatch_synced' | 'unknown'
   shipmentInterceptStatus?: 'intercepted' | 'released' | null
   /** Unique effective FOP allocation for this order; null/omitted = unavailable or not yet created. */
+  allocationDocuments?: AllocationDocumentReference[]
   allocationDocument?: AllocationDocumentReference | null
   /** Shopify-selected tracking grouped by shipment/carrier; raw legacy fields do not prove selection. */
   logisticsInfo?: LogisticsInfo[] | null
@@ -98,8 +115,12 @@ export interface FopOrder {
   allocationApprovedAt?: string | null
   outboundCompletedAt?: string | null
   reviewedAt?: string | null
-  /** 客户完成付款时间；相对时间筛选及默认排序使用此字段，未知为null。 */
+  /** 旧接口兼容别名，等同 paidAt（FOP 收款日期）；不得作为 C 端付款时间使用。 */
   consumerPaidAt?: string | null
+  /** C端客户付款时间：履约订单源单付款时间 hzkj_datetimefield；与收款日期独立。 */
+  sourceOrderPaidAt?: string | null
+  /** FOP源单付款状态hzkj_sourcepayststus，与本公司收款状态独立。 */
+  sourcePaymentStatus?: string | null
   /** Earliest actual payment among effective paid purchase obligations still awaiting supplier shipment. */
   procurementPaidAt?: string | null
   /** Current existing allocation completion time; cleared when allocation becomes incomplete. */
@@ -136,6 +157,8 @@ export interface FopOrder {
   paymentStatus: 'paid' | 'unpaid' | 'refunded' | 'unknown'
   reviewStatus: 'pending' | 'approved' | 'unknown'
   /** FOP fulfillment header hzkj_purchase_status / hzkj_delivery_status; null means unknown. */
+  businessStatus?: { version: number; order: string; purchase: string; outbound: string; sourceShipment: string; missingFields: string[] }
+  sourcePurchaseStatusName?: string | null
   sourcePurchaseStatus?: '0' | '1' | '2' | '3' | '4' | null
   sourceOutboundStatus?: '0' | '1' | '2' | null
   procurementStatus: 'pending' | 'purchased' | 'not_required' | 'unknown'
@@ -178,6 +201,7 @@ export interface FopOrderQuery {
   projection?: 'count'
   completed?: boolean
   /** Customer completed payment time; completed lists default to the last week. */
+  skuAssociation?: 'linked' | 'unlinked'
   timeRange?: 'all' | '1w' | '1m' | '3m'
   shippingCountryCode?: string
   warehouseCode?: 'HZ' | 'SZ'
@@ -272,17 +296,27 @@ function validateQuery(query: FopOrderQuery) {
 }
 
 export function matchesFopQueue(order: FopOrder, queue: FopOrderQueue, warehouseStage?: WarehouseStage, completed = false): boolean {
+  if (queue === 'dispatch' && hasDispatchSyncFailure(order)) return false
+  if (queue === 'exceptions' && hasDispatchSyncFailure(order)) return true
+  if (queue === 'dispatch' && order.businessStatus) return order.reviewStatus === 'approved' && (completed ? ['fulfilled','partial_fulfilled'].includes(order.businessStatus.order) : ['paid','processing','fulfillment_cancelled'].includes(order.businessStatus.order))
   if (completed) return matchesCompletedQueue(order, queue)
   if (queue === 'exceptions' && order.dataQuality?.mode === 'collected' && order.dataQuality.readOnly === true && order.dataQuality.reasons.length > 0) return true
+  if (matchesCollectedAllocation(order, queue)) return true
   if (order.cancelled) return false
   if (queue === 'exceptions') return order.exception != null
-  if (queue === 'unpaid') return order.paymentStatus === 'unpaid'
+  if (queue === 'unpaid') return order.paymentStatus === 'unpaid' && !['refunded', 'voided', 'expired', 'unpaid'].includes(order.sourcePaymentStatus ?? '')
   if (order.paymentStatus !== 'paid') return false
   if (queue === 'review') return order.reviewStatus === 'pending'
+  if (order.dataQuality?.mode === 'collected' && order.dataQuality.readOnly) {
+    if (queue === 'dispatch' && order.nativeFactsCaptured) return ['dispatch_missing','dispatch_pending','dispatch_tracking','dispatch_updating','dispatch_cancelled'].includes(order.dispatchTaskStatus ?? '')
+    if (queue === 'shipping' && order.nativeFactsCaptured) return warehouseStage !== 'pending_review' && order.nativeShippingReady === true && (order.businessStatus ? ['pending','partial'].includes(order.businessStatus.outbound) : ['0','1'].includes(order.sourceOutboundStatus ?? ''))
+    if (order.nativeProcurementCaptured && queue === 'procurement') return ['purchase_order_pending','alibaba_pending','payment_pending','refund_pending'].includes(order.procurementStage ?? '')
+    if (order.nativeProcurementCaptured && queue === 'procurement_shipping') return ['supplier_pending','supplier_partial'].includes(order.procurementStage ?? '')
+  }
   const progress = order.fulfillmentProgress
   if (!progress) return false
   // Customer payment and the actual Shopify sync result determine pending fulfillment.
-  if (queue === 'dispatch') return progress.shopifySync === 'pending'
+  if (queue === 'dispatch') return order.reviewStatus === 'approved' && progress.shopifySync === 'pending'
   if (queue === 'procurement' || queue === 'procurement_shipping') {
     if (order.sourcePurchaseStatus !== undefined && !['0','1','2'].includes(order.sourcePurchaseStatus ?? '')) return false
     const purchase = order.procurementProgress
@@ -308,9 +342,9 @@ export function matchesFopQueue(order: FopOrder, queue: FopOrderQueue, warehouse
 export async function getFopOrders(query: FopOrderQuery, signal?: AbortSignal): Promise<FopQueuePage> {
   validateQuery(query)
   const { default: api } = await import('./index')
-  const { queue, projection, completed, timeRange, shippingCountryCode, search, orderNumber, departmentId, ownerId, warehouseCode, paidAtOrder, sortBy, sortOrder, warehouseStage, procurementStage, taskStatus, page, pageSize } = query
+  const { queue, projection, completed, skuAssociation, timeRange, shippingCountryCode, search, orderNumber, departmentId, ownerId, warehouseCode, paidAtOrder, sortBy, sortOrder, warehouseStage, procurementStage, taskStatus, page, pageSize } = query
   const remember = beginWorkbenchCount(query)
-  const result: FopQueuePage = await api.get('/autoflow/integrations/fop/fulfillment-orders', { params: { queue, projection, ...(completed ? { completed } : {}), timeRange, shippingCountryCode, search, orderNumber, departmentId, ownerId, warehouseCode, paidAtOrder, sortBy, sortOrder, warehouseStage, procurementStage, taskStatus, page, pageSize }, ...(signal ? { signal } : {}) })
+  const result: FopQueuePage = await api.get('/autoflow/integrations/fop/fulfillment-orders', { params: { queue, projection, ...(completed ? { completed } : {}), skuAssociation, timeRange, shippingCountryCode, search, orderNumber, departmentId, ownerId, warehouseCode, paidAtOrder, sortBy, sortOrder, warehouseStage, procurementStage, taskStatus, page, pageSize }, ...(signal ? { signal } : {}) })
   if (!isFopOrderPageDataValid(result)) throw new Error('Unexpected partial data')
   if (!result.dataAvailability?.missingDatasets?.length) remember?.(result.total)
   return result

@@ -1,3 +1,5 @@
+// Verify source field/filter/permission contracts independently of the shared layout, tested in single-sheet.spec.ts.
+jest.mock('../workbench-export/single-sheet',()=>({...jest.requireActual('../workbench-export/single-sheet'),singleSheetWorkbook:jest.fn()}))
 import * as ExcelJS from 'exceljs'
 import { logisticsInfoText } from './logistics-info'
 import { buildFulfillmentWorkbook } from './fop-order-export'
@@ -150,15 +152,14 @@ describe('fulfillment Excel export', () => {
     expect(JSON.stringify(ws.getSheetValues())).not.toContain('STALE')
     expect(value(ws,3,'物流信息').value).toBe('—\n—')
   })
-  it.each(['unpaid', 'review', 'exceptions', 'dispatch', 'allocation'] as const)('exports consumer payment completion time for %s instead of creation time', async queue => {
+  it.each(['review', 'exceptions', 'dispatch', 'allocation'] as const)('exports consumer payment completion time for %s instead of creation time', async queue => {
     const unpaid = { ...order, paymentStatus: 'unpaid' as const, paidAt: null, consumerPaidAt: '2026-10-01T17:30:00-04:00' }
     const ws = (await read([unpaid, { ...unpaid, id: 'missing', consumerPaidAt: undefined }], queue)).getWorksheet('订单清单')!
     expect(headers(ws)).toContain('客户付款时间（UTC+8）')
     expect(headers(ws)).not.toContain('创建日期（UTC+8）')
     expect(value(ws, 2, '客户付款时间（UTC+8）').value).toBe('2026-10-02 05:30:00')
     expect(value(ws, 3, '客户付款时间（UTC+8）').value).toBe('—')
-    if (queue === 'unpaid') expect(headers(ws)).not.toContain('收款日期（UTC+8）')
-    else expect(value(ws, 2, '收款日期（UTC+8）').value).toBe('—')
+    expect(value(ws, 2, '收款日期（UTC+8）').value).toBe('—')
     expect(headers((await read([order], 'procurement')).getWorksheet('订单清单')!)).toContain('订单审核时间（UTC+8）')
   })
   it('preserves supplier shipment facts for unpaid purchases even after shipment', async () => {
@@ -224,4 +225,16 @@ describe('fulfillment Excel export', () => {
     await expect(read(Array(10001).fill(order))).rejects.toMatchObject({ status: 413 })
     await expect(read([{ ...order, items: Array(50001).fill(order.items[0]) }])).rejects.toMatchObject({ status: 413 })
   })
+})
+
+it('exports unpaid C-end source time without falling back to customer payment', async()=>{
+ const row={...order,sourceOrderPaidAt:'2026-09-02T00:00:00Z',consumerPaidAt:'2026-10-01T00:00:00Z'}
+ const ws=(await read([row,{...row,id:'missing',sourceOrderPaidAt:null}],'unpaid')).getWorksheet('订单清单')!
+ expect(value(ws,2,'C端付款时间（UTC+8）').value).toBe('2026-09-02 08:00:00')
+ expect(value(ws,3,'C端付款时间（UTC+8）').value).toBe('—')
+ expect(headers(ws)).not.toContain('客户付款时间（UTC+8）')
+})
+it('exports package tracking without requiring Shopify-selected route evidence',()=>{
+ expect(logisticsInfoText([{channelName:'渠道甲',packageTrackingNumber:'000A'}])).toBe('渠道甲\n000A')
+ expect(logisticsInfoText([{channelName:'渠道甲',packageTrackingNumber:'000A'}],null,null,null,true)).toBe('渠道甲\n000A')
 })

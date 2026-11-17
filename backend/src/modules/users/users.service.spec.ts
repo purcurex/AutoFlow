@@ -80,7 +80,7 @@ describe('UsersService workbench persistence', () => {
       save: jest.fn(async (user) => user),
     } as unknown as Repository<User>
     const result = await new UsersService(repository).updateWorkbenchRoles('user-1', ['warehouse'])
-    expect(repository.update).toHaveBeenCalledWith('user-1', { workbenchRoles: ['warehouse'] })
+    expect(repository.update).toHaveBeenCalledWith('user-1', { workbenchRoles: ['sales', 'procurement', 'allocation', 'dispatch', 'warehouse'] })
     expect(stored.role).toBe(UserRole.ADMIN)
     expect(result).not.toHaveProperty('password')
   })

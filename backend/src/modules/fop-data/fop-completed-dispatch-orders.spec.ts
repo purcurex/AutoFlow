@@ -60,7 +60,7 @@ describe('已履约真实接口的客户付款期间能力边界', () => {
 
   it('未授权岗位不能借未配置提示绕过列表或导出授权', async () => {
     const { service, user, request, permissions } = setup()
-    user.role = 'user' as User['role']; user.businessRole = 'salesperson'; user.businessEmployeeId = '501'; user.workbenchRoles = ['sales']
+    user.role = 'user' as User['role']; user.businessRole = 'department_manager'; user.businessEmployeeId = '501'; user.workbenchRoles = ['sales']
     await expect(service.getOrders(user.id, completedQuery)).rejects.toMatchObject({ status: 403 })
     await expect(service.exportOrders(user.id, { queue: 'dispatch', completed: true, mode: 'filtered' })).rejects.toMatchObject({ status: 403 })
     expect(permissions).not.toHaveBeenCalled()

@@ -11,7 +11,7 @@ from html import escape as E
 import json,re,importlib.util,hashlib
 R=Path(__file__).resolve().parents[2]; D=R/'.runtime/fop-local-field-matrix'
 D.mkdir(parents=True,exist_ok=True)
-OUT=R/'docs/integrations/HyperZone待办清单数据字段对照表.html'
+OUT=D/'matrix-reference.html'
 # List inventory is versioned here; no previous runtime artifact is required.
 old=[{'group': 'sales', 'id': 'sales-unpaid', 'title': '待支付清单', 'main': '平台订单（履约订单）'}, {'group': 'sales', 'id': 'sales-review', 'title': '待审核清单', 'main': '平台订单（履约订单）'}, {'group': 'sales', 'id': 'sales-stock', 'title': '备货清单', 'main': '备货订单'}, {'group': 'sales', 'id': 'sales-rma', 'title': 'RMA售后清单', 'main': '售后单 RMA'}, {'group': 'sales', 'id': 'sales-exceptions', 'title': '异常订单清单', 'main': '平台订单（履约订单）'}, {'group': 'sales', 'id': 'sales-completed', 'title': '已完成清单', 'main': '平台订单（履约订单）'}, {'group': 'dispatch', 'id': 'dispatch-pending', 'title': '待履约清单', 'main': '平台订单（履约订单）'}, {'group': 'dispatch', 'id': 'dispatch-completed', 'title': '已履约订单', 'main': '平台订单（履约订单）'}, {'group': 'procurement', 'id': 'proc-fulfill-procurement', 'title': '待采购清单 · 履约单', 'main': '平台订单（履约订单）'}, {'group': 'procurement', 'id': 'proc-fulfill-procurement_shipping', 'title': '已采购待发货 · 履约单', 'main': '平台订单（履约订单）'}, {'group': 'procurement', 'id': 'proc-fulfill-completed', 'title': '采购完成清单 · 履约单', 'main': '平台订单（履约订单）'}, {'group': 'procurement', 'id': 'proc-purchase-procurement', 'title': '待采购清单 · 采购单', 'main': '采购订单'}, {'group': 'procurement', 'id': 'proc-purchase-procurement_shipping', 'title': '已采购待发货 · 采购单', 'main': '采购订单'}, {'group': 'procurement', 'id': 'proc-purchase-completed', 'title': '采购完成清单 · 采购单', 'main': '采购订单'}, {'group': 'procurement', 'id': 'proc-stock', 'title': '备货待采购清单', 'main': '备货订单'}, {'group': 'procurement', 'id': 'proc-returns', 'title': '采购退货清单', 'main': 'FOP 采购退货单'}, {'group': 'allocation', 'id': 'allocation-allocation', 'title': '未齐套清单', 'main': '配货单'}, {'group': 'allocation', 'id': 'allocation-allocation_review', 'title': '已齐套未审核', 'main': '配货单'}, {'group': 'allocation', 'id': 'allocation-completed', 'title': '配货完成清单', 'main': '配货单'}, {'group': 'warehouse', 'id': 'warehouse-inbound', 'title': '待入库清单', 'main': '收货通知单'}, {'group': 'warehouse', 'id': 'warehouse-outbound', 'title': '待出库清单', 'main': '发货通知单'}, {'group': 'warehouse', 'id': 'warehouse-completed', 'title': '已出库清单', 'main': '销售出库单'}, {'group': 'warehouse', 'id': 'warehouse-returns', 'title': '采购退货清单', 'main': 'FOP 采购退货单'}]
 # Validate all published local references against the implemented schema, including later migration.
@@ -72,7 +72,7 @@ def dispatchstatus(allocation=False):
  return row('履约状态',db('hz_fop_dispatches','raw_delivery_status')+n('按关联有效发运单的交付状态实时归一化；全部 FULFILLED 才进入已履约。'),confirmed(DD,'hzkj_delivery_status · 交付状态','PENDING 待处理；TRACKING_OBTAINED 已取号未同步；FULFILLED 已发货；UPDATING 更正中；CANCELLED 已取消。多单优先显示更正中、已取消、待处理、已取号未同步；未知不当作完成。'))
 def complete(role):
  if role=='sales':return row('订单审核时间',db(SD,'source_audited_at')+n('直接读取履约订单审核时间，不以清单阶段时间覆盖。'),fop(FD,'auditdate'))
- if role=='allocation':return row('配货审核时间',db(SD,'source_audited_at')+n('通过有效 allocation 关联读取配货单审核时间；多张配货单全部已审核时取最近审核时间，任一审核时间缺失则保留空值，不以阶段时间替代。'),confirmed(AD,'auditdate','配货单审核时间来源已确认；本地读取已调整，真实同步写入尚未接通。'))
+ if role=='allocation':return row('配货审核时间',db(SD,'source_audited_at')+n('通过有效 allocation 关联读取配货单审核时间，返回 allocationApprovedAt；多张配货单全部已审核时取最近审核时间，任一审核时间缺失则保留空值，不以阶段时间替代。'),confirmed(AD,'auditdate','配货单审核时间来源已确认；本地读取已调整，真实同步写入尚未接通。'))
  if role=='dispatch':return row('发运审核时间',db(SD,'source_audited_at')+n('取关联有效发运单审核时间；多单取最近一次。'),confirmed(DD,'auditdate'))
  titles={'sales':'订单审核时间','dispatch':'发运审核时间','procurement':'采购完成时间','allocation':'配货审核时间','warehouse':'出库完成时间'}
  return row(titles[role],db(M,'phase_completed_at')+n('按 queue_code 区分阶段；本地返回值已读取，来源计算需在同步适配中确认。'),fop(FD,'auditdate') if role=='sales' else wait({'dispatch':DD,'procurement':'采购完成事实','allocation':AD,'warehouse':'出库完成事实'}[role],'当前已履约页面展示发运审核时间；不能标成 Shopify 同步成功时间。' if role=='dispatch' else '具体完成证据及时间写入规则待实现。'))
@@ -89,7 +89,7 @@ def regular(q,completed=False,role='sales'):
  rows=[number(flags=q=='shipping' and not completed),products(),shopify(),amount(),customer()]
  if q=='review':rows += [logistics('物流信息',approved=completed),warehouse()]
  if q!='unpaid':rows.append(payment('收款日期'))
- if q=='allocation_review':rows.append(row('配货单号',db(SD,'document_number')+n('allocation 关联唯一一张配货单时返回；多包裹配货单展示待完善。'),fop(AD,'billno')))
+ if q=='allocation_review':rows.append(row('配货单号',db(SD,'document_number')+n('正式 replica 查询路径：allocation 关联唯一一张配货单时返回；该路径多配货单号展示待完善。collected 路径已返回 allocationDocuments，多单与时间字段见“已支持待真实采集”节，不受本格状态概括。'),fop(AD,'billno')))
  if q in ['dispatch','allocation','allocation_review']:rows.append(dispatchnumber())
  if completed and q=='dispatch':rows.append(dispatchstatus())
  elif completed and q=='allocation_review':rows.append(row('审核状态',db(SD,'raw_bill_status')+n('直接依据关联有效配货单审核状态；C 显示已审核，多单全部已审核才进入本清单。撤销审核后不再展示为完成。'),confirmed(AD,'billstatus','配货单审核状态来源已确认；不使用固定“已完成”标签，真实同步写入尚未接通。')))
@@ -113,7 +113,7 @@ def regular(q,completed=False,role='sales'):
  if completed:rows.append(complete(role))
  elif q=='procurement':rows.append(audit())
  elif q=='procurement_shipping':rows.append(multi('采购付款时间',[(db('hz_fop_purchase_orders','paid_at')+n('经履约—采购明确分摊关联读取；多采购单取最早付款时间，任一付款时间未知则保留空值。'),confirmed(PD,'hzkj_pay_time','queryPurchase 与原始事实已定义支付时间；当前元数据未见同名字段，是否覆盖线下、部分付款及退款后的口径待确认，真实写入尚未接入。')),(db('hz_fop_stock_orders','procurement_paid_at')+db('hz_fop_stock_consumptions','stock_document_id','order_document_id'),confirmed(ST,note='使用全款备货库存时取备货订单采购付款时间；具体源字段待确认，真实写入尚未接入。此类无新采购需求履约单不进入待采购。'))]))
- elif q=='allocation_review':rows.append(row('齐套时间','<span class="pending">本地列表尚未返回</span>'+db('hz_fop_allocations','ready_at')+n('存储位置已建；allocationReadyAt 尚未映射到列表。'),fop(AD,'hzkj_complete_time','已核对存储来源；尚未接入列表返回。')))
+ elif q=='allocation_review':rows.append(row('齐套时间','<span class="pending">正式 replica 列表尚未返回</span>'+db('hz_fop_allocations','ready_at')+n('正式 replica 路径已建存储，但 allocationReadyAt 尚未映射；collected 路径已支持 display.readyAt → allocationReadyAt，当前待真实完整采集。'),fop(AD,'hzkj_complete_time','已核对来源；正式 replica 列表待补，collected 接收与返回已支持但尚无真实采集。')))
  elif q=='shipping':rows.append(row('WMS创建时间','<span class="pending">本地列表尚未返回</span>'+db('hz_fop_delivery_notices','wms_created_at'),fop(WD,'hzkj_bill_create_time','存储位置已建；wmsCreatedAt 尚未映射到列表。')))
  else:rows.append(payment())
  return rows
@@ -246,8 +246,8 @@ def api_state(local,source):
 # Local-read coverage and source confirmation are separate from global live sync.
 def local_state(local,source):
  text=re.sub('<[^>]*>',' ',local+' '+source)
- if '本地列表尚未返回' in local:return 'schema-only'
- if any(term in local for term in ['本地字段与统计映射待补','字段与列表映射待补','尚未接入整单统计','本地展开明细尚未返回','本地采购组头尚未返回','退货物流尚未返回','多包裹配货单展示待完善']):return 'mapping-pending'
+ if any(term in local for term in ['本地列表尚未返回','正式 replica 列表尚未返回']):return 'schema-only'
+ if any(term in local for term in ['该路径多配货单号展示待完善','本地字段与统计映射待补','字段与列表映射待补','尚未接入整单统计','本地展开明细尚未返回','本地采购组头尚未返回','退货物流尚未返回','多包裹配货单展示待完善']):return 'mapping-pending'
  if any(term in text for term in ['仅 Mock','仅模拟模式','当前仅 Mock']):return 'mock-only'
  return 'local-read'
 
@@ -273,17 +273,17 @@ body=styles+'''<section><h2 id="reading">01 · 读取链路</h2>
 <div class="flow"><span>FOP 业务单据</span><b>→</b><span>同步落库 · 来源事实表</span><b>→</b><span>本地展示投影与关联查询</span><b>→</b><span>工作台列表</span></div>
 <p>本表用于核对列表需求、本地读取字段与上游业务来源。本表只记录数据展示列，不包含勾选、展开、催办等操作列。列表、筛选、排序、分页及合计读取本地数据库；FOP API 服务于服务端同步落库，不作为页面取数接口。</p>
 <p>当前进入工作台或切换清单只读取本地，自动增量已暂停；筛选、翻页、排序与“刷新”只重查本地。“同步数据”由后台任务完成，成功后再重查本地。即时库存查询及审核属于独立按需能力，不纳入本表。</p>
-<div class="guide"><span class="review-tag review-missing">旧 API 已入库展示 · 完整同步待接通</span><p><strong>核对状态：</strong>本轮新增已采集只读模式：旧 API 完整游标扫描后写入 hz_fop_collected_orders，销售清单直接读取本地已知字段，缺失值留空；下游数据集显示未接入。正式一致快照、变更及授权续验协议仍待 FOP 提供。下方 23 清单矩阵记录完整模式设计；当前实际入库与展示路径以“已采集模式字段”表为准，不能把完整模式映射数量当作本轮已采集字段数量。</p></div>
-<h3>配货流程适用版本</h3><p>现阶段履约审核后自动建配货单；使用备货库存且够用的齐套待审单归“已齐套未审核”。不齐套无法通过 FOP 配货审核，预占／锁库门禁已有；本表现行配货查询仍要求有效配货单。若采集显示已审无单或已审却不齐套，应核查异步任务、关联与版本，不认定正常流程缺口。</p><p>未来智能配货改为订单先预占、齐套后建单，需新增订单级待配货视图及五进度、计算结果、预占与变更字段；拦截闭环另待 FOP 补齐。上述未来字段／API 和本地接收适配均待开发，未加入下列现行 348 条映射，不能把本段说明当作已实现。详见<a href="HyperZone智能办公平台项目FOP扩展开发需求.html">扩展需求 V1.4</a>未来智能配货与拦截相关 E13—E15。</p>
+<div class="guide"><span class="review-tag review-missing">真实业务事实已入库 · 一致增量同步待接通</span><p><strong>核对状态：</strong>本轮新增已采集只读模式：旧 API 完整游标扫描后写入 hz_fop_collected_orders，销售清单直接读取本地已知字段；备货独立授权分页153笔写入共享实体表，销售／采购按状态筛选，采购备货24笔；原生已出库13,761笔可显示。本轮补采配货/发运/出库/采购/收货通知和RMA，并接入本地展示；缺失字段留空，状态不明列为待核查，实物退货实体/API仍待提供。正式一致快照、变更及授权续验协议仍待 FOP 提供。下方 23 清单矩阵记录完整模式设计；当前实际入库与展示路径以“已采集模式字段”表为准，不能把完整模式映射数量当作本轮已采集字段数量。</p></div>
+<h3>配货流程适用版本</h3><p>现阶段履约审核后自动建配货单；使用备货库存且够用的齐套待审单归“已齐套未审核”。不齐套无法通过 FOP 配货审核，预占／锁库门禁已有；本表现行配货查询仍要求有效配货单。若采集显示已审无单或已审却不齐套，应核查异步任务、关联与版本，不认定正常流程缺口。</p><p>未来智能配货改为订单先预占、齐套后建单，需新增订单级待配货视图及五进度、计算结果、预占与变更字段；拦截闭环另待 FOP 补齐。上述未来字段／API 和本地接收适配均待开发，未加入下列现行 348 条映射，不能把本段说明当作已实现。详见<a href="../../docs/requirements/HyperZone智能办公平台项目开发需求说明书.html#fop-backlog">扩展需求 V1.4</a>未来智能配货与拦截相关 E13—E15。</p>
 <h3>三列阅读规则</h3><ul><li><strong>前端展示字段：</strong>按列表列名记录。商品、收件人等同源对象整体描述，不拆成每个属性。</li><li><strong>本地数据库字段：</strong>先列当前查询实际读取的表和列，并在同格注明来源落库位置。“本地读取已接入”只证明读取路径存在；“仅存储预留”表示列已建但列表尚未返回；“本地映射待补”表示统计或投影不符合确认规则；“仅 Mock 归一化”表示正式模式尚无有效归一化。来源事实写入及展示投影生产仍须接通真实同步。</li><li><strong>FOP 来源：</strong>列业务单据、已核实字段及独立 API 提供状态。API 已提供定义只证明归档契约包含字段；来源确认、真实数据与同步实现分别验收。跨单据已存在本地关联时按来源拆行；未提供的 API 明确标示。</li><li><strong>一列多来源：</strong>合并左侧单元格，右侧逐行说明各来源。同一单据内的多个值合并在同一行。</li></ul>
 <p>商品款数、总数量、金额合计及阶段标签由授权范围内的完整本地数据计算，不要求 FOP 提供同名展示字段。搜索命中一个 SKU，仍返回整笔订单；清单与导出沿用同一权限及数据范围。</p>
 <div class="review-legend" aria-label="审阅标记说明"><div><span class="review-tag review-source">来源待确认</span><span>业务来源、具体源字段或字段含义尚未确认；按同格说明核实。</span></div><div><span class="review-tag review-missing">数据未接入</span><span>本地字段尚未返回、仅模拟模式提供，或明确缺少该数据；不用于代替全局真实同步状态。</span></div><p class="review-note">绿色“来源已确认”仅代表对照表业务来源通过核对，不代表真实同步已接通；具体字段或数据仍待补时保留对应警示。两类问题可同时存在。蓝色“本地读取已接入”与绿色“来源已确认”均不代表真实 FOP 同步完成；同步整体状态见上方说明。</p></div>
 <div class="review-legend" aria-label="API 提供状态说明"><div><span class="review-tag api-defined">API 已提供定义待联调</span><span>归档接口已定义字段或能力，未证明远端当前部署、完整数据或同步写入已就绪。</span></div><div><span class="review-tag api-confirm">API 待确认</span><span>接口存在，但字段语义、枚举、完整关联或授权契约待 FOP 确认。</span></div><div><span class="review-tag api-missing">API 待提供</span><span>当前归档未提供所需字段或能力；须由 FOP 新增或扩展。本地计算及组织目录不标此状态。</span></div><p class="review-note">API 状态独立于绿色来源确认、蓝色本地读取和全局真实同步状态；整行含多项时，仍须阅读同格列出的具体缺项。</p></div><div class="matrix-tools"><input id="field-search" aria-label="搜索清单、字段或表名" placeholder="搜索清单、展示字段、本地表或 FOP 来源"><select id="review-filter" aria-label="按审阅标记筛选"><option value="all">全部字段</option><option value="source">来源待确认</option><option value="missing">数据未接入</option><option value="any">全部警示项</option><option value="api-defined">API 已提供定义待联调</option><option value="api-confirm">API 待确认</option><option value="api-missing">API 待提供</option></select><button id="clear-search" type="button">清除</button><span id="search-status" aria-live="polite"></span></div></section>'''
 collected=json.loads((R/'scripts/fop-local-field-matrix/collected-mapping.json').read_text())
-body+='<section><h2 id="collected-fields">已采集模式字段</h2><p>实际订单表：hz_fop_collected_orders；原始报文保存在 raw，展示 JSON 保存在 display，索引字段用于权限、筛选和分页。hz_fop_collected_batches 记录租户、公司、工作区、采集时间、完整页数及激活状态；只读取当前工作区与已配置租户／公司的 active 批次。</p><table><thead><tr><th>字段组</th><th>实际本地位置</th><th>FOP 来源 / 前端字段</th><th>当前状态</th></tr></thead><tbody>'
+body+='<section><h2 id="collected-fields">已采集模式字段</h2><p>实际订单表：hz_fop_collected_orders；备货、RMA及下游事实共用 hz_fop_collected_entities（按entity_type区分），销售／采购只改变筛选；原始报文保存在 raw，展示 JSON 保存在 display，索引字段用于权限、筛选和分页。hz_fop_collected_batches 记录租户、公司、工作区、采集时间、完整页数及激活状态；只读取当前工作区与已配置租户／公司的 active 批次。</p><table><thead><tr><th>字段组</th><th>实际本地位置</th><th>FOP 来源 / 前端字段</th><th>当前状态</th></tr></thead><tbody>'
 for entry in collected:
  body+='<tr>'+''.join('<td>'+E(value)+'</td>' for value in [entry['label'],entry['local'],entry['source']+' → '+entry['display'],entry['state']])+'</tr>'
-body+='</tbody></table><p>待支付取已知未取消且未付款；待审核取已付款且 billstatus=B；已审核仅取 billstatus=C，取消及付款差异不抹除审核记录。异常待核查兜底未整体出库的已付款、取消或状态未知订单；它不是确认发生业务异常，也不替代 FOP 正常配货清单。下游关联齐备后重新归类。来源外未授权、未返回、删除及历史变更仍须 FOP 对账。</p></section>'
+body+='</tbody></table><p>待支付取已知未取消且未付款；待审核取已付款且 billstatus=B；已审核仅取 billstatus=C，取消及付款差异不抹除审核记录。异常待核查保留明确来源问题、关键状态未知及未整体出库且未进入任何正常待办的订单；已能按正常环节归类的已付款订单不因此全部标为异常。它是核查候选，不等于已确认业务故障。来源外未授权、未返回、删除及历史变更仍须 FOP 对账。</p></section>'
 groups=[('sales','02 · 销售工作台'),('dispatch','03 · 发运工作台'),('procurement','04 · 采购工作台'),('allocation','05 · 配货工作台'),('warehouse','06 · 仓库工作台')]
 for group,title in groups:
  body+=f'<section class="workbench-section" id="wb-{group}"><h2 id="{group}">{title}</h2>'

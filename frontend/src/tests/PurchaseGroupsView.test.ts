@@ -13,6 +13,18 @@ const group = { id: 'purchase:p1', kind: 'purchase', purchase: { id: 'p1', numbe
 const row = { orderId: 'o1', orderNumber: 'SO-001', shopifyOrderNumber: '#1', customerName: 'Visible Customer', storeName: 'Store', ownerName: 'Alice', departmentName: '业务一部', warehouse: 'HZ', paidAt: '2026-10-27T00:00:00Z', lines: [{ fulfillmentLineId: 'f1', purchaseLineId: 'p1', sku: 'LINKED-SKU', name: 'Lamp', imageUrl: null, variant: '', quantity: 4, shippedQuantity: 1 }] }
 const page = { items: [group], total: 1, page: 1, pageSize: 50, refreshedAt: '2026-10-29T00:00:00Z', source: 'mock', departments: [{ id: 'd1', name: '业务一部' }], totals: { groupCount: 1, purchaseCount: 1, orderCount: 2, uncreatedCount: 0, pendingQuantity: 3 } }
 const detail = { group, items: [row], total: 21, page: 1, pageSize: 20 }
+it('opens a one-line virtual purchase group without displaying a virtual preview or losing its details', async () => {
+  const virtualLine = { ...row.lines[0]!, sku: 'HZ000020-001', name: 'Virtual service', isVirtual: true }
+  const virtualGroup = { ...group, detailLineCount: 1, previewLines: [virtualLine] }
+  vi.mocked(api.get).mockImplementation(async url => String(url).includes('/purchase%3Ap1')
+    ? { ...detail, group: virtualGroup, items: [{ ...row, lines: [virtualLine] }], total: 1 }
+    : { ...page, items: [virtualGroup] })
+  const { wrapper } = await setup()
+  expect(wrapper.find('.purchase-preview .linked-product').exists()).toBe(false)
+  await wrapper.get('.product-lines-toggle').trigger('click'); await flushPromises()
+  expect(wrapper.get('tbody').text()).toContain('Virtual service')
+  expect(wrapper.get('.product-lines-toggle').attributes('aria-expanded')).toBe('true')
+})
 const wrappers: ReturnType<typeof mount>[] = []
 beforeEach(() => { clearWorkbenchAccess(); vi.resetAllMocks(); vi.mocked(api.get).mockImplementation(async url => String(url).includes('/purchase%3Ap1') ? detail : page) })
 afterEach(() => { wrappers.forEach(w => w.unmount()); wrappers.length = 0; vi.restoreAllMocks(); vi.unstubAllGlobals() })
@@ -177,7 +189,7 @@ it('uses customer payment ranges for completed groups and carries the scope thro
   vi.mocked(api.post).mockRejectedValue(new Error('download unavailable'))
   vi.mocked(api.get).mockImplementation(async url => String(url).includes('/purchase%3Ap1') ? { ...detail, items: [{ ...row, completedAt: '2026-10-28T01:00:00Z', consumerPaidAt: '2026-10-27T00:00:00Z' }] } : page)
   const { wrapper, router } = await setup('/workbench/procurement?queue=completed&departmentId=d1')
-  expect(wrapper.get('select[aria-label="客户付款时间范围"]').element).toHaveProperty('value', '1w')
+  expect(wrapper.get('select[aria-label="客户付款时间范围"]').element).toHaveProperty('value', '1m')
   expect(wrapper.findAll('button').some(b => b.text() === '最新客户付款优先')).toBe(true)
   await wrapper.get('select[aria-label="客户付款时间范围"]').setValue('3m'); await flushPromises()
   expect(router.currentRoute.value.query).toMatchObject({ queue: 'completed', timeRange: '3m', departmentId: 'd1' })
@@ -210,8 +222,115 @@ it('does not query on timers, focus, visibility changes or network reconnection'
 it('labels uncollected counts and empty states without implying a business zero', async () => {
   vi.mocked(api.get).mockResolvedValue({ ...page, items: [], total: 0, dataAvailability: { mode: 'collected', complete: false, missingDatasets: ['procurement'] } })
   const { wrapper } = await setup()
-  expect(wrapper.get('.result-count').text()).toBe('— · 待接入')
-  expect(wrapper.text()).toContain('采购数据尚未接入')
+  expect(wrapper.get('.result-count').text()).toBe('—')
+  expect(wrapper.text()).not.toContain('采购数据尚未接入')
   expect(wrapper.text()).not.toContain('暂无符合条件')
   wrapper.unmount()
+})
+it.each([1,2])('shows all %i purchase source lines directly, without an expander or detail request', async count => {
+ const previewLines=[1,2].slice(0,count).map(i=>({...row.lines[0]!,fulfillmentLineId:`f${i}`,name:`Purchase source line ${i}`}))
+ vi.mocked(api.get).mockResolvedValue({...page,items:[{...group,skuCount:1,detailLineCount:count,previewLines}]})
+ const {wrapper}=await setup()
+ expect(wrapper.findAll('.purchase-preview .linked-product')).toHaveLength(count)
+ expect(wrapper.find('.group-expand').exists()).toBe(false)
+ expect(wrapper.find('.product-lines-toggle').exists()).toBe(false)
+ expect(api.get).toHaveBeenCalledTimes(1)
+})
+it('uses actual purchase detail-line count and retains server detail pagination on expansion', async () => {
+ const summary={...group,detailLineCount:30,previewLines:[row.lines[0]!]}
+ vi.mocked(api.get).mockImplementation(async url=>String(url).endsWith('/purchase-groups')?{...page,items:[summary]}:{...detail,group:summary})
+ const {wrapper}=await setup()
+ expect(wrapper.get('.purchase-preview').text()).toContain('30 行商品 · 4 件')
+ expect(wrapper.findAll('.purchase-preview .linked-product')).toHaveLength(1)
+ expect(wrapper.find('tbody').exists()).toBe(false)
+ await wrapper.get('.product-lines-toggle').trigger('click');await flushPromises()
+ expect(wrapper.get('.detail-pagination').text()).toContain('1 / 2')
+ const baseline=vi.mocked(api.get).mock.calls.length
+ await wrapper.get('.product-lines-toggle').trigger('click');await flushPromises()
+ await wrapper.get('.product-lines-toggle').trigger('click');await flushPromises()
+ expect(wrapper.find('tbody').exists()).toBe(true)
+ expect(api.get).toHaveBeenCalledTimes(baseline)
+})
+it('shows every loaded source line after expanding the purchase group once', async () => {
+ const summary={...group,detailLineCount:3,previewLines:[row.lines[0]!]}
+ vi.mocked(api.get).mockImplementation(async url=>String(url).endsWith('/purchase-groups')?{...page,items:[summary]}:{...detail,group:summary,items:[{...row,lines:[1,2,3].map(i=>({...row.lines[0]!,fulfillmentLineId:`f${i}`,name:`Line ${i}`}))}]})
+ const {wrapper}=await setup()
+ await wrapper.get('.product-lines-toggle').trigger('click');await flushPromises()
+ expect(wrapper.findAll('tbody .linked-product')).toHaveLength(3)
+ expect(wrapper.find('tbody .product-lines-toggle').exists()).toBe(false)
+ expect(wrapper.get('.detail-pagination').text()).toContain('1 / 2')
+ expect(api.get).toHaveBeenCalledTimes(2)
+})
+it('returns a refreshed purchase group below the threshold to its complete preview', async () => {
+ const summary={...group,detailLineCount:3,previewLines:[row.lines[0]!]}
+ const small={...summary,detailLineCount:2,previewLines:[row.lines[0]!,{...row.lines[0]!,fulfillmentLineId:'f2',name:'Second source'}]}
+ vi.mocked(api.get).mockImplementation(async url=>String(url).endsWith('/purchase-groups')?{...page,items:[summary]}:{...detail,group:small})
+ const {wrapper}=await setup()
+ await wrapper.get('.product-lines-toggle').trigger('click');await flushPromises()
+ expect(wrapper.find('.product-lines-toggle').exists()).toBe(false)
+ expect(wrapper.findAll('.purchase-preview .linked-product')).toHaveLength(2)
+ expect(wrapper.find('.group-body').exists()).toBe(false)
+})
+it('reuses loaded purchase details when expanding the page again', async () => {
+ const {wrapper}=await setup()
+ await wrapper.get('.expand-all').trigger('click');await flushPromises()
+ const baseline=vi.mocked(api.get).mock.calls.length
+ await wrapper.get('.expand-all').trigger('click');await flushPromises()
+ await wrapper.get('.expand-all').trigger('click');await flushPromises()
+ expect(wrapper.find('tbody').exists()).toBe(true)
+ expect(api.get).toHaveBeenCalledTimes(baseline)
+})
+it('keeps linked fulfillment metadata accessible for a short purchase group without a SKU expander', async () => {
+ const summary={...group,detailLineCount:2,previewLines:[row.lines[0]!,{...row.lines[0]!,fulfillmentLineId:'f2',name:'Second source'}]}
+ vi.mocked(api.get).mockImplementation(async url=>String(url).endsWith('/purchase-groups')?{...page,items:[summary]}:{...detail,group:summary,total:1})
+ const {wrapper}=await setup()
+ expect(wrapper.find('.product-lines-toggle').exists()).toBe(false)
+ expect(wrapper.findAll('.purchase-preview .linked-product')).toHaveLength(2)
+ await wrapper.get('.related-details-toggle').trigger('click');await flushPromises()
+ expect(wrapper.get('tbody').text()).toContain('SO-001')
+ expect(wrapper.get('tbody').text()).toContain('Visible Customer')
+ expect(wrapper.get('tbody').text()).toContain('Alice')
+ expect(wrapper.get('tbody').text()).toContain('Store')
+ expect(wrapper.get('tbody').text()).toContain('业务一部')
+ expect(wrapper.get('tbody').text()).toContain('HangZhou')
+ expect(wrapper.findAll('.purchase-preview .linked-product')).toHaveLength(2)
+ expect(wrapper.get('.related-details-toggle').attributes('aria-expanded')).toBe('true')
+ await wrapper.get('.related-details-toggle').trigger('click');await flushPromises()
+ expect(wrapper.find('tbody').exists()).toBe(false)
+ await wrapper.get('.related-details-toggle').trigger('click');await flushPromises()
+ expect(wrapper.find('tbody').exists()).toBe(true)
+ expect(api.get).toHaveBeenCalledTimes(2)
+})
+it('allows opening related fulfillment details after a detail refresh lowers the SKU count', async () => {
+ const large={...group,detailLineCount:3,previewLines:[row.lines[0]!]}
+ const small={...large,detailLineCount:1}
+ vi.mocked(api.get).mockImplementation(async url=>String(url).endsWith('/purchase-groups')?{...page,items:[large]}:{...detail,group:small,total:1})
+ const {wrapper}=await setup()
+ await wrapper.get('.product-lines-toggle').trigger('click');await flushPromises()
+ expect(wrapper.find('.group-body').exists()).toBe(false)
+ expect(wrapper.find('.product-lines-toggle').exists()).toBe(false)
+ await wrapper.get('.related-details-toggle').trigger('click');await flushPromises()
+ expect(wrapper.get('tbody').text()).toContain('Visible Customer')
+ expect(api.get).toHaveBeenCalledTimes(2)
+})
+it('moves an open related-detail view to the SKU control when the refreshed group grows', async () => {
+ const small={...group,detailLineCount:2,previewLines:[row.lines[0]!,{...row.lines[0]!,fulfillmentLineId:'f2'}]}
+ const large={...small,detailLineCount:3,previewLines:[row.lines[0]!]}
+ vi.mocked(api.get).mockImplementation(async url=>String(url).endsWith('/purchase-groups')?{...page,items:[small]}:{...detail,group:large,total:1})
+ const {wrapper}=await setup()
+ await wrapper.get('.related-details-toggle').trigger('click');await flushPromises()
+ expect(wrapper.find('.related-details-toggle').exists()).toBe(false)
+ expect(wrapper.get('.product-lines-toggle').attributes('aria-expanded')).toBe('true')
+ await wrapper.get('.product-lines-toggle').trigger('click');await flushPromises()
+ expect(wrapper.find('tbody').exists()).toBe(false)
+})
+
+it('automatically reloads when its warehouse dropdown changes',async()=>{
+
+ const {wrapper}=await setup()
+ const select=wrapper.findAll('select').find(s=>s.find('option[value="SZ"]').exists())!
+ expect(select.text()).toContain('HangZhou');expect(select.text()).toContain('ShenZhen')
+ await select.setValue('SZ');await flushPromises()
+ expect(api.get).toHaveBeenLastCalledWith(expect.stringContaining('purchase-groups'),expect.objectContaining({params:expect.objectContaining({warehouseCode:'SZ',page:1})}))
+ wrapper.unmount()
 })

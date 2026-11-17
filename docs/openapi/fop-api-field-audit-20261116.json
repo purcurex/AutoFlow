@@ -1,0 +1,1906 @@
+{
+  "schemaVersion": 1,
+  "auditDate": "2026-11-16",
+  "method": "DTS body after @ISC@, JSON[0]; no network or database access",
+  "operationCount": 26,
+  "automaticCallsEnabled": false,
+  "databaseWritten": false,
+  "limits": [
+    "字段配置提供不等于真实响应包含值，不证明部署或采集完成。",
+    "来源主键、原单关联、组织和当前账号权限仍按本地事实核验；未知保留未知。",
+    "时间窗口与稳定分页由独立时间增量审计负责；本记录不宣称任何接口已支持完整增量。"
+  ],
+  "fopSourceEvidence": [
+    {
+      "file": "code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/einkauf/service/PurchaseRefundApplicationService.java",
+      "symbols": [
+        "ENTITY",
+        "initializeDraft",
+        "validateSources"
+      ],
+      "finding": "REFUND_ONLY与RETURN_REFUND分离，实物申请数量为hzkj_rf_applyqty，默认审批核验未接通时阻止提交/审核。"
+    },
+    {
+      "file": "code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm/logistics/exception/FreightExceptionService.java",
+      "symbols": [
+        "ENTITY",
+        "findDelivery",
+        "manualDeliveryValues"
+      ],
+      "finding": "异常通知按当前组织唯一发运单带出销售单号及归属；发送是独立通知动作，不等于发运同步状态。"
+    }
+  ],
+  "operations": [
+    {
+      "operation": "auditFulfillmentOrder",
+      "sourceFile": "auditFulfillmentOrder.dts",
+      "sourceSha256": "478c8e143d0097cc15f9f4b2eb2519485ec309cd4a2cc09bb9e4a1c381845a72",
+      "entity": "hzkj_orders",
+      "path": "/v2/hzkj/hzkj_ordercenter/hzkj_orders/auditFulfillmentOrder",
+      "operationType": "audit",
+      "intendedUse": "审核执行",
+      "parameters": [
+        {
+          "name": "billno",
+          "required": true,
+          "sourceField": "billno"
+        },
+        {
+          "name": "org_number",
+          "required": true,
+          "sourceField": "org.number"
+        }
+      ],
+      "responseFieldCount": 0,
+      "presentCheckedFields": [],
+      "missingCheckedFields": [],
+      "conclusion": "执行接口；不纳入查询同步，源码配置不证明部署或执行联调。",
+      "verificationLevel": "supplied_api_configuration_only",
+      "liveResponseVerified": false,
+      "physicalReturnIntegration": false
+    },
+    {
+      "operation": "queryAfterSaleOrders",
+      "sourceFile": "queryAfterSaleOrders.dts",
+      "sourceSha256": "a03c53737e327ce4ecfb0c1700fb53939c68ac16c4cbc67db9e731d0670c0279",
+      "entity": "hzkj_after_sale_orders",
+      "path": "/v2/hzkj/hzkj_ordercenter/hzkj_after_sale_orders/queryAfterSaleOrders",
+      "operationType": "query",
+      "intendedUse": "RMA",
+      "parameters": [
+        {
+          "name": "hzkj_payingcustomer_id",
+          "required": true,
+          "sourceField": "hzkj_payingcustomer.id"
+        },
+        {
+          "name": "hzkj_shop_id",
+          "required": false,
+          "sourceField": "hzkj_shop.id"
+        },
+        {
+          "name": "hzkj_sales_type",
+          "required": false,
+          "sourceField": "hzkj_sales_type"
+        },
+        {
+          "name": "start_date",
+          "required": false,
+          "sourceField": "start_date"
+        },
+        {
+          "name": "end_date",
+          "required": false,
+          "sourceField": "end_date"
+        },
+        {
+          "name": "str",
+          "required": false,
+          "sourceField": "str"
+        },
+        {
+          "name": "hzkj_orderstatus",
+          "required": false,
+          "sourceField": "hzkj_orderstatus"
+        },
+        {
+          "name": "hzkj_resason_id",
+          "required": false,
+          "sourceField": "hzkj_resason.id"
+        }
+      ],
+      "responseFieldCount": 46,
+      "presentCheckedFields": [
+        {
+          "field": "hzkj_order_amount",
+          "responseName": "hzkj_order_amount",
+          "description": "订单金额"
+        },
+        {
+          "field": "hzkj_refund_amount",
+          "responseName": "hzkj_refund_amount",
+          "description": "退款金额"
+        },
+        {
+          "field": "hzkj_tocurr.number",
+          "responseName": "hzkj_tocurr_number",
+          "description": "结算币种.货币代码"
+        },
+        {
+          "field": "hzkj_srcnumber",
+          "responseName": "hzkj_srcnumber",
+          "description": "源单号"
+        }
+      ],
+      "missingCheckedFields": [
+        "hzkj_operator.id",
+        "org.id"
+      ],
+      "conclusion": "可补本单金额/退款/币种；必填付款客户ID，不构成公司全量同步入口；归属需本地验证原单关联。",
+      "verificationLevel": "supplied_api_configuration_only",
+      "liveResponseVerified": false,
+      "physicalReturnIntegration": false
+    },
+    {
+      "operation": "queryAllocation",
+      "sourceFile": "queryAllocation.dts",
+      "sourceSha256": "85b4e742e7554419f5bb6b00212b0735a89263a40d536dd71d0263241258b8d5",
+      "entity": "hzkj_alloc_bill",
+      "path": "/v2/hzkj/hzkj_ordercenter/hzkj_alloc_bill/queryAllocation",
+      "operationType": "query",
+      "intendedUse": "待配货/审核/已配货",
+      "parameters": [
+        {
+          "name": "id",
+          "required": false,
+          "sourceField": "id"
+        },
+        {
+          "name": "billno",
+          "required": false,
+          "sourceField": "billno"
+        },
+        {
+          "name": "billstatus",
+          "required": false,
+          "sourceField": "billstatus"
+        },
+        {
+          "name": "auditdate",
+          "required": false,
+          "sourceField": "auditdate"
+        },
+        {
+          "name": "modifytime",
+          "required": false,
+          "sourceField": "modifytime"
+        },
+        {
+          "name": "createtime",
+          "required": false,
+          "sourceField": "createtime"
+        },
+        {
+          "name": "hzkj_order_id",
+          "required": false,
+          "sourceField": "hzkj_order_id"
+        },
+        {
+          "name": "hzkj_order_no",
+          "required": false,
+          "sourceField": "hzkj_order_no"
+        },
+        {
+          "name": "hzkj_pkg_no",
+          "required": false,
+          "sourceField": "hzkj_pkg_no"
+        },
+        {
+          "name": "hzkj_alloc_status",
+          "required": false,
+          "sourceField": "hzkj_alloc_status"
+        },
+        {
+          "name": "org_number",
+          "required": true,
+          "sourceField": "org.number"
+        },
+        {
+          "name": "start_modifytime",
+          "required": true,
+          "sourceField": "start_modifytime"
+        },
+        {
+          "name": "end_modifytime",
+          "required": true,
+          "sourceField": "end_modifytime"
+        }
+      ],
+      "responseFieldCount": 52,
+      "presentCheckedFields": [
+        {
+          "field": "hzkj_order_id",
+          "responseName": "hzkj_order_id",
+          "description": "来源履约订单ID"
+        },
+        {
+          "field": "billstatus",
+          "responseName": "billstatus",
+          "description": "单据状态"
+        },
+        {
+          "field": "hzkj_alloc_status",
+          "responseName": "hzkj_alloc_status",
+          "description": "配货状态"
+        },
+        {
+          "field": "hzkj_alloc_entry.hzkj_src_entry_number",
+          "responseName": "hzkj_src_entry_number",
+          "description": "配货需求明细.来源订单行ID"
+        },
+        {
+          "field": "hzkj_alloc_entry.hzkj_line_ready_qty",
+          "responseName": "hzkj_line_ready_qty",
+          "description": "配货需求明细.本次新增占用量"
+        },
+        {
+          "field": "hzkj_alloc_entry.hzkj_line_alloc_qty",
+          "responseName": "hzkj_line_alloc_qty",
+          "description": "配货需求明细.已配货量"
+        },
+        {
+          "field": "hzkj_alloc_entry.hzkj_line_short_qty",
+          "responseName": "hzkj_line_short_qty",
+          "description": "配货需求明细.待配货量"
+        },
+        {
+          "field": "org.id",
+          "responseName": "org_id",
+          "description": "组织.id"
+        }
+      ],
+      "missingCheckedFields": [],
+      "conclusion": "提供配货状态、审核及逐行需求/齐套/短缺事实；原单和分录关联仍需验证，不能按SKU猜配。",
+      "verificationLevel": "supplied_api_configuration_only",
+      "liveResponseVerified": false,
+      "physicalReturnIntegration": false
+    },
+    {
+      "operation": "queryCustomerRegistrations",
+      "sourceFile": "queryCustomerRegistrations.dts",
+      "sourceSha256": "fa2b83dd6744f601cb576eadde89b29b2b5a4f7d7b7562a4c51b2b02b78822e7",
+      "entity": "hzkj_member_customer",
+      "path": "/v2/hzkj/hzkj_member/hzkj_member_customer/queryCustomerRegistrations",
+      "operationType": "query",
+      "intendedUse": "客户注册统计",
+      "parameters": [
+        {
+          "name": "from",
+          "required": true,
+          "sourceField": "from"
+        },
+        {
+          "name": "toExclusive",
+          "required": true,
+          "sourceField": "toExclusive"
+        }
+      ],
+      "responseFieldCount": 6,
+      "presentCheckedFields": [
+        {
+          "field": "id",
+          "responseName": "id",
+          "description": "id"
+        },
+        {
+          "field": "createtime",
+          "responseName": "createtime",
+          "description": "创建时间"
+        },
+        {
+          "field": "createorg.id",
+          "responseName": "createorg_id",
+          "description": "创建组织.id"
+        },
+        {
+          "field": "hzkj_biz_user.id",
+          "responseName": "hzkj_biz_user_id",
+          "description": "业务员.id"
+        }
+      ],
+      "missingCheckedFields": [],
+      "conclusion": "注册事件按客户创建时间取数；归属ID、本地权限及窗口需要独立核验，不借订单创建时间。",
+      "verificationLevel": "supplied_api_configuration_only",
+      "liveResponseVerified": false,
+      "physicalReturnIntegration": false
+    },
+    {
+      "operation": "queryDeliveryNotice",
+      "sourceFile": "queryDeliveryNotice.dts",
+      "sourceSha256": "446378b83f20fa3f1b808f2bcbb69ac8198a1f105eee97fbd51e423c7488781b",
+      "entity": "hzkj_deliver_order",
+      "path": "/v2/hzkj/hzkj_ordercenter/hzkj_deliver_order/queryDeliveryNotice",
+      "operationType": "query",
+      "intendedUse": "仓库发货通知/业务链",
+      "parameters": [
+        {
+          "name": "id",
+          "required": false,
+          "sourceField": "id"
+        },
+        {
+          "name": "billno",
+          "required": false,
+          "sourceField": "billno"
+        },
+        {
+          "name": "org_number",
+          "required": true,
+          "sourceField": "org.number"
+        },
+        {
+          "name": "start_modifytime",
+          "required": true,
+          "sourceField": "modifytime"
+        },
+        {
+          "name": "end_modifytime",
+          "required": true,
+          "sourceField": "end_modifytime"
+        },
+        {
+          "name": "hzkj_deliver_billno",
+          "required": false,
+          "sourceField": "hzkj_deliver_billno"
+        }
+      ],
+      "responseFieldCount": 50,
+      "presentCheckedFields": [
+        {
+          "field": "id",
+          "responseName": "id",
+          "description": "id"
+        },
+        {
+          "field": "billno",
+          "responseName": "billno",
+          "description": "单据编号"
+        },
+        {
+          "field": "org.id",
+          "responseName": "org_id",
+          "description": "组织.id"
+        },
+        {
+          "field": "hzkj_deliver_billno",
+          "responseName": "hzkj_deliver_billno",
+          "description": "发运单编号"
+        },
+        {
+          "field": "hzkj_intercept_cancelled",
+          "responseName": "hzkj_intercept_cancelled",
+          "description": "已拦截取消"
+        },
+        {
+          "field": "entryentity.id",
+          "responseName": "id",
+          "description": "商品明细.id"
+        },
+        {
+          "field": "entryentity.hzkj_entry_billno",
+          "responseName": "hzkj_entry_billno",
+          "description": "商品明细.销售订单编号"
+        },
+        {
+          "field": "entryentity.hzkj_sale_order_rowno",
+          "responseName": "hzkj_sale_order_rowno",
+          "description": "商品明细.销售订单行号"
+        }
+      ],
+      "missingCheckedFields": [],
+      "conclusion": "提供通知主单及明细关联候选；通知进度不直接代替履约整单出库。",
+      "verificationLevel": "supplied_api_configuration_only",
+      "liveResponseVerified": false,
+      "physicalReturnIntegration": false
+    },
+    {
+      "operation": "queryDeliveryNoticeByNo",
+      "sourceFile": "queryDeliveryNoticeByNo.dts",
+      "sourceSha256": "091e85c96df4fc686fbc9a863e0abb0670dc2d848d0415f77e126bcf5af6cf42",
+      "entity": "hzkj_deliver_order",
+      "path": "/v2/hzkj/hzkj_ordercenter/hzkj_deliver_order/queryDeliveryNoticeByNo",
+      "operationType": "query",
+      "intendedUse": "发货通知明细补查",
+      "parameters": [
+        {
+          "name": "billnos",
+          "required": true,
+          "sourceField": "billnos"
+        }
+      ],
+      "responseFieldCount": 4,
+      "presentCheckedFields": [
+        {
+          "field": "entryentity.id",
+          "responseName": "id",
+          "description": "商品明细.id"
+        },
+        {
+          "field": "entryentity.hzkj_entry_billno",
+          "responseName": "hzkj_entry_billno",
+          "description": "商品明细.销售订单编号"
+        },
+        {
+          "field": "entryentity.hzkj_sale_order_rowno",
+          "responseName": "hzkj_sale_order_rowno",
+          "description": "商品明细.销售订单行号"
+        }
+      ],
+      "missingCheckedFields": [
+        "id",
+        "billno",
+        "org.id"
+      ],
+      "conclusion": "仅返回分录与来源号；缺主单ID/编号/组织，不能单独形成完整主单副本。",
+      "verificationLevel": "supplied_api_configuration_only",
+      "liveResponseVerified": false,
+      "physicalReturnIntegration": false
+    },
+    {
+      "operation": "queryDispatch",
+      "sourceFile": "queryDispatch.dts",
+      "sourceSha256": "353c02e6bcf5380b448392080a8b071709b9da23a6e23b4dae3fe4bf3dbb7c72",
+      "entity": "hzkj_deliver_bill",
+      "path": "/v2/hzkj/hzkj_logistics/hzkj_deliver_bill/queryDispatch",
+      "operationType": "query",
+      "intendedUse": "待履约/已履约/仓库发运事实",
+      "parameters": [
+        {
+          "name": "id",
+          "required": false,
+          "sourceField": "id"
+        },
+        {
+          "name": "billno",
+          "required": false,
+          "sourceField": "billno"
+        },
+        {
+          "name": "org_number",
+          "required": true,
+          "sourceField": "org.number"
+        },
+        {
+          "name": "start_modifytime",
+          "required": true,
+          "sourceField": "start_modifytime"
+        },
+        {
+          "name": "end_modifytime",
+          "required": true,
+          "sourceField": "end_modifytime"
+        },
+        {
+          "name": "hzkj_order_no",
+          "required": false,
+          "sourceField": "hzkj_order_no"
+        }
+      ],
+      "responseFieldCount": 90,
+      "presentCheckedFields": [
+        {
+          "field": "hzkj_delivery_status",
+          "responseName": "hzkj_delivery_status",
+          "description": "交付状态"
+        },
+        {
+          "field": "hzkj_fulfillment_status",
+          "responseName": "hzkj_fulfillment_status",
+          "description": "源单发货状态"
+        },
+        {
+          "field": "hzkj_ship_block_state",
+          "responseName": "hzkj_ship_block_state",
+          "description": "发货拦截状态"
+        },
+        {
+          "field": "hzkj_order_no",
+          "responseName": "hzkj_order_no",
+          "description": "销售订单编号"
+        },
+        {
+          "field": "hzkj_logistics_channel1.number",
+          "responseName": "hzkj_logistics_channel1_number",
+          "description": "物流渠道.编码"
+        },
+        {
+          "field": "hzkj_logistics_channel1.name",
+          "responseName": "hzkj_logistics_channel1_name",
+          "description": "物流渠道.渠道名称"
+        },
+        {
+          "field": "hzkj_basedatafield.number",
+          "responseName": "hzkj_basedatafield_number",
+          "description": "仓库.编码"
+        },
+        {
+          "field": "hzkj_logistics_orderno",
+          "responseName": "hzkj_logistics_orderno",
+          "description": "物流追踪号"
+        },
+        {
+          "field": "hzkj_logistics_trackno",
+          "responseName": "hzkj_logistics_trackno",
+          "description": "尾程追踪号"
+        }
+      ],
+      "missingCheckedFields": [],
+      "conclusion": "可补实际渠道、两类跟踪号和发运状态；本单取消状态不能反推履约取消。",
+      "verificationLevel": "supplied_api_configuration_only",
+      "liveResponseVerified": false,
+      "physicalReturnIntegration": false
+    },
+    {
+      "operation": "queryFreightException",
+      "sourceFile": "queryFreightException.dts",
+      "sourceSha256": "0d388c18deb55056245d9c9402065672f5e1e49046913a0bd5a552d51aefde62",
+      "entity": "hzkj_freight_exception",
+      "path": "/v2/hzkj/hzkj_logistics/hzkj_freight_exception/queryFreightException",
+      "operationType": "query",
+      "intendedUse": "货代异常通知候选",
+      "parameters": [
+        {
+          "name": "hzkj_sale_order_no",
+          "required": true,
+          "sourceField": "hzkj_sale_order_no"
+        }
+      ],
+      "responseFieldCount": 11,
+      "presentCheckedFields": [
+        {
+          "field": "id",
+          "responseName": "id",
+          "description": "id"
+        },
+        {
+          "field": "billno",
+          "responseName": "billno",
+          "description": "单据编号"
+        },
+        {
+          "field": "billstatus",
+          "responseName": "billstatus",
+          "description": "单据状态"
+        },
+        {
+          "field": "modifytime",
+          "responseName": "modifytime",
+          "description": "修改时间"
+        },
+        {
+          "field": "createtime",
+          "responseName": "createtime",
+          "description": "创建时间"
+        },
+        {
+          "field": "hzkj_order_no",
+          "responseName": "hzkj_order_no",
+          "description": "发运单号"
+        },
+        {
+          "field": "hzkj_sale_order_no",
+          "responseName": "hzkj_sale_order_no",
+          "description": "销售单号"
+        },
+        {
+          "field": "hzkj_issue_detail",
+          "responseName": "hzkj_issue_detail",
+          "description": "问题件明细"
+        },
+        {
+          "field": "hzkj_send_status",
+          "responseName": "hzkj_send_status",
+          "description": "发送状态"
+        }
+      ],
+      "missingCheckedFields": [
+        "org.id",
+        "hzkj_bizoperator.id",
+        "hzkj_inner_no",
+        "hzkj_transfer_no"
+      ],
+      "conclusion": "发送状态是通知发送状态，不是发运SYNC_FAILED或异常已解决状态；仅销售单号过滤，缺公司及归属回显，需受控范围与唯一原单核验后才能展示。",
+      "verificationLevel": "supplied_api_configuration_only",
+      "liveResponseVerified": false,
+      "physicalReturnIntegration": false
+    },
+    {
+      "operation": "queryInbound",
+      "sourceFile": "queryInbound.dts",
+      "sourceSha256": "c354b1db31611e607d5ed3595fa3ac126839006025805ec81013381998450a6a",
+      "entity": "im_purinbill",
+      "path": "/v2/hzkj/im/im_purinbill/queryInbound",
+      "operationType": "query",
+      "intendedUse": "入库事实/业务链",
+      "parameters": [
+        {
+          "name": "id",
+          "required": false,
+          "sourceField": "id"
+        },
+        {
+          "name": "billno",
+          "required": false,
+          "sourceField": "billno"
+        },
+        {
+          "name": "org_number",
+          "required": true,
+          "sourceField": "org.number"
+        },
+        {
+          "name": "srcbillnumber",
+          "required": false,
+          "sourceField": "srcbillnumber"
+        }
+      ],
+      "responseFieldCount": 200,
+      "presentCheckedFields": [
+        {
+          "field": "id",
+          "responseName": "id",
+          "description": "id"
+        },
+        {
+          "field": "billstatus",
+          "responseName": "billstatus",
+          "description": "单据状态"
+        },
+        {
+          "field": "org.id",
+          "responseName": "org_id",
+          "description": "库存组织.id"
+        },
+        {
+          "field": "billentry.id",
+          "responseName": "id",
+          "description": "物料明细.id"
+        },
+        {
+          "field": "billentry.qty",
+          "responseName": "qty",
+          "description": "物料明细.数量"
+        },
+        {
+          "field": "billentry.srcbillentity",
+          "responseName": "srcbillentity",
+          "description": "物料明细.来源单据实体"
+        },
+        {
+          "field": "billentry.srcbillid",
+          "responseName": "srcbillid",
+          "description": "物料明细.来源单据ID"
+        },
+        {
+          "field": "billentry.srcbillentryid",
+          "responseName": "srcbillentryid",
+          "description": "物料明细.来源单据行ID"
+        },
+        {
+          "field": "billentry.warehouse.id",
+          "responseName": "warehouse_id",
+          "description": "仓库.id"
+        },
+        {
+          "field": "billentry.material.id",
+          "responseName": "material_id",
+          "description": "物料编码.id"
+        }
+      ],
+      "missingCheckedFields": [],
+      "conclusion": "提供原单及行、数量/仓库；需核验审核/冲销/有效性及唯一关联后计算入库，不凭列表返回即视为已入库。",
+      "verificationLevel": "supplied_api_configuration_only",
+      "liveResponseVerified": false,
+      "physicalReturnIntegration": false
+    },
+    {
+      "operation": "queryOrderDetail",
+      "sourceFile": "queryOrderDetail.dts",
+      "sourceSha256": "3915421508c8d97045f31e16ed7974c1ffd27c32faa1527d1c70c11ee42ca3c2",
+      "entity": "hzkj_orders",
+      "path": "/v2/hzkj/hzkj_ordercenter/hzkj_orders/queryOrderDetail",
+      "operationType": "query",
+      "intendedUse": "履约定向核查",
+      "parameters": [
+        {
+          "name": "id",
+          "required": true,
+          "sourceField": "id"
+        }
+      ],
+      "responseFieldCount": 143,
+      "presentCheckedFields": [
+        {
+          "field": "hzkj_sourcepayststus",
+          "responseName": "hzkj_sourcepayststus",
+          "description": "源单付款状态"
+        }
+      ],
+      "missingCheckedFields": [
+        "hzkj_total_amount",
+        "hzkj_fre_quo_amount",
+        "hzkj_delivery_status",
+        "hzkj_logistics_info.hzkj_package_tax_fee"
+      ],
+      "conclusion": "按ID查询，不能将列表已提供的字段视为详情也已提供。",
+      "verificationLevel": "supplied_api_configuration_only",
+      "liveResponseVerified": false,
+      "physicalReturnIntegration": false
+    },
+    {
+      "operation": "queryOrderList",
+      "sourceFile": "queryOrderList.dts",
+      "sourceSha256": "c42866dcdb4358a3e404593c569ae9f3d5264eaf240084bdc42f52b373e28156",
+      "entity": "hzkj_orders",
+      "path": "/v2/hzkj/hzkj_ordercenter/hzkj_orders/queryOrderList",
+      "operationType": "query",
+      "intendedUse": "五岗位履约主单",
+      "parameters": [
+        {
+          "name": "id",
+          "required": false,
+          "sourceField": "id"
+        },
+        {
+          "name": "billno",
+          "required": false,
+          "sourceField": "billno"
+        },
+        {
+          "name": "org_number",
+          "required": true,
+          "sourceField": "org.number"
+        },
+        {
+          "name": "start_modifytime",
+          "required": true,
+          "sourceField": "modifytime"
+        },
+        {
+          "name": "end_modifytime",
+          "required": true,
+          "sourceField": "end_modifytime"
+        }
+      ],
+      "responseFieldCount": 161,
+      "presentCheckedFields": [
+        {
+          "field": "hzkj_total_amount",
+          "responseName": "hzkj_total_amount",
+          "description": "订单金额"
+        },
+        {
+          "field": "hzkj_order_amount",
+          "responseName": "hzkj_order_amount",
+          "description": "订单金额"
+        },
+        {
+          "field": "hzkj_fre_quo_amount",
+          "responseName": "hzkj_fre_quo_amount",
+          "description": "运费报价金额"
+        },
+        {
+          "field": "hzkj_sourcepayststus",
+          "responseName": "hzkj_sourcepayststus",
+          "description": "源单付款状态"
+        },
+        {
+          "field": "hzkj_fulfillment_status",
+          "responseName": "hzkj_fulfillment_status",
+          "description": "源单发货状态"
+        },
+        {
+          "field": "hzkj_purchase_status",
+          "responseName": "hzkj_purchase_status",
+          "description": "采购状态"
+        },
+        {
+          "field": "hzkj_datetimefield",
+          "responseName": "hzkj_datetimefield",
+          "description": "源单付款时间"
+        },
+        {
+          "field": "hzkj_receipt_date",
+          "responseName": "hzkj_receipt_date",
+          "description": "收款日期"
+        },
+        {
+          "field": "hzkj_orders_billentry.hzkj_local_sku.hzkj_sku_value",
+          "responseName": "hzkj_local_sku_hzkj_sku_value",
+          "description": "本地sku.属性名"
+        },
+        {
+          "field": "hzkj_order_blocked",
+          "responseName": "hzkj_order_blocked",
+          "description": "订单拦截"
+        },
+        {
+          "field": "hzkj_use_status",
+          "responseName": "hzkj_use_status",
+          "description": "数据状态"
+        }
+      ],
+      "missingCheckedFields": [
+        "hzkj_delivery_status",
+        "hzkj_logistics_info.hzkj_package_tax_fee"
+      ],
+      "conclusion": "可补总额/运费/源单付款状态和SKU规格；包裹税费及履约原生整单出库字段逐项检查，不能用表头税费或发运状态替代。",
+      "verificationLevel": "supplied_api_configuration_only",
+      "liveResponseVerified": false,
+      "physicalReturnIntegration": false
+    },
+    {
+      "operation": "queryOutbound",
+      "sourceFile": "queryOutbound.dts",
+      "sourceSha256": "b23c70769e1b5a848455df3cb036c10f582c20c9814abb927d4a3c54f4f55096",
+      "entity": "im_saloutbill",
+      "path": "/v2/hzkj/im/im_saloutbill/queryOutbound",
+      "operationType": "query",
+      "intendedUse": "定向出库事实",
+      "parameters": [
+        {
+          "name": "id",
+          "required": true,
+          "sourceField": "id"
+        }
+      ],
+      "responseFieldCount": 224,
+      "presentCheckedFields": [
+        {
+          "field": "id",
+          "responseName": "id",
+          "description": "id"
+        },
+        {
+          "field": "billstatus",
+          "responseName": "billstatus",
+          "description": "单据状态"
+        },
+        {
+          "field": "org.id",
+          "responseName": "org_id",
+          "description": "库存组织.id"
+        },
+        {
+          "field": "billentry.id",
+          "responseName": "id",
+          "description": "物料明细.id"
+        },
+        {
+          "field": "billentry.qty",
+          "responseName": "qty",
+          "description": "物料明细.数量"
+        },
+        {
+          "field": "billentry.srcbillentity",
+          "responseName": "srcbillentity",
+          "description": "物料明细.来源单据实体"
+        },
+        {
+          "field": "billentry.srcbillid",
+          "responseName": "srcbillid",
+          "description": "物料明细.来源单据ID"
+        },
+        {
+          "field": "billentry.srcbillentryid",
+          "responseName": "srcbillentryid",
+          "description": "物料明细.来源单据行ID"
+        },
+        {
+          "field": "billentry.warehouse.id",
+          "responseName": "warehouse_id",
+          "description": "仓库.id"
+        }
+      ],
+      "missingCheckedFields": [],
+      "conclusion": "仅必填出库ID，不能据此完成公司范围全量出库采集。",
+      "verificationLevel": "supplied_api_configuration_only",
+      "liveResponseVerified": false,
+      "physicalReturnIntegration": false
+    },
+    {
+      "operation": "queryOutboundList",
+      "sourceFile": "queryOutboundList.dts",
+      "sourceSha256": "ed14867004c40398419423a3d14cdc6f4cd291606572d200920a04d7aa08ae52",
+      "entity": "im_saloutbill",
+      "path": "/v2/hzkj/im/im_saloutbill/queryOutboundList",
+      "operationType": "query",
+      "intendedUse": "出库事实/业务链",
+      "parameters": [
+        {
+          "name": "id",
+          "required": false,
+          "sourceField": "id"
+        },
+        {
+          "name": "billno",
+          "required": false,
+          "sourceField": "billno"
+        },
+        {
+          "name": "org_number",
+          "required": true,
+          "sourceField": "org.number"
+        },
+        {
+          "name": "srcbillnumber",
+          "required": false,
+          "sourceField": "srcbillnumber"
+        }
+      ],
+      "responseFieldCount": 224,
+      "presentCheckedFields": [
+        {
+          "field": "id",
+          "responseName": "id",
+          "description": "id"
+        },
+        {
+          "field": "billstatus",
+          "responseName": "billstatus",
+          "description": "单据状态"
+        },
+        {
+          "field": "org.id",
+          "responseName": "org_id",
+          "description": "库存组织.id"
+        },
+        {
+          "field": "isvirtualbill",
+          "responseName": "isvirtualbill",
+          "description": "内部交易单据"
+        },
+        {
+          "field": "billentry.id",
+          "responseName": "id",
+          "description": "物料明细.id"
+        },
+        {
+          "field": "billentry.qty",
+          "responseName": "qty",
+          "description": "物料明细.数量"
+        },
+        {
+          "field": "billentry.srcbillentity",
+          "responseName": "srcbillentity",
+          "description": "物料明细.来源单据实体"
+        },
+        {
+          "field": "billentry.srcbillid",
+          "responseName": "srcbillid",
+          "description": "物料明细.来源单据ID"
+        },
+        {
+          "field": "billentry.srcbillentryid",
+          "responseName": "srcbillentryid",
+          "description": "物料明细.来源单据行ID"
+        },
+        {
+          "field": "billentry.material.id",
+          "responseName": "material_id",
+          "description": "物料编码.id"
+        }
+      ],
+      "missingCheckedFields": [],
+      "conclusion": "补公司范围出库查询入口，仍需排除虚拟/冲销/无效行并验证原单关系；不替代履约原生状态回写。",
+      "verificationLevel": "supplied_api_configuration_only",
+      "liveResponseVerified": false,
+      "physicalReturnIntegration": false
+    },
+    {
+      "operation": "queryPayment",
+      "sourceFile": "queryPayment.dts",
+      "sourceSha256": "5570b891ff29d4bd0513a94cc90a92f78fc5bafb67111f41e90d291a31e60c81",
+      "entity": "hzkj_pay_cost_bill",
+      "path": "/v2/hzkj/hzkj_fund/hzkj_pay_cost_bill/queryPayment",
+      "operationType": "query",
+      "intendedUse": "采购付款事实",
+      "parameters": [
+        {
+          "name": "id",
+          "required": false,
+          "sourceField": "id"
+        },
+        {
+          "name": "billno",
+          "required": false,
+          "sourceField": "billno"
+        },
+        {
+          "name": "org_number",
+          "required": true,
+          "sourceField": "org.number"
+        },
+        {
+          "name": "hzkj_purorder_no",
+          "required": false,
+          "sourceField": "hzkj_purorder_no"
+        }
+      ],
+      "responseFieldCount": 49,
+      "presentCheckedFields": [
+        {
+          "field": "hzkj_purorder_no",
+          "responseName": "hzkj_purorder_no",
+          "description": "采购订单号"
+        },
+        {
+          "field": "hzkj_purchase_id",
+          "responseName": "hzkj_purchase_id",
+          "description": "来源采购订单ID"
+        },
+        {
+          "field": "hzkj_pay_status",
+          "responseName": "hzkj_pay_status",
+          "description": "付款状态"
+        },
+        {
+          "field": "hzkj_paydate",
+          "responseName": "hzkj_paydate",
+          "description": "付款日期"
+        },
+        {
+          "field": "hzkj_actpayamt",
+          "responseName": "hzkj_actpayamt",
+          "description": "实付金额"
+        },
+        {
+          "field": "hzkj_cancelstatus",
+          "responseName": "hzkj_cancelstatus",
+          "description": "作废状态"
+        },
+        {
+          "field": "hzkj_refund_amount",
+          "responseName": "hzkj_refund_amount",
+          "description": "累计退款金额"
+        }
+      ],
+      "missingCheckedFields": [],
+      "conclusion": "提供付款与采购来源事实；款项和币种须本单校验，退款与实物退货分开。",
+      "verificationLevel": "supplied_api_configuration_only",
+      "liveResponseVerified": false,
+      "physicalReturnIntegration": false
+    },
+    {
+      "operation": "queryPurchase",
+      "sourceFile": "queryPurchase.dts",
+      "sourceSha256": "4f4b8bf55b54d5c30343f35fc8914640d3a51c8965d3d33638b980bddaa75916",
+      "entity": "hzkj_purorderbill",
+      "path": "/v2/hzkj/hzkj_einkauf/hzkj_purorderbill/queryPurchase",
+      "operationType": "query",
+      "intendedUse": "采购分组/待发货",
+      "parameters": [
+        {
+          "name": "billno",
+          "required": false,
+          "sourceField": "billno"
+        },
+        {
+          "name": "id",
+          "required": false,
+          "sourceField": "id"
+        },
+        {
+          "name": "org_number",
+          "required": true,
+          "sourceField": "org.number"
+        },
+        {
+          "name": "source_stock_billno",
+          "required": false,
+          "sourceField": "source_stock_billno"
+        }
+      ],
+      "responseFieldCount": 300,
+      "presentCheckedFields": [
+        {
+          "field": "billstatus",
+          "responseName": "billstatus",
+          "description": "单据状态"
+        },
+        {
+          "field": "hzkj_pay_status",
+          "responseName": "hzkj_pay_status",
+          "description": "1688订单状态"
+        },
+        {
+          "field": "hzkj_paystatus",
+          "responseName": "hzkj_paystatus",
+          "description": "付款状态"
+        },
+        {
+          "field": "hzkj_logisticsstatus",
+          "responseName": "hzkj_logisticsstatus",
+          "description": "物流状态"
+        },
+        {
+          "field": "hzkj_ship_status",
+          "responseName": "hzkj_ship_status",
+          "description": "发货状态"
+        },
+        {
+          "field": "hzkj_refund_amount",
+          "responseName": "hzkj_refund_amount",
+          "description": "退款金额"
+        },
+        {
+          "field": "hzkj_billentry.hzkj_salbillid",
+          "responseName": "hzkj_salbillid",
+          "description": "物料明细.销售订单ID"
+        },
+        {
+          "field": "hzkj_billentry.hzkj_salbillentryid",
+          "responseName": "hzkj_salbillentryid",
+          "description": "物料明细.销售订单行ID"
+        },
+        {
+          "field": "hzkj_warehouse_all.name",
+          "responseName": "hzkj_warehouse_all_name",
+          "description": "仓库.名称"
+        }
+      ],
+      "missingCheckedFields": [
+        "hzkj_supplier.id",
+        "hzkj_supplier.name"
+      ],
+      "conclusion": "采购原生状态可补，1688付款/标准付款/供应商发货仍分别判断；采购退款金额不代表实物退货。",
+      "verificationLevel": "supplied_api_configuration_only",
+      "liveResponseVerified": false,
+      "physicalReturnIntegration": false
+    },
+    {
+      "operation": "queryPurchaseRefundApplication",
+      "sourceFile": "queryPurchaseRefundApplication.dts",
+      "sourceSha256": "22bd4d6258acbfb44fecc43dccf49dfc23f1f52f1c8b441effd79b26d9e5a204",
+      "entity": "hzkj_purrefundapplybill",
+      "path": "/v2/hzkj/hzkj_einkauf/hzkj_purrefundapplybill/queryPurchaseRefundApplication",
+      "operationType": "query",
+      "intendedUse": "采购退款申请；不归实物退货清单",
+      "parameters": [
+        {
+          "name": "org_number",
+          "required": true,
+          "sourceField": "org.number"
+        }
+      ],
+      "responseFieldCount": 14,
+      "presentCheckedFields": [
+        {
+          "field": "id",
+          "responseName": "id",
+          "description": "id"
+        },
+        {
+          "field": "billno",
+          "responseName": "billno",
+          "description": "单据编号"
+        },
+        {
+          "field": "billstatus",
+          "responseName": "billstatus",
+          "description": "单据状态"
+        },
+        {
+          "field": "hzkj_cancelstatus",
+          "responseName": "hzkj_cancelstatus",
+          "description": "作废状态"
+        },
+        {
+          "field": "entryentity.id",
+          "responseName": "id",
+          "description": "物料明细.id"
+        },
+        {
+          "field": "entryentity.hzkj_srcbillentity",
+          "responseName": "hzkj_srcbillentity",
+          "description": "物料明细.来源单据实体"
+        },
+        {
+          "field": "entryentity.hzkj_srcbillid",
+          "responseName": "hzkj_srcbillid",
+          "description": "物料明细.来源单据ID"
+        },
+        {
+          "field": "entryentity.hzkj_srcbillentryid",
+          "responseName": "hzkj_srcbillentryid",
+          "description": "物料明细.来源单据行ID"
+        },
+        {
+          "field": "entryentity.hzkj_qty",
+          "responseName": "hzkj_qty",
+          "description": "物料明细.数量"
+        }
+      ],
+      "missingCheckedFields": [
+        "hzkj_rf_kind",
+        "entryentity.hzkj_rf_applyqty",
+        "hzkj_rf_submitstate",
+        "hzkj_rf_totalamt",
+        "hzkj_settlecurrency.number",
+        "org.id"
+      ],
+      "conclusion": "提供申请头/原单分录候选；源码实物申请量为hzkj_rf_applyqty，通用hzkj_qty不得替代。未返回退款类型、真实退货执行状态与物流。",
+      "verificationLevel": "supplied_api_configuration_only",
+      "liveResponseVerified": false,
+      "physicalReturnIntegration": false
+    },
+    {
+      "operation": "queryPurchaseRequisition",
+      "sourceFile": "queryPurchaseRequisition.dts",
+      "sourceSha256": "202ff1144a542d609415feb4bc548e6e640b1988bf83287b26e79fafc28ab654",
+      "entity": "hzkj_purapplybill",
+      "path": "/v2/hzkj/hzkj_einkauf/hzkj_purapplybill/queryPurchaseRequisition",
+      "operationType": "query",
+      "intendedUse": "采购申请/原单关联",
+      "parameters": [
+        {
+          "name": "id",
+          "required": false,
+          "sourceField": "id"
+        },
+        {
+          "name": "billno",
+          "required": false,
+          "sourceField": "billno"
+        },
+        {
+          "name": "org_number",
+          "required": true,
+          "sourceField": "org.number"
+        },
+        {
+          "name": "srcbillnumber",
+          "required": false,
+          "sourceField": "srcbillnumber"
+        }
+      ],
+      "responseFieldCount": 119,
+      "presentCheckedFields": [
+        {
+          "field": "billstatus",
+          "responseName": "billstatus",
+          "description": "单据状态"
+        },
+        {
+          "field": "hzkj_cancelstatus",
+          "responseName": "hzkj_cancelstatus",
+          "description": "作废状态"
+        },
+        {
+          "field": "entryentity.hzkj_srcbillentity",
+          "responseName": "hzkj_srcbillentity",
+          "description": "物料明细.来源单据实体"
+        },
+        {
+          "field": "entryentity.hzkj_srcbillid",
+          "responseName": "hzkj_srcbillid",
+          "description": "物料明细.来源单据ID"
+        },
+        {
+          "field": "entryentity.hzkj_srcbillentryid",
+          "responseName": "hzkj_srcbillentryid",
+          "description": "物料明细.来源单据行ID"
+        },
+        {
+          "field": "entryentity.hzkj_salbillid",
+          "responseName": "hzkj_salbillid",
+          "description": "物料明细.销售订单ID"
+        },
+        {
+          "field": "entryentity.hzkj_salbillentryid",
+          "responseName": "hzkj_salbillentryid",
+          "description": "物料明细.销售订单行ID"
+        },
+        {
+          "field": "entryentity.hzkj_procurement_status",
+          "responseName": "hzkj_procurement_status",
+          "description": "物料明细.采购状态 [0:否, 1:是]"
+        }
+      ],
+      "missingCheckedFields": [],
+      "conclusion": "补采购申请与履约原单关系；申请进度不等于供应商付款成功。",
+      "verificationLevel": "supplied_api_configuration_only",
+      "liveResponseVerified": false,
+      "physicalReturnIntegration": false
+    },
+    {
+      "operation": "queryPurchaseReturn",
+      "sourceFile": "queryPurchaseReturn.dts",
+      "sourceSha256": "8c4d315957f8784f71b7c21d66d57fc9d41b4592e67df4be1cc7993408772fb5",
+      "entity": "hzkj_purorderbill",
+      "path": "/v2/hzkj/hzkj_einkauf/hzkj_purorderbill/queryPurchaseReturn",
+      "operationType": "query",
+      "intendedUse": "采购退款候选；不归实物退货清单",
+      "parameters": [
+        {
+          "name": "billno",
+          "required": false,
+          "sourceField": "billno"
+        },
+        {
+          "name": "id",
+          "required": false,
+          "sourceField": "id"
+        },
+        {
+          "name": "org_number",
+          "required": true,
+          "sourceField": "org.number"
+        }
+      ],
+      "responseFieldCount": 7,
+      "presentCheckedFields": [
+        {
+          "field": "id",
+          "responseName": "id",
+          "description": "id"
+        },
+        {
+          "field": "billno",
+          "responseName": "billno",
+          "description": "单据编号"
+        },
+        {
+          "field": "hzkj_pay_status",
+          "responseName": "hzkj_pay_status",
+          "description": "1688订单状态"
+        },
+        {
+          "field": "hzkj_refund_amount",
+          "responseName": "hzkj_refund_amount",
+          "description": "退款金额"
+        },
+        {
+          "field": "hzkj_1688_order_n",
+          "responseName": "hzkj_1688_order_n",
+          "description": "1688订单号"
+        },
+        {
+          "field": "hzkj_biztime",
+          "responseName": "hzkj_biztime",
+          "description": "订单日期"
+        }
+      ],
+      "missingCheckedFields": [
+        "org.id",
+        "entryentity.id"
+      ],
+      "conclusion": "实际实体hzkj_purorderbill；固定1688状态3/4，七字段采购订单退款候选，没有实物单据、行、退货进度或归属证明。",
+      "verificationLevel": "supplied_api_configuration_only",
+      "liveResponseVerified": false,
+      "physicalReturnIntegration": false
+    },
+    {
+      "operation": "queryReceipt",
+      "sourceFile": "queryReceipt.dts",
+      "sourceSha256": "87cbc4f31ca63b7fbb71a4740397a27a08a52c2991976340c5aa20ca7df0681d",
+      "entity": "hzkj_receive_bill",
+      "path": "/v2/hzkj/hzkj_fund/hzkj_receive_bill/queryReceipt",
+      "operationType": "query",
+      "intendedUse": "收款事实/业务链",
+      "parameters": [
+        {
+          "name": "id",
+          "required": false,
+          "sourceField": "id"
+        },
+        {
+          "name": "billno",
+          "required": false,
+          "sourceField": "billno"
+        },
+        {
+          "name": "org_number",
+          "required": true,
+          "sourceField": "org.number"
+        }
+      ],
+      "responseFieldCount": 66,
+      "presentCheckedFields": [
+        {
+          "field": "hzkj_receive_status",
+          "responseName": "hzkj_receive_status",
+          "description": "收款状态"
+        },
+        {
+          "field": "hzkj_void_status",
+          "responseName": "hzkj_void_status",
+          "description": "作废状态"
+        },
+        {
+          "field": "entryentity.hzkj_src_order",
+          "responseName": "hzkj_src_order",
+          "description": "单据体.源单编号"
+        },
+        {
+          "field": "entryentity.hzkj_samount",
+          "responseName": "hzkj_samount",
+          "description": "单据体.订单金额"
+        },
+        {
+          "field": "entryentity.hzkj_freight",
+          "responseName": "hzkj_freight",
+          "description": "单据体.运费金额"
+        },
+        {
+          "field": "entryentity.hzkj_amountfield",
+          "responseName": "hzkj_amountfield",
+          "description": "单据体.产品金额"
+        },
+        {
+          "field": "entryentity.hzkj_fixed_tax_fee",
+          "responseName": "hzkj_fixed_tax_fee",
+          "description": "单据体.固定税费"
+        }
+      ],
+      "missingCheckedFields": [],
+      "conclusion": "保留收款事实；按现行待办金额契约不再用收款分录替补履约待办金额。",
+      "verificationLevel": "supplied_api_configuration_only",
+      "liveResponseVerified": false,
+      "physicalReturnIntegration": false
+    },
+    {
+      "operation": "queryReceiptAdjustment",
+      "sourceFile": "queryReceiptAdjustment.dts",
+      "sourceSha256": "ea6c0e56e0c3bb765c9545f628964b03d07eaf4f3e4771e39b45bca93649ff8c",
+      "entity": "hzkj_adjust_bill",
+      "path": "/v2/hzkj/hzkj_fund/hzkj_adjust_bill/queryReceiptAdjustment",
+      "operationType": "query",
+      "intendedUse": "收款调整事实/业务链",
+      "parameters": [
+        {
+          "name": "id",
+          "required": false,
+          "sourceField": "id"
+        },
+        {
+          "name": "billno",
+          "required": false,
+          "sourceField": "billno"
+        },
+        {
+          "name": "org_number",
+          "required": true,
+          "sourceField": "org.number"
+        }
+      ],
+      "responseFieldCount": 46,
+      "presentCheckedFields": [
+        {
+          "field": "billstatus",
+          "responseName": "billstatus",
+          "description": "单据状态"
+        },
+        {
+          "field": "hzkj_adjust_amount",
+          "responseName": "hzkj_adjust_amount",
+          "description": "调整金额"
+        },
+        {
+          "field": "hzkj_entryentity.hzkj_order_bill",
+          "responseName": "hzkj_order_bill",
+          "description": "订单明细.源单编号"
+        },
+        {
+          "field": "hzkj_entryentity.hzkj_sales_order_number",
+          "responseName": "hzkj_sales_order_number",
+          "description": "订单明细.销售订单编号"
+        },
+        {
+          "field": "hzkj_entryentity.hzkj_adjust_status",
+          "responseName": "hzkj_adjust_status",
+          "description": "订单明细.调整状态 [1:补收, 2:退回]"
+        }
+      ],
+      "missingCheckedFields": [],
+      "conclusion": "提供调整事实；不将已调整自动视为原单状态或到账结果，不在日志输出账户信息。",
+      "verificationLevel": "supplied_api_configuration_only",
+      "liveResponseVerified": false,
+      "physicalReturnIntegration": false
+    },
+    {
+      "operation": "queryReceiptNotice",
+      "sourceFile": "queryReceiptNotice.dts",
+      "sourceSha256": "145fadbc7c7ed9fa37325d5e4f1ff335ebaa4c2021f6b8de01d5677d2a8e5855",
+      "entity": "hzkj_receiptnotice",
+      "path": "/v2/hzkj/hzkj_einkauf/hzkj_receiptnotice/queryReceiptNotice",
+      "operationType": "query",
+      "intendedUse": "待入库/收货通知",
+      "parameters": [
+        {
+          "name": "id",
+          "required": false,
+          "sourceField": "id"
+        },
+        {
+          "name": "billno",
+          "required": false,
+          "sourceField": "billno"
+        },
+        {
+          "name": "org_number",
+          "required": true,
+          "sourceField": "org.number"
+        },
+        {
+          "name": "purchase_1688_order_no",
+          "required": false,
+          "sourceField": "hzkj_1688_order_n"
+        },
+        {
+          "name": "hzkj_purchase_order_numbe",
+          "required": false,
+          "sourceField": "hzkj_purchase_order_numbe"
+        }
+      ],
+      "responseFieldCount": 155,
+      "presentCheckedFields": [
+        {
+          "field": "id",
+          "responseName": "id",
+          "description": "id"
+        },
+        {
+          "field": "billno",
+          "responseName": "billno",
+          "description": "单据编号"
+        },
+        {
+          "field": "billstatus",
+          "responseName": "billstatus",
+          "description": "单据状态"
+        },
+        {
+          "field": "hzkj_receiptnotice_status",
+          "responseName": "hzkj_receiptnotice_status",
+          "description": "入库委托状态"
+        },
+        {
+          "field": "hzkj_logistics_company",
+          "responseName": "hzkj_logistics_company",
+          "description": "物流公司名称"
+        },
+        {
+          "field": "hzkj_waybill_number",
+          "responseName": "hzkj_waybill_number",
+          "description": "运单号"
+        },
+        {
+          "field": "entryentity.hzkj_receiveqty",
+          "responseName": "hzkj_receiveqty",
+          "description": "物料明细.已收货数量"
+        },
+        {
+          "field": "entryentity.hzkj_srcbillid",
+          "responseName": "hzkj_srcbillid",
+          "description": "物料明细.来源单据ID"
+        },
+        {
+          "field": "entryentity.hzkj_srcbillentryid",
+          "responseName": "hzkj_srcbillentryid",
+          "description": "物料明细.来源单据行ID"
+        },
+        {
+          "field": "entryentity.entryentity_lk.entryentity_lk_sid",
+          "responseName": "entryentity_lk_sid",
+          "description": "关联子实体.源单主实体内码"
+        }
+      ],
+      "missingCheckedFields": [
+        "hzkj_ware_house.name",
+        "hzkj_providersupplier.name"
+      ],
+      "conclusion": "已收货数量不直接冒充已入库；国内物流及源采购行可补，通知本单仓库/供应商仍缺对应输出。",
+      "verificationLevel": "supplied_api_configuration_only",
+      "liveResponseVerified": false,
+      "physicalReturnIntegration": false
+    },
+    {
+      "operation": "queryStockOrder",
+      "sourceFile": "queryStockOrder.dts",
+      "sourceSha256": "2f83500837876787efccb55bcc1ead2b1ef54a3df5f6184d3900136e3326d2a0",
+      "entity": "hzkj_stock_order_new",
+      "path": "/v2/hzkj/hzkj_ordercenter/hzkj_stock_order_new/queryStockOrder",
+      "operationType": "query",
+      "intendedUse": "销售/采购备货",
+      "parameters": [
+        {
+          "name": "id",
+          "required": false,
+          "sourceField": "id"
+        },
+        {
+          "name": "billno",
+          "required": false,
+          "sourceField": "billno"
+        },
+        {
+          "name": "org_number",
+          "required": true,
+          "sourceField": "org.number"
+        }
+      ],
+      "responseFieldCount": 115,
+      "presentCheckedFields": [
+        {
+          "field": "billstatus",
+          "responseName": "billstatus",
+          "description": "单据状态"
+        },
+        {
+          "field": "hzkj_orderstatus",
+          "responseName": "hzkj_orderstatus",
+          "description": "订单状态"
+        },
+        {
+          "field": "hzkj_order_amount",
+          "responseName": "hzkj_order_amount",
+          "description": "订单金额"
+        },
+        {
+          "field": "hzkj_currency.number",
+          "responseName": "hzkj_currency_number",
+          "description": "本位币.货币代码"
+        },
+        {
+          "field": "hzkj_operator.id",
+          "responseName": "hzkj_operator_id",
+          "description": "业务员.id"
+        },
+        {
+          "field": "hzkj_orders_billentry.hzkj_local_sku.hzkj_sku_value",
+          "responseName": "hzkj_local_sku_hzkj_sku_value",
+          "description": "本地sku.属性名"
+        }
+      ],
+      "missingCheckedFields": [
+        "hzkj_settlecurrency.number"
+      ],
+      "conclusion": "金额可取订单金额；hzkj_currency是本位币，不能替代结算币种。",
+      "verificationLevel": "supplied_api_configuration_only",
+      "liveResponseVerified": false,
+      "physicalReturnIntegration": false
+    },
+    {
+      "operation": "queryWorkbenchAllocationBalance",
+      "sourceFile": "queryWorkbenchAllocationBalance.dts",
+      "sourceSha256": "5041160774e15db455a96ab9b5439552c444e5775059c0965fb8f004f89e2c46",
+      "entity": "hzkj_alloc_balance",
+      "path": "/v2/hzkj/hzkj_ordercenter/hzkj_alloc_balance/queryWorkbenchAllocationBalance",
+      "operationType": "query",
+      "intendedUse": "配货占用库存",
+      "parameters": [
+        {
+          "name": "org_number",
+          "required": true,
+          "sourceField": "org.number"
+        },
+        {
+          "name": "hzkj_material_id",
+          "required": true,
+          "sourceField": "hzkj_material.id"
+        }
+      ],
+      "responseFieldCount": 12,
+      "presentCheckedFields": [
+        {
+          "field": "org.id",
+          "responseName": "org_id",
+          "description": "组织.id"
+        },
+        {
+          "field": "hzkj_material.id",
+          "responseName": "hzkj_material_id",
+          "description": "物料.id"
+        },
+        {
+          "field": "hzkj_warehouse.id",
+          "responseName": "hzkj_warehouse_id",
+          "description": "仓库.id"
+        },
+        {
+          "field": "hzkj_customer.id",
+          "responseName": "hzkj_customer_id",
+          "description": "客户.id"
+        },
+        {
+          "field": "hzkj_occ_qty",
+          "responseName": "hzkj_occ_qty",
+          "description": "配货占用量"
+        }
+      ],
+      "missingCheckedFields": [],
+      "conclusion": "提供物料/仓库/客户占用；缺可用库存证明，不直接反推可配货数量。",
+      "verificationLevel": "supplied_api_configuration_only",
+      "liveResponseVerified": false,
+      "physicalReturnIntegration": false
+    },
+    {
+      "operation": "queryWorkbenchInventoryBalance",
+      "sourceFile": "queryWorkbenchInventoryBalance.dts",
+      "sourceSha256": "c28fdbd3d1eb837f24b6f1bcf813820a34f0d39715d804db17e2463deb6f4123",
+      "entity": "im_inv_realbalance",
+      "path": "/v2/hzkj/im/im_inv_realbalance/queryWorkbenchInventoryBalance",
+      "operationType": "query",
+      "intendedUse": "即时库存",
+      "parameters": [
+        {
+          "name": "org_number",
+          "required": true,
+          "sourceField": "org.number"
+        },
+        {
+          "name": "material_id",
+          "required": true,
+          "sourceField": "material.id"
+        }
+      ],
+      "responseFieldCount": 12,
+      "presentCheckedFields": [
+        {
+          "field": "org.id",
+          "responseName": "org_id",
+          "description": "库存组织.id"
+        },
+        {
+          "field": "material.id",
+          "responseName": "material_id",
+          "description": "物料.id"
+        },
+        {
+          "field": "warehouse.id",
+          "responseName": "warehouse_id",
+          "description": "仓库.id"
+        },
+        {
+          "field": "qty",
+          "responseName": "qty",
+          "description": "库存量（库存单位）"
+        },
+        {
+          "field": "baseqty",
+          "responseName": "baseqty",
+          "description": "库存量（基本单位）"
+        }
+      ],
+      "missingCheckedFields": [],
+      "conclusion": "必填组织及物料；独立即时读取，不能当已锁库或可预占成功，也不以快照代表当前可用。",
+      "verificationLevel": "supplied_api_configuration_only",
+      "liveResponseVerified": false,
+      "physicalReturnIntegration": false
+    },
+    {
+      "operation": "queryWorkbenchReservedStock",
+      "sourceFile": "queryWorkbenchReservedStock.dts",
+      "sourceSha256": "3801ffd94fae7f3e0bc42e34e5ce4b8a74c8aa0b6f9fe0d4bd6db85bfd7d0ddc",
+      "entity": "hzkj_stock_inventory_data",
+      "path": "/v2/hzkj/hzkj_ordercenter/hzkj_stock_inventory_data/queryWorkbenchReservedStock",
+      "operationType": "query",
+      "intendedUse": "客户备货可用/锁定",
+      "parameters": [
+        {
+          "name": "hzkj_customer_id",
+          "required": true,
+          "sourceField": "hzkj_customer.id"
+        },
+        {
+          "name": "org_number",
+          "required": true,
+          "sourceField": "org.number"
+        }
+      ],
+      "responseFieldCount": 18,
+      "presentCheckedFields": [
+        {
+          "field": "org.id",
+          "responseName": "org_id",
+          "description": "组织.id"
+        },
+        {
+          "field": "hzkj_customer.id",
+          "responseName": "hzkj_customer_id",
+          "description": "客户.id"
+        },
+        {
+          "field": "hzkj_local_sku.id",
+          "responseName": "hzkj_local_sku_id",
+          "description": "本地sku.id"
+        },
+        {
+          "field": "hzkj_warehouse.id",
+          "responseName": "hzkj_warehouse_id",
+          "description": "仓库.id"
+        },
+        {
+          "field": "hzkj_total_available_qty",
+          "responseName": "hzkj_total_available_qty",
+          "description": "全款备货·可用量"
+        },
+        {
+          "field": "hzkj_lock_qty",
+          "responseName": "hzkj_lock_qty",
+          "description": "全款备货·已锁定量"
+        },
+        {
+          "field": "hzkj_deposit_avail_qty",
+          "responseName": "hzkj_deposit_avail_qty",
+          "description": "押金备货·可用量"
+        },
+        {
+          "field": "hzkj_deposit_lock_qty",
+          "responseName": "hzkj_deposit_lock_qty",
+          "description": "押金备货·锁定数量"
+        }
+      ],
+      "missingCheckedFields": [],
+      "conclusion": "必填客户及组织；区分全款/定金可用与锁定，不自动执行预占。",
+      "verificationLevel": "supplied_api_configuration_only",
+      "liveResponseVerified": false,
+      "physicalReturnIntegration": false
+    },
+    {
+      "operation": "queryWorkbenchSkuMaterial",
+      "sourceFile": "queryWorkbenchSkuMaterial.dts",
+      "sourceSha256": "1e97e3f7ea4cfb5c891050008d6ee09ebb41c002472f0263a00ab24085b212d8",
+      "entity": "hzkj_sku_record",
+      "path": "/v2/hzkj/hzkj_commodity/hzkj_sku_record/queryWorkbenchSkuMaterial",
+      "operationType": "query",
+      "intendedUse": "SKU物料关系",
+      "parameters": [
+        {
+          "name": "number",
+          "required": true,
+          "sourceField": "number"
+        },
+        {
+          "name": "hzkj_org_data_number",
+          "required": true,
+          "sourceField": "hzkj_org_data.number"
+        }
+      ],
+      "responseFieldCount": 7,
+      "presentCheckedFields": [
+        {
+          "field": "id",
+          "responseName": "id",
+          "description": "id"
+        },
+        {
+          "field": "number",
+          "responseName": "number",
+          "description": "编码"
+        },
+        {
+          "field": "hzkj_material.id",
+          "responseName": "hzkj_material_id",
+          "description": "对应物料编码.id"
+        },
+        {
+          "field": "hzkj_material.number",
+          "responseName": "hzkj_material_number",
+          "description": "对应物料编码.编码"
+        },
+        {
+          "field": "hzkj_org_data.number",
+          "responseName": "hzkj_org_data_number",
+          "description": "组织.编码"
+        }
+      ],
+      "missingCheckedFields": [],
+      "conclusion": "按SKU编码及组织编码查询，提供明确物料映射；不按名称猜关联。",
+      "verificationLevel": "supplied_api_configuration_only",
+      "liveResponseVerified": false,
+      "physicalReturnIntegration": false
+    }
+  ]
+}

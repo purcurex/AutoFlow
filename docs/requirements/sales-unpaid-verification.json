@@ -1,0 +1,84 @@
+{
+  "checkedAt": "2026-11-16T04:51:32.566Z",
+  "readMode": "local_collected",
+  "upstreamCalled": false,
+  "rawRewritten": false,
+  "scope": "Active local company capture, administrator aggregate; personal counts vary",
+  "sourceAsOf": "2026-11-12T09:11:26.523Z",
+  "supplement": {
+    "coverage": "local_same_document_projection",
+    "rowCount": 44841,
+    "companyId": "100000",
+    "rebuiltAt": "2026-11-16T04:50:49.249Z",
+    "ruleVersion": 1,
+    "sourceCapture": {
+      "coverage": "full_company_scan",
+      "rowCount": 45529,
+      "captureId": "176667f3-45cb-4c2c-b3a8-1c41c3fd76e9",
+      "companyId": "100000",
+      "operation": "order-list",
+      "pageCount": 456,
+      "capturedAt": "2026-11-13T02:16:08.469Z",
+      "finishedAt": "2026-11-13T02:19:35.579Z",
+      "verifiedOwnerRows": 45176,
+      "consistentSnapshot": false
+    }
+  },
+  "counts": {
+    "status_candidates": 29031,
+    "excluded_source_fulfilled": 15830,
+    "eligible": 13201,
+    "wrong_order_status": 0,
+    "source_fulfilled": 0,
+    "source_status_unavailable": 3
+  },
+  "personalScopeMatches": true,
+  "tests": {
+    "targeted": {
+      "passed": 31,
+      "failed": 0,
+      "includesIsolatedPostgresTempTables": true
+    },
+    "frontend": {
+      "suitesPassed": 89,
+      "passed": 743,
+      "failed": 0
+    },
+    "backendFull": {
+      "suitesPassed": 143,
+      "suitesFailed": 2,
+      "suitesSkipped": 5,
+      "passed": 1760,
+      "failed": 8,
+      "skipped": 37,
+      "failures": [
+        {
+          "file": "backend/src/modules/fop-data/fop-connection.spec.ts",
+          "reason": "Existing HTTP test module does not provide CollectedWorkbenchService",
+          "failed": 6
+        },
+        {
+          "file": "backend/src/modules/fop-data/procurement-groups-export.spec.ts",
+          "reason": "Existing customer payment date expectations use old consumer date (26th vs 27th)",
+          "failed": 2
+        }
+      ],
+      "note": "No production files implicated in these failures were modified by this change"
+    },
+    "offlineImporter": {
+      "passed": 2,
+      "failed": 0
+    }
+  },
+  "builds": {
+    "backend": true,
+    "frontend": true
+  },
+  "browserVerification": {
+    "url": "http://localhost:5173/workbench/sales?queue=unpaid",
+    "accountRole": "admin",
+    "displayedTotal": 13201,
+    "updatedDescriptionVisible": true,
+    "automaticSyncDisabled": true
+  }
+}

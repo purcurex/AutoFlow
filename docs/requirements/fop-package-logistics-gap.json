@@ -1,0 +1,414 @@
+{
+  "date": "2026-11-16",
+  "operation": "queryOrderList",
+  "entity": "hzkj_orders",
+  "requiredResponse": {
+    "parent": "hzkj_logistics_info",
+    "field": "hzkj_logistics_info.hzkj_tracking_number",
+    "responseName": "hzkj_tracking_number",
+    "type": "String",
+    "meaning": "本包裹物流跟踪号，原值返回，不要求本项目重新证明Shopify同步"
+  },
+  "alreadyProvided": "hzkj_logistics_info.hzkj_channel.name -> hzkj_channel_name",
+  "liveProbe": {
+    "order": "TO261109051115",
+    "channel": "云途全球专线挂号（特惠普货）",
+    "trackingFieldReturned": true,
+    "trackingNumber": "YT2631300715756034"
+  },
+  "sourceMetadata": "/Library/VSCode/dtr5b/datamodel/hzkj_CRM/1.5/main/hzkj_ordercenter/metadata/hzkj_orders.dym",
+  "deploymentStatus": "用户确认已发布；真实queryOrderList定点核验通过",
+  "automaticCallsEnabled": false,
+  "verificationSource": ".runtime/logistics-audit-20261116/order-sample-after-release.json",
+  "historicalBackfillStatus": "四实体历史补采及一轮增量均已入库发布；本地HTTP、销售已审核、发运已履约页面及Excel验证通过",
+  "captureAudit": {
+    "orders": 45587,
+    "uniqueIds": 45587,
+    "packages": 42812,
+    "packagesWithTrackingField": 42812,
+    "packagesWithTrackingNumber": 14943,
+    "nativeFulfilledEmptyTrackingOrders": 29,
+    "replayUsesSavedPages": true
+  },
+  "sourceEmptyTrackingOrders": [
+    {
+      "order": "TO261004023889",
+      "id": "2582611613005680640",
+      "billStatus": "C",
+      "orderStatus": "4",
+      "packages": [
+        {
+          "hzkj_combofield": "1",
+          "hzkj_tracking_number": "",
+          "hzkj_channel_name": null
+        }
+      ]
+    },
+    {
+      "order": "TO261013028372",
+      "id": "2589197859941266432",
+      "billStatus": "C",
+      "orderStatus": "4",
+      "packages": [
+        {
+          "hzkj_combofield": "1",
+          "hzkj_tracking_number": "",
+          "hzkj_channel_name": null
+        }
+      ]
+    },
+    {
+      "order": "TO261103044144",
+      "id": "2604670353888248834",
+      "billStatus": "C",
+      "orderStatus": "4",
+      "packages": [
+        {
+          "hzkj_combofield": "1",
+          "hzkj_tracking_number": "",
+          "hzkj_channel_name": "云途全球专线挂号（特惠普货）"
+        }
+      ]
+    },
+    {
+      "order": "TO261102039610",
+      "id": "2603853752880399362",
+      "billStatus": "C",
+      "orderStatus": "4",
+      "packages": [
+        {
+          "hzkj_combofield": "1",
+          "hzkj_tracking_number": "",
+          "hzkj_channel_name": null
+        }
+      ]
+    },
+    {
+      "order": "TO261104044410",
+      "id": "2604874573635721217",
+      "billStatus": "C",
+      "orderStatus": "4",
+      "packages": [
+        {
+          "hzkj_combofield": "1",
+          "hzkj_tracking_number": "",
+          "hzkj_channel_name": "联邮通标准挂号带电（OH）"
+        }
+      ]
+    },
+    {
+      "order": "TO261014029134",
+      "id": "2589961343226381312",
+      "billStatus": "C",
+      "orderStatus": "4",
+      "packages": [
+        {
+          "hzkj_combofield": "1",
+          "hzkj_tracking_number": "",
+          "hzkj_channel_name": null
+        }
+      ]
+    },
+    {
+      "order": "TO260826011788",
+      "id": "2554532496901443613",
+      "billStatus": "C",
+      "orderStatus": "4",
+      "packages": [
+        {
+          "hzkj_combofield": "1",
+          "hzkj_tracking_number": "",
+          "hzkj_channel_name": null
+        }
+      ]
+    },
+    {
+      "order": "TO261023033870",
+      "id": "2596631544592400385",
+      "billStatus": "C",
+      "orderStatus": "4",
+      "packages": [
+        {
+          "hzkj_combofield": "1",
+          "hzkj_tracking_number": "",
+          "hzkj_channel_name": null
+        }
+      ]
+    },
+    {
+      "order": "TO261031038100",
+      "id": "2602426715284256771",
+      "billStatus": "C",
+      "orderStatus": "4",
+      "packages": [
+        {
+          "hzkj_combofield": "1",
+          "hzkj_tracking_number": "",
+          "hzkj_channel_name": null
+        }
+      ]
+    },
+    {
+      "order": "TO261105045305",
+      "id": "2605595768303727617",
+      "billStatus": "C",
+      "orderStatus": "4",
+      "packages": [
+        {
+          "hzkj_combofield": "1",
+          "hzkj_tracking_number": "",
+          "hzkj_channel_name": "智尚宝-特敏"
+        }
+      ]
+    },
+    {
+      "order": "TO261107047946",
+      "id": "2607620316658161665",
+      "billStatus": "C",
+      "orderStatus": "4",
+      "packages": [
+        {
+          "hzkj_combofield": "1",
+          "hzkj_tracking_number": "",
+          "hzkj_channel_name": "智尚宝-特敏"
+        }
+      ]
+    },
+    {
+      "order": "TO261101038476",
+      "id": "2602816867470961666",
+      "billStatus": "C",
+      "orderStatus": "4",
+      "packages": [
+        {
+          "hzkj_combofield": "1",
+          "hzkj_tracking_number": "",
+          "hzkj_channel_name": "万邦特敏专线 B"
+        }
+      ]
+    },
+    {
+      "order": "TO260928021451",
+      "id": "2578051381726333957",
+      "billStatus": "C",
+      "orderStatus": "4",
+      "packages": [
+        {
+          "hzkj_combofield": "1",
+          "hzkj_tracking_number": "",
+          "hzkj_channel_name": null
+        }
+      ]
+    },
+    {
+      "order": "TO260921019317",
+      "id": "2573381614939749379",
+      "billStatus": "C",
+      "orderStatus": "4",
+      "packages": [
+        {
+          "hzkj_combofield": "1",
+          "hzkj_tracking_number": "",
+          "hzkj_channel_name": null
+        }
+      ]
+    },
+    {
+      "order": "TO260824011364",
+      "id": "2553075028950298634",
+      "billStatus": "C",
+      "orderStatus": "4",
+      "packages": [
+        {
+          "hzkj_combofield": "1",
+          "hzkj_tracking_number": "",
+          "hzkj_channel_name": null
+        }
+      ]
+    },
+    {
+      "order": "TO261022032968",
+      "id": "2595659362227738631",
+      "billStatus": "C",
+      "orderStatus": "4",
+      "packages": [
+        {
+          "hzkj_combofield": "1",
+          "hzkj_tracking_number": "",
+          "hzkj_channel_name": "万邦化妆品专线"
+        }
+      ]
+    },
+    {
+      "order": "TO261022033017",
+      "id": "2595726802836064257",
+      "billStatus": "C",
+      "orderStatus": "4",
+      "packages": [
+        {
+          "hzkj_combofield": "1",
+          "hzkj_tracking_number": "",
+          "hzkj_channel_name": "美国特惠专线敏感-全量邮编"
+        }
+      ]
+    },
+    {
+      "order": "TO261022033034",
+      "id": "2595756798308852737",
+      "billStatus": "C",
+      "orderStatus": "4",
+      "packages": [
+        {
+          "hzkj_combofield": "1",
+          "hzkj_tracking_number": "",
+          "hzkj_channel_name": "万邦化妆品专线"
+        }
+      ]
+    },
+    {
+      "order": "TO261022033391",
+      "id": "2595968272138524673",
+      "billStatus": "C",
+      "orderStatus": "4",
+      "packages": [
+        {
+          "hzkj_combofield": "1",
+          "hzkj_tracking_number": "",
+          "hzkj_channel_name": "万邦化妆品专线"
+        }
+      ]
+    },
+    {
+      "order": "TO261023033547",
+      "id": "2596150666019756033",
+      "billStatus": "C",
+      "orderStatus": "4",
+      "packages": [
+        {
+          "hzkj_combofield": "1",
+          "hzkj_tracking_number": "",
+          "hzkj_channel_name": "万邦化妆品专线"
+        }
+      ]
+    },
+    {
+      "order": "TO261023033600",
+      "id": "2596233124459337729",
+      "billStatus": "C",
+      "orderStatus": "4",
+      "packages": [
+        {
+          "hzkj_combofield": "1",
+          "hzkj_tracking_number": "",
+          "hzkj_channel_name": "万邦化妆品专线"
+        }
+      ]
+    },
+    {
+      "order": "TO261029036734",
+      "id": "2600800297471187968",
+      "billStatus": "C",
+      "orderStatus": "4",
+      "packages": [
+        {
+          "hzkj_combofield": "1",
+          "hzkj_tracking_number": "",
+          "hzkj_channel_name": "美国特惠专线含电-精选邮编"
+        }
+      ]
+    },
+    {
+      "order": "TO260821010824",
+      "id": "2550825974501507083",
+      "billStatus": "C",
+      "orderStatus": "4",
+      "packages": [
+        {
+          "hzkj_combofield": "1",
+          "hzkj_tracking_number": "",
+          "hzkj_channel_name": null
+        }
+      ]
+    },
+    {
+      "order": "TO261014029142",
+      "id": "2589975904121861120",
+      "billStatus": "C",
+      "orderStatus": "4",
+      "packages": [
+        {
+          "hzkj_combofield": "1",
+          "hzkj_tracking_number": "",
+          "hzkj_channel_name": null
+        }
+      ]
+    },
+    {
+      "order": "TO261102039828",
+      "id": "2604027485129605121",
+      "billStatus": "C",
+      "orderStatus": "4",
+      "packages": [
+        {
+          "hzkj_combofield": "1",
+          "hzkj_tracking_number": "",
+          "hzkj_channel_name": "智尚宝-特敏"
+        }
+      ]
+    },
+    {
+      "order": "TO261101038880",
+      "id": "2603363103248772097",
+      "billStatus": "C",
+      "orderStatus": "4",
+      "packages": [
+        {
+          "hzkj_combofield": "1",
+          "hzkj_tracking_number": "",
+          "hzkj_channel_name": "dropshipping-11敏感货（欧盟包税）"
+        }
+      ]
+    },
+    {
+      "order": "TO261022033425",
+      "id": "2596021591473195009",
+      "billStatus": "C",
+      "orderStatus": "4",
+      "packages": [
+        {
+          "hzkj_combofield": "1",
+          "hzkj_tracking_number": "",
+          "hzkj_channel_name": "万邦专线挂号含电美国"
+        }
+      ]
+    },
+    {
+      "order": "TO261012028012",
+      "id": "2588632892804454406",
+      "billStatus": "C",
+      "orderStatus": "4",
+      "packages": [
+        {
+          "hzkj_combofield": "1",
+          "hzkj_tracking_number": "",
+          "hzkj_channel_name": null
+        }
+      ]
+    },
+    {
+      "order": "TO261106047243",
+      "id": "2606988010390112257",
+      "billStatus": "C",
+      "orderStatus": "4",
+      "packages": [
+        {
+          "hzkj_combofield": "1",
+          "hzkj_tracking_number": "",
+          "hzkj_channel_name": "云途全球专线挂号（特惠带电）"
+        }
+      ]
+    }
+  ],
+  "emptyValuePolicy": "保持FOP已审核及已履约状态；记录API原始空值，不用发运单号码或截图补造本单包裹字段。",
+  "executionEvidence": "api-integration-verification-20261116.json#timestampHistoricalBackfill"
+}

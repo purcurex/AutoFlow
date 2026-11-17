@@ -1,0 +1,26 @@
+{
+  "revisionDate": "2026-11-15",
+  "scope": "local-timestamp-capture-engine",
+  "upstreamCalled": false,
+  "automaticCallsEnabled": false,
+  "businessDatabaseModified": false,
+  "migrationAppliedToBusinessDatabase": false,
+  "backendBuildPassed": true,
+  "focusedJest": {"suitesPassed": 5, "testsPassed": 63, "testsFailed": 0},
+  "isolatedPostgres": {"testsPassed": 8, "includedInFocusedJest": true, "databaseKind": "dedicated-empty-test-database", "businessFixtures": "synthetic"},
+  "cliTests": {"testsPassed": 2, "testsFailed": 0},
+  "fullBackend": {"suitesPassed": 138, "suitesFailed": 13, "suitesSkipped": 6, "testsPassed": 1804, "testsFailed": 30, "testsSkipped": 45, "allPassed": false},
+  "fullBackendFailureAreas": ["workbench-role-expectations", "captured-employee-bindings", "procurement-export-date", "test-controller-dependency-provider"],
+  "preflight": {"executable": false, "blockedReasons": ["fop_queries_paused", "timestamp_profile_required", "timestamp_batch_id_required"]},
+  "review": {"blockingFindingsAfterFixes": 0, "fixes": ["preserve-linked-display-generation", "fence-non-admin-reads-after-owner-change-or-deletion"]},
+  "limitations": ["source-query-profile-unverified", "linked-and-other-entity-projectors-pending", "ownership-fence-is-batch-wide-and-has-no-automatic-clear", "live-incremental-not-accepted", "full-backend-regression-not-green"],
+  "implementationFiles": [
+    "backend/src/database/migrations/1794770000000-TimestampQueryReplica.ts",
+    "backend/src/modules/workbench-replica/timestamp-sync.ts",
+    "backend/src/modules/workbench-replica/timestamp-postgres.ts",
+    "backend/src/modules/workbench-replica/timestamp-http-source.ts",
+    "backend/src/modules/workbench-replica/timestamp-status.ts",
+    "backend/src/modules/workbench-replica/collected-workbench.service.ts",
+    "scripts/workbench-timestamp-sync.mjs"
+  ]
+}
