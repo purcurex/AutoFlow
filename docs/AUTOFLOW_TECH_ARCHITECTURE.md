@@ -170,7 +170,7 @@ Git 不同步数据库记录、上传文件与本机私有配置。新电脑先�
 | --- | --- |
 | 数据库变更 | TypeORM 版本化迁移；synchronize 和 migrationsRun 默认关闭，按发布流程执行迁移 |
 | 测试与构建 | 前端 Vitest、后端 Jest、Supertest E2E；统一 lint、测试、构建和生产冒烟脚本 |
-| CI | GitHub Actions 对 master 推送及 PR 执行 ci:local，包含生产依赖审计 |
+| CI | GitHub Actions 对 main 推送及目标为 main 的 PR 执行 ci:local，包含生产依赖审计 |
 | 健康检查 | /api/health 检查数据库及工作流队列状态；不等同于所有外部服务健康 |
 | 可观测性 | correlation ID、请求耗时与结果日志；写请求审计元数据落库 |
 | 配置 | 环境变量校验；密钥只存服务端私有配置，不进入前端包、Git 或交付文档 |

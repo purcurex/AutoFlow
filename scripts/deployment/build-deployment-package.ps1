@@ -24,6 +24,11 @@ function Invoke-Checked {
 
 Push-Location $root
 try {
+  $sourceBranch = (& git branch --show-current)
+  if ($LASTEXITCODE -ne 0 -or ([string]$sourceBranch).Trim() -ne 'main') {
+    throw 'Deployment packages must be built from the main branch. Switch to main and update it before building.'
+  }
+
   if (-not $SkipBuild) {
     Invoke-Checked 'npm.cmd' @('run', 'build')
   }

@@ -457,3 +457,7 @@ PowerShell -ExecutionPolicy Bypass `
 - 保留周期：每日7至14份、每周4至8份、每月6份以上。
 - 每月至少执行一次恢复演练。
 - 数据库备份和 `backend/uploads` 使用同一业务时间点归档。
+
+## 发布源码分支
+
+　　统一从 `main` 分支制作部署包，先执行 `git switch main`、`git pull --ff-only origin main`，再按本文构建。打包脚本拒绝其他分支及 detached HEAD。GitHub CI 验证 main 推送和目标为 main 的 PR；打包、推送均不会自动部署服务器。
