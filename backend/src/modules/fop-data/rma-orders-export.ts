@@ -1,4 +1,4 @@
-import { singleSheetWorkbook, appendExportRecipients } from '../workbench-export/single-sheet'
+import { exportProductRow, exportRowIdentity, singleSheetWorkbook, appendExportRecipients } from '../workbench-export/single-sheet'
 import { normalizeConsumerPaidAt } from './consumer-payment-time'
 import * as ExcelJS from 'exceljs'
 import { PayloadTooLargeException } from '@nestjs/common'
@@ -15,8 +15,9 @@ export async function buildRmaWorkbook(rows: RmaOrder[], query: RmaExportDto, so
   for (const row of rows) {
     assertRmaTypeCompatibility(row.rmaCases)
     list.addRow({ order: row.orderNumber, products: row.items.map(item => `${item.name}\n${item.sku} × ${item.quantity}`).join('\n'), shopify: row.shopifyOrderNumber || '—', tags: (row.orderTags ?? []).map(tag => tag === 'cancellation_requested' ? '订单取消（申请中）' : rmaOrderTagLabels[tag][0]).join('、') || '—', types: row.rmaCases.filter(item => Object.prototype.hasOwnProperty.call(rmaTypeLabels, item.type)).map(item => `${rmaTypeLabels[item.type as keyof typeof rmaTypeLabels][0]} · ${item.number || '—'}`).join('\n') || '—', reason: [...new Set(row.rmaCases.map(item => item.reason).filter(Boolean))].join('\n') || '—', refunds: (row.refundAmounts ?? []).map(item => item.amount != null ? `${item.currency || '币种未提供'} ${item.amount.toFixed(2)}` : '—').join('\n') || '—', amount: row.amount, currency: row.currency === 'XXX' ? '—' : row.currency, customer: row.customerName, store: row.storeName, warehouse: row.warehouse, owner: `${row.owner?.name || row.salesperson}\n${row.department?.name || '—'}`, updated: date(normalizeConsumerPaidAt(row.consumerPaidAt)) })
-    for (const item of row.rmaCases) cases.addRow({ order: row.orderNumber, number: item.number || '—', type: rmaCaseLabels[item.type][0], status: item.isOpen === null ? '状态未提供' : item.isOpen ? '进行中' : '已结束', stage: item.stage || '—', reason: item.reason || '—', refundAmount: item.refundAmount ?? '—', refundCurrency: item.refundCurrency || '—', requestedAmount: item.requestedAmount ?? '—', currency: item.currency || '—', created: date(item.createdAt), updated: date(item.updatedAt) })
-    for (const item of row.items) items.addRow({ order: row.orderNumber, rmaNumber: row.rmaCases[0]?.number || '—', sku: item.sku, name: item.name, variant: item.variant, quantity: item.quantity, imageUrl: item.imageUrl })
+    exportRowIdentity(list.lastRow!,row.id)
+    for (const item of row.rmaCases) exportRowIdentity(cases.addRow({ order: row.orderNumber, number: item.number || '—', type: rmaCaseLabels[item.type][0], status: item.isOpen === null ? '状态未提供' : item.isOpen ? '进行中' : '已结束', stage: item.stage || '—', reason: item.reason || '—', refundAmount: item.refundAmount ?? '—', refundCurrency: item.refundCurrency || '—', requestedAmount: item.requestedAmount ?? '—', currency: item.currency || '—', created: date(item.createdAt), updated: date(item.updatedAt) }),row.id)
+    for (const item of row.items) exportRowIdentity(exportProductRow(items.addRow({ order: row.orderNumber, rmaNumber: row.rmaCases[0]?.number || '—', sku: item.sku, name: item.name, variant: item.variant, quantity: item.quantity, imageUrl: item.imageUrl }), item),row.id)
   }
   for (const ws of [list, cases, items]) ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: ws.rowCount, column: ws.columnCount } }
   const totals = summarizeRmaOrders(rows)

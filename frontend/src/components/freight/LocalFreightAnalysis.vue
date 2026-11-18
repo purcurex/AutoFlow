@@ -5,7 +5,8 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import EChart from '@/components/charts/EChart.vue'
 import FreightTrendDialog from './FreightTrendDialog.vue'
-import { getLocalFreight, type LocalFreightQuery, type LocalFreightResult, type FreightDimension, type FreightMeasure } from '@/api/local-freight'
+import FreightDetailsDialog from './FreightDetailsDialog.vue'
+import { getLocalFreight, type LocalFreightQuery, type LocalFreightResult, type FreightDimension, type FreightMeasure, type LocalFreightDetailsQuery } from '@/api/local-freight'
 import { businessYears } from '@/utils/business-years'
 import { formatCurrency } from '@/utils/currency'
 import { onSessionReset } from '@/utils/session'
@@ -20,8 +21,9 @@ const t=(cn:string,en:string)=>String(locale.value).startsWith('zh')?cn:en
 const businessToday=()=>new Date(Date.now()+8*3600000).toISOString().slice(0,10)
 const today=ref(businessToday()),currentYear=computed(()=>Number(today.value.slice(0,4)))
 const year=ref(currentYear.value),grain=ref<LocalFreightQuery['grain']>('week'),weekOf=ref(today.value),warehouse=ref(''),dimension=ref<FreightDimension>('carrier'),compare=ref(false)
+const detail=ref<{query:LocalFreightDetailsQuery;name:string}>()
 const data=ref<LocalFreightResult>(),busy=ref(false),error=ref(''),selected=ref('')
-const dimensions=computed(()=>[{id:'carrier',name:t('物流服务商','Carrier')},{id:'channel',name:t('物流渠道','Channel')},{id:'warehouse',name:t('仓库','Warehouse')},{id:'country',name:t('国家','Country')},{id:'customer',name:t('客户','Customer')},{id:'owner',name:t('业务员','Salesperson')},{id:'department',name:t('业务部门','Department')}])
+const dimensions=computed(()=>[{id:'carrier',name:t('物流服务商','Carrier')},{id:'channel',name:t('物流渠道','Channel')},{id:'owner',name:t('业务员','Salesperson')},{id:'department',name:t('业务部门','Department')},{id:'country',name:t('国家','Country')},{id:'warehouse',name:t('仓库','Warehouse')},{id:'customer',name:t('客户','Customer')}])
 const query=computed<LocalFreightQuery>(()=>({grain:grain.value,year:year.value,...grain.value==='week'?{weekOf:weekOf.value}:{},...warehouse.value?{warehouse:warehouse.value}:{},currency:'CNY',dimension:dimension.value}))
 const money=(n:string|number|null)=>n===null?'—':formatCurrency(Number(n),data.value?.currency??'CNY',String(locale.value))
 const number=(n:string|number)=>Number(n).toLocaleString(String(locale.value),{maximumFractionDigits:3})
@@ -42,7 +44,7 @@ const refresh=useAnalyticsRefresh(()=>load(),()=>busy.value,true)
 async function load(force=false){
  filterQuery.cancel()
  updateClock()
- const id=++request;busy.value=true;error.value='';selected.value=''
+ const id=++request;busy.value=true;error.value='';selected.value='';detail.value=undefined
  const submitted={...query.value}
  const baseKey=(q:LocalFreightQuery)=>JSON.stringify({...q,dimension:undefined,allDimensions:undefined})
  if(!data.value||baseKey(data.value.query)!==baseKey(submitted))data.value=undefined
@@ -51,9 +53,9 @@ async function load(force=false){
  finally{if(id===request)busy.value=false}
 }
 watch(year,v=>{weekOf.value=v===currentYear.value?today.value:`${v}-12-31`},{flush:'sync'})
-watch(query,(_next,previous)=>{if(!updatingClock){if(previous)filterQuery.schedule();else void load()}},{immediate:true})
+watch(query,(_next,previous)=>{if(!updatingClock){detail.value=undefined;if(previous)filterQuery.schedule();else void load()}},{immediate:true})
 watch(()=>props.revision,()=>load(true))
-const off=onSessionReset(()=>{request++;data.value=undefined;error.value='';selected.value='';busy.value=false;warehouseOptions.value=[]})
+const off=onSessionReset(()=>{request++;data.value=undefined;detail.value=undefined;error.value='';selected.value='';busy.value=false;warehouseOptions.value=[]})
 onBeforeUnmount(()=>{request++;off()})
 watch(data,v=>{if(v){warehouseOptions.value=v.warehouseOptions??v.warehouses.map(id=>({id,name:id}))}})
 const escape=(s:string)=>s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!))
@@ -79,6 +81,17 @@ function chart(group?:string){
   series:rows.map(s=>({id:s.id,name:s.label,type:group&&!compare.value?'line':'bar',data:s.values.map(v=>compare.value?v.delta===null?null:Number(v.delta):Number(v.amount)),emphasis:{focus:'series'}}))}
 }
 const option=computed(()=>ownerChart.value?.option??chart()),trend=computed(()=>chart(selected.value)),selectedName=computed(()=>data.value?.series.find(s=>s.id===selected.value)?.label??'')
+function openDetails(dimensionId?:string,periodId?:string){
+ const d=data.value;if(!d?.canViewDetails||busy.value)return
+ const series=d.series.find(s=>s.id===dimensionId),period=d.periods.find(p=>p.id===periodId)
+ detail.value={query:{...d.query,...dimensionId?{dimensionId}:{},...periodId?{periodId}:{}},name:[series?.label??t('当前范围','Current scope'),period?.label].filter(Boolean).join(' · ')}
+}
+function selectChart(event:{seriesIndex?:number;dataIndex?:number}){
+ if(event.dataIndex===undefined)return
+ if(ownerChart.value){const target=ownerChart.value.targets[event.dataIndex];if(target?.dimension==='person')openDetails(target.id);else if(target?.dimension==='department'&&data.value?.canViewDetails&&!busy.value)detail.value={query:{...data.value.query,departmentId:target.id},name:target.name};return}
+ const series=data.value?.series[event.seriesIndex??0],period=data.value?.periods[event.dataIndex]
+ if(series&&period)openDetails(series.id,period.id)
+}
 const displayPeriods=computed(()=>data.value?.periods.map((p,index)=>({...p,index})).reverse()??[])
 </script>
 <template>
@@ -111,9 +124,11 @@ const displayPeriods=computed(()=>data.value?.periods.map((p,index)=>({...p,inde
    </div>
    <p v-if="compare&&data.values.every(v=>v.previousAmount===null)" class="comparison-note">{{t('上期无可比数据','No comparable previous period')}}</p>
    <div v-if="ownerChart" class="owner-legend"><span><i class="department-swatch"/>{{t('部门汇总','Department')}}</span><span><i class="person-swatch"/>{{t('业务员','Salesperson')}}</span></div>
-   <div class="freight-chart" :class="{'owner-groups':ownerChart}"><EChart :option="option" :style="ownerChart?{minWidth:`${ownerChart.minWidth}px`}:undefined" :label="t('实际物流运费统计','Actual freight statistics')" /></div>
+   <div class="freight-chart" :class="{'owner-groups':ownerChart}"><EChart :option="option" @select="selectChart" :style="ownerChart?{minWidth:`${ownerChart.minWidth}px`}:undefined" :label="t('实际物流运费统计','Actual freight statistics')" /></div>
+   <div v-if="data.canViewDetails" class="freight-trend-actions"><button class="ov-link" :disabled="busy" @click="openDetails()">{{t('查看发运单明细 / 导出','Dispatch details / Export')}}</button><button v-for="s in data.series" :key="s.id" class="ov-link" :disabled="busy" @click="openDetails(s.id)">{{s.label}} · {{t('明细','Details')}}</button></div>
    <div class="freight-trend-actions"><span>{{t('分组趋势','Group trends')}}</span><button v-for="s in data.series" :key="s.id" class="ov-link" @click="selected=s.id">{{s.label}} ↗</button></div>
    <details><summary>{{t('运费统计表','Freight statistics')}}</summary><div class="ov-table-scroll"><table class="ov-table"><thead><tr><th>{{t('统计周期','Period')}}</th><th>{{compare?t('合计差额','Total change'):t('合计','Total')}}</th><th v-for="s in data.series" :key="s.id">{{s.label}}</th></tr></thead><tbody><tr v-for="p in displayPeriods" :key="p.id"><th>{{p.label}} <small v-if="p.partial">{{t('非完整周期','Partial')}}</small></th><td>{{money(compare?data.values[p.index]!.delta:data.values[p.index]!.amount)}}<small v-if="compare">{{percent(data.values[p.index]!.percent)}}</small></td><td v-for="s in data.series" :key="s.id">{{money(compare?s.values[p.index]!.delta:s.values[p.index]!.amount)}}<small v-if="compare">{{percent(s.values[p.index]!.percent)}}</small></td></tr></tbody></table></div></details>
+   <FreightDetailsDialog v-if="detail" :query="detail.query" :name="detail.name" @close="detail=undefined" />
    <FreightTrendDialog v-if="selected" :name="selectedName" scope="CNY · UTC+8" @close="selected=''"><div class="freight-chart"><EChart :option="trend" :label="selectedName" /></div></FreightTrendDialog>
   </template>
  </section>

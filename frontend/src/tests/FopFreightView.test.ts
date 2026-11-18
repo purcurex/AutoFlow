@@ -4,7 +4,7 @@ import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import WorkbenchView from '@/views/autoflow/WorkbenchView.vue'
+import FopFreightView from '@/views/autoflow/FopFreightView.vue'
 import { invalidateSession } from '@/utils/session'
 import { freightPage } from './freight-fixtures'
 const get = vi.hoisted(() => vi.fn())
@@ -17,9 +17,9 @@ vi.mock('@/views/autoflow/FopOrdersView.vue', () => ({ default: { template: '<di
 vi.mock('@/components/order-volume/OrderVolumeAnalysis.vue', () => ({ default: { template: '<div />' } }))
 enableAutoUnmount(afterEach)
 async function setup(query = 'grain=month&year=2026&warehouse=HZ&carrierCode=YT&periodId=2026-10') {
-  const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/workbench/:role/freight', name: 'RoleWorkbenchFreight', component: WorkbenchView }, { path: '/workbench/:role', name: 'RoleWorkbench', component: { template: '<div />' } }, { path: '/dashboard', component: { template: '<div />' } }] })
+  const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/workbench/:role/freight', name: 'RoleWorkbenchFreight', component: FopFreightView }, { path: '/workbench/:role', name: 'RoleWorkbench', component: { template: '<div />' } }, { path: '/dashboard', component: { template: '<div />' } }] })
   await router.push(`/workbench/dispatch/freight?${query}`)
-  const wrapper = mount(WorkbenchView, { global: { plugins: [router, createI18n({ legacy: false, locale: 'zh-CN', messages: {} })] } })
+  const wrapper = mount(FopFreightView, { global: { plugins: [router, createI18n({ legacy: false, locale: 'zh-CN', messages: {} })] } })
   await flushPromises(); return { wrapper, router }
 }
 describe('actual freight workbench details', () => {

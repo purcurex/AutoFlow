@@ -82,7 +82,7 @@ it('maps both stock types and payment/audit stages without hiding received recor
     order('1001', { stockType: '2', billStatus: 'A', purchaseStatus: '1' }), order('1002'), order('1003', { purchaseStatus: '4' })] }) })
   const page = await service.getStockOrders('local', { page: 1, pageSize: 1 })
   expect(page.total).toBe(4); expect(page.totals.orderCount).toBe(4); expect(page.totals.amounts).toEqual([{ currency: 'USD', amount: 493.8 }])
-  const paid = await service.getStockOrders('local', { page: 1, pageSize: 50, orderStatus: 'paid', stockType: 'deposit', purchaseStatus: 'partial' })
+  const paid = await service.getStockOrders('local', { page: 1, pageSize: 50, orderStatus: 'paid', stockType: 'deposit', purchaseStatus: 'in_progress' })
   expect(paid.items.map(row => row.id)).toEqual(['1001'])
   expect((await service.getStockOrders('local', { page: 1, pageSize: 50, orderStatus: 'paid', purchaseStatus: 'received' })).items.map(row => row.id)).toEqual(['1002'])
 })
@@ -323,10 +323,10 @@ describe('local stock employee scope', () => {
 })
 
 
-it('keeps raw procurement status 2 as in progress rather than asserting a paid supplier order', async () => {
+it('keeps raw stock status 2 as purchased without inventing a supplier shipment label', async () => {
   const { provider } = setup({ page: () => ({ items: [order('1000', { purchaseStatus: '2' })] }) })
   const grant = await provider.resolveStockPermissions(identity, admin)
-  expect((await provider.listStockOrders(identity, grant, admin))[0].purchaseStatus).toBe('in_progress')
+  expect((await provider.listStockOrders(identity, grant, admin))[0].purchaseStatus).toBe('purchased')
 })
 
 describe('local historical stock ownership compatibility', () => {

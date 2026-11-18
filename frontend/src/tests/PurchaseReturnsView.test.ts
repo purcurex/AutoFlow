@@ -64,7 +64,7 @@ describe('physical purchase return workbench', () => {
     vi.mocked(getPurchaseReturns).mockImplementationOnce(() => new Promise(done => { resolve = done }))
     const { wrapper } = await setup(); invalidateSession(); resolve(page); await flushPromises()
     expect(wrapper.text()).not.toContain('TH20261105000001')
-    expect(wrapper.find('tbody').exists()).toBe(false)
+    expect(wrapper.find('tbody tr:not(.workbench-state-row)').exists()).toBe(false)
   })
 })
 
@@ -132,4 +132,8 @@ vi.mocked(getPurchaseReturns).mockResolvedValue(page)
  await select.setValue('SZ');await flushPromises()
  expect(getPurchaseReturns).toHaveBeenLastCalledWith(expect.objectContaining({warehouseCode:'SZ',page:1}),expect.any(AbortSignal))
  wrapper.unmount()
+})
+it('allows resolving a captured return contact without a prefilled purchase reference',async()=>{
+ vi.mocked(getPurchaseReturns).mockResolvedValue({...page,items:[{...page.items[0]!,purchaseReturns:[{...document,purchaseOrder:{id:'',number:''}}]}]})
+ const {wrapper}=await setup('procurement');expect(wrapper.get('.return-supplier-contact').attributes('disabled')).toBeUndefined()
 })

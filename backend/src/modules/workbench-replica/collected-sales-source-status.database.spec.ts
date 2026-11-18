@@ -2,7 +2,11 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { parseEnv } from 'node:util'
 import { collectedWhere } from './collected-workbench-query'
+// pg is an optional runtime boundary for this isolated SQL test, without typed client usage.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const { Client } = require('pg')
+// This external CommonJS maintenance script has no TypeScript declarations.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const { refreshSalesSourceStatuses } = require('../../../../scripts/workbench-sales-source-status.cjs')
 const integration=process.env.RUN_COLLECTED_SALES_SQL_TEST==='1'?describe:describe.skip
 

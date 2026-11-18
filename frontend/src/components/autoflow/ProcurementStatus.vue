@@ -2,15 +2,15 @@
 import SupplierShipmentStatus from './SupplierShipmentStatus.vue'
 import WorkbenchStatusBadge from './WorkbenchStatusBadge.vue'
 import { computed } from 'vue'
-import { getProcurementTaskStatus, taskStatusLabels } from '@/utils/workbench-status'
+import { getProcurementTaskStatus, taskStatusLabels, type TaskStatus } from '@/utils/workbench-status'
 import { useI18n } from 'vue-i18n'
 import type { FulfillmentProgress, ProcurementProgress } from '@/api/fop-orders'
 
-const props = defineProps<{ progress?: ProcurementProgress; shipment: FulfillmentProgress['supplierShipment']; paidAt?: string | null; now?: number }>()
+const props = defineProps<{ stage?: TaskStatus; progress?: ProcurementProgress; shipment: FulfillmentProgress['supplierShipment']; paidAt?: string | null; now?: number }>()
 const { locale } = useI18n()
 const text = (cn: string, en: string) => String(locale.value).startsWith('zh') ? cn : en
 const stage = computed(() => {
-  const value = getProcurementTaskStatus(props.progress, props.shipment)
+  const value = props.stage ?? getProcurementTaskStatus(props.progress, props.shipment)
   const labels = taskStatusLabels[value]
   return { value, label: text(labels[0], labels[1]), tone: ['refund_pending', 'cancelled'].includes(value) ? 'attention'
     : ['unknown', 'not_required'].includes(value) ? 'neutral'

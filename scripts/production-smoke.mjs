@@ -13,6 +13,13 @@ const child = spawn(process.execPath, ['dist/src/main.js'], {
   env: {
     ...process.env,
     NODE_ENV: 'production',
+    FOP_QUERIES_PAUSED: 'true',
+    WORKBENCH_SYNC_ENABLED: 'false',
+    WORKBENCH_AUTOMATIC_CALLS_ENABLED: 'false',
+    WORKBENCH_TIMESTAMP_SYNC_ENABLED: 'false',
+    ENABLE_ADMIN_BOOTSTRAP: 'false',
+    DB_SYNCHRONIZE: 'false',
+    DB_MIGRATIONS_RUN: 'false',
     PORT: String(port),
     SMTP_HOST: process.env.SMTP_HOST || 'smtp.invalid',
     SMTP_USER: process.env.SMTP_USER || 'smoke-test',

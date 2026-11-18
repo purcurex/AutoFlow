@@ -1,3 +1,4 @@
+import { rmaRefundCurrency } from './rma-refund-currency'
 import Decimal from 'decimal.js'
 import { normalizeBusinessTimestamp } from './fop-business-time'
 import { completedSalesRows } from './fop-kingdee.sales-completed'
@@ -131,7 +132,7 @@ export async function readKingdeeRma(options: {
     cases.push({ id: id(row.id), tenantId: identity.tenantId, orderId: source.id, number: text(row.number) || null, type,
       isOpen: state === '' ? null : state === '1' || state === '2', stage: stages[state] ?? '状态未提供', reason: text(row.hzkj_resason1) || text(row.hzkj_resason_name) || null,
       createdAt: timestamp(row.createtime), updatedAt: timestamp(row.modifytime), requestedAmount: null, currency: null,
-      refundAmount: type === 'reshipment' ? null : amount(row.hzkj_refund_amount), refundCurrency: type !== 'reshipment' && /^[A-Z]{3}$/.test(text(row.hzkj_tocurr_number)) ? text(row.hzkj_tocurr_number) : null })
+      refundAmount: type === 'reshipment' ? null : amount(row.hzkj_refund_amount), refundCurrency: type !== 'reshipment' ? rmaRefundCurrency(row.hzkj_tocurr_number ?? (typeof row.hzkj_tocurr === 'object' && row.hzkj_tocurr !== null ? (row.hzkj_tocurr as Record<string, unknown>).number : undefined)) : null })
   }
   cases.sort((a,b) => a.id.localeCompare(b.id))
   return { snapshot: { subject: { ...identity }, cases }, orders: [...orders.values()], permission: { ...permission, allowedOrderIds: [...orders.keys()], allowedRmaCaseIds: cases.map(c => c.id) } }

@@ -26,7 +26,7 @@ describe('RMA independent workflow read model', () => {
     expect(rows[0].orderTags).toEqual(['interception_released'])
     expect(rows[0].rmaCases.map(item => item.type)).toEqual(['refund'])
     const missing = buildRmaOrders({ subject, cases: [flow('a', { requestedAmount: 15, currency: 'USD' })] }, grant, [order], {}, paths)
-    expect(missing[0].refundAmounts).toEqual([{ currency: null, amount: null }])
+    expect(missing[0].refundAmounts).toEqual([{ currency: 'USD', amount: null }])
     expect(() => buildRmaOrders({ subject, cases: [flow('a', { refundAmount: -1, refundCurrency: 'USD' })] }, grant, [order], {}, paths)).toThrow()
   })
   it('distinguishes an open cancellation request from confirmed order cancellation', () => {

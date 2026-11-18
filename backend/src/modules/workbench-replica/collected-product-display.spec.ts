@@ -1,4 +1,4 @@
-import { collectedProductLines } from './collected-product-display'
+import { collectedProductLines,physicalProductsFirst } from './collected-product-display'
 import { scopedPurchaseGroup } from '../fop-data/collected-native-facts'
 
 it('selects a physical group preview before truncation without altering totals or per-order line identities', () => {
@@ -35,4 +35,31 @@ it('does not query the catalogue for an empty list', async () => {
   const db = { query: jest.fn() }
   expect(await collectedProductLines(db, 'batch', [[]])).toEqual([[]])
   expect(db.query).not.toHaveBeenCalled()
+})
+
+it('uses captured SKU attributes including explicit empty values without replacing product names or joining ambiguous codes', async()=>{
+ const db={query:jest.fn().mockResolvedValue([
+ {source_id:'1',sku:'SKU',carrier:null,variant:'颜色:蓝色;尺寸:L',variantProvided:true},
+ {source_id:'2',sku:'EMPTY',carrier:null,variant:null,variantProvided:true},
+ {source_id:'3',sku:'DUP',carrier:null,variant:'甲',variantProvided:true},
+ {source_id:'4',sku:'DUP',carrier:null,variant:'乙',variantProvided:true},
+ ])}
+ const [lines]=await collectedProductLines(db,'b',[[{productId:'1',sku:'SKU',name:'English',variant:'old'},{sku:'EMPTY',variant:'old'},{sku:'DUP',variant:'original'},{productId:'missing',sku:'SKU',variant:'original'}]])
+ expect(lines.map(x=>x.variant)).toEqual(['颜色:蓝色;尺寸:L','','original','original'])
+ expect(lines[0].name).toBe('English')
+})
+
+it('keeps explicit gift ordering consistent with frontend and export, without name or price inference',()=>{
+ const rows=[{sku:'HZ000020-001'},{sku:'gift',isGift:true},{sku:'main',name:'赠品',amount:0},{sku:'main2'}]
+ expect(physicalProductsFirst(rows).map(r=>r.sku)).toEqual(['main','main2','gift','HZ000020-001']);expect(rows[0].sku).toBe('HZ000020-001')
+})
+
+it('uses the captured Chinese picking name, preserves attributes, and clears explicit blank names', async()=>{
+ const db={query:jest.fn().mockResolvedValue([
+  {source_id:'1',sku:'SKU',carrier:null,pickingName:'蓝色L码上衣',nameProvided:true},
+  {source_id:'2',sku:'EMPTY',carrier:null,pickingName:null,nameProvided:true},
+ ])}
+ const [lines]=await collectedProductLines(db,'b',[[{productId:'1',sku:'SKU',name:'English',variant:'颜色:蓝色'},{sku:'EMPTY',name:'Old'},{productId:'missing',sku:'SKU',name:'Original'}]])
+ expect(lines.map(x=>x.name)).toEqual(['蓝色L码上衣','','Original'])
+ expect(lines[0].variant).toBe('颜色:蓝色')
 })

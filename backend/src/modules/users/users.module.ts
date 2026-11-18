@@ -1,8 +1,9 @@
+import { TimestampSchedulerService } from '../workbench-replica/timestamp-scheduler.service'
 import { CollectedWorkbenchService } from '../workbench-replica/collected-workbench.service'
 import { FopApprovalService } from '../fop-data/fop-approval.service'
 import { Module } from '@nestjs/common'
 import { ModuleRef } from '@nestjs/core'
-import { ConfigService } from '@nestjs/config'
+import { ConfigModule, ConfigService } from '@nestjs/config'
 import { TypeOrmModule } from '@nestjs/typeorm'
 import { UsersService } from './users.service'
 import { UsersController } from './users.controller'
@@ -27,9 +28,9 @@ import { ReplicaAuthorizationService } from '../workbench-replica/replica-author
 import { DataSource } from 'typeorm'
 
 @Module({
-  imports: [TypeOrmModule.forFeature([User])],
+  imports: [ConfigModule, TypeOrmModule.forFeature([User])],
   controllers: [UsersController, WorkbenchController, FulfillmentOrdersController, ReplicaController],
-  providers: [CollectedWorkbenchService, LocalWorkbenchService, ReplicaSyncService, ReplicaPublisher, ReplicaBootstrapService, ReplicaAuthorizationService,
+  providers: [TimestampSchedulerService, CollectedWorkbenchService, LocalWorkbenchService, ReplicaSyncService, ReplicaPublisher, ReplicaBootstrapService, ReplicaAuthorizationService,
     { provide: ReplicaHttpSource, inject: [ConfigService, DataSource], useFactory: (config:ConfigService,db:DataSource)=>new ReplicaHttpSource(config,db) },
     { provide: REPLICA_CHANGE_SOURCE, useExisting: ReplicaHttpSource }, FopAccountBindingService, { provide: FOP_EMPLOYEE_BINDER, useExisting: FopAccountBindingService }, FopApprovalService, UsersService, WorkbenchAccessService, FopDataService, {
     provide: FOP_DATA_PROVIDER,

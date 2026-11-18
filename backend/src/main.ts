@@ -8,6 +8,7 @@ import { AppModule } from './app.module'
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule)
+  app.enableShutdownHooks(['SIGTERM', 'SIGINT'])
   const isProduction = process.env.NODE_ENV === 'production'
   const backendRoot = isProduction ? join(__dirname, '..', '..') : join(__dirname, '..')
 

@@ -1,9 +1,11 @@
 import {collectedInboundQuery} from './collected-inbound-query'
-it('requires stable entry relations and positive unfinished evidence, not SKU guesses',()=>{
- const q=collectedInboundQuery('batch',['employee'],{search:'SKU_1'})
- expect(q.cte).toContain("p.purchase_line_id=l->>'purchaseLineId'")
- expect(q.cte).toContain("n.order_line_id=line->>'id'")
- expect(q.cte).toContain("HAVING bool_or(state IN ('0','1','2','4'))")
- expect(q.from).toContain('o.owner_employee_id=ANY($2::text[])')
- expect(q.params).toEqual(['batch',['employee'],'%sku\\_1%'])
+it('uses native order/entry facts and keeps owner, status and keyword filters bound',()=>{
+ const q=collectedInboundQuery('batch',['employee'],{search:'SKU_1',status:'partial'})
+ expect(q.cte).toContain("line->>'hzkj_entrypurc_status' IN ('3','4')")
+ expect(q.cte).not.toContain("o.raw->>'hzkj_purchase_status'")
+ expect(q.cte).toContain("line->>'hzkj_purcqty'")
+ expect(q.cte).toContain('o.owner_employee_id=ANY($2::text[])')
+ expect(q.cte).not.toContain('JOIN purchase_lines')
+ expect(q.params).toEqual(['batch',['employee'],'%sku\\_1%','partial'])
+ expect(q.unclassifiedParams).toEqual(q.params.slice(0,-1))
 })

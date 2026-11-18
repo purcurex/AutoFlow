@@ -30,7 +30,7 @@ it('reads real independently authorized RMA cases and full source orders, includ
   expect(result.permission.allowedRmaCaseIds).toEqual(['900']); expect(result.permission.allowedOrderIds).toEqual(['1000'])
   const rows = buildRmaOrders(result.snapshot, result.permission, result.orders, { search: 'SKU1' }, new Map())
   expect(rows).toHaveLength(1); expect(rows[0].items).toHaveLength(2)
-  expect(rows[0]).toMatchObject({ cancelled: true, consumerPaidAt: '2026-01-02T00:00:00.000Z', refundAmounts: [{ amount: 2.5, currency: null }] })
+  expect(rows[0]).toMatchObject({ cancelled: true, consumerPaidAt: '2026-01-02T00:00:00.000Z', refundAmounts: [{ amount: 2.5, currency: 'USD' }] })
   expect(rows[0].rmaCases[0]).toMatchObject({ type: 'refund', isOpen: true, stage: '待处理', updatedAt: '2026-11-09T09:21:01.000Z' })
 })
 it.each(['0','3','4','5','6'])('maps native RMA status %s to closed instead of pending', async state => {
@@ -82,7 +82,7 @@ it('does not reveal a source which is no longer visible through the employee end
 })
 it('does not default a missing refund currency from the original order currency', async () => {
   const result = await setup().read()
-  expect(result.snapshot.cases[0]).toMatchObject({ refundAmount: 2.5, refundCurrency: null })
+  expect(result.snapshot.cases[0]).toMatchObject({ refundAmount: 2.5, refundCurrency: 'USD' })
 })
 it('keeps historical RMA records without a native status in all, without labeling them closed', async () => {
   const r = await setup({ rmas: [rawRma({ hzkj_orderstatus: '' })] }).read()

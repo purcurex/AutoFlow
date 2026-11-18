@@ -18,6 +18,7 @@ export const businessStatusLabels:Record<string,readonly [string,string]>={
 }
 export function businessStatusLabel(value:string|undefined,kind:'purchase'|'outbound'|'order'|'source'='order',english=false):string{
  const source:Record<string,readonly[string,string]>={manual:['手工订单','Manual order'],fulfilled:['已发货','Shipped'],partial:['部分发货','Partly shipped'],unfulfilled:['未发货','Not shipped'],restocked:['已退货','Returned'],pending:['待处理','Pending'],open:['已打开','Open'],cancelled:['已取消','Cancelled'],scheduled:['已计划','Scheduled'],'on demand':['按需发货','On demand']}
+ if(kind==='source'){const native=value?.trim();return !native||native==='unknown'?(english?'Unconfirmed':'待确认'):source[native]?.[english?1:0]??native}
  if(value==='not_required')return kind==='outbound'?(english?'No outbound required':'无需出库'):(english?'No purchase required':'无需采购')
- return ((kind==='source'?source:businessStatusLabels)[value??'unknown']??businessStatusLabels.unknown)[english?1:0]
+ return (businessStatusLabels[value??'unknown']??businessStatusLabels.unknown)[english?1:0]
 }

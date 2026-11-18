@@ -33,3 +33,17 @@ test('accepts only documented per-entity related-document filters',()=>{
  assert.throws(()=>buildRequest('stock',{orgNumber:'hyperzone.test',sourceStockBillno:'BH-1'}),/invalid-request/)
  assert.equal(parseArgs(['--operation','order-list','--org-number','hyperzone.test','--start-modifytime',window.startModifytime,'--end-modifytime',window.endModifytime]).startModifytime,window.startModifytime)
 })
+
+test('material return supports an optional exact bill number and uses the supplied im_purinbill API', () => {
+ const request=buildRequest('purchase-material-return',{billno:'CGRK-261021-000052',pageNo:1,pageSize:100})
+ assert.equal(request.path,'/kapi/v2/hzkj/im/im_purinbill/queryPurchaseMaterialReturn')
+ assert.deepEqual(request.body.data,{billno:'CGRK-261021-000052'})
+ assert.deepEqual(buildRequest('purchase-material-return',{}).body.data,{})
+ assert.throws(()=>buildRequest('purchase-material-return',{billno:'*'}))
+})
+test('allows documented number-only return details, but rejects a different returned number',async()=>{
+ const cfg={FOP_OPENAPI_ACCESS_TOKEN:'fixture',FOP_OPENAPI_IDENTITY:'fixture'},query={operation:'purchase-material-return',billno:'R1'}
+ const reply=billno=>async()=>new Response(JSON.stringify({status:true,errorCode:'0',data:{rows:[{billno,billentry:[{seq:1,qty:-1}]}],pageNo:1,pageSize:10,totalCount:1,lastPage:true}}))
+ assert.equal((await runQuery(cfg,query,reply('R1'))).report.success,true)
+ assert.equal((await runQuery(cfg,query,reply('other'))).report.success,false)
+})

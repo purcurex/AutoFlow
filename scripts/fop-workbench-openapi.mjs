@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url'
 import { parseEnv } from 'node:util'
 import { randomUUID } from 'node:crypto'
 import { getToken } from './fop-openapi-smoke.mjs'
+import { confirmedFopOrigin } from './fop-confirmed-origin.mjs'
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
 const origin = 'https://hyperzone.test.kdgalaxy.com'
@@ -18,6 +19,7 @@ const routes = Object.freeze({
   'outbound-list': '/kapi/v2/hzkj/im/im_saloutbill/queryOutboundList',
   'purchase-requisition': '/kapi/v2/hzkj/hzkj_einkauf/hzkj_purapplybill/queryPurchaseRequisition',
   purchase: '/kapi/v2/hzkj/hzkj_einkauf/hzkj_purorderbill/queryPurchase',
+  'purchase-material-return': '/kapi/v2/hzkj/im/im_purinbill/queryPurchaseMaterialReturn',
   'purchase-return': '/kapi/v2/hzkj/hzkj_einkauf/hzkj_purorderbill/queryPurchaseReturn',
   'receipt-notice': '/kapi/v2/hzkj/hzkj_einkauf/hzkj_receiptnotice/queryReceiptNotice',
   inbound: '/kapi/v2/hzkj/im/im_purinbill/queryInbound',
@@ -84,6 +86,8 @@ export function buildRequest(operation, options = {}) {
     allowed.push('from','toExclusive');[data.from,data.toExclusive]=timeBounds(options.from,options.toExclusive)
   } else if(operation==='freight-exception'){
     allowed.push('orderNumber');data.hzkj_sale_order_no=exact(options.orderNumber)
+  } else if(operation==='purchase-material-return'){
+    allowed.push('billno');if(options.billno!==undefined)data.billno=exact(options.billno)
   } else if(operation==='purchase-refund-application'){
     allowed.push('orgNumber');data.org_number=exact(options.orgNumber)
   } else if (operation === 'order-detail' || operation === 'outbound') {
@@ -128,13 +132,15 @@ export function buildRequest(operation, options = {}) {
 }
 
 function confirmedOrigin(config) {
-  let url
-  try { url = new URL(config.FOP_OPENAPI_BASE_URL || origin) } catch { fail('invalid-origin') }
-  if (url.origin !== origin || url.username || url.password || url.search || url.hash || url.pathname !== '/') fail('invalid-origin')
-  return origin
+  try {return confirmedFopOrigin(config)} catch {fail('invalid-origin')}
 }
 
 // The deadline covers headers AND stream consumption, including token responses.
+export function retryAfterMs(value) {
+  if(!value)return null
+  const ms=/^\d+$/.test(value)?Number(value)*1000:/^[A-Za-z]{3}, /.test(value)?Date.parse(value)-Date.now():NaN
+  return Number.isFinite(ms)&&ms>=0?Math.min(86400000,Math.ceil(ms)):null
+}
 async function boundedResponse(fetcher, url, init) {
   const controller = new AbortController()
   let reader, response, timer
@@ -149,7 +155,8 @@ async function boundedResponse(fetcher, url, init) {
     if (response.redirected || (response.status >= 300 && response.status < 400)) fail('redirect-error')
     const declared = response.headers.get('content-length')
     if (declared && Number(declared) > maxBytes) fail('response-too-large')
-    if (!response.body) return { ok: response.ok, status: response.status, raw: '' }
+    const retryAfter=retryAfterMs(response.headers.get('retry-after'))
+    if (!response.body) return { ok: response.ok, status: response.status, raw: '', retryAfterMs:retryAfter }
     reader = response.body.getReader()
     const chunks = []
     let size = 0
@@ -160,7 +167,7 @@ async function boundedResponse(fetcher, url, init) {
       if (size > maxBytes) fail('response-too-large')
       chunks.push(value)
     }
-    return { ok: response.ok, status: response.status, raw: Buffer.concat(chunks, size).toString('utf8') }
+    return { ok: response.ok, status: response.status, raw: Buffer.concat(chunks, size).toString('utf8'), retryAfterMs:retryAfter }
   }
   try { return await Promise.race([consume(), deadline]) }
   catch (error) { controller.abort(); cancel(); throw error instanceof QueryError ? error : new QueryError('network-error') }
@@ -176,11 +183,12 @@ function validIds(value) {
     return validIds(child)
   })
 }
-function validate(json, body) {
+function validate(json, body, operation) {
+  if(object(json)&&json.status!==true&&['401','612'].includes(String(json.errorCode)))return 'authentication-error'
   if (!object(json) || json.status !== true || !['0', 0].includes(json.errorCode)) return 'business-error'
   const data = json.data
   if (!object(data) || !Array.isArray(data.rows) || data.pageNo !== body.pageNo || data.pageSize !== body.pageSize || !Number.isSafeInteger(data.totalCount) || data.totalCount < 0 || typeof data.lastPage !== 'boolean' || data.rows.length > data.pageSize || data.rows.length > data.totalCount) return 'invalid-response'
-  if (data.rows.some(row => !object(row) || typeof row.id !== 'string' || !row.id || !validIds(row))) return 'invalid-id'
+  if (data.rows.some(row => !object(row) || (operation==='purchase-material-return' ? typeof row.billno!=='string'||!row.billno.trim()||(body.data.billno!==undefined&&row.billno!==body.data.billno) : typeof row.id !== 'string' || !row.id) || !validIds(row))) return 'invalid-id'
   return null
 }
 
@@ -212,6 +220,7 @@ export async function runQuery(config, options = {}, fetcher = fetch) {
     }, body: JSON.stringify(body) })
   } catch (error) { return failure(error.category) }
   report.httpStatus = result.status
+  if(result.status===429||result.status===503)report.retryAfterMs=result.retryAfterMs
   const raw = saveResponse ? result.raw : null
   if (!result.ok) {
     let errorCode
@@ -220,7 +229,7 @@ export async function runQuery(config, options = {}, fetcher = fetch) {
   }
   let json
   try { json = JSON.parse(result.raw) } catch { return failure('invalid-json', raw) }
-  const category = validate(json, body)
+  const category = validate(json, body, operation)
   if (category) return failure(category, raw)
   return { report: { ...report, success: true, rowCount: json.data.rows.length }, rows: json.data.rows, raw }
 }

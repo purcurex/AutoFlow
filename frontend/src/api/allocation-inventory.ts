@@ -2,7 +2,7 @@ import api from './index'
 export interface AllocationInventoryRow {
   id: string; sku: string; name: string; warehouseCode: 'HZ' | 'SZ'; warehouse: string
   customer: { id: string; name: string } | null
-  onHand: number; occupied: number; free: number
+  pool?: 'unknown'; onHand: number | null; occupied: number | null; free: number | null
 }
 export interface AllocationInventoryPage { items: AllocationInventoryRow[]; total: number; page: number; pageSize: number; asOf: string; source: 'mock' | 'fop' }
 export type AllocationInventoryQuery = ({ mode: 'selected'; orderIds: string[] } | { mode: 'search'; search: string }) & { queue?: 'allocation' | 'shipping'; warehouseCode?: string; page: number; pageSize: number }

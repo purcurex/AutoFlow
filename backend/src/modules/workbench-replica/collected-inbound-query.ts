@@ -1,30 +1,45 @@
 import { warehouseCodes } from './warehouse-codes'
-/** Receipt -> purchase entry -> fulfillment entry. Never infer links from SKU. */
+import { collectedPhysicalLineSqlV5 } from './physical-business-sql-v5'
+
+/** Same-fulfillment shipment and receipt facts; a receipt-notice relation is optional display data. */
 export function collectedInboundQuery(batchId:string,employeeIds:readonly string[]|null,query:Record<string,any>){
  const params:unknown[]=[batchId],clauses=['o.batch_id=$1'],bind=(v:unknown)=>{params.push(v);return `$${params.length}`}
  if(employeeIds!==null)clauses.push(`o.owner_employee_id=ANY(${bind(employeeIds)}::text[])`)
  if(query.warehouseCode)clauses.push(`o.warehouse_code=ANY(${bind(warehouseCodes(query.warehouseCode))}::text[])`)
- if(query.search?.trim())clauses.push(`(o.search_text LIKE ${bind('%'+query.search.trim().toLowerCase().replace(/[\\%_]/g,'\\$&')+'%')} OR lower(n.notices::text) LIKE $${params.length}${query.searchOwnerIds?.length?` OR o.owner_employee_id=ANY(${bind(query.searchOwnerIds)}::text[])`:''})`)
- if(query.status)clauses.push(`n.status=${bind(query.status)}`)
- const cte=`WITH purchase_lines AS MATERIALIZED (
- SELECT l->>'purchaseLineId' purchase_line_id,r->>'orderId' order_id,l->>'fulfillmentLineId' order_line_id
- FROM hz_fop_collected_entities p CROSS JOIN LATERAL jsonb_array_elements(p.display->'rows') r CROSS JOIN LATERAL jsonb_array_elements(r->'lines') l
- WHERE p.batch_id=$1 AND p.entity_type='purchase' AND l->>'fulfillmentLineId' IS NOT NULL
- ), notice_lines AS MATERIALIZED (
- SELECT DISTINCT l->>'sourceOrderId' order_id, p.order_line_id,e.source_id notice_id,e.display->>'number' notice_number
+ if(query.search?.trim()){
+  const term=bind('%'+query.search.trim().toLowerCase().replace(/[\\%_]/g,'\\$&')+'%')
+  clauses.push(`(o.search_text LIKE ${term} OR o.source_id IN(SELECT l->>'sourceOrderId' FROM hz_fop_collected_entities e CROSS JOIN LATERAL jsonb_array_elements(e.display->'lines') l WHERE e.batch_id=$1 AND e.entity_type='receipt_notice' AND e.display->'association'->>'state'='verified' AND lower(e.display->>'number') LIKE ${term})${query.searchOwnerIds?.length?` OR o.owner_employee_id=ANY(${bind(query.searchOwnerIds)}::text[])`:''})`)
+ }
+ const physicalLine=collectedPhysicalLineSqlV5('line')
+ // Indexed coarse candidate check; the exact physical-line predicate still runs before counting/paging.
+ clauses.push(`o.raw @? '$.hzkj_orders_billentry[*] ? (@.hzkj_entrypurc_status == "3" || @.hzkj_entrypurc_status == "4")'`)
+ clauses.push(`EXISTS(SELECT 1 FROM jsonb_array_elements(o.raw->'hzkj_orders_billentry') line WHERE line->>'hzkj_entrypurc_status' IN ('3','4') AND ${physicalLine})`)
+ const numeric=(key:string)=>`CASE WHEN line->>'${key}' ~ '^([0-9]{1,15})([.][0-9]{1,6})?$' THEN (line->>'${key}')::numeric END`
+ const cte=`WITH inbound_orders AS MATERIALIZED (
+ SELECT o.* FROM hz_fop_collected_orders o WHERE ${clauses.map(c=>`(${c})`).join(' AND ')}
+ ), physical_lines AS (
+ SELECT o.source_id order_id,line->>'id' line_id,line->>'hzkj_entrypurc_status' state,
+ ${numeric('hzkj_purcqty')} purchase_qty,${numeric('hzkj_instock_qty')} received_qty
+ FROM inbound_orders o CROSS JOIN LATERAL jsonb_array_elements(o.raw->'hzkj_orders_billentry') line
+ WHERE ${physicalLine}
+ ), line_facts AS (
+ SELECT order_id,jsonb_agg(jsonb_build_object('id',line_id,'purchaseQuantity',purchase_qty,'inboundQuantity',received_qty,'pendingQuantity',CASE WHEN purchase_qty IS NULL OR received_qty IS NULL THEN NULL ELSE greatest(purchase_qty-received_qty,0) END,'rawPurchaseStatus',state)) inbound_lines FROM physical_lines GROUP BY order_id
+ ), inbound_stats AS (
+ SELECT order_id,
+ CASE WHEN bool_or(purchase_qty IS NULL OR received_qty IS NULL OR state IS NULL OR state NOT IN ('0','1','2','3','4')) THEN 'unknown'
+ WHEN bool_and(state='3' AND received_qty=purchase_qty) THEN 'completed'
+ WHEN bool_or(received_qty>0 OR state='3') THEN 'partial' ELSE 'pending' END status,
+ sum(purchase_qty) quantity,sum(received_qty) inbound_quantity,sum(greatest(purchase_qty-received_qty,0)) pending_quantity
+ FROM physical_lines WHERE purchase_qty IS NULL OR purchase_qty>0 GROUP BY order_id
+ ), receipt_links AS MATERIALIZED (
+ SELECT l->>'sourceOrderId' order_id,jsonb_agg(DISTINCT jsonb_build_object('id',e.source_id,'number',e.display->>'number','shippedAt',e.raw->>'hzkj_shipping_time','carrier',e.raw->>'hzkj_logistics_company','trackingNumber',e.raw->>'hzkj_waybill_number')) notices
  FROM hz_fop_collected_entities e CROSS JOIN LATERAL jsonb_array_elements(e.display->'lines') l
- JOIN purchase_lines p ON p.purchase_line_id=l->>'purchaseLineId' AND p.order_id=l->>'sourceOrderId'
- WHERE e.batch_id=$1 AND e.entity_type='receipt_notice' AND e.display->'association'->>'state'='verified'
- AND e.display->>'rawCancelStatus'='A' AND l->>'productSource'='verified_receipt_purchase_fulfillment_link'
- ), linked AS MATERIALIZED (
- SELECT n.*,line->>'hzkj_entrypurc_status' state
- FROM hz_fop_collected_orders o CROSS JOIN LATERAL jsonb_array_elements(o.raw->'hzkj_orders_billentry') line
- JOIN notice_lines n ON n.order_id=o.source_id AND n.order_line_id=line->>'id'
- WHERE o.batch_id=$1
+ WHERE e.batch_id=$1 AND e.entity_type='receipt_notice' AND e.display->'association'->>'state'='verified' AND e.display->>'rawCancelStatus'='A' AND l->>'sourceOrderId' IN (SELECT source_id FROM inbound_orders) GROUP BY l->>'sourceOrderId'
  ), notices AS (
- SELECT order_id,jsonb_agg(DISTINCT jsonb_build_object('id',notice_id,'number',notice_number)) notices,
- CASE WHEN bool_or(state='3') THEN 'partial' ELSE 'pending' END status
- FROM linked GROUP BY order_id HAVING bool_or(state IN ('0','1','2','4'))
+ SELECT o.source_id order_id,coalesce(s.status,'unknown') status,s.quantity,s.inbound_quantity,s.pending_quantity,f.inbound_lines,coalesce(r.notices,'[]'::jsonb) notices
+ FROM inbound_orders o LEFT JOIN inbound_stats s ON s.order_id=o.source_id LEFT JOIN line_facts f ON f.order_id=o.source_id LEFT JOIN receipt_links r ON r.order_id=o.source_id
+ WHERE s.order_id IS NOT NULL OR jsonb_array_length(coalesce(o.raw->'hzkj_orders_billentry','[]'::jsonb))=0
  )`
- return {cte,from:`FROM hz_fop_collected_orders o JOIN notices n ON n.order_id=o.source_id WHERE ${clauses.map(c=>`(${c})`).join(' AND ')}`,params}
+ const from='FROM inbound_orders o JOIN notices n ON n.order_id=o.source_id',unclassifiedParams=[...params]
+ return {cte,from:`${from} WHERE n.status ${query.status?'='+bind(query.status):"IN ('pending','partial')"}`,unclassifiedFrom:`${from} WHERE n.status='unknown'`,unclassifiedParams,params}
 }

@@ -1,5 +1,6 @@
+import { localOrderExceptionSql, localFulfillmentCancelledSql } from './local-workbench-logistics'
 import { warehouseCodes } from './warehouse-codes'
-import { localDispatchFailureSql, localOrderDispatchTaskSql } from './local-workbench-logistics'
+import { localMissingObtainedTrackingSql, localDispatchFailureSql, localMissingFulfilledTrackingSql, localDispatchExceptionSql, localOrderDispatchTaskSql } from './local-workbench-logistics'
 import { CollectedWorkbenchService } from './collected-workbench.service'
 import { ReceiptNoticesQueryDto } from './receipt-notices.dto'
 import { receiptNoticeProgress } from './receipt-notices'
@@ -230,7 +231,7 @@ export class LocalWorkbenchService {
       if (invalidLines.n) throw new ServiceUnavailableException({ code: 'workbench_replica_incomplete', total: null, message: 'Receipt notice header and entries disagree' })
       const [summary] = await manager.query(`SELECT count(*)::int AS total,COALESCE(sum(p.quantity),0) AS quantity,COALESCE(sum(p.inbound_quantity),0) AS inbound_quantity,COALESCE(sum(p.quantity-p.inbound_quantity),0) AS pending_quantity,max(p.published_at) AS synced_at ${from} WHERE ${where}`, values)
       const warehouses = await manager.query(`SELECT DISTINCT warehouse.code,warehouse.name ${from} WHERE ${scoped} AND warehouse.code IS NOT NULL ORDER BY warehouse.code`, [values[0]])
-      const page = query.page ?? 1, pageSize = query.pageSize ?? 20
+      const page = query.page ?? 1, pageSize = query.pageSize ?? 100
       const rows = await manager.query(`SELECT sd.id,sd.document_number,r.supplier_shipped_at,r.tracking_number,r.raw_wms_status,p.*,supplier.name AS supplier_name,warehouse.name AS warehouse_name,warehouse.code AS warehouse_code ${from} WHERE ${where} ORDER BY r.supplier_shipped_at DESC,sd.id LIMIT $${values.length+1} OFFSET $${values.length+2}`, [...values,pageSize,(page-1)*pageSize])
       const items = rows.map((row: LocalRow) => {
         const progress = receiptNoticeProgress(row.shipment_state, row.raw_wms_status, row.lines)
@@ -262,12 +263,12 @@ export class LocalWorkbenchService {
       const searchOwnerIds=[...new Set([...context.organizations.values()].flatMap(org=>org.members.filter(member=>query.search?.trim() && member.name.toLowerCase().includes(query.search.trim().toLowerCase())).map(member=>member.employeeId)))]
       const sql = buildLocalOrderQuery(context.scopes, {...query,searchOwnerIds}, stock)
       const completeness: LocalRow[] = await manager.query(`SELECT count(*)::text AS unknown_count ${sql.from} WHERE ${sql.completenessWhere}
-        AND (${!stock && ['dispatch','procurement','allocation','allocation_review'].includes(query.queue) ? 'delivery.incomplete OR' : ''} ${!stock && query.queue==='shipping' ? "native.raw_delivery_status IS NULL OR native.raw_delivery_status NOT IN ('0','1','2') OR" : !stock && ['procurement','procurement_shipping'].includes(query.queue) ? "native.raw_purchase_status IS NULL OR native.raw_purchase_status NOT IN ('0','1','2','3','4') OR" : ''} o.readiness <> 'ready' OR o.published_at IS NULL OR o.total_amount IS NULL OR o.total_quantity IS NULL OR sd.validation_state <> 'verified'
+        AND (${!stock && ['dispatch','procurement','allocation','allocation_review'].includes(query.queue) ? 'delivery.incomplete OR' : !stock && query.queue==='shipping' && !query.completed ? 'delivery.incomplete OR allocation_approval.incomplete OR' : ''} ${!stock && query.queue==='shipping' ? "native.raw_delivery_status IS NULL OR native.raw_delivery_status NOT IN ('0','1','2') OR" : ''} o.readiness <> 'ready' OR o.published_at IS NULL OR o.total_amount IS NULL OR o.total_quantity IS NULL OR sd.validation_state <> 'verified'
           OR o.ownership_verified_at IS NULL OR o.ownership_verified_at < CURRENT_TIMESTAMP - INTERVAL '60 seconds' OR o.ownership_verified_at > CURRENT_TIMESTAMP OR o.ownership_version IS NULL
-          OR ${query.queue==='exceptions' ? `NOT ${localDispatchFailureSql} AND` : ''} (m.classification_state IS NULL OR m.classification_state = 'unknown' OR m.projection_revision <> o.projection_revision OR m.rule_version <> o.rule_version)
+          OR ${query.queue==='exceptions' ? `NOT ${localOrderExceptionSql} AND` : ''} (m.classification_state IS NULL OR m.classification_state = 'unknown' OR m.projection_revision <> o.projection_revision OR m.rule_version <> o.rule_version)
           OR EXISTS (SELECT 1 FROM hz_fop_workbench_order_lines invalid_line WHERE invalid_line.order_document_id = o.document_id AND invalid_line.company_id = o.company_id AND invalid_line.dataset_id = o.dataset_id AND invalid_line.projection_revision <> o.projection_revision))`, sql.completenessValues)
       if (Number(completeness[0]?.unknown_count) > 0) throw new ServiceUnavailableException({ code: 'workbench_replica_incomplete', queueState: 'incomplete', total: null, message: 'Authorized candidates contain unknown or incomplete queue classifications' })
-      const memberWhere = `${sql.where} AND o.readiness = 'ready' AND ${query.queue==='exceptions' ? `(${localDispatchFailureSql} OR (m.classification_state = 'member' AND m.projection_revision = o.projection_revision))` : "m.classification_state = 'member' AND m.projection_revision = o.projection_revision"}`
+      const memberWhere = `${sql.where} AND o.readiness = 'ready' AND ${query.queue==='exceptions' ? `(${localOrderExceptionSql} OR (m.classification_state = 'member' AND m.projection_revision = o.projection_revision))` : "m.classification_state = 'member' AND m.projection_revision = o.projection_revision"}`
       const aggregate: LocalRow[] = await manager.query(`SELECT count(*)::text AS case_count, count(DISTINCT o.document_id)::text AS order_count, COALESCE(max(o.projection_revision),0)::text AS revision, max(o.published_at) AS source_synced_at ${sql.from} WHERE ${memberWhere}`, sql.values)
       const monies: LocalRow[] = await manager.query(`SELECT currency_code AS currency,sum(total_amount)::text AS amount,sum(total_quantity)::text AS quantity FROM (SELECT DISTINCT o.document_id,o.currency_code,o.total_amount,o.total_quantity ${sql.from} WHERE ${memberWhere}) amounts GROUP BY currency_code ORDER BY currency_code NULLS LAST`, sql.values)
       let shippingCountries:string[]|undefined
@@ -276,9 +277,9 @@ export class LocalWorkbenchService {
         const countries:LocalRow[]=await manager.query(`SELECT DISTINCT o.country_code ${countrySql.from} WHERE ${countrySql.where} AND o.readiness='ready' AND m.classification_state='member' AND m.projection_revision=o.projection_revision AND o.country_code ~ '^[A-Z]{2}$' ORDER BY o.country_code`,countrySql.values)
         shippingCountries=countries.map(row=>row.country_code)
       }
-      const page = query.page ?? 1, pageSize = query.pageSize ?? 20
-      const rows: LocalRow[] = query.projection === 'count' ? [] : await manager.query(`SELECT o.*, ${!stock && ['shipping','procurement','procurement_shipping'].includes(query.queue) ? `native.raw_purchase_status AS source_purchase_status,native.raw_delivery_status AS source_outbound_status,${query.queue==='shipping' ? "CASE native.raw_delivery_status WHEN '0' THEN 'pending' WHEN '1' THEN 'partial' WHEN '2' THEN 'completed' ELSE 'unknown' END AS outbound_state," : ''}` : ''} ${query.queue === 'rma' ? 'rm.rma_document_id AS selected_rma_id,' : ''} sd.source_id, sd.raw_bill_status, sd.source_audited_at, m.queue_code, m.phase_completed_at, ${query.queue === 'allocation_review' && query.completed ? 'allocation_approval.review_state AS allocation_review_state,allocation_approval.audited_at AS allocation_audited_at,' : ''} ${query.queue === 'dispatch' && !query.completed ? localPendingDispatchLogisticsSql : query.queue === 'review' && !query.completed ? localReviewLogisticsSql : localLogisticsSql} AS logistics_packages,
-        ${query.queue === 'exceptions' ? `${localDispatchFailureSql} AS dispatch_sync_failed,native.raw_order_status AS native_order_status,` : ''}
+      const page = query.page ?? 1, pageSize = query.pageSize ?? 100
+      const rows: LocalRow[] = query.projection === 'count' ? [] : await manager.query(`SELECT o.*, ${!stock && ['shipping','procurement','procurement_shipping'].includes(query.queue) ? `native.raw_purchase_status AS source_purchase_status,native.raw_delivery_status AS source_outbound_status,` : ''} ${query.queue === 'rma' ? 'rm.rma_document_id AS selected_rma_id,' : ''} sd.source_id, sd.raw_bill_status, sd.source_audited_at, m.queue_code, m.phase_completed_at, ${query.queue === 'allocation_review' && query.completed ? 'allocation_approval.review_state AS allocation_review_state,allocation_approval.audited_at AS allocation_audited_at,' : ''} ${query.queue === 'dispatch' && !query.completed ? localPendingDispatchLogisticsSql : query.queue === 'review' && !query.completed ? localReviewLogisticsSql : localLogisticsSql} AS logistics_packages,
+        ${!stock ? `${localDispatchFailureSql} AS dispatch_sync_failed,${localMissingObtainedTrackingSql} AS obtained_tracking_missing,${localMissingFulfilledTrackingSql} AS fulfilled_tracking_missing,native.raw_order_status AS native_order_status,` : ''}
         ${query.queue === 'dispatch' ? `native.raw_order_status AS native_order_status,${localOrderDispatchTaskSql} AS dispatch_task_state,CASE WHEN native.raw_order_status IN ('4','5') THEN 'synced' ELSE 'pending' END AS shopify_sync_state,delivery.audited_at AS dispatch_audited_at,` : ''}
         (SELECT f.custom_channel_name FROM hz_fop_fulfillment_orders f WHERE f.document_id=o.document_id AND f.company_id=o.company_id AND f.dataset_id=o.dataset_id) AS custom_channel_name,
         ${localProcurementPaidAtSql} AS procurement_paid_at,
@@ -459,7 +460,7 @@ export class LocalWorkbenchService {
     })
   }
   async getPurchaseReturns(userId: string, query: PurchaseReturnQueryDto) {
-    if(this.collected?.enabled)return this.collected.unavailable(userId,{...query,queue:'purchase_returns'},query.workbenchRole)
+    if(this.collected?.enabled)return this.collected.purchaseReturns(userId,query)
     if(!['procurement','warehouse'].includes(query.workbenchRole))throw new BadRequestException('Invalid purchase return role')
     if(query.status && query.status!=='unknown'&&!this.mock)throw unconfigured('Physical return progress requires a normalized physical-state projection; platform refund state cannot substitute')
     return this.orders(userId,{...query,queue:'purchase_returns',...(this.mock?{returnStatus:query.status}:{})},query.workbenchRole,false)

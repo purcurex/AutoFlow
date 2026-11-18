@@ -73,7 +73,7 @@ describe('compact workbench statuses', () => {
 
 describe('current procurement filter business states', () => {
   it('excludes obsolete filter states but keeps remaining payment and push tasks visible', () => {
-    expect(taskStatusOptions('procurement')).toEqual(['purchase_order_pending', 'dispatch_preparation', 'alibaba_pending', 'payment_pending', 'refund_pending'])
+    expect(taskStatusOptions('procurement')).toEqual(['purchase_order_pending', 'dispatch_preparation', 'payment_pending'])
     for (const state of ['unknown', 'application_pending', 'dispatch_missing', 'logistics_pending', 'supplier_pending']) expect(canFilterTaskStatus('procurement', state)).toBe(false)
     expect(taskStatusOptions('procurement')).not.toContain('logistics_unknown')
     expect(taskStatusOptions('procurement')).not.toContain('partially_paid')
@@ -82,25 +82,25 @@ describe('current procurement filter business states', () => {
   })
 })
 
- it('groups missing and pending dispatches in the unnumbered filter without guessing unknown or updating', () => {
-    expect(taskStatusOptions('dispatch')).toEqual(['dispatch_pending', 'dispatch_tracking', 'dispatch_cancelled'])
-    for (const [stage, expected] of [['dispatch_missing', true], ['dispatch_pending', true], ['dispatch_tracking', false], ['dispatch_cancelled', false], ['dispatch_updating', false], ['unknown', false]] as const) {
+ it('separates missing and created dispatch filters', () => {
+    expect(taskStatusOptions('dispatch')).toEqual(['dispatch_missing', 'dispatch_pending', 'dispatch_tracking'])
+    for (const [stage, expected] of [['dispatch_missing', false], ['dispatch_pending', true], ['dispatch_tracking', false], ['dispatch_cancelled', false], ['dispatch_updating', false], ['unknown', false]] as const) {
       expect(matchesTaskStatus({ dispatchTaskStatus: stage } as FopOrder, 'dispatch', 'dispatch_pending')).toBe(expected)
     }
   })
 
 describe('fulfillment header plus active tracking', () => {
   it.each([
-    ['paid', [], 'dispatch_pending'],
-    ['processing', [{ trackingNumbers: [] }], 'dispatch_pending'],
-    ['processing', [{ deliveryStatus: 'PENDING', trackingNumbers: [{type:'full',number:'TRACK'}] }], 'dispatch_tracking'],
-    ['processing', [{ deliveryStatus: 'TRACKING_OBTAINED', trackingNumbers: [] }], 'dispatch_pending'],
-    ['processing', [{ trackingNumbers: [{type:'full',number:'   '}] }], 'dispatch_pending'],
-    ['processing', [{ rawInterceptStatus:'CANCELLED',trackingNumbers:[{type:'full',number:'OLD'}] }], 'dispatch_pending'],
-    ['processing', [{ deliveryStatus:'CANCELLED',trackingNumbers:[{type:'full',number:'OLD'}] }], 'dispatch_pending'],
+    ['paid', [], 'dispatch_missing'],
+    ['processing', [{ number:'FY1', trackingNumbers: [] }], 'dispatch_pending'],
+    ['processing', [{ number:'FY1', deliveryStatus: 'PENDING', trackingNumbers: [{type:'full',number:'TRACK'}] }], 'dispatch_tracking'],
+    ['processing', [{ number:'FY1', deliveryStatus: 'TRACKING_OBTAINED', trackingNumbers: [] }], 'dispatch_pending'],
+    ['processing', [{ number:'FY1', trackingNumbers: [{type:'full',number:'   '}] }], 'dispatch_pending'],
+    ['processing', [{ rawInterceptStatus:'CANCELLED',trackingNumbers:[{type:'full',number:'OLD'}] }], 'dispatch_missing'],
+    ['processing', [{ number:'FY1', deliveryStatus:'CANCELLED',trackingNumbers:[{type:'full',number:'OLD'}] }], 'dispatch_missing'],
     ['fulfillment_cancelled', [], 'dispatch_cancelled'],
     ['partial_fulfilled', [], 'dispatch_synced'], ['fulfilled', [], 'dispatch_synced'],
-    ['paid', [{ trackingNumbers:[{type:'full',number:'CONFLICT'}] }], 'unknown'],
+    ['paid', [{ number:'FY1', trackingNumbers:[{type:'full',number:'CONFLICT'}] }], 'unknown'],
     ['processing', null, 'unknown'],
   ])('%s uses actual tracking and header state', (state, docs, expected) => {
     const order={businessStatus:{order:state},dispatchDocuments:docs,dispatchTaskStatus:'dispatch_updating',reviewStatus:'approved'} as unknown as FopOrder

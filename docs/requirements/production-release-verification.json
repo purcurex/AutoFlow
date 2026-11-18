@@ -1,0 +1,150 @@
+{
+  "asOf": "2026-11-18",
+  "deliveryStatus": "deployment-candidate-not-production-approved",
+  "isolatedDeploymentReady": true,
+  "productionReleaseApproved": false,
+  "productionFopCalls": 0,
+  "productionDatabaseTouched": false,
+  "testEnvironmentSyncPolicyChanged": false,
+  "productionValuesProvided": false,
+  "accountRoster": {
+    "localReferenceAccounts": 36,
+    "productionIds": "blank",
+    "privateFileExcludedFromGitAndPackage": true
+  },
+  "verification": {
+    "frontend": {
+      "passed": 1084,
+      "skipped": 2
+    },
+    "backend": {
+      "passed": 2573,
+      "skipped": 96,
+      "suitesPassed": 214
+    },
+    "scriptTests": {
+      "passed": 39,
+      "failed": 0
+    },
+    "e2e": {
+      "passed": 216,
+      "failed": 109,
+      "suitesPassed": 6,
+      "suitesFailed": 2,
+      "failingSuites": [
+        "backend/test/fop-data-access.e2e-spec.ts",
+        "backend/test/workbench-access.e2e-spec.ts"
+      ],
+      "unresolved": true
+    },
+    "lint": {
+      "errors": 0,
+      "warnings": 11
+    },
+    "build": {
+      "frontend": true,
+      "backend": true,
+      "packagedFrontend": true
+    },
+    "runtime": {
+      "passed": true,
+      "installedProductionDependenciesOnly": true,
+      "isolatedDatabase": true,
+      "counts": {
+        "migrations": 73,
+        "tables": 107,
+        "users": 1,
+        "batches": 1
+      },
+      "adminIdempotent": true,
+      "batchIdempotent": true,
+      "sourceSyncedAt": null,
+      "initialized": false,
+      "health": "up",
+      "frontendServed": true,
+      "authenticatedLocalList": true,
+      "productionCalls": 0,
+      "realProductionValidated": false
+    },
+    "backupRestore": {
+      "backupRestoreVerified": true,
+      "counts": {
+        "migrations": 73,
+        "users": 1,
+        "batches": 1,
+        "tables": 107
+      },
+      "sourceCalls": 0,
+      "productionDatabaseTouched": false
+    },
+    "dependencyAudit": {
+      "critical": 0,
+      "high": 0,
+      "moderate": 5,
+      "remaining": [
+        "exceljs",
+        "uuid",
+        "typeorm",
+        "glob",
+        "minimatch"
+      ],
+      "riskAccepted": false
+    },
+    "environment": {
+      "node": "22.23.3",
+      "postgres": "16.15",
+      "host": "macOS arm64; Linux/Windows target-host verification pending"
+    },
+    "independentReview": {
+      "importantFindings": 2,
+      "fixed": 2,
+      "regressionVerified": true
+    }
+  },
+  "releaseBlockers": [
+    "E2E 109 failures must be triaged and corrected; all regression must pass",
+    "5 moderate dependency advisories require verified remediation or documented risk assessment",
+    "Production tenant/company/org/origin/credentials/subscriptions not supplied",
+    "Production per-user identity and department bindings pending",
+    "Four scheduled entities only; remaining business sources need first production capture and coverage acceptance",
+    "Real execution permissions, capacity, alert delivery and target-host recovery acceptance pending"
+  ],
+  "implementationFiles": [
+    "scripts/deployment/build-production-package.mjs",
+    "scripts/deployment/build-production-package.test.mjs",
+    "scripts/deployment/migrate-compiled.mjs",
+    "scripts/deployment/initialize-production.mjs",
+    "scripts/deployment/production-readiness.mjs",
+    "scripts/deployment/production-preparation.test.mjs",
+    "scripts/deployment/production-bootstrap.test.mjs",
+    "scripts/deployment/production-database.test.mjs",
+    "scripts/deployment/verify-package.mjs",
+    "scripts/deployment/verify-runtime.mjs",
+    "scripts/deployment/build-deployment-package.ps1",
+    "scripts/workbench-scheduled-sync.mjs",
+    "scripts/workbench-scheduled-sync.test.mjs",
+    "scripts/production-smoke.mjs",
+    "backend/src/config/env-files.ts",
+    "backend/src/config/env-files.spec.ts",
+    "backend/src/app.module.ts",
+    "backend/src/database/data-source.ts",
+    "backend/src/modules/users/users.module.ts",
+    "backend/src/modules/workbench-replica/collected-chain-storage.ts",
+    "backend/src/modules/workbench-replica/collected-workbench.service.ts",
+    "backend/test/replica-test-boundary.ts",
+    "backend/test/organization.e2e-spec.ts",
+    "package.json",
+    "package-lock.json",
+    "backend/package.json",
+    "frontend/package.json",
+    "deployment/.env.production.example",
+    "deployment/production-inputs.csv",
+    "deployment/account-bindings.template.csv",
+    "deployment/hyperzone.service.example",
+    "deployment/nginx.conf.example",
+    "deployment/database/schema-reference.sql",
+    "deployment/database/migration-inventory.json",
+    "docs/manuals/source/production-deployment.body.html",
+    "docs/manuals/HyperZone生产部署指导手册.html"
+  ]
+}

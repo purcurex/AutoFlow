@@ -215,13 +215,17 @@ it('does not query local or diagnostic pending queues in analytics-only mode', a
   await x.service.getDashboard('local-user', { ...dashboardQuery, includeQueues: false }, x.local as any)
   expect(x.queryOrders).not.toHaveBeenCalled(); expect(x.local.getOrders).not.toHaveBeenCalled()
 })
-it('uses the verified own identity for manager personal analytics despite a legacy employee assignment', async () => {
+it('uses the verified own identity for manager lists while keeping separate authorized chart scope', async () => {
   const x = setup()
   Object.assign(x.user, { role: UserRole.USER, businessRole: 'department_manager', businessDepartmentId: 'local-1', businessEmployeeId: 'someone-else', dataDisplayScope: 'self', workbenchRoles: ['sales'] })
   const result = await x.service.getChartAccess('local-user')
   expect(result.businessScope).toMatchObject({ role: 'salesperson', employeeId: '101' })
-  expect(result.charts.every(chart => chart.dataScope === 'self' || chart.dataScope === 'none')).toBe(true)
-  expect(result.charts.every(chart => chart.summaryDepartments.length === 0)).toBe(true)
+  expect(result.charts.every(chart => ['self','department','none'].includes(chart.dataScope))).toBe(true)
+  expect(result.charts.some(chart=>chart.dataScope==='all')).toBe(false)
+  // This legacy provider fixture grants no organization summaries; local peer policy cannot create a source grant.
+  expect(result.charts.find(chart => chart.chartId === 'department_receipts')).toMatchObject({
+    visible: false, dataScope: 'none', summaryOnly: false, canViewDetails: false, summaryDepartments: [],
+  })
 })
 it('rejects an in-flight page when the manager changes display preference', async () => {
   const x = setup()

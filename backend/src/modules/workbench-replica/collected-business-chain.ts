@@ -1,3 +1,4 @@
+import { purchaseSalesReference } from '../fop-data/collected-purchase-association'
 import { createHash } from 'node:crypto'
 import Decimal from 'decimal.js'
 type Row = Record<string, any>
@@ -49,6 +50,15 @@ export function buildCollectedBusinessChain(scope:ChainScope,inputs:ChainInput[]
  }
  const run=(kind:string,fn:(d:Row)=>void)=>documents.filter(d=>d.kind===kind).forEach(fn)
  for(const kind of ['purchase_application','purchase'])run(kind,d=>{for(const l of docLines.get(d.id)??[]){if(kind==='purchase'&&l.entryEntity!=='hzkj_billentry')continue;const r=l.raw
+  // A purchase line's sales number identifies the root even when the immediate source is a requisition.
+  if(kind==='purchase'&&Object.prototype.hasOwnProperty.call(r,'hzkj_salbillnumber')){
+   if(!chainText(r.hzkj_salbillnumber)){issue(d,'source_order_unresolved',l);continue}
+   const ref=purchaseSalesReference(r),sales=find('fulfillment',null,ref.number),stock=find('stock',null,ref.number)
+   const p=sales&&!stock?sales:stock&&!sales?stock:undefined
+   if(!p){issue(d,'source_order_unresolved',l);continue}
+   const pl=sourceLine(p,ref.entryId,ref.sequence)
+   link(p,d,'demand_purchase',pl,l,pl?'sales_order_number_and_entry':'sales_order_number',l.quantity);continue
+  }
   const sourceEntity=chainText(r.hzkj_srcbillentity)
   const application=sourceEntity===chainKinds.purchase_application.entity
   const sourceKind=application?'purchase_application':sourceEntity===chainKinds.stock.entity?'stock':'fulfillment'

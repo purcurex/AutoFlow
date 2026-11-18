@@ -79,7 +79,7 @@ describe('Per-account organization sandbox persistence API', () => {
     const owner = await app.get(UsersService).findById(ownerId)
     expect(owner?.role).toBe('admin')
     expect(owner?.businessRole).toBe('none')
-    expect(owner?.workbenchRoles).toEqual(['sales'])
+    expect(owner?.workbenchRoles).toEqual(['sales', 'procurement', 'allocation', 'dispatch', 'warehouse'])
   })
 
   it('persists creation, renaming, reparenting, ordering and deletion for the owner only', async () => {

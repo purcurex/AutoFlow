@@ -69,10 +69,15 @@ describe('待履约真实分页接口', () => {
     await service.getOrders(user.id, { queue: 'dispatch', page: 1, pageSize: 10, departmentId: '400', warehouseCode: 'HZ', sortBy: 'dispatchDocumentStatus', sortOrder: 'desc' })
     expect(JSON.parse(String(request.mock.calls[0][1]?.body)).query).toMatchObject({ departmentId: '400', warehouseIds: ['600'], sortBy: 'dispatchDocumentStatus', sortOrder: 'desc' })
   })
-  it.each(['dispatch_missing', 'dispatch_draft', 'dispatch_submitted', 'dispatch_approved'] as const)('旧发运单审核阶段%s不能作为待履约状态筛选', async taskStatus => {
+  it.each(['dispatch_draft', 'dispatch_submitted', 'dispatch_approved'] as const)('旧发运单审核阶段%s不能作为待履约状态筛选', async taskStatus => {
     const { service, user, request } = setup(taskStatus)
     await expect(service.getOrders(user.id, { queue: 'dispatch', page: 1, pageSize: 10, taskStatus })).rejects.toMatchObject({ response: { code: 'fop_feature_not_configured' } })
     expect(request).not.toHaveBeenCalled()
+  })
+  it('未取号兼容筛选保留接口已声明的dispatch_missing能力',async()=>{
+    const {service,user}=setup('dispatch_missing')
+    const result=await service.getOrders(user.id,{queue:'dispatch',page:1,pageSize:10,taskStatus:'dispatch_missing'})
+    expect(result.items).toHaveLength(1);expect(result.items[0].dispatchTaskStatus).toBe('dispatch_missing')
   })
   it('未发布交付状态筛选时明确拒绝，不能沿用旧审核状态代替', async () => {
     const {service,user,request}=setup('dispatch_approved')

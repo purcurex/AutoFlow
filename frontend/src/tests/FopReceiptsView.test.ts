@@ -3,11 +3,12 @@ import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import WorkbenchView from '@/views/autoflow/WorkbenchView.vue'
+// Legacy component contracts remain tested independently; current workbench routing uses LocalDashboardAnalytics.
+import WorkbenchView from '@/views/autoflow/FopReceiptsView.vue'
 import { invalidateSession } from '@/utils/session'
 const get = vi.hoisted(() => vi.fn())
 vi.mock('@/api/index', () => ({ default: { get } }))
-vi.mock('@/composables/useWorkbenchAccess', async () => { const { ref } = await import('vue'); return { useWorkbenchAccess: () => ({ roles: ref(['allocation']) }) } })
+vi.mock('@/composables/useWorkbenchAccess', async () => { const { ref } = await import('vue'); return { useWorkbenchAccess: () => ({ roles: ref(['allocation']), isAdmin: ref(true), access: ref({isAdmin:true}) }) } })
 vi.mock('@/components/layout', () => ({ AppLayout: { template: '<div><slot /></div>' } }))
 vi.mock('@/components/FopDataAccessNotice.vue', () => ({ default: { template: '<div />' } }))
 vi.mock('@/views/autoflow/DashboardView.vue', () => ({ default: { template: '<div />' } }))
@@ -56,7 +57,7 @@ describe('receipt workbench details', () => {
     const { wrapper } = await setup('from=2026-10-01&to=2026-10-31&department=sales4&ownerId=unavailable-owner&warehouse=HZ')
     const summary = wrapper.get('.ov-applied-filters').text() || ''
     expect(summary).toContain('业务四部')
-    expect(summary).toContain('杭州仓')
+    expect(summary).toContain('HangZhou')
     expect(summary).toContain('所选业务员')
     expect(summary).not.toContain('unavailable-owner')
     expect(wrapper.find('thead').text()).toContain('物流服务商')

@@ -35,15 +35,23 @@
     "workbench:preflight": "node scripts/workbench-preflight.cjs",
     "workbench:initialize": "node scripts/workbench-initialize.mjs",
     "workbench:chain:rebuild": "node scripts/workbench-chain-rebuild.cjs",
-    "workbench:timestamp-sync": "node scripts/workbench-timestamp-sync.mjs"
+    "workbench:timestamp-sync": "node scripts/workbench-timestamp-sync.mjs",
+    "workbench:scheduled-sync": "node --max-old-space-size=8192 scripts/workbench-scheduled-sync.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@vue/server-renderer": "3.5.45",
+    "archiver": "5.3.2",
     "concurrently": "^8.2.2",
     "eslint": "^10.7.0",
     "eslint-plugin-vue": "^10.10.0",
     "globals": "^17.7.0",
     "typescript-eslint": "^8.65.0",
+    "vue": "3.5.45",
     "vue-eslint-parser": "^10.4.0"
+  },
+  "overrides": {
+    "vue": "3.5.45",
+    "@vue/server-renderer": "3.5.45"
   }
 }

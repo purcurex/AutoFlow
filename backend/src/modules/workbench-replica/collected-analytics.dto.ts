@@ -14,3 +14,10 @@ export class DashboardAnalyticsQueryDto extends CollectedAnalyticsQueryDto {
  @IsOptional() @Matches(/^[A-Z]{3}$/) currency?:string
  @IsOptional() @IsIn(['fulfillment','stock']) entityType?:string
 }
+
+export class DashboardTrendQueryDto extends DashboardAnalyticsQueryDto {
+ @IsIn(['department','person','customer','country','warehouse']) dimension: 'department'|'person'|'customer'|'country'|'warehouse'
+ @IsString() @MinLength(1) @MaxLength(128) id: string
+ @IsIn(['day','month']) grain: 'day'|'month'
+}
+export type DashboardTrendFocus = Pick<DashboardTrendQueryDto,'dimension'|'id'|'grain'>

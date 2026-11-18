@@ -3,6 +3,7 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseEnv } from 'node:util'
 import { randomUUID } from 'node:crypto'
+import { confirmedFopOrigin } from './fop-confirmed-origin.mjs'
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
 export const OPERATIONS = {
@@ -21,11 +22,7 @@ const required = (config, key) => {
   return value
 }
 function baseUrl(config) {
-  const url = new URL(config.FOP_OPENAPI_BASE_URL || 'https://hyperzone.test.kdgalaxy.com')
-  if (url.origin !== 'https://hyperzone.test.kdgalaxy.com' || url.username || url.password || url.search || url.hash || url.pathname !== '/') {
-    throw new Error('This smoke tool only supports the confirmed HTTPS FOP test origin')
-  }
-  return url.origin
+  return confirmedFopOrigin(config)
 }
 function safeCode(value) { return typeof value === 'string' || typeof value === 'number' ? String(value).replace(/[^a-zA-Z0-9_.-]/g, '').slice(0, 32) : null }
 function successful(json) { return json?.status === true && (json.errorCode == null || String(json.errorCode) === '0' || json.errorCode === '') }

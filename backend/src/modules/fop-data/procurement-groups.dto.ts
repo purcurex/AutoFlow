@@ -15,11 +15,11 @@ export class PurchaseGroupFiltersDto extends CompletionFiltersDto {
 }
 export class PurchaseGroupQueryDto extends PurchaseGroupFiltersDto {
   @Type(() => Number) @IsInt() @Min(1) @Max(1000000) page = 1
-  @Type(() => Number) @IsIn([20, 50, 100]) pageSize = 50
+  @Type(() => Number) @IsIn([20, 50, 100, 200, 500, 1000]) pageSize = 100
 }
 export class PurchaseGroupExportDto extends PurchaseGroupFiltersDto {
   @IsIn(['selected', 'filtered']) mode!: 'selected' | 'filtered'
-  @ValidateIf((_o, v) => v !== undefined) @IsArray() @ArrayMinSize(1) @ArrayMaxSize(100) @ArrayUnique() @IsString({ each: true }) @MinLength(1, { each: true }) @MaxLength(520, { each: true }) groupIds?: string[]
+  @ValidateIf((_o, v) => v !== undefined) @IsArray() @ArrayMinSize(1) @ArrayMaxSize(1000) @ArrayUnique() @IsString({ each: true }) @MinLength(1, { each: true }) @MaxLength(520, { each: true }) groupIds?: string[]
 }
 
 export class PurchaseGroupChatQueryDto extends PurchaseGroupFiltersDto {

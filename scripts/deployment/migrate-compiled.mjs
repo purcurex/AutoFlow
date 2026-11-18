@@ -65,7 +65,7 @@ async function main() {
   }
 
   if (action === 'run') {
-    const executed = await dataSource.runMigrations({ transaction: 'all' })
+    const executed = await dataSource.runMigrations({ transaction: 'each' })
     console.log(`Executed migrations: ${executed.length}`)
     for (const migration of executed) console.log(`  + ${migration.name}`)
     if (executed.length === 0) console.log('Database schema is already current.')
@@ -76,7 +76,7 @@ async function main() {
     if (!confirmedRevert) {
       throw new Error('Reverting is destructive. Add --confirm-revert after taking a database backup.')
     }
-    await dataSource.undoLastMigration({ transaction: 'all' })
+    await dataSource.undoLastMigration({ transaction: 'each' })
     console.log('Latest migration reverted.')
     return
   }

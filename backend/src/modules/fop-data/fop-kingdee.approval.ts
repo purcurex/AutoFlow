@@ -28,12 +28,17 @@ export class KingdeeNativeApprovalAdapter {
   async context(identity: Readonly<FopIdentity>, scope: FopRealtimeScope, queue: ApprovalQueue, orderId: string): Promise<FopRealtimeApprovalContext> {
     if (!/^[1-9]\d{0,18}$/.test(orderId) || !['review', 'allocation_review'].includes(queue)) throw new FopPermissionDeniedError('Invalid approval target')
     const query = this.query(identity, scope, queue)
-    const grant = obj(await this.call('FOP_KINGDEE_ANALYTICS_PERMISSIONS_URL', { query }))
+    // Independent read-only proofs run together; both are validated before any audit.
+    const [grantResponse, pageResponse] = await Promise.all([
+      this.call('FOP_KINGDEE_ANALYTICS_PERMISSIONS_URL', { query }),
+      this.call('FOP_KINGDEE_QUERY_URL', { query: { ...query, rawWorkbenchFacts: true, afterOrderId: String(BigInt(orderId) - 1n) } }),
+    ])
+    const grant = obj(grantResponse)
     this.subject(grant, identity)
     if (queue === 'allocation_review' && !grant.approvalActions?.includes(queue)) throw new FopPermissionDeniedError('Allocation audit permission denied')
     // The published raw-facts API ignores orderIds. A one-row cursor plus exact ID check
     // prevents a full scan and refuses the next visible row when this ID is inaccessible.
-    const page = obj(await this.call('FOP_KINGDEE_QUERY_URL', { query: { ...query, rawWorkbenchFacts: true, afterOrderId: String(BigInt(orderId) - 1n) } }))
+    const page = obj(pageResponse)
     this.subject(page, identity)
     const source = rows(page.items)
     if (page.workbenchFactsSchemaVersion !== 1 || source.length !== 1 || source[0].id !== orderId) throw new FopPermissionDeniedError('Order no longer visible')

@@ -100,7 +100,7 @@ describe('已履约真实接口的客户付款期间能力边界', () => {
     expect(request).not.toHaveBeenCalled()
   })
 
-  it.each([{ completed: 'yes' }, { timeRange: '1y' }, { page: 0 }, { pageSize: 101 }, { sortBy: 'unrecognized' }])('完成清单DTO仍拒绝非法输入：%j', filters => {
+  it.each([{ completed: 'yes' }, { timeRange: '1y' }, { page: 0 }, { pageSize: 1001 }, { sortBy: 'unrecognized' }])('完成清单DTO仍拒绝非法输入：%j', filters => {
     expect(validateSync(plainToInstance(ListFulfillmentOrdersDto, { ...completedQuery, ...filters })).length).toBeGreaterThan(0)
   })
 })

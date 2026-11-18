@@ -65,7 +65,7 @@ function statusRank(order: FopOrder, field: Exclude<FulfillmentSortBy, 'complete
   }
   // Match the warehouse column: approval pending precedes outbound work.
   if (progress.allocationReview === 'pending') return 0
-  return ({ pending: 1, partial: 1, completed: 2, unknown: Infinity })[progress.outbound]
+  return ({ pending: 1, partial: 1, completed: 2, not_required: Infinity, unknown: Infinity })[progress.outbound]
 }
 
 /** Time defaults are newest first; explicit status sorts retain ascending stages. */

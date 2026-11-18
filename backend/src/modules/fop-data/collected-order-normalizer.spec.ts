@@ -1,6 +1,12 @@
 import { normalizeCollectedOrder } from './collected-order-normalizer'
 const raw = (patch: Record<string, unknown> = {}) => ({ id:'9007199254740993123', billno:'TO-test', hzkj_org:{id:'100000'}, hzkj_order_amount:'12.30', hzkj_currency:{number:'USD'}, hzkj_orders_billentry:[{id:'9007199254740993124',hzkj_qty:'2',hzkj_local_sku:{number:'SKU',name:'Product'}}],...patch })
 describe('collected raw facts',()=>{
+ it.each([[5.75,5.75],['5.75',5.75],[0,0],['0',0],[null,null],[undefined,null]])('stores fixed header tax %p without using package tax',(value,expected)=>{
+  const source=raw({hzkj_fixed_tax_fee:value,hzkj_logistics_info:[{hzkj_package_tax_fee:'99'}]})
+  const n=normalizeCollectedOrder(source,{companyId:'100000'})
+  expect(n.display.amountBreakdown.taxAmount).toBe(expected)
+  expect(n.raw).toEqual(source)
+ })
  it('uses the native text specification before legacy values and preserves the raw source',()=>{
   const source=raw({hzkj_orders_billentry:[{id:'9007199254740993124',hzkj_qty:'2',hzkj_local_sku:{number:'SKU',name:'Product',hzkj_sku_value:'  Blue / Large  ',hzkj_sku_values:[{name:'Old variant'}]}}]})
   const n=normalizeCollectedOrder(source,{companyId:'100000'})

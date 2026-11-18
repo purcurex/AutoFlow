@@ -3,7 +3,10 @@ export type PurchaseQueue = 'procurement' | 'procurement_shipping'
 export interface PurchaseHeader {
   purchaseType: 'offline' | 'online'; platform: '1688' | 'other' | null
   id: string; number: string; supplier: { id: string; name: string }; platformOrderNumber: string | null
-  payment: 'unpaid' | 'partial' | 'paid' | 'refunded' | 'unknown'
+  payment: 'unpaid' | 'partial' | 'paid' | 'refunded' | 'cancelled' | 'partially_refunded' | 'unknown'
+  paymentName?: string
+  actualPaidAmount?: number | null
+  actualPaidFreight?: number | null
   placement: 'pending' | 'placed' | 'unknown'; paidAt: string | null
 }
 export interface PurchaseSourceLine {
@@ -17,7 +20,7 @@ export interface PurchaseLinkSnapshot {
   /** One entry for every requested order. null=integration failure (never a business task), []=confirmed no outstanding procurement. */
   orders: { orderId: string; obligations: PurchaseObligation[] | null }[]
 }
-export const purchaseStages = ['uncreated', 'placement_pending', 'payment_pending', 'refund_pending', 'unknown'] as const
+export const purchaseStages = ['uncreated', 'dispatch_preparation', 'placement_pending', 'payment_pending', 'refund_pending', 'unknown'] as const
 export type PurchaseStage = typeof purchaseStages[number]
 export interface PurchaseGroupFilters {
   completed?: boolean; timeRange?: '1w' | '1m' | '3m'

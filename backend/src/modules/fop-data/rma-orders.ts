@@ -1,3 +1,4 @@
+import { rmaRefundCurrency } from './rma-refund-currency'
 import { compareConsumerPaymentTime } from './fop-order-sort'
 import { summarizeFopOrders } from './fop-order-totals'
 import type { FopIdentity, FopOrder, FopPermissionGrant } from './fop-data.types'
@@ -35,7 +36,7 @@ export function buildRmaOrders(snapshot: RmaSnapshot, permission: FopPermissionG
     seen.add(id)
     if (row.requestedAmount != null && (!Number.isFinite(row.requestedAmount) || row.requestedAmount < 0 || row.requestedAmount > Number.MAX_SAFE_INTEGER)) throw new Error('Invalid RMA amount')
     if (row.refundAmount != null && (!Number.isFinite(row.refundAmount) || row.refundAmount < 0 || row.refundAmount > Number.MAX_SAFE_INTEGER)) throw new Error('Invalid RMA refund amount')
-    const item: RmaCase = { id, orderId: row.orderId, type: row.type, isOpen: row.isOpen, number: text(row.number), stage: text(row.stage), reason: text(row.reason, 4000), createdAt: normalizeBusinessTimestamp(row.createdAt), updatedAt: normalizeBusinessTimestamp(row.updatedAt), refundAmount: ['refund', 'return_refund'].includes(row.type) ? row.refundAmount ?? null : null, refundCurrency: typeof row.refundCurrency === 'string' && /^[A-Z]{3}$/.test(row.refundCurrency.trim().toUpperCase()) ? row.refundCurrency.trim().toUpperCase() : null, requestedAmount: row.requestedAmount ?? null, currency: typeof row.currency === 'string' && /^[A-Z]{3}$/.test(row.currency.trim().toUpperCase()) ? row.currency.trim().toUpperCase() : null }
+    const item: RmaCase = { id, orderId: row.orderId, type: row.type, isOpen: row.isOpen, number: text(row.number), stage: text(row.stage), reason: text(row.reason, 4000), createdAt: normalizeBusinessTimestamp(row.createdAt), updatedAt: normalizeBusinessTimestamp(row.updatedAt), refundAmount: ['refund', 'return_refund'].includes(row.type) ? row.refundAmount ?? null : null, refundCurrency: ['refund', 'return_refund'].includes(row.type) ? rmaRefundCurrency(row.refundCurrency) : null, requestedAmount: row.requestedAmount ?? null, currency: typeof row.currency === 'string' && /^[A-Z]{3}$/.test(row.currency.trim().toUpperCase()) ? row.currency.trim().toUpperCase() : null }
     const group = byOrder.get(row.orderId) ?? []; group.push(item); byOrder.set(row.orderId, group)
   }
   const search = query.search?.trim().toLowerCase(), result: RmaOrder[] = []

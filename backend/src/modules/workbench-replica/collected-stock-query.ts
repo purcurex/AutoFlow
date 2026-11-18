@@ -10,7 +10,8 @@ export function collectedStockWhere(batchId:string,employeeIds:readonly string[]
  if(q.lifecycle==='received')clauses.push("display->>'orderStatus'='paid' AND display->>'reviewStatus'='approved' AND display->>'purchaseStatus'='received'")
  if(q.search?.trim())clauses.push(`search_text LIKE ${bind('%'+q.search.trim().toLowerCase().replace(/[\\%_]/g,'\\$&')+'%')}${q.searchOwnerIds?.length?` OR owner_employee_id = ANY(${bind(q.searchOwnerIds)}::text[])`:''}`)
  if(q.mode==='selected')clauses.push(`source_id=ANY(${bind(q.orderIds)}::text[])`)
- const days:Record<string,number>={'1w':7,'1m':30,'3m':90};if(days[q.timeRange])clauses.push(`NULLIF(display->>'paidAt','')::timestamptz BETWEEN now()-(${bind(days[q.timeRange])}*interval '1 day') AND now()`)
+ const range=q.timeRange??(q.queue==='procurement'?undefined:'1m')
+ const days:Record<string,number>={'1w':7,'1m':30,'3m':90};if(days[range])clauses.push(`NULLIF(display->>'paidAt','')::timestamptz BETWEEN now()-(${bind(days[range])}*interval '1 day') AND now()`)
  const key=['createdAt','paidAt','orderStatus','purchaseStatus'].includes(q.sortBy)?q.sortBy:'createdAt';const sort=['createdAt','paidAt'].includes(key)?`NULLIF(display->>'${key}','')::timestamptz`:`display->>'${key}'`
  return{where:clauses.map(v=>`(${v})`).join(' AND '),params,orderBy:`${sort} ${q.sortOrder==='asc'?'ASC':'DESC'} NULLS LAST,source_id ASC`}
 }

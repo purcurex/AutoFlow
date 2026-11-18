@@ -29,7 +29,7 @@ function closeMobileSidebar() {
     <Sidebar :collapsed="isSidebarCollapsed" @navigate="closeMobileSidebar" />
     <div class="flex min-w-0 flex-1 flex-col overflow-hidden">
       <Header :sidebar-collapsed="isSidebarCollapsed" @toggle-sidebar="toggleSidebar" />
-      <main ref="pageScroller" data-page-scroll class="flex-1 overflow-auto bg-[var(--color-background)]"><slot /></main>
+      <main ref="pageScroller" data-page-scroll class="flex-1 overflow-auto bg-[var(--color-background)]" style="scrollbar-gutter:stable"><slot /></main>
     </div>
   </div>
 </template>

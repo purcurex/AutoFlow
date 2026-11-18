@@ -1,8 +1,10 @@
+import type { DashboardTrendFocus } from './collected-analytics.dto'
 import { warehouseCodes } from './warehouse-codes'
 import { customerRegistrationQuery } from './customer-registration-query'
 export interface DashboardAnalyticsOptions {
  batchId:string;companyId:string;employeeIds:readonly string[]|null;members:unknown[];start:string;end:string
  chartId:string;summaryOnly:boolean;warehouseCode?:string;currency?:string;entityType?:string
+ trend?:DashboardTrendFocus
  customerOwnershipScope?:boolean;recordEmployeeIds?:readonly string[]
 }
 /** Read only the local source-document projection. Never join lines into monetary aggregates. */
@@ -20,9 +22,12 @@ export function dashboardAnalyticsQuery(o:DashboardAnalyticsOptions){
   dimensions.push("('day',to_char(paid_at AT TIME ZONE 'Asia/Shanghai','YYYY-MM-DD'),to_char(paid_at AT TIME ZONE 'Asia/Shanghai','YYYY-MM-DD'))")
   if(orderOwners)dimensions.push("('person',CASE WHEN owner_name IS NULL THEN 'unknown' ELSE coalesce(owner_employee_id,'unknown') END,coalesce(owner_name,'未绑定业务员'))")
   if(o.chartId==='customer_orders')dimensions.push("('customer',coalesce(customer_id,'unknown'),coalesce(customer_name,'未知客户'))","('person',coalesce(customer_owner_id,'unknown'),coalesce(customer_owner_name,'未绑定业务员'))","('person_department',coalesce(customer_owner_department_id,'unknown'),coalesce(customer_owner_department_name,'归属待确认'))")
-  if(o.chartId==='order_volume')dimensions.push("('country',coalesce(country_code,'unknown'),coalesce(country_code,'未知国家'))","('warehouse',coalesce(warehouse_code,'unknown'),coalesce(warehouse_name,warehouse_code,'未知仓库'))")
  }
- if(o.summaryOnly)dimensions.splice(0,1)
+ if(o.chartId==='order_volume')dimensions.push("('country',coalesce(country_code,'unknown'),coalesce(country_code,'未知国家'))","('warehouse',coalesce(warehouse_code,'unknown'),coalesce(warehouse_name,warehouse_code,'未知仓库'))")
+
+ const trendColumn=o.trend?({department:customerOwners?'customer_owner_department_id':'department_id',person:customerOwners?'customer_owner_id':'owner_employee_id',customer:'customer_id',country:'country_code',warehouse:'warehouse_code'}[o.trend.dimension]):undefined
+ const trendParam=o.customerOwnershipScope&&customerOwners?11:10
+ if(o.trend){const format=o.trend.grain==='day'?'YYYY-MM-DD':'YYYY-MM';dimensions.splice(0,dimensions.length,`('${o.trend.grain}',to_char(paid_at AT TIME ZONE 'Asia/Shanghai','${format}'),to_char(paid_at AT TIME ZONE 'Asia/Shanghai','${format}'))`)}
  const sql=`WITH members AS (
  SELECT * FROM jsonb_to_recordset($6::jsonb) AS m("employeeId" text,"fopUserId" text,"departmentId" text,"name" text,"englishName" text,"departmentName" text)
  ), ${customerOwners?`customer_owners AS (
@@ -52,7 +57,7 @@ export function dashboardAnalyticsQuery(o:DashboardAnalyticsOptions){
  ), receipt_lookup AS MATERIALIZED (
  SELECT jsonb_object_agg(order_number,amount) AS amounts FROM receipt_totals CROSS JOIN unique_lookup
  WHERE amount IS NOT NULL AND unique_lookup.ids ? order_number
- ), source AS (
+ ), ${o.trend?'unfocused':'source'} AS (
  SELECT f.source_id,f.entity_type,f.paid_at,f.raw->>'hzkj_receipt_status' receipt_status,f.owner_employee_id,m."name" owner_name,NULLIF(trim(m."englishName"),'') owner_english_name,m."departmentId" department_id,m."departmentName" department_name,
  NULLIF(f.facts->'customer'->>'id','') customer_id,NULLIF(f.facts->'customer'->>'name','') customer_name,
  ${customerOwners?'c.customer_owner_id,c.customer_owner_name,c.customer_owner_department_id,c.customer_owner_department_name,c.customer_owner_english_name,':''}
@@ -70,7 +75,7 @@ export function dashboardAnalyticsQuery(o:DashboardAnalyticsOptions){
  ${o.customerOwnershipScope&&customerOwners?'AND owner_employee_id = ANY($10::text[])':''}
  AND facts->'scope'->>'verified'='true' AND facts->'scope'->>'companyId'=$2
  AND ($3::text[] IS NULL OR facts->>'sourceOwnershipVerified'='true')
- ), filtered AS (
+ )${o.trend?`, source AS (SELECT * FROM unfocused WHERE coalesce(${trendColumn},'unknown')=$${trendParam})`:''}, filtered AS (
  SELECT * FROM source WHERE paid_at >= $4::timestamptz AND paid_at < $5::timestamptz
  AND ($7::text[] IS NULL OR warehouse_code=ANY($7)) AND ($8::text IS NULL OR currency=$8)
  ), undated AS (
@@ -80,10 +85,10 @@ export function dashboardAnalyticsQuery(o:DashboardAnalyticsOptions){
  SELECT d.dimension,d.id,d.label,${money?'currency':'NULL::text'} currency,count(*)::int "orderCount",
  ${salespersonGroups?`CASE WHEN d.dimension='person' THEN max(${personDepartment}) END "departmentId",CASE WHEN d.dimension='person' THEN max(${personDepartmentName}) END "departmentName",CASE WHEN d.dimension='person' THEN max(${personEnglishName}) END "englishName",`:''}
  ${customerOwners&&!o.summaryOnly?`CASE WHEN d.dimension='customer' THEN max(customer_owner_name) END "customerOwnerName",`:''}
- ${money?'sum(order_amount)::text':'NULL::text'} amount,
+ ${money?(o.trend?'CASE WHEN count(order_amount)=count(*) THEN sum(order_amount)::text END':'sum(order_amount)::text'):'NULL::text'} amount,
  CASE WHEN count(quantity)=count(*) THEN sum(quantity)::text END quantity
  FROM filtered CROSS JOIN LATERAL (VALUES ${dimensions.join(',')}) d(dimension,id,label)
- ${money?'WHERE currency IS NOT NULL AND order_amount IS NOT NULL':''}
+ ${money&&!o.trend?'WHERE currency IS NOT NULL AND order_amount IS NOT NULL':''}
  GROUP BY d.dimension,d.id,d.label${money?',currency':''}
  ) SELECT jsonb_build_object(
  'rows',coalesce((SELECT jsonb_agg(to_jsonb(g) ORDER BY dimension,id,currency) FROM grouped g),'[]'::jsonb),
@@ -99,9 +104,9 @@ export function dashboardAnalyticsQuery(o:DashboardAnalyticsOptions){
  'paid',count(*) FILTER(WHERE receipt_status='1')::int,
  'unknown',count(*) FILTER(WHERE receipt_status IS NULL OR receipt_status NOT IN ('0','1'))::int) FROM undated),
  'currencies',coalesce((SELECT jsonb_agg(c.currency ORDER BY c.currency) FROM (SELECT DISTINCT currency FROM source WHERE currency IS NOT NULL) c),'[]'::jsonb),
- 'warehouses',${o.summaryOnly?"'[]'::jsonb":`coalesce((SELECT jsonb_agg(w ORDER BY w.name) FROM (SELECT warehouse_code id,max(coalesce(warehouse_name,warehouse_code)) name FROM source WHERE warehouse_code IS NOT NULL GROUP BY warehouse_code) w),'[]'::jsonb)`}
+ 'warehouses',${`coalesce((SELECT jsonb_agg(w ORDER BY w.name) FROM (SELECT warehouse_code id,max(coalesce(warehouse_name,warehouse_code)) name FROM source WHERE warehouse_code IS NOT NULL GROUP BY warehouse_code) w),'[]'::jsonb)`}
  ) analytics`
  // Department performance has one reporting currency; old client filters cannot switch it.
  const currency=o.chartId==='department_receipts'?'USD':o.currency??null
- return {sql,params:[o.batchId,o.companyId,o.employeeIds,o.start,o.end,JSON.stringify(o.members),o.warehouseCode?warehouseCodes(o.warehouseCode):null,currency,o.entityType??'fulfillment',...o.customerOwnershipScope&&customerOwners?[o.recordEmployeeIds??[]]:[]]}
+ return {sql,params:[o.batchId,o.companyId,o.employeeIds,o.start,o.end,JSON.stringify(o.members),o.warehouseCode?warehouseCodes(o.warehouseCode):null,currency,o.entityType??'fulfillment',...o.customerOwnershipScope&&customerOwners?[o.recordEmployeeIds??[]]:[],...o.trend?[o.trend.id]:[]]}
 }

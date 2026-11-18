@@ -1,8 +1,11 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { DataSource, QueryRunner } from 'typeorm'
 import { publishTimestampProjections } from './timestamp-projection-publisher'
-import { rebuildCollectedChain } from './collected-chain-storage'
+import { TIMESTAMP_PROJECTION_KINDS } from './timestamp-projection-normalizer'
+import { rebuildCollectedChain, chainSourceSignature } from './collected-chain-storage'
 import { normalizeCollectedOrder } from '../fop-data/collected-order-normalizer'
+import { retainCapturedStoreName } from '../fop-data/collected-store-name'
+import { assertOutboundFieldCoverage } from '../fop-data/collected-outbound-supplement'
 import { sourceTime, type TimestampScope, type TimestampSession, type TimestampStore, type TimestampDocument, type TimestampMode, type TimestampQuery } from './timestamp-sync'
 
 type Row=Record<string,any>
@@ -60,6 +63,13 @@ class PgTimestampSession implements TimestampSession {
   return [...new Set<string>(rows.map((r:Row)=>r.source_id))]
  }
  async fail(runId:string,code:string){await this.q.query("UPDATE hz_fop_timestamp_runs SET state='failed',error_code=$2,finished_at=now() WHERE id=$1 AND state='running'",[runId,code])}
+ private async priorPublishedRaw(id:string){
+  if(this.scope.entityCode==='hzkj_orders')return (await this.q.query('SELECT raw FROM hz_fop_collected_orders WHERE batch_id=$1 AND source_id=$2',[this.scope.batchId,id]))[0]?.raw??null
+  const kind=(TIMESTAMP_PROJECTION_KINDS as Record<string,string>)[this.scope.entityCode]
+  if(!kind)return null
+  const [{present}]=await this.q.query("SELECT to_regclass('hz_fop_collected_entities') IS NOT NULL AS present")
+  return present?(await this.q.query('SELECT raw FROM hz_fop_collected_entities WHERE batch_id=$1 AND entity_type=$2 AND source_id=$3',[this.scope.batchId,kind,id]))[0]?.raw??null:null
+ }
  private async project(d:TimestampDocument|null,id:string,runId:string,previous:Row|null){
   const supported=this.scope.entityCode==='hzkj_orders'
   if(supported&&previous){
@@ -72,7 +82,9 @@ class PgTimestampSession implements TimestampSession {
    if(!d)await this.q.query('DELETE FROM hz_fop_collected_orders WHERE batch_id=$1 AND source_id=$2',[this.scope.batchId,id])
    else{
     if(d.raw.id!==d.id || !Array.isArray(d.raw.hzkj_orders_billentry))throw Error('timestamp_fulfillment_shape_invalid')
-    const row=normalizeCollectedOrder(d.raw,{companyId:this.scope.companyId})
+    const [priorOrder]=await this.q.query('SELECT source_id,order_number,raw,display FROM hz_fop_collected_orders WHERE batch_id=$1 AND source_id=$2 FOR UPDATE',[this.scope.batchId,id])
+    assertOutboundFieldCoverage(d.raw,priorOrder?.raw??previous??{})
+    const row=retainCapturedStoreName(normalizeCollectedOrder(d.raw,{companyId:this.scope.companyId}),priorOrder)
     row.display.dataQuality={...row.display.dataQuality,mode:'timestamp',reasons:['eventual_timestamp_capture','linked_workbench_facts_require_reprojection']}
     // Do not retain facts derived from a different parent/ownership version.
     const columns=Object.keys(row),quoted=columns.map(k=>'"'+k+'"')
@@ -115,7 +127,7 @@ class PgTimestampSession implements TimestampSession {
       if(prior.last_run_id===runId)continue
       if(!authoritative)throw Error('timestamp_older_source_conflict')
      }
-     const previous=prior?.raw??(this.scope.entityCode==='hzkj_orders'?(await this.q.query('SELECT raw FROM hz_fop_collected_orders WHERE batch_id=$1 AND source_id=$2',[this.scope.batchId,d.id]))[0]?.raw:null)
+     const previous=prior?.raw??await this.priorPublishedRaw(d.id)
      await this.q.query(`INSERT INTO hz_fop_timestamp_documents(batch_id,entity_code,source_id,company_id,created_at,modified_at,raw,payload_hash,last_run_id)
       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT(batch_id,entity_code,source_id) DO UPDATE SET company_id=excluded.company_id,
       created_at=excluded.created_at,modified_at=excluded.modified_at,raw=excluded.raw,payload_hash=excluded.payload_hash,last_run_id=excluded.last_run_id,removed=false,captured_at=now()`,
@@ -125,7 +137,7 @@ class PgTimestampSession implements TimestampSession {
    }
    for(const id of deleted){
     const [prior]=await this.q.query('SELECT raw FROM hz_fop_timestamp_documents WHERE batch_id=$1 AND entity_code=$2 AND source_id=$3',[...this.identity,id])
-    const previous=prior?.raw??(this.scope.entityCode==='hzkj_orders'?(await this.q.query('SELECT raw FROM hz_fop_collected_orders WHERE batch_id=$1 AND source_id=$2',[this.scope.batchId,id]))[0]?.raw:null)
+    const previous=prior?.raw??await this.priorPublishedRaw(id)
     await this.q.query(`INSERT INTO hz_fop_timestamp_documents(batch_id,entity_code,source_id,company_id,raw,payload_hash,last_run_id,removed)
      VALUES($1,$2,$3,$4,$5,$6,$7,true) ON CONFLICT(batch_id,entity_code,source_id) DO UPDATE SET removed=true,last_run_id=excluded.last_run_id,captured_at=now()`,[...this.identity,id,this.scope.companyId,JSON.stringify(previous??{}),digest(previous??{}),runId])
     await this.project(null,id,runId,previous??null);changed++
@@ -142,6 +154,12 @@ class PgTimestampSession implements TimestampSession {
    await this.q.query("UPDATE hz_fop_collected_batches SET metadata=jsonb_set(metadata,'{timestampSync}',coalesce(metadata->'timestampSync','{}'::jsonb)||$2::jsonb) WHERE id=$1",[this.scope.batchId,JSON.stringify({[this.scope.entityCode]:meta})])
    if(this.scope.entityCode==='hzkj_orders'||publication?.applied)await this.q.query('UPDATE hz_fop_collected_batches SET row_count=(SELECT count(*) FROM hz_fop_collected_orders WHERE batch_id=$1) WHERE id=$1',[this.scope.batchId])
    if(publication?.rebuildChain)await rebuildCollectedChain(this.q.manager,this.scope.batchId)
+   else if(publication?.available&&!publication.blocked.length&&!changed){
+    // A no-change poll only moves capture metadata. Keep an already-current graph
+    // usable without rebuilding it; never bless a graph that was stale beforehand.
+    const [updatedBatch]=await this.q.query('SELECT * FROM hz_fop_collected_batches WHERE id=$1',[this.scope.batchId])
+    await this.q.query('UPDATE hz_fop_collected_chains SET source_signature=$2,built_at=now() WHERE batch_id=$1 AND source_signature=$3',[this.scope.batchId,chainSourceSignature(updatedBatch),chainSourceSignature(batch)])
+   }
    await this.q.commitTransaction();return {...meta}
   }catch(error){await this.q.rollbackTransaction();throw error}
  }

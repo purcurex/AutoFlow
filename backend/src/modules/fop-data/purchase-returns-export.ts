@@ -1,4 +1,4 @@
-import { singleSheetWorkbook, appendExportRecipients } from '../workbench-export/single-sheet'
+import { exportProductRow, exportRowIdentity, singleSheetWorkbook, appendExportRecipients } from '../workbench-export/single-sheet'
 import * as ExcelJS from 'exceljs'
 import { PayloadTooLargeException } from '@nestjs/common'
 import { purchaseReturnLabels, summarizePurchaseReturnOrders, type PurchaseReturnOrder } from './purchase-returns'
@@ -14,8 +14,9 @@ export async function buildPurchaseReturnWorkbook(rows: PurchaseReturnOrder[], q
   const products = sheet('商品明细', ['订单编号', 'SKU', '商品信息', '规格', '订单商品数量', '商品图片'], ['order', 'sku', 'name', 'variant', 'quantity', 'imageUrl'])
   for (const row of rows) {
     list.addRow({ order: row.orderNumber, products: row.items.slice(0, 5).map(item => `${item.name}\n${item.sku} × ${item.quantity}`).join('\n') + (row.items.length > 5 ? `\n共${row.items.length}行，见商品明细` : ''), shopify: row.shopifyOrderNumber, amount: row.amount, currency: row.currency || 'USD', paid: date(row.consumerPaidAt ?? null), returns: [...new Set(row.purchaseReturns.flatMap(doc => doc.number ? [doc.number] : []))].join('\n') || '—', quantity: row.returnQuantity, returned: row.returnedQuantity, customer: row.customerName, store: row.storeName, warehouse: row.warehouse, owner: `${row.owner?.name || row.salesperson}\n${row.department?.name || '—'}`, reviewed: date(row.reviewedAt) })
-    for (const doc of row.purchaseReturns) for (const line of doc.lines) detail.addRow({ order: row.orderNumber, number: doc.number || '—', status: purchaseReturnLabels[doc.status][0], purchase: doc.purchaseOrder.number, supplier: doc.supplier.name, sku: line.sku, name: line.name, variant: line.variant, quantity: line.quantity, returned: line.returnedQuantity, warehouse: doc.warehouse, carrier: doc.logistics.carrier || '—', tracking: doc.logistics.trackingNumber || '—', created: date(doc.createdAt) })
-    for (const item of row.items) products.addRow({ order: row.orderNumber, sku: item.sku, name: item.name, variant: item.variant, quantity: item.quantity, imageUrl: item.imageUrl })
+    exportRowIdentity(list.lastRow!,row.id)
+    for (const doc of row.purchaseReturns) for (const line of doc.lines) exportRowIdentity(detail.addRow({ order: row.orderNumber, number: doc.number || '—', status: purchaseReturnLabels[doc.status][0], purchase: doc.purchaseOrder.number, supplier: doc.supplier.name, sku: line.sku, name: line.name, variant: line.variant, quantity: line.quantity, returned: line.returnedQuantity, warehouse: doc.warehouse, carrier: doc.logistics.carrier || '—', tracking: doc.logistics.trackingNumber || '—', created: date(doc.createdAt) }),row.id)
+    for (const item of row.items) exportRowIdentity(exportProductRow(products.addRow({ order: row.orderNumber, sku: item.sku, name: item.name, variant: item.variant, quantity: item.quantity, imageUrl: item.imageUrl }), item),row.id)
   }
   for (const ws of [list, detail, products]) ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: ws.rowCount, column: ws.columnCount } }
   const totals = summarizePurchaseReturnOrders(rows)

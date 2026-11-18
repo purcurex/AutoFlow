@@ -78,11 +78,12 @@ function queueLink(value: string) { return { name: 'RoleWorkbench', params: { ro
           <template v-for="item in workbenchQueues[role]" :key="item">
             <RouterLink v-if="role === 'sales' && item === 'exceptions'" :to="queueLink('rma')" :class="{ active: choice === 'rma' }">{{ text('RMA售后清单', 'RMA after-sales') }}</RouterLink>
             <RouterLink :to="queueLink(item)" :class="{ active: choice === item }">{{ queueNames[item][zh ? 0 : 1] }}{{ ['procurement_shipping', 'allocation_review'].includes(item) ? '' : text('清单', item === 'exceptions' ? '' : ' orders') }}</RouterLink>
+            <RouterLink v-if="role === 'sales' && item === 'review'" :to="queueLink('completed')" :class="{ active: choice === 'completed' }">{{ completedNames[role][zh ? 0 : 1] }}</RouterLink>
             <RouterLink v-if="role === 'sales' && item === 'review'" :to="queueLink('stock')" :class="{ active: choice === 'stock' }">{{ text('备货清单', 'Stock orders') }}</RouterLink>
             <RouterLink v-if="role === 'procurement' && item === 'procurement_shipping'" :to="queueLink('stock_procurement')" :class="{ active: choice === 'stock_procurement' }">{{ text('备货待采购清单', 'Stock procurement') }}</RouterLink>
           </template>
           <RouterLink v-if="role === 'procurement' || role === 'warehouse'" :to="queueLink('purchase_returns')" :class="{ active: choice === 'purchase_returns' }">{{ text('采购退货清单', 'Purchase returns') }}</RouterLink>
-          <RouterLink :to="queueLink('completed')" :class="{ active: choice === 'completed' }">{{ completedNames[role][zh ? 0 : 1] }}</RouterLink>
+          <RouterLink v-if="role !== 'sales'" :to="queueLink('completed')" :class="{ active: choice === 'completed' }">{{ completedNames[role][zh ? 0 : 1] }}</RouterLink>
           <RouterLink v-if="role === 'sales' && chartVisible('sales_performance')" :to="queueLink('performance')" :class="{ active: choice === 'performance' }">{{ text('业绩收入与毛利', 'Revenue and profit') }}</RouterLink>
           <RouterLink v-if="role === 'sales' && chartVisible('sales_performance')" :to="queueLink('overview')" :class="{ active: choice === 'overview' }">{{ text('客户开发概览', 'Prospecting overview') }}</RouterLink>
         </nav>

@@ -1,11 +1,11 @@
 import api from './index'
 import { analyticsQuery, type AnalyticsQueryOptions } from '@/utils/analytics-cache'
 export type FreightDimension='carrier'|'channel'|'warehouse'|'country'|'customer'|'owner'|'department'
-export interface LocalFreightQuery {grain:'week'|'month'|'year';year:number;weekOf?:string;warehouse?:string;currency:string;dimension:FreightDimension}
+export interface LocalFreightQuery {grain:'week'|'month'|'year';year:number;weekOf?:string;warehouse?:string;currency:string;dimension:FreightDimension;departmentId?:string;ownerId?:string}
 export interface FreightMeasure {amount:string;previousAmount:string|null;delta:string|null;percent:number|null}
 export interface FreightSeries {id:string;label:string;totals:FreightMeasure;values:FreightMeasure[];billCount:number;departmentId?:string|null;departmentName?:string|null;englishName?:string|null}
 export interface LocalFreightResult {
- source:'local';currency:string;asOf:string;query:LocalFreightQuery
+ source:'local';currency:string;asOf:string;query:LocalFreightQuery;canViewDetails?:boolean;canExport?:boolean
  periods:{id:string;label:string;from:string;to:string;previousFrom:string;previousTo:string;partial:boolean}[]
  totals:FreightMeasure;values:FreightMeasure[];billCount:number;averagePerBill:string|null;weightKg:string;weightBillCount:number;costPerKg:string|null
  series:FreightSeries[];departmentSeries?:FreightSeries[]
@@ -22,3 +22,9 @@ export async function getLocalFreight(query:LocalFreightQuery,options?:Analytics
  result.query={...query,currency:'CNY'}
  return result
 }
+export interface LocalFreightDetailsQuery extends LocalFreightQuery {dimensionId?:string;periodId?:string;page?:number;pageSize?:number}
+export interface FreightDocument {id:string;documentNumber:string;confirmedAt:string;businessDay:string;amount:string;currency:'CNY';weightKg:string|null;orderNumber:string|null;trackingNumber:string|null;carrierName:string|null;channelName:string|null;ownerName:string|null;departmentName:string|null;country:string|null;warehouseName:string|null;customerName:string|null}
+export interface LocalFreightDetailsResult {source:'local';currency:'CNY';asOf:string;from:string;to:string;items:FreightDocument[];total:number;amount:string;page:number;pageSize:number;canExport:boolean}
+/** Source records never use the aggregate cache; every request rechecks authorization. */
+export function getLocalFreightDetails(query:LocalFreightDetailsQuery):Promise<LocalFreightDetailsResult>{return api.get('/workbench/analytics/freight/details',{params:{...query,currency:'CNY'}})}
+export function exportLocalFreightDetails(query:LocalFreightDetailsQuery):Promise<Blob>{return api.get('/workbench/analytics/freight/export',{params:{...query,currency:'CNY',page:undefined,pageSize:undefined},responseType:'blob',timeout:30000})}

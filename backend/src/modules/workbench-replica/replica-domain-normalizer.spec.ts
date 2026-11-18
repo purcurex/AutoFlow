@@ -45,7 +45,7 @@ it('publishes explicit procurement demand and allocation facts with stable sourc
  expect(out.projections[0].rows.find(r=>r.table==='hz_fop_workbench_purchase_allocations')?.values).toMatchObject({allocation_state:'known',purchase_document_id:sourceEntityIdentity(scope,'hzkj_purorderbill','purchase-1'),supplier_shipped_quantity:'0'})
 })
 it('provides an explicit complete synthetic unpaid fixture that is ready and has correct queue membership',()=>{
- const out=normalizeReplicaGroup(scope,completeFulfillmentDomainFixture());expect(out.projections[0].rows[0].values).toMatchObject({readiness:'ready',total_amount:'10',currency_code:'USD'})
+ const fixture=completeFulfillmentDomainFixture();fixture.documents[0].workbench!.outboundState='pending';const out=normalizeReplicaGroup(scope,fixture);expect(out.projections[0].rows[0].values).toMatchObject({readiness:'ready',total_amount:'10',currency_code:'USD'})
  expect(out.projections[0].rows.find(r=>r.table==='hz_fop_workbench_memberships'&&r.values.queue_code==='unpaid')?.values.classification_state).toBe('member')
 })
 it('classifies complete current related documents locally instead of leaving RMA permanently unknown',()=>{
@@ -68,4 +68,64 @@ it.each(['2','3','4','5','6'])('uses native header %s for exclusive fulfillment 
  const memberships=normalizeReplicaGroup(scope,g).projections[0].rows.filter(r=>r.table==='hz_fop_workbench_memberships')
  for(const [queue,expected] of [['dispatch',['2','3','6'].includes(status)],['dispatch_completed',['4','5'].includes(status)]] as const)
   expect(memberships.find(r=>r.values.queue_code===queue)?.values.classification_state).toBe(expected?'member':'non_member')
+})
+
+it('never overwrites physical service-feed outbound with a header that includes virtual products',()=>{
+ const fixture=completeFulfillmentDomainFixture();fixture.documents[0].workbench!.outboundState='pending';fixture.documents[0].header!.rawDeliveryStatus='2'
+ const projection=normalizeReplicaGroup(scope,fixture).projections[0]
+ expect(projection.rows[0].values.outbound_state).toBe('pending')
+ expect(projection.rows.find(r=>r.table==='hz_fop_workbench_memberships'&&r.values.queue_code==='warehouse_completed')?.values.classification_state).toBe('non_member')
+})
+
+describe('formal memberships preserve current queue boundaries', () => {
+ const membership = (g: any, queue: string) => normalizeReplicaGroup(scope,g).projections[0].rows.find(r=>r.table==='hz_fop_workbench_memberships'&&r.values.queue_code===queue)?.values.classification_state
+ const ready = () => {
+  const g=completeFulfillmentDomainFixture() as any,d=g.documents[0]
+  d.sourceFields.rawBillStatus='C';d.header.rawOrderStatus='2';d.workbench.outboundState='pending'
+  return g
+ }
+ it.each([['allocation','incomplete'],['allocation_review','ready']])('does not require payment or unfinished outbound for %s', (queue, readiness) => {
+  const g=ready(),w=g.documents[0].workbench
+  Object.assign(w,{allocationCreated:true,stockReadinessState:readiness,allocationReviewState:'pending',customerPaymentState:'unpaid',outboundState:'completed'})
+  expect(membership(g,queue)).toBe('member')
+  g.documents[0].sourceFields.rawBillStatus='B'
+  expect(membership(g,queue)).toBe('non_member')
+ })
+ it('requires approved fulfillment and an allocation for allocation completion', () => {
+  const g=ready(),w=g.documents[0].workbench
+  Object.assign(w,{allocationCreated:false,stockReadinessState:'ready',allocationReviewState:'approved'})
+  expect(membership(g,'allocation_completed')).toBe('non_member')
+  w.allocationCreated=true
+  expect(membership(g,'allocation_completed')).toBe('member')
+  g.documents[0].sourceFields.rawBillStatus='B'
+  expect(membership(g,'allocation_completed')).toBe('non_member')
+ })
+ it('does not turn an intercepted pending shipment into a missing warehouse task', () => {
+  const g=ready()
+  Object.assign(g.documents[0].workbench,{allocationCreated:true,customerPaymentState:'paid',stockReadinessState:'ready',allocationReviewState:'approved',interceptStatus:'intercepted'})
+  expect(membership(g,'shipping')).toBe('member')
+ })
+ it.each(['refunded','partially_refunded'])('excludes %s procurement from pending payment', status => {
+  const g=ready()
+  Object.assign(g.documents[0].workbench,{customerPaymentState:'paid',purchaseCoverageState:'ordered',platformOrderState:'not_pushed',supplierPaymentState:status})
+  expect(membership(g,'procurement')).toBe('non_member')
+ })
+ it('excludes cancelled or unpaid procurement completion', () => {
+  const g=ready(),w=g.documents[0].workbench
+  Object.assign(w,{purchaseCoverageState:'ordered',supplierShipmentState:'shipped',customerPaymentState:'unpaid'})
+  expect(membership(g,'procurement_completed')).toBe('non_member')
+  w.customerPaymentState='paid';w.cancelled=true
+  expect(membership(g,'procurement_completed')).toBe('non_member')
+ })
+ it('requires paid, approved and active stock before procurement membership', () => {
+  const g=ready(),d=g.documents[0]
+  d.entityCode='hzkj_stock_order_new';d.header={customerId:'customer',ownerEmployeeId:'fixture-employee',warehouseId:'warehouse',stockType:'full_payment',totalAmount:'10',settlementCurrency:'USD',businessCreatedAt:'2026-11-11T01:00:00Z',rawPurchaseStatus:'0'}
+  expect(membership(g,'stock_procurement')).toBe('non_member')
+  d.workbench.customerPaymentState='paid'
+  expect(membership(g,'stock_procurement')).toBe('member')
+  d.sourceFields.rawBillStatus='B'
+  expect(membership(g,'stock_procurement')).toBe('non_member')
+  d.sourceFields.rawBillStatus='C';d.workbench.cancelled=true
+  expect(membership(g,'stock_procurement')).toBe('non_member')
+ })
 })

@@ -1,4 +1,4 @@
-import { singleSheetWorkbook } from '../workbench-export/single-sheet'
+import { exportProductRow, exportRowIdentity, singleSheetWorkbook } from '../workbench-export/single-sheet'
 import * as ExcelJS from 'exceljs'
 import { PayloadTooLargeException } from '@nestjs/common'
 import type { PurchaseGroup } from './procurement-groups.types'
@@ -9,9 +9,9 @@ const dateText = (value: string | null) => {
   const normalized = normalizeBusinessTimestamp(value)
   return normalized ? new Date(Date.parse(normalized) + 8 * 3600000).toISOString().slice(0, 19).replace('T', ' ') : ''
 }
-const payments = { paid: '已付款', unpaid: '待付款', partial: '部分付款', refunded: '已退款待处理', unknown: '付款待确认' }
-const shipments = { pending: '供应商待发货', partial: '供应商部分发货', shipped: '供应商已发货', unknown: '发货待确认' }
-const stages = { unknown: '待核查', uncreated: '待创建采购单', placement_pending: '待下单 / 推单', payment_pending: '待支付采购款', refund_pending: '采购退款待跟进' }
+const payments = { paid: '已付款', unpaid: '待付款', partial: '部分付款', refunded: '已退款', cancelled: '未支付已取消', partially_refunded: '部分退款', unknown: '付款待确认' }
+const shipments = { pending: '供应商待发货', partial: '供应商部分发货', shipped: '已发货', unknown: '发货待确认' }
+const stages = { dispatch_preparation: '待制作发运单', unknown: '待核查', uncreated: '待创建采购单', placement_pending: '待下单 / 推单', payment_pending: '待支付采购款', refund_pending: '采购退款待跟进' }
 function shipmentAging(group: PurchaseGroup, now: Date) {
   if (group.purchase?.payment !== 'paid' || !['pending', 'partial'].includes(group.shipment)) return ''
   const paidAt = normalizeBusinessTimestamp(group.purchase.paidAt)
@@ -35,6 +35,7 @@ export async function buildPurchaseGroupWorkbook(groups: PurchaseGroup[], query?
       group.kind === 'uncreated' ? '待创建采购单' : '已创建', purchase ? purchase.purchaseType === 'offline' ? '线下' : '线上' : '', purchase?.platform === '1688' ? '1688' : purchase?.platform === 'other' ? '其他平台' : '',
       !purchase ? line?.quantity ?? '' : '', purchase ? purchase.placement === 'placed' ? '已下单' : purchase.placement === 'unknown' ? '下单待确认' : purchase.platform === '1688' ? '待推1688采购' : '待下单' : '',
       purchase ? shipments[group.shipment] : '', row.storeName, line?.variant ?? '', dateText(row.paidAt ?? null), shipmentAging(group, now), ...(query?.completed ? [dateText(row.completedAt ?? null)] : []), line?.imageUrl ?? ''])
+    exportRowIdentity(exportProductRow(sheet.lastRow!,line??{}),group.id)
   }
   sheet.eachRow((row, i) => {
     row.height = i === 1 ? 32 : 44
@@ -49,8 +50,8 @@ export async function buildPurchaseGroupWorkbook(groups: PurchaseGroup[], query?
   sheet.autoFilter = { from: 'A1', to: `${query?.completed ? 'AA' : 'Z'}${sheet.rowCount}` }
   const summary = book.addWorksheet('采购单汇总', { views: [{ state: 'frozen', ySplit: 1 }] })
   summary.columns = ['采购订单号','供应商','平台订单号','履约笔数','SKU种数','采购数量','供应商已发数量','供应商待发数量','待采购数量'].map((header,i)=>({header,key:String(i),width:i<3?28:18}))
-  for (const group of groups) summary.addRow([group.purchase?.number ?? '',group.purchase?.supplier.name ?? '',group.purchase?.platformOrderNumber ?? '',group.orderCount,group.skuCount,
-    group.purchase ? group.quantity ?? '' : '',group.purchase ? group.shippedQuantity ?? '' : '',group.purchase ? group.pendingQuantity ?? '' : '',group.purchase ? '' : group.quantity ?? ''])
+  for (const group of groups) exportRowIdentity(summary.addRow([group.purchase?.number ?? '',group.purchase?.supplier.name ?? '',group.purchase?.platformOrderNumber ?? '',group.orderCount,group.skuCount,
+    group.purchase ? group.quantity ?? '' : '',group.purchase ? group.shippedQuantity ?? '' : '',group.purchase ? group.pendingQuantity ?? '' : '',group.purchase ? '' : group.quantity ?? '']),group.id)
   summary.eachRow((row,index)=>{
     row.height=index===1?32:28
     row.eachCell((cell,col)=>{

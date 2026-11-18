@@ -9,6 +9,8 @@ import { initializeTheme } from './composables/useTheme'
 import { installExternalLinkPolicy } from './utils/externalLinks'
 import { installSelectDropdowns } from './utils/selectDropdowns'
 import './styles/select-dropdowns.css'
+import { installTextTooltips } from './utils/textTooltips'
+import './styles/text-tooltips.css'
 
 const app = createApp(App)
 
@@ -21,4 +23,5 @@ app.use(i18n)
 
 app.mount('#app')
 const disposeDropdowns = installSelectDropdowns(document.getElementById('app')!)
-if (import.meta.hot) import.meta.hot.dispose(disposeDropdowns)
+const disposeTextTooltips = installTextTooltips()
+if (import.meta.hot) import.meta.hot.dispose(() => { disposeDropdowns(); disposeTextTooltips() })

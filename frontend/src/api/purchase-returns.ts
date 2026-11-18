@@ -6,19 +6,19 @@ export const purchaseReturnLabels = {
 } as const
 export type PurchaseReturnStatus = keyof typeof purchaseReturnLabels
 export interface PurchaseReturnLine {
-  id: string; sku: string; name: string; variant: string; imageUrl: string | null; quantity: number; returnedQuantity: number
+  id: string; sku: string; name: string; variant: string; imageUrl: string | null; quantity: number | null; returnedQuantity: number | null
   sourceOrder: { id: string; number: string; kind: 'fulfillment' | 'stock'; customerName: string; owner: { id: string; name: string }; department: { id: string; name: string } }
 }
 export interface PurchaseReturn {
-  id: string; number: string | null; status: PurchaseReturnStatus; purchaseOrder: { id: string; number: string }; supplier: { id: string; name: string }; warehouseCode: string; warehouse: string; createdAt: string | null
-  logistics: { carrier: string | null; trackingNumber: string | null }; lines: PurchaseReturnLine[]; quantity: number; returnedQuantity: number
+  id: string; number: string | null; billStatusName?: string | null; status: PurchaseReturnStatus; purchaseOrder: { id: string; number: string }; supplier: { id: string; name: string }; warehouseCode: string; warehouse: string; createdAt: string | null
+  logistics: { carrier: string | null; trackingNumber: string | null }; lines: PurchaseReturnLine[]; quantity: number | null; returnedQuantity: number | null
 }
-export interface PurchaseReturnOrder extends FopOrder { purchaseReturns: PurchaseReturn[]; returnQuantity: number; returnedQuantity: number }
+export interface PurchaseReturnOrder extends FopOrder { relatedPurchaseOrders?: {id:string;number:string}[]; purchaseReturns: PurchaseReturn[]; returnQuantity: number | null; returnedQuantity: number | null }
 export interface PurchaseReturnFilters { paidAtOrder?: 'asc' | 'desc'; workbenchRole: 'procurement' | 'warehouse'; search?: string; departmentId?: string; ownerId?: string; warehouseCode?: 'HZ' | 'SZ'; status?: PurchaseReturnStatus }
 export interface PurchaseReturnQuery extends PurchaseReturnFilters { page: number; pageSize: number }
 export interface PurchaseReturnPage {
   dataAvailability?: WorkbenchDataAvailability; replica?: WorkbenchReplicaSnapshot
- items: PurchaseReturnOrder[]; total: number; page: number; pageSize: number; departments: { id: string; name: string }[]; source: 'mock' | 'fop'; refreshedAt: string; totals: FopOrderTotals & { returnCount: number; quantity: number; returnedQuantity: number } }
+ items: PurchaseReturnOrder[]; total: number; page: number; pageSize: number; departments: { id: string; name: string }[]; source: 'mock' | 'fop'; refreshedAt: string; totals: FopOrderTotals & { returnCount: number; quantity: number | null; returnedQuantity: number | null } }
 const filters = (q: PurchaseReturnFilters) => ({ paidAtOrder: q.paidAtOrder, workbenchRole: q.workbenchRole, search: q.search, departmentId: q.departmentId, ownerId: q.ownerId, warehouseCode: q.warehouseCode, status: q.status })
 export function getPurchaseReturns(query: PurchaseReturnQuery, signal?: AbortSignal): Promise<PurchaseReturnPage> { return api.get('/autoflow/integrations/fop/purchase-returns', { params: { ...filters(query), page: query.page, pageSize: query.pageSize }, signal }) }
 export function exportPurchaseReturns(query: PurchaseReturnFilters, mode: 'selected' | 'filtered', orderIds: string[], signal?: AbortSignal): Promise<Blob> {

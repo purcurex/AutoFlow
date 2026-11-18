@@ -27,7 +27,11 @@ function requireHttpsUrl(config: Record<string, unknown>, key: string): string {
 export function validateEnvironment(config: Record<string, unknown>): Record<string, unknown> {
   workbenchMockEnabled(new ConfigService(config))
   const nodeEnv = String(config.NODE_ENV ?? 'development')
+  if(config.WORKBENCH_TIMESTAMP_ENVIRONMENT!==undefined&&!['test','production'].includes(String(config.WORKBENCH_TIMESTAMP_ENVIRONMENT)))throw Error('WORKBENCH_TIMESTAMP_ENVIRONMENT must be test or production.')
+  if(config.WORKBENCH_TIMESTAMP_ENVIRONMENT==='production'&&nodeEnv!=='production')throw Error('Production synchronization requires NODE_ENV=production.')
+  if(config.WORKBENCH_TIMESTAMP_WORKER_HEAP_MB!==undefined){const heap=Number(config.WORKBENCH_TIMESTAMP_WORKER_HEAP_MB);if(!Number.isInteger(heap)||heap<1024||heap>16384)throw Error('WORKBENCH_TIMESTAMP_WORKER_HEAP_MB must be an integer from 1024 to 16384.')}
   if (config.WORKBENCH_READ_MODE !== undefined && config.WORKBENCH_READ_MODE !== 'local') throw new Error('WORKBENCH_READ_MODE must be local; legacy live list passthrough has been removed.')
+  if (config.WORKBENCH_TIMESTAMP_SYNC_ENABLED !== undefined && !['true', 'false'].includes(String(config.WORKBENCH_TIMESTAMP_SYNC_ENABLED))) throw new Error('WORKBENCH_TIMESTAMP_SYNC_ENABLED must be true or false.')
   if (config.WORKBENCH_SYNC_ENABLED !== undefined && !['true', 'false'].includes(String(config.WORKBENCH_SYNC_ENABLED))) throw new Error('WORKBENCH_SYNC_ENABLED must be true or false.')
   if (config.WORKBENCH_COLLECTED_ENABLED !== undefined && !['true', 'false'].includes(String(config.WORKBENCH_COLLECTED_ENABLED))) throw new Error('WORKBENCH_COLLECTED_ENABLED must be true or false.')
   if (config.WORKBENCH_AUTOMATIC_CALLS_ENABLED !== undefined && !['true', 'false'].includes(String(config.WORKBENCH_AUTOMATIC_CALLS_ENABLED))) throw new Error('WORKBENCH_AUTOMATIC_CALLS_ENABLED must be true or false.')

@@ -1,5 +1,5 @@
 import type { EChartsCoreOption } from 'echarts/core'
-import type { AnalyticsRow } from '@/api/local-dashboard-analytics'
+import type { AnalyticsRow,TrendTarget } from '@/api/local-dashboard-analytics'
 import { formatChartCurrency, formatKnownCurrency } from './currency'
 
 type Column = { kind: 'department' | 'person'; label: string; departmentName: string; rows: AnalyticsRow[] } | null
@@ -19,7 +19,7 @@ export function salespersonRows(rows: AnalyticsRow[]): AnalyticsRow[] {
 
 export type SalespersonMetric = 'amount' | 'registrations' | 'orders' | 'quantity'
 /** Shared person view: layout only; values and matching subtotals come from scoped backend aggregates. */
-export function salespersonGroupedChart(input: AnalyticsRow[], metric: SalespersonMetric, labels: {amount?:string;count?:string;extraTooltip?:(row:AnalyticsRow)=>string} = {}): { option: EChartsCoreOption; minWidth: number } {
+export function salespersonGroupedChart(input: AnalyticsRow[], metric: SalespersonMetric, labels: {amount?:string;count?:string;extraTooltip?:(row:AnalyticsRow)=>string} = {}): { option: EChartsCoreOption; minWidth: number; targets: (TrendTarget|null)[] } {
   const rows = salespersonRows(input), registration = metric === 'registrations', monetary = metric === 'amount'
   const amountLabel=labels.amount??'订单金额',countLabel=labels.count??'订单量'
   const metricLabel = registration ? '注册客户数' : metric === 'orders' ? '订单数' : '商品件数'
@@ -79,5 +79,5 @@ export function salespersonGroupedChart(input: AnalyticsRow[], metric: Salespers
     })),
   }
   // Preserve readable English labels and all members; narrow views scroll rather than drop people.
-  return { option, minWidth: columns.reduce((width, column) => width + Math.max(64, (column?.label.length ?? 0) * 8 + 16), 90) }
+  return { option, targets:columns.map(c=>c&&c.rows[0]&&c.rows[0].id!=='unknown'?{dimension:c.kind,id:c.rows[0].id,name:c.label}:null), minWidth: columns.reduce((width, column) => width + Math.max(64, (column?.label.length ?? 0) * 8 + 16), 90) }
 }

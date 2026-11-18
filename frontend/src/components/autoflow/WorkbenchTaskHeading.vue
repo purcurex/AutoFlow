@@ -15,7 +15,7 @@ onBeforeUnmount(() => unregister?.())
   <header class="workbench-task-heading">
     <div class="task-heading-copy">
       <h2>{{ title }}</h2>
-      <p v-if="description" class="task-heading-description" :title="description">{{ description }}</p>
+      <p v-if="description" class="task-heading-description">{{ description }}</p>
     </div>
     <div class="task-heading-actions"><slot /></div>
   </header>

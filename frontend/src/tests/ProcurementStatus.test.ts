@@ -4,6 +4,12 @@ import { describe, expect, it } from 'vitest'
 import ProcurementStatus from '@/components/autoflow/ProcurementStatus.vue'
 
 describe('procurement workflow facts', () => {
+  it('uses the backend stage even when legacy purchase progress is unknown', () => {
+    const wrapper = mount(ProcurementStatus, { props: { stage: 'purchase_order_pending', progress: { purchaseOrder: 'unknown', supplierPayment: 'unknown', alibabaOrder: 'unknown' }, shipment: 'unknown' }, global: { plugins: [createI18n({ legacy: false, locale: 'zh-CN' })] } })
+    expect(wrapper.get('.procurement-stage').text()).toBe('待建采购订单')
+    wrapper.unmount()
+  })
+
   it('uses a gentle pending tone for dispatch collaboration instead of a danger alert', () => {
     const wrapper = mount(ProcurementStatus, { props: { progress: { purchaseOrder: 'ordered', supplierPayment: 'unpaid', alibabaOrder: 'not_pushed', logisticsGate: 'pending_dispatch' }, shipment: 'pending' }, global: { plugins: [createI18n({ legacy: false, locale: 'zh-CN' })] } })
     expect(wrapper.get('.procurement-stage').text()).toBe('待制作发运单')

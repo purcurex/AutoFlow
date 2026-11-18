@@ -1,5 +1,6 @@
 import Decimal from 'decimal.js'
 import { normalizeCollectedStock } from './collected-stock-normalizer'
+import { stockOrderState, stockPurchaseState } from './stock-native-status'
 type Row=Record<string,any>
 const number=(value:unknown)=>value!==null&&value!==undefined&&value!==''&&Number.isFinite(Number(value))&&Math.abs(Number(value))<=Number.MAX_SAFE_INTEGER?Number(value):null
 /** Offline projection of the same stock document. Never performs remote reads. */
@@ -17,12 +18,12 @@ export function projectCollectedStockNative(fact:Row,tenantId:string,companyId:s
  const code=raw.hzkj_settlecurrency_number??raw.hzkj_settlecurrency?.number
  const currency=typeof code==='string'&&/^[A-Z]{3}$/.test(code)?code:code==null||code===''?'USD':null
  const row=normalizeCollectedStock({...old,id:fact.source_id,tenantId,stockNumber:fact.document_number,
-  rawOrderStatus:raw.hzkj_orderstatus??null,rawBillStatus:raw.billstatus??null,
+  ...stockOrderState(raw.hzkj_orderstatus,raw.hzkj_orderstatus_title),rawBillStatus:raw.billstatus??null,
   // Owner scope uses the importer-verified stable employee id, never a display name.
   owner:fact.owner_employee_id?{id:fact.owner_employee_id,name:f.sourceOwner?.name??old.owner?.name??null}:null,
   department:old.department??null,customerId:f.customer?.id??null,customerCode:f.customer?.number??null,customerName:f.customer?.name??null,
   stockType:({'1':'full_payment','2':'deposit'} as Row)[raw.hzkj_stock_type]??null,
-  purchaseStatus:({'0':'unpurchased','1':'partial','2':'in_progress','3':'received','4':'shipped'} as Row)[raw.hzkj_purchase_status]??'unknown',
+  ...stockPurchaseState(raw.hzkj_purchase_status,raw.hzkj_purchase_status_title),
   createdAt:fact.created_at?new Date(fact.created_at).toISOString():null,paidAt:fact.paid_at?new Date(fact.paid_at).toISOString():null,
   warehouse: f.warehouse?.name??null,warehouseCode:old.warehouseCode??f.warehouse?.number??null,
   amount,currency,

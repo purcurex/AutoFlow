@@ -13,7 +13,19 @@ async function exportNow(wrapper: Pick<VueWrapper, 'get'>) {
 }
 vi.mock('@/api/index', () => ({ default: { get: vi.fn(), post: vi.fn() } }))
 const row = { id: 's1', stockNumber: 'BH261028000001', stockType: 'full_payment', items: [{ sku: 'SKU-1', name: 'Lamp', imageUrl: null, variant: 'White', quantity: 20 }], amount: 100, currency: 'USD', paidAt: '2026-10-01T01:00:00Z', customerId: 'c1', customerCode: 'C1', customerName: 'Customer One', storeName: 'Shop One', owner: { id: 'e1', name: 'Alice' }, department: { id: 'd1', name: '业务一部' }, warehouse: '杭州仓', warehouseCode: 'HZ', purchaseStatus: 'received' }
-const response = { source: 'mock', refreshedAt: '2026-10-28T00:00:00Z', items: [row], total: 1, page: 1, pageSize: 50, departments: [row.department], totals: { orderCount: 1, itemQuantity: 20, amounts: [{ currency: 'USD', amount: 100 }] } }
+const response = { source: 'mock', refreshedAt: '2026-10-28T00:00:00Z', items: [row], total: 1, page: 1, pageSize: 100, departments: [row.department], totals: { orderCount: 1, itemQuantity: 20, amounts: [{ currency: 'USD', amount: 100 }] } }
+it.each([false,true])('renders original stock names and empty purchase as unpurchased (procurement=%s)',async procurement=>{
+ vi.mocked(api.get).mockResolvedValue({...response,items:[
+  {...row,id:'native',orderStatus:'paid',orderStatusName:'已支付',purchaseStatus:'in_progress',purchaseStatusName:'采购中'},
+  {...row,id:'new',orderStatus:null,orderStatusName:'新订单阶段',purchaseStatus:'unknown',purchaseStatusName:'新采购阶段'},
+  {...row,id:'empty',orderStatus:'paid',purchaseStatus:null,purchaseStatusName:null},
+  {...row,id:'purchased',purchaseStatus:'purchased',purchaseStatusName:'已采购'},
+ ]})
+ const {wrapper}=await setup(procurement?'/workbench/procurement?queue=stock_procurement':'/workbench/sales?queue=stock',procurement)
+ expect(wrapper.findAll('td[data-label="采购状态"]').map(cell=>cell.text())).toEqual(['采购中','新采购阶段','未采购','已采购'])
+ if(!procurement)expect(wrapper.findAll('td[data-label="备货订单状态"]').slice(0,2).map(cell=>cell.text())).toEqual(['已支付','新订单阶段'])
+ wrapper.unmount()
+})
 it('prioritizes unpurchased orders and shares supplier shipment labels and aging without using customer payment time', async () => {
   const now = Date.now()
   const statuses = ['unpurchased', 'partial', 'purchased', 'purchased', 'purchased', 'purchased']
@@ -21,9 +33,9 @@ it('prioritizes unpurchased orders and shares supplier shipment labels and aging
   vi.mocked(api.get).mockResolvedValue({ ...response, items: statuses.map((purchaseStatus, i) => ({ ...row, id: `s${i}`, purchaseStatus, procurementPaidAt: typeof times[i] === 'number' ? new Date(now - times[i]! * 3600000).toISOString() : null })) })
   const { wrapper } = await setup('/workbench/procurement?queue=stock_procurement', true)
   const statusesInTable = wrapper.findAll('td[data-label="采购状态"]')
-  expect(statusesInTable.map(cell => cell.text())).toEqual(['未采购', '部分采购', '供应商待发货', '供应商待发货', '供应商待发货', '供应商待发货'])
+  expect(statusesInTable.map(cell => cell.text())).toEqual(['未采购', '部分采购', '已采购', '已采购', '已采购', '已采购'])
   expect(statusesInTable.map(cell => cell.get('[data-tone]').attributes('data-tone'))).toEqual(['info', 'info', 'success', 'success', 'warning', 'danger'])
-  expect(wrapper.findAll('select').find(s => s.text().includes('未采购'))!.text()).toContain('供应商待发货')
+  expect(wrapper.findAll('select').find(s => s.text().includes('未采购'))!.text()).toContain('已采购')
   wrapper.unmount()
 })
 beforeEach(() => { vi.resetAllMocks(); vi.mocked(api.get).mockImplementation(async (url) => String(url).endsWith('stock-inventory') ? { ...response, items: [], total: 0, customerId: null } : response) })
@@ -70,7 +82,7 @@ it('keeps new sales-only filters out of procurement stock queries and exports', 
   expect(wrapper.text()).not.toContain('近一周')
   await exportNow(wrapper)
   expect(api.get).toHaveBeenLastCalledWith(expect.stringContaining('stock-orders'), expect.objectContaining({ params: expect.objectContaining({ queue:'procurement' }) }))
-  const params=vi.mocked(api.get).mock.calls.at(-1)![1]!.params
+  const params=vi.mocked(api.get).mock.calls.at(-1)![1]!.params as Record<string,unknown>
   expect(params.lifecycle).toBeUndefined(); expect(params.timeRange).toBeUndefined()
   expect((vi.mocked(api.post).mock.calls.at(-1)![1] as Record<string,unknown>).lifecycle).toBeUndefined()
   wrapper.unmount()
@@ -84,14 +96,14 @@ it('shows header-only historical orders with an explicit empty-details label', a
   wrapper.unmount()
 })
 
-it('renders stock-specific completed orders, no fulfillment columns, 50 rows by default', async () => {
+it('renders stock-specific completed orders, no fulfillment columns, 100 rows by default', async () => {
   const { wrapper } = await setup()
   expect(wrapper.find('thead').text()).toContain('备货单号')
   expect(wrapper.find('thead').text()).toContain('收货仓库')
   expect(wrapper.find('thead').text()).not.toMatch(/Shopify|Customer|履约|物流|C端/)
   expect(wrapper.find('tbody').text()).toContain('已入库')
   expect(wrapper.find('tbody').text()).toContain('全款备货')
-  expect(api.get).toHaveBeenCalledWith(expect.stringContaining('stock-orders'), expect.objectContaining({ params: expect.objectContaining({ page: 1, pageSize: 50 }) }))
+  expect(api.get).toHaveBeenCalledWith(expect.stringContaining('stock-orders'), expect.objectContaining({ params: expect.objectContaining({ page: 1, pageSize: 100 }) }))
   wrapper.unmount()
 })
 it('combines order and procurement status filters in sales queries and both export modes', async () => {
@@ -173,7 +185,7 @@ it('uses the procurement queue for listing and export and offers unfinished purc
   expect(wrapper.get('h2').text()).toContain('备货待采购清单')
   expect(api.get).toHaveBeenLastCalledWith(expect.stringContaining('stock-orders'), expect.objectContaining({ params: expect.objectContaining({ queue: 'procurement' }) }))
   const options = wrapper.findAll('select').find(s => s.text().includes('未采购'))!
-  expect(options.findAll('option').map(o => o.text())).toEqual(['全部', '未采购', '部分采购', '采购中', '供应商待发货'])
+  expect(options.findAll('option').map(o => o.text())).toEqual(['全部', '未采购', '部分采购', '采购中', '已采购'])
   await options.setValue('purchased'); await flushPromises()
   expect(api.get).toHaveBeenLastCalledWith(expect.stringContaining('stock-orders'), expect.objectContaining({ params: expect.objectContaining({ queue: 'procurement', purchaseStatus: 'purchased' }) }))
   vi.mocked(api.post).mockRejectedValue(new Error('test export'))
@@ -185,7 +197,9 @@ it('uses the procurement queue for listing and export and offers unfinished purc
 it('exports all filtered rows on one click and switches to selected rows without a menu', async () => {
   vi.mocked(api.post).mockRejectedValue(new Error('download unavailable'))
   const { wrapper } = await setup('/workbench/sales?queue=stock&search=Lamp')
-  const actions = wrapper.get('.workbench-list-actions')
+  const actions = wrapper.get('.workbench-filter-main')
+  expect(wrapper.find('.workbench-list-actions [data-testid=export-orders]').exists()).toBe(false)
+  expect(wrapper.find('.workbench-list-actions .workbench-pagination').exists()).toBe(true)
   const button = actions.findAll('button').find(b => b.text().includes('导出'))!
   expect(actions.findAll('button').filter(b => b.text().includes('导出'))).toHaveLength(1)
   await button.trigger('click'); await flushPromises()
@@ -227,7 +241,7 @@ it.each([false, true])('queries own inventory without list filters, or the selec
   const { wrapper } = await setup('/workbench/sales?queue=stock&ownerId=other&departmentId=d1&warehouseCode=HZ', procurement)
   const open = () => wrapper.findAll('button').find(b => b.text().includes('查询备货库存'))!.trigger('click')
   await open(); await flushPromises()
-  const first = vi.mocked(api.get).mock.calls.find(call => String(call[0]).endsWith('stock-inventory'))![1]!.params
+  const first = vi.mocked(api.get).mock.calls.find(call => String(call[0]).endsWith('stock-inventory'))![1]!.params as Record<string,unknown>
   expect(first.ownerId).toBeUndefined(); expect(first.departmentId).toBeUndefined(); expect(first.warehouseCode).toBeUndefined(); expect(first.orderIds).toBeUndefined()
   const dialog = wrapper.findComponent({ name: 'StockInventoryDialog' })
   dialog.vm.$emit('close'); await flushPromises()
@@ -318,7 +332,7 @@ it('labels uncollected counts and empty states without implying a business zero'
   vi.mocked(api.get).mockResolvedValue({ ...response, items: [], total: 0, dataAvailability: { mode: 'collected', complete: false, missingDatasets: ['stock_orders'] } })
   const { wrapper } = await setup()
   expect(wrapper.get('.count').text()).toBe('—')
-  expect(wrapper.get('.stock-empty').text()).toContain('备货单数据尚未齐全，暂时无法查询。')
+  expect(wrapper.get('.workbench-table-state').text()).toContain('备货单数据尚未齐全，暂时无法查询。')
   expect(wrapper.text()).not.toContain('暂无符合条件')
   wrapper.unmount()
 })
@@ -392,9 +406,9 @@ it('filters document approval independently, resets pagination/selection and pre
  await wrapper.get('tbody input[type=checkbox]').setValue(true);await exportNow(wrapper)
  expect(vi.mocked(api.post).mock.calls.map(call=>call[1])).toEqual(expect.arrayContaining([expect.objectContaining({mode:'filtered',reviewStatus:'pending'}),expect.objectContaining({mode:'selected',reviewStatus:'pending'})]))
  await select.setValue('approved');await flushPromises()
- expect(vi.mocked(api.get).mock.calls.at(-1)![1]!.params.reviewStatus).toBe('approved')
+ expect((vi.mocked(api.get).mock.calls.at(-1)![1]!.params as Record<string,unknown>).reviewStatus).toBe('approved')
  await select.setValue('');await flushPromises()
- expect(vi.mocked(api.get).mock.calls.at(-1)![1]!.params.reviewStatus).toBeUndefined()
+ expect((vi.mocked(api.get).mock.calls.at(-1)![1]!.params as Record<string,unknown>).reviewStatus).toBeUndefined()
  wrapper.unmount()
 })
 
@@ -405,5 +419,16 @@ it('automatically reloads when its warehouse dropdown changes',async()=>{
  expect(select.text()).toContain('HangZhou');expect(select.text()).toContain('ShenZhen')
  await select.setValue('SZ');await flushPromises()
  expect(api.get).toHaveBeenLastCalledWith(expect.stringContaining('stock-orders'),expect.objectContaining({params:expect.objectContaining({warehouseCode:'SZ',page:1})}))
+ wrapper.unmount()
+})
+
+it.each([false,true])('shows and clears the stock exception badge after refreshed facts (procurement=%s)',async procurement=>{
+ vi.mocked(api.get).mockResolvedValue({...response,items:[{...row,exception:{type:'logistics_exception',reason:'业务员为空'}}]})
+ const {wrapper}=await setup(procurement?'/workbench/procurement?queue=stock_procurement':'/workbench/sales?queue=stock',procurement)
+ expect(wrapper.get('.stock-number .order-exception-label').text()).toBe('订单异常')
+ vi.mocked(api.get).mockResolvedValue({...response,items:[{...row,exception:null}]})
+ await wrapper.get('.workbench-refresh').trigger('click');await flushPromises()
+ expect(wrapper.find('.order-exception-label').exists()).toBe(false)
+ expect(wrapper.get('tbody .stock-number').text()).toContain(row.stockNumber)
  wrapper.unmount()
 })

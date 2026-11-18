@@ -1,5 +1,8 @@
+import { sourceOrderNumber } from './source-order-number'
+import { collectedOrderNotes } from './collected-order-notes'
 import { collectedActualChannels } from './collected-actual-channel'
 import { withOrderBusinessStatus } from './order-business-status'
+import { fixedOrderTax } from './collected-order-money'
 import Decimal from 'decimal.js'
 const ExactDecimal = Decimal.clone({ precision: 80 })
 type Row = Record<string, any>
@@ -58,11 +61,11 @@ export function normalizeCollectedOrder(input: unknown, context: {companyId: str
   if(items.some((x:Row)=>x.quantity===null))missing.add('itemQuantity')
   const actualChannels=collectedActualChannels(r)
   const display: Row={
-    id:sourceId,orderNumber:text(r.billno),shopifyOrderNumber:text(r.hzkj_source_number)||'',organization:org,department:ref(r.hzkj_dept),owner,
+    ...collectedOrderNotes(r),id:sourceId,orderNumber:text(r.billno),...sourceOrderNumber(r),organization:org,department:ref(r.hzkj_dept),owner,
     departmentPathIds:Array.isArray(r.departmentPathIds)?r.departmentPathIds.map(id).filter(Boolean):[],
     customerId:customer?.id,customerName:customer?.name||'',storeName:shop?.name||'',warehouseCode:warehouseCode||undefined,warehouse:warehouse?.name||'',salesperson:owner?.name||'',
     items,amount:number(total),currency,sourcePaymentStatus:text(r.hzkj_sourcepayststus),paymentStatus,reviewStatus,cancelled,createdAt,paidAt,consumerPaidAt:paidAt,sourceOrderPaidAt,reviewedAt:date(r.auditdate),
-    amountBreakdown:{productAmount:number(product),shippingFee:null,taxAmount:null,discountAmount:null,totalAmount:number(total)},
+    amountBreakdown:{productAmount:number(product),shippingFee:null,taxAmount:fixedOrderTax(r),discountAmount:null,totalAmount:number(total)},
     sourcePurchaseStatus:['0','1','2','3','4'].includes(text(r.hzkj_purchase_status)||'')?r.hzkj_purchase_status:null,
     sourceOutboundStatus:['0','1','2'].includes(delivery||'')?delivery:null,
     procurementStatus:'unknown',allocationStatus:'unknown',dispatchStatus:'unknown',shippingStatus:'unknown',dispatchTaskStatus:'unknown',

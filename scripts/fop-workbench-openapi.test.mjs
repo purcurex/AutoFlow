@@ -1,6 +1,8 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync, statSync, unlinkSync } from 'node:fs'
+import { readFileSync, statSync, unlinkSync, mkdtempSync, mkdirSync, cpSync, writeFileSync, rmSync, realpathSync } from 'node:fs'
+import {tmpdir} from 'node:os'
+import {join} from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 
@@ -193,10 +195,16 @@ test('redirect, malformed JSON and HTTP errors are sanitized without query retri
 
 test('CLI honors the project pause even with an alternate config and never calls transport', () => {
   const preload = 'globalThis.fetch = async () => { console.error("UNEXPECTED_NETWORK"); throw new Error("must not call") }'
-  const result = spawnSync(process.execPath, ['--import', `data:text/javascript,${encodeURIComponent(preload)}`, fileURLToPath(new URL('./fop-workbench-openapi.mjs', import.meta.url)), '--config', '/nonexistent/fop-fake-test.env', '--operation', 'order-detail', '--id', '123'], { encoding: 'utf8', env: config })
-  assert.equal(result.status, 1)
-  assert.equal(result.stdout, '')
-  assert.deepEqual(JSON.parse(result.stderr), { success: false, errorCategory: 'fop_queries_paused' })
+  const dir=realpathSync(mkdtempSync(join(tmpdir(),'hz-cli-pause-')))
+  try{
+    mkdirSync(join(dir,'scripts'));mkdirSync(join(dir,'backend'))
+    for(const name of ['fop-workbench-openapi.mjs','fop-openapi-smoke.mjs','fop-confirmed-origin.mjs'])cpSync(fileURLToPath(new URL('./'+name,import.meta.url)),join(dir,'scripts',name))
+    writeFileSync(join(dir,'backend/.env.fop-pause'),'FOP_QUERIES_PAUSED=true\n')
+    const result = spawnSync(process.execPath, ['--import', `data:text/javascript,${encodeURIComponent(preload)}`, join(dir,'scripts/fop-workbench-openapi.mjs'), '--config', '/nonexistent/fop-fake-test.env', '--operation', 'order-detail', '--id', '123'], { encoding: 'utf8', env: config })
+    assert.equal(result.status, 1)
+    assert.equal(result.stdout, '')
+    assert.deepEqual(JSON.parse(result.stderr), { success: false, errorCategory: 'fop_queries_paused' })
+  }finally{rmSync(dir,{recursive:true,force:true})}
 })
 
 test('pause blocks workbench queries before token or transport', async () => {

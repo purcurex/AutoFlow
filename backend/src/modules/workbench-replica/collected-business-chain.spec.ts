@@ -7,7 +7,7 @@ it('keeps combined purchase lines attached to the exact order rather than the sa
  expect(g.relations.map(r=>[r.rootSourceId,r.toEntryId,r.quantity])).toEqual([['1','31','2'],['2','32','7']])
  expect(g.documents.every(d=>d.sourceVersion===null)).toBe(true)
 })
-it('rejects conflicting ID and number and duplicate source numbers; never matches by SKU',()=>{
+it('rejects absent or duplicate source numbers; never matches by SKU',()=>{
  const g=buildCollectedBusinessChain(scope,[order('1','TO'),order('2','TO'),input('purchase',{id:'3',hzkj_billentry:[{id:'31',hzkj_salbillnumber:'TO',hzkj_srcbillentryseq:1},{id:'32',hzkj_salbillid:'1',hzkj_salbillnumber:'OTHER',hzkj_salbillentryid:'11'}]})])
  expect(g.relations).toHaveLength(0);expect(g.issues).toHaveLength(2)
 })
@@ -38,4 +38,16 @@ it('follows explicit requisition entries through purchase and receipt notice',()
 it('does not reinterpret unknown source entities as fulfillment orders',()=>{
  const g=buildCollectedBusinessChain(scope,[order('1','TO1'),input('purchase',{id:'p',hzkj_billentry:[{id:'p1',hzkj_srcbillentity:'unknown',hzkj_srcbillid:'1',hzkj_srcbillentryid:'11'}]})])
  expect(g.relations).toEqual([]);expect(g.issues[0].reason).toBe('unsupported_source_entity')
+})
+
+it('links purchase entry sales numbers to multiple orders without requiring a requisition API or sales entry ID',()=>{
+ const g=buildCollectedBusinessChain(scope,[order('1','TO1'),order('2','TO2'),input('purchase',{id:'p',hzkj_billentry:[{id:'p1',hzkj_salbillnumber:'TO1',hzkj_salbillid:'0',hzkj_srcbillentity:'hzkj_purapplybill',hzkj_srcbillid:'absent',hzkj_qty:'2'},{id:'p2',hzkj_salbillnumber:'TO2',hzkj_qty:'3'}]})])
+ expect(g.issues).toEqual([])
+ expect(g.relations.map(r=>[r.rootSourceId,r.fromEntryId,r.toEntryId])).toEqual([['1',null,'p1'],['2',null,'p2']])
+})
+
+it('trusts purchase sales numbers over stale optional source IDs',()=>{
+ const g=buildCollectedBusinessChain(scope,[order('1','TO1'),order('2','TO2'),input('purchase',{id:'p',hzkj_billentry:[{id:'p1',hzkj_salbillnumber:'TO1',hzkj_salbillid:'2',hzkj_salbillentryid:'21',hzkj_qty:'2'}]})])
+ expect(g.issues).toEqual([])
+ expect(g.relations.map(r=>[r.rootSourceId,r.fromEntryId,r.toEntryId])).toEqual([['1',null,'p1']])
 })

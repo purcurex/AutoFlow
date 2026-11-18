@@ -15,11 +15,13 @@ export class ReplicaAuthorizationService implements OnModuleInit, OnModuleDestro
   private readonly logger=new Logger(ReplicaAuthorizationService.name)
   constructor(private readonly db:DataSource,private readonly config:ConfigService,private readonly source:ReplicaHttpSource){}
   onModuleInit(){
+    if(this.config.get<string>('WORKBENCH_COLLECTED_ENABLED')==='true')return
     if(this.config.get<string>('WORKBENCH_AUTOMATIC_CALLS_ENABLED')==='false'||this.config.get<string>('FOP_QUERIES_PAUSED')?.trim().toLowerCase()==='true'||this.config.get<string>('WORKBENCH_MOCK_ENABLED')==='true'||!this.source.isConfigured())return
     this.timer=setInterval(()=>{void this.tick().catch(()=>this.logger.warn('Independent FOP authorization refresh failed; expired proofs remain unavailable'))},20000);this.timer.unref()
   }
   onModuleDestroy(){if(this.timer)clearInterval(this.timer)}
   async tick(){
+    if(this.config.get<string>('WORKBENCH_COLLECTED_ENABLED')==='true')return
     if(this.working||this.config.get<string>('WORKBENCH_AUTOMATIC_CALLS_ENABLED')==='false'||this.config.get<string>('FOP_QUERIES_PAUSED')?.trim().toLowerCase()==='true'||this.config.get<string>('WORKBENCH_MOCK_ENABLED')==='true'||!this.source.isConfigured())return
     this.working=true
     try{
@@ -28,6 +30,7 @@ export class ReplicaAuthorizationService implements OnModuleInit, OnModuleDestro
     }finally{this.working=false}
   }
   async ensure(scope:Omit<ReplicaDatasetScope,'datasetId'>) {
+    if(this.config.get<string>('WORKBENCH_COLLECTED_ENABLED')==='true')throw new ServiceUnavailableException('workbench_replica_collected_mode')
     if(this.config.get<string>('WORKBENCH_MOCK_ENABLED')==='true')return
     const [row]=await this.db.query('SELECT verified_at,expires_at FROM hz_fop_companies WHERE connection_id=$1 AND id=$2',[scope.connectionId,scope.companyId])
     if(this.config.get<string>('WORKBENCH_AUTOMATIC_CALLS_ENABLED')==='false'){
@@ -101,6 +104,7 @@ export class ReplicaAuthorizationService implements OnModuleInit, OnModuleDestro
     for (const plan of plans.filter(plan => plan.enabled)) await write(plan, true)
   }
   async refresh(scope:Omit<ReplicaDatasetScope,'datasetId'>) {
+    if(this.config.get<string>('WORKBENCH_COLLECTED_ENABLED')==='true')throw new Error('workbench_replica_collected_mode')
     if(this.config.get<string>('FOP_QUERIES_PAUSED')?.trim().toLowerCase()==='true')throw new Error('fop_queries_paused')
     if(this.config.get<string>('WORKBENCH_MOCK_ENABLED')==='true')throw new Error('fop_replica_mock_source_forbidden')
     const proof=await this.source.authorization(scope)

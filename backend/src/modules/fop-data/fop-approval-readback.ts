@@ -13,6 +13,8 @@ export async function persistApprovalReadback(db: DataSource, proof: ApprovalRea
     || proof.entity === 'hzkj_alloc_bill' && target.hzkj_order_id !== proof.orderId || !Number.isFinite(Date.parse(proof.capturedAt))) throw new Error('Unconfirmed approval readback')
   const native = normalizeNativeCapture([proof.page], { complete: true, coverage: 'full_parent_scan', companyId: proof.companyId, queue: 'allocation' })
   return db.transaction(async manager => {
+    // Match timestamp/import lock order before changing source rows or exception projections.
+    await manager.query("SELECT id FROM hz_fop_collected_batches WHERE state='active' AND tenant_id=$1 AND company_id=$2 ORDER BY id FOR UPDATE",[proof.tenantId,proof.companyId])
     const matches = await manager.query(`SELECT o.batch_id,o.owner_employee_id,o.raw,o.display FROM hz_fop_collected_orders o JOIN hz_fop_collected_batches b ON b.id=o.batch_id
       WHERE b.state='active' AND b.tenant_id=$1 AND b.company_id=$2 AND o.source_id=$3 FOR UPDATE OF o`, [proof.tenantId, proof.companyId, proof.orderId])
     if (!matches.length) return false

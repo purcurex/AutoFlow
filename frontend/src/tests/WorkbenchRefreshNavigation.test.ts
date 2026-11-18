@@ -29,7 +29,7 @@ it.each([
 ])('preserves a pending search across real permission rechecks without parent remounts ($delayed, cancel once: $cancelOnce)', async ({ delayed, cancelOnce }) => {
   localStorage.setItem('user', JSON.stringify({ id: 'test-user' }))
   vi.mocked(getWorkbenchAccess).mockResolvedValue({ roles: ['allocation'], isAdmin: false, businessRole: 'salesperson' })
-  let total = 51
+  let total = 101 // The initial second page must exist at the current default of 100 rows.
   const order = mockFopOrders.find(row => matchesFopQueue(row, 'allocation'))!
   vi.mocked(getFopOrders).mockImplementation(async query => {
     if (delayed) await new Promise(resolve => setTimeout(resolve, 0))

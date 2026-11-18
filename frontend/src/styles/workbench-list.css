@@ -13,9 +13,46 @@
 .workbench-filter-search .workbench-search-field{flex:1;min-width:0}
 .workbench-filter-toolbar label:not(.workbench-search-field){display:flex;align-items:center;gap:8px;margin:0;white-space:nowrap;font-size:12px;color:var(--color-text-secondary)}
 .workbench-filter-main > label select{width:136px;min-width:0}
-.workbench-filter-main > label:last-child select{width:112px}
+.workbench-filter-main > label:last-of-type select{width:112px}
 .workbench-filter-secondary select{width:150px}
-.workbench-filter-secondary .result-count,.workbench-filter-secondary .count{margin-left:auto;white-space:nowrap;font-size:12px;color:var(--color-text-secondary)}
+.workbench-filter-secondary .result-count,.workbench-filter-secondary .count{margin-left:auto;width:300px;max-width:100%;min-height:20px;flex-shrink:0;text-align:right;white-space:nowrap;font-size:12px;color:var(--color-text-secondary);font-variant-numeric:tabular-nums}
 @media(max-width:700px){.workbench-filter-toolbar{padding:14px}.workbench-filter-search{flex-basis:100%;width:100%;min-width:0}.workbench-filter-toolbar label:not(.workbench-search-field){max-width:100%}.workbench-filter-toolbar select{max-width:100%}.workbench-filter-secondary .result-count,.workbench-filter-secondary .count{margin-left:0}}
 .workbench-task-table{font-size:12px}
 .workbench-task-table th{font-size:11px;font-weight:600;line-height:1.5;color:var(--color-text-secondary)}
+
+/* Date/time values stay complete on one line in tables and responsive cards. */
+.workbench-task-table .workbench-date-cell { white-space: nowrap; font-variant-numeric: tabular-nums; overflow-wrap: normal; }
+.workbench-task-table .workbench-date-cell::before { white-space: normal; }
+
+.picking-name-tooltip {
+  position: fixed;
+  z-index: 10000;
+  max-width: min(440px, calc(100vw - 24px));
+  max-height: calc(100vh - 24px);
+  overflow: auto;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 7px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  box-shadow: 0 6px 24px rgb(0 0 0 / 15%);
+  font-size: 12px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+}
+
+/* Query export sits on the search row; pagination stays above the document list. */
+.workbench-filter-export{display:flex;justify-content:flex-end;margin-left:auto;flex-shrink:0}
+.workbench-list-pagination{margin-left:auto;min-width:0;max-width:100%}
+.workbench-export-trigger{width:136px;flex-shrink:0}
+.workbench-button[data-testid="toggle-all-products"]{width:184px;flex-shrink:0}
+/* Feedback overlays never insert a new row above the list header. */
+.workbench-feedback{position:fixed!important;top:82px;right:24px;z-index:70;max-width:min(480px,calc(100vw - 48px));margin:0!important;padding:12px 16px!important;border:1px solid var(--color-border);border-radius:7px;background:var(--color-surface);box-shadow:0 5px 20px #0002;font-size:12px}
+.workbench-list-body{min-height:230px}
+
+@media(min-width:701px){.workbench-filter-main > .workbench-filter-search{flex:1 1 230px;width:auto;min-width:200px;max-width:424px}}
+
+/* Page selection shares the first-column checkbox treatment across workbenches. */
+input.workbench-page-checkbox{width:15px;height:15px;min-width:15px;margin:0 7px 0 0;padding:0;vertical-align:middle;accent-color:#8398c9;cursor:pointer}input.workbench-page-checkbox:disabled{cursor:default}

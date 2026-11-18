@@ -1,4 +1,4 @@
-import { hasDispatchSyncFailure } from '@/utils/order-dispatch-status'
+import { hasDispatchException } from '@/utils/order-dispatch-status'
 import { matchesCollectedAllocation } from '@/utils/collected-allocation'
 import type { WorkbenchDataAvailability, WorkbenchReplicaSnapshot } from './workbench-replica'
 import { beginWorkbenchCount } from '@/utils/workbench-counts'
@@ -6,7 +6,7 @@ import { isProcurementReady } from '@/utils/workbench-queue-rules'
 import { matchesCompletedQueue } from '@/utils/completed-orders'
 import { canFilterTaskStatus, type TaskStatus } from '@/utils/workbench-status'
 import { canFilterProcurementStage, type ProcurementStage } from '@/utils/procurement-stage'
-export const FOP_EXCEPTION_TYPES = ['procurement_exception', 'dispatch_exception', 'allocation_exception', 'logistics_exception', 'delivery_exception'] as const
+export const FOP_EXCEPTION_TYPES = ['logistics_exception', 'dispatch_exception', 'allocation_exception', 'procurement_exception', 'outbound_exception', 'delivery_exception'] as const
 export type FopExceptionType = typeof FOP_EXCEPTION_TYPES[number]
 export const fopOrderQueues = ['unpaid', 'review', 'procurement', 'procurement_shipping', 'allocation', 'allocation_review', 'dispatch', 'shipping', 'exceptions'] as const
 export type FopOrderQueue = typeof fopOrderQueues[number]
@@ -32,7 +32,7 @@ export interface FulfillmentProgress {
   supplierShipment: 'pending' | 'partial' | 'shipped' | 'not_required' | 'unknown'
   stockReadiness: 'incomplete' | 'ready' | 'unknown'
   allocationReview: 'pending' | 'approved' | 'unknown'
-  outbound: 'pending' | 'partial' | 'completed' | 'unknown'
+  outbound: 'pending' | 'partial' | 'completed' | 'not_required' | 'unknown'
 }
 
 /** Aggregated over effective linked purchases; independent of customer payment. */
@@ -43,7 +43,7 @@ export interface ProcurementProgress {
   /** Logistics prerequisite for the actual 1688 push only, not permission/readiness to purchase. */
   logisticsGate?: 'pending_dispatch' | 'pending_logistics' | 'satisfied' | 'not_required' | 'unknown'
   purchaseOrder: 'not_ordered' | 'partial' | 'ordered' | 'cancelled' | 'not_required' | 'unknown'
-  supplierPayment: 'unpaid' | 'partial' | 'paid' | 'refunded' | 'not_required' | 'unknown'
+  supplierPayment: 'unpaid' | 'partial' | 'paid' | 'refunded' | 'partially_refunded' | 'not_required' | 'unknown'
 }
 
 /** Effective linked dispatch documents; never inferred from customer payment or Shopify sync. */
@@ -86,10 +86,15 @@ export interface LogisticsInfo {
   trackingNumbers?: LogisticsTrackingNumber[]
 }
 
-export interface AllocationDocumentReference { id: string; number: string; rawBillStatus?: 'A' | 'B' | 'C' | 'D' | null; rawAllocationStatus?: 'pending' | 'available' | 'completed' | 'error' | 'voided' | null }
+export interface AllocationDocumentReference { id: string; number: string; rawBillStatus?: 'A' | 'B' | 'C' | 'D' | null; rawAllocationStatus?: 'pending' | 'available' | 'completed' | 'error' | 'voided' | null; association?: { state: string } }
 
 export interface FopOrder {
+  /** Display-only manual label; never written back as an upstream order number. */
+  documentKind?: 'stock_order'
+  sourceDocumentId?: string
+  sourceOrderNumberIsManual?: boolean
   nativeFactsCaptured?: boolean
+  procurementQueueFlags?: {pending:boolean;shipping:boolean;completed:boolean}
   nativeProcurementCaptured?: boolean
   nativeShippingReady?: boolean
   procurementStage?: string
@@ -155,6 +160,7 @@ export interface FopOrder {
   amountBreakdown?: FopOrderAmountBreakdown | null
   currency: string | null
   paymentStatus: 'paid' | 'unpaid' | 'refunded' | 'unknown'
+  rawBillStatus?: string | null
   reviewStatus: 'pending' | 'approved' | 'unknown'
   /** FOP fulfillment header hzkj_purchase_status / hzkj_delivery_status; null means unknown. */
   businessStatus?: { version: number; order: string; purchase: string; outbound: string; sourceShipment: string; missingFields: string[] }
@@ -290,18 +296,18 @@ function validateQuery(query: FopOrderQuery) {
   if (query.paidAtOrder !== undefined && !['asc', 'desc'].includes(query.paidAtOrder)) throw new Error('Invalid payment sort order')
   if (query.departmentId !== undefined && (typeof query.departmentId !== 'string' || query.departmentId.length > 128)) throw new Error('Invalid department')
   if (query.ownerId !== undefined && (typeof query.ownerId !== 'string' || query.ownerId.length > 128)) throw new Error('Invalid salesperson')
-  if (!Number.isInteger(query.page) || query.page < 1 || !Number.isInteger(query.pageSize) || query.pageSize < 1 || query.pageSize > 100) {
+  if (!Number.isInteger(query.page) || query.page < 1 || !Number.isInteger(query.pageSize) || query.pageSize < 1 || query.pageSize > 1000) {
     throw new Error('Invalid pagination')
   }
 }
 
 export function matchesFopQueue(order: FopOrder, queue: FopOrderQueue, warehouseStage?: WarehouseStage, completed = false): boolean {
-  if (queue === 'dispatch' && hasDispatchSyncFailure(order)) return false
-  if (queue === 'exceptions' && hasDispatchSyncFailure(order)) return true
-  if (queue === 'dispatch' && order.businessStatus) return order.reviewStatus === 'approved' && (completed ? ['fulfilled','partial_fulfilled'].includes(order.businessStatus.order) : ['paid','processing','fulfillment_cancelled'].includes(order.businessStatus.order))
+  if (queue === 'exceptions' && order.businessStatus?.order === 'fulfillment_cancelled') return true
+  if (queue === 'exceptions' && hasDispatchException(order)) return true
+  if (queue === 'dispatch' && order.businessStatus) return order.reviewStatus === 'approved' && (completed ? ['fulfilled','partial_fulfilled'].includes(order.businessStatus.order) : ['paid','processing'].includes(order.businessStatus.order))
   if (completed) return matchesCompletedQueue(order, queue)
   if (queue === 'exceptions' && order.dataQuality?.mode === 'collected' && order.dataQuality.readOnly === true && order.dataQuality.reasons.length > 0) return true
-  if (matchesCollectedAllocation(order, queue)) return true
+  if (['allocation','allocation_review'].includes(queue) && order.dataQuality?.mode === 'collected' && order.dataQuality.readOnly) return matchesCollectedAllocation(order, queue)
   if (order.cancelled) return false
   if (queue === 'exceptions') return order.exception != null
   if (queue === 'unpaid') return order.paymentStatus === 'unpaid' && !['refunded', 'voided', 'expired', 'unpaid'].includes(order.sourcePaymentStatus ?? '')
@@ -309,8 +315,10 @@ export function matchesFopQueue(order: FopOrder, queue: FopOrderQueue, warehouse
   if (queue === 'review') return order.reviewStatus === 'pending'
   if (order.dataQuality?.mode === 'collected' && order.dataQuality.readOnly) {
     if (queue === 'dispatch' && order.nativeFactsCaptured) return ['dispatch_missing','dispatch_pending','dispatch_tracking','dispatch_updating','dispatch_cancelled'].includes(order.dispatchTaskStatus ?? '')
-    if (queue === 'shipping' && order.nativeFactsCaptured) return warehouseStage !== 'pending_review' && order.nativeShippingReady === true && (order.businessStatus ? ['pending','partial'].includes(order.businessStatus.outbound) : ['0','1'].includes(order.sourceOutboundStatus ?? ''))
-    if (order.nativeProcurementCaptured && queue === 'procurement') return ['purchase_order_pending','alibaba_pending','payment_pending','refund_pending'].includes(order.procurementStage ?? '')
+    if (queue === 'shipping' && order.nativeFactsCaptured) return warehouseStage !== 'pending_review' && order.nativeShippingReady === true && (order.businessStatus && order.businessStatus.outbound !== 'unknown' ? ['pending','partial'].includes(order.businessStatus.outbound) : ['0','1'].includes(order.sourceOutboundStatus ?? ''))
+    if (order.procurementQueueFlags && queue === 'procurement') return order.procurementQueueFlags.pending
+    if (order.procurementQueueFlags && queue === 'procurement_shipping') return order.procurementQueueFlags.shipping
+    if (order.nativeProcurementCaptured && queue === 'procurement') return ['purchase_order_pending','dispatch_preparation','payment_pending'].includes(order.procurementStage ?? '')
     if (order.nativeProcurementCaptured && queue === 'procurement_shipping') return ['supplier_pending','supplier_partial'].includes(order.procurementStage ?? '')
   }
   const progress = order.fulfillmentProgress
@@ -330,8 +338,8 @@ export function matchesFopQueue(order: FopOrder, queue: FopOrderQueue, warehouse
   }
   if (order.reviewStatus !== 'approved' || progress.allocationCreated !== true) return false
   switch (queue) {
-    case 'allocation': return progress.stockReadiness === 'incomplete' && progress.allocationReview === 'pending' && (progress.outbound === 'pending' || progress.outbound === 'partial')
-    case 'allocation_review': return progress.stockReadiness === 'ready' && progress.allocationReview === 'pending' && (progress.outbound === 'pending' || progress.outbound === 'partial')
+    case 'allocation': return progress.stockReadiness === 'incomplete' && progress.allocationReview === 'pending'
+    case 'allocation_review': return progress.stockReadiness === 'ready' && progress.allocationReview === 'pending'
     // Pending allocation approval belongs only to allocation; legacy pending_review queries stay empty.
     case 'shipping': return warehouseStage !== 'pending_review' && progress.stockReadiness === 'ready'
       && progress.allocationReview === 'approved' && (progress.outbound === 'pending' || progress.outbound === 'partial')

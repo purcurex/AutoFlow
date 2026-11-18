@@ -1,12 +1,13 @@
 import Decimal from 'decimal.js'
 import { normalizeBusinessTimestamp } from './fop-business-time'
 import { consumerPaymentRange } from './consumer-payment-range'
+import { stockOrderState } from './stock-native-status'
 import { SALES_DEPARTMENTS } from './fop-data.types'
 import { FopStockOrderCandidate, FopStockInventoryCandidate, FopStockOrder, StockFilters, StockOwnership, STOCK_TYPES, STOCK_PURCHASE_STATUSES, StockBalance } from './fop-stock.types'
 
 const string = (value: unknown): value is string => typeof value === 'string' && !!value.trim()
 function stockOrderStatus(row: FopStockOrderCandidate): FopStockOrder['orderStatus'] {
-  if (row.rawOrderStatus !== undefined) return ({'0':'cancelled','1':'unpaid','2':'paid'} as const)[row.rawOrderStatus ?? ''] ?? null
+  if (row.rawOrderStatus !== undefined) return stockOrderState(row.rawOrderStatus,row.orderStatusName).orderStatus
   if (row.cancelled) return 'cancelled'
   return row.paymentStatus === 'paid' || row.paymentStatus === 'unpaid' ? row.paymentStatus : null
 }
@@ -27,7 +28,7 @@ export function publicStockOrder(row: FopStockOrderCandidate): FopStockOrder {
     if (!string(item.sku) || !string(item.name) || !Number.isFinite(item.quantity) || item.quantity <= 0 || item.quantity > Number.MAX_SAFE_INTEGER || typeof item.variant !== 'string' || item.imageUrl !== null && typeof item.imageUrl !== 'string') throw new Error('Invalid stock product')
     return { sku: item.sku, name: item.name, imageUrl: item.imageUrl, variant: item.variant, quantity: item.quantity }
   })
-  return { ...ownership(row), id: row.id, stockNumber: row.stockNumber, stockType: row.stockType, storeName: row.storeName, items, amount: row.amount, currency: row.currency, paidAt, createdAt: normalizeBusinessTimestamp(row.createdAt), paymentStatus: row.paymentStatus ?? 'unknown', reviewStatus: row.reviewStatus ?? 'unknown', rawBillStatus: row.rawBillStatus ?? null, orderStatus: stockOrderStatus(row), purchaseStatus: row.purchaseStatus, procurementPaidAt: normalizeBusinessTimestamp(row.procurementPaidAt), warehouseCode: row.warehouseCode, warehouse: row.warehouse }
+  return { ...ownership(row), ...('orderStatusName' in row ? {rawOrderStatus:row.rawOrderStatus,orderStatusName:row.orderStatusName} : {}), ...('rawPurchaseStatus' in row ? {rawPurchaseStatus:row.rawPurchaseStatus,purchaseStatusName:row.purchaseStatusName} : {}), id: row.id, stockNumber: row.stockNumber, stockType: row.stockType, storeName: row.storeName, items, amount: row.amount, currency: row.currency, paidAt, createdAt: normalizeBusinessTimestamp(row.createdAt), paymentStatus: row.paymentStatus ?? 'unknown', reviewStatus: row.reviewStatus ?? 'unknown', rawBillStatus: row.rawBillStatus ?? null, orderStatus: stockOrderStatus(row), purchaseStatus: row.purchaseStatus, procurementPaidAt: normalizeBusinessTimestamp(row.procurementPaidAt), warehouseCode: row.warehouseCode, warehouse: row.warehouse }
 }
 function balance(value: StockBalance) {
   if (!value || [value.available, value.locked].some(qty => !Number.isFinite(qty) || qty < 0 || qty > Number.MAX_SAFE_INTEGER)) throw new Error('Invalid inventory quantity')

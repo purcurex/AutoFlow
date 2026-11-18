@@ -1,3 +1,6 @@
+// pg is an optional runtime boundary for this isolated SQL test, without typed client usage.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { Client } = require('pg')
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { collectedOrganizationQuery } from './collected-organization-query'
@@ -12,7 +15,7 @@ integration('collected directory SQL authorization',()=>{
  const user={id:'account',role:'user',businessRole:'salesperson'} as User
  const nodes=[{id:'root',parent_id:null,kind:'organization',name:'Company'},{id:'marketing',parent_id:'root',kind:'department',name:'营销中心'},{id:'dept',parent_id:'marketing',kind:'department',name:'业务三部'}]
  const organization=async()=>buildReplicaOrganization(user,'workspace',nodes,(await db.query(collectedOrganizationQuery,['workspace','tenant','100000'])).rows,{tenant_id:'tenant',source_company_id:'100000'})
- beforeAll(async()=>{const {Client}=require('pg');db=new Client({host:'127.0.0.1',port:55432,user:'autoflow_demo',database,password:readFileSync(resolve(__dirname,'../../../../.runtime/local-demo/database-password'),'utf8').trim()});await db.connect()})
+ beforeAll(async()=>{db=new Client({host:'127.0.0.1',port:55432,user:'autoflow_demo',database,password:readFileSync(resolve(__dirname,'../../../../.runtime/local-demo/database-password'),'utf8').trim()});await db.connect()})
  afterAll(async()=>{await db?.end()})
  beforeEach(async()=>{
   await db.query(`BEGIN;

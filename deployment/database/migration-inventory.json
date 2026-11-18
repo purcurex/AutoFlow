@@ -1,0 +1,299 @@
+{
+  "asOf": "2026-11-18",
+  "initialization": "Run compiled migrations, do not import schema-reference.sql as initialization.",
+  "count": 73,
+  "migrations": [
+    {
+      "timestamp": "1784700000000",
+      "name": "BaselineLegacySchema1784700000000"
+    },
+    {
+      "timestamp": "1784700060000",
+      "name": "AddAutoFlowCoreEntities1784700060000"
+    },
+    {
+      "timestamp": "1784709000000",
+      "name": "AlignP1Contracts1784709000000"
+    },
+    {
+      "timestamp": "1784709060000",
+      "name": "AddLeadDiscoveryLinks1784709060000"
+    },
+    {
+      "timestamp": "1784710000000",
+      "name": "AddDiscoveryEvidence1784710000000"
+    },
+    {
+      "timestamp": "1784711000000",
+      "name": "AddWorkflowExecutionGuards1784711000000"
+    },
+    {
+      "timestamp": "1784711060000",
+      "name": "FixLeadScoreUniqueIndex1784711060000"
+    },
+    {
+      "timestamp": "1784712000000",
+      "name": "AddWorkflowJobQueue1784712000000"
+    },
+    {
+      "timestamp": "1784713000000",
+      "name": "AddDiscoveryVerificationEvidence1784713000000"
+    },
+    {
+      "timestamp": "1784714000000",
+      "name": "AddQuotationSnapshots1784714000000"
+    },
+    {
+      "timestamp": "1784715000000",
+      "name": "AddFopHandoffs1784715000000"
+    },
+    {
+      "timestamp": "1784716000000",
+      "name": "AddOutreachDeliveryContext1784716000000"
+    },
+    {
+      "timestamp": "1784717000000",
+      "name": "AddAuditEvents1784717000000"
+    },
+    {
+      "timestamp": "1784718000000",
+      "name": "AddShopifyProspectingEvidence1784718000000"
+    },
+    {
+      "timestamp": "1784719000000",
+      "name": "AddUserDisplayIds1784719000000"
+    },
+    {
+      "timestamp": "1784720000000",
+      "name": "AddOutreachTemplateOptions1784720000000"
+    },
+    {
+      "timestamp": "1784721000000",
+      "name": "AddAiPromptTemplates1784721000000"
+    },
+    {
+      "timestamp": "1784722000000",
+      "name": "AddWorkflowRevisionLifecycle1784722000000"
+    },
+    {
+      "timestamp": "1784723000000",
+      "name": "AddAiOutreachConversations1784723000000"
+    },
+    {
+      "timestamp": "1784724000000",
+      "name": "AddAlibaba1688Sourcing1784724000000"
+    },
+    {
+      "timestamp": "1784725000000",
+      "name": "AddLeadPoolWorkflowOrdering1784725000000"
+    },
+    {
+      "timestamp": "1784726000000",
+      "name": "AddOutreachOtherChannel1784726000000"
+    },
+    {
+      "timestamp": "1784727000000",
+      "name": "AddOwnerScopedWorkflowDisplayIds1784727000000"
+    },
+    {
+      "timestamp": "1784728000000",
+      "name": "AddAlibaba1688SourcingPagination1784728000000"
+    },
+    {
+      "timestamp": "1784728000000",
+      "name": "AddWorkbenchRoles1784728000000"
+    },
+    {
+      "timestamp": "1784729000000",
+      "name": "AddFopUserBindings1784729000000"
+    },
+    {
+      "timestamp": "1784729000000",
+      "name": "AddSourcingOfferProductFingerprint1784729000000"
+    },
+    {
+      "timestamp": "1784730000000",
+      "name": "AddOrganizationSandbox1784730000000"
+    },
+    {
+      "timestamp": "1784730000000",
+      "name": "AddSourcingResponseCacheMetadata1784730000000"
+    },
+    {
+      "timestamp": "1784731000000",
+      "name": "AddBusinessDataScopes1784731000000"
+    },
+    {
+      "timestamp": "1784731000000",
+      "name": "AddSourcingResultLimit1784731000000"
+    },
+    {
+      "timestamp": "1784732000000",
+      "name": "SeparateManagementAndBusinessAccess1784732000000"
+    },
+    {
+      "timestamp": "1784733000000",
+      "name": "AddChartPermissions1784733000000"
+    },
+    {
+      "timestamp": "1784734000000",
+      "name": "LinkEmployeeAccounts1784734000000"
+    },
+    {
+      "timestamp": "1784735000000",
+      "name": "ManageOrganizationMembers1784735000000"
+    },
+    {
+      "timestamp": "1793200000000",
+      "name": "CompanyDirectoryAccess1793200000000"
+    },
+    {
+      "timestamp": "1793200001000",
+      "name": "LinkDirectoryAdministrator1793200001000"
+    },
+    {
+      "timestamp": "1793200002000",
+      "name": "CompanyDirectoryAllWorkbenches1793200002000"
+    },
+    {
+      "timestamp": "1793233000000",
+      "name": "VerifiedFopEmployeeBindings1793233000000"
+    },
+    {
+      "timestamp": "1794300000000",
+      "name": "AddDataDisplayScope1794300000000"
+    },
+    {
+      "timestamp": "1794300001000",
+      "name": "DefaultManagerDisplayToSelf1794300001000"
+    },
+    {
+      "timestamp": "1794393000000",
+      "name": "QualifyChartPermissionValidator1794393000000"
+    },
+    {
+      "timestamp": "1794393001000",
+      "name": "AddWorkbenchSchemeA1794393001000"
+    },
+    {
+      "timestamp": "1794398400000",
+      "name": "RemoveDepartedRuth1794398400000"
+    },
+    {
+      "timestamp": "1794402000000",
+      "name": "WorkbenchDemandSyncPolicy1794402000000"
+    },
+    {
+      "timestamp": "1794403000000",
+      "name": "WorkbenchReceiptNotices1794403000000"
+    },
+    {
+      "timestamp": "1794405000000",
+      "name": "WorkbenchConfirmedSources1794405000000"
+    },
+    {
+      "timestamp": "1794406000000",
+      "name": "WorkbenchPackageTracking1794406000000"
+    },
+    {
+      "timestamp": "1794407000000",
+      "name": "WorkbenchTrackingLifecycle1794407000000"
+    },
+    {
+      "timestamp": "1794408000000",
+      "name": "WorkbenchPurchaseSalesNumber1794408000000"
+    },
+    {
+      "timestamp": "1794410000000",
+      "name": "WorkbenchSnapshotStaging1794410000000"
+    },
+    {
+      "timestamp": "1794411000000",
+      "name": "WorkbenchCollectedOrders1794411000000"
+    },
+    {
+      "timestamp": "1794480000000",
+      "name": "CollectedEntities1794480000000"
+    },
+    {
+      "timestamp": "1794481000000",
+      "name": "CollectedAllocationOrderIndex1794481000000"
+    },
+    {
+      "timestamp": "1794500000000",
+      "name": "CollectedAnalyticsFacts1794500000000"
+    },
+    {
+      "timestamp": "1794580000000",
+      "name": "CollectedBusinessChain1794580000000"
+    },
+    {
+      "timestamp": "1794581000000",
+      "name": "BusinessChainRelationIndexes1794581000000"
+    },
+    {
+      "timestamp": "1794770000000",
+      "name": "TimestampQueryReplica1794770000000"
+    },
+    {
+      "timestamp": "1794830000000",
+      "name": "CollectedCustomerRegistrations1794830000000"
+    },
+    {
+      "timestamp": "1794831000000",
+      "name": "CollectedUnpaidIndex1794831000000"
+    },
+    {
+      "timestamp": "1794909000000",
+      "name": "CollectedOrderNumberIndex1794909000000"
+    },
+    {
+      "timestamp": "1794967200000",
+      "name": "WorkbenchOutboundException1794967200000"
+    },
+    {
+      "timestamp": "1794975000000",
+      "name": "CollectedExceptionCandidates1794975000000"
+    },
+    {
+      "timestamp": "1794980000000",
+      "name": "PersistedExceptionState1794980000000"
+    },
+    {
+      "timestamp": "1794981000000",
+      "name": "ProcurementDataExceptions1794981000000"
+    },
+    {
+      "timestamp": "1794982000000",
+      "name": "TrustPurchaseOrderNumber1794982000000"
+    },
+    {
+      "timestamp": "1794983000000",
+      "name": "AllocationOutboundGate1794983000000"
+    },
+    {
+      "timestamp": "1794984000000",
+      "name": "InboundCandidateIndex1794984000000"
+    },
+    {
+      "timestamp": "1794985000000",
+      "name": "PurchasePaymentStates1794985000000"
+    },
+    {
+      "timestamp": "1794986000000",
+      "name": "PhysicalBusinessClassification1794986000000"
+    },
+    {
+      "timestamp": "1794987000000",
+      "name": "ExceptionCommitProbe1794987000000"
+    },
+    {
+      "timestamp": "1794988000000",
+      "name": "ExceptionAuditRemediation1794988000000"
+    },
+    {
+      "timestamp": "1794989000000",
+      "name": "ExceptionReceiptDateQuality1794989000000"
+    }
+  ]
+}

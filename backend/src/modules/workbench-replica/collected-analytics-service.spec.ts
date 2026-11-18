@@ -229,5 +229,46 @@ it('merges manager own-member aggregates with peer summaries without widening pr
  expect(peer.summaryOnly).toBe(true);expect(peer.departmentSummary).toBeUndefined()
  expect(db.query.mock.calls[0][0]).not.toContain("('person',")
  expect(db.query.mock.calls[0][1][2]).toEqual(['71'])
- await expect(service.dashboardAnalytics('u',{...query,chartId:'order_volume',departmentId:'d2',warehouseCode:'W1'})).rejects.toThrow('Department aggregates only')
+ await expect(service.dashboardAnalytics('u',{...query,chartId:'order_volume',departmentId:'d2',warehouseCode:'W1'})).resolves.toMatchObject({summaryOnly:true})
+})
+
+it('returns only time aggregates for an authorized dashboard trend',async()=>{
+ const {service,db}=setup()
+ db.query.mockResolvedValue([{analytics:{rows:[{dimension:'month',id:'2026-11',label:'2026-11',orderCount:2,quantity:'3',amount:null}],orderCount:2,totalQuantity:'3',missingAmountCount:0,missingPaidAtCount:0}}])
+ const result=await service.dashboardTrend('u',{...query,chartId:'order_volume',dimension:'person',id:'70',grain:'month'})
+ expect(result.points).toHaveLength(1)
+ expect(result).not.toHaveProperty('departments')
+ expect(result).not.toHaveProperty('rows')
+ expect(db.query.mock.calls[0][1].slice(-1)[0]).toBe('70')
+})
+it('rejects personal trend requests outside the current chart record grant',async()=>{
+ const {service,context,db}=setup()
+ context.user={role:'user',businessRole:'salesperson',businessEmployeeId:'70',businessDepartmentId:'d1',workbenchRoles:['sales']}
+ context.org.employeeIds=['70'];context.org.employeeId='70'
+ await expect(service.dashboardTrend('u',{...query,chartId:'order_volume',dimension:'person',id:'71',grain:'day'})).rejects.toThrow()
+ expect(db.query).not.toHaveBeenCalled()
+})
+it('allows department trends for summary-only accounts without exposing personal dimensions',async()=>{
+ const {service,context,db}=setup()
+ context.user={role:'user',businessRole:'admin',chartPermissions:collaborationChartPermissions()}
+ await expect(service.dashboardTrend('u',{...query,chartId:'order_volume',dimension:'person',id:'70',grain:'month'})).rejects.toThrow()
+ db.query.mockResolvedValue([{analytics:{rows:[],orderCount:0}}])
+ const result=await service.dashboardTrend('u',{...query,chartId:'order_volume',dimension:'department',id:'d1',grain:'month'})
+ expect(result.summaryOnly).toBe(true)
+ expect(db.query.mock.calls[0][0]).not.toContain("('person',")
+})
+
+it('uses peer department aggregates for manager trends but rejects peer member targets and revoked scope',async()=>{
+ const {service,context,db,contextSpy}=setup()
+ context.user={role:'user',businessRole:'department_manager',businessDepartmentId:'d1',workbenchRoles:['sales'],chartPermissions:[]}
+ context.org={...context.org,marketingScope:{rootId:'marketing',departmentIds:['d1','d2']},departmentId:'d1',employeeIds:['70'],analyticsPeers:{departments:context.org.departments,members:context.org.members},members:[context.org.members[0]],departments:context.org.departments.filter((d:any)=>d.id==='d1')}
+ db.query.mockResolvedValue([{analytics:{rows:[],orderCount:0}}])
+ const args={...query,chartId:'order_volume' as const,dimension:'department' as const,id:'d2',grain:'month' as const}
+ const result=await service.dashboardTrend('u',args)
+ expect(result.summaryOnly).toBe(true)
+ expect(db.query.mock.calls[0][1][2]).toEqual(['70','71'])
+ expect(db.query.mock.calls[0][0]).not.toContain("('person',")
+ await expect(service.dashboardTrend('u',{...args,dimension:'person',id:'71'})).rejects.toThrow()
+ contextSpy.mockResolvedValueOnce(context).mockResolvedValueOnce({...context,signature:'revoked'})
+ await expect(service.dashboardTrend('u',args)).rejects.toThrow('Permission or source changed')
 })

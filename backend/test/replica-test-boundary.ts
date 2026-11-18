@@ -1,3 +1,5 @@
+import { CollectedWorkbenchService } from '../src/modules/workbench-replica/collected-workbench.service'
+import { TimestampSchedulerService } from '../src/modules/workbench-replica/timestamp-scheduler.service'
 import { ServiceUnavailableException } from '@nestjs/common'
 import { TestingModuleBuilder } from '@nestjs/testing'
 import { FopDataService } from '../src/modules/fop-data/fop-data.service'
@@ -21,7 +23,7 @@ const unavailable=()=>{throw new ServiceUnavailableException({code:'workbench_so
 
 /** Pure identity/permission tests do not instantiate replica services or a second database boundary. */
 export function isolateReplicaProviders(builder:TestingModuleBuilder,providerListFixture=false):TestingModuleBuilder {
-  for(const token of [ReplicaSyncService,ReplicaPublisher,ReplicaBootstrapService,ReplicaAuthorizationService])builder.overrideProvider(token).useValue({})
+  for(const token of [ReplicaSyncService,ReplicaPublisher,ReplicaBootstrapService,ReplicaAuthorizationService,CollectedWorkbenchService,TimestampSchedulerService])builder.overrideProvider(token).useValue({})
   const source={isConfigured:()=>false,barrier:unavailable,groups:unavailable}
   builder.overrideProvider(ReplicaHttpSource).useValue(source)
   builder.overrideProvider(REPLICA_CHANGE_SOURCE).useValue(source)

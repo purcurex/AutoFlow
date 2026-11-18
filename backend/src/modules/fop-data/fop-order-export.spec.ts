@@ -61,7 +61,7 @@ describe('fulfillment Excel export', () => {
     const at = '2026-10-28T00:00:00Z'
     const done = { ...order, reviewStatus: 'approved' as const, consumerPaidAt: '2026-10-26T00:00:00Z', reviewedAt: at, dispatchApprovedAt: at, shopifySyncedAt: '2026-10-01T00:00:00Z', procurementCompletedAt: at, allocationApprovedAt: at, outboundCompletedAt: at,
       procurementProgress: { purchaseOrder: 'ordered' as const, supplierPayment: 'paid' as const, alibabaOrder: 'pushed' as const },
-      fulfillmentProgress: { ...order.fulfillmentProgress, supplierShipment: 'shipped' as const, shopifySync: 'synced' as const, allocationReview: 'approved' as const, outbound: 'completed' as const } }
+      fulfillmentProgress: { ...order.fulfillmentProgress, stockReadiness: 'ready' as const, supplierShipment: 'shipped' as const, shopifySync: 'synced' as const, allocationReview: 'approved' as const, outbound: 'completed' as const } }
     const book = new ExcelJS.Workbook()
     await book.xlsx.load(await buildFulfillmentWorkbook([done], { queue, completed: true, mode: 'filtered' }, 'mock') as unknown as ExcelJS.Buffer)
     const ws = book.getWorksheet('订单清单')!, info = book.getWorksheet('导出说明')!
@@ -163,7 +163,7 @@ describe('fulfillment Excel export', () => {
     expect(headers((await read([order], 'procurement')).getWorksheet('订单清单')!)).toContain('订单审核时间（UTC+8）')
   })
   it('preserves supplier shipment facts for unpaid purchases even after shipment', async () => {
-    const shipped = { ...order, procurementProgress: { purchaseOrder: 'ordered', supplierPayment: 'unpaid' } as const, fulfillmentProgress: { ...order.fulfillmentProgress, supplierShipment: 'shipped' as const } }
+    const shipped = { ...order, procurementProgress: { purchaseOrder: 'ordered', supplierPayment: 'unpaid' } as const, fulfillmentProgress: { ...order.fulfillmentProgress, stockReadiness: 'ready' as const, supplierShipment: 'shipped' as const } }
     const sheet = (await read([shipped], 'procurement')).getWorksheet('订单清单')!
     expect(headers(sheet)).not.toContain('供应商发货状态')
     expect(value(sheet, 2, '采购状态').value).toBe('待支付采购款')

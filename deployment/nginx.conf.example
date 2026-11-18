@@ -1,0 +1,21 @@
+# Replace hostname and certificate paths before use; backend port stays private.
+server {
+    listen 443 ssl;
+    server_name REPLACE_PRODUCTION_HOST;
+    ssl_certificate /etc/ssl/REPLACE_FULLCHAIN.pem;
+    ssl_certificate_key /etc/ssl/REPLACE_PRIVATEKEY.pem;
+    client_max_body_size 20m;
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_read_timeout 120s;
+    }
+}
+server {
+    listen 80;
+    server_name REPLACE_PRODUCTION_HOST;
+    return 301 https://$host$request_uri;
+}

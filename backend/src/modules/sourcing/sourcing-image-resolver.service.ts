@@ -10,7 +10,7 @@ import { isAbsolute, relative, resolve } from 'path'
 import * as sharpModule from 'sharp'
 import { WorkflowRunEntity } from '../autoflow/entities'
 
-type SharpFactory = (typeof import('sharp'))['sharp']
+type SharpFactory = (typeof import('sharp'))['default']
 const sharp = (sharpModule as unknown as { default?: SharpFactory }).default
   ?? sharpModule as unknown as SharpFactory
 

@@ -12,6 +12,7 @@ import { SeederModule } from './modules/seeder/seeder.module'
 import { AutoflowModule } from './modules/autoflow/autoflow.module'
 import { APP_GUARD } from '@nestjs/core'
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler'
+import { environmentFiles } from './config/env-files'
 import { validateEnvironment } from './config/environment'
 import { HealthModule } from './modules/health/health.module'
 import { FopIntegrationModule } from './modules/fop-integration/fop-integration.module'
@@ -23,7 +24,7 @@ import { OrganizationModule } from './modules/organization/organization.module'
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: ['.env.fop-pause', '.env.workbench.local', '.env.fop.local', '.env.alibaba1688.local', '.env.providers.local', '.env'],
+      envFilePath: environmentFiles(),
       validate: validateEnvironment,
     }),
 

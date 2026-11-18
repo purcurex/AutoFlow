@@ -28,14 +28,21 @@ export function collectedActualChannels(raw: Row | undefined) {
   return unique.length ? unique : null
 }
 
-/** Prefer this fulfillment's package facts; legacy supplements must remain unambiguous. */
-export function withCollectedActualChannel(display: Row, raw: Row | undefined, companyId?: string): Row {
+/** Shared by display and exception classification, including same-document supplemental capture. */
+export function collectedPackageSource(display: Row, raw: Row | undefined, companyId?: string): Row | undefined {
   const capture = display?.moneyCapture
-  if (raw && companyId && capture?.sourceId === raw.id && capture?.orderNumber === raw.billno && capture?.companyId === companyId
+  if (raw && !owns(raw, 'hzkj_logistics_info') && companyId && capture?.sourceId === raw.id && capture?.orderNumber === raw.billno && capture?.companyId === companyId
     && ['order-detail', 'order-list'].includes(capture?.operation) && owns(capture.values, 'hzkj_logistics_info')) {
     raw = { ...raw, hzkj_logistics_info: capture.values.hzkj_logistics_info }
   }
+  return raw
+}
+
+/** Prefer this fulfillment's package facts; legacy supplements must remain unambiguous. */
+export function withCollectedActualChannel(display: Row, raw: Row | undefined, companyId?: string): Row {
+  raw = collectedPackageSource(display, raw, companyId)
   const packages = packageRows(raw)
+  if (owns(raw, 'hzkj_logistics_info') && !packages.length) return { ...display, logisticsChannels: null, logisticsInfo: [], trackingNumber: null }
   const hasPackages = packages.some(row => hasPackageChannel(row) || owns(row, 'hzkj_tracking_number'))
   if (!owns(raw, 'hzkj_logistics_channel') && !hasPackages) return display
   const channels = collectedActualChannels(raw)

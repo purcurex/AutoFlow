@@ -1,0 +1,94 @@
+<style>.cover h1{text-wrap:balance}.sidebar h2{font-size:18px}</style>
+<h2 id="release">01 · 交付范围与上线门槛</h2>
+<p>本手册用于HyperZone智能办公平台的全新生产环境部署。交付包包含前后端编译产物、全部数据库迁移、同步worker、生产配置模板、初始化命令、参数与账号绑定清单及文件校验清单。不含测试业务数据、真实凭据、用户密码或node_modules；在目标服务器按锁文件安装生产依赖。唯一业务契约仍为《HyperZone智能办公平台项目开发需求说明书》。</p>
+<p>当前交付目标是“可以安装、建库、启动并等待正式配置”。生产租户、公司/组织ID、组织编码、接口地址、集成凭据与逐人绑定值尚待提供；正式源端全量采集、权限和办理功能验收完成前，不认定已可全面上线。初始同步命令覆盖履约订单、配货单、发运单、发货通知四实体；其他业务来源不得借测试库迁移冒充生产接通。</p>
+<h2 id="inputs">02 · 上线准备清单</h2>
+<table><thead><tr><th>准备事项</th><th>必须提供或确认</th><th>验收依据</th></tr></thead><tbody>
+<tr><td>生产范围</td><td>租户ID、公司/组织ID、组织编码；FOP_REPLICA与FOP_KINGDEE对应值一致。所有ID按文本保存，不能使用测试环境值。</td><td>生产配置预检＋真实身份响应核验。</td></tr>
+<tr><td>统一集成账号</td><td>目标公司必要实体全量读取权限；应用订阅、HTTPS源站、identity、accountId、clientId、clientSecret、用户名及认证用户ID。两组KINGDEE/OPENAPI使用同一套自动认证配置，不预置accessToken。</td><td>身份范围接口与业务查询均成功；HTTP 519/2505需FOP补订阅。</td></tr>
+<tr><td>用户与组织</td><td>生产管理员、部门树、账号邮箱、员工、岗位角色、业务数据范围及下章绑定ID。</td><td>管理员、部门经理、业务员各至少一人验证可见与不可见数据。</td></tr>
+<tr><td>服务器</td><td>64位系统、Node.js 22、PostgreSQL 16。交付演练版本见验收记录。单应用实例配单worker，默认同步堆上限8GB；建议预留16GB及以上整机内存，最终以实际全量压测确定。</td><td>前端、API、数据库、worker峰值内存与磁盘空间均满足；8GB堆不等于整机占用上限。</td></tr>
+<tr><td>网络和访问</td><td>域名、TLS证书、反向代理、FOP出站白名单、数据库私网连接。仅开放HTTPS业务入口，数据库与3000端口不公开。</td><td>真实域名访问、证书、API路由和上传限制验证。</td></tr>
+<tr><td>基础配置</td><td>数据库连接与TLS、随机JWT密钥、SMTP、初始管理员密码；密钥通过服务器私密配置交付，不填入Git或普通表格。</td><td>production-readiness数据库阶段通过。</td></tr>
+<tr><td>运维</td><td>数据库与uploads备份、保留周期、RPO/RTO、恢复目标机、告警接收人、维护窗口、磁盘和数据库连接监控。</td><td>备份实际恢复成功；故障告警有人接收和处理。</td></tr>
+<tr><td>业务来源</td><td>客户注册、备货、采购、收货、RMA、采购退货及档案的首次生产采集路径和覆盖确认；四实体外增量契约仍需逐项核验。</td><td>每张待办以生产样本验收；缺失不等于业务零。</td></tr>
+</tbody></table>
+<p>逐项填写deployment/production-inputs.csv。完整待填项与缺口均保留，不能以启动成功替代业务联调通过。依赖安全审计、源端数据完整性与容量验证属于上线门槛，详见最终验收记录。</p>
+<h2 id="bindings">03 · 账号绑定ID清单</h2>
+<table><thead><tr><th>字段</th><th>来源及用途</th></tr></thead><tbody>
+<tr><td>生产本地账号UUID</td><td>生产创建账号后由本项目生成；对应users.id，不复制测试账号UUID。</td></tr>
+<tr><td>生产本地员工/部门UUID</td><td>生产组织目录生成；对应organization_employees.id、organization_nodes.id，关联account_id、department_id与workspace owner。</td></tr>
+<tr><td>FOP租户与组织ID</td><td>FOP管理员提供固定生产值；租户隔离与公司范围核验。</td></tr>
+<tr><td>FOP认证用户ID</td><td>认证主体userId，对应users.fop_user_id；不能用员工记录ID或用户名猜测。</td></tr>
+<tr><td>FOP人员记录ID</td><td>目录返回employeeId/id，用于定位人员记录。</td></tr>
+<tr><td>FOP员工主档ID</td><td>目录返回masterId，作为来源业务员与本地账号关联的稳定标识。</td></tr>
+<tr><td>FOP工号</td><td>employeeNumber，必须真实工号，不能以ID或用户名替代。</td></tr>
+<tr><td>FOP任职ID</td><td>membershipId，核验当前组织任职关系。</td></tr>
+<tr><td>FOP部门ID</td><td>来源部门标识；与本地部门映射后确定经理和部门范围。</td></tr>
+<tr><td>本地角色及范围</td><td>系统admin/user；业务admin、department_manager、salesperson或none；五工作台角色；self/department展示范围。经理范围和管理员资格必须负责人确认。</td></tr>
+</tbody></table>
+<p>每人一行填写deployment/account-bindings.template.csv，ID列在表格软件中先设为“文本”。另交付的逐人待填表仅以当前36个有效本地账号作为人员参考，包含本地参考ID；生产ID栏均留空，复核离职、停用及重复账号后再开通。该人员表包含内部账号信息，单独私密保存，不进入公共资源包或Git。</p>
+<p>正式账号在组织管理中创建并绑定，沿用目录真实核验流程：管理员读取GET /api/users/fop-employees，PUT /api/users/:id/fop-binding提交employeeNumber、employeeId、membershipId，由后端验证并保存其他ID。目录接口未接通时保持未绑定，不直接SQL写入“已验证”标识。普通清单权限在本地按业务员、账号、部门和角色计算；不要求每名普通用户拥有FOP全量读取权限。</p>
+<h2 id="install">04 · 安装与空库构建</h2>
+<p>以下命令均在解压后的资源包根目录执行。Linux使用node/npm；Windows将npm替换为npm.cmd，或使用随包PowerShell入口。生产依赖含平台二进制，必须在目标服务器安装，不能复制macOS的node_modules。</p>
+<pre><code># 解压前核验ZIP的SHA256（Linux）
+sha256sum -c HyperZone-Production-VERSION.zip.sha256
+# Windows: Get-FileHash -Algorithm SHA256 .\HyperZone-Production-VERSION.zip
+node scripts/deployment/verify-package.mjs
+npm ci --omit=dev
+# 将deployment/.env.production.example复制为backend/.env，填写数据库、JWT、SMTP等
+node scripts/deployment/production-readiness.mjs
+node scripts/deployment/migrate-compiled.mjs show
+node scripts/deployment/migrate-compiled.mjs run
+node scripts/deployment/migrate-compiled.mjs show</code></pre>
+<p>数据库先由运维创建独立空库和迁移账号；可采用现有PostgreSQL或deployment/docker-compose.postgres.yml，并填写postgres.env。DB_SYNCHRONIZE=false、DB_MIGRATIONS_RUN=false保持不变。迁移按each执行，允许并发索引在事务外创建；重复执行仅运行未应用迁移。若并发索引中断，先检查pg_index.indisvalid和迁移表，定位无效索引并由DBA修复后重试，不直接重跑全部DDL。包内schema-reference.sql仅供结构核对，禁止与迁移同时导入。</p>
+<pre><code># 初始管理员：在backend/.env中填入ADMIN_BOOTSTRAP_EMAIL、USERNAME、PASSWORD与PRODUCTION_ORGANIZATION_NAME
+# 密码至少16字符、至多72字符；ENABLE_ADMIN_BOOTSTRAP保持false
+node scripts/deployment/initialize-production.mjs admin --execute
+# 命令成功后删除ADMIN_BOOTSTRAP_PASSWORD，保留管理员邮箱用于创建批次
+node scripts/deployment/verify-runtime.mjs</code></pre>
+<p>管理员命令创建本地管理员和组织根节点，密码仅散列入库，不创建任何FOP身份绑定。重复命令不重置已有密码；账号冲突会拒绝执行。verify-runtime在独立端口启动验证实例，强制暂停源端调用和自动同步，只检查数据库、打包前端与HTTP安全响应；验证后退出。</p>
+<h2 id="source">05 · 生产范围、首次采集与增量启用</h2>
+<p>收到正式固定值及凭据后填写backend/.env：NODE_ENV与WORKBENCH_TIMESTAMP_ENVIRONMENT均为production；两组认证配置一致，源站必须HTTPS且与允许源站完全一致。FOP_ORGANIZATION_NUMBERS按JSON对象填写，例如{"生产公司ID":"生产组织编码"}，不是组织编码数组。填写FOP_DATA_MODE=kingdee、目录及实际办理所需已发布API，空接口留空并记录影响，不填写猜测地址。</p>
+<pre><code># 此阶段仍保持暂停和全部自动开关false
+node scripts/deployment/production-readiness.mjs --require-source
+node scripts/deployment/initialize-production.mjs batch --execute</code></pre>
+<p>batch命令按正式生产范围创建一个空活动采集批次，保存的是准备时间，不伪造采集时间、水位、订单或已验证权限。同范围重跑复用；不同公司、组织编码或账号归属冲突拒绝。FOP数据尚未采集时，工作台可能空白，不算业务零。</p>
+<pre><code># 完成配置、源端订阅与身份范围确认后，改为以下值
+FOP_QUERIES_PAUSED=false
+WORKBENCH_COLLECTED_ENABLED=true
+WORKBENCH_AUTOMATIC_CALLS_ENABLED=true
+WORKBENCH_SYNC_ENABLED=true
+WORKBENCH_TIMESTAMP_SYNC_ENABLED=true
+WORKBENCH_READ_MODE=local
+WORKBENCH_MOCK_ENABLED=false
+# 先在应用服务未启动时显式执行一轮；生产值完整前不要执行
+node --max-old-space-size=8192 scripts/workbench-scheduled-sync.mjs --execute
+# 核查完成后再启动常驻服务
+npm start</code></pre>
+<p>首次无水位时执行四实体全量初始化；已有水位则增量，超过24小时执行全量核对。每日UTC+8共27时点，后台每15秒只查本地是否到期，请求起始间隔不低于500毫秒。正常查询、详情、统计和导出读本地；审核、办理和特定库存查询实时访问FOP。失败不推进水位，实体独立退避；429及长503按源端冷却停止本轮。重启不清水位、不复制另一环境的批次，不循环人工执行全量。</p>
+<p>检查每实体水位、运行记录、最后成功时间、错误码、待关联数量，以及实际业务样本。普通分页上限1000页/10万条，超限失败保留旧数据；生产数据超过上限时必须先完成分窗或稳定游标适配。四实体之外的数据必须另行完成生产首次采集和验证，不能从本地测试库搬运业务数据替代。</p>
+<h2 id="operations">06 · 常驻运行、备份与回退</h2>
+<p>Linux可使用deployment/hyperzone.service.example，修改安装路径、Node路径与系统服务账号后安装；Nginx模板须补正式域名和证书。工作目录必须为backend，.env权限600。uploads放持久目录，以链接接入各版资源目录。当前先部署单应用实例；数据库锁只避免同步重叠，不能代替完整的多实例容量与调度验证。</p>
+<p>Windows使用scripts/deployment/start-production.ps1启动；通过受管理服务或运维任务托管，设置崩溃重启与日志轮转，勿依赖交互终端长期在线。上线前核验健康接口、HTTPS首页及浏览器静态资源；业务API跨域、上传路径和备份权限随目标机验证。</p>
+<pre><code># 使用受保护的PGPASSFILE或交互密码，不在命令行/仓库写密码
+pg_dump -h DB_HOST -p 5432 -U MIGRATION_USER -d DATABASE -Fc -f backup.dump
+# 恢复到新建的独立数据库，勿覆盖在线库
+createdb -h DB_HOST -p 5432 -U MIGRATION_USER RESTORE_DATABASE
+pg_restore -h DB_HOST -p 5432 -U MIGRATION_USER -d RESTORE_DATABASE --no-owner --no-privileges backup.dump
+# uploads与配置另行加密备份，数据库备份不能替代附件备份</code></pre>
+<p>升级前等当前同步批次结束，停止服务，备份数据库、uploads和旧版本配置，再切换资源目录并执行迁移。失败时停止新服务，恢复旧资源与对应备份数据库；不要对数据变更后的库盲目执行迁移down。恢复目标库先核验迁移记录、订单数量、权限与采集水位，再开放入口并恢复调度。原始事实、水位和待补任务不能因回退而单独删除。</p>
+<h2 id="acceptance">07 · 部署验收与待完成项</h2>
+<p><strong>本次结论：可进入隔离部署与配置演练，尚不满足正式上线放行条件。</strong>资源目录已单独安装生产依赖，完成空库73项迁移、重复迁移、管理员与空批次幂等创建、HTTP健康、登录及本地空清单查询；备份恢复演练通过。没有调用生产FOP，没有导入测试业务数据。</p>
+<p>前端1084项、后端2573项测试通过；另有2项前端和96项后端测试因条件未启用而跳过。端到端8套中6套通过，216项通过、109项失败；失败集中在旧provider边界的权限、导出结构、日期与业务筛选断言，尚未逐项排除实际缺陷，不删测试或修改业务规则来换取通过。该项由本项目开发修复并完成全量回归后放行。Lint无错误，11项未使用变量告警保留。</p>
+<p>生产依赖审计为0严重、0高危、5中危，涉及ExcelJS/uuid与TypeORM/glob/minimatch依赖链。兼容升级及Nodemailer升级已完成；剩余告警未作风险豁免，也未执行会破坏兼容性的强制升级，须在上线前完成可达性评估或经过验证的升级。真实生产参数、逐人绑定、全业务来源覆盖、容量压测与目标服务器恢复验收也仍是放行条件。</p>
+<table><thead><tr><th>验收项</th><th>合格标准</th></tr></thead><tbody>
+<tr><td>资源包</td><td>SHA256匹配，文件manifest可核对，无.env私密文件、数据库备份、测试业务数据、密码和源码测试脚本；仅生产依赖可运行。</td></tr>
+<tr><td>数据库</td><td>空库完整迁移及重复执行通过；管理员与空批次幂等；备份恢复后记录一致，无自动schema同步。</td></tr>
+<tr><td>真实初始化</td><td>正式源站身份核验、公司范围正确，四实体完整采集且事务提交；逐工作台其余来源另做覆盖验收。</td></tr>
+<tr><td>权限</td><td>普通业务员仅见本人，部门经理仅见授权部门，管理员范围正确；停用、解绑、转部门后结果及时收敛，导出同口径。</td></tr>
+<tr><td>操作</td><td>履约/配货审核、库存查询和其他实际办理逐项真实测试；执行结果读回，超时不能盲目重复业务操作。</td></tr>
+<tr><td>恢复和容量</td><td>网络超时、401/612、429、进程中断及恢复不会丢水位或重复办理；实际数据规模全量/增量耗时、内存、磁盘及查询延迟达到业务要求。</td></tr>
+<tr><td>业务缺口</td><td>客户、备货、采购、收货、RMA、退货、档案覆盖；删除识别、同秒稳定分页、创建/修改时间更新范围；缺失关联和未知状态有责任人核对。</td></tr>
+</tbody></table>
+<p>交付验证只证明本地隔离环境的工程条件，不替代正式服务器、真实凭据及业务数据验收。机器可读工程证据见docs/requirements/production-release-verification.json；当前完成项与未完成项同步记入唯一需求说明书。</p>

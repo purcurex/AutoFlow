@@ -32,3 +32,25 @@ it('keeps missing amounts and invalid explicit currency unknown instead of fabri
  const r=projectCollectedStockNative({...fact,raw:{...fact.raw,hzkj_order_amount:null,hzkj_settlecurrency_number:'invalid'}},'hyperzone.test','100000')!
  expect(r.amount).toBeNull();expect(r.currency).toBeNull()
 })
+
+it.each([
+ ['1','采购中','in_progress'],['2','已采购','purchased'],['3','已入库','received'],['4','已发货','shipped'],
+ ['9','部分采购','partial'],['1','新增采购阶段','unknown'],
+])('preserves native stock purchase %s / %s instead of stale code meanings', (code,title,status)=>{
+ const r=projectCollectedStockNative({...fact,raw:{...fact.raw,hzkj_orderstatus:'2',hzkj_orderstatus_title:'已支付',hzkj_purchase_status:code,hzkj_purchase_status_title:title}},'hyperzone.test','100000')!
+ expect(r).toMatchObject({rawPurchaseStatus:code,purchaseStatusName:title,purchaseStatus:status,orderStatusName:'已支付',orderStatus:'paid'})
+})
+it.each([undefined,null,'','  '])('defaults only an empty purchase value %s to unpurchased',value=>{
+ const r=projectCollectedStockNative({...fact,raw:{...fact.raw,hzkj_purchase_status:value}},'hyperzone.test','100000')!
+ expect(r).toMatchObject({purchaseStatus:'unpurchased',purchaseStatusName:'未采购',rawPurchaseStatus:null})
+})
+it('uses verified current code meanings when titles are absent, retaining unknown nonempty states',()=>{
+ const project=(value:unknown)=>projectCollectedStockNative({...fact,raw:{...fact.raw,hzkj_purchase_status:value}},'hyperzone.test','100000')!
+ expect(project('1')).toMatchObject({purchaseStatus:'in_progress',purchaseStatusName:'采购中'})
+ expect(project('2')).toMatchObject({purchaseStatus:'purchased',purchaseStatusName:'已采购'})
+ expect(project('99')).toMatchObject({purchaseStatus:'unknown',purchaseStatusName:null,rawPurchaseStatus:'99'})
+})
+it('keeps source order state separate from approval and never replaces a provided source title',()=>{
+ const r=projectCollectedStockNative({...fact,raw:{...fact.raw,hzkj_orderstatus:'2',hzkj_orderstatus_title:'新订单阶段',billstatus:'C'}},'hyperzone.test','100000')!
+ expect(r).toMatchObject({orderStatus:null,orderStatusName:'新订单阶段',rawOrderStatus:'2',reviewStatus:'approved'})
+})

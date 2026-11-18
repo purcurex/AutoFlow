@@ -19,6 +19,12 @@ const child = spawn(process.execPath, ['dist/src/main.js'], {
     SMTP_PASS: process.env.SMTP_PASS || 'deployment-verification',
     ENABLE_ADMIN_BOOTSTRAP: 'false',
     DB_MIGRATIONS_RUN: 'false',
+    DB_SYNCHRONIZE: 'false',
+    FOP_QUERIES_PAUSED: 'true',
+    WORKBENCH_AUTOMATIC_CALLS_ENABLED: 'false',
+    WORKBENCH_SYNC_ENABLED: 'false',
+    WORKBENCH_TIMESTAMP_SYNC_ENABLED: 'false',
+    WORKBENCH_MOCK_ENABLED: 'false',
   },
   stdio: ['ignore', 'pipe', 'pipe'],
 })

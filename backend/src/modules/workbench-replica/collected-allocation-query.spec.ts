@@ -1,7 +1,8 @@
 import { collectedAllocationPredicate } from './collected-allocation-query'
 it('requires explicit parent identity, current parent scope, known native states, and all captured allocations before classifying readiness',()=>{
  const sql=collectedAllocationPredicate('allocation_review')
- for(const part of ["a.batch_id=hz_fop_collected_orders.batch_id","a.display->>'sourceOrderId'=hz_fop_collected_orders.source_id","raw_bill_status='C'","raw_delivery_status IN ('0','1')","bool_and","completed"])expect(sql).toContain(part)
+ for(const part of ["a.batch_id=hz_fop_collected_orders.batch_id","a.display->>'sourceOrderId'=hz_fop_collected_orders.source_id","raw_bill_status='C'","bool_and","completed"])expect(sql).toContain(part)
+ expect(sql).not.toContain('raw_delivery_status')
 })
 it('does not assign audited or unknown allocation records to pending queues',()=>{expect(collectedAllocationPredicate('allocation')).toContain("IN ('A','B')");expect(collectedAllocationPredicate('allocation')).toContain("IN ('pending','available','completed')")})
 

@@ -3,7 +3,7 @@ import { completedAt, isStageCompleted, type CompletionQueue } from './completed
 import type { FopOrder } from './fop-data.types'
 const now = Date.parse('2026-10-30T12:00:00Z'), day = 86400000
 const base = {
-  cancelled: false, paymentStatus: 'paid', reviewStatus: 'approved',
+  cancelled: false, paymentStatus: 'paid', reviewStatus: 'approved', logisticsInfo: [{ packageTrackingNumber: 'TRACK' }],
   reviewedAt: '2026-10-24T12:00:00Z', dispatchApprovedAt: '2026-10-25T12:00:00Z', shopifySyncedAt: '2026-10-25T12:00:00Z', procurementCompletedAt: '2026-10-26T12:00:00Z',
   allocationApprovedAt: '2026-10-27T12:00:00Z', outboundCompletedAt: '2026-10-28T12:00:00Z',
   paidAt: '2025-01-01T00:00:00Z', consumerPaidAt: '2025-01-01T00:00:00Z', createdAt: '2025-01-01T00:00:00Z',

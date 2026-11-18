@@ -66,7 +66,7 @@ export class TimestampPagedSource implements TimestampNumberedSource {
   if(this.paused())throw Error('fop_queries_paused')
   const p=this.profile
   if(p?.version!==2||p.protocol!=='ordinary_modified_pages'||p.packageVersion!=='2026-11-16'||p.readOnly!==true||p.acknowledgeEventualConsistency!==true||!Object.prototype.hasOwnProperty.call(TIMESTAMP_PAGED_OPERATIONS,p.entityCode))throw Error('timestamp_profile_unverified')
-  if(!sameTimestampScope({...p,batchId:scope.batchId},scope)||!p.tenantId||/待|[\r\n]/.test(p.tenantId)||p.companyId!=='100000'||p.orgNumber!=='hyperzone.test')throw Error('timestamp_profile_scope_mismatch')
+  if(!sameTimestampScope({...p,batchId:scope.batchId},scope)||!/^[A-Za-z0-9_.-]{1,100}$/.test(p.tenantId)||!/^[1-9]\d{0,18}$/.test(p.companyId)||!/^[A-Za-z0-9_.-]{1,100}$/.test(p.orgNumber))throw Error('timestamp_profile_scope_mismatch')
  }
  private time(value:unknown):string|null{
   if(value===null||value===undefined||value==='')return null

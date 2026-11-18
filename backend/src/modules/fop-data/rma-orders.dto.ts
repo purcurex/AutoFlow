@@ -11,9 +11,9 @@ export class RmaFiltersDto {
 }
 export class RmaQueryDto extends RmaFiltersDto {
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(1000000) page = 1
-  @IsOptional() @Type(() => Number) @IsIn([20, 50, 100]) pageSize = 50
+  @IsOptional() @Type(() => Number) @IsIn([20, 50, 100, 200, 500, 1000]) pageSize = 100
 }
 export class RmaExportDto extends RmaFiltersDto {
   @IsIn(['selected', 'filtered']) mode: 'selected' | 'filtered'
-  @IsOptional() @IsArray() @ArrayMinSize(1) @ArrayMaxSize(100) @ArrayUnique() @IsString({ each: true }) @MaxLength(500, { each: true }) caseIds?: string[]
+  @IsOptional() @IsArray() @ArrayMinSize(1) @ArrayMaxSize(1000) @ArrayUnique() @IsString({ each: true }) @MaxLength(500, { each: true }) caseIds?: string[]
 }

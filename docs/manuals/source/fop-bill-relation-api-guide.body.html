@@ -1,0 +1,81 @@
+<style>article p{text-indent:2em}article h2,article h3{text-indent:0}.flow{background:#edf6f8;border-left:4px solid #087f8c;padding:18px 22px;border-radius:8px;margin:20px 0}.flow b{display:block;color:#133f69}.flow div{margin:8px 0}pre{white-space:pre-wrap;overflow-wrap:anywhere}</style>
+<h2>1. 实现目标与范围</h2>
+<p>以履约订单（平台订单）为业务起点，查询主流程关联单据。FOP API只提供单据级关联身份，本项目保存关联后，通过本地数据库查询采购、收货、入库、配货、发运和出库业务数据。无需提供商品分录关联、数量分摊或金额分摊。</p>
+<p>业务展示使用单据编号；技术关联同时保留实体标识及单据内码，避免同号、类型混淆和编号变化。此轮不建设独立关系变更目录，不实现全业务分录追溯。</p>
+<div class="flow" aria-label="履约订单主业务流程关联示意"><b>履约订单／平台订单 · hzkj_orders</b><div>采购分支：采购申请单 → 采购订单 → 收货通知单 → 采购入库单</div><div>配货分支：配货单 → 发货通知单 → 出库单</div><div>发运分支：发运单及实际关联的后续单据</div></div>
+<p>以上为查询范围示意，实际连线以FOP已保存的关系为准，不按示意图补造关系。收款、RMA、采购退料及备货使用关系不作为本轮接口验收范围，已有业务接入保持。</p>
+<h2>2. FOP开发路径</h2>
+<ol><li><b>核对业务对象：</b>在开发平台确认主流程各单据的实体标识、单据编号字段、单据类型字段；以一张已有完整业务链的履约订单验证关系图。</li>
+<li><b>新增只读Java接口：</b>在CRM模块增加 BillRelationApi 和 BillRelationService，接收履约订单内码，调用BOTP单据级下查服务，批量补齐相关单据编号与类型。</li>
+<li><b>编译部署：</b>使用当前工程SDK及既有发布流程部署到测试环境。不要调用审核、保存或下推操作。</li>
+<li><b>登记发布：</b>开放服务云 → OpenAPI → API管理 → API开发 → 自定义API／Java插件；绑定插件类，解析参数并发布。菜单名称以安装版本为准。</li>
+<li><b>应用授权：</b>为现有集成应用授权该查询接口，沿用现有认证；实际调用地址以平台发布结果为准。</li></ol>
+<p>FOP现有参考：AllocationConstants.java已确认履约实体为hzkj_orders；einkauf/webapi/PurchasePaymentSyncApi.java可参考API注解和返回格式，不调用其中的付款业务。两者均位于 /Library/VSCode/dtr5b/code/crm/hzkj-dtr5b-crm/src/main/java/hzkj/dtr5b/crm 下。</p>
+<h2>3. 核心查询方法</h2>
+<p>使用 BFTrackerServiceHelper.loadBillLinkDown 查询单据级上下游关系，第三个参数为false时包含跨级下游，true时仅直接下游。本地苍穹8.0 SDK已确认存在此方法；实际返回方向和范围仍需测试环境样本核验。</p>
+<pre><code>import kd.bos.entity.botp.runtime.BFRow;
+import kd.bos.entity.botp.runtime.BFRowId;
+import kd.bos.servicehelper.botp.BFTrackerServiceHelper;
+import java.util.List;
+
+// billId为已验证组织与权限的履约订单内码。
+List&lt;BFRow&gt; rows = BFTrackerServiceHelper.loadBillLinkDown(
+    "hzkj_orders", new Long[] { billId }, false);
+
+for (BFRow row : rows) {
+    BFRowId source = row.getSId();
+    BFRowId target = row.getId();
+    // source.getMainTableId()、source.getBillId()
+    // target.getMainTableId()、target.getBillId()
+    // 解析实体标识，批量查询单据编号、类型，去重后转为自有DTO。
+    // 不读取或返回商品分录字段。
+}</code></pre>
+<p>单据头关系按来源实体／内码与目标实体／内码去重，不因多条商品关联重复输出。首期每次查询一张履约订单，避免批量根节点混在一起造成归属错误。后续可在保留每个根订单结果的前提下优化批量。</p>
+<ul><li>仅允许约定的主流程业务实体；未知实体不要按编号前缀猜测。</li><li>内码对外转字符串，避免JavaScript大整数精度丢失。</li><li>DTO及嵌套对象按现有调用链实现Serializable；不直接返回平台对象。</li><li>编号、类型按实体批量查询；元数据映射缓存，避免每条关系单独查库。</li></ul>
+<h2>4. 最小接口契约</h2>
+<p>建议接口名称 bill-relations/query，最终路径由平台生成。接口返回一张履约订单的主流程关联单据，以及单据之间的关系；不附带商品、金额、物流明细，这些信息由本项目本地库提供。</p>
+<pre><code>// 请求
+{ "orderId": "履约订单内码" }
+
+// 业务响应示意，外层沿用现有CustomApiResult
+{
+  "orderId": "履约订单内码",
+  "orderNo": "履约订单编号",
+  "complete": true,
+  "bills": [
+    { "entity": "实际实体标识", "billId": "关联单内码",
+      "billNo": "关联单编号", "billType": "实际单据类型" }
+  ],
+  "links": [
+    { "sourceEntity": "来源实体", "sourceBillId": "来源单内码",
+      "targetEntity": "目标实体", "targetBillId": "目标单内码" }
+  ]
+}</code></pre>
+<table><thead><tr><th>规则</th><th>约定</th></tr></thead><tbody>
+<tr><td>完整结果</td><td>complete=true表示约定主流程范围已查询完整；无下游时正常返回空数组。</td></tr>
+<tr><td>失败或超限</td><td>返回明确错误或complete=false，不把失败当成无关联。本地保留已有关系。</td></tr>
+<tr><td>单据类型</td><td>保留源端实际类型；同一实体可有多种业务类型，不能仅凭实体名称判定。</td></tr>
+<tr><td>边与根订单</td><td>links保留平台查询得到的单据配对，不将所有结果拼接成一条直线；结果按根履约订单保存。</td></tr>
+<tr><td>权限</td><td>FOP校验集成账号及组织范围；本项目查询本地业务数据时再应用登录用户权限。</td></tr>
+</tbody></table>
+<h2>5. 本项目落库与使用</h2>
+<div class="flow"><b>履约订单 → FOP关联API → 本地关联记录 → 本地业务单据 → 页面展示</b><div>例如：履约订单A关联采购P1、P2 → 本地查询P1、P2采购状态 → 查询关联收货通知、入库记录 → 展示履约订单业务进展。</div></div>
+<ol><li><b>初始化：</b>主流程业务单据先按现有接口同步落库，再分批按履约订单查询关系，复用本项目已有关系存储。</li>
+<li><b>本地查询：</b>以租户／公司、实体标识和单据内码连接本地单据；编号用于展示。已有关联但本地缺单据时，进入补采任务，不在页面查询时实时穿透FOP。</li>
+<li><b>更新：</b>沿用现有同步任务，主流程单据变化后重查受影响履约订单；暂时无法反查归属的变化，进入待处理订单定期关系复核。</li>
+<li><b>替换快照：</b>仅完整成功结果可替换该根订单的关联快照；失败不清空。共用单据的关系不因某一根订单刷新而被全局删除。</li>
+<li><b>状态计算：</b>单据状态、采购付款、入库进度等继续使用本地业务字段与现有规则，不能由“有下游单据”直接认定业务完成。</li></ol>
+<p>一张采购订单可能关联多张履约订单。单据级关系负责找到业务数据，具体履约订单的商品归属仍依据本地已采集的来源订单字段；不得把合并采购单全部商品、金额、入库数量复制到每张履约订单。现有本地字段不足时留空并记录缺口，本轮不扩展分摊API。</p>
+<p>本轮不新增关系事件日志，因此仅关系解除、删除且相关单据修改时间未变化的情况，依靠定期完整关系复核发现；此方案不承诺关系变化实时到达。复核频率纳入现有同步调度及负载控制。</p>
+<h2>6. 联调验收与交付边界</h2>
+<table><thead><tr><th>测试</th><th>通过标准</th></tr></thead><tbody>
+<tr><td>单订单完整流程</td><td>关联编号与FOP关系图一致，可从本地库查到对应业务单据。</td></tr>
+<tr><td>一单多采购单</td><td>完整返回多张采购单及其后续主流程，不遗漏、不重复。</td></tr>
+<tr><td>多订单合并采购</td><td>共用采购单可被各自根订单查到；不暴露无权限的其他订单商品、客户信息。</td></tr>
+<tr><td>新下推、关系解除</td><td>重查完整结果后本地关系正确更新；失败时旧数据保留。</td></tr>
+<tr><td>本地数据缺失</td><td>可识别并定向补采；不将缺数据显示为已完成或零值。</td></tr>
+<tr><td>性能</td><td>记录单订单及复杂链路耗时、节点数、超时情况，再确定批量、并发和复核频率。</td></tr>
+</tbody></table>
+<p>交付顺序：真实订单验证标准方法 → 发布只读API → 初始化关联落库 → 本地查询接入 → 关系复核验收。目前只完成开发指导及本地SDK／源码核查，新API尚未开发部署或实测；其他实体映射、历史关系完整度与本地字段覆盖仍需联调确认。</p>
+<h2>7. 参考依据</h2>
+<ul><li><a href="https://developer.kingdee.com/knowledge/294499338368404736" target="_blank" rel="noopener noreferrer">金蝶官方：自定义API（Java插件）</a>，用于开发与发布路径。</li><li><a href="https://developer.kingdee.com/knowledge/386485262278647808?isKnowledge=2&amp;lang=zh-CN&amp;productLineId=29" target="_blank" rel="noopener noreferrer">金蝶官方：OpenAPI新手指引</a>，用于API接入与应用配置。</li><li>本地SDK：/Library/VSCode/kd/lib/bos/bos-botp-business-8.0.jar、bos-botp-core-8.0.jar；已核对loadBillLinkDown及BFRow／BFRowId方法签名。</li><li>本手册为实施指引，业务口径、权限及同步约定仍以《HyperZone智能办公平台项目开发需求说明书》为共同契约。</li></ul>

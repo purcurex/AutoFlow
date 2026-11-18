@@ -1,9 +1,11 @@
 const relation=`a.batch_id=hz_fop_collected_orders.batch_id AND a.entity_type='allocation' AND a.display->>'sourceOrderId'=hz_fop_collected_orders.source_id`
-/** A full company capture is required by the caller. Unknown native state block membership instead of shrinking the related document set. */
+/** Verified allocation coverage is required by the caller. Readiness and audit
+ * are allocation facts; an absent parent outbound field must not hide this task.
+ * Unknown allocation states still block membership. */
 export function collectedAllocationPredicate(queue:string,completed=false){
  const pending="a.display->>'rawBillStatus' IN ('A','B')"
- const state=completed?`bool_and(a.display->>'rawBillStatus'='C')`:queue==='allocation_review'?`bool_or(${pending}) AND bool_and(a.display->>'rawAllocationStatus'='completed') FILTER (WHERE ${pending})`:`bool_or(${pending}) AND bool_and(a.display->>'rawAllocationStatus' IN ('pending','available','completed')) FILTER (WHERE ${pending}) AND bool_or(a.display->>'rawAllocationStatus' IN ('pending','available')) FILTER (WHERE ${pending})`
- return `raw_bill_status='C' AND ${completed?'TRUE':"raw_delivery_status IN ('0','1')"} AND EXISTS(SELECT 1 FROM hz_fop_collected_entities a WHERE ${relation} AND a.display->>'rawAllocationStatus' IS DISTINCT FROM 'voided' HAVING count(*)>0 AND bool_and(coalesce(a.display->'association'->>'state','verified')='verified') AND bool_and(coalesce(a.display->>'rawBillStatus' IN ('A','B','C')${completed?'':" AND (a.display->>'rawBillStatus'='C' OR a.display->>'rawAllocationStatus' IS NOT NULL)"},false)) AND ${state})`
+ const state=completed?`bool_and(a.display->>'rawBillStatus'='C' AND coalesce(a.display->>'rawAllocationStatus'='completed',false))`:queue==='allocation_review'?`bool_or(${pending}) AND bool_and(a.display->>'rawAllocationStatus'='completed') FILTER (WHERE ${pending})`:`bool_or(${pending}) AND bool_and(a.display->>'rawAllocationStatus' IN ('pending','available','completed')) FILTER (WHERE ${pending}) AND bool_or(a.display->>'rawAllocationStatus' IN ('pending','available')) FILTER (WHERE ${pending})`
+ return `raw_bill_status='C' AND EXISTS(SELECT 1 FROM hz_fop_collected_entities a WHERE ${relation} AND a.display->>'rawAllocationStatus' IS DISTINCT FROM 'voided' HAVING count(*)>0 AND bool_and(coalesce(a.display->'association'->>'state','verified')='verified') AND bool_and(coalesce(a.display->>'rawBillStatus' IN ('A','B','C')${completed?'':" AND (a.display->>'rawBillStatus'='C' OR a.display->>'rawAllocationStatus' IS NOT NULL)"},false)) AND ${state})`
 }
 export function collectedAllocationDisplay(completed=false,ready=false){
  const active=`FROM hz_fop_collected_entities a WHERE ${relation} AND a.display->>'rawAllocationStatus' IS DISTINCT FROM 'voided'`

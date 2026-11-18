@@ -6,7 +6,7 @@ import {parseEnv} from 'node:util'
 import {createRequire} from 'node:module'
 import {fileURLToPath} from 'node:url'
 import {runQuery} from './fop-workbench-openapi.mjs'
-export const fields=['hzkj_total_amount','hzkj_order_amount','hzkj_fre_quo_amount','hzkj_discount_cost']
+export const fields=['hzkj_total_amount','hzkj_order_amount','hzkj_fre_quo_amount','hzkj_fixed_tax_fee','hzkj_discount_cost']
 export function validateMoneyDetail(body,parent,companyId){
  if(body.status!==true||String(body.errorCode)!=='0'||!body.data?.filter?.includes(`org in (${companyId})`)||body.data.totalCount!==1||body.data.rows?.length!==1)throw Error('unverified_detail_scope')
  return validateMoneyRow(body.data.rows[0],parent,companyId,'order-detail')
@@ -31,8 +31,7 @@ export function validateMoneyRow(r,parent,companyId,operation='order-list'){
    return Object.fromEntries(['id','hzkj_combofield','hzkj_package_tax_fee','hzkj_channel_name','hzkj_tracking_number'].filter(key=>Object.hasOwn(row,key)).map(key=>[key,row[key]]))
   })
  }
- const required=[...fields,'hzkj_logistics_info']
- return {sourceId:r.id,orderNumber:r.billno,companyId,operation,capturedAt:new Date().toISOString(),sourceModifiedAt:r.modifytime??null,values,missingFields:required.filter(k=>!Object.hasOwn(values,k)),complete:fields.every(k=>values[k]!=null)&&Array.isArray(values.hzkj_logistics_info)&&values.hzkj_logistics_info.length>0&&values.hzkj_logistics_info.every(row=>row.hzkj_package_tax_fee!=null)}
+ return {sourceId:r.id,orderNumber:r.billno,companyId,operation,capturedAt:new Date().toISOString(),sourceModifiedAt:r.modifytime??null,values,missingFields:fields.filter(k=>!Object.hasOwn(values,k)),complete:fields.every(k=>values[k]!=null)}
 }
 async function main(){
  const a=process.argv.slice(2)

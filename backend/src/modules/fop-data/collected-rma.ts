@@ -1,13 +1,37 @@
 import Decimal from 'decimal.js'
+import { rmaRefundCurrency } from './rma-refund-currency'
 type Row=Record<string,any>
 const text=(v:unknown):string|null=>typeof v==='string'&&v.trim()?v.trim():null
 const id=(v:unknown):string|null=>typeof v==='string'&&/^[1-9]\d{0,30}$/.test(v)?v:null
 const date=(v:unknown)=>{const s=text(v),z=s&&/^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d$/.test(s)?s.replace(' ','T')+'+08:00':s;return z&&/(Z|[+-]\d\d:\d\d)$/.test(z)&&Number.isFinite(Date.parse(z))?new Date(z).toISOString():null}
 const amount=(v:unknown)=>{try{if(v===null||v===undefined||v==='')return null;const d=new Decimal(String(v)),n=d.toNumber();return d.isFinite()&&d.gte(0)&&n<=Number.MAX_SAFE_INTEGER&&new Decimal(String(n)).eq(d)?n:null}catch{return null}}
 /** RMA amount belongs to this case, never the parent fulfillment or refund. */
-export function collectedRmaMoney<T extends Row>(display:T,raw:Row){
+export function collectedRmaMoney<T extends Row>(display:T,raw:Row|undefined){
  const currency=raw?.hzkj_tocurr_number??raw?.hzkj_tocurr?.number
- return {...display,amount:amount(raw?.hzkj_order_amount),currency:currency==null?'USD':typeof currency==='string'&&/^[A-Z]{3}$/.test(currency)?currency:null,amountBreakdown:undefined,amountBasis:'rma.hzkj_order_amount'}
+ const values={amount:amount(raw?.hzkj_order_amount),currency:currency==null?'USD':typeof currency==='string'&&/^[A-Z]{3}$/.test(currency)?currency:null}
+ const missing=new Set<string>(display.dataQuality?.missingFields??[])
+ for(const [key,value]of Object.entries(values)){if(value===null)missing.add(key);else missing.delete(key)}
+ missing.delete('productAmount')
+ return {...display,...values,dataQuality:{...display.dataQuality,missingFields:[...missing]},amountBreakdown:undefined,amountBasis:'rma.hzkj_order_amount'}
+}
+/** Capture, read and offline repair share the native after-sales product source. */
+export function withCollectedRmaDetails(display:Row,raw:Row|undefined):Row{
+ if(raw?.id&&raw.id!==display.id)throw Error('rma_display_identity_mismatch')
+ const result=collectedRmaMoney(display,raw),details=raw?.hzkj_after_entryentity
+ const refundCurrency=rmaRefundCurrency(raw?.hzkj_tocurr_number??raw?.hzkj_tocurr?.number)
+ result.rmaCases=(result.rmaCases??[]).map((item:Row)=>({...item,refundCurrency:['refund','return_refund'].includes(item.type)?refundCurrency:null}))
+ result.refundAmounts=result.rmaCases.filter((item:Row)=>['refund','return_refund'].includes(item.type)).map((item:Row)=>({currency:item.refundCurrency,amount:item.refundAmount??null}))
+ const missing=new Set<string>(result.dataQuality?.missingFields??[])
+ missing.delete('items');missing.delete('items.quantity');missing.delete('rma.refundCurrency')
+ if(!Array.isArray(details))missing.add('items')
+ const items=(Array.isArray(details)?details:[]).map((entry:Row)=>{
+  const line=entry??{},value=line.hzkj_qty
+  const quantity=['number','string'].includes(typeof value)&&/^\d+(?:\.\d+)?$/.test(String(value))?amount(value):null
+  if(quantity===null)missing.add('items.quantity')
+  return {id:id(line.id),productId:id(line.hzkj_localsku_id),sku:text(line.hzkj_localsku_number)??'',name:text(line.hzkj_localsku_name)??'',variant:text(line.hzkj_localsku_hzkj_sku_value)??'',imageUrl:text(line.hzkj_localsku_hzkj_picturefield),quantity,purchaseState:'unknown'}
+ })
+ if(['A','B'].includes(raw?.hzkj_sales_type)&&!result.rmaCases?.[0]?.refundCurrency)missing.add('rma.refundCurrency')
+ return {...result,items,itemsBasis:'rma.hzkj_after_entryentity',dataQuality:{...result.dataQuality,missingFields:[...missing]}}
 }
 const types:Record<string,string>={A:'return_refund',B:'refund',C:'reshipment'}
 const stages:Record<string,string>={'0':'取消','1':'待处理','2':'处理中','3':'处理完成','4':'已补发','5':'取消发货','6':'已关闭'}
@@ -22,12 +46,12 @@ export function normalizeCollectedRma(raw:Row,context:{companyId:string;payerCus
  else if(parent.payer_customer_id!==context.payerCustomerId)state='payer_mismatch'
  else if(!parent.source_businessowner_id||parent.source_businessowner_id!==parent.owner_employee_id||parent.display.owner?.id!==parent.source_businessowner_id)state='owner_unverified'
  const verified=state==='verified',rawType=text(raw.hzkj_sales_type),rawStatus=text(raw.hzkj_orderstatus),type=types[rawType??'']??'unknown'
- const refundCurrency=text(raw.hzkj_tocurr_number)
+ const refundCurrency=text(raw.hzkj_tocurr_number??raw.hzkj_tocurr?.number)
  const item={id:raw.id,orderId:verified?parent!.source_id:null,type,rawType,rawStatus,isOpen:Object.prototype.hasOwnProperty.call(stages,rawStatus??'')?['1','2'].includes(rawStatus!):null,number:text(raw.number),stage:stages[rawStatus??'']??'状态未提供',reason:text(raw.hzkj_resason1)||text(raw.hzkj_resason_name),createdAt:date(raw.createtime),updatedAt:date(raw.modifytime),requestedAmount:null,currency:null,refundAmount:type==='reshipment'?null:amount(raw.hzkj_refund_amount),refundCurrency:type!=='reshipment'&&refundCurrency&&/^[A-Z]{3}$/.test(refundCurrency)?refundCurrency:null}
  const association={state,companyVerified:candidates.some(p=>p.payer_customer_id===context.payerCustomerId),sourceNumber,shopId:shop,payerCustomerId:context.payerCustomerId,candidateCount:candidates.length}
  const fallback={orderNumber:sourceNumber??'',shopifyOrderNumber:text(raw.hzkj_shopify_order)??'',customerName:'',storeName:text(raw.hzkj_shop_name)??'',warehouse:'',items:[],amount:null,currency:null,owner:undefined,salesperson:'',paidAt:null,consumerPaidAt:null}
  const display:Row={...collectedRmaMoney(verified?parent!.display:fallback,raw),id:raw.id,sourceOrderId:verified?parent!.source_id:null,rmaCases:[item],rmaUpdatedAt:item.updatedAt,orderTags:[],refundAmounts:['refund','return_refund'].includes(type)?[{currency:item.refundCurrency,amount:item.refundAmount}]:[],rmaAssociation:association,dataQuality:{mode:'collected',readOnly:true,missingFields:[...(verified?parent!.display.dataQuality?.missingFields??[]:[]),...(!item.refundCurrency?['rma.refundCurrency']:[]),...(type==='unknown'?['rma.type']:[]),...(item.isOpen===null?['rma.status']:[])],reasons:['rma_capture_not_consistent_snapshot',...(verified?[]:['rma_parent_'+state])]}}
- return {id:raw.id as string,ownerEmployeeId:verified?parent!.source_businessowner_id:null,association,display,raw}
+ return {id:raw.id as string,ownerEmployeeId:verified?parent!.source_businessowner_id:null,association,display:withCollectedRmaDetails(display,raw),raw}
 }
 /** Completeness here covers only the explicitly captured customers, never a company-wide assertion. */
 export function validateCollectedRmaPages(pages:unknown):{payerCustomerId:string;raw:Row}[]{

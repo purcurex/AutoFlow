@@ -12,6 +12,12 @@ it.each([
  ['采购分组',()=>buildPurchaseGroupWorkbook([])]
 ] as const)('%s exports exactly one usable sheet even with no data',async(_name,build)=>{
  const b=new Workbook();await b.xlsx.load(await build() as any)
- expect(b.worksheets).toHaveLength(1);expect(b.worksheets[0].getCell('A1').value).toBe('行类型')
+ expect(b.worksheets).toHaveLength(1)
+ const sheet=b.worksheets[0]
+ expect(sheet.getCell('B2').text).not.toBe('')
+ expect(sheet.getCell('A4').text).not.toBe('')
+ const values:string[]=[];sheet.eachRow(row=>row.eachCell(cell=>values.push(typeof cell.value==='string'?cell.value:'')))
+ expect(values).toContain('当前筛选暂无数据')
+ expect(values.some(value=>value.includes('HyperZone'))).toBe(true)
  expect(b.worksheets[0].properties.outlineProperties.summaryBelow).toBe(false)
 })

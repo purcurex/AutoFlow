@@ -1,0 +1,20 @@
+[Unit]
+Description=HyperZone application and synchronization worker
+After=network-online.target
+Wants=network-online.target
+[Service]
+Type=simple
+User=hyperzone
+Group=hyperzone
+WorkingDirectory=/opt/hyperzone/current/backend
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/node dist/src/main.js
+Restart=on-failure
+RestartSec=30
+KillMode=control-group
+TimeoutStopSec=45
+UMask=0077
+# backend/.env is read by the app. Use mode 600; do not export test private files.
+# Keep uploads as a symlink to /var/lib/hyperzone/uploads across releases.
+[Install]
+WantedBy=multi-user.target

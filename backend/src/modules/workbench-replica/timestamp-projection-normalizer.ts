@@ -1,11 +1,15 @@
 import { sourceTime } from './timestamp-sync'
+import { purchaseSalesReference, purchaseReference } from '../fop-data/collected-purchase-association'
+import { assertOutboundFieldCoverage } from '../fop-data/collected-outbound-supplement'
 
 type Row = Record<string, any>
 export const TIMESTAMP_PROJECTION_KINDS = {
   hzkj_orders: 'fulfillment', hzkj_alloc_bill: 'allocation', hzkj_deliver_bill: 'dispatch', hzkj_deliver_order: 'delivery_notice',
+  hzkj_purorderbill: 'purchase',
 } as const
 const ENTRY_KEYS: Record<keyof typeof TIMESTAMP_PROJECTION_KINDS, string> = {
   hzkj_orders: 'hzkj_orders_billentry', hzkj_alloc_bill: 'hzkj_alloc_entry', hzkj_deliver_bill: 'hzkj_logisticstrackentry', hzkj_deliver_order: 'entryentity',
+  hzkj_purorderbill: 'hzkj_billentry',
 }
 const isObject = (value: unknown): value is Row => value !== null && typeof value === 'object' && !Array.isArray(value)
 const own = (row: Row, key: string) => Object.prototype.hasOwnProperty.call(row, key)
@@ -41,12 +45,13 @@ const HEAD_TIMES: Record<keyof typeof TIMESTAMP_PROJECTION_KINDS, string[]> = {
   hzkj_alloc_bill: ['modifydatefield', 'hzkj_complete_time', 'hzkj_receipt_date'],
   hzkj_deliver_bill: ['hzkj_actual_freight_time', 'hzkj_push_time', 'hzkj_track_sync_time', 'hzkj_track_next_sync_time', 'hzkj_track_latest_time', 'hzkj_freight_query_time'],
   hzkj_deliver_order: ['hzkj_bizdate', 'hzkj_bill_create_time'],
+  hzkj_purorderbill: ['hzkj_biztime', 'hzkj_pay_time', 'hzkj_closedate', 'hzkj_canceldate', 'hzkj_changedate'],
 }
 
 /** Projection-only conversion of the 2026-11-16 native API response; never merge a previous document.
  * The caller must first verify the timestamp response scope. Persist the original document separately.
  */
-export function normalizeTimestampProjectionRaw(entityCode: string, input: unknown, companyId: string): Row {
+export function normalizeTimestampProjectionRaw(entityCode: string, input: unknown, companyId: string, previous?: Row): Row {
   if (!own(TIMESTAMP_PROJECTION_KINDS, entityCode)) fail('unsupported_entity')
   identifier(companyId)
   if (!isObject(input)) fail('invalid_shape')
@@ -100,7 +105,9 @@ export function normalizeTimestampProjectionRaw(entityCode: string, input: unkno
     ? { org: BASIC_REF, hzkj_customer: BASIC_REF, hzkj_warehouse: BASIC_REF, hzkj_operator: BASIC_REF }
     : entity === 'hzkj_deliver_bill'
       ? { org: BASIC_REF, hzkj_customer: BASIC_REF, hzkj_logistics_providers: BASIC_REF, hzkj_shop: BASIC_REF, hzkj_logistics_channel1: BASIC_REF, hzkj_basedatafield: BASIC_REF }
-      : { org: BASIC_REF }
+      : entity === 'hzkj_purorderbill'
+        ? { org: BASIC_REF, hzkj_supplier: BASIC_REF, hzkj_currency: BASIC_REF, hzkj_settlecurrency: BASIC_REF, hzkj_warehouse_all: BASIC_REF }
+        : { org: BASIC_REF }
   for (const [prefix, properties] of Object.entries(references)) reference(out, prefix, properties)
   if (entity === 'hzkj_orders') {
     out.hzkj_org = { id: companyId, ...(input.hzkj_org?.name != null ? { name: input.hzkj_org.name } : {}) }
@@ -108,6 +115,8 @@ export function normalizeTimestampProjectionRaw(entityCode: string, input: unkno
   } else out.organizationId = companyId
   if (entity === 'hzkj_alloc_bill' && own(out, 'hzkj_order_id')) identifier(out.hzkj_order_id, true)
   const seen = new Set<string>()
+  const previousPurchaseLines = new Map<string, Row>((entity === 'hzkj_purorderbill' && Array.isArray(previous?.hzkj_billentry) ? previous.hzkj_billentry : []).map((row: Row) => [row.id, row]))
+  // Use the last published version only to detect omissions, never to merge old facts into new raw.
   for (let i = 0; i < out[entryKey].length; i++) {
     const row = out[entryKey][i], path = `${entryKey}[${i}].`
     if (!isObject(row)) fail('invalid_entry')
@@ -121,7 +130,20 @@ export function normalizeTimestampProjectionRaw(entityCode: string, input: unkno
       reference(row, 'hzkj_warehourse', BASIC_REF, path)
     } else if (entity === 'hzkj_alloc_bill') reference(row, 'hzkj_sku', BASIC_REF, path)
     else if (entity === 'hzkj_deliver_order') { reference(row, 'hzkj_local_sku', BASIC_REF, path); time(row, 'modifydatefield', path) }
-    else {
+    else if (entity === 'hzkj_purorderbill') {
+      // A current, verifiable fulfillment source number can establish the order link by itself.
+      // Omitting a previously authoritative source number must not silently switch to the sales number.
+      const prior = previousPurchaseLines.get(id), priorSource = prior && purchaseReference(prior.hzkj_srcbillnumber)
+      const priorUsesSource = !!priorSource && purchaseSalesReference(prior!).number === priorSource
+      if (priorUsesSource && !own(row, 'hzkj_srcbillnumber')) fail('missing_purchase_source_reference')
+      for (const field of ['hzkj_salbillnumber', 'hzkj_srcbillnumber']) if (own(row, field) && row[field] !== null && typeof row[field] !== 'string') fail('invalid_reference')
+      const sourceCleared = own(row, 'hzkj_srcbillnumber') && purchaseReference(row.hzkj_srcbillnumber) === null && (priorUsesSource || !purchaseReference(prior?.hzkj_salbillnumber))
+      if (!own(row, 'hzkj_salbillnumber') && !purchaseSalesReference(row).number && !sourceCleared) fail('missing_purchase_sales_reference')
+      // Optional legacy IDs may disappear; the complete sales number still establishes the order link.
+      for (const key of ['hzkj_salbillid', 'hzkj_salbillentryid']) if (own(row, key)) identifier(row[key], true)
+      reference(row, 'hzkj_material', SKU_PROPS, path)
+      reference(row, 'hzkj_local_sku', SKU_PROPS, path)
+    } else {
       // Carrier-local process time has a separate timezone field; do not label it as UTC+8.
       time(row, 'hzkj_modifydatefield2', path)
     }
@@ -133,6 +155,7 @@ export function normalizeTimestampProjectionRaw(entityCode: string, input: unkno
       reference(row as Row, 'hzkj_channel', BASIC_REF, `hzkj_logistics_info[${i}].`)
     })
   }
+  if(entity==='hzkj_orders')assertOutboundFieldCoverage(out,previous)
   out.timestampProjection = { version: 1, entityCode, companyId,
     companyBasis: own(input, 'org_id') ? 'source_org_id_checked_against_timestamp_scope' : 'verified_timestamp_scope',
     referenceMappings: mappings, timeMappings, unknownTimes }

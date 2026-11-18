@@ -9,34 +9,34 @@ import { fileURLToPath } from 'node:url'
 import { runQuery } from './fop-workbench-openapi.mjs'
 import { getToken } from './fop-openapi-smoke.mjs'
 import { validateAnalyticsPage } from './workbench-analytics-capture.mjs'
-import { normalizePurchaseRefundCandidate, physicalPurchaseReturnGap } from './fop-purchase-refund-facts.mjs'
+import { normalizePurchaseRefundCandidate, normalizePurchaseRefundApplication, physicalPurchaseReturnGap } from './fop-purchase-refund-facts.mjs'
 const sha = s => createHash('sha256').update(s).digest('hex')
-export async function capturePurchaseRefundCandidates({directory,context,query}) {
+export async function capturePurchaseRefundCandidates({directory,context,query,application=false}) {
  fs.mkdirSync(directory,{recursive:true,mode:0o700})
- const m={version:1,captureId:randomUUID(),operation:'queryPurchaseReturn',sourceEntity:'hzkj_purorderbill',semanticType:'purchase_refund_candidates',physicalReturnIntegration:false,context,companyId:'100000',orgNumber:'hyperzone.test',capturedAt:new Date().toISOString(),consistentSnapshot:false,complete:false,rowCount:0,pages:[]}
+ const m={version:1,captureId:randomUUID(),operation:application?'queryPurchaseRefundApplication':'queryPurchaseReturn',sourceEntity:application?'hzkj_purrefundapplybill':'hzkj_purorderbill',semanticType:application?'purchase_refund_applications':'purchase_refund_candidates',physicalReturnIntegration:false,context,companyId:'100000',orgNumber:'hyperzone.test',capturedAt:new Date().toISOString(),consistentSnapshot:false,complete:false,rowCount:0,pages:[]}
  let total;const seen=new Set(),candidates=[]
  try {
   for(let pageNo=1;pageNo<=20;pageNo++){
-   const r=await query({operation:'purchase-return',orgNumber:m.orgNumber,pageNo,pageSize:100,saveResponse:true})
+   const r=await query({operation:application?'purchase-refund-application':'purchase-return',orgNumber:m.orgNumber,pageNo,pageSize:100,saveResponse:true})
    if(!r.report.success||typeof r.raw!=='string'){m.sourceFailure={httpStatus:r.report.httpStatus??null,category:r.report.errorCategory??'invalid_response',pageNo};throw Error('source_query_failed')}
    const body=JSON.parse(r.raw),file=`page-${String(pageNo).padStart(4,'0')}.json`
    fs.writeFileSync(path.join(directory,file),r.raw,{mode:0o600,flag:'wx'})
    total=validateAnalyticsPage(body.data,pageNo,100,total,seen)
-   candidates.push(...body.data.rows.map(normalizePurchaseRefundCandidate))
+   candidates.push(...body.data.rows.map(application?normalizePurchaseRefundApplication:normalizePurchaseRefundCandidate))
    m.pages.push({file,sha256:sha(r.raw),rows:body.data.rows.length});m.rowCount=seen.size
    if(body.data.lastPage){m.complete=true;break}
   }
   if(!m.complete)throw Error('page_limit')
   const normalized=JSON.stringify({version:1,companyId:m.companyId,capturedAt:m.capturedAt,consistentSnapshot:false,...physicalPurchaseReturnGap,items:candidates},null,2)
   fs.writeFileSync(path.join(directory,'refund-candidates.json'),normalized,{mode:0o600,flag:'wx'})
-  m.normalized={file:'refund-candidates.json',sha256:sha(normalized),rows:candidates.length,semanticType:'purchase_refund_candidates'}
+  m.normalized={file:'refund-candidates.json',sha256:sha(normalized),rows:candidates.length,semanticType:m.semanticType}
  }catch(e){m.complete=false;m.error=/^[a-z_]+$/.test(e.message)?e.message:'capture_failed'}
  m.finishedAt=new Date().toISOString()
  fs.writeFileSync(path.join(directory,'manifest.json'),JSON.stringify(m,null,2),{mode:0o600,flag:'wx'})
  return m
 }
 async function main(){
- const args=process.argv.slice(2)
+ const application=process.argv.includes('--applications'),args=process.argv.slice(2).filter(x=>x!=='--applications')
  if(args.length!==3||args[0]!=='--authorize-one-shot'||args[1]!=='--output')throw Error('explicit_one_shot_output_required')
  const env=parseEnv(fs.readFileSync('backend/.env.workbench.local','utf8')),cfg=parseEnv(fs.readFileSync('backend/.env.fop.local','utf8'))
  if(env.FOP_QUERIES_PAUSED!=='true'||env.WORKBENCH_SYNC_ENABLED!=='false'||env.WORKBENCH_AUTOMATIC_CALLS_ENABLED!=='false')throw Error('persistent_pause_required')
@@ -49,7 +49,7 @@ async function main(){
  const c=await provider.getConnectionContext()
  if(c.subject.tenantId!==cfg.FOP_KINGDEE_TENANT_ID||c.subject.userId!==cfg.FOP_KINGDEE_USER_ID||c.currentOrganization.id!=='100000')throw Error('connection_mismatch')
  config.FOP_OPENAPI_ACCESS_TOKEN=await getToken(config)
- const result=await capturePurchaseRefundCandidates({directory,context:c.subject,query:q=>runQuery(config,q)})
+ const result=await capturePurchaseRefundCandidates({directory,context:c.subject,query:q=>runQuery(config,q),application})
  console.log(JSON.stringify({complete:result.complete,rows:result.rowCount,pages:result.pages.length,semanticType:result.semanticType,physicalReturnIntegration:false,error:result.error??null,sourceFailure:result.sourceFailure??null,automaticCallsEnabled:false}))
  if(!result.complete)process.exitCode=1
 }

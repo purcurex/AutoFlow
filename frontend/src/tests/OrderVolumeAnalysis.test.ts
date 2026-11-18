@@ -58,7 +58,7 @@ describe('customer order analysis', () => {
       return payload
     })
     const { wrapper } = await setup()
-    for (const [code, name] of [['HZ', '杭州仓'], ['SZ', '深圳仓']]) {
+    for (const [code, name] of [['HZ', 'HangZhou'], ['SZ', 'ShenZhen']]) {
       const hint = wrapper.find(`[data-row-id="customer:c1"][data-metric="amount"] button[data-warehouse="${code}"]`).attributes('title')
       expect(hint).toContain(name)
       expect(hint).toContain('回款')
@@ -184,8 +184,8 @@ describe('customer order analysis', () => {
     expect(charts()).toHaveLength(2)
     expect(charts()[0]!.props('option').yAxis.data).toEqual(labels)
     expect(charts()[1]!.props('option').yAxis.data).toEqual(labels)
-    expect(charts()[0]!.props('option').series.map((s: {name: string; data: number[]}) => [s.name, s.data])).toEqual([['杭州仓', [3, 4]], ['深圳仓', [2, 3]]])
-    expect(charts()[1]!.props('option').series.map((s: {name: string; data: number[]}) => [s.name, s.data])).toEqual([['杭州仓', [30.03, 40.04]], ['深圳仓', [20.02, 30.03]]])
+    expect(charts()[0]!.props('option').series.map((s: {name: string; data: number[]}) => [s.name, s.data])).toEqual([['HangZhou', [3, 4]], ['ShenZhen', [2, 3]]])
+    expect(charts()[1]!.props('option').series.map((s: {name: string; data: number[]}) => [s.name, s.data])).toEqual([['HangZhou', [30.03, 40.04]], ['ShenZhen', [20.02, 30.03]]])
     expect(charts()[1]!.props('option').tooltip.valueFormatter(30.03)).toBe('$30.03')
     await wrapper.find('[data-row-id="customer:c1"][data-metric="amount"] button[data-warehouse="SZ"]').trigger('click')
     await flushPromises()
@@ -240,7 +240,7 @@ describe('customer order analysis', () => {
     expect(dialog.textContent).toContain('正在加载客户趋势')
     expect(dialog.textContent).toContain('2026-09-01')
     expect(dialog.textContent).toContain('业务一部')
-    expect(dialog.textContent).toContain('杭州仓')
+    expect(dialog.textContent).toContain('HangZhou')
     expect(wrapper.find('.ov-selected').exists()).toBe(false)
     const query = vi.mocked(getOrderVolume).mock.calls.at(-1)![0]
     expect(query).toMatchObject({ customerId: 'c1', from: '2026-09-01', to: '2026-09-30', department: 'sales1', warehouse: 'HZ' })

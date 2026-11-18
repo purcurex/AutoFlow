@@ -735,7 +735,18 @@
       "conclusion": "按ID查询，不能将列表已提供的字段视为详情也已提供。",
       "verificationLevel": "supplied_api_configuration_only",
       "liveResponseVerified": false,
-      "physicalReturnIntegration": false
+      "physicalReturnIntegration": false,
+      "liveSupplement20261118": {
+        "verificationLevel": "live_test_response",
+        "evidence": "../requirements/api-integration-verification-20261116.json#fulfillmentLineOutboundIntegration20261118",
+        "returnedFields": [
+          "hzkj_orders_billentry.hzkj_outbound_status",
+          "hzkj_orders_billentry.hzkj_outbound_qty",
+          "hzkj_delivery_status"
+        ],
+        "headerOutboundReturned": true,
+        "documentationExportUnchanged": true
+      }
     },
     {
       "operation": "queryOrderList",
@@ -837,7 +848,18 @@
       "conclusion": "可补总额/运费/源单付款状态和SKU规格；包裹税费及履约原生整单出库字段逐项检查，不能用表头税费或发运状态替代。",
       "verificationLevel": "supplied_api_configuration_only",
       "liveResponseVerified": false,
-      "physicalReturnIntegration": false
+      "physicalReturnIntegration": false,
+      "liveSupplement20261118": {
+        "verificationLevel": "live_test_response",
+        "evidence": "../requirements/api-integration-verification-20261116.json#fulfillmentLineOutboundIntegration20261118",
+        "returnedFields": [
+          "hzkj_orders_billentry.hzkj_outbound_status",
+          "hzkj_orders_billentry.hzkj_outbound_qty",
+          "hzkj_delivery_status"
+        ],
+        "headerOutboundReturned": true,
+        "documentationExportUnchanged": true
+      }
     },
     {
       "operation": "queryOutbound",

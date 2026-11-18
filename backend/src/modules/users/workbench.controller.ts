@@ -1,3 +1,4 @@
+import { LocalFreightDetailsDto } from '../workbench-replica/local-freight-details'
 import type { FopSupplierContext } from '../fop-data/fop-realtime.types'
 import { RmaQueryDto, RmaExportDto } from '../fop-data/rma-orders.dto'
 import { PurchaseReturnContactQueryDto, PurchaseReturnChatQueryDto, PurchaseReturnQueryDto, PurchaseReturnExportDto } from '../fop-data/purchase-returns.dto'
@@ -25,7 +26,7 @@ import { ServiceUnavailableException } from '@nestjs/common'
 import { ReceiptNoticesQueryDto } from '../workbench-replica/receipt-notices.dto'
 import { LocalWorkbenchService } from '../workbench-replica/local-workbench.service'
 import { CollectedWorkbenchService } from '../workbench-replica/collected-workbench.service'
-import { DashboardAnalyticsQueryDto, CollectedAnalyticsQueryDto } from '../workbench-replica/collected-analytics.dto'
+import { DashboardAnalyticsQueryDto, DashboardTrendQueryDto, CollectedAnalyticsQueryDto } from '../workbench-replica/collected-analytics.dto'
 import { LocalFreightQueryDto } from '../workbench-replica/local-freight'
 
 @AllowWithoutBusinessData()
@@ -61,10 +62,28 @@ export class WorkbenchController {
     return this.collected.dashboardAnalytics(req.user!.userId, query)
   }
 
+  @Get('analytics/dashboard/trend')
+  @Header('Cache-Control', 'private, no-store')
+  getDashboardTrend(@Request() req: ExpressRequest, @Query() query: DashboardTrendQueryDto) {
+    return this.collected.dashboardTrend(req.user!.userId, query)
+  }
+
   @Get('analytics/freight')
   @Header('Cache-Control', 'private, no-store')
   getLocalFreight(@Request() req: ExpressRequest, @Query() query: LocalFreightQueryDto) {
     return this.collected.freightAnalytics(req.user!.userId, query)
+  }
+
+  @Get('analytics/freight/details')
+  @Header('Cache-Control', 'private, no-store')
+  getLocalFreightDetails(@Request() req: ExpressRequest, @Query() query: LocalFreightDetailsDto) {
+    return this.collected.freightDetails(req.user!.userId, query)
+  }
+
+  @Get('analytics/freight/export')
+  @Header('Cache-Control', 'private, no-store')
+  async exportLocalFreightDetails(@Request() req: ExpressRequest, @Query() query: LocalFreightDetailsDto) {
+    return new StreamableFile(await this.collected.exportFreightDetails(req.user!.userId, query), {type: FULFILLMENT_EXPORT_MIME, disposition: 'attachment; filename="freight-dispatch-details.xlsx"'})
   }
 
   @Get('analytics')
@@ -100,11 +119,13 @@ export class FulfillmentOrdersController {
   private get realtime(): FopDataService | LocalWorkbenchService { return this.local?.enabled && this.local.mock ? this.local : this.data }
 
   private supplierContacts(userId: string, context: FopSupplierContext) {
+    if(this.collected?.enabled && context.context!=='stock')return this.collected.supplierContacts(userId,context)
     if (this.local?.enabled && this.local.mock) return this.local.unavailableSupplier(userId)
     return this.data.getRealtimeSupplierContacts(userId, context)
   }
 
   private supplierChat(userId: string, context: FopSupplierContext, contactVersion: string, purchaseOrderId?: string) {
+    if(this.collected?.enabled && context.context!=='stock')return this.collected.supplierContacts(userId,context,{contactVersion,purchaseOrderId})
     if (this.local?.enabled && this.local.mock) return this.local.unavailableSupplier(userId)
     return this.data.getRealtimeSupplierChat(userId, context, contactVersion, purchaseOrderId)
   }
@@ -144,7 +165,7 @@ export class FulfillmentOrdersController {
   @Get('purchase-returns/:returnId/supplier-follow-up/launch')
   @Header('Cache-Control', 'private, no-store')
   getReturnSupplierChat(@Request() req: ExpressRequest, @Param('returnId') id: string, @Query() query: PurchaseReturnChatQueryDto) {
-    return this.supplierChat(req.user!.userId, { context: 'purchase_return', returnId: id, orderId: query.orderId, workbenchRole: query.workbenchRole }, query.contactVersion)
+    return this.supplierChat(req.user!.userId, { context: 'purchase_return', returnId: id, orderId: query.orderId, workbenchRole: query.workbenchRole }, query.contactVersion, query.purchaseOrderId)
   }
 
   @Post('purchase-returns/export')
@@ -185,7 +206,7 @@ export class FulfillmentOrdersController {
   @Post('allocation-inventory/query')
   @HttpCode(200)
   @Header('Cache-Control', 'private, no-store')
-  getAllocationInventory(@Request() req: ExpressRequest, @Body() query: AllocationInventoryQueryDto) { return this.realtime.getAllocationInventory(req.user!.userId, query) }
+  getAllocationInventory(@Request() req: ExpressRequest, @Body() query: AllocationInventoryQueryDto) { return this.collected?.enabled ? this.collected.inventory(req.user!.userId, query, 'current') : this.realtime.getAllocationInventory(req.user!.userId, query) }
 
   @Get('stock-orders')
   @Header('Cache-Control', 'private, no-store')
@@ -205,7 +226,7 @@ export class FulfillmentOrdersController {
 
   @Get('stock-inventory')
   @Header('Cache-Control', 'private, no-store')
-  getStockInventory(@Request() req: ExpressRequest, @Query() query: StockInventoryQueryDto) { return this.realtime.getStockInventory(req.user!.userId, query) }
+  getStockInventory(@Request() req: ExpressRequest, @Query() query: StockInventoryQueryDto) { return this.collected?.enabled ? this.collected.inventory(req.user!.userId, query, 'reserved') : this.realtime.getStockInventory(req.user!.userId, query) }
 
   @Post('stock-orders/export')
   @HttpCode(200)

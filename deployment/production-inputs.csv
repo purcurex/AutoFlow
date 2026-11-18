@@ -1,0 +1,19 @@
+﻿事项,配置项或交付项,生产值（待填写）,提供方,使用时点
+租户,FOP_REPLICA_TENANT_ID / FOP_KINGDEE_TENANT_ID,,FOP管理员,创建批次前
+公司组织ID,FOP_REPLICA_COMPANY_ID / FOP_KINGDEE_ORGANIZATION_IDS,,FOP管理员,创建批次前
+组织编码,FOP_REPLICA_ORG_NUMBER,,FOP管理员,创建批次前
+源站,FOP_OPENAPI_BASE_URL / FOP_OPENAPI_ALLOWED_ORIGIN,,FOP管理员,源端预检前
+集成用户,FOP_KINGDEE_USER_ID / 两组USERNAME,,FOP管理员,源端预检前
+认证配置,两组IDENTITY / ACCOUNT_ID / CLIENT_ID / CLIENT_SECRET / TOKEN_URL,,FOP管理员（密钥另走私密渠道）,源端预检前
+身份范围验证,FOP_KINGDEE_ANALYTICS_PERMISSIONS_URL,,FOP开发,源端预检前
+员工目录,员工查询及绑定校验API地址,,FOP开发,普通账号授权前
+执行接口,审核、读回、库存等实际操作API及权限,,FOP开发,办理功能验收前
+数据库,DB_HOST / PORT / DATABASE / USERNAME / PASSWORD / SSL,,运维,迁移前
+应用域名,HTTPS域名、证书、反向代理地址,,运维,访问验收前
+初始管理员,ADMIN_BOOTSTRAP_EMAIL / USERNAME / PASSWORD / PRODUCTION_ORGANIZATION_NAME,,项目负责人（密码私密传递）,初始管理员命令前
+会话密钥,JWT_SECRET（至少32随机字符）,,运维,启动前
+邮件服务,SMTP_HOST / PORT / USER / PASS,,运维,启动前
+容量,CPU、内存、磁盘、备份空间与增长预测,,运维,安装前
+运维验收,备份保留、恢复目标RPO/RTO、告警接收人、维护窗口,,项目负责人/运维,上线前
+账号绑定,account-bindings.template.csv，每人一行,,业务管理员/FOP管理员,权限验收前
+初始业务范围,四实体外：客户、备货、采购、收货、RMA、退货、档案补采方案与覆盖确认,,FOP/项目开发,全工作台上线前

@@ -7,6 +7,8 @@ import {fileURLToPath} from 'node:url'
 import {createRequire} from 'node:module'
 import {getToken} from './fop-openapi-smoke.mjs'
 import {runQuery} from './fop-workbench-openapi.mjs'
+import {confirmedFopOrigin} from './fop-confirmed-origin.mjs'
+import {readSyncConfig,syncDatabaseOptions,syncRuntimeRequire} from './workbench-sync-runtime.mjs'
 const root=dirname(dirname(fileURLToPath(import.meta.url))),require=createRequire(import.meta.url)
 export function timestampPagedIdentityConfig(config,profile){
  const tenantIds=[config.FOP_KINGDEE_TENANT_ID,config.FOP_REPLICA_TENANT_ID].filter(Boolean).map(x=>x.trim())
@@ -59,38 +61,47 @@ export function timestampPreflight(config,options,profile){
  else if(profile.version===2?profile.protocol!=='ordinary_modified_pages'||profile.packageVersion!=='2026-11-16'||profile.acknowledgeEventualConsistency!==true:profile.verified!==true)reasons.push('timestamp_profile_unverified')
  if(profile?.version===2){try{timestampPagedIdentityConfig(config,profile)}catch(error){reasons.push(error.message)}}
  if(!options['batch-id'])reasons.push('timestamp_batch_id_required')
- if(!['127.0.0.1','localhost'].includes(config.DB_HOST)||config.DB_PORT!=='55432'||config.DB_DATABASE!=='autoflow_local_demo')reasons.push('timestamp_explicit_local_database_required')
+ if(config.NODE_ENV==='production'||config.WORKBENCH_TIMESTAMP_ENVIRONMENT==='production'){
+  if(config.WORKBENCH_TIMESTAMP_ENVIRONMENT!=='production'||config.NODE_ENV!=='production')reasons.push('timestamp_production_environment_required')
+  if(['DB_HOST','DB_USERNAME','DB_PASSWORD','DB_DATABASE'].some(k=>!config[k]?.trim())||!/^\d+$/.test(config.DB_PORT??'5432')||Number(config.DB_PORT??5432)<1||Number(config.DB_PORT??5432)>65535)reasons.push('timestamp_database_configuration_required')
+  if(config.DB_SSL==='true'&&config.DB_SSL_REJECT_UNAUTHORIZED==='false')reasons.push('timestamp_database_tls_verification_required')
+  if(['IDENTITY','ACCOUNT_ID','CLIENT_ID','CLIENT_SECRET','USERNAME'].some(key=>!config['FOP_KINGDEE_'+key]?.trim()||config['FOP_KINGDEE_'+key]?.trim()!==config['FOP_OPENAPI_'+key]?.trim())||['FOP_KINGDEE_ACCESS_TOKEN','FOP_OPENAPI_ACCESS_TOKEN'].some(key=>config[key]?.trim()))reasons.push('timestamp_production_shared_automatic_credentials_required')
+  if(!config.FOP_KINGDEE_IDENTITY?.trim()||!config.FOP_KINGDEE_ANALYTICS_PERMISSIONS_URL?.trim()||!config.FOP_KINGDEE_ACCESS_TOKEN?.trim()&&['FOP_KINGDEE_TOKEN_URL','FOP_KINGDEE_CLIENT_ID','FOP_KINGDEE_CLIENT_SECRET','FOP_KINGDEE_ACCOUNT_ID','FOP_KINGDEE_USERNAME'].some(k=>!config[k]?.trim()))reasons.push('timestamp_connection_configuration_required')
+  try{
+   const origin=confirmedFopOrigin(config)
+   const endpoints=Object.entries(config).filter(([k,v])=>/^FOP_KINGDEE_.*_URL$/.test(k)&&v)
+   if(!endpoints.length||endpoints.some(([,v])=>{const u=new URL(v);return u.origin!==origin||u.username||u.password||u.hash}))throw Error('invalid')
+  }catch{reasons.push('timestamp_source_origin_invalid')}
+ }else if(!['127.0.0.1','localhost'].includes(config.DB_HOST)||config.DB_PORT!=='55432'||config.DB_DATABASE!=='autoflow_local_demo')reasons.push('timestamp_explicit_local_database_required')
  if(!config.FOP_OPENAPI_IDENTITY||!config.FOP_OPENAPI_ACCESS_TOKEN&&['FOP_OPENAPI_CLIENT_ID','FOP_OPENAPI_CLIENT_SECRET','FOP_OPENAPI_USERNAME','FOP_OPENAPI_ACCOUNT_ID'].some(k=>!config[k]))reasons.push('timestamp_existing_credentials_missing')
  return {mode:options.mode,executable:reasons.length===0,blockedReasons:reasons,automaticCallsEnabled:false,upstreamCalled:false,protocol:profile?.version===2?'ordinary_modified_pages':'strict_keyset',clockBasis:profile?.version===2?'local_capture_time':'source_clock',consistentSnapshot:false,projectionCoverage:profile?.version===2?'four_entities_transactional_local_projection; incomplete_records_pending':'fulfillment_header_only; related_and_other_entities_pending'}
 }
 async function main(){
- const options=timestampArguments(process.argv.slice(2)),configs=['backend/.env.workbench.local','backend/.env.fop.local','backend/.env.fop-pause'].filter(p=>existsSync(resolve(root,p))).map(p=>parseEnv(readFileSync(resolve(root,p),'utf8')))
- let config=Object.assign({},...configs)
- // A pause in any private configuration wins. This command never writes these files.
- if(configs.some(c=>c.FOP_QUERIES_PAUSED?.trim().toLowerCase()==='true'))config.FOP_QUERIES_PAUSED='true'
+ const options=timestampArguments(process.argv.slice(2))
+ let config=readSyncConfig()
  const profile=options.profile?JSON.parse(readFileSync(resolve(options.profile),'utf8')):null
  config=timestampExecutionConfig(config,options)
  const report=timestampPreflight(config,options,profile)
  if(!options.execute){console.log(JSON.stringify(report));return}
  if(!report.executable){console.log(JSON.stringify(report));process.exitCode=1;return}
- require('ts-node').register({project:resolve(root,'backend/tsconfig.json'),transpileOnly:true});require('reflect-metadata')
- const {TimestampSync}=require('../backend/src/modules/workbench-replica/timestamp-sync')
- const {TimestampPostgresStore}=require('../backend/src/modules/workbench-replica/timestamp-postgres')
- const {TimestampHttpSource}=require('../backend/src/modules/workbench-replica/timestamp-http-source')
+ const runtime=syncRuntimeRequire(config)
+ const {TimestampSync}=runtime('workbench-replica/timestamp-sync')
+ const {TimestampPostgresStore}=runtime('workbench-replica/timestamp-postgres')
+ const {TimestampHttpSource}=runtime('workbench-replica/timestamp-http-source')
  const scope={batchId:options['batch-id'],tenantId:profile.tenantId,companyId:profile.companyId,entityCode:profile.entityCode}
  let token
- const {TimestampPagedSource}=require('../backend/src/modules/workbench-replica/timestamp-paged-source')
- const {TimestampPagedSync}=require('../backend/src/modules/workbench-replica/timestamp-paged-sync')
+ const {TimestampPagedSource}=runtime('workbench-replica/timestamp-paged-source')
+ const {TimestampPagedSync}=runtime('workbench-replica/timestamp-paged-sync')
  let prepared
  if(profile.version===2){
-  const {KingdeeFopDataProvider}=require('../backend/src/modules/fop-data/fop-kingdee.provider')
+  const {KingdeeFopDataProvider}=runtime('fop-data/fop-kingdee.provider')
   const provider=new KingdeeFopDataProvider({get:key=>config[key]})
   prepared=await prepareTimestampPagedExecution(config,profile,{getConnection:()=>provider.getConnectionContext()})
  }
  const source=profile.version===2?new TimestampPagedSource(profile,()=>config.FOP_QUERIES_PAUSED?.trim().toLowerCase()==='true',prepared.query,prepared.identityBasis):new TimestampHttpSource(profile,{paused:()=>config.FOP_QUERIES_PAUSED?.trim().toLowerCase()==='true',identity:config.FOP_OPENAPI_IDENTITY,tokenHeader:config.FOP_OPENAPI_TOKEN_HEADER,
   token:async()=>token??(token=await getToken(config))})
  source.assertReady(scope)
- const {DataSource}=require('typeorm'),db=await new DataSource({type:'postgres',host:config.DB_HOST,port:+config.DB_PORT,username:config.DB_USERNAME,password:config.DB_PASSWORD,database:config.DB_DATABASE,logging:false}).initialize()
+ const {DataSource}=require('typeorm'),db=await new DataSource(syncDatabaseOptions(config)).initialize()
  try{
   const [{present}]=await db.query("SELECT to_regclass('hz_fop_timestamp_state') IS NOT NULL AS present")
   if(!present)throw Error('timestamp_migration_required')

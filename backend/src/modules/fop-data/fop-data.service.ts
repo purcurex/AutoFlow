@@ -1,3 +1,4 @@
+import { dashboardExceptionSummary } from './dashboard-exception-summary'
 import { matchesQueue, type Queue } from './workbench-queue-rules'
 import { DASHBOARD_QUEUES, dashboardQueues } from './dashboard-queues'
 import { localEmployeeFilter, localOwnership, localDepartments, localSalespeople } from './local-workbench-scope'
@@ -126,7 +127,7 @@ function publicOrder(order: FopOrderCandidate): FopOrder {
   })) throw new Error('Invalid procurement preparation fact')
   if (procurement !== undefined && (!procurement
     || !['not_ordered', 'partial', 'ordered', 'cancelled', 'not_required', 'unknown'].includes(procurement.purchaseOrder)
-    || !['unpaid', 'partial', 'paid', 'refunded', 'not_required', 'unknown'].includes(procurement.supplierPayment))) {
+    || !['unpaid', 'partial', 'paid', 'refunded', 'partially_refunded', 'not_required', 'unknown'].includes(procurement.supplierPayment))) {
     throw new Error('Invalid procurement progress')
   }
   const documents = order.dispatchDocuments
@@ -1600,7 +1601,7 @@ export class FopDataService {
       businessScope: scoped.initial.business, source: this.provider.source ?? 'fop', updatedAt: now.toISOString(), ...pending, rates, ...registrationData,
       exceptions: allowed('exceptions') ? orders.filter((order) => matchesQueue(order, 'exceptions'))
         .sort(comparePaymentTime)
-        .map((order) => ({ id: order.orderNumber, customer: order.customerName, type: order.exception!.type, reason: order.exception!.reason, hours: order.exception!.hours })) : [],
+        .map(dashboardExceptionSummary) : [],
       receipts, departmentReceipts, chartAccess,
     }
   }

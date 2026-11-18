@@ -1,5 +1,4 @@
 import type { FopOrderItem, SalesDepartmentCode } from './fop-data.types'
-import { procurementStageLabels } from './procurement-stage'
 
 export const STOCK_BILL_STATUS_LABELS: Record<string, string> = { A: '暂存', B: '已提交', C: '已审核' }
 export const STOCK_TYPES = ['full_payment', 'deposit'] as const
@@ -15,7 +14,7 @@ export const STOCK_PURCHASE_STATUSES = ['unpurchased', 'partial', 'in_progress',
 export type StockType = typeof STOCK_TYPES[number]
 export type StockPurchaseStatus = typeof STOCK_PURCHASE_STATUSES[number]
 export const STOCK_TYPE_LABELS = { full_payment: '全款备货', deposit: '押金备货' }
-export const STOCK_PURCHASE_LABELS = { unpurchased: '未采购', partial: '部分采购', in_progress: '采购中', purchased: procurementStageLabels.supplier_pending[0], shipped: procurementStageLabels.shipped[0], received: '已入库', unknown: '—' }
+export const STOCK_PURCHASE_LABELS = { unpurchased: '未采购', partial: '部分采购', in_progress: '采购中', purchased: '已采购', shipped: '已发货', received: '已入库', unknown: '—' }
 
 export interface StockOwnership {
   customerId: string; customerCode: string; customerName: string
@@ -23,6 +22,7 @@ export interface StockOwnership {
   departmentPathIds?: string[]; salesDepartmentCode?: SalesDepartmentCode
 }
 export interface FopStockOrder extends StockOwnership {
+  exception?: { type: string | null; reason?: string | null; hours?: number | null } | null
   id: string; stockNumber: string; stockType: StockType; storeName: string | null
   items: FopOrderItem[]; amount: number; currency: string; paidAt: string | null
   /** Actual stock-order creation time; never inferred from a fulfillment order or paidAt. */
@@ -30,6 +30,7 @@ export interface FopStockOrder extends StockOwnership {
   paymentStatus: 'paid' | 'unpaid' | 'unknown'; reviewStatus: 'approved' | 'pending' | 'unknown'
   orderStatus: StockOrderStatus | null
   rawOrderStatus?: string | null; rawBillStatus?: string | null
+  orderStatusName?: string | null; rawPurchaseStatus?: string | null; purchaseStatusName?: string | null
   /** Actual procurement payment for outstanding supplier shipment, not customer paidAt. */
   procurementPaidAt?: string | null
   purchaseStatus: StockPurchaseStatus; warehouseCode: string; warehouse: string

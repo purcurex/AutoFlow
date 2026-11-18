@@ -9,7 +9,7 @@ import {
   SourcingImageResolverService,
 } from './sourcing-image-resolver.service'
 
-type SharpFactory = (typeof import('sharp'))['sharp']
+type SharpFactory = (typeof import('sharp'))['default']
 const sharp = (sharpModule as unknown as { default?: SharpFactory }).default
   ?? sharpModule as unknown as SharpFactory
 

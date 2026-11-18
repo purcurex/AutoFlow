@@ -1,4 +1,4 @@
-import { hasDispatchSyncFailure } from './order-dispatch-status'
+import { hasDispatchException } from './order-dispatch-status'
 import type { FopOrder, ProcurementProgress } from './fop-data.types'
 import type { FULFILLMENT_QUEUE_ROLES, ListFulfillmentOrdersDto } from '../users/dto/workbench.dto'
 
@@ -11,9 +11,9 @@ export function isProcurementReady(purchase: ProcurementProgress | undefined): b
 }
 
 export function matchesQueue(order: FopOrder, queue: Queue, warehouseStage?: ListFulfillmentOrdersDto['warehouseStage']): boolean {
-  if (queue === 'dispatch' && hasDispatchSyncFailure(order)) return false
-  if (queue === 'exceptions' && hasDispatchSyncFailure(order)) return true
-  if (queue === 'dispatch' && order.businessStatus) return order.reviewStatus === 'approved' && ['paid','processing','fulfillment_cancelled'].includes(order.businessStatus.order)
+  if (queue === 'exceptions' && order.businessStatus?.order === 'fulfillment_cancelled') return true
+  if (queue === 'exceptions' && hasDispatchException(order)) return true
+  if (queue === 'dispatch' && order.businessStatus) return order.reviewStatus === 'approved' && ['paid','processing'].includes(order.businessStatus.order)
   if (order.cancelled) return false
   if (queue === 'exceptions') return order.exception != null
   if (queue === 'unpaid') return order.paymentStatus === 'unpaid' && !['refunded', 'voided', 'expired', 'unpaid'].includes(order.sourcePaymentStatus ?? '')
@@ -37,8 +37,8 @@ export function matchesQueue(order: FopOrder, queue: Queue, warehouseStage?: Lis
   }
   if (order.reviewStatus !== 'approved' || progress.allocationCreated !== true) return false
   switch (queue) {
-    case 'allocation': return progress.stockReadiness === 'incomplete' && progress.allocationReview === 'pending' && (progress.outbound === 'pending' || progress.outbound === 'partial')
-    case 'allocation_review': return progress.stockReadiness === 'ready' && progress.allocationReview === 'pending' && (progress.outbound === 'pending' || progress.outbound === 'partial')
+    case 'allocation': return progress.stockReadiness === 'incomplete' && progress.allocationReview === 'pending'
+    case 'allocation_review': return progress.stockReadiness === 'ready' && progress.allocationReview === 'pending'
     // Pending allocation approval belongs only to allocation; legacy pending_review queries stay empty.
     case 'shipping': return warehouseStage !== 'pending_review' && progress.stockReadiness === 'ready'
       && progress.allocationReview === 'approved' && (progress.outbound === 'pending' || progress.outbound === 'partial')

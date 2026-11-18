@@ -1,8 +1,51 @@
+import { stockPurchaseSql } from './local-workbench-query'
 import { buildLocalOrderQuery, localQueueCode, localResourceGrantSql } from './local-workbench-query'
 import { localOrder, localStockOrder } from './local-workbench-mapping'
 
 const scopes = [{ connectionId: 'connection', companyId: 'company', datasetId: 'dataset', employeeIds: ['123'] }]
+describe('formal queue alignment with current list date and physical purchase facts', () => {
+  it('requires verified completed allocations and an approved active dispatch before pending outbound', () => {
+    const sql=buildLocalOrderQuery(scopes,{queue:'shipping'})
+    expect(sql.where).toContain("allocation_approval.review_state='approved'")
+    expect(sql.where).toContain("ds.raw_bill_status='C'")
+    expect(sql.where).toContain("d.raw_delivery_status IS DISTINCT FROM 'CANCELLED'")
+    expect(sql.where).toContain('NOT delivery.incomplete')
+    expect(sql.from).toContain("a.raw_allocation_status IS DISTINCT FROM 'voided'")
+    expect(sql.from).toContain("s.entity_code='hzkj_alloc_bill'")
+    expect(sql.from).toContain('allocation_approval')
+    expect(sql.where).not.toContain("intercept_status IS DISTINCT FROM 'intercepted'")
+    const completed=buildLocalOrderQuery(scopes,{queue:'shipping',completed:true})
+    expect(completed.where).not.toContain('allocation_approval')
+    expect(completed.where).not.toContain('delivery.incomplete')
+  })
+  it.each(['review', 'dispatch', 'procurement', 'allocation_review', 'shipping'])('defaults completed %s to the last 30 days of customer payment', queue => {
+    const sql = buildLocalOrderQuery(scopes, { queue, completed: true })
+    expect(sql.where).toContain("o.customer_paid_at >= CURRENT_TIMESTAMP - INTERVAL '30 days'")
+    expect(sql.where).not.toContain('phase_completed_at >=')
+  })
+  it('defaults unpaid to 30 days of source payment and preserves unrestricted ordinary queues', () => {
+    expect(buildLocalOrderQuery(scopes, { queue: 'unpaid' }).where).toContain("o.consumer_paid_at >= CURRENT_TIMESTAMP - INTERVAL '30 days'")
+    for (const queue of ['review', 'procurement', 'procurement_shipping', 'allocation', 'allocation_review', 'shipping', 'purchase_returns']) {
+      expect(buildLocalOrderQuery(scopes, { queue }).where).not.toContain('customer_paid_at >=')
+    }
+    expect(buildLocalOrderQuery(scopes, { queue: 'procurement' }, true).where).not.toContain('customer_paid_at >=')
+    expect(buildLocalOrderQuery(scopes, { queue: 'review', completed: true, timeRange: '3m' }).where).toContain("INTERVAL '90 days'")
+  })
+  it.each([{queue:'procurement'}, {queue:'procurement_shipping'}, {queue:'procurement',completed:true}])('does not let a legacy purchase header override physical membership: %j', query => {
+    const sql = buildLocalOrderQuery(scopes, query)
+    expect(sql.where).not.toContain('native.raw_purchase_status')
+    expect(sql.where).toContain('owner_employee_id = ANY')
+    expect(sql.where).toContain("decision = 'deny'")
+  })
+})
 describe('local workbench query boundary', () => {
+  it('uses the UI month default for approved and sales stock, preserving explicit all',()=>{
+    for(const stock of [false,true]){
+      const query={queue:stock?'all':'review',completed:!stock}
+      expect(buildLocalOrderQuery(scopes,query,stock)).toEqual(buildLocalOrderQuery(scopes,{...query,timeRange:'1m'},stock))
+      expect(buildLocalOrderQuery(scopes,{...query,timeRange:'all'},stock).where).not.toContain('customer_paid_at >=')
+    }
+  })
   it('uses the warehouse resource enum defined by the database schema', () => {
     expect(buildLocalOrderQuery(scopes,{queue:'review',warehouseCode:'HZ'}).where).toContain("resource_type = 'warehouse'")
   })
@@ -83,16 +126,16 @@ it('keeps source checkout independent for unpaid date range, sort and response',
 it('uses the same unnumbered grouping in the formal local replica',()=>{
  const q=buildLocalOrderQuery(scopes,{queue:'dispatch',taskStatus:'dispatch_pending'})
  expect(q.where).toContain("delivery.has_tracking")
- expect(q.where).toContain("native.raw_order_status IN ('2','3','6')")
+ expect(q.where).toContain("native.raw_order_status IN ('2','3')")
  expect(q.values).toContain('dispatch_pending')
  expect(q.where).toContain('owner_employee_id = ANY')
 })
 
-it('keeps native sync failures in dispatch exceptions and out of both dispatch queues with scope intact',()=>{
+it('keeps native sync failures supplementary to normal dispatch queues with scope intact',()=>{
  for(const completed of [false,true]){
   const q=buildLocalOrderQuery(scopes,{queue:'dispatch',completed})
-  expect(q.where).toContain("d.raw_delivery_status='SYNC_FAILED'")
-  expect(q.where).toContain('NOT (sd.raw_bill_status')
+  expect(q.where).not.toContain("d.raw_delivery_status='SYNC_FAILED'")
+  expect(q.where).not.toContain("NOT ((native.raw_order_status='6') OR ((sd.raw_bill_status")
   expect(q.where).toContain('owner_employee_id = ANY')
  }
  const q=buildLocalOrderQuery(scopes,{queue:'exceptions',taskStatus:'dispatch_exception'})
@@ -109,3 +152,26 @@ it('keeps native sync failures in dispatch exceptions and out of both dispatch q
    expect(result.trackingNumber).toBe(number)
   }
  })
+
+it('uses current same-order package tracking for fulfilled gating and dispatch exception display',()=>{
+ const q=buildLocalOrderQuery(scopes,{queue:'exceptions',taskStatus:'dispatch_exception'})
+ for(const clause of ['pkg.order_document_id=o.document_id','pkg.connection_id=o.connection_id','pkg.company_id=o.company_id','pkg.dataset_id=o.dataset_id','pkg.expected_active IS TRUE','pkg.removed_at IS NULL','pkg.tracking_number']) expect(q.where).toContain(clause)
+ expect(localOrder({...row(),fulfilled_tracking_missing:true,native_order_status:'4'},[]).exception).toMatchObject({type:'dispatch_exception',reason:'履约订单物流跟踪号为空'})
+})
+
+it('maps missing obtained tracking to dispatch exception without changing the fulfillment order status',()=>{
+ const order=localOrder({...row(),obtained_tracking_missing:true,native_order_status:'3'},[])
+ expect(order.exception).toMatchObject({type:'dispatch_exception',reason:'已取号订单缺少物流跟踪号'})
+ expect(order.businessStatus?.order).toBe('processing')
+})
+it('reads stock purchase status from the native stock header, not derived supplier stages',()=>{
+
+ expect(stockPurchaseSql).toContain('hz_fop_stock_orders')
+ expect(stockPurchaseSql).toContain('raw_purchase_status')
+ expect(stockPurchaseSql).toContain("WHEN '1' THEN 'in_progress'")
+ expect(stockPurchaseSql).toContain("WHEN '2' THEN 'purchased'")
+ expect(stockPurchaseSql).not.toMatch(/supplier_shipment_state|procurement_stage|purchase_coverage_state/)
+})
+it('retains simultaneous dispatch causes in the formal local adapter',()=>{
+ expect(localOrder({...row(),native_order_status:'4',dispatch_sync_failed:true,fulfilled_tracking_missing:true},[]).exception?.reason).toBe('发运审核同步状态与履约状态不一致；履约订单物流跟踪号为空')
+})

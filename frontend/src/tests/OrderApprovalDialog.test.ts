@@ -8,6 +8,16 @@ vi.mock('@/api/fop-approvals', () => ({ previewOrderApproval: vi.fn(), submitOrd
 const item = { orderId: 'o', orderNumber: 'SO-1', version: 'a'.repeat(64), eligible: true, documents: [{ id: 'd', number: 'AO261028000404', status: 'B', eligible: true, reason: null }] }
 function setup(queue: 'review' | 'allocation_review' = 'allocation_review') { return mount(OrderApprovalDialog, { props: { queue, orderIds: ['o'] }, global: { plugins: [createI18n({ legacy: false, locale: 'zh-CN' })], stubs: { OrganizationModal: { template: '<section><slot /><slot name="footer" /></section>' } } } }) }
 describe('approval confirmation', () => {
+  it('surfaces the FOP rejection as an alert and never labels a rejected order successful', async () => {
+    vi.mocked(submitOrderApproval).mockResolvedValue({source:'fop',requestId:'r',completedAt:'',items:[{orderId:'o',orderNumber:'SO-1',status:'failed',message:'未完成审核',documents:[{id:'d',number:'SO-1',status:'failed',message:'详细地址未识别到有效门牌号；Google校验超时',warning:null}]}]})
+    const wrapper=setup('review');await flushPromises()
+    await wrapper.get('[data-testid="confirm-approval"]').trigger('click');await flushPromises()
+    expect(wrapper.get('[role="alert"]').text()).toContain('有效门牌号')
+    expect(wrapper.get('.approval-row-title').text()).not.toContain('审核成功')
+    expect(wrapper.emitted('completed')).toHaveLength(1)
+    wrapper.unmount()
+  })
+
   it('does not submit a preview from a previous login session', async () => {
     const wrapper = setup(); await flushPromises()
     invalidateSession()

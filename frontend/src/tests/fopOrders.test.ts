@@ -5,6 +5,20 @@ import { clearWorkbenchCounts, getWorkbenchCount } from '@/utils/workbench-count
 import { getProcurementStage } from '@/utils/procurement-stage'
 import { mockFopOrders } from '@/api/fop-order-fixtures'
 
+describe('collected allocation document admission', () => {
+  const row = (documents: unknown[]) => ({...mockFopOrders[0]!, reviewStatus:'approved' as const, dataQuality:{mode:'collected',readOnly:true,missingFields:[],reasons:[]}, allocationDocuments:documents}) as unknown as import('@/api/fop-orders').FopOrder
+  const valid={id:'active',number:'AO-A',rawBillStatus:'B',rawAllocationStatus:'completed',association:{state:'verified'}}
+  it('ignores voided allocations when valid pending allocations are ready', () => {
+    expect(matchesFopQueue(row([valid,{id:'voided',number:'AO-V',rawBillStatus:'A',rawAllocationStatus:'voided'}]),'allocation_review')).toBe(true)
+    expect(matchesFopQueue(row([{id:'voided',number:'AO-V',rawBillStatus:'A',rawAllocationStatus:'voided'}]),'allocation_review')).toBe(false)
+  })
+  it('rejects an explicitly unverified live allocation before accepting its status', () => {
+    expect(matchesFopQueue(row([{...valid,association:{state:'unverified'}}]),'allocation_review')).toBe(false)
+    expect(matchesFopQueue(row([{...valid,rawBillStatus:'C',association:{state:'unverified'}}]),'allocation_review',undefined,true)).toBe(false)
+    expect(matchesFopQueue(row([{...valid,rawBillStatus:'C',rawAllocationStatus:null}]),'allocation_review',undefined,true)).toBe(false)
+  })
+})
+
 const get = vi.hoisted(() => vi.fn())
 vi.mock('@/api/index', () => ({ default: { get } }))
 
@@ -99,9 +113,9 @@ describe('explicit procurement and outbound evidence', () => {
       expect(getProcurementStage(row.procurementProgress, 'pending')).toBe('unknown')
     }
   })
-  it('requires explicit pending outbound for both allocation queues', () => {
-    expect(matchesFopQueue(base, 'allocation')).toBe(false)
-    expect(matchesFopQueue({ ...base, fulfillmentProgress: { ...base.fulfillmentProgress, stockReadiness: 'ready' } }, 'allocation_review')).toBe(false)
+  it('keeps allocation readiness independent of unknown outbound progress', () => {
+    expect(matchesFopQueue(base, 'allocation')).toBe(true)
+    expect(matchesFopQueue({ ...base, fulfillmentProgress: { ...base.fulfillmentProgress, stockReadiness: 'ready' } }, 'allocation_review')).toBe(true)
   })
 })
 

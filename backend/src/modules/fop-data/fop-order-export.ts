@@ -1,4 +1,4 @@
-import { singleSheetWorkbook, appendExportRecipients } from '../workbench-export/single-sheet'
+import { exportProductRow, singleSheetWorkbook, appendExportRecipients } from '../workbench-export/single-sheet'
 import { sourceStatusLabel, businessStatusLabel } from './fulfillment-source-status'
 import { fulfillmentSortDirection, fulfillmentSortField } from './fop-order-sort'
 import { completedAt, completionLabels, completionTimeLabels, isCompletionQueue } from './completed-orders'
@@ -78,6 +78,7 @@ export async function buildFulfillmentWorkbook(orders: readonly FopOrder[], quer
     const statusColumn = columns.find(column => column.key === 'primaryStatus')
     if (statusColumn) statusColumn.header = query.queue === 'procurement' ? '采购状态' : query.queue === 'shipping' ? '出库状态' : query.queue === 'dispatch' ? '履约状态' : query.queue === 'allocation_review' ? '审核状态' : '完成状态'
   }
+  columns.push(column('订单备注','orderRemark',48))
   columns.push(column('订单状态', 'orderState'), column('订单采购状态', 'purchaseState'), column('源单发货状态', 'sourceShipment'))
   const list = sheet(workbook, '订单清单', columns)
   const items = sheet(workbook, '商品明细', [column('订单编号', 'orderNumber', 30), column('商品信息', 'name', 40), column('SKU', 'sku', 26), column('规格', 'variant', 26), { ...column('数量', 'quantity', 12), number: true }, column('商品图片链接', 'imageUrl', 50), column('商品采购状态', 'purchaseState')])
@@ -87,7 +88,7 @@ export async function buildFulfillmentWorkbook(orders: readonly FopOrder[], quer
     const detail = normalizeOrderAmountBreakdown(order.amountBreakdown)
     const detailMoney = (value: number | null | undefined) => value == null ? '—' : moneyToCents(value) / 100
     addRow(list, {
-      orderState: businessStatusLabel(order.businessStatus?.order), purchaseState: businessStatusLabel(order.businessStatus?.purchase,'purchase'), sourceShipment: businessStatusLabel(order.businessStatus?.sourceShipment,'source'),
+      orderRemark:order.orderRemark??'',orderState: businessStatusLabel(order.businessStatus?.order), purchaseState: businessStatusLabel(order.businessStatus?.purchase,'purchase'), sourceShipment: businessStatusLabel(order.businessStatus?.sourceShipment,'source'),
       shipmentInterceptStatus: order.shipmentInterceptStatus === 'intercepted' ? '拦截发货' : order.shipmentInterceptStatus === 'released' ? '取消拦截' : '—',
       completedAt: dateText(completedAt(order, query.queue)), orderNumber: order.orderNumber, products: itemSummary(order.items.map(item => `${item.name}\nSKU · ${item.sku} × ${item.quantity}${item.variant ? `\n${item.variant}` : ''}`)), shopifyOrderNumber: order.shopifyOrderNumber,
       customerName: order.customerName, shippingCountryCode: normalizeShippingCountry(order.shippingCountryCode) ?? '—', paidAt: dateText(order.paidAt), primaryStatus, allocationNumber: order.allocationDocument?.number || '—', dispatchNumbers: order.dispatchDocuments?.map(doc => doc.number).join('\n') || '—', storeName: order.storeName,
@@ -98,7 +99,7 @@ export async function buildFulfillmentWorkbook(orders: readonly FopOrder[], quer
       logisticsChannels: normalizeLogisticsChannels(order.logisticsChannels)?.map(logisticsChannelLabel).join('\n') || '—',
       customLogisticsChannelName: normalizeCustomLogisticsChannelName(order.customLogisticsChannelName) ?? '—',
     })
-    for (const item of order.items) addRow(items, { orderNumber: order.orderNumber, name: item.name, sku: item.sku, variant: item.variant, quantity: item.quantity, imageUrl: item.imageUrl ?? '', purchaseState: businessStatusLabel(item.purchaseState, 'purchase') })
+    for (const item of order.items) exportProductRow(addRow(items, { orderNumber: order.orderNumber, name: item.name, sku: item.sku, variant: item.variant, quantity: item.quantity, imageUrl: item.imageUrl ?? '', purchaseState: businessStatusLabel(item.purchaseState, 'purchase') }), item)
   }
   list.autoFilter = { from: { row: 1, column: 1 }, to: { row: orders.length + 1, column: columns.length } }
   items.autoFilter = { from: { row: 1, column: 1 }, to: { row: itemCount + 1, column: 6 } }

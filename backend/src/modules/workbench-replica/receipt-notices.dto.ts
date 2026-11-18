@@ -8,5 +8,5 @@ export class ReceiptNoticesQueryDto {
   @IsOptional() @IsString() @MaxLength(128) warehouseCode?: string
   @IsOptional() @IsIn(['pending', 'partial']) status?: 'pending' | 'partial'
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(1000000) page = 1
-  @IsOptional() @Type(() => Number) @IsIn([20, 50, 100]) pageSize = 20
+  @IsOptional() @Type(() => Number) @IsIn([20, 50, 100, 200, 500, 1000]) pageSize = 100
 }

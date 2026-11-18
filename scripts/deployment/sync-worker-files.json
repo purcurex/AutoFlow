@@ -1,0 +1,8 @@
+[
+  "workbench-scheduled-sync.mjs",
+  "workbench-timestamp-sync.mjs",
+  "workbench-sync-runtime.mjs",
+  "fop-workbench-openapi.mjs",
+  "fop-openapi-smoke.mjs",
+  "fop-confirmed-origin.mjs"
+]

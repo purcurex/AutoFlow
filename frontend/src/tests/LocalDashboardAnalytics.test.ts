@@ -2,7 +2,7 @@ import { mount,flushPromises as flushVuePromises } from '@vue/test-utils'
 import { describe,it,expect,vi,beforeEach,afterEach } from 'vitest'
 import LocalDashboardAnalytics from '@/components/charts/LocalDashboardAnalytics.vue'
 const get=vi.hoisted(()=>vi.fn())
-vi.mock('@/api/local-dashboard-analytics',()=>({getLocalDashboardAnalytics:get}))
+vi.mock('@/api/local-dashboard-analytics',()=>({getLocalDashboardAnalytics:get,getLocalDashboardTrend:vi.fn()}))
 vi.mock('@/utils/session',()=>({onSessionReset:()=>()=>{}}))
 vi.mock('@/components/charts/EChart.vue',()=>({default:{name:'EChart',props:['option','label'],template:'<div data-chart />'}}))
 const value={source:'local',asOf:'2026-11-12T00:00:00Z',summaryOnly:false,rows:[{dimension:'month',id:'2026-11',label:'2026-11',currency:null,orderCount:42,amount:null,quantity:'71'}],orderCount:42,departments:[{id:'d1',name:'业务一部'}],warehouses:[],currencies:[],missingCurrencyCount:42,missingAmountCount:0,missingPaidAtCount:2}
@@ -34,7 +34,7 @@ it.each(['customer_orders','order_volume'] as const)('groups %s orders and quant
 it.each([
  ['registrations',['注册日期','业务员','月度趋势'],'day'],
  ['salesperson_receipts',['业务员','月度趋势'],'person'],
- ['order_volume',['月度趋势','业务员','国家','仓库'],'month'],
+ ['order_volume',['业务员','仓库','国家','月度趋势'],'person'],
  ['customer_orders',['客户','业务员','月度趋势'],'customer'],
 ] as const)('merges the department dimension into salesperson without changing the %s default',async(chartId,labels,initial)=>{
  const w=mount(LocalDashboardAnalytics,{props:{chartId,title:'统计'}});await flushPromises()
@@ -95,15 +95,15 @@ it.each(['salesperson_receipts','registrations','customer_orders','order_volume'
  expect(w.find('.chart').classes()).toContain('grouped-revenue')
  w.unmount()
 })
-it.each(['salesperson_receipts','registrations','customer_orders','order_volume'] as const)('keeps %s department-only for summary permission',async(chartId)=>{
+it.each(['salesperson_receipts','registrations','customer_orders','order_volume'] as const)('keeps %s controls consistent without exposing personal summary rows',async(chartId)=>{
  get.mockResolvedValue({...value,summaryOnly:true,rows:[
   {...value.rows[0],id:'d1',dimension:'department',label:'业务一部',currency:'USD',amount:'100.00'},
   {...value.rows[0],id:'p1',dimension:'person',label:'张三（Alex）',englishName:'Alex',departmentId:'d1',currency:'USD',amount:'100.00'},
  ]})
  const w=mount(LocalDashboardAnalytics,{props:{chartId,title:'统计'}});await flushPromises()
- expect(w.find('[aria-label="展示维度"]').exists()).toBe(false)
- expect(w.find('.analysis-controls').text()).not.toContain('展示维度')
- expect(w.findComponent({name:'EChart'}).props('option').xAxis.data).toEqual(['业务一部'])
+ expect(w.find('[aria-label="展示维度"]').exists()).toBe(true)
+ expect(w.find('.analysis-controls').text()).toContain('展示维度')
+ expect(w.findAll('option').map(o=>o.text())).toContain('月度趋势')
  expect(w.find('.revenue-legend').exists()).toBe(false)
  expect(w.text()).not.toContain('Alex');w.unmount()
 })
@@ -201,6 +201,7 @@ it('does not repeat a manual query or query after unmount while a date query is 
 it('keeps the chart while loading and ignores an older date response arriving last',async()=>{
  vi.useFakeTimers();vi.setSystemTime(new Date('2026-11-17T00:00:00Z'))
  const w=mount(LocalDashboardAnalytics,{props:{chartId:'order_volume',title:'分析'}});await flushPromises()
+ await w.get('select[aria-label="展示维度"]').setValue('month')
  let finishOld!:(result:typeof value)=>void
  get.mockImplementationOnce(()=>new Promise(resolve=>{finishOld=resolve}))
  await w.findAll('input[type="date"]')[0]!.setValue('2026-10-01')
@@ -231,6 +232,7 @@ it.each([
 describe('local dashboard analytics',()=>{
  it('renders database aggregates into ECharts and applies filters to the local request',async()=>{
   const w=mount(LocalDashboardAnalytics,{props:{chartId:'order_volume',title:'订单量分析'}});await flushPromises()
+  await w.get('select[aria-label="展示维度"]').setValue('month')
   expect(w.find('[data-chart]').exists()).toBe(true);expect(w.text()).toContain('42 笔订单')
   await w.findAll('select')[0]!.setValue('d1');await w.find('form').trigger('submit');await flushPromises()
   expect(get.mock.lastCall?.[0]).toMatchObject({chartId:'order_volume',departmentId:'d1',entityType:'fulfillment'})
@@ -247,10 +249,10 @@ describe('local dashboard analytics',()=>{
   get.mockRejectedValue(new Error('forbidden'));await w.find('form').trigger('submit');await flushPromises()
   expect(w.find('[data-chart]').exists()).toBe(false);expect(w.text()).toContain('加载失败')
  })
- it('never offers customer or person dimensions for department-only users',async()=>{
+ it('keeps customer controls available while backend scope limits returned data',async()=>{
   get.mockResolvedValue({...value,summaryOnly:true,rows:[]})
   const w=mount(LocalDashboardAnalytics,{props:{chartId:'customer_orders',title:'客户订单分析'}});await flushPromises()
-  expect(w.findAll('option').map(o=>o.text())).not.toContain('客户')
+  expect(w.findAll('option').map(o=>o.text())).toContain('客户')
  })
 })
 it('shows salesperson revenue in USD, ranked by amount rather than order count',async()=>{
@@ -305,11 +307,11 @@ it('shows customer creation registrations with no order/quantity filter or FOP r
  expect(w.findAll('option').map(o=>o.text())).toContain('业务员')
  w.unmount()
 })
-it('registration department summaries expose no person or monthly dimensions',async()=>{
+it('registration summary grants preserve the same dimension controls',async()=>{
  get.mockResolvedValue({...value,summaryOnly:true,rows:[],registrationCount:0})
  const w=mount(LocalDashboardAnalytics,{props:{chartId:'registrations',title:'客户注册统计'}});await flushPromises()
  const options=w.findAll('option').map(o=>o.text())
- expect(options).not.toContain('业务员');expect(options).not.toContain('月度趋势');expect(options).not.toContain('注册日期')
+ expect(options).toContain('业务员');expect(options).toContain('月度趋势');expect(options).toContain('注册日期')
  w.unmount()
 })
 
@@ -497,5 +499,38 @@ it('coalesces rapid warehouse choices and ignores the earlier response while fin
  await vi.advanceTimersByTimeAsync(200);await flushVuePromises()
  expect(get).toHaveBeenCalledTimes(3)
  expect(get.mock.lastCall?.[0].warehouseCode).toBe('c')
+ w.unmount()
+})
+
+it('opens the clicked department or member by stable ID and closes the trend when filters change',async()=>{
+ get.mockResolvedValue({...value,rows:[
+  {...value.rows[0],dimension:'department',id:'d1',label:'业务一部'},
+  {...value.rows[0],dimension:'person',id:'p1',label:'张三',englishName:'Alex',departmentId:'d1'},
+  {...value.rows[0],dimension:'department',id:'d2',label:'业务二部'},
+  {...value.rows[0],dimension:'person',id:'p2',label:'李四',englishName:'Alex',departmentId:'d2'},
+ ]})
+ const w=mount(LocalDashboardAnalytics,{props:{chartId:'order_volume',title:'订单量'},global:{stubs:{AnalyticsTrendDialog:{name:'AnalyticsTrendDialog',props:['target','query','targets','metric'],template:'<div data-trend />'}}}});await flushPromises()
+ const chart=w.findComponent({name:'EChart'})
+ chart.vm.$emit('select',{dataIndex:1});await flushPromises()
+ expect(w.findComponent({name:'AnalyticsTrendDialog'}).props('target')).toMatchObject({id:'p1',dimension:'person'})
+ chart.vm.$emit('select',{dataIndex:4});await flushPromises()
+ expect(w.findComponent({name:'AnalyticsTrendDialog'}).props('target')).toMatchObject({id:'p2',dimension:'person'})
+ chart.vm.$emit('select',{dataIndex:3});await flushPromises()
+ expect(w.findComponent({name:'AnalyticsTrendDialog'}).props('target')).toMatchObject({id:'d2',dimension:'department'})
+ await w.get('select[aria-label="展示维度"]').setValue('month');await flushPromises()
+ expect(w.find('[data-trend]').exists()).toBe(false)
+ expect(w.find('.trend-open').exists()).toBe(false)
+ w.unmount()
+})
+it('opens the actual clicked comparison period rather than the parent date range',async()=>{
+ const person={...value.rows[0],dimension:'person',id:'p1',label:'Alex',englishName:'Alex'}
+ const current={from:'2026-11-09',to:'2026-11-15'},previous={from:'2026-11-02',to:'2026-11-08'}
+ get.mockResolvedValue({...value,rows:[person],comparison:{available:true,mode:'week',current,previous,metrics:[],previousData:{...value,rows:[person]}}})
+ const w=mount(LocalDashboardAnalytics,{props:{chartId:'order_volume',title:'订单量'},global:{stubs:{AnalyticsTrendDialog:{name:'AnalyticsTrendDialog',props:['target','query','targets','metric'],template:'<div data-trend />'}}}});await flushPromises()
+ const chart=w.findComponent({name:'EChart'})
+ chart.vm.$emit('select',{dataIndex:0,seriesIndex:0});await flushPromises()
+ expect(w.findComponent({name:'AnalyticsTrendDialog'}).props('query')).toMatchObject({...previous,comparison:undefined})
+ chart.vm.$emit('select',{dataIndex:0,seriesIndex:1});await flushPromises()
+ expect(w.findComponent({name:'AnalyticsTrendDialog'}).props('query')).toMatchObject({...current,comparison:undefined})
  w.unmount()
 })

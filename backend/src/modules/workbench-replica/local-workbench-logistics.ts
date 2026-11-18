@@ -55,7 +55,7 @@ export const localDispatchStateJoin = `LEFT JOIN LATERAL (SELECT CASE WHEN count
  WHEN bool_or(d.raw_delivery_status='PENDING') THEN 'dispatch_pending' ELSE 'dispatch_tracking' END AS task_state,
  CASE WHEN count(*)>0 AND bool_and(COALESCE(ds.raw_bill_status='C',false)) THEN 'dispatch_complete' ELSE 'dispatch_incomplete' END AS completion_state,
  CASE WHEN count(*)=0 THEN 'pending_dispatch' WHEN bool_or(EXISTS (SELECT 1 FROM hz_fop_tracking_numbers tn WHERE tn.dispatch_document_id=d.document_id AND tn.connection_id=o.connection_id AND tn.company_id=o.company_id AND tn.dataset_id=o.dataset_id AND tn.removed_at IS NULL AND tn.tracking_type='full' AND NULLIF(btrim(tn.number),'') IS NOT NULL)) THEN 'satisfied' ELSE 'pending_logistics' END AS logistics_gate,
- COALESCE(bool_or(d.raw_delivery_status IS DISTINCT FROM 'CANCELLED' AND EXISTS(SELECT 1 FROM hz_fop_tracking_numbers tn WHERE tn.dispatch_document_id=d.document_id AND tn.connection_id=o.connection_id AND tn.company_id=o.company_id AND tn.dataset_id=o.dataset_id AND tn.removed_at IS NULL AND tn.tracking_type IN ('full','first_mile','last_mile') AND NULLIF(btrim(tn.number),'') IS NOT NULL)),false) AS has_tracking,
+ COALESCE(bool_or(d.raw_delivery_status IS DISTINCT FROM 'CANCELLED' AND EXISTS(SELECT 1 FROM hz_fop_tracking_numbers tn WHERE tn.dispatch_document_id=d.document_id AND tn.connection_id=o.connection_id AND tn.company_id=o.company_id AND tn.dataset_id=o.dataset_id AND tn.removed_at IS NULL AND tn.tracking_type='full' AND NULLIF(btrim(tn.number, ' ' || chr(9) || chr(10) || chr(13)),'') IS NOT NULL)),false) AS has_tracking,
  ${localDispatchIncompleteSql} AS incomplete, max(ds.source_audited_at) AS audited_at
  ${localValidDispatchFromSql}) delivery ON TRUE`
 
@@ -71,19 +71,45 @@ export const localReviewLogisticsSql = `(SELECT jsonb_agg(jsonb_build_object('ch
  FROM hz_fop_order_packages pkg LEFT JOIN hz_fop_reference_items ch ON ch.connection_id=o.connection_id AND ch.company_id=o.company_id AND ch.resource_type='actual_channel' AND ch.source_id=pkg.channel_id AND ch.deleted_at IS NULL
  WHERE pkg.order_document_id=o.document_id AND pkg.connection_id=o.connection_id AND pkg.company_id=o.company_id AND pkg.dataset_id=o.dataset_id AND pkg.expected_active IS TRUE AND pkg.removed_at IS NULL)`
 
-/** Approval facts come from valid allocation documents, not the workbench completion timestamp. */
+/** Unresolved live allocation links cannot be interpreted as complete coverage. */
+const localAllocationIncompleteSql = `EXISTS (SELECT 1 FROM hz_fop_document_relations r
+ LEFT JOIN hz_fop_source_documents s ON s.id=r.to_document_id AND s.connection_id=o.connection_id AND s.company_id=o.company_id AND s.dataset_id=o.dataset_id
+ LEFT JOIN hz_fop_allocations a ON a.document_id=s.id AND a.company_id=o.company_id AND a.dataset_id=o.dataset_id
+ WHERE r.from_document_id=o.document_id AND r.connection_id=o.connection_id AND r.company_id=o.company_id AND r.dataset_id=o.dataset_id AND r.relation_type='allocation' AND r.removed_at IS NULL
+ AND s.deleted_at IS NULL AND a.raw_allocation_status IS DISTINCT FROM 'voided'
+ AND (r.resolution_state<>'resolved' OR s.id IS NULL OR s.validation_state<>'verified' OR s.entity_code<>'hzkj_alloc_bill' OR a.document_id IS NULL))`
+
+/** Approval facts come from all valid, non-voided allocation documents, never a completion timestamp. */
 export const localAllocationApprovalJoin = `LEFT JOIN LATERAL (
- SELECT CASE WHEN count(*)>0 AND bool_and(s.raw_bill_status='C') AND count(s.raw_bill_status)=count(*) THEN 'approved' ELSE 'unknown' END AS review_state,
+ SELECT CASE WHEN NOT ${localAllocationIncompleteSql} AND count(*)>0 AND bool_and(s.raw_bill_status='C' AND coalesce(a.raw_allocation_status='completed',false)) AND count(s.raw_bill_status)=count(*) THEN 'approved' ELSE 'unknown' END AS review_state,
+ ${localAllocationIncompleteSql} AS incomplete,
  CASE WHEN count(*)=count(s.source_audited_at) THEN max(s.source_audited_at) END AS audited_at
- FROM hz_fop_allocations a JOIN hz_fop_source_documents s ON s.id=a.document_id AND s.connection_id=o.connection_id AND s.company_id=o.company_id AND s.dataset_id=o.dataset_id AND s.deleted_at IS NULL AND s.validation_state='verified'
- WHERE a.company_id=o.company_id AND a.dataset_id=o.dataset_id AND EXISTS (SELECT 1 FROM hz_fop_document_relations r WHERE r.from_document_id=o.document_id AND r.to_document_id=a.document_id AND r.connection_id=o.connection_id AND r.company_id=o.company_id AND r.dataset_id=o.dataset_id AND r.relation_type='allocation' AND r.resolution_state='resolved' AND r.removed_at IS NULL)
+ FROM hz_fop_allocations a JOIN hz_fop_source_documents s ON s.id=a.document_id AND s.connection_id=o.connection_id AND s.company_id=o.company_id AND s.dataset_id=o.dataset_id AND s.entity_code='hzkj_alloc_bill' AND s.deleted_at IS NULL AND s.validation_state='verified'
+ WHERE a.company_id=o.company_id AND a.dataset_id=o.dataset_id AND a.raw_allocation_status IS DISTINCT FROM 'voided' AND EXISTS (SELECT 1 FROM hz_fop_document_relations r WHERE r.from_document_id=o.document_id AND r.to_document_id=a.document_id AND r.connection_id=o.connection_id AND r.company_id=o.company_id AND r.dataset_id=o.dataset_id AND r.relation_type='allocation' AND r.resolution_state='resolved' AND r.removed_at IS NULL)
 ) allocation_approval ON TRUE`
 
 export const localOrderDispatchTaskSql = `(CASE WHEN native.raw_order_status='6' THEN 'dispatch_cancelled'
  WHEN native.raw_order_status IN ('4','5') THEN 'dispatch_synced'
  WHEN native.raw_order_status NOT IN ('2','3') OR native.raw_order_status IS NULL OR delivery.incomplete THEN 'unknown'
+ WHEN NOT EXISTS(SELECT 1 ${localValidDispatchFromSql} AND d.raw_delivery_status IS DISTINCT FROM 'CANCELLED' AND NULLIF(btrim(ds.document_number),'') IS NOT NULL) THEN CASE WHEN delivery.has_tracking THEN 'unknown' ELSE 'dispatch_missing' END
  WHEN delivery.has_tracking THEN CASE WHEN native.raw_order_status='3' THEN 'dispatch_tracking' ELSE 'unknown' END
  ELSE 'dispatch_pending' END)`
 
 export const localDispatchFailureSql = `(sd.raw_bill_status='C' AND native.raw_order_status IN ('2','3','4','5')
  AND EXISTS(SELECT 1 ${localValidDispatchFromSql} AND d.raw_delivery_status='SYNC_FAILED'))`
+
+export const localMissingFulfilledTrackingSql = `(sd.raw_bill_status='C' AND native.raw_order_status IN ('4','5')
+ AND NOT EXISTS(SELECT 1 FROM hz_fop_order_packages pkg WHERE pkg.order_document_id=o.document_id
+ AND pkg.connection_id=o.connection_id AND pkg.company_id=o.company_id AND pkg.dataset_id=o.dataset_id
+ AND pkg.expected_active IS TRUE AND pkg.removed_at IS NULL AND NULLIF(btrim(pkg.tracking_number, ' ' || chr(9) || chr(10) || chr(13)),'') IS NOT NULL))`
+const localTrackingNumberFromSql = `FROM hz_fop_tracking_numbers tn WHERE tn.dispatch_document_id=d.document_id
+ AND tn.connection_id=o.connection_id AND tn.company_id=o.company_id AND tn.dataset_id=o.dataset_id AND tn.removed_at IS NULL
+ AND NULLIF(btrim(tn.number, ' ' || chr(9) || chr(10) || chr(13)),'') IS NOT NULL`
+export const localMissingObtainedTrackingSql = `(sd.raw_bill_status='C' AND native.raw_order_status IN ('2','3','4','5')
+ AND EXISTS(SELECT 1 ${localValidDispatchFromSql} AND d.raw_delivery_status IS DISTINCT FROM 'CANCELLED'
+ AND (d.raw_delivery_status='TRACKING_OBTAINED' OR EXISTS(SELECT 1 ${localTrackingNumberFromSql} AND tn.tracking_type IN ('full','first_mile','last_mile')))
+ AND NOT EXISTS(SELECT 1 ${localTrackingNumberFromSql} AND tn.tracking_type='full')))`
+export const localDispatchExceptionSql = `(${localDispatchFailureSql} OR ${localMissingObtainedTrackingSql} OR ${localMissingFulfilledTrackingSql})`
+
+export const localFulfillmentCancelledSql = "(native.raw_order_status='6')"
+export const localOrderExceptionSql = `(${localFulfillmentCancelledSql} OR ${localDispatchExceptionSql})`

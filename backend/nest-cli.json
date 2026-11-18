@@ -5,7 +5,11 @@
   "compilerOptions": {
     "deleteOutDir": true,
     "assets": [
-      "modules/quotation/assets/**/*"
+      "modules/quotation/assets/**/*",
+      {
+        "include": "modules/workbench-export/assets/**/*",
+        "outDir": "dist/src"
+      }
     ]
   }
 }

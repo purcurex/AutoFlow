@@ -1,3 +1,4 @@
+import { missingObtainedTrackingReason, missingFulfilledTrackingReason, dispatchSyncFailureReason } from '../fop-data/order-dispatch-status'
 import { orderBusinessStatus } from '../fop-data/order-business-status'
 import { ServiceUnavailableException } from '@nestjs/common'
 import type { FopOrder, FopOrderItem } from '../fop-data/fop-data.types'
@@ -12,6 +13,7 @@ function items(lines: LocalRow[]): FopOrderItem[] { return lines.map(line => ({ 
 /** Unknown stages remain unknown in the response; type assertion only bridges the older public type's narrower enums. */
 export function localOrder(row: LocalRow, lines: LocalRow[]): FopOrder {
   const paidAt = time(row.customer_paid_at)
+  const dispatchReasons = [row.dispatch_sync_failed ? (['4','5'].includes(row.native_order_status) ? '发运审核同步状态与履约状态不一致' : dispatchSyncFailureReason) : null, row.obtained_tracking_missing ? missingObtainedTrackingReason : null, row.fulfilled_tracking_missing ? missingFulfilledTrackingReason : null].filter(Boolean)
   const packages: LocalRow[] = Array.isArray(row.logistics_packages) ? row.logistics_packages : []
   const carriers = [...new Set(packages.map(p => p.carrierName).filter(Boolean))]
   const logisticsChannels = [...new Map(packages.filter(p => p.channelName || p.channelCode).map(p => [JSON.stringify([p.channelName, p.channelCode]), { name: p.channelName ?? null, code: p.channelCode ?? null }])).values()]
@@ -29,7 +31,7 @@ export function localOrder(row: LocalRow, lines: LocalRow[]): FopOrder {
     ...(row.native_order_status != null ? { businessStatus: orderBusinessStatus({ hzkj_orderstatus: row.native_order_status }) } : {}),
     dispatchTaskStatus: row.dispatch_task_state ?? 'unknown', shipmentInterceptStatus: ['intercepted', 'released'].includes(row.intercept_status) ? row.intercept_status : null,
     dispatchDocuments: row.dispatch_documents ?? null, allocationDocument: row.allocation_document ?? null, carrier: carriers.join(' / ') || null, logisticsChannels, logisticsInfo: packages.map(p => ({ carrierName: p.carrierName ?? null, channelName: p.channelName ?? null, channelCode: p.channelCode ?? null, ...('packageTrackingNumber' in p ? { packageTrackingNumber: p.packageTrackingNumber ?? null } : {}), shopifyTracking: p.shopifyTracking ?? null, trackingNumbers: p.trackingNumbers ?? undefined })), trackingNumber: tracking.length === 1 ? tracking[0] : null, cancelled: row.cancelled ?? null,
-    exception: row.dispatch_sync_failed ? {type:'dispatch_exception',reason:'Shopify跟踪号同步失败，请重新同步；成功回写后进入已履约清单。',hours:null} : row.exception_type ? { type: row.exception_type, reason: row.exception_reason ?? null, hours: row.exception_occurred_at ? Math.max(0, (Date.now() - Date.parse(row.exception_occurred_at)) / 3600000) : null } : null,
+    exception: row.native_order_status === '6' ? {type:'logistics_exception',reason:'取消履约',code:'fulfillment_cancelled',hours:null} : dispatchReasons.length ? {type:'dispatch_exception',reason:dispatchReasons.join('；'),hours:null} : row.exception_type ? { type: row.exception_type, reason: row.exception_reason ?? null, hours: row.exception_occurred_at ? Math.max(0, (Date.now() - Date.parse(row.exception_occurred_at)) / 3600000) : null } : null,
     ...(row.queue_code === 'dispatch_completed' ? { dispatchApprovedAt: time(row.dispatch_audited_at) } : {}),
     ...(row.queue_code === 'procurement_completed' ? { procurementCompletedAt: time(row.phase_completed_at) } : {}),
     ...(row.queue_code === 'allocation_completed' ? { allocationApprovedAt: time(row.allocation_audited_at) } : {}),
@@ -39,5 +41,5 @@ export function localOrder(row: LocalRow, lines: LocalRow[]): FopOrder {
 export function localStockOrder(row: LocalRow, lines: LocalRow[]): FopStockOrder {
   if (!['full_payment', 'deposit'].includes(row.stock_type)) throw new ServiceUnavailableException({ code: 'workbench_replica_incomplete', message: 'Missing stock type' })
   const order = localOrder(row, lines)
-  return { id: order.id, stockNumber: order.orderNumber, stockType: row.stock_type, customerId: row.customer_id ?? '', customerCode: '', customerName: order.customerName, storeName: order.storeName, owner: order.owner ?? { id: '', name: '' }, department: { id: '', name: '' }, items: order.items, amount: order.amount, currency: order.currency, paidAt: order.paidAt, createdAt: time(row.business_created_at), paymentStatus: row.customer_payment_state ?? 'unknown', reviewStatus: row.order_review_state ?? 'unknown', rawBillStatus: row.raw_bill_status ?? null, orderStatus: row.stock_order_status ?? null, purchaseStatus: row.stock_purchase_status ?? 'unknown', warehouseCode: order.warehouseCode ?? '', warehouse: order.warehouse }
+  return { exception:order.exception,id: order.id, stockNumber: order.orderNumber, stockType: row.stock_type, customerId: row.customer_id ?? '', customerCode: '', customerName: order.customerName, storeName: order.storeName, owner: order.owner ?? { id: '', name: '' }, department: { id: '', name: '' }, items: order.items, amount: order.amount, currency: order.currency, paidAt: order.paidAt, createdAt: time(row.business_created_at), paymentStatus: row.customer_payment_state ?? 'unknown', reviewStatus: row.order_review_state ?? 'unknown', rawBillStatus: row.raw_bill_status ?? null, orderStatus: row.stock_order_status ?? null, purchaseStatus: row.stock_purchase_status ?? 'unknown', warehouseCode: order.warehouseCode ?? '', warehouse: order.warehouse }
 }

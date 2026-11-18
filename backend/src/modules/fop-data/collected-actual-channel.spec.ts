@@ -46,7 +46,7 @@ it('reads the actual queryOrderList channel alias rather than expecting only nes
  expect(withCollectedActualChannel({}, {hzkj_logistics_info:[{hzkj_combofield:'1',hzkj_channel_name:'万邦快线含电'}]}).logisticsChannels).toEqual([{name:'万邦快线含电',code:null}])
 })
 it('uses a matching local capture and rejects cross-company or cross-order channel supplements',()=>{
- const source={id:'1',billno:'TO1',hzkj_logistics_info:[{hzkj_combofield:'1'}]}
+ const source={id:'1',billno:'TO1'}
  const capture={sourceId:'1',orderNumber:'TO1',companyId:'100000',operation:'order-list',values:{hzkj_logistics_info:[{hzkj_channel_name:'万邦快线含电'}]}}
  expect(withCollectedActualChannel({moneyCapture:capture},source,'100000').logisticsChannels).toEqual([{name:'万邦快线含电',code:null}])
  for(const patch of [{companyId:'other'},{sourceId:'2'},{orderNumber:'TO2'},{operation:'unknown'}]){
@@ -81,4 +81,12 @@ describe('pending dispatch source isolation',()=>{
  it.each([{queue:'dispatch',completed:true},{queue:'review',completed:true}])('completed views retain package tracking %j',query=>{
   expect(withCollectedOrderLogistics({dispatchDocuments:[{trackingNumbers:[{type:'full',number:'DISPATCH'}]}]},raw,undefined,query).logisticsInfo[0].packageTrackingNumber).toBe('PACKAGE')
  })
+})
+it('never overwrites current package facts, including an explicit empty array, with an older supplement',()=>{
+ const capture={sourceId:'1',orderNumber:'TO1',companyId:'100000',operation:'order-list',values:{hzkj_logistics_info:[{hzkj_tracking_number:'OLD',hzkj_channel_name:'旧渠道'}]}}
+ const display={moneyCapture:capture}
+ const raw={id:'1',billno:'TO1',hzkj_logistics_info:[{hzkj_tracking_number:'NEW',hzkj_channel_name:'新渠道'}]}
+ expect(withCollectedActualChannel(display,raw,'100000').trackingNumber).toBe('NEW')
+ expect(withCollectedActualChannel(display,{...raw,hzkj_logistics_info:[]},'100000').logisticsInfo??[]).toEqual([])
+ expect(withCollectedActualChannel(display,{...raw,hzkj_logistics_info:null},'100000').trackingNumber??null).toBeNull()
 })

@@ -85,3 +85,48 @@ it('normalizes an explicitly null native entry collection without inventing rows
  expect(normalizeTimestampProjectionRaw('hzkj_orders',raw,company).hzkj_orders_billentry).toEqual([])
  expect(raw.hzkj_orders_billentry).toBeNull()
 })
+
+it('normalizes complete purchase references and payment facts without accepting missing relationship fields',()=>{
+ const raw={id:'80',billno:'P80',org_id:company,hzkj_supplier_id:'90',hzkj_supplier_name:'Supplier',hzkj_pay_time:'2026-11-02 08:00:00',hzkj_billentry:[{id:'81',hzkj_salbillnumber:'TO10',hzkj_salbillid:'0',hzkj_salbillentryid:'0',hzkj_material_number:'SKU-1',hzkj_qty:'2'}]}
+ const before=JSON.stringify(raw),out=normalizeTimestampProjectionRaw('hzkj_purorderbill',raw,company)
+ expect(out).toMatchObject({organizationId:company,hzkj_supplier:{id:'90',name:'Supplier'},hzkj_pay_time:'2026-11-02T08:00:00+08:00',hzkj_billentry:[{hzkj_material:{number:'SKU-1'},hzkj_salbillnumber:'TO10'}]})
+ expect(JSON.stringify(raw)).toBe(before)
+ expect(()=>normalizeTimestampProjectionRaw('hzkj_purorderbill',{...raw,org_id:'200000'},company)).toThrow('company_mismatch')
+ expect(()=>normalizeTimestampProjectionRaw('hzkj_purorderbill',{...raw,hzkj_billentry:[{id:'81'}]},company)).toThrow('missing_purchase_sales_reference')
+ expect(()=>normalizeTimestampProjectionRaw('hzkj_purorderbill',{...raw,hzkj_billentry:undefined},company)).toThrow('partial_entries')
+ expect(()=>normalizeTimestampProjectionRaw('hzkj_purorderbill',{...raw,hzkj_billentry:[{id:'81',hzkj_salbillnumber:null}]},company)).not.toThrow()
+})
+it('publishes a complete numbered purchase even when optional legacy line references disappear',()=>{
+ const previous={id:'80',billno:'P80',org_id:company,hzkj_billentry:[{id:'81',hzkj_salbillnumber:'TO10',hzkj_salbillid:'10',hzkj_salbillentryid:'101'}]}
+ const incoming={...previous,hzkj_billentry:[{id:'81',hzkj_salbillnumber:'TO10'}]}
+ expect(()=>normalizeTimestampProjectionRaw('hzkj_purorderbill',incoming,company,previous)).not.toThrow()
+ expect(normalizeTimestampProjectionRaw('hzkj_purorderbill',incoming,company,previous).hzkj_billentry[0]).not.toHaveProperty('hzkj_salbillentryid')
+})
+
+
+it('accepts a verified fulfillment source number without an optional sales number',()=>{
+ const raw={id:'80',billno:'P80',org_id:company,hzkj_billentry:[{id:'81',hzkj_srcbillnumber:'TO10',hzkj_srcbillentity:'hzkj_orders'}]}
+ expect(normalizeTimestampProjectionRaw('hzkj_purorderbill',raw,company).hzkj_billentry).toEqual(raw.hzkj_billentry)
+ expect(()=>normalizeTimestampProjectionRaw('hzkj_purorderbill',{...raw,hzkj_billentry:[{id:'81',hzkj_srcbillnumber:'PA10',hzkj_srcbillentity:'hzkj_purapplybill'}]},company)).toThrow('missing_purchase_sales_reference')
+})
+it('keeps a published authoritative source reference when its field is omitted, while allowing explicit clearing',()=>{
+ const previous={id:'80',billno:'P80',org_id:company,hzkj_billentry:[{id:'81',hzkj_srcbillnumber:'TO10',hzkj_salbillnumber:'TO20'}]}
+ const incoming={...previous,hzkj_billentry:[{id:'81',hzkj_salbillnumber:'TO20'}]}
+ expect(()=>normalizeTimestampProjectionRaw('hzkj_purorderbill',incoming,company,previous)).toThrow('missing_purchase_source_reference')
+ const cleared={...incoming,hzkj_billentry:[{...incoming.hzkj_billentry[0],hzkj_srcbillnumber:null}]}
+ expect(normalizeTimestampProjectionRaw('hzkj_purorderbill',cleared,company,previous).hzkj_billentry[0]).toMatchObject({hzkj_srcbillnumber:null,hzkj_salbillnumber:'TO20'})
+})
+
+
+it('accepts explicit clearing of a source-only purchase link without restoring an old reference',()=>{
+ const previous={id:'80',billno:'P80',org_id:company,hzkj_billentry:[{id:'81',hzkj_srcbillnumber:'TO10'}]}
+ const cleared={...previous,hzkj_billentry:[{id:'81',hzkj_srcbillnumber:null}]}
+ expect(normalizeTimestampProjectionRaw('hzkj_purorderbill',cleared,company,previous).hzkj_billentry[0]).toEqual({id:'81',hzkj_srcbillnumber:null})
+})
+
+
+it('does not treat an empty optional source number as clearing an omitted authoritative sales number',()=>{
+ const previous={id:'80',billno:'P80',org_id:company,hzkj_billentry:[{id:'81',hzkj_srcbillnumber:null,hzkj_salbillnumber:'TO10'}]}
+ const incoming={...previous,hzkj_billentry:[{id:'81',hzkj_srcbillnumber:null}]}
+ expect(()=>normalizeTimestampProjectionRaw('hzkj_purorderbill',incoming,company,previous)).toThrow('missing_purchase_sales_reference')
+})

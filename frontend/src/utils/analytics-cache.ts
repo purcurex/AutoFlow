@@ -61,7 +61,9 @@ export async function analyticsQuery<T>(endpoint: string, params: object, fetch:
   const existing = pending.get(key)
   if (!options.force && existing) { const entry = await existing as Entry; assertCurrentSession(session); return copy<T>(entry) }
   entries.delete(key)
+  // The async closure checks its own identity after the first await.
   let request!: Promise<Entry>
+  // eslint-disable-next-line prefer-const
   request = (async (): Promise<Entry> => {
     const value = await fetch()
     assertCurrentSession(session)

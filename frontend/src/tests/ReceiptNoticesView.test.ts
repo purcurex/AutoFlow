@@ -15,6 +15,23 @@ async function setup(){
  const wrapper=mount(ReceiptNoticesView,{global:{plugins:[router,createI18n({legacy:false,locale:'zh-CN',messages:{}})]}});wrappers.push(wrapper);await flushPromises();return {wrapper,router}
 }
 describe('warehouse receipt notices',()=>{
+ it('keeps the same header and refresh controls through initial load, refresh and empty results',async()=>{
+  let resolve!:(v:ReceiptNoticePage)=>void
+  vi.mocked(getReceiptNotices).mockImplementation(()=>new Promise(done=>{resolve=done}))
+  const {wrapper}=await setup()
+  const header=wrapper.get('thead').element
+  const refresh=wrapper.get('.workbench-refresh').element
+  expect(wrapper.find('[role="status"]').exists()).toBe(true)
+  resolve(page);await flushPromises()
+  expect(wrapper.get('thead').element).toBe(header)
+  expect(wrapper.get('.workbench-refresh').element).toBe(refresh)
+  await wrapper.get('.workbench-refresh').trigger('click')
+  expect(wrapper.get('thead').element).toBe(header)
+  resolve({...page,items:[],total:0});await flushPromises()
+  expect(wrapper.get('thead').element).toBe(header)
+  expect(wrapper.get('.workbench-refresh').element).toBe(refresh)
+  expect(wrapper.text()).toContain('暂无符合条件')
+ })
  it('does not present uncollected receipt quantities as zero',async()=>{
   vi.mocked(getReceiptNotices).mockResolvedValue({...page,items:[],total:0,totals:{quantity:0,inboundQuantity:0,pendingQuantity:0},dataAvailability:{mode:'collected',complete:false,missingDatasets:['receipt_notices'],reason:'收货通知单尚未采集'}})
   const {wrapper}=await setup()
@@ -22,13 +39,13 @@ describe('warehouse receipt notices',()=>{
   expect(wrapper.get('.result-count').text()).toBe('—')
   expect(wrapper.text()).not.toContain('收货通知单数据尚未接入')
   expect(wrapper.text()).not.toContain('暂无符合条件')
-  expect(wrapper.get('footer').text()).toContain('通知 — 件')
-  expect(wrapper.get('footer').text()).not.toContain('通知 0 件')
+  expect(wrapper.get('footer').text()).toContain('采购 — 件')
+  expect(wrapper.get('footer').text()).not.toContain('采购 0 件')
  })
  it('renders one notice row with all products, quantities and combined logistics',async()=>{
   vi.mocked(getReceiptNotices).mockResolvedValue(page);const {wrapper,router}=await setup()
   expect(wrapper.findAll('tbody tr')).toHaveLength(1);expect(wrapper.findAll('.product')).toHaveLength(2)
-  expect(wrapper.text()).toContain('共 1 张收货通知单');expect(wrapper.get('tbody').text()).toContain('部分入库')
+  expect(wrapper.text()).toContain('共 1 笔履约订单');expect(wrapper.get('tbody').text()).toContain('部分入库')
   const cell=wrapper.get('td[data-label="物流信息"]');expect(cell.text()).toContain('顺丰');expect(cell.text()).toContain('SF001')
   await router.replace({query:{queue:'receipt_notices',search:'SKU1',inboundStatus:'partial'}});await flushPromises()
   expect(getReceiptNotices).toHaveBeenLastCalledWith(expect.objectContaining({search:'SKU1',status:'partial',page:1}),expect.any(AbortSignal))
@@ -43,7 +60,7 @@ describe('warehouse receipt notices',()=>{
  })
  it('clears records and discards old account responses',async()=>{
   let resolve!:(v:ReceiptNoticePage)=>void;vi.mocked(getReceiptNotices).mockImplementationOnce(()=>new Promise(done=>{resolve=done}))
-  const {wrapper}=await setup();invalidateSession();resolve(page);await flushPromises();expect(wrapper.find('tbody').exists()).toBe(false)
+  const {wrapper}=await setup();invalidateSession();resolve(page);await flushPromises();expect(wrapper.find('tbody tr:not(.workbench-state-row)').exists()).toBe(false)
  })
  it('shows an error without inventing a zero count',async()=>{
   vi.mocked(getReceiptNotices).mockRejectedValue(new Error('unavailable'));const {wrapper}=await setup()
@@ -56,7 +73,7 @@ it('renders collected quantities with unknown progress explicitly marked for inv
  expect(wrapper.get('td[data-label="发货时间"]').text()).toBe('—')
  expect(wrapper.get('td[data-label="入库进度"]').text()).toBe('待核查')
  expect(wrapper.get('.product').text()).toContain('待入库 —')
- expect(wrapper.get('footer').text()).toContain('通知 6 件 · 已入库 — 件 · 待入库 — 件')
+ expect(wrapper.get('footer').text()).toContain('采购 6 件 · 已入库 — 件 · 待入库 — 件')
 })
 it('collapses three receipt source lines locally and retains each inbound quantity after expansion', async () => {
  const first=page.items[0]!
@@ -74,7 +91,8 @@ it('collapses three receipt source lines locally and retains each inbound quanti
  await wrapper.get('[data-testid=toggle-all-products]').trigger('click')
  expect(wrapper.findAll('.product')).toHaveLength(3)
 
- expect(wrapper.text()).toContain('Third receipt line')
+ expect(wrapper.findAll('.product')[2]!.text()).toContain('Third receipt line')
+ expect(wrapper.findAll('.product')[2]!.text()).not.toContain('Blue')
  expect(getReceiptNotices).toHaveBeenCalledTimes(1)
 })
 
@@ -96,7 +114,29 @@ it('automatically queries warehouse and status changes and retains options durin
  await warehouse.setValue('HNDGLB');await flushPromises()
  expect(getReceiptNotices).toHaveBeenLastCalledWith(expect.objectContaining({warehouseCode:'HNDGLB',page:1}),expect.any(AbortSignal))
  expect(warehouse.find('option[value="01"]').exists()).toBe(true)
- complete({...data,items:[],total:0});await flushPromises();expect(wrapper.findAll('tbody tr')).toHaveLength(0)
+ complete({...data,items:[],total:0});await flushPromises();expect(wrapper.findAll('tbody tr:not(.workbench-state-row)')).toHaveLength(0)
  await wrapper.findAll('select').find(s=>s.find('option[value="partial"]').exists())!.setValue('partial');await flushPromises()
  expect(getReceiptNotices).toHaveBeenLastCalledWith(expect.objectContaining({status:'partial',warehouseCode:'HNDGLB'}),expect.any(AbortSignal))
+})
+
+it('shows native purchase, received and pending quantities without borrowing consumer quantity',async()=>{
+ const first=page.items[0]!
+ vi.mocked(getReceiptNotices).mockResolvedValue({...page,items:[{...first,lines:[{...first.lines[0]!,quantity:3,purchaseQuantity:10,inboundQuantity:2,pendingQuantity:8}]}]})
+ const {wrapper}=await setup()
+ expect(wrapper.get('.product').text()).toContain('采购 10')
+ expect(wrapper.get('.product').text()).toContain('已入库 2')
+ expect(wrapper.get('.product').text()).toContain('待入库 8')
+ expect(getReceiptNotices).toHaveBeenCalledWith(expect.objectContaining({pageSize:100}),expect.any(AbortSignal))
+})
+it('requeries automatically when clearing a submitted search',async()=>{
+ vi.mocked(getReceiptNotices).mockResolvedValue(page)
+ const {wrapper}=await setup();await wrapper.get('input').setValue('SKU1');await wrapper.get('form').trigger('submit');await flushPromises()
+ await wrapper.get('input').setValue('');await flushPromises()
+ expect(getReceiptNotices).toHaveBeenLastCalledWith(expect.objectContaining({search:undefined,page:1}),expect.any(AbortSignal))
+})
+
+it('labels an exceptional fulfillment in the normal inbound list',async()=>{
+ vi.mocked(getReceiptNotices).mockResolvedValue({...page,items:[{...page.items[0]!,exception:{type:'procurement_exception',reason:'采购状态冲突'}}]})
+ const {wrapper}=await setup()
+ expect(wrapper.get('tbody .order-exception-label').text()).toBe('采购异常')
 })

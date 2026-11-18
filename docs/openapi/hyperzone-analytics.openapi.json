@@ -4273,7 +4273,7 @@
         "tags": [
           "履约"
         ],
-        "description": "采购岗位+当前本地数据范围+FOP订单白名单+独立allowedPurchaseOrderIds共同限制；需有效已支付已审核履约单处于procurement_shipping。按真实源单/分录关联实际采购卖家，不从SKU默认供应商猜测。仅有效已付且pending/partial采购，数量>0的本订单分录。不得传userId/tenantId/supplierId/旺旺账号；未知或重复query返回400。不存在或不可见订单/采购404，流程退出或contactVersion变化409，provider未配置/响应异常503，无演示回退。查询前后核对权限，打开每次重新取数；缺采购授权返回空联系人。详见需求9.10。 单可联系采购自动尝试，多采购先选择；联系人不混入常规订单/图表响应；本接口不返回URL。",
+        "description": "当前本地采集模式：先核对本地账号、工作台及员工数据范围，再按实际采购单读取queryPurchase物流信息。账号取hzkj_ww_login_id或hzkj_sellers_ww，1688号取hzkj_1688_order_n并按字符串核对；不使用客户字段hzkj_supplier猜卖家。手动FOP_MANUAL_SUPPLIER_CONTACT_ENABLED独立控制，普通列表不回源；联系人返回不含URL，每次launch重新读取并校验contactVersion、本地权限及同公司同采购关系，只生成账号匹配的aliim地址，不发送消息。旧独立网关适配模式保留原授权约束。 履约订单必须处于本地procurement_shipping，联系人仅来自已核验关联且供应商未发完货的采购；源采购分录须仍包含当前履约单。",
         "parameters": [
           {
             "name": "orderId",
@@ -4359,12 +4359,14 @@
             "$ref": "#/components/responses/Unavailable"
           }
         },
-        "x-implementation-status": "implemented",
+        "x-implementation-status": "connected-native-purchase-contact; legacy-gateway-mode-retained",
         "x-source-files": [
           "backend/src/modules/users/workbench.controller.ts",
           "backend/src/modules/fop-data/fop-data.service.ts",
           "backend/src/modules/fop-data/supplier-follow-up.ts",
-          "frontend/src/components/autoflow/SupplierFollowUpDialog.vue"
+          "frontend/src/components/autoflow/SupplierFollowUpDialog.vue",
+          "backend/src/modules/fop-data/native-supplier-contact.ts",
+          "backend/src/modules/workbench-replica/collected-workbench.service.ts"
         ]
       }
     },
@@ -4375,7 +4377,7 @@
         "tags": [
           "履约"
         ],
-        "description": "采购岗位+当前本地数据范围+FOP订单白名单+独立allowedPurchaseOrderIds共同限制；需有效已支付已审核履约单处于procurement_shipping。按真实源单/分录关联实际采购卖家，不从SKU默认供应商猜测。仅有效已付且pending/partial采购，数量>0的本订单分录。不得传userId/tenantId/supplierId/旺旺账号；未知或重复query返回400。不存在或不可见订单/采购404，流程退出或contactVersion变化409，provider未配置/响应异常503，无演示回退。查询前后核对权限，打开每次重新取数；缺采购授权返回空联系人。详见需求9.10。 同步比较供应商账号及contactVersion；Mock强制demo+null，不唤醒虚构用户。真实响应需通过前端协议/接收人二次校验；只尝试打开，不代表消息送达。",
+        "description": "当前本地采集模式：先核对本地账号、工作台及员工数据范围，再按实际采购单读取queryPurchase物流信息。账号取hzkj_ww_login_id或hzkj_sellers_ww，1688号取hzkj_1688_order_n并按字符串核对；不使用客户字段hzkj_supplier猜卖家。手动FOP_MANUAL_SUPPLIER_CONTACT_ENABLED独立控制，普通列表不回源；联系人返回不含URL，每次launch重新读取并校验contactVersion、本地权限及同公司同采购关系，只生成账号匹配的aliim地址，不发送消息。旧独立网关适配模式保留原授权约束。 履约订单必须处于本地procurement_shipping，联系人仅来自已核验关联且供应商未发完货的采购；源采购分录须仍包含当前履约单。",
         "parameters": [
           {
             "name": "orderId",
@@ -4457,12 +4459,14 @@
             "$ref": "#/components/responses/Unavailable"
           }
         },
-        "x-implementation-status": "implemented",
+        "x-implementation-status": "connected-native-purchase-contact; legacy-gateway-mode-retained",
         "x-source-files": [
           "backend/src/modules/users/workbench.controller.ts",
           "backend/src/modules/fop-data/fop-data.service.ts",
           "backend/src/modules/fop-data/supplier-follow-up.ts",
-          "frontend/src/components/autoflow/SupplierFollowUpDialog.vue"
+          "frontend/src/components/autoflow/SupplierFollowUpDialog.vue",
+          "backend/src/modules/fop-data/native-supplier-contact.ts",
+          "backend/src/modules/workbench-replica/collected-workbench.service.ts"
         ]
       }
     },
@@ -6313,7 +6317,7 @@
         ],
         "operationId": "getPurchaseGroupSupplier",
         "summary": "获取采购单唯一供应商联系信息",
-        "description": "queue必须为procurement_shipping。按当前采购组及筛选重新校验履约来源、本地范围和采购授权；仅返回该采购单唯一供应商，不提供来源局部数量冒充整单数量。沿用联系弹窗结构，orderId在本接口中为groupId，orderNumber为采购号，items恰一项、lines为空；单头supplier/id/采购号/1688号须与联系资料一致。内部以当前有权来源调用现有催办适配器，不增加员工网关接口。launch重新读取并核验contactVersion；不发送消息、不修改采购状态。 仅线上1688采购适用；线下/其他平台返回409 supplier_contact_unavailable，前端提示在FOP联系。",
+        "description": "当前本地采集模式：先核对本地账号、工作台及员工数据范围，再按实际采购单读取queryPurchase物流信息。账号取hzkj_ww_login_id或hzkj_sellers_ww，1688号取hzkj_1688_order_n并按字符串核对；不使用客户字段hzkj_supplier猜卖家。手动FOP_MANUAL_SUPPLIER_CONTACT_ENABLED独立控制，普通列表不回源；联系人返回不含URL，每次launch重新读取并校验contactVersion、本地权限及同公司同采购关系，只生成账号匹配的aliim地址，不发送消息。旧独立网关适配模式保留原授权约束。 采购组仅procurement_shipping；必须在当前筛选及数据范围内，并核对采购分录含有可见履约订单；不返回未授权的其他来源明细。",
         "parameters": [
           {
             "name": "groupId",
@@ -6446,7 +6450,11 @@
             "description": "上游不可用或快照不完整/无效"
           }
         },
-        "x-implementation-status": "implemented-platform-and-demo; production-employee-gateway-pending"
+        "x-implementation-status": "connected-native-purchase-contact; legacy-gateway-mode-retained",
+        "x-source-files": [
+          "backend/src/modules/fop-data/native-supplier-contact.ts",
+          "backend/src/modules/workbench-replica/collected-workbench.service.ts"
+        ]
       }
     },
     "/autoflow/integrations/fop/purchase-groups/{groupId}/supplier-follow-up/launch": {
@@ -6456,7 +6464,7 @@
         ],
         "operationId": "getPurchaseGroupSupplierChat",
         "summary": "复核采购单供应商并打开会话",
-        "description": "queue必须为procurement_shipping。按当前采购组及筛选重新校验履约来源、本地范围和采购授权；仅返回该采购单唯一供应商，不提供来源局部数量冒充整单数量。沿用联系弹窗结构，orderId在本接口中为groupId，orderNumber为采购号，items恰一项、lines为空；单头supplier/id/采购号/1688号须与联系资料一致。内部以当前有权来源调用现有催办适配器，不增加员工网关接口。launch重新读取并核验contactVersion；不发送消息、不修改采购状态。 仅线上1688采购适用；线下/其他平台返回409 supplier_contact_unavailable，前端提示在FOP联系。",
+        "description": "当前本地采集模式：先核对本地账号、工作台及员工数据范围，再按实际采购单读取queryPurchase物流信息。账号取hzkj_ww_login_id或hzkj_sellers_ww，1688号取hzkj_1688_order_n并按字符串核对；不使用客户字段hzkj_supplier猜卖家。手动FOP_MANUAL_SUPPLIER_CONTACT_ENABLED独立控制，普通列表不回源；联系人返回不含URL，每次launch重新读取并校验contactVersion、本地权限及同公司同采购关系，只生成账号匹配的aliim地址，不发送消息。旧独立网关适配模式保留原授权约束。 采购组仅procurement_shipping；必须在当前筛选及数据范围内，并核对采购分录含有可见履约订单；不返回未授权的其他来源明细。",
         "parameters": [
           {
             "name": "groupId",
@@ -6598,7 +6606,11 @@
             "description": "上游不可用或快照不完整/无效"
           }
         },
-        "x-implementation-status": "implemented-platform-and-demo; production-employee-gateway-pending"
+        "x-implementation-status": "connected-native-purchase-contact; legacy-gateway-mode-retained",
+        "x-source-files": [
+          "backend/src/modules/fop-data/native-supplier-contact.ts",
+          "backend/src/modules/workbench-replica/collected-workbench.service.ts"
+        ]
       }
     },
     "/users/{id}/account-access": {
@@ -6916,6 +6928,218 @@
           "response": "StockSupplierFollowUpProviderResult",
           "status": "gateway contract; not a Kingdee standard endpoint"
         }
+      }
+    },
+    "/autoflow/integrations/fop/purchase-returns/{returnId}/supplier-follow-up": {
+      "get": {
+        "operationId": "getReturnSupplier",
+        "summary": "读取采购退货关联的供应商旺旺账号",
+        "tags": [
+          "履约"
+        ],
+        "description": "当前本地采集模式：先核对本地账号、工作台及员工数据范围，再按实际采购单读取queryPurchase物流信息。账号取hzkj_ww_login_id或hzkj_sellers_ww，1688号取hzkj_1688_order_n并按字符串核对；不使用客户字段hzkj_supplier猜卖家。手动FOP_MANUAL_SUPPLIER_CONTACT_ENABLED独立控制，普通列表不回源；联系人返回不含URL，每次launch重新读取并校验contactVersion、本地权限及同公司同采购关系，只生成账号匹配的aliim地址，不发送消息。旧独立网关适配模式保留原授权约束。 退货以本地可见履约订单及本退货行授权，经原入库单ID/分录ID→收货通知→采购号及1688号追溯，不按SKU或订单候选采购第一笔猜配。可返回多个采购联系人；launch按选中的purchaseOrderId及contactVersion唯一定位，未传采购ID时仍要求版本唯一匹配。关联不完整返回503；错配订单/退货返回404，版本或权限变化返回409，账号为空不可唤醒。",
+        "parameters": [
+          {
+            "name": "returnId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "orderId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 500
+            }
+          },
+          {
+            "name": "workbenchRole",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "procurement",
+                "warehouse"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功，裸JSON；本接口不发送消息或修改订单。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupplierFollowUpPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "x-implementation-status": "connected-native-purchase-contact; legacy-gateway-mode-retained",
+        "x-source-files": [
+          "backend/src/modules/users/workbench.controller.ts",
+          "backend/src/modules/fop-data/fop-data.service.ts",
+          "backend/src/modules/fop-data/supplier-follow-up.ts",
+          "frontend/src/components/autoflow/SupplierFollowUpDialog.vue",
+          "backend/src/modules/fop-data/native-supplier-contact.ts",
+          "backend/src/modules/workbench-replica/collected-workbench.service.ts"
+        ]
+      }
+    },
+    "/autoflow/integrations/fop/purchase-returns/{returnId}/supplier-follow-up/launch": {
+      "get": {
+        "operationId": "getReturnSupplierChat",
+        "summary": "复核采购退货供应商并读取旺旺地址",
+        "tags": [
+          "履约"
+        ],
+        "description": "当前本地采集模式：先核对本地账号、工作台及员工数据范围，再按实际采购单读取queryPurchase物流信息。账号取hzkj_ww_login_id或hzkj_sellers_ww，1688号取hzkj_1688_order_n并按字符串核对；不使用客户字段hzkj_supplier猜卖家。手动FOP_MANUAL_SUPPLIER_CONTACT_ENABLED独立控制，普通列表不回源；联系人返回不含URL，每次launch重新读取并校验contactVersion、本地权限及同公司同采购关系，只生成账号匹配的aliim地址，不发送消息。旧独立网关适配模式保留原授权约束。 退货以本地可见履约订单及本退货行授权，经原入库单ID/分录ID→收货通知→采购号及1688号追溯，不按SKU或订单候选采购第一笔猜配。可返回多个采购联系人；launch按选中的purchaseOrderId及contactVersion唯一定位，未传采购ID时仍要求版本唯一匹配。关联不完整返回503；错配订单/退货返回404，版本或权限变化返回409，账号为空不可唤醒。",
+        "parameters": [
+          {
+            "name": "returnId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "orderId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 500
+            }
+          },
+          {
+            "name": "workbenchRole",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "procurement",
+                "warehouse"
+              ]
+            }
+          },
+          {
+            "name": "contactVersion",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          },
+          {
+            "name": "purchaseOrderId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "description": "所选联系人对应的采购单ID；后端重新解析原退货关系并核验，不接受供应商或旺旺账号作为输入。"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功，裸JSON；本接口不发送消息或修改订单。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupplierChatLaunch"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "x-implementation-status": "connected-native-purchase-contact; legacy-gateway-mode-retained",
+        "x-source-files": [
+          "backend/src/modules/users/workbench.controller.ts",
+          "backend/src/modules/fop-data/fop-data.service.ts",
+          "backend/src/modules/fop-data/supplier-follow-up.ts",
+          "frontend/src/components/autoflow/SupplierFollowUpDialog.vue",
+          "backend/src/modules/fop-data/native-supplier-contact.ts",
+          "backend/src/modules/workbench-replica/collected-workbench.service.ts"
+        ]
       }
     }
   },
@@ -16523,7 +16747,6 @@
           "purchaseOrderNumber",
           "platformOrderNumber",
           "supplier",
-          "shipmentStatus",
           "lines",
           "availability",
           "contactVersion"
@@ -16552,7 +16775,8 @@
             "enum": [
               "pending",
               "partial"
-            ]
+            ],
+            "description": "待发货履约联系人可提供pending/partial；采购组及退货联系人不补造发货状态，可省略。"
           },
           "lines": {
             "type": "array",

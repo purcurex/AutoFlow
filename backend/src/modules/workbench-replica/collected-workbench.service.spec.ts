@@ -6,13 +6,14 @@ function setup(){
  const user:any={id:'admin',role:'admin',sessionVersion:2}
  const users={findById:jest.fn(async()=>user)}
  const db={query:jest.fn(async(sql:string,_params?:unknown[])=>{
+  if(sql.startsWith('WITH candidates AS MATERIALIZED'))return [{total:1,quantity:null,countries:['US'],rows:[{raw:{},display:{id:'1',items:[],amount:null,currency:null}}]}]
   if(sql.includes('SELECT owner_user_id'))return []
   if(sql.includes('FROM hz_fop_collected_batches'))return [batch]
   if(sql.includes('FROM organization_nodes'))return []
   if(sql.includes('FROM organization_employees e'))return []
   if(sql.includes('count(*)'))return [{total:1,quantity:null}]
   if(sql.includes('SELECT DISTINCT country_code'))return [{country_code:'US'}]
-  if(sql.includes('SELECT display'))return [{display:{id:'1',items:[],amount:null,currency:null}}]
+  if(sql.includes('SELECT display') || sql.includes('AS display,raw FROM hz_fop_collected_orders'))return [{raw:{},display:{id:'1',items:[],amount:null,currency:null}}]
   throw Error('Unexpected SQL')
  })}
  const config=new ConfigService({WORKBENCH_COLLECTED_ENABLED:'true',FOP_REPLICA_TENANT_ID:'tenant',FOP_REPLICA_COMPANY_ID:'company'})
@@ -96,7 +97,7 @@ it.each(['receipt_notices','procurement_groups','purchase_returns'])('reports co
 
  it.each([['allocation',false],['allocation_review',false],['allocation_review',true]])('reads %s completed=%s from captured allocations only after explicit complete company scope',async(queue,completed)=>{
   const {service,db}=setup(),b=batch as any;b.company_id='company';b.metadata={entityCaptures:{allocation:{coverage:'full_company_scan',companyId:'company',capturedAt:'2026-11-12T00:00:00Z'}}}
-  const original=db.query.getMockImplementation()!;db.query.mockImplementation(async(sql,params)=>sql.includes('AS display,raw FROM hz_fop_collected_orders')?[{display:{id:'1',items:[],allocationDocuments:[{id:'2'}]}}] as any:original(sql,params))
+  const original=db.query.getMockImplementation()!;db.query.mockImplementation(async(sql,params)=>sql.includes('AS display,raw FROM hz_fop_collected_orders')?[{raw:{},display:{id:'1',items:[],allocationDocuments:[{id:'2'}]}}] as any:original(sql,params))
   try{const result=await service.orders('admin',{queue,completed},'allocation');expect(result.dataAvailability.queueAvailable).toBe(true);expect(result.items[0].allocationDocuments).toEqual([{id:'2'}]);expect(db.query.mock.calls.some(c=>c[0].includes("a.display->>'sourceOrderId'=hz_fop_collected_orders.source_id"))).toBe(true)}finally{delete b.metadata;delete b.company_id}
  })
 describe('business chain access',()=>{
@@ -127,7 +128,7 @@ it('dispatch classification no longer requires downstream capture to list native
 it.each(['dispatch','shipping'])('projects current %s logistics into the public logisticsInfo field',async queue=>{
  const {service,db}=setup()
  await service.orders('admin',{queue,completed:true},queue==='dispatch'?'dispatch':'warehouse')
- const sql=db.query.mock.calls.find(c=>c[0].includes(' AS display,raw FROM hz_fop_collected_orders'))?.[0]
+ const sql=db.query.mock.calls.find(c=>c[0].includes(' AS display,raw FROM hz_fop_collected_orders') || c[0].startsWith('WITH candidates AS MATERIALIZED'))?.[0]
  expect(sql).toContain("jsonb_build_object('logisticsInfo',display->'"+(queue==='dispatch'?'dispatchLogistics':'warehouseLogistics')+"')")
 })
 
@@ -147,7 +148,7 @@ it.each(['dispatch','shipping'])('exports %s actual logistics with typed trackin
 it.each([1,2])('uses the captured fulfillment actual Chinese channel without guessing across %s dispatch groups',async count=>{
  const {service,db}=setup();const original=db.query.getMockImplementation()!
  db.query.mockImplementation(async(sql,params)=>{
-  if(sql.startsWith('SELECT display ||'))return [{raw:{hzkj_logistics_channel:{name:'云途德国专线',number:'YT-DE'}},display:{id:'1',items:[],logisticsInfo:Array.from({length:count},(_,i)=>({channelName:null,trackingNumbers:[{type:'full',number:'00'+i}]}))}}] as any
+  if(sql.startsWith('WITH candidates AS MATERIALIZED'))return [{total:1,quantity:null,countries:[],rows:[{raw:{hzkj_logistics_channel:{name:'云途德国专线',number:'YT-DE'}},display:{id:'1',items:[],logisticsInfo:Array.from({length:count},(_,i)=>({channelName:null,trackingNumbers:[{type:'full',number:'00'+i}]}))}}]}] as any
   return original(sql,params)
  })
  const result=await service.orders('admin',{queue:'dispatch',completed:true},'dispatch')
@@ -209,4 +210,63 @@ describe('local analytics cache authorization',()=>{
   jest.spyOn(service as any,'context').mockRejectedValue(new Error('denied'))
   await expect(service.analyticsCacheScope('admin')).rejects.toThrow('denied')
  })
+})
+
+it.each([
+ {completed:false,outbound:'pending',label:'未出库',title:'待出库清单'},
+ {completed:true,outbound:'completed',label:'已出库',title:'已出库清单'},
+ {completed:false,outbound:'unknown',label:'待确认',title:'待出库清单'},
+])('warehouse export retains physical outbound status $outbound in the visible main row',async ({completed,outbound,label,title})=>{
+ const {service}=setup()
+ jest.spyOn(service as any,'context').mockResolvedValue({user:{sessionVersion:2},batch:{id:'b',source_as_of:'2026-11-18T00:00:00Z'},signature:'same'})
+ jest.spyOn(service,'orders').mockResolvedValue({items:[{id:'1',orderNumber:'TO1',reviewStatus:'approved',sourceOutboundStatus:'1',businessStatus:{outbound},items:[]}],total:1,page:1,pageSize:100,replica:{readMode:'local',datasetId:'b',revision:'r'}} as any)
+ const buffer=await service.export('admin',{queue:'shipping',completed,mode:'selected',orderIds:['1']},2,'orders')
+ const wb=new Workbook();await wb.xlsx.load(buffer as any);const sheet=wb.worksheets[0]
+ const headers=sheet.getRow(4).values as string[],index=headers.indexOf('出库状态')
+ expect(index).toBeGreaterThan(0)
+ expect(sheet.getRow(5).getCell(index).value).toBe(label)
+ expect(sheet.getRow(2).getCell(2).value).toBe(title)
+})
+
+it('purchase headers avoid product hydration; expanded rows hydrate only their page',async()=>{
+ const {service,db}=setup()
+ const context:any={batch:{id:'b',company_id:'c',metadata:{entityCaptures:{procurement_groups:{companyId:'c'}}}},filter:{employeeIds:null},org:{nodes:[],employees:[],members:[],departments:[]},signature:'v1'}
+ jest.spyOn(service as any,'context').mockResolvedValue(context)
+ jest.spyOn(service as any,'metadata').mockReturnValue({replica:{}})
+ const hydrate=jest.spyOn(service as any,'productDisplay').mockImplementation(async(_batch,rows)=>rows)
+ db.query.mockImplementation(async sql=>sql.includes('hz_fop_collected_entities')?[{display:{id:'p',kind:'purchase',stage:'supplier_pending',purchase:{payment:'paid'},rows:Array.from({length:25},(_,i)=>({orderId:String(i),lines:[],ownerEmployeeId:'e'}))}}] as any:[])
+ const query={queue:'procurement_shipping',page:1,pageSize:10}
+ await service.purchaseGroups('admin',query)
+ expect(hydrate).not.toHaveBeenCalled()
+ await service.purchaseGroups('admin',query,'p')
+ expect(hydrate).toHaveBeenCalledWith('b',expect.arrayContaining([expect.objectContaining({orderId:'0'})]),'lines')
+ expect((hydrate.mock.calls[0][1] as any[]).length).toBe(10)
+ expect(db.query.mock.calls.filter(([sql])=>sql.includes('hz_fop_collected_entities'))).toHaveLength(2)
+ context.signature='v2'
+ await service.purchaseGroups('admin',query)
+ expect(db.query.mock.calls.filter(([sql])=>sql.includes('hz_fop_collected_entities'))).toHaveLength(3)
+})
+
+it('warehouse SQL cache reuses matching pages and separates paging and permission versions',async()=>{
+ const {service,db,user}=setup()
+ const query={queue:'shipping',completed:true,page:1,pageSize:100}
+ const reads=()=>db.query.mock.calls.filter(([sql])=>sql.includes('SELECT (')&&sql.includes('AS display,raw FROM hz_fop_collected_orders')).length
+ await service.orders('admin',query,'warehouse');const initial=reads();expect(initial).toBe(1)
+ await service.orders('admin',query,'warehouse');expect(reads()).toBe(initial)
+ await service.orders('admin',{...query,page:2},'warehouse');expect(reads()).toBe(initial+1)
+ user.sessionVersion++
+ await service.orders('admin',query,'warehouse');expect(reads()).toBe(initial+2)
+ user.accountDisabled=true
+ await expect(service.orders('admin',query,'warehouse')).rejects.toThrow()
+ expect(reads()).toBe(initial+2)
+})
+
+it('does not report an empty production preparation as initialized or source-synchronized',async()=>{
+ const {service}=setup();const b=batch as any;b.metadata={productionPreparation:{sourceCaptured:false},sourceTimeMeaning:'local_preparation_time_not_source_capture'}
+ try{
+  const status=await service.status('admin');expect(status.initialized).toBe(false);expect(status.sourceSyncedAt).toBeNull();expect(status.replica.sourceSyncedAt).toBeNull();expect(status.collected.sourceAsOf).toBeNull()
+  expect((await service.orders('admin',{queue:'review'},'sales')).replica.sourceSyncedAt).toBeNull()
+  b.metadata.timestampSync={hzkj_orders:{watermark:'2026-11-18T00:00:00Z',state:'applied',pendingProjection:0,publicationPending:false,capturedAt:'2026-11-18T00:01:00Z'}}
+  const published=await service.status('admin');expect(published.initialized).toBe(true);expect(published.replica.sourceSyncedAt).toBe('2026-11-18T00:01:00Z')
+ }finally{delete b.metadata}
 })

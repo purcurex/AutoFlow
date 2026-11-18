@@ -26,11 +26,11 @@ describe('manager display scope', () => {
     expect(effectiveBusinessScope({ ...user, role: UserRole.ADMIN }).role).toBe('admin')
     expect(effectiveBusinessScope({ ...user, businessRole: 'none' }).role).toBe('none')
   })
-  it('limits record charts to self and disables department-only summary charts', () => {
+  it('keeps personal list scope separate from authorized peer chart summaries', () => {
     const user = { ...manager(), dataDisplayScope: 'self' as const }
-    expect(resolveChartSummaryPolicy(user, 'registrations').mode).toBe('none')
-    expect(resolveChartAccess(user).find(row => row.chartId === 'department_receipts')?.visible).toBe(false)
-    expect(resolveChartAccess(user).find(row => row.chartId === 'salesperson_receipts')?.dataScope).toBe('self')
+    expect(resolveChartSummaryPolicy(user, 'registrations').mode).toBe('marketing')
+    expect(resolveChartAccess(user).find(row => row.chartId === 'department_receipts')).toMatchObject({visible:true,summaryOnly:true,canViewDetails:false})
+    expect(resolveChartAccess(user).find(row => row.chartId === 'salesperson_receipts')?.dataScope).toBe('department')
   })
   it('persists only the preference and cannot overwrite manager grants', async () => {
     const user = manager()
@@ -59,7 +59,7 @@ it('applies the personal preference to local customer/quotation record owners to
 })
 
 
-it('keeps personal analytics navigation visible for a verified manager with no legacy employee assignment', async () => {
+it('keeps authorized department analytics visible while unbound personal lists remain restricted', async () => {
   const actor = { ...manager(), dataDisplayScope: 'self', businessEmployeeId: null,
     fopBindingDetails: { employeeMasterId: '101' } } as User
   const users = { findById: async () => actor, workbenchDepartment: async () => null, defaultProcurementView: async () => 'fulfillment' } as unknown as UsersService
@@ -67,8 +67,8 @@ it('keeps personal analytics navigation visible for a verified manager with no l
   expect(access.businessRole).toBe('department_manager')
   expect(access.chartVisibility.salesperson_receipts).toBe(true)
   expect(access.chartVisibility.customer_orders).toBe(true)
-  expect(access.chartVisibility.department_receipts).toBe(false)
-  expect(resolveChartAccess(actor).find(chart => chart.chartId === 'salesperson_receipts')?.dataScope).toBe('self')
+  expect(access.chartVisibility.department_receipts).toBe(true)
+  expect(resolveChartAccess(actor).find(chart => chart.chartId === 'salesperson_receipts')?.dataScope).toBe('department')
 })
 
 

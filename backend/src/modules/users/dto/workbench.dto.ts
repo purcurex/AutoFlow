@@ -146,8 +146,8 @@ export class ListFulfillmentOrdersDto extends FulfillmentOrderFiltersDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  @Max(100)
-  pageSize = 20
+  @Max(1000)
+  pageSize = 100
 }
 
 export class ExportFulfillmentOrdersDto extends FulfillmentOrderFiltersDto {
@@ -157,7 +157,7 @@ export class ExportFulfillmentOrdersDto extends FulfillmentOrderFiltersDto {
   @IsOptional()
   @IsArray()
   @ArrayMinSize(1)
-  @ArrayMaxSize(100)
+  @ArrayMaxSize(1000)
   @ArrayUnique()
   @IsString({ each: true })
   @MinLength(1, { each: true })

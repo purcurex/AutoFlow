@@ -8,7 +8,7 @@ describe('待履约包裹聚合阶段', () => {
     const view = mount(DispatchStatus, { props: { queue: 'dispatch', stage: 'dispatch_missing', shopifySync: 'pending',
       documents: [{ id: '1', number: 'FY1', status: 'approved' }] },
       global: { plugins: [createI18n({ legacy: false, locale: 'zh-CN', messages: {} })] } })
-    expect(view.text()).toBe('未创建')
+    expect(view.text()).toBe('待建发运单')
     view.unmount()
   })
   it('配货清单仍使用原发运单审核完成规则', () => {

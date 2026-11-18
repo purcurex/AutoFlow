@@ -109,7 +109,7 @@ describe('role workbench content', () => {
     const { wrapper, router } = await setup('/workbench/sales', ['sales'], undefined, true)
     expect(wrapper.find('h1').text()).toBe('销售工作台')
     expect(wrapper.find('h2').text()).toContain('待审核清单')
-    expect(wrapper.findAll('.workbench-queues a').slice(0, 6).map(a => a.text())).toEqual(['待支付清单', '待审核清单', '备货清单', 'RMA售后清单', '异常订单清单', '已审核清单'])
+    expect(wrapper.findAll('.workbench-queues a').slice(0, 6).map(a => a.text())).toEqual(['待支付清单', '待审核清单', '已审核清单', '备货清单', 'RMA售后清单', '异常订单清单'])
     expect(wrapper.find('.workbench-queues a.active').text()).toBe('待审核清单')
     expect(wrapper.findAll('.role-tabs a')).toHaveLength(1)
     expect(wrapper.find('.workbench-queues').text()).toContain('待审核清单')
@@ -146,7 +146,7 @@ describe('role workbench content', () => {
 
   it.each([
     ['allocation', '已齐套未审核', 'allocation_review', '发运单状态'],
-    ['procurement', '已采购待发货', 'procurement_shipping', '供应商发货状态'],
+    ['procurement', '已采购待发货', 'procurement_shipping', '采购状态'],
   ])('opens the separate %s follow-up tab and retains department filters', async (role, label, queue, column) => {
     const { wrapper, router } = await setup(`/workbench/${role}?departmentId=d1${role === 'procurement' ? '&view=fulfillment' : ''}`)
     if (role === 'allocation') {

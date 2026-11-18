@@ -9,6 +9,14 @@ function fixture(){
  return {body,transport,source:new TimestampPagedSource(profile,()=>false,transport)}
 }
 describe('2026-11-16 ordinary query source',()=>{
+ it('binds an explicitly configured production company and rejects a test-company response',async()=>{
+  const f=fixture(),p={...profile,tenantId:'production',companyId:'200001',orgNumber:'prod-org'},s={...scope,tenantId:p.tenantId,companyId:p.companyId}
+  const source=new TimestampPagedSource(p,()=>false,f.transport)
+  await expect(source.page(s,q)).rejects.toThrow('timestamp_response_scope_invalid')
+  f.body.data.filter="org in (200001) AND org.number = 'prod-org'"
+  await expect(source.page(s,q)).resolves.toMatchObject({totalCount:1})
+  expect(f.transport).toHaveBeenLastCalledWith(expect.objectContaining({orgNumber:'prod-org'}))
+ })
  it.each(['hzkj_orders','hzkj_alloc_bill','hzkj_deliver_bill','hzkj_deliver_order'])('accepts the observed native filter grammar for %s',async entityCode=>{
   const f=fixture(),entries={hzkj_orders:'hzkj_orders_billentry',hzkj_alloc_bill:'hzkj_alloc_entry',hzkj_deliver_bill:'hzkj_logisticstrackentry',hzkj_deliver_order:'entryentity'}
   f.body.data.rows[0][entries[entityCode as keyof typeof entries]]=[]

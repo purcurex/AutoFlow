@@ -4,11 +4,11 @@ import WorkbenchStatusBadge from './WorkbenchStatusBadge.vue'
 import SupplierShipmentStatus from './SupplierShipmentStatus.vue'
 import { stockStatuses, type StockPurchaseStatus } from '@/api/fop-stock'
 
-defineProps<{ status: StockPurchaseStatus; paidAt?: string | null; now: number }>()
+defineProps<{ status: StockPurchaseStatus; sourceName?: string | null; paidAt?: string | null; now: number }>()
 const { locale } = useI18n()
 </script>
 
 <template>
-  <SupplierShipmentStatus v-if="status === 'purchased'" :paid-at="paidAt" :now="now" />
-  <WorkbenchStatusBadge v-else :tone="['unpurchased', 'partial', 'in_progress'].includes(status) ? 'info' : ['shipped', 'received'].includes(status) ? 'success' : 'neutral'">{{ stockStatuses[status]?.[String(locale).startsWith('zh') ? 0 : 1] ?? '—' }}</WorkbenchStatusBadge>
+  <SupplierShipmentStatus v-if="status === 'purchased'" :label="sourceName || stockStatuses.purchased[String(locale).startsWith('zh') ? 0 : 1]" :paid-at="paidAt" :now="now" />
+  <WorkbenchStatusBadge v-else :tone="['unpurchased', 'partial', 'in_progress'].includes(status) ? 'info' : ['shipped', 'received'].includes(status) ? 'success' : 'neutral'">{{ sourceName || stockStatuses[status]?.[String(locale).startsWith('zh') ? 0 : 1] || '—' }}</WorkbenchStatusBadge>
 </template>

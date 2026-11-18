@@ -1,17 +1,17 @@
 {
   "schemaVersion": "fop-timestamp-sync/1",
-  "status": "four-entity-local-publication-implemented-source-full-sync-unverified",
+  "status": "four-entity-ordinary-time-sync-scheduled",
   "consistency": "eventual-with-full-reconciliation",
   "preferred": true,
-  "runtimeEnabled": false,
+  "runtimeEnabled": true,
   "upstreamCalledForThisRevision": true,
   "localImplementation": {
     "engine": true,
     "durablePostgres": true,
     "transactionalWatermark": true,
     "manualCli": "npm run workbench:timestamp-sync",
-    "automaticScheduler": false,
-    "sourceLiveVerified": false,
+    "automaticScheduler": true,
+    "sourceLiveVerified": true,
     "primaryFulfillmentProjection": "ordinary pages: current verified fields with linked re-evaluation; strict keyset legacy restrictions retained",
     "linkedSnapshotPublication": "four entities: transactional local display, ownership, analytics and graph refresh; incomplete records pending",
     "otherEntityProjection": "other entity timestamp acquisition pending; existing dependent projections revalidated",
@@ -27,14 +27,70 @@
         "queryDeliveryNotice"
       ],
       "liveSampleVerified": true,
-      "liveFullSyncVerified": false,
+      "liveFullSyncVerified": true,
       "publication": "transactional_four_entity_local_projection_with_per_record_pending",
       "clock": "local_utc_minus_safety_lag_not_source_clock",
       "timezone": "Asia/Shanghai",
       "precision": "seconds",
       "initialization": "full_modifytime_range_then_incremental",
       "reconciliation": "full_modifytime_range_required_within_24h_no_deletion_inference",
-      "identity": "configuration_and_authenticated_connection_context"
+      "identity": "configuration_and_authenticated_connection_context",
+      "liveFullSyncVerificationScope": "four-entity full source capture and local transaction commit; unresolved relationships remain pending projection"
+    },
+    "automaticSchedule": {
+      "implementation": "scripts/workbench-scheduled-sync.mjs",
+      "timezone": "Asia/Shanghai",
+      "dailySlots": 27,
+      "localDueCheckSeconds": 15,
+      "minimumRequestIntervalMs": 500,
+      "failureBackoffMinutes": [
+        30,
+        60,
+        120
+      ],
+      "transientPageRetryCount": 1,
+      "transientPageRetryDelayMs": 2000,
+      "strictServicesEnabled": false,
+      "evidence": "requirements/api-integration-verification-20261116.json#normalApiOperation20261118",
+      "workerHeapMiB": 8192,
+      "unexpectedExitRestartDelayMinutes": 30,
+      "failureIsolation": "per_entity_backoff_healthy_entities_keep_normal_slots",
+      "authenticationRefreshPerCycle": 1,
+      "authenticationErrorCodes": [
+        "HTTP401",
+        "native401",
+        "native612"
+      ],
+      "rateLimitPolicy": "stop_cycle_on_429_or_503_retry_after_over_60s; respect_retry_after_up_to_24h_and_backoff",
+      "diagnostics": [
+        "lastSuccessfulCycleAt",
+        "entityRetry",
+        "pendingProjection",
+        "errorCode",
+        "maintenance"
+      ],
+      "stagingRetention": {
+        "successfulDays": 7,
+        "failedDays": 14,
+        "maxPagesPerCycle": 100,
+        "preserve": [
+          "running",
+          "latest_per_entity_and_mode",
+          "pending_projection_references",
+          "canonical_facts",
+          "watermarks",
+          "run_receipts"
+        ]
+      },
+      "productionRuntime": {
+        "compiledModules": true,
+        "testPrivateConfigExcluded": true,
+        "explicitScopeAndHttpsOriginRequired": true,
+        "sameAutomaticCredentialsRequired": true,
+        "preconfiguredBearerForbidden": true,
+        "liveProductionValidated": false
+      },
+      "readinessEvidence": "requirements/api-integration-verification-20261116.json#syncProductionReadiness20261118"
     }
   },
   "reuse": [

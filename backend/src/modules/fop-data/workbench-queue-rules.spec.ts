@@ -34,7 +34,7 @@ it.each(['unpaid', 'partial', 'refunded', 'unknown', 'not_required'] as const)('
   expect(isStageCompleted(row, 'procurement')).toBe(false)
 })
 
-it.each([['pending', true], ['partial', true], ['unknown', false], ['completed', false]] as const)('uses explicit outbound %s for both allocation queues', (outbound, expected) => {
+it.each([['pending', true], ['partial', true], ['unknown', true], ['completed', true]] as const)('keeps allocation membership independent of outbound %s', (outbound, expected) => {
   const row = order()
   row.fulfillmentProgress.outbound = outbound
   expect(matchesQueue(row, 'allocation')).toBe(expected)
@@ -104,18 +104,18 @@ it.each(['paid','pending','partially_refunded',null])('retains nonexcluded sourc
 })
 
 it.each(['paid','processing','fulfillment_cancelled','partial_fulfilled','fulfilled','cancelled'])('routes native %s exclusively between pending and fulfilled lists',state=>{
- const row={...order(),reviewStatus:'approved',businessStatus:{order:state}} as unknown as FopOrder
- expect(matchesQueue(row,'dispatch')).toBe(['paid','processing','fulfillment_cancelled'].includes(state))
+ const row={...order(),reviewStatus:'approved',logisticsInfo:[{packageTrackingNumber:'TRACK'}],businessStatus:{order:state}} as unknown as FopOrder
+ expect(matchesQueue(row,'dispatch')).toBe(['paid','processing'].includes(state))
  expect(isStageCompleted(row,'dispatch')).toBe(['partial_fulfilled','fulfilled'].includes(state))
 })
 
-it('routes sync failures exclusively to dispatch exceptions until successful native writeback',()=>{
- const row={...order(),reviewStatus:'approved',exception:null,businessStatus:{order:'paid'},dispatchDocuments:[{id:'d',number:'FY',status:'approved',association:{state:'verified'},deliveryStatus:'SYNC_FAILED',trackingNumbers:[{type:'full',number:'TRACK'}]}]} as unknown as FopOrder
+it('keeps sync failures in normal dispatch stages and exceptions until successful native writeback',()=>{
+ const row={...order(),reviewStatus:'approved',exception:null,logisticsInfo:[{packageTrackingNumber:'TRACK'}],businessStatus:{order:'paid'},dispatchDocuments:[{id:'d',number:'FY',status:'approved',association:{state:'verified'},deliveryStatus:'SYNC_FAILED',trackingNumbers:[{type:'full',number:'TRACK'}]}]} as unknown as FopOrder
  expect(matchesQueue(row,'exceptions')).toBe(true)
- expect(matchesQueue(row,'dispatch')).toBe(false)
+ expect(matchesQueue(row,'dispatch')).toBe(true)
  expect(isStageCompleted(row,'dispatch')).toBe(false)
  row.businessStatus!.order='fulfilled'
- expect(isStageCompleted(row,'dispatch')).toBe(false)
+ expect(isStageCompleted(row,'dispatch')).toBe(true)
  row.dispatchDocuments![0].deliveryStatus='FULFILLED'
  expect(matchesQueue(row,'exceptions')).toBe(false)
  expect(isStageCompleted(row,'dispatch')).toBe(true)

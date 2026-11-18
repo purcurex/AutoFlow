@@ -1,0 +1,2 @@
+﻿姓名,登录邮箱,账号名,生产本地账号UUID（创建后）,生产本地员工UUID（创建后）,生产本地部门UUID（创建后）,FOP租户ID,FOP组织ID,FOP认证用户ID,FOP人员记录ID employeeId,FOP员工主档ID masterId,FOP工号 employeeNumber,FOP任职ID membershipId,FOP部门ID,系统角色 admin/user,业务角色 admin/department_manager/salesperson/none,工作台角色 sales/procurement/allocation/dispatch/warehouse,数据范围 self/department,是否启用,负责人确认,目录核验结果
+,,,,,,,,,,,,,,,,,,,,

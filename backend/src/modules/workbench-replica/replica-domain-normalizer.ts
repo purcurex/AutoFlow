@@ -388,7 +388,7 @@ function normalizeCollections(scope:ReplicaDatasetScope,d:ReplicaDomainDocument,
  }
 }
 const stateOptions:Record<string,string[]>={
- customerPaymentState:['unpaid','paid','refunded','unknown'],purchaseApplicationState:['not_created','partial','created','not_required','unknown'],purchaseCoverageState:['not_ordered','partial','ordered','cancelled','not_required','unknown'],platformOrderState:['not_pushed','partial','pushed','not_required','unknown'],supplierPaymentState:['unpaid','partial','paid','refunded','not_required','unknown'],supplierShipmentState:['pending','partial','shipped','not_required','unknown'],stockReadinessState:['incomplete','ready','unknown'],allocationReviewState:['pending','approved','unknown'],shopifySyncState:['pending','synced','not_required','unknown'],dispatchTaskState:['dispatch_missing','dispatch_draft','dispatch_submitted','dispatch_approved','dispatch_synced','unknown'],outboundState:['pending','completed','unknown'],shipmentState:['pending','shipped','unknown'],
+ customerPaymentState:['unpaid','paid','refunded','unknown'],purchaseApplicationState:['not_created','partial','created','not_required','unknown'],purchaseCoverageState:['not_ordered','partial','ordered','cancelled','not_required','unknown'],platformOrderState:['not_pushed','partial','pushed','not_required','unknown'],supplierPaymentState:['unpaid','partial','paid','refunded','partially_refunded','not_required','unknown'],supplierShipmentState:['pending','partial','shipped','not_required','unknown'],stockReadinessState:['incomplete','ready','unknown'],allocationReviewState:['pending','approved','unknown'],shopifySyncState:['pending','synced','not_required','unknown'],dispatchTaskState:['dispatch_missing','dispatch_draft','dispatch_submitted','dispatch_approved','dispatch_synced','unknown'],outboundState:['pending','completed','unknown'],shipmentState:['pending','shipped','unknown'],
 }
 const workbenchKeys=[...Object.keys(stateOptions),'ownerEmployeeIds','ownershipVerifiedAt','ownershipVersion','customerName','warehouseName','storeName','currentCustomerOwnerId','cancelled','allocationCreated','interceptStatus','stockLifecycle','recipientSnapshot','carrierName','procurementCompletedAt','allocationApprovedAt','dispatchApprovedAt','outboundCompletedAt','procurementDemands','purchaseAllocations','relatedDocuments']
 function workbench(input:unknown):Record<string,any>{
@@ -427,8 +427,7 @@ function orderProjection(scope:ReplicaDatasetScope,d:ReplicaDomainDocument,depen
  const h=d.header!,w=workbench(d.workbench),isStock=d.entityCode==='hzkj_stock_order_new'
  const states=Object.fromEntries(Object.keys(stateOptions).filter(k=>k!=='shipmentState').map(k=>[snake(k),w[k]??'unknown']))
  const review=d.sourceFields?.rawBillStatus==='C'?'approved':['A','B'].includes(d.sourceFields?.rawBillStatus??'')?'pending':'unknown'
- // Outbound is a native HEADER fact. A partial header is actionable; it is not a completed outbound.
- if(!isStock)states.outbound_state=['0','1'].includes(h.rawDeliveryStatus as string)?'pending':h.rawDeliveryStatus==='2'?'completed':'unknown'
+ // The service-feed state must be computed from physical lines. A header including virtual lines cannot override it.
  const purchase={purchaseApplication:states.purchase_application_state,purchaseOrder:states.purchase_coverage_state,alibabaOrder:states.platform_order_state,supplierPayment:states.supplier_payment_state}
  const stage=getProcurementStage(purchase as any,states.supplier_shipment_state as any)
  let quantity=new exactDecimal(0),quantitiesKnown=true
@@ -452,21 +451,22 @@ function orderProjection(scope:ReplicaDatasetScope,d:ReplicaDomainDocument,depen
  ...states,order_review_state:review,procurement_stage:stage,recipient_snapshot:w.recipientSnapshot??null,stock_type:h.stockType??null,stock_lifecycle:w.stockLifecycle??null,intercept_status:w.interceptStatus??null,cancelled:w.cancelled??null,allocation_created:w.allocationCreated??null,ownership_verified_at:w.ownershipVerifiedAt??null,ownership_version:w.ownershipVersion??null,readiness:ready?'ready':'incomplete',stage_evidence:{missingFields:missing},dependency_vector:Object.fromEntries(deps.map(dep=>[sourceEntityIdentity(scope,dep.entityCode,dep.sourceId),dep.sourceVersion])),mapping_version:1,rule_version:1,
  })]
  for(const entry of d.entries){if(!entry.skuCode)continue;const lineId=sourceLineIdentity(scope,{...d,entryEntity:entry.entryEntity,sourceEntryId:entry.sourceEntryId});rows.push(row('hz_fop_workbench_order_lines',{id:stable(scope,'display-line',lineId),order_document_id:id,source_line_id:lineId,sku_code:entry.skuCode??null,product_name:entry.productName??null,variant:entry.variant??null,image_url:entry.imageUrl??null,quantity:entry.quantity??null,display_role:'product',sequence:entry.sequence??null}))}
- const order={cancelled:w.cancelled,paymentStatus:states.customer_payment_state,reviewStatus:review,sourcePurchaseStatus:h.rawPurchaseStatus??null,procurementProgress:purchase,fulfillmentProgress:{allocationCreated:w.allocationCreated,shopifySync:states.shopify_sync_state,supplierShipment:states.supplier_shipment_state,stockReadiness:states.stock_readiness_state,allocationReview:states.allocation_review_state,outbound:h.rawDeliveryStatus==='1'?'partial':states.outbound_state}} as unknown as FopOrder
+ const order={cancelled:w.cancelled,paymentStatus:states.customer_payment_state,reviewStatus:review,procurementProgress:purchase,fulfillmentProgress:{allocationCreated:w.allocationCreated,shopifySync:states.shopify_sync_state,supplierShipment:states.supplier_shipment_state,stockReadiness:states.stock_readiness_state,allocationReview:states.allocation_review_state,outbound:states.outbound_state}} as unknown as FopOrder
  for(const queue of queues){
   let member=false,known=ready
-  if(isStock){member=queue==='stock'||queue==='stock_procurement'&&['0','1','2'].includes(h.rawPurchaseStatus as string);if(!['stock','stock_procurement'].includes(queue))known=true}
+  if(isStock){member=queue==='stock'||queue==='stock_procurement'&&w.cancelled===false&&states.customer_payment_state==='paid'&&review==='approved'&&['0','1','2'].includes(h.rawPurchaseStatus as string);if(!['stock','stock_procurement'].includes(queue))known=true}
   else if(queue==='sales_completed'){known=review!=='unknown';member=review==='approved'}
   else if(queue==='dispatch'){known=review!=='unknown'&&h.rawOrderStatus!=null;member=review==='approved'&&['2','3','6'].includes(h.rawOrderStatus as string)}
   else if(queue==='dispatch_completed'){known=review!=='unknown'&&h.rawOrderStatus!=null;member=review==='approved'&&['4','5'].includes(h.rawOrderStatus as string)}
-  else if(queue==='procurement_completed')member=['3','4'].includes(h.rawPurchaseStatus as string)&&states.purchase_coverage_state!=='not_required'
-  else if(queue==='allocation_completed')member=states.allocation_review_state==='approved'
-  else if(queue==='warehouse_completed')member=h.rawDeliveryStatus==='2'
+  else if(queue==='procurement_completed')member=w.cancelled===false&&states.customer_payment_state==='paid'&&states.supplier_shipment_state==='shipped'&&states.purchase_coverage_state!=='not_required'
+  // Allocation tasks follow the approved order and allocation itself, independently of receipt or outbound progress.
+  else if(['allocation','allocation_review','allocation_completed'].includes(queue))member=review==='approved'&&w.allocationCreated===true&&states.stock_readiness_state===(queue==='allocation'?'incomplete':'ready')&&states.allocation_review_state===(queue==='allocation_completed'?'approved':'pending')
+  else if(queue==='warehouse_completed')member=states.outbound_state==='completed'
   else if(['stock','stock_procurement'].includes(queue))known=true
   else if(queue==='rma'){known=w.relatedDocuments!==undefined;member=relatedDocuments.some(dep=>dep.entityCode==='hzkj_after_sale_orders')}
   else if(queue==='purchase_returns'){known=false}
   else if(queue==='exceptions'){known=false}
-  else member=matchesQueue(order,queue as Queue)&&(queue!=='shipping'||w.interceptStatus!=='intercepted')
+  else member=matchesQueue(order,queue as Queue)&&(queue!=='procurement'||!['refunded','partially_refunded'].includes(states.supplier_payment_state))
   const phase=queue==='procurement_completed'?w.procurementCompletedAt:queue==='allocation_completed'?w.allocationApprovedAt:queue==='warehouse_completed'?w.outboundCompletedAt:queue==='dispatch_completed'?w.dispatchApprovedAt:null
   rows.push(row('hz_fop_workbench_memberships',{id:stable(scope,'membership',id,queue),order_document_id:id,queue_code:queue,classification_state:known?(member?'member':'non_member'):'unknown',phase_completed_at:phase??null,unknown_reason_code:known?null:'domain_facts_not_provided',reason_codes:known?[]:['domain_facts_not_provided'],rule_version:1}))
  }

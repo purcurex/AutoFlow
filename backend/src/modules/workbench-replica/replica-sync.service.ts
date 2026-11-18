@@ -29,11 +29,13 @@ export class ReplicaSyncService implements OnModuleInit, OnModuleDestroy {
   private get paused() { return this.config.get<string>('FOP_QUERIES_PAUSED')?.trim().toLowerCase() === 'true' }
   private get automaticCallsEnabled() { return this.config.get<string>('WORKBENCH_AUTOMATIC_CALLS_ENABLED') !== 'false' }
   private assertSource() {
+    if (this.config.get<string>('WORKBENCH_COLLECTED_ENABLED') === 'true') throw fail('workbench_replica_collected_mode')
     if (this.paused || this.local.mock) throw fail('fop_queries_paused')
     if (!this.source.isConfigured()) throw fail('workbench_replica_sync_not_configured')
   }
 
   onModuleInit() {
+    if (this.config.get<string>('WORKBENCH_COLLECTED_ENABLED') === 'true') return
     this.started = true
     if (this.automaticCallsEnabled && this.local.enabled && !this.local.mock && !this.paused && this.source.isConfigured()) {
       this.timer = setInterval(() => { void this.tick().catch(() => this.logger.error('Replica worker failed; durable tasks remain retryable')) }, 15_000)
@@ -47,7 +49,7 @@ export class ReplicaSyncService implements OnModuleInit, OnModuleDestroy {
   }
 
   async status(userId: string) {
-    if(this.local.enabled){const collected=await this.local.collectedStatus?.(userId);if(collected)return {...collected,capabilities:this.readiness(false)}}
+    if(this.local.enabled){const collected=await this.local.collectedStatus?.(userId);if(collected)return collected}
     if (!this.local.enabled) return { capabilities: this.readiness(false), syncConfigured: this.source.isConfigured(), readMode: 'live', initialized: false, state: 'ready', paused: this.paused, sourceSyncedAt: null, nextScheduledAt: null, datasetId: null, revision: null }
     let scopes: Awaited<ReturnType<LocalWorkbenchService['replicaScope']>>
     try { scopes = await this.local.replicaScope(userId) } catch (error) { if ((error as Row).code !== '42P01') throw error; scopes = [] }
@@ -73,6 +75,7 @@ export class ReplicaSyncService implements OnModuleInit, OnModuleDestroy {
   }
 
   async request(userId: string, requestKey: string, trigger: ReplicaSyncTrigger = 'manual') {
+    if(this.config.get<string>('WORKBENCH_COLLECTED_ENABLED')==='true')throw fail('workbench_replica_collected_mode')
     const authorized = await this.local.replicaScope(userId)
     if (trigger !== 'manual' && !this.automaticCallsEnabled) return { id: null, state: 'skipped', reason: 'workbench_automatic_calls_disabled' }
     const scopes = authorized.filter(scope => trigger !== 'scheduled' || scope.datasetId).sort((a, b) => a.companyId.localeCompare(b.companyId))
@@ -128,6 +131,7 @@ export class ReplicaSyncService implements OnModuleInit, OnModuleDestroy {
 
   /** Source adapters are explicitly registered; enabling a flag alone cannot turn legacy APIs into a reliable feed. */
   async tick(manualBatch?: { actorAccountId: string; batchId: string }) {
+    if (this.config.get<string>('WORKBENCH_COLLECTED_ENABLED') === 'true') return
     if ((!this.automaticCallsEnabled && !manualBatch) || this.working || !this.local.enabled || this.local.mock || this.paused || !this.source.isConfigured()) return
     this.working = true
     try {

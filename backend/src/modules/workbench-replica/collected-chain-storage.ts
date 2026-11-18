@@ -3,8 +3,14 @@ import type { EntityManager } from 'typeorm'
 import { createHash } from 'node:crypto'
 import { buildCollectedBusinessChain, chainId, chainKinds, chainText, chainTime, chainDecimal } from './collected-business-chain'
 type Row=Record<string,any>
-export const chainSourceSignature=(batch:Row)=>createHash('sha256').update(JSON.stringify([batch.id,batch.source_as_of,batch.metadata])).digest('hex')
-const MAPPING_VERSION=2
+export const chainSourceSignature=(batch:Row)=>{
+ // Scheduler receipts describe execution, not source facts. Updating the next
+ // attempt must not invalidate an otherwise unchanged local business graph.
+ const metadata=batch.metadata?{...batch.metadata}:batch.metadata
+ if(metadata)delete metadata.timestampSchedule
+ return createHash('sha256').update(JSON.stringify([batch.id,batch.source_as_of,metadata])).digest('hex')
+}
+const MAPPING_VERSION=3
 /** Preserve the existing digest without building a single >512 MB JSON string. */
 export function chainContentHash(ordered:unknown[],receiptLinks:Record<string,string>,unresolvedConflicts:number){
  const hash=createHash('sha256').update(`[${MAPPING_VERSION},[`)
@@ -29,24 +35,35 @@ export async function rebuildCollectedChain(q:EntityManager,batchId:string,dryRu
   if(existing.source_signature!==signature)await q.query('UPDATE hz_fop_collected_chains SET source_signature=$2,built_at=now() WHERE batch_id=$1',[batch.id,signature])
   return {datasetId,reused:true,...summary}
  }
- await q.query("INSERT INTO hz_fop_connections(id,workspace_owner_id,name,environment,tenant_id,base_url,credential_ref,status,capabilities) VALUES($1,$2,'已采集离线业务链','test',$3,'https://hyperzone.test.kdgalaxy.com','collected/offline/no-credentials','disabled','{\"offlineCollectedOnly\":true}'::jsonb) ON CONFLICT(id) DO NOTHING",[connectionId,batch.workspace_owner_id,batch.tenant_id])
+ await q.query("INSERT INTO hz_fop_connections(id,workspace_owner_id,name,environment,tenant_id,base_url,credential_ref,status,capabilities) VALUES($1,$2,'已采集离线业务链',$4,$3,$5,'collected/offline/no-credentials','disabled','{\"offlineCollectedOnly\":true}'::jsonb) ON CONFLICT(id) DO NOTHING",[connectionId,batch.workspace_owner_id,batch.tenant_id,collectedDeploymentScope(batch).environment,collectedDeploymentScope(batch).baseUrl])
  const [connection]=await q.query('SELECT status,capabilities FROM hz_fop_connections WHERE id=$1',[connectionId]);if(connection.status!=='disabled'||connection.capabilities?.offlineCollectedOnly!==true)throw Error('offline_connection_required')
- await q.query('INSERT INTO hz_fop_companies(id,connection_id,source_company_id,company_number,enabled) VALUES($1,$2,$3,$4,false) ON CONFLICT(id) DO NOTHING',[companyId,connectionId,batch.company_id,'hyperzone.test'])
+ await q.query('INSERT INTO hz_fop_companies(id,connection_id,source_company_id,company_number,enabled) VALUES($1,$2,$3,$4,false) ON CONFLICT(id) DO NOTHING',[companyId,connectionId,batch.company_id,collectedDeploymentScope(batch).orgNumber])
  const [dataset]=await q.query('SELECT * FROM hz_fop_datasets WHERE id=$1 FOR UPDATE',[datasetId]);if(dataset&&(dataset.state!=='building'||dataset.snapshot_id!=='collected:'+batch.id))throw Error('cannot_overwrite_replica_dataset')
  if(!dataset)await q.query("INSERT INTO hz_fop_datasets(id,connection_id,company_id,snapshot_id,state) VALUES($1,$2,$3,$4,'building')",[datasetId,scope.connectionId,scope.companyId,'collected:'+batch.id])
  const unique=new Map(graph.relations.map(r=>[r.id,r]))
- await q.query('DELETE FROM hz_fop_order_relation_paths WHERE dataset_id=$1',[datasetId])
+ const pathKeys=['company_id','dataset_id','order_document_id','relation_id']
+ const paths=graph.relations.map(r=>({company_id:scope.companyId,dataset_id:datasetId,order_document_id:r.rootId,relation_id:r.id,basis:r.basis}))
+ const pathKey=(row:Row)=>JSON.stringify(pathKeys.map(key=>row[key]))
+ const wantedPaths=new Set(paths.map(pathKey))
+ const priorPaths:Row[]=await q.query('SELECT company_id,dataset_id,order_document_id,relation_id FROM hz_fop_order_relation_paths WHERE dataset_id=$1',[datasetId])
+ const removedPaths=priorPaths.filter(row=>!wantedPaths.has(pathKey(row)))
+ // Remove vanished roots before their relations/documents, preserving the real composite key.
+ for(let i=0;i<removedPaths.length;i+=250)await q.query(`DELETE FROM hz_fop_order_relation_paths p
+  USING jsonb_to_recordset($1::jsonb) AS gone(company_id uuid,dataset_id uuid,order_document_id uuid,relation_id uuid)
+  WHERE ${pathKeys.map(key=>`p.${key}=gone.${key}`).join(' AND ')}`,[JSON.stringify(removedPaths.slice(i,i+250))])
  await q.query('DELETE FROM hz_fop_document_relations WHERE dataset_id=$1 AND NOT(id=ANY($2::uuid[]))',[datasetId,[...unique.keys()]])
- async function insert(table:string,rows:Row[],upsert=true){
-  const columns:Row[]=upsert?await q.query('SELECT attname FROM pg_attribute WHERE attrelid=$1::regclass AND attnum>0 AND NOT attisdropped ORDER BY attnum',[table]):[]
-  const key=table==='hz_fop_source_documents'||table==='hz_fop_source_lines'||table==='hz_fop_document_relations'?'id':'document_id'
-  const conflict=upsert?` ON CONFLICT (${key}) DO UPDATE SET `+columns.filter(c=>c.attname!==key).map(c=>`"${c.attname}"=excluded."${c.attname}"`).join(','):''
+ async function insert(table:string,rows:Row[],keys?:string[]){
+  const columns:Row[]=await q.query('SELECT attname FROM pg_attribute WHERE attrelid=$1::regclass AND attnum>0 AND NOT attisdropped ORDER BY attnum',[table])
+  const key=keys??[table==='hz_fop_source_documents'||table==='hz_fop_source_lines'||table==='hz_fop_document_relations'?'id':'document_id']
+  const changed=columns.filter(c=>!key.includes(c.attname)).map(c=>`"${c.attname}"`)
+  const conflict=` ON CONFLICT (${key.map(k=>`"${k}"`).join(',')}) DO UPDATE SET `+changed.map(c=>`${c}=excluded.${c}`).join(',')
+   +` WHERE ROW(${changed.map(c=>`${table}.${c}`).join(',')}) IS DISTINCT FROM ROW(${changed.map(c=>`excluded.${c}`).join(',')})`
   for(let i=0;i<rows.length;i+=250)await q.query(`INSERT INTO ${table} SELECT * FROM jsonb_populate_recordset(NULL::${table},$1::jsonb)${conflict}`,[JSON.stringify(rows.slice(i,i+250))])
   await q.query(`ANALYZE ${table}`)
  }
  const issueByDoc=new Map<string,Row[]>();for(const issue of graph.issues)issueByDoc.set(issue.documentId,[...(issueByDoc.get(issue.documentId)??[]),issue])
  const common={connection_id:scope.connectionId,company_id:scope.companyId,dataset_id:datasetId}
- await insert('hz_fop_source_documents',graph.documents.map(d=>({...common,id:d.id,entity_code:d.entity,source_id:d.sourceId,document_number:d.number,source_version:null,raw_bill_status:chainText(d.raw.billstatus),source_created_at:chainTime(d.raw.createtime),source_modified_at:chainTime(d.raw.modifytime),source_audited_at:chainTime(d.raw.auditdate),synced_at:d.capturedAt,validation_state:'incomplete',payload_hash:createHash('sha256').update(JSON.stringify(d.raw)).digest('hex'),payload:{raw:d.raw,provenance:{mode:'collected',capturedAt:d.capturedAt,sourceVersionVerified:false},issues:issueByDoc.get(d.id)??[]},mapping_version:MAPPING_VERSION,relation_revision:0})))
+ await insert('hz_fop_source_documents',graph.documents.map(d=>({...common,id:d.id,entity_code:d.entity,source_id:d.sourceId,document_number:d.number,source_version:null,raw_bill_status:chainText(d.raw.billstatus),source_created_at:chainTime(d.raw.createtime),source_modified_at:chainTime(d.raw.modifytime),source_audited_at:chainTime(d.raw.auditdate),synced_at:d.capturedAt,validation_state:'incomplete',payload_hash:createHash('sha256').update(JSON.stringify(d.raw)).digest('hex'),payload:{raw:d.raw,provenance:{mode:'collected',capturedAt:d.capturedAt,sourceVersionVerified:false,...(d.display?.lineOutboundCapture?{lineOutboundCapture:d.display.lineOutboundCapture}:{})},issues:issueByDoc.get(d.id)??[]},mapping_version:MAPPING_VERSION,relation_revision:0})))
  await insert('hz_fop_source_lines',graph.lines.map(l=>({...common,id:l.id,document_id:l.documentId,entry_entity:l.entryEntity,source_entry_id:l.sourceEntryId,sequence:l.sequence,sku_code:l.sku,product_name:l.name,quantity:l.quantity,line_amount:l.amount,payload:l.raw})))
  for(const[kind,cfg]of Object.entries(chainKinds)){
   const rows=graph.documents.filter(d=>d.kind===kind).map(d=>{const r=d.raw,base:Row={document_id:d.id,company_id:scope.companyId,dataset_id:datasetId,entity_code:cfg.entity};const id=(key:string)=>chainText(r[key+'_id']??r[key]?.id)
@@ -65,7 +82,17 @@ export async function rebuildCollectedChain(q:EntityManager,batchId:string,dryRu
  for(const [kind,cfg]of Object.entries(chainKinds))await q.query(`DELETE FROM ${cfg.table} WHERE dataset_id=$1 AND NOT(document_id=ANY($2::uuid[]))`,[datasetId,graph.documents.filter(d=>d.kind===kind).map(d=>d.id)])
  await q.query('DELETE FROM hz_fop_source_lines WHERE dataset_id=$1 AND NOT(id=ANY($2::uuid[]))',[datasetId,graph.lines.map(l=>l.id)])
  await q.query('DELETE FROM hz_fop_source_documents WHERE dataset_id=$1 AND NOT(id=ANY($2::uuid[]))',[datasetId,graph.documents.map(d=>d.id)])
- await insert('hz_fop_order_relation_paths',graph.relations.map(r=>({company_id:scope.companyId,dataset_id:datasetId,order_document_id:r.rootId,relation_id:r.id,basis:r.basis})),false)
+ await insert('hz_fop_order_relation_paths',paths,pathKeys)
  await q.query(`INSERT INTO hz_fop_collected_chains(batch_id,dataset_id,source_signature,content_hash,mapping_version,summary) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(batch_id) DO UPDATE SET source_signature=excluded.source_signature,content_hash=excluded.content_hash,mapping_version=excluded.mapping_version,summary=excluded.summary,built_at=now()`,[batch.id,datasetId,signature,contentHash,MAPPING_VERSION,JSON.stringify(summary)])
  return {datasetId,reused:false,...summary}
+}
+
+export function collectedDeploymentScope(batch:Row){
+ const scope=batch.metadata?.deploymentScope
+ if(scope?.environment==='production'){
+  const url=new URL(scope.baseUrl)
+  if(url.protocol!=='https:'||url.origin!==scope.baseUrl||!scope.orgNumber)throw Error('collected_production_scope_invalid')
+  return {environment:'production',baseUrl:scope.baseUrl,orgNumber:scope.orgNumber}
+ }
+ return {environment:'test',baseUrl:'https://hyperzone.test.kdgalaxy.com',orgNumber:'hyperzone.test'}
 }

@@ -17,6 +17,13 @@ it('enables authentic partial captures with explicit partial coverage and missin
  const {service}=setup();const page=await service.orders('admin',{queue:'rma',rmaFlowStatus:'all'},'sales',true)
  expect(page.items[0].id).toBe('r1');expect(page.totals.caseCount).toBe(1);expect(page.totals.itemQuantity).toBeNull();expect(page.totals.amountsByCurrency).toEqual([]);expect(page.dataAvailability).toMatchObject({queueAvailable:true,coverage:'partial_customer_scan',provesBusinessZero:false});expect(page.replica.sourceSyncedAt).toBe('2026-11-12T01:00:00Z')
 })
+it('can total known scoped RMA values without claiming complete company coverage',async()=>{
+ const {service,db}=setup(),original=db.query.getMockImplementation()!
+ db.query.mockImplementation((async(sql:string)=>sql.includes('AS currency')?[{currency:'USD',amount:'12.50'}]:sql.includes('AS quantity')?[{quantity:'2'}]:original(sql)) as any)
+ const page=await service.orders('admin',{queue:'rma',rmaFlowStatus:'all'},'sales',true)
+ expect(page.totals).toMatchObject({complete:true,itemQuantity:2,amountsByCurrency:[{currency:'USD',amount:12.5}]})
+ expect(page.dataAvailability).toMatchObject({complete:false,coverage:'partial_customer_scan',provesBusinessZero:false})
+})
 it('rechecks account before delivering partial RMA data',async()=>{
  const {service,users,user}=setup();users.findById.mockImplementationOnce(async()=>user).mockImplementationOnce(async()=>({...user,accountDisabled:true}));await expect(service.orders('admin',{queue:'rma'},'sales',true)).rejects.toThrow()
 })

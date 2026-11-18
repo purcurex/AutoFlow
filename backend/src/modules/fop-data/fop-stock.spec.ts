@@ -34,7 +34,7 @@ it('filters stock lifecycle stages without hiding intermediate stages from all r
     await book.xlsx.load(await service.exportStockOrders('u', { lifecycle: 'pending_procurement', mode, ...(mode === 'selected' ? { orderIds: ['purchased'] } : {}) }) as never)
     const sheet = book.getWorksheet('备货清单')!
     const values = JSON.stringify(sheet.getSheetValues())
-    expect(values).toContain('供应商待发货')
+    expect(values).toContain('已采购')
     expect(values).not.toContain('采购已发货')
     expect(sheet.rowCount).toBe(mode === 'selected' ? 3 : 5)
   }
@@ -296,7 +296,7 @@ it('includes purchased stock awaiting shipment in the procurement queue and both
     const sheet = filteredBook.getWorksheet('备货清单')!
     expect(sheet.rowCount).toBe(3)
     expect(sheet.getCell('A2').value).toBe('BH2610283')
-    expect(sheet.getCell(2, (sheet.getRow(1).values as string[]).indexOf('采购状态')).value).toBe('供应商待发货')
+    expect(sheet.getCell(2, (sheet.getRow(1).values as string[]).indexOf('采购状态')).value).toBe('已采购')
   }
   await expect(service.exportStockOrders('u', { mode: 'selected', queue: 'procurement', orderIds: ['9'] })).rejects.toMatchObject({ status: 409 })
   user.businessRole = 'department_manager'

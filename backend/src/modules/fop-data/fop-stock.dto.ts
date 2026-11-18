@@ -21,7 +21,7 @@ export class StockFiltersDto extends StockScopeDto {
 }
 export class StockOrdersQueryDto extends StockFiltersDto {
   @Type(() => Number) @IsInt() @Min(1) @Max(1000000) page = 1
-  @Type(() => Number) @IsIn([20, 50, 100]) pageSize = 50
+  @Type(() => Number) @IsIn([20, 50, 100, 200, 500, 1000]) pageSize = 100
 }
 export class StockInventoryQueryDto extends StockScopeDto {
   @ValidateIf((_object, value) => value !== undefined) @Transform(({ value }) => typeof value === 'string' ? [value] : value)
@@ -34,5 +34,5 @@ export class StockInventoryQueryDto extends StockScopeDto {
 }
 export class ExportStockOrdersDto extends StockFiltersDto {
   @IsIn(['selected', 'filtered']) mode: 'selected' | 'filtered'
-  @IsOptional() @IsArray() @ArrayMinSize(1) @ArrayMaxSize(100) @ArrayUnique() @IsString({ each: true }) @MaxLength(200, { each: true }) orderIds?: string[]
+  @IsOptional() @IsArray() @ArrayMinSize(1) @ArrayMaxSize(1000) @ArrayUnique() @IsString({ each: true }) @MaxLength(200, { each: true }) orderIds?: string[]
 }

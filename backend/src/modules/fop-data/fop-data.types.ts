@@ -10,7 +10,7 @@ import type { BusinessScope } from '../users/business-scope'
 import type { FopBindingEmployeePage, VerifiedFopEmployeeBinding } from './fop-employee-binding'
 import type { FopProfitCandidate } from './sales-performance.types'
 import type { FopStockOrderCandidate, FopStockInventoryCandidate } from './fop-stock.types'
-export const FOP_EXCEPTION_TYPES = ['procurement_exception', 'dispatch_exception', 'allocation_exception', 'logistics_exception', 'delivery_exception'] as const
+export const FOP_EXCEPTION_TYPES = ['logistics_exception', 'dispatch_exception', 'allocation_exception', 'procurement_exception', 'outbound_exception', 'delivery_exception'] as const
 export type FopExceptionType = typeof FOP_EXCEPTION_TYPES[number]
 export const SALES_DEPARTMENTS = [
   { id: 'sales1', name: '业务一部' }, { id: 'sales2', name: '业务二部' },
@@ -115,6 +115,8 @@ export interface FopAnalyticsData {
 }
 
 export interface FopOrderItem {
+  /** Explicit gift flag only; never inferred from zero price or name. */
+  isGift?: boolean | null
   /** Verified FOP virtual-product classification; null/absent remains unknown. */
   isVirtual?: boolean | null
   purchaseState?: string
@@ -137,7 +139,7 @@ export interface FulfillmentProgress {
   supplierShipment: 'pending' | 'partial' | 'shipped' | 'not_required' | 'unknown'
   stockReadiness: 'incomplete' | 'ready' | 'unknown'
   allocationReview: 'pending' | 'approved' | 'unknown'
-  outbound: 'pending' | 'partial' | 'completed' | 'unknown'
+  outbound: 'pending' | 'partial' | 'completed' | 'not_required' | 'unknown'
 }
 
 /** Aggregated over effective linked purchases; independent of customer payment. */
@@ -148,7 +150,7 @@ export interface ProcurementProgress {
   /** FOP logistics-only validation for outstanding actual 1688 pushes. */
   logisticsGate?: 'pending_dispatch' | 'pending_logistics' | 'satisfied' | 'not_required' | 'unknown'
   purchaseOrder: 'not_ordered' | 'partial' | 'ordered' | 'cancelled' | 'not_required' | 'unknown'
-  supplierPayment: 'unpaid' | 'partial' | 'paid' | 'refunded' | 'not_required' | 'unknown'
+  supplierPayment: 'unpaid' | 'partial' | 'paid' | 'refunded' | 'partially_refunded' | 'not_required' | 'unknown'
 }
 
 /** Effective linked dispatch documents; never inferred from customer payment or Shopify sync. */
@@ -192,6 +194,13 @@ export interface LogisticsInfo {
 export interface AllocationDocumentReference { id: string; number: string }
 
 export interface FopOrder {
+  /** Display-only manual label; never written back as an upstream order number. */
+  documentKind?: 'stock_order'
+  sourceDocumentId?: string
+  sourceOrderNumberIsManual?: boolean
+  /** 履约订单 hzkj_note；不以 Shopify 或 SKU 备注回退。 */
+  orderRemark?: string | null
+  orderRemarkProvided?: boolean
   /** 服务端按未完成期望包裹聚合，避免缺包裹被已有发运单掩盖。 */
   dispatchTaskStatus?: 'dispatch_pending' | 'dispatch_tracking' | 'dispatch_updating' | 'dispatch_cancelled' | 'dispatch_missing' | 'dispatch_draft' | 'dispatch_submitted' | 'dispatch_approved' | 'dispatch_synced' | 'unknown'
   /** Explicit latest FOP interception fact; absent is unknown, never an inferred release. */

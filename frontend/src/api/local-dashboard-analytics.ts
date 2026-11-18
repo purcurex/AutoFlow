@@ -26,3 +26,16 @@ export async function getLocalDashboardAnalytics(query:LocalAnalyticsQuery, opti
  assertCurrentSession(session)
  return result
 }
+
+export interface TrendTarget {dimension:'department'|'person'|'customer'|'country'|'warehouse';id:string;name:string}
+export interface DashboardTrendQuery extends Omit<LocalAnalyticsQuery,'comparison'> {dimension:TrendTarget['dimension'];id:string;grain:'day'|'month'}
+export interface TrendPoint {period:string;orderCount:number;registrationCount?:number;quantity:string|null;amount:string|null}
+export interface DashboardTrendResult {
+ source:'local';chartId:LocalChartId;dimension:TrendTarget['dimension'];id:string;grain:'day'|'month';from:string;to:string;asOf:string;summaryOnly:boolean;timeBasis:string
+ orderCount:number;registrationCount?:number;totalQuantity:string|null;amount:string|null;currency:string|null;missingAmountCount:number;missingPaidAtCount:number;points:TrendPoint[]
+}
+export async function getLocalDashboardTrend(query:DashboardTrendQuery,options?:AnalyticsQueryOptions):Promise<DashboardTrendResult>{
+ const session=captureSession(),endpoint='/workbench/analytics/dashboard/trend'
+ const result=await analyticsQuery(endpoint,query,()=>api.get<DashboardTrendResult,DashboardTrendResult>(endpoint,{params:query}),options)
+ assertCurrentSession(session);return result
+}

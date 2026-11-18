@@ -1,9 +1,13 @@
 import { collectedWhere } from './collected-workbench-query'
 describe('collected orders filters',()=>{
+ it('defaults approved queries to the same month as the UI while retaining explicit periods',()=>{
+  expect(collectedWhere('b',null,{queue:'review',completed:true})).toEqual(collectedWhere('b',null,{queue:'review',completed:true,timeRange:'1m'}))
+  expect(collectedWhere('b',null,{queue:'review',completed:true,timeRange:'all'}).where).not.toContain('paid_at >=')
+ })
  it('binds batch and employee authorization',()=>{const q=collectedWhere('batch',['employee'],{queue:'review'});expect(q.params).toEqual(['batch',['employee']]);expect(q.where).toContain('owner_employee_id = ANY');expect(q.where).toContain("raw_order_status='2' AND raw_bill_status IN ('A','B')")})
  it('retains audited records regardless of payment or cancellation',()=>{const q=collectedWhere('b',null,{queue:'review',completed:true,timeRange:'1w'});expect(q.where).toContain("raw_bill_status = 'C'");expect(q.where).not.toContain('raw_payment_status');expect(q.where).toContain("paid_at >= now()");expect(q.where).not.toContain("display->>'reviewedAt'")})
- it('does not invent downstream completion',()=>{expect(collectedWhere('b',null,{queue:'allocation_review'}).where).toContain('EXISTS(SELECT 1 FROM hz_fop_collected_entities');expect(collectedWhere('b',null,{queue:'exceptions'}).where).toContain("raw_delivery_status IS DISTINCT FROM '2'")})
- it('keeps unknown payment in exceptions',()=>{expect(collectedWhere('b',null,{queue:'exceptions'}).where).toContain("raw_payment_status IS NULL")})
+ it('does not invent downstream completion',()=>{expect(collectedWhere('b',null,{queue:'allocation_review'}).where).toContain('EXISTS(SELECT 1 FROM hz_fop_collected_entities');expect(collectedWhere('b',null,{queue:'exceptions'}).where).not.toContain("display->>'nativeProcurementCaptured' IS DISTINCT FROM 'true'")})
+ it('reads persisted exceptions without rechecking payment or associated documents',()=>{const where=collectedWhere('b',null,{queue:'exceptions'}).where;expect(where).toContain('is_exception');expect(where).not.toContain('raw_payment_status IS NULL')})
  it('parameterizes searches and empty employee scope',()=>{const q=collectedWhere('b',[],{queue:'unpaid',search:"%' OR TRUE --"});expect(q.params[1]).toEqual([]);expect(q.where).not.toContain('OR TRUE');expect(q.params[2]).toContain('\\%')})
 })
 
@@ -45,7 +49,7 @@ it.each([collectedWhere,collectedStockWhere,collectedRmaWhere])('searches matche
 
 it('dispatch pending is approved native paid/processing/cancelled fulfillment, independent of dispatch capture',()=>{
  const q=collectedWhere('b',null,{queue:'dispatch'})
- expect(q.where).toContain("raw_bill_status='C' AND raw_order_status IN ('2','3','6')")
+ expect(q.where).toContain("raw_bill_status='C' AND raw_order_status IN ('2','3')")
  expect(q.where).not.toContain('nativeFactsCaptured');expect(q.where).not.toContain('raw_payment_status')
  expect(collectedWhere('b',null,{queue:'dispatch',completed:true}).where).toContain("raw_order_status IN ('4','5')")
 })
@@ -61,10 +65,10 @@ it('uses source payment for unpaid range and ordering only',()=>{
 it('filters unnumbered dispatches before paging using missing and pending, retaining permissions',()=>{
  const q=collectedWhere('batch',['employee'],{queue:'dispatch',taskStatus:'dispatch_pending'})
  expect(q.where).toContain("jsonb_array_elements")
- expect(q.where).toContain("btrim(t->>'number')")
+ expect(q.where).toContain("trim(t->>'number', ' ' || chr(9) || chr(10) || chr(13))")
  expect(q.params).toContain('dispatch_pending')
  expect(q.where).toContain('owner_employee_id = ANY')
- expect(q.where).toContain("raw_bill_status='C' AND raw_order_status IN ('2','3','6')")
+ expect(q.where).toContain("raw_bill_status='C' AND raw_order_status IN ('2','3')")
 })
 
 it('filters unpaid SKU association by native order status, defaulting to linked',()=>{

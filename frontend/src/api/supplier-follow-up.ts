@@ -33,6 +33,6 @@ const returnPath = (id: string) => `/autoflow/integrations/fop/purchase-returns/
 export function getReturnSupplier(orderId: string, context: ReturnContactContext): Promise<SupplierFollowUpPage> {
   return api.get(returnPath(context.returnId), { params: { orderId, workbenchRole: context.workbenchRole } })
 }
-export function getReturnSupplierChat(orderId: string, context: ReturnContactContext, contactVersion: string): Promise<SupplierChatLaunch> {
-  return api.get(`${returnPath(context.returnId)}/launch`, { params: { orderId, workbenchRole: context.workbenchRole, contactVersion } })
+export function getReturnSupplierChat(orderId: string, context: ReturnContactContext, contactVersion: string, purchaseOrderId?: string): Promise<SupplierChatLaunch> {
+  return api.get(`${returnPath(context.returnId)}/launch`, { params: { orderId, workbenchRole: context.workbenchRole, contactVersion, ...(purchaseOrderId ? { purchaseOrderId } : {}) } })
 }

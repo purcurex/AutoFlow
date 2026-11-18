@@ -140,7 +140,7 @@ onBeforeUnmount(() => { disposed = true; cancel(); off() })
 </script>
 
 <template>
-  <div v-if="local" class="workbench-replica-controls" aria-live="polite">
+  <div class="workbench-replica-controls" :style="{ visibility: local ? 'visible' : 'hidden' }" :aria-hidden="!local" aria-live="polite">
     <template v-if="!status?.initialized && status?.bootstrap?.allowed">
       <button class="replica-sync" data-testid="initialize-workbench" :disabled="disabled || syncing || !status.bootstrap.executable || statusUnavailable" @click="initialize">{{ initializing ? text('初始化中…', 'Initializing…') : status.bootstrap.resume || bootstrapRequest ? text('继续初始化', 'Continue initialization') : text('初始化数据', 'Initialize data') }}</button>
       <span v-if="initializationReason" class="replica-error">{{ initializationReason }}</span>
@@ -152,11 +152,12 @@ onBeforeUnmount(() => { disposed = true; cancel(); off() })
 </template>
 
 <style scoped>
-.workbench-replica-controls{display:flex;flex-direction:column;align-items:flex-end;gap:2px;flex-shrink:0;color:var(--color-text-secondary)}
+.workbench-replica-controls{position:relative;display:flex;flex-direction:column;align-items:flex-end;gap:2px;width:280px;height:48px;max-width:100%;flex-shrink:0;color:var(--color-text-secondary)}
+.replica-sync[data-testid=initialize-workbench]{position:absolute;right:100%;top:0}
 .replica-sync{display:inline-flex;align-items:center;gap:5px;padding:4px 7px;font-size:11px;font-weight:400;line-height:1.5;white-space:nowrap;color:var(--color-text-secondary);background:transparent;border:1px solid transparent;border-radius:5px;cursor:pointer}
 .replica-sync:hover:not(:disabled){background:var(--color-surface);border-color:var(--color-border);color:var(--color-text)}
 .replica-sync:focus-visible{outline:2px solid var(--color-text-secondary);outline-offset:2px}.replica-sync:disabled{opacity:.5;cursor:default}
-.replica-time{font-size:10px;line-height:1.5;white-space:nowrap}.replica-error{font-size:11px;max-width:280px;color:var(--color-warning,#9a6700)}
+.replica-time{font-size:10px;line-height:1.5;white-space:nowrap;font-variant-numeric:tabular-nums}.replica-error{position:absolute;right:0;top:100%;z-index:5;font-size:11px;width:280px;padding:6px 8px;background:var(--color-surface);border:1px solid var(--color-border);border-radius:5px;color:var(--color-warning,#9a6700)}
 .replica-announcement{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
 .spinning{animation:replica-spin 1s linear infinite}@keyframes replica-spin{to{transform:rotate(360deg)}}
 </style>

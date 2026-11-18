@@ -30,11 +30,14 @@ describe('timestamp publisher facts retain the collected read-only list contract
     expect(isFopOrderPageDataValid(page({ ...item, dataQuality: { ...item.dataQuality!, readOnly: false } } as unknown as FopOrder))).toBe(false)
     expect(isFopOrderPageDataValid(page({ ...item, dataQuality: { ...item.dataQuality!, mode: 'timestamp' } } as unknown as FopOrder))).toBe(false)
   })
-  it.each(['alibaba_pending', 'payment_pending', 'refund_pending'] as const)('uses independently verified procurement stage %s despite missing old header status', procurementStage => {
+  it.each(['purchase_order_pending', 'dispatch_preparation', 'payment_pending'] as const)('uses independently verified procurement stage %s despite missing old header status', procurementStage => {
     const item = row({ nativeProcurementCaptured: true, procurementStage })
     expect(matchesFopQueue(item, 'procurement')).toBe(true)
     expect(matchesFopQueue(item, 'procurement_shipping')).toBe(false)
     expect(matchesCompletedQueue(item, 'procurement')).toBe(false)
+  })
+  it.each(['alibaba_pending', 'refund_pending'] as const)('does not treat retired stage %s as an actionable pending task', procurementStage => {
+    expect(matchesFopQueue(row({ nativeProcurementCaptured: true, procurementStage }), 'procurement')).toBe(false)
   })
   it('uses verified supplier shipment and completion while leaving unknown procurement out', () => {
     expect(matchesFopQueue(row({ nativeProcurementCaptured: true, procurementStage: 'supplier_pending' }), 'procurement_shipping')).toBe(true)
@@ -46,7 +49,7 @@ describe('timestamp publisher facts retain the collected read-only list contract
   })
   it('keeps refreshed stock readiness separate from missing source outbound evidence', () => {
     const item = row({ allocationDocuments: [{ id: 'allocation', rawBillStatus: 'B', rawAllocationStatus: 'available' }] as FopOrder['allocationDocuments'], fulfillmentProgress: { allocationCreated: true, allocationReview: 'pending', stockReadiness: 'incomplete', outbound: 'unknown', supplierShipment: 'unknown', shopifySync: 'unknown' } })
-    expect(matchesFopQueue(item, 'allocation')).toBe(false)
+    expect(matchesFopQueue(item, 'allocation')).toBe(true)
     expect(matchesFopQueue({ ...item, sourceOutboundStatus: '0' }, 'allocation')).toBe(true)
     expect(matchesFopQueue(row({ nativeFactsCaptured: true, nativeShippingReady: true }), 'shipping')).toBe(false)
     expect(matchesCompletedQueue(row({ nativeFactsCaptured: true, nativeShippingReady: true }), 'shipping')).toBe(false)

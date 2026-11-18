@@ -12,11 +12,11 @@ export class PurchaseReturnFiltersDto {
 }
 export class PurchaseReturnQueryDto extends PurchaseReturnFiltersDto {
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(1000000) page = 1
-  @IsOptional() @Type(() => Number) @IsIn([20, 50, 100]) pageSize = 50
+  @IsOptional() @Type(() => Number) @IsIn([20, 50, 100, 200, 500, 1000]) pageSize = 100
 }
 export class PurchaseReturnExportDto extends PurchaseReturnFiltersDto {
   @IsIn(['filtered', 'selected']) mode: 'filtered' | 'selected'
-  @IsOptional() @IsArray() @ArrayMinSize(1) @ArrayMaxSize(100) @ArrayUnique() @IsString({ each: true }) @MaxLength(500, { each: true }) orderIds?: string[]
+  @IsOptional() @IsArray() @ArrayMinSize(1) @ArrayMaxSize(1000) @ArrayUnique() @IsString({ each: true }) @MaxLength(500, { each: true }) orderIds?: string[]
 }
 
 export class PurchaseReturnContactQueryDto {
@@ -24,5 +24,6 @@ export class PurchaseReturnContactQueryDto {
   @IsString() @IsNotEmpty() @MaxLength(500) orderId: string
 }
 export class PurchaseReturnChatQueryDto extends PurchaseReturnContactQueryDto {
+  @IsOptional() @IsString() @IsNotEmpty() @MaxLength(128) purchaseOrderId?: string
   @IsString() @Matches(/^[a-f0-9]{64}$/) contactVersion: string
 }

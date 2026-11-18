@@ -13,7 +13,7 @@ const props = withDefaults(defineProps<{ option: EChartsCoreOption; label: strin
 const { canExport: inheritedExport } = useChartCapabilities()
 const { isDark } = useTheme()
 const allowExport = computed(() => props.canExport ?? inheritedExport.value)
-export interface ChartClick { seriesId?: string; dataIndex?: number; name?: string }
+export interface ChartClick { seriesId?: string; seriesIndex?:number; dataIndex?: number; name?: string }
 export interface ChartZoom { start?: number; end?: number; startValue?: number; endValue?: number; batch?: ChartZoom[] }
 const emit = defineEmits<{ select: [event: ChartClick]; zoom: [event: ChartZoom] }>()
 defineExpose({ zoom: (event: ChartZoom) => {

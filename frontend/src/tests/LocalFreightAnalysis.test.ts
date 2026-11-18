@@ -3,8 +3,10 @@ import { createI18n } from 'vue-i18n'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import EChartStub from '@/components/charts/EChart.vue'
 import LocalFreightAnalysis from '@/components/freight/LocalFreightAnalysis.vue'
+import FreightDetailsDialog from '@/components/freight/FreightDetailsDialog.vue'
 import { getLocalFreight } from '@/api/local-freight'
 vi.mock('@/api/local-freight',()=>({getLocalFreight:vi.fn()}))
+vi.mock('@/components/freight/FreightDetailsDialog.vue',()=>({default:{props:['query','name'],template:'<div />'}}))
 vi.mock('@/composables/useAnalyticsRefresh',()=>({useAnalyticsRefresh:()=>({updated:vi.fn()})}))
 vi.mock('@/components/charts/EChart.vue',()=>({default:{props:['option','label'],template:'<div class="chart-stub" />'}}))
 const measure={amount:'12.34',previousAmount:'10',delta:'2.34',percent:23.4}
@@ -13,6 +15,21 @@ const mountView=()=>mount(LocalFreightAnalysis,{global:{plugins:[createI18n({leg
 beforeEach(()=>{vi.useFakeTimers();vi.mocked(getLocalFreight).mockReset().mockResolvedValue(sample as any)})
 afterEach(()=>vi.useRealTimers())
 describe('real local freight chart',()=>{
+ it('drills chart cells into actual source records only when the backend advertises capability',async()=>{
+  vi.mocked(getLocalFreight).mockResolvedValue({...sample,canViewDetails:true,canExport:true} as any)
+  const w=mountView();await flushPromises()
+  w.findComponent(EChartStub).vm.$emit('select',{seriesIndex:0,dataIndex:0});await flushPromises()
+  expect(w.findComponent(FreightDetailsDialog).props('query')).toMatchObject({currency:'CNY',dimension:'carrier',dimensionId:'native',periodId:'p'})
+  await w.get('[aria-label="运费仓库"]').setValue('HangZhou');await flushPromises()
+  expect(w.findComponent(FreightDetailsDialog).exists()).toBe(false);w.unmount()
+ })
+ it('drills owner department totals through the same local department scope, not the native department dimension',async()=>{
+  vi.mocked(getLocalFreight).mockResolvedValue({...sample,canViewDetails:true,series:[{...sample.series[0],id:'p1',departmentId:'d1',departmentName:'业务一部',englishName:'Alex'}],departmentSeries:[{...sample.series[0],id:'d1',label:'业务一部'}]} as any)
+  const w=mountView();await flushPromises();await w.get('[aria-label="运费统计维度"]').setValue('owner');await flushPromises()
+  w.findComponent(EChartStub).vm.$emit('select',{seriesIndex:0,dataIndex:0});await flushPromises()
+  expect(w.findComponent(FreightDetailsDialog).props('query')).toMatchObject({currency:'CNY',dimension:'owner',departmentId:'d1'})
+  expect(w.findComponent(FreightDetailsDialog).props('query').dimensionId).toBeUndefined();w.unmount()
+ })
  it('groups owner bars by department with English names and retains native-currency comparison deltas',async()=>{
   const owner=(id:string,dept:string,name:string,amount:string)=>({id,label:'中文名',departmentId:dept,englishName:name,values:[measure],totals:{...measure,amount},billCount:2})
   vi.mocked(getLocalFreight).mockResolvedValue({...sample,series:[owner('p2','d2','Bob','20'),owner('p1','d1','Alex','10')],departmentSeries:[{...sample.series[0],id:'d2',label:'业务二部',totals:{...measure,amount:'20'}},{...sample.series[0],id:'d1',label:'业务一部',totals:{...measure,amount:'10'}}]} as any)

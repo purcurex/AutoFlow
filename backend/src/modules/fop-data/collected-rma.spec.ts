@@ -1,9 +1,9 @@
 import { normalizeCollectedRma, validateCollectedRmaPages } from './collected-rma'
 const raw={id:'11',number:'RMA1',hzkj_srcnumber:'TO1',hzkj_shop_id:'22',hzkj_sales_type:'B',hzkj_orderstatus:'3',hzkj_refund_amount:0,createtime:'2026-08-08 14:49:28'}
 const parent:any={source_id:'33',company_id:'100000',order_number:'TO1',shop_id:'22',payer_customer_id:'44',source_businessowner_id:'55',owner_employee_id:'55',display:{id:'33',orderNumber:'TO1',items:[],owner:{id:'55',name:'Sales'},currency:null}}
-it('inherits only a unique same-company and payer verified parent; currency is never guessed',()=>{
+it('inherits only a unique same-company and payer verified parent; missing refund currency defaults to the confirmed USD rule',()=>{
  const n=normalizeCollectedRma(raw,{companyId:'100000',payerCustomerId:'44',parents:[parent]})
- expect(n.ownerEmployeeId).toBe('55');expect(n.display).toMatchObject({id:'11',sourceOrderId:'33',rmaCases:[{type:'refund',isOpen:false,refundAmount:0,refundCurrency:null,currency:null,createdAt:'2026-08-08T06:49:28.000Z'}]});expect(n.association.state).toBe('verified')
+ expect(n.ownerEmployeeId).toBe('55');expect(n.display).toMatchObject({id:'11',sourceOrderId:'33',rmaCases:[{type:'refund',isOpen:false,refundAmount:0,refundCurrency:'USD',currency:null,createdAt:'2026-08-08T06:49:28.000Z'}]});expect(n.association.state).toBe('verified')
 })
 it.each([['unmatched',[]],['ambiguous',[parent,parent]],['payer_mismatch',[{...parent,payer_customer_id:'45'}]],['owner_unverified',[{...parent,source_businessowner_id:null}]]])('retains %s for admin diagnostics without assigning an owner',(state,parents)=>{
  const n=normalizeCollectedRma(raw,{companyId:'100000',payerCustomerId:'44',parents:parents as any});expect(n.ownerEmployeeId).toBeNull();expect(n.association.state).toBe(state);expect(n.display.rmaCases).toHaveLength(1)
@@ -41,4 +41,29 @@ it('accepts source identity configuration from FOP env while enforcing persisten
 it.each([['88.12',88.12],[0,0],[null,null],['invalid',null]])('uses RMA native amount %s without inheriting parent money',(value,expected)=>{
  const n=normalizeCollectedRma({...raw,hzkj_order_amount:value},{companyId:'100000',payerCustomerId:'44',parents:[{...parent,display:{...parent.display,amount:999,amountBreakdown:{productAmount:888}}}]})
  expect(n.display.amount).toBe(expected);expect(n.display.currency).toBe('USD');expect(n.display.amountBreakdown).toBeUndefined();expect(n.display.rmaCases[0].refundAmount).toBe(0)
+})
+it('uses this RMA SKU and quantity instead of the original fulfillment products',()=>{
+ const n=normalizeCollectedRma({...raw,hzkj_order_amount:12,hzkj_after_entryentity:[{id:'101',hzkj_localsku_id:'201',hzkj_localsku_number:'RETURN-SKU',hzkj_localsku_name:'售后商品',hzkj_localsku_hzkj_sku_value:'绿色',hzkj_localsku_hzkj_picturefield:'https://example.com/product.png',hzkj_qty:1}]},{companyId:'100000',payerCustomerId:'44',parents:[{...parent,display:{...parent.display,items:[{sku:'ORIGINAL',quantity:3}],dataQuality:{missingFields:['amount']}}}]})
+ expect(n.display.items).toEqual([expect.objectContaining({id:'101',productId:'201',sku:'RETURN-SKU',name:'售后商品',variant:'绿色',quantity:1,imageUrl:'https://example.com/product.png'})])
+ expect(n.display.dataQuality.missingFields).not.toContain('amount')
+ expect(n.display.dataQuality.missingFields).not.toContain('rma.refundCurrency')
+})
+it.each([undefined,null,[]])('never falls back to parent items when RMA detail is %s',details=>{
+ const n=normalizeCollectedRma({...raw,hzkj_after_entryentity:details},{companyId:'100000',payerCustomerId:'44',parents:[{...parent,display:{...parent.display,items:[{sku:'PARENT',quantity:9}]}}]})
+ expect(n.display.items).toEqual([])
+ if(!Array.isArray(details))expect(n.display.dataQuality.missingFields).toContain('items')
+})
+it('retains an unknown RMA quantity as missing and does not invent refund currency for reshipment',()=>{
+ const n=normalizeCollectedRma({...raw,hzkj_sales_type:'C',hzkj_after_entryentity:[{id:'101',hzkj_localsku_number:'SKU',hzkj_qty:null}]},{companyId:'100000',payerCustomerId:'44',parents:[parent]})
+ expect(n.display.items[0].quantity).toBeNull()
+ expect(n.display.dataQuality.missingFields).toContain('items.quantity')
+ expect(n.display.dataQuality.missingFields).not.toContain('rma.refundCurrency')
+})
+
+import { withCollectedRmaDetails } from './collected-rma'
+it.each([[undefined,'USD'],[null,'USD'],['','USD'],['  ','USD'],['EUR','EUR'],[' cny ','CNY'],['bad-currency',null]])('reprojects captured refund currency %s consistently for list and export', (currency,expected)=>{
+ const d=withCollectedRmaDetails({id:'11',rmaCases:[{id:'11',type:'refund',refundAmount:5,refundCurrency:null}],refundAmounts:[{amount:5,currency:null}],dataQuality:{missingFields:['rma.refundCurrency']}},{...raw,hzkj_tocurr_number:currency})
+ expect(d.rmaCases[0].refundCurrency).toBe(expected)
+ expect(d.refundAmounts).toEqual([{amount:5,currency:expected}])
+ expect(d.dataQuality.missingFields.includes('rma.refundCurrency')).toBe(expected===null)
 })

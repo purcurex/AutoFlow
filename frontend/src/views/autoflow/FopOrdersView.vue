@@ -1,4 +1,9 @@
 <script setup lang="ts">
+import WorkbenchPagination from '@/components/autoflow/WorkbenchPagination.vue'
+import OrderExceptionLabel from '@/components/autoflow/OrderExceptionLabel.vue'
+import { vPickingNameTooltip } from '@/directives/picking-name-tooltip'
+import { vTaskTableLayout } from '@/directives/task-table-layout'
+import { skuPickingName } from '@/utils/product-display'
 import { warehouseName } from '@/utils/warehouse'
 import { workbenchTimeRange } from '@/utils/workbench-time-range'
 import { useProductExpansion } from '@/composables/useProductExpansion'
@@ -17,9 +22,11 @@ import SupplierFollowUpDialog from '@/components/autoflow/SupplierFollowUpDialog
 import WorkbenchListActions from '@/components/autoflow/WorkbenchListActions.vue'
 import WorkbenchStatusBadge from '@/components/autoflow/WorkbenchStatusBadge.vue'
 import WorkbenchExportButton from '@/components/autoflow/WorkbenchExportButton.vue'
+import WorkbenchRefreshControl from '@/components/autoflow/WorkbenchRefreshControl.vue'
+import WorkbenchTableState from '@/components/autoflow/WorkbenchTableState.vue'
 import WorkbenchTaskHeading from '@/components/autoflow/WorkbenchTaskHeading.vue'
 import OrderSortHeader from '@/components/autoflow/OrderSortHeader.vue'
-import { sourceStatusLabel, businessStatusLabel } from '@/utils/fulfillment-source-status'
+import { sourceStatusLabel, businessStatusLabel, completedPurchaseLabel } from '@/utils/fulfillment-source-status'
 import SupplierShipmentStatus from '@/components/autoflow/SupplierShipmentStatus.vue'
 import ProcurementStatus from '@/components/autoflow/ProcurementStatus.vue'
 import { canFilterTaskStatus, getTaskStatus, matchesTaskStatus, taskStatusHeading, taskStatusLabel, taskStatusOptions } from '@/utils/workbench-status'
@@ -39,7 +46,7 @@ import OrderAmountBreakdown from '@/components/ui/OrderAmountBreakdown.vue'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { ArrowUp, ArrowDown, ArrowUpDown, Check, Copy, ChevronLeft, ChevronRight, PackageSearch, RefreshCw, Search, MessageCircle } from 'lucide-vue-next'
+import { ArrowUp, ArrowDown, ArrowUpDown, Check, Copy, PackageSearch, Search, MessageCircle } from 'lucide-vue-next'
 import { copyText } from '@/utils/copyText'
 import { procurementPaymentTime } from '@/utils/procurement-payment'
 import { getFopOrders, isFopOrderPageDataValid, orderItemQuantity, canSortFopQueue, isFopOrderSortBy, type FopOrderSortBy, isFopOrderQueue, isWarehouseStage, matchesFopQueue, type FopOrder, type FopOrderQuery, type FopQueuePage } from '@/api/fop-orders'
@@ -85,7 +92,7 @@ function openApproval() {
   unlockApproval = lockApprovalNavigation()
 }
 function clearApproval() { approvalOrderIds.value = undefined; unlockApproval?.(); unlockApproval = undefined }
-function approvalCompleted() { approvalNeedsRefresh = true; selectedOrders.value = [] }
+async function approvalCompleted() { approvalNeedsRefresh = true; selectedOrders.value = []; await load(false, true); if (!error.value) approvalNeedsRefresh = false }
 function closeApproval() { clearApproval(); if (approvalNeedsRefresh) { approvalNeedsRefresh = false; void load() } }
 function preventApprovalUnload(event: BeforeUnloadEvent) { if (approvalOrderIds.value) { event.preventDefault(); event.returnValue = '' } }
 const exporting = ref<'selected' | 'filtered'>()
@@ -134,7 +141,7 @@ const procurementStage = computed(() => !completed.value && canFilterProcurement
 const taskStatus = computed(() => !completed.value && canFilterTaskStatus(queue.value ?? '', route.query.taskStatus) ? route.query.taskStatus : undefined)
 const statusOptions = computed(() => completed.value ? [] : taskStatusOptions(queue.value ?? ''))
 const filterStatusHeading = computed(() => taskStatusHeading(queue.value ?? '')[zh.value ? 0 : 1])
-const statusHeading = computed(() => queue.value === 'procurement' ? text('采购状态', 'Purchase status') : queue.value === 'shipping' ? text('出库状态', 'Outbound status') : completed.value ? queue.value === 'dispatch' ? text('履约状态', 'Fulfillment status') : queue.value === 'allocation_review' ? text('审核状态', 'Approval status') : text('完成状态', 'Completion status') : taskStatusHeading(queue.value ?? '')[zh.value ? 0 : 1])
+const statusHeading = computed(() => ['procurement','procurement_shipping'].includes(queue.value ?? '') ? text('采购状态', 'Purchase status') : queue.value === 'shipping' ? text('出库状态', 'Outbound status') : completed.value ? queue.value === 'dispatch' ? text('履约状态', 'Fulfillment status') : queue.value === 'allocation_review' ? text('审核状态', 'Approval status') : text('完成状态', 'Completion status') : taskStatusHeading(queue.value ?? '')[zh.value ? 0 : 1])
 const hasStatus = computed(() => completed.value ? queue.value !== 'review' : statusOptions.value.length > 0)
 function exceptionReason(order: FopOrder): string { return order.exception?.reason || '' }
 function statusLabel(order: FopOrder) {
@@ -145,13 +152,13 @@ const labels = computed(() => ({ unpaid: text('待支付', 'Pending payment'), p
 const descriptions = computed(() => ({
   unpaid: text('展示订单状态为“未关联本地 SKU”或“待支付”的履约订单，排除源单已发货及源单付款状态为已退款、已作废、已过期、未付款的订单；时间取C端源单付款时间。', 'Fulfillment orders with status “Local SKU not linked” or “Pending payment”, excluding fulfilled source orders and refunded, voided, expired or unpaid source payments. Dates use source-order buyer payment time.'),
   procurement: text('跟进采购建单、1688 下单及采购付款，业务处理请在 FOP 完成。', 'Track purchase preparation, 1688 placement and payment. Process orders in FOP.'),
-  procurement_shipping: text('采购款已付清，等待供应商发货；超过 24 小时提醒，超过 48 小时预警。', 'Paid purchases awaiting supplier shipment; reminders after 24 hours and alerts after 48 hours.'),
+  procurement_shipping: text('展示含已采购待发货商品的履约订单，发货进度以收货通知审核回写为准。', 'Orders with purchased items awaiting shipment; shipment progress follows approved receipt notices.'),
   allocation_review: text('已齐套的配货单待审核；发运单制作完成后，可单笔或批量审核配货单。请及时处理未完成的发运单后审核配货单。', 'Fully allocated documents awaiting approval. Once dispatch preparation is complete, approve allocations individually or in batches. Please complete unfinished dispatch documents promptly, then approve the allocation documents.'),
   review: text('订单状态已支付、单据状态暂存或已提交的履约订单。', 'Paid fulfillment orders with draft or submitted document status.'),
   allocation: text('已生成配货单但尚未齐套，可按选中订单查询即时库存，配货操作请在 FOP 完成。', 'Existing allocation documents awaiting stock completion. Query current inventory for selected orders and allocate in FOP.'),
-  dispatch: text('已审核履约订单按实际跟踪号区分未取号、已取号未同步；取消履约单独筛选，部分履约及已履约进入已履约清单。', 'Approved orders grouped by current tracking; cancelled fulfillment is separate, while partial and full fulfillment move to fulfilled orders.'),
+  dispatch: text('已审核履约订单按实际跟踪号区分待建发运单、已建单未取号、已取号未同步；取消履约进入订单异常，部分履约及已履约进入已履约清单。', 'Approved orders grouped by current tracking; cancelled fulfillment moves to order exceptions, while partial and full fulfillment move to fulfilled orders.'),
   shipping: text('配货单已审核，按履约订单整单跟进打包及出库。', 'Approved allocations awaiting packing and whole-order outbound completion.'),
-  exceptions: text('按异常类型跟进；Shopify同步失败进入发运异常，成功回写后转入已履约清单。', 'Track exceptions by type; Shopify sync failures move to dispatch exceptions and return to fulfilled orders after successful writeback.'),
+  exceptions: text('按异常类型跟进；正常清单同时保留业务行并标红，问题解决且同步后取消异常。', 'Track exceptions alongside normal queues; resolved issues clear after synchronization.'),
 }))
 const search = ref('')
 const data = ref<FopQueuePage>()
@@ -175,12 +182,12 @@ const copyMessage = ref('')
 let copyTimer: ReturnType<typeof setTimeout> | undefined
 let recoveringPage = false
 const page = computed(() => Number(route.query.page || 1))
-const pageSize = computed(() => Number(route.query.pageSize || 50))
+const pageSize = computed(() => Number(route.query.pageSize || 100))
 const sortBy = computed<FopOrderSortBy>(() => isFopOrderSortBy(route.query.sortBy) ? route.query.sortBy : 'consumerPaidAt')
 const sortOrder = computed(() => route.query.sortOrder === 'desc' ? 'desc' : route.query.sortOrder === 'asc' ? 'asc' : sortBy.value === 'paidAt' ? route.query.paidAtOrder === 'asc' ? 'asc' : 'desc' : ['completedAt', 'consumerPaidAt', 'reviewedAt'].includes(sortBy.value) ? 'desc' : 'asc')
 const paidAtOrder = computed(() => sortBy.value === 'paidAt' ? sortOrder.value : 'desc')
 const leadingSortField = computed<FopOrderSortBy | undefined>(() => completed.value ? undefined : isAllocation.value || queue.value === 'dispatch' ? 'dispatchDocumentStatus' : queue.value === 'shipping' ? 'outboundStatus' : undefined)
-const dispatchSortHint = computed(() => isAllocation.value ? text('未完成 → 已完成；关联发运单全部审核后为已完成', 'Incomplete → Complete; all linked dispatch documents approved') : queue.value === 'dispatch' ? text('未取号 → 已取号未同步 → 已取消；依据履约订单状态与有效跟踪号，未知置后', 'Awaiting tracking → Tracking obtained → Cancelled; native order state and active tracking, unknown last') : text('未创建 → 暂存 → 已提交 → 已审核 → 已同步；多单取最早进度；含未知状态的订单置后', 'Not created → Draft → Submitted → Approved → Synced; earliest document stage; orders with unknown statuses last'))
+const dispatchSortHint = computed(() => isAllocation.value ? text('未完成 → 已完成；关联发运单全部审核后为已完成', 'Incomplete → Complete; all linked dispatch documents approved') : queue.value === 'dispatch' ? text('待建发运单 → 已建单未取号 → 已取号未同步；依据履约订单状态与有效跟踪号，未知置后', 'Awaiting dispatch → Created, awaiting tracking → Tracking obtained; native order state and active tracking, unknown last') : text('未创建 → 暂存 → 已提交 → 已审核 → 已同步；多单取最早进度；含未知状态的订单置后', 'Not created → Draft → Submitted → Approved → Synced; earliest document stage; orders with unknown statuses last'))
 function sortDirection(field: FopOrderSortBy) { return sortBy.value === field ? sortOrder.value : undefined }
 function sortStatus(field: FopOrderSortBy) {
   return navigate({ sortBy: field, sortOrder: sortBy.value === field ? sortOrder.value === 'asc' ? 'desc' : 'asc' : field === 'completedAt' ? 'desc' : 'asc', page: 1 })
@@ -193,47 +200,25 @@ const sortHint = computed(() => sortBy.value !== 'paidAt' ? text('点击按最�
   ? text('最早收款在前，点击切换为最新收款在前', 'Oldest payment first; click for newest first')
   : text('最新收款在前，点击切换为最早收款在前', 'Newest payment first; click for oldest first'))
 const pageCount = computed(() => Math.max(1, Math.ceil((data.value?.total || 0) / pageSize.value)))
-// Shared field weights keep all queues consistent and spread available space
-// across every column, instead of leaving a few columns to absorb the remainder.
-const listColumns = computed(() => {
-  const columns: { key: string; width: number }[] = [
-    { key: 'order', width: 196 }, { key: 'product', width: 240 },
-    { key: 'shopify', width: 104 }, { key: 'amount', width: 96 },
-    { key: 'recipient', width: 96 },
-  ]
-  if (queue.value === 'review') columns.push({ key: 'channel', width: completed.value ? 184 : 144 }, { key: 'warehouse', width: 72 })
-  if (queue.value !== 'unpaid') columns.push({ key: 'receipt-time', width: 100 })
-  // TO/FY/AO: two letters + YYMMDD + six digits; include selection/copy controls.
-  if (queue.value === 'allocation_review') columns.push({ key: 'allocation-document', width: 148 })
-  if (showDispatchNumbers.value) columns.push({ key: 'dispatch-document', width: 148 })
-  if (hasStatus.value) columns.push({ key: 'status', width: 112 })
-  columns.push({ key: 'customer', width: 116 }, { key: 'store', width: 116 })
-  if (queue.value === 'exceptions') columns.push({ key: 'exception-reason', width: 172 }, { key: 'exception-age', width: 80 })
-  if (queue.value !== 'review') columns.push({ key: 'warehouse', width: 72 })
-  if (queue.value === 'unpaid') columns.push({ key: 'channel', width: 144 })
-  if (queue.value === 'dispatch') columns.push({ key: 'logistics', width: 184 })
-  if (queue.value === 'shipping') columns.push({ key: 'carrier-tracking', width: 184 })
-  columns.push({ key: 'salesperson', width: 148 })
-  if (completed.value || ['procurement', 'procurement_shipping', 'allocation_review', 'shipping'].includes(queue.value ?? '')) columns.push({ key: 'consumer-time', width: 100 })
-  if (showEventTime.value) columns.push({ key: 'event-time', width: 100 })
-  if (queue.value === 'procurement_shipping') columns.push({ key: 'action', width: 80 })
-  if (isFulfilledDispatch.value) {
-    // Reuse the removed approval-time column for long product and tracking values.
-    const widths: Record<string, number> = { product: 280, logistics: 216, customer: 122, store: 122, warehouse: 96, 'consumer-time': 112 }
-    for (const column of columns) column.width = widths[column.key] ?? column.width
-  }
-  const total = columns.reduce((sum, column) => sum + column.width, 0)
-  // Percentage widths also work in fixed-layout tables that ignore mixed-unit calc().
-  return columns.map(column => ({ ...column, size: `${column.width / total * 100}%` }))
-})
 const extraConsumerTime = computed(() => completed.value || ['procurement', 'procurement_shipping', 'allocation_review', 'shipping'].includes(queue.value ?? ''))
-const columnCount = computed(() => listColumns.value.length)
+// Structural count only; the shared directive owns every column width.
+const columnCount = computed(() => 8
+  + (queue.value === 'review' ? 2 : 1)
+  + (queue.value !== 'unpaid' ? 1 : 0)
+  + (queue.value === 'allocation_review' ? 1 : 0)
+  + (showDispatchNumbers.value ? 1 : 0)
+  + (hasStatus.value ? 1 : 0)
+  + (queue.value === 'exceptions' ? 2 : 0)
+  + (['unpaid', 'dispatch', 'shipping'].includes(queue.value ?? '') ? 1 : 0)
+  + (extraConsumerTime.value ? 1 : 0)
+  + (showEventTime.value ? 1 : 0)
+  + (queue.value === 'procurement_shipping' ? 1 : 0))
 let requestId = 0
 
 function reloadReplica() { inventoryOrderIds.value = undefined; recipientOrderId.value = undefined; followUpOrder.value = undefined; clearApproval(); approvalNeedsRefresh = false; cancelExport(); selectedOrders.value = []; void load(true) }
-async function load(reset = false) {
+async function load(reset = false, afterApproval = false) {
   currentTime.value = Date.now()
-  if (approvalOrderIds.value) return
+  if (approvalOrderIds.value && !afterApproval) return
   // The access guard temporarily unmounts this child before committing navigation.
   // Do not fetch/recover the old page again if it remounts in that interval.
   if (props.searchRecovery?.from === route.fullPath) { busy.value = true; return }
@@ -260,9 +245,9 @@ async function load(reset = false) {
     await router.replace({ query: { ...route.query, taskStatus: 'outbound_pending', page: '1' } })
     return
   }
-  if (queue.value === 'dispatch' && ['dispatch_missing', 'dispatch_updating', 'dispatch_synced'].includes(String(route.query.taskStatus))) {
+  if (queue.value === 'dispatch' && ['dispatch_updating', 'dispatch_synced', 'dispatch_cancelled'].includes(String(route.query.taskStatus))) {
     busy.value = false
-    await router.replace({ query: { ...route.query, taskStatus: route.query.taskStatus === 'dispatch_missing' ? 'dispatch_pending' : undefined, page: '1' } })
+    await router.replace({ query: { ...route.query, taskStatus: undefined, page: '1' } })
     return
   }
   if (queue.value === 'procurement') {
@@ -284,7 +269,7 @@ async function load(reset = false) {
     await router.replace({ query: { ...route.query, taskStatus: completed ? 'dispatch_complete' : 'dispatch_incomplete', page: '1' } })
     return
   }
-  if (!Number.isInteger(page.value) || page.value < 1 || ![20, 50, 100].includes(pageSize.value)) {
+  if (!Number.isInteger(page.value) || page.value < 1 || ![20, 50, 100, 200, 500, 1000].includes(pageSize.value)) {
     busy.value = false
     error.value = text('分页参数无效，请重新选择清单。', 'Invalid pagination. Select the queue again.')
     return
@@ -406,7 +391,6 @@ async function copyValue(value: string, key: string, label: string) {
 function copyOrderValue(order: FopOrder, field: 'orderNumber' | 'customerName') {
   return copyValue(order[field], `${field}:${order.id}`, field === 'orderNumber' ? text('订单编号', 'Order number') : text('客户名称', 'Customer name'))
 }
-const refreshedTime = computed(() => data.value?.refreshedAt ? new Date(data.value.refreshedAt).toLocaleTimeString(zh.value ? 'zh-CN' : 'en-GB', { timeZone: 'Asia/Shanghai', hour12: false }) : '')
 function listLocation(values: Record<string, string | number | undefined>, selectedQueue = queue.value!) {
   return completed.value ? { name: 'RoleWorkbench', params: { role: role.value }, query: { ...route.query, ...values, queue: 'completed' } }
     : workbenchOrderLocation(selectedQueue, { ...route.query, ...values })
@@ -473,7 +457,7 @@ const { expandedProductIds, hasExpandableProducts, allProductsExpanded, setProdu
 <template>
   <div class="fulfillment-page" :aria-busy="busy">
       <WorkbenchTaskHeading :data-availability="data?.dataAvailability" :replica="data?.replica" :sync-disabled="busy || !!exporting || !!approvalOrderIds" @replica-synced="reloadReplica" class="list-heading" :title="completed ? completedNames[role][zh ? 0 : 1] : (queue ? labels[queue] : text('履约订单', 'Fulfillment orders')) + (queue && !['exceptions', 'allocation_review', 'procurement_shipping'].includes(queue) ? text('清单', ' orders') : '')" :description="completed ? role === 'sales' ? text('单据状态为已审核的履约订单，默认按客户付款时间查询近一月。', 'Approved fulfillment orders, defaulting to the last month by customer payment time.') : undefined : queue ? descriptions[queue] : undefined">
-        <div class="refresh-controls"><slot name="heading-actions" /><button class="workbench-button refresh-orders workbench-refresh" :disabled="busy || !queue || !online" @click="load()"><RefreshCw :size="15" :class="{ 'animate-spin': busy }" />{{ busy ? text('刷新中…', 'Refreshing…') : text('刷新', 'Refresh') }}</button><span class="refresh-status" :class="{ 'sync-paused': !online }">{{ !online ? text('网络已断开', 'Offline') : text('手动刷新', 'Manual refresh') }}<template v-if="refreshedTime"><br />{{ text('最近查询', 'Last queried') }} {{ refreshedTime }} · UTC+8</template></span></div>
+        <slot name="heading-actions" /><WorkbenchRefreshControl :busy="busy" :disabled="busy || !queue || !online" :refreshed-at="data?.refreshedAt" :offline="!online" @refresh="load()" />
       </WorkbenchTaskHeading>
       <p v-if="queue === 'shipping' && warehouseStage === 'pending_review'" class="read-only-note">{{ text('已齐套未审核已归入配货工作台。', 'Allocation approval is tracked in the Allocation Workbench.') }} <button class="clear-selection" @click="navigate({ warehouseStage: undefined, page: 1 })">{{ text('查看待出库清单', 'View pending outbound') }}</button></p>
       <p v-if="copyMessage" class="copy-feedback" role="status">{{ copyMessage }}</p>
@@ -483,7 +467,7 @@ const { expandedProductIds, hasExpandableProducts, allProductsExpanded, setProdu
             <form class="search-form workbench-filter-search" @submit.prevent="submitSearch"><label class="search-field workbench-search-field"><Search :size="16" /><input v-model="search" type="search" @input="clearSearchIfEmpty" :aria-label="text('搜索履约订单', 'Search fulfillment orders')" :placeholder="searchPlaceholder" :title="searchHint" /></label><button class="workbench-button workbench-primary" :disabled="busy || !queue">{{ text('查询', 'Search') }}</button></form>
             <label class="department-filter"><span>{{ text('业务部门', 'Business department') }}</span><select class="workbench-filter-select" :value="departmentId" :disabled="busy || !queue" :aria-label="text('业务部门', 'Business department')" @change="navigate({ departmentId: ($event.target as HTMLSelectElement).value || undefined, ownerId: undefined, page: 1 })"><option :value="defaultDepartmentValue(departments, departmentId)">{{ defaultDepartmentLabel }}</option><option v-if="departmentId && !departments.some(item => item.id === departmentId)" :value="departmentId" disabled>{{ text('所选业务部门', 'Selected business department') }}</option><option v-for="department in departmentOptions(departments)" :key="department.id" :value="department.id">{{ department.name }}</option></select></label>
             <label class="department-filter warehouse-filter"><span>{{ text('发货仓库', 'Shipping warehouse') }}</span><select class="workbench-filter-select" :value="warehouseCode" :disabled="busy || !queue" :aria-label="text('发货仓库', 'Shipping warehouse')" @change="navigate({ warehouseCode: ($event.target as HTMLSelectElement).value || undefined, page: 1 })"><option value="">{{ text('全部', 'All') }}</option><option value="HZ">{{ 'HangZhou' }}</option><option value="SZ">{{ 'ShenZhen' }}</option></select></label>
-          </div>
+          <div class="workbench-filter-export"><WorkbenchExportButton :selected-count="selectedOrders.length" :total="data?.total ?? 0" :disabled="busy || !online || !data" :busy="!!exporting" @export="exportOrders" /></div></div>
           <div class="workbench-filter-secondary">
             <label v-if="queue === 'unpaid'" class="department-filter"><span>{{ text('关联SKU', 'SKU association') }}</span><select class="workbench-filter-select" :value="skuAssociation" :disabled="busy" :aria-label="text('关联SKU', 'SKU association')" @change="navigate({ skuAssociation: ($event.target as HTMLSelectElement).value, page: 1 })"><option value="linked">{{ text('已关联', 'Linked') }}</option><option value="unlinked">{{ text('未关联', 'Unlinked') }}</option></select></label>
             <label v-if="completed" class="department-filter">{{ text('客户付款时间', 'Customer payment time') }}<select class="workbench-filter-select" :value="timeRange" :disabled="busy" :aria-label="text('客户付款时间范围', 'Customer payment time range')" @change="navigate({ timeRange: ($event.target as HTMLSelectElement).value, page: 1 })"><option value="1w">{{ text('近一周', 'Last week') }}</option><option value="1m">{{ text('近一月', 'Last month') }}</option><option value="3m">{{ text('近三月', 'Last three months') }}</option></select></label>
@@ -513,29 +497,26 @@ const { expandedProductIds, hasExpandableProducts, allProductsExpanded, setProdu
           <button v-if="approvalQueue" type="button" class="workbench-button workbench-primary" data-testid="open-approval" :disabled="busy || !online || !hasApprovableSelection || !data || !!approvalOrderIds" :title="queue === 'allocation_review' ? text('审核发运单制作已完成的配货单', 'Approve allocations with completed dispatch preparation') : undefined" @click="openApproval"><Check :size="15" />{{ text('审核', 'Approve') }}</button>
           <button v-if="!completed && (queue === 'allocation' || queue === 'shipping')" type="button" class="workbench-button" data-testid="open-inventory" :disabled="busy || !online || !data" @click="inventoryOrderIds = [...selectedOrders]"><PackageSearch :size="15" />{{ text('查询即时库存', 'Current inventory') }}</button>
           <ProductExpansionButton :expanded="allProductsExpanded" :disabled="busy || !hasExpandableProducts" @toggle="toggleAllProducts" />
-          <template #export>
-            <WorkbenchExportButton :selected-count="selectedOrders.length" :total="data?.total ?? 0" :disabled="busy || !online || !data" :busy="!!exporting" @export="exportOrders" />
-          </template>
+          <template #pagination><WorkbenchPagination :page="page" :page-size="pageSize" :pages="pageCount" :disabled="busy || !data" @page="navigate({ page: $event })" @page-size="navigate({ pageSize: $event, page: 1 })" /></template>
         </WorkbenchListActions>
-        <p v-if="exportFeedback" class="export-feedback" :class="{ 'export-error': exportFailed }" :role="exportFailed ? 'alert' : 'status'">{{ exportFeedback }}</p>
+        <p v-if="exportFeedback" class="export-feedback workbench-feedback" :class="{ 'export-error': exportFailed }" :role="exportFailed ? 'alert' : 'status'">{{ exportFeedback }}</p>
         <div v-if="procurementStage && taskStatus" class="exact-filter legacy-status-filter"><span>{{ text('原采购筛选', 'Legacy purchase filter') }}：{{ procurementStageLabels[procurementStage][zh ? 0 : 1] }}</span><button :disabled="busy" :aria-label="text('清除原采购状态筛选', 'Clear legacy purchase status filter')" @click="navigate({ procurementStage: undefined, page: 1 })">{{ text('清除', 'Clear') }}</button></div>
         <div v-if="ownerId" class="exact-filter legacy-owner-filter"><span>{{ text('业务员', 'Salesperson') }}：{{ selectedOwnerName }}</span><button :disabled="busy" @click="navigate({ ownerId: undefined, page: 1 })">{{ text('清除业务员筛选', 'Clear salesperson filter') }}</button></div>
         <div v-if="route.query.orderNumber" class="exact-filter"><span>{{ text('指定订单', 'Selected order') }}：{{ route.query.orderNumber }}</span><button @click="navigate({ orderNumber: undefined, page: 1 })">{{ text('查看该类全部订单', 'View all orders in this queue') }}</button></div>
-        <p v-if="error" class="state-message error-message" role="alert">{{ text('刷新未成功，当前进度暂不可用。', 'Refresh failed; current progress is unavailable.') }} {{ error }} <button v-if="queue" @click="load()">{{ text('重试', 'Retry') }}</button></p>
-        <div v-else-if="busy && !data" class="state-message" role="status"><RefreshCw class="animate-spin" :size="22" />{{ text('正在加载订单…', 'Loading orders…') }}</div>
-        <template v-else-if="data && queue">
+        <p v-if="error && !queue" class="state-message error-message" role="alert">{{ error }}</p>
+        <template v-if="queue">
           <div class="compact-list-controls">
-            <label><input type="checkbox" class="order-checkbox" :checked="pageSelected" :indeterminate="!!selectedOrders.length && !pageSelected" :disabled="busy || !data.items.length" :aria-label="text('选择本页全部订单', 'Select current page')" @change="togglePage(($event.target as HTMLInputElement).checked)" />{{ text('全选本页', 'Select page') }}</label>
+            <label><input type="checkbox" class="order-checkbox" :checked="pageSelected" :indeterminate="!!selectedOrders.length && !pageSelected" :disabled="busy || !data?.items?.length" :aria-label="text('选择本页全部订单', 'Select current page')" @change="togglePage(($event.target as HTMLInputElement).checked)" />{{ text('订单编号', 'Order number') }}</label>
             <button v-if="queue !== 'unpaid'" class="compact-payment-sort" :disabled="busy" :aria-label="`${text('按收款日期排序', 'Sort payment date')}：${sortHint}`" @click="sortPayment()">{{ text('收款日期', 'Payment date') }}<component :is="sortBy !== 'paidAt' ? ArrowUpDown : paidAtOrder === 'asc' ? ArrowUp : ArrowDown" :size="13" /></button>
             <button v-if="timeSortField" class="compact-consumer-sort" :disabled="busy" :aria-label="`${createdTimeLabel}：${consumerSortHint}`" @click="sortStatus(timeSortField)">{{ createdTimeLabel }}<component :is="sortDirection(timeSortField) === 'asc' ? ArrowUp : sortDirection(timeSortField) === 'desc' ? ArrowDown : ArrowUpDown" :size="13" /></button>
             <button v-if="extraConsumerTime" class="compact-consumer-payment-sort" :disabled="busy" @click="sortStatus('consumerPaidAt')">{{ text('客户付款时间', 'Customer payment time') }}<component :is="sortDirection('consumerPaidAt') === 'desc' ? ArrowDown : ArrowUp" :size="13" /></button>
             <button v-if="leadingSortField" class="compact-status-sort" :disabled="busy" :aria-label="`${statusHeading}：${sortDirection(leadingSortField) === 'asc' ? text('当前升序，点击降序', 'Ascending; sort descending') : sortDirection(leadingSortField) === 'desc' ? text('当前降序，点击升序', 'Descending; sort ascending') : text('点击按状态升序排列', 'Sort status ascending')}`" @click="sortStatus(leadingSortField)">{{ statusHeading }}<component :is="sortDirection(leadingSortField) === 'asc' ? ArrowUp : sortDirection(leadingSortField) === 'desc' ? ArrowDown : ArrowUpDown" :size="13" /></button>
           </div>
-          <div class="table-scroll" :aria-label="text('履约订单明细表', 'Fulfillment orders')">
-            <table class="workbench-task-table">
-              <colgroup><col v-for="column in listColumns" :key="column.key" :class="`${column.key}-column`" :style="{ width: column.size }" /></colgroup>
+          <div class="table-scroll workbench-list-body" :aria-label="text('履约订单明细表', 'Fulfillment orders')">
+            <table v-task-table-layout class="workbench-task-table">
+
               <thead><tr>
-                <th class="order-cell"><input type="checkbox" class="order-checkbox" :checked="pageSelected" :indeterminate="!!selectedOrders.length && !pageSelected" :disabled="busy || !data.items.length" :aria-label="text('全选当前页订单', 'Select all orders on this page')" @change="togglePage(($event.target as HTMLInputElement).checked)" />{{ text('订单编号', 'Order number') }}</th>
+                <th class="order-cell"><input type="checkbox" class="order-checkbox" :checked="pageSelected" :indeterminate="!!selectedOrders.length && !pageSelected" :disabled="busy || !data?.items?.length" :aria-label="text('全选当前页订单', 'Select all orders on this page')" @change="togglePage(($event.target as HTMLInputElement).checked)" />{{ text('订单编号', 'Order number') }}</th>
                 <th class="product-cell">{{ text('商品图片 / 商品信息', 'Product image / details') }}</th>
                 <th class="shopify-cell">{{ text('Shopify 单号', 'Shopify order') }}</th><th class="amount-cell">{{ text('订单金额', 'Order amount') }}</th>
                 <th :title="text('订单收货国家', 'Delivery destination country')">Customer</th>
@@ -554,38 +535,41 @@ const { expandedProductIds, hasExpandableProducts, allProductsExpanded, setProdu
                 <th v-if="timeSortField" :aria-sort="sortDirection(timeSortField) === 'asc' ? 'ascending' : sortDirection(timeSortField) === 'desc' ? 'descending' : 'none'"><button type="button" class="sort-consumer" :disabled="busy" :aria-label="`${createdTimeLabel}：${consumerSortHint}`" :title="`${consumerSortHint} · ${createdTimeHint}`" @click="sortStatus(timeSortField)">{{ createdTimeLabel }}<component :is="sortDirection(timeSortField) === 'asc' ? ArrowUp : sortDirection(timeSortField) === 'desc' ? ArrowDown : ArrowUpDown" :size="13" aria-hidden="true" /></button></th>
                 <th v-else-if="showEventTime">{{ createdTimeLabel }}</th><th v-if="queue === 'procurement_shipping'">{{ text('操作', 'Action') }}</th>
               </tr></thead>
-              <tbody><tr v-for="order in data.items" :key="order.id" class="order-record" :style="{ '--detail-rows': Math.ceil((columnCount - 2 + (showDispatchNumbers ? 1 : 0) + (queue === 'allocation_review' || queue === 'dispatch' || queue === 'shipping' ? 1 : 0)) / 4) }">
+              <tbody><tr v-for="order in error ? [] : data?.items" :key="order.id" class="order-record" :style="{ '--detail-rows': Math.ceil((columnCount - 2 + (showDispatchNumbers ? 1 : 0) + (queue === 'allocation_review' || queue === 'dispatch' || queue === 'shipping' ? 1 : 0)) / 4) }">
                 <td class="order-cell" :data-label="text('订单编号', 'Order number')">
                   <input v-model="selectedOrders" type="checkbox" class="order-checkbox" :value="order.id" :disabled="busy" :aria-label="`${text('选择订单', 'Select order')} ${order.orderNumber}`" />
+                  <span class="order-identity">
                   <button type="button" class="copy-order" :aria-label="`${text('复制订单编号', 'Copy order number')} ${order.orderNumber}`" :title="order.orderNumber" @click="copyOrderValue(order, 'orderNumber')"><strong>{{ order.orderNumber }}</strong><Check v-if="copiedValue === `orderNumber:${order.id}`" :size="14" /><Copy v-else :size="14" /></button>
+<WorkbenchStatusBadge v-if="queue === 'review' && !completed && order.rawBillStatus && ['A','B','C'].includes(order.rawBillStatus)" :tone="order.rawBillStatus === 'C' ? 'success' : order.rawBillStatus === 'B' ? 'info' : 'warning'">{{ order.rawBillStatus === 'A' ? text('暂存', 'Draft') : order.rawBillStatus === 'B' ? text('已提交', 'Submitted') : text('已审核', 'Approved') }}</WorkbenchStatusBadge>
+<OrderExceptionLabel :exception="order.exception" /></span>
                   <span v-if="queue === 'shipping' && !completed && (order.shipmentInterceptStatus === 'intercepted' || order.shipmentInterceptStatus === 'released')" class="shipment-intercept-status"><WorkbenchStatusBadge :tone="order.shipmentInterceptStatus === 'intercepted' ? 'danger' : 'success'" current>{{ order.shipmentInterceptStatus === 'intercepted' ? text('拦截发货', 'Shipment intercepted') : text('取消拦截', 'Interception released') }}</WorkbenchStatusBadge></span>
-                  <div v-if="completed && (role === 'sales' || role === 'dispatch' || order.businessStatus)" class="business-status-summary"><span v-if="role !== 'dispatch' && order.businessStatus">{{ businessStatusLabel(order.businessStatus.order, 'order', !zh) }}</span><span>{{ text('采购：', 'Purchase: ') }}{{ role === 'sales' || role === 'dispatch' ? (order.sourcePurchaseStatusName || sourceStatusLabel(order.sourcePurchaseStatus, 'purchase', !zh)) : businessStatusLabel(order.businessStatus?.purchase, 'purchase', !zh) }}</span></div>
+                  <div v-if="completed && (role === 'sales' || role === 'dispatch' || order.businessStatus)" class="business-status-summary"><span v-if="role !== 'dispatch' && order.businessStatus">{{ businessStatusLabel(order.businessStatus.order, 'order', !zh) }}</span><span>{{ text('采购：', 'Purchase: ') }}{{ completedPurchaseLabel(order, role === 'sales' || role === 'dispatch', !zh) }}</span></div>
                   <span v-if="order.items.length > 1" class="multi-item-badge">{{ text(`${order.items.length} 款商品 · ${orderItemQuantity(order.items) ?? '—'} 件`, `${order.items.length} products · ${orderItemQuantity(order.items) ?? '—'} units`) }}</span>
                 </td>
                 <td class="product-cell" :data-label="text('商品图片 / 商品信息', 'Product image / details')"><CollapsibleProductLines :expanded="expandedProductIds.has(order.id)" @update:expanded="setProductExpanded(order.id, $event)" :items="order.items" :label="order.orderNumber" v-slot="{ item, index }"><div class="product">
-                  <OrderProductImage :src="item.imageUrl" :name="item.name" />
-                  <div class="product-details"><span class="product-name" :title="item.name">{{ item.name }}</span><span class="product-sku-meta"><span class="product-sku mono"><button v-if="item.sku?.trim()" type="button" class="copy-value" :title="item.sku" :aria-label="`${text('复制SKU', 'Copy SKU')} ${item.sku}`" @click="copyValue(item.sku, `sku:${order.id}:${index}`, 'SKU')"><span>SKU · {{ item.sku }}</span><Check v-if="copiedValue === `sku:${order.id}:${index}`" :size="12" /><Copy v-else :size="12" /></button><span v-else>SKU · —</span></span><span class="product-quantity" :aria-label="`${item.sku} ${text('数量', 'quantity')} ${item.quantity}`">× {{ item.quantity ?? '—' }}</span></span><span v-if="item.variant" class="product-variant">{{ item.variant }}</span><small v-if="completed && item.purchaseState" class="product-purchase-status">{{ businessStatusLabel(item.purchaseState, 'purchase', !zh) }}</small></div>
+                  <OrderProductImage :src="item.imageUrl" :name="skuPickingName(item)" />
+                  <div class="product-details"><span class="product-name" v-picking-name-tooltip="skuPickingName(item)">{{ skuPickingName(item) }}</span><span class="product-sku-meta"><span class="product-sku mono"><button v-if="item.sku?.trim()" type="button" class="copy-value" :title="item.sku" :aria-label="`${text('复制SKU', 'Copy SKU')} ${item.sku}`" @click="copyValue(item.sku, `sku:${order.id}:${index}`, 'SKU')"><span>SKU · {{ item.sku }}</span><Check v-if="copiedValue === `sku:${order.id}:${index}`" :size="12" /><Copy v-else :size="12" /></button><span v-else>SKU · —</span></span><span class="product-quantity" :aria-label="`${item.sku} ${text('数量', 'quantity')} ${item.quantity}`">× {{ item.quantity ?? '—' }}</span></span><small v-if="(completed || role === 'procurement') && item.purchaseState" class="product-purchase-status">{{ businessStatusLabel(item.purchaseState, 'purchase', !zh) }}</small></div>
                 </div></CollapsibleProductLines></td>
-                <td class="mono shopify-cell" :data-label="text('Shopify 单号', 'Shopify order')"><button v-if="order.shopifyOrderNumber?.trim()" type="button" class="copy-value" :title="order.shopifyOrderNumber" :aria-label="`${text('复制Shopify 单号', 'Copy Shopify order')} ${order.shopifyOrderNumber}`" @click="copyValue(order.shopifyOrderNumber, `shopify:${order.id}`, text('Shopify 单号', 'Shopify order'))"><span>{{ order.shopifyOrderNumber }}</span><Check v-if="copiedValue === `shopify:${order.id}`" :size="12" /><Copy v-else :size="12" /></button><span v-else>—</span><small v-if="completed && order.businessStatus" class="source-shipment-status">{{ businessStatusLabel(order.businessStatus.sourceShipment, 'source', !zh) }}</small></td>
+                <td class="mono shopify-cell" :data-label="text('Shopify 单号', 'Shopify order')"><button v-if="order.shopifyOrderNumber?.trim() && !order.sourceOrderNumberIsManual && order.documentKind !== 'stock_order'" type="button" class="copy-value" :title="order.shopifyOrderNumber" :aria-label="`${text('复制Shopify 单号', 'Copy Shopify order')} ${order.shopifyOrderNumber}`" @click="copyValue(order.shopifyOrderNumber, `shopify:${order.id}`, text('Shopify 单号', 'Shopify order'))"><span>{{ order.shopifyOrderNumber }}</span><Check v-if="copiedValue === `shopify:${order.id}`" :size="12" /><Copy v-else :size="12" /></button><span v-else>{{ order.shopifyOrderNumber || '—' }}</span><small v-if="completed" class="source-shipment-status">{{ businessStatusLabel(order.businessStatus?.sourceShipment, 'source', !zh) }}</small></td>
                 <td class="money amount-cell" :data-label="text('订单金额', 'Order amount')"><OrderAmountBreakdown v-if="queue === 'unpaid' || queue === 'review' || order.dataQuality?.mode === 'collected'" :amount="order.amount" :currency="order.currency" :breakdown="order.amountBreakdown" /><template v-else>{{ formatMoney(order.amount, order.currency) }}</template></td>
-                <td class="country-cell" data-label="Customer"><div class="order-recipient"><ShippingCountryBadge :code="order.shippingCountryCode" /><button v-if="order.shippingRecipient" type="button" class="recipient-name" :aria-label="`${text('查看收件人信息', 'View recipient details')} · ${order.shippingRecipient.name || order.orderNumber}`" @click="recipientOrderId = order.id">{{ order.shippingRecipient.name || text('查看收件人', 'View recipient') }}</button><span v-else class="recipient-empty">—</span></div></td>
+                <td class="country-cell" data-label="Customer"><span v-if="order.documentKind === 'stock_order'">---</span><div v-else class="order-recipient"><ShippingCountryBadge :code="order.shippingCountryCode" /><button v-if="order.shippingRecipient" type="button" class="recipient-name" :title="order.shippingRecipient.name || undefined" :aria-label="`${text('查看收件人信息', 'View recipient details')} · ${order.shippingRecipient.name || order.orderNumber}`" @click="recipientOrderId = order.id">{{ order.shippingRecipient.name || text('查看收件人', 'View recipient') }}</button><span v-else class="recipient-empty">—</span></div></td>
                 <td v-if="queue === 'review'" class="logistics-channel-cell" :data-label="text('物流信息', 'Logistics information')"><OrderLogisticsChannels :custom-channel="order.customLogisticsChannelName" :channels="order.logisticsChannels" :groups="order.logisticsInfo" :show-tracking="completed" :missing-tracking-text="order.dataQuality?.readOnly ? '—' : undefined" /></td>
                 <td v-if="queue === 'review'" :data-label="text('发货仓库', 'Shipping warehouse')">{{ warehouseName(order.warehouse) }}</td>
-                <td v-if="queue !== 'unpaid'" :data-label="text('收款日期', 'Payment date')">{{ formatDate(order.paidAt) }}</td>
+                <td class="workbench-date-cell" v-if="queue !== 'unpaid'" :data-label="text('收款日期', 'Payment date')">{{ formatDate(order.paidAt) }}</td>
                 <td v-if="queue === 'allocation_review'" class="dispatch-numbers mono" :data-label="text('配货单号', 'Allocation document number')"><div v-for="document in (order.allocationDocuments ?? (order.allocationDocument ? [order.allocationDocument] : []))" :key="document.id"><button v-if="document.number?.trim()" type="button" class="copy-value" :title="document.number" :aria-label="`${text('复制配货单号', 'Copy allocation number')} ${document.number}`" @click="copyValue(document.number, `allocation:${order.id}:${document.id}`, text('配货单号', 'Allocation number'))"><span>{{ document.number }}</span><Check v-if="copiedValue === `allocation:${order.id}:${document.id}`" :size="12" /><Copy v-else :size="12" /></button><span v-else>—</span></div><span v-if="!(order.allocationDocuments ?? (order.allocationDocument ? [order.allocationDocument] : [])).length">—</span></td>
                 <td v-if="showDispatchNumbers" class="dispatch-numbers mono" :data-label="text('发运单编号', 'Dispatch document number')"><div v-for="document in order.dispatchDocuments" :key="document.id"><button v-if="document.number?.trim()" type="button" class="copy-value" :title="document.number" :aria-label="`${text('复制发运单编号', 'Copy dispatch number')} ${document.number}`" @click="copyValue(document.number, `dispatch:${order.id}:${document.id}`, text('发运单编号', 'Dispatch number'))"><span>{{ document.number }}</span><Check v-if="copiedValue === `dispatch:${order.id}:${document.id}`" :size="12" /><Copy v-else :size="12" /></button><span v-else>—</span></div><span v-if="!order.dispatchDocuments?.length">—</span></td>
                 <td v-if="(queue === 'procurement' || queue === 'procurement_shipping') && order.sourcePurchaseStatus !== undefined" :data-label="statusHeading">
                   <WorkbenchStatusBadge :tone="order.businessStatus ? (['received','shipped','purchased'].includes(order.businessStatus.purchase) ? 'success' : order.businessStatus.purchase.startsWith('partial_') ? 'warning' : 'neutral') : ['3','4'].includes(order.sourcePurchaseStatus ?? '') ? 'success' : order.sourcePurchaseStatus === '1' ? 'warning' : 'neutral'">{{ order.businessStatus ? businessStatusLabel(order.businessStatus.purchase, 'purchase', !zh) : sourceStatusLabel(order.sourcePurchaseStatus, 'purchase', !zh) }}</WorkbenchStatusBadge>
-                  <div v-if="!completed && queue === 'procurement'" class="native-status-detail"><ProcurementStatus :paid-at="order.procurementPaidAt" :now="currentTime" :progress="order.procurementProgress" :shipment="order.fulfillmentProgress.supplierShipment" /></div>
+                  <div v-if="!completed && queue === 'procurement'" class="native-status-detail"><ProcurementStatus :stage="getTaskStatus(order, 'procurement')" :paid-at="order.procurementPaidAt" :now="currentTime" :progress="order.procurementProgress" :shipment="order.fulfillmentProgress.supplierShipment" /></div>
                   <SupplierShipmentStatus v-if="queue === 'procurement_shipping'" class="native-status-detail" :paid-at="order.procurementPaidAt" :now="currentTime" :shipment="order.fulfillmentProgress.supplierShipment === 'partial' ? 'partial' : 'pending'" />
                 </td>
                 <td v-else-if="queue === 'shipping' && order.sourceOutboundStatus !== undefined" :data-label="statusHeading"><WorkbenchStatusBadge :tone="order.businessStatus ? (order.businessStatus.outbound === 'completed' ? 'success' : order.businessStatus.outbound === 'partial' ? 'warning' : 'neutral') : order.sourceOutboundStatus === '2' ? 'success' : order.sourceOutboundStatus === '1' ? 'warning' : 'info'">{{ order.businessStatus ? businessStatusLabel(order.businessStatus.outbound, 'outbound', !zh) : sourceStatusLabel(order.sourceOutboundStatus, 'outbound', !zh) }}</WorkbenchStatusBadge></td>
                 <td v-else-if="completed && hasStatus" :data-label="statusHeading"><WorkbenchStatusBadge tone="success">{{ role === 'allocation' ? (order.fulfillmentProgress.allocationReview === 'approved' ? text('已审核', 'Approved') : order.fulfillmentProgress.allocationReview === 'pending' ? text('未审核', 'Not approved') : text('—', '—')) : role === 'warehouse' ? text('已出库', 'Outbound completed') : role === 'dispatch' ? (order.businessStatus?.order === 'partial_fulfilled' ? text('部分履约', 'Partially fulfilled') : text('已履约', 'Fulfilled')) : text('已完成', 'Completed') }}</WorkbenchStatusBadge></td>
-                <td v-else-if="queue === 'procurement'" :data-label="statusHeading"><ProcurementStatus :paid-at="order.procurementPaidAt" :now="currentTime" :progress="order.procurementProgress" :shipment="order.fulfillmentProgress.supplierShipment" /></td>
+                <td v-else-if="queue === 'procurement'" :data-label="statusHeading"><ProcurementStatus :stage="getTaskStatus(order, 'procurement')" :paid-at="order.procurementPaidAt" :now="currentTime" :progress="order.procurementProgress" :shipment="order.fulfillmentProgress.supplierShipment" /></td>
                 <td v-else-if="queue === 'dispatch' || isAllocation" :data-label="statusHeading"><DispatchStatus :queue="queue ?? undefined" :stage="queue === 'dispatch' ? getTaskStatus(order, 'dispatch') as FopOrder['dispatchTaskStatus'] : order.dispatchTaskStatus" :documents="order.dispatchDocuments" :shopify-sync="order.fulfillmentProgress.shopifySync" /></td>
                 <td v-else-if="queue === 'procurement_shipping'" :data-label="statusHeading"><SupplierShipmentStatus class="status-pill" :paid-at="order.procurementPaidAt" :now="currentTime" :shipment="order.fulfillmentProgress.supplierShipment === 'partial' ? 'partial' : 'pending'" /></td>
                 <td v-else-if="hasStatus" :data-label="statusHeading"><WorkbenchStatusBadge class="status-pill pending" tone="info">{{ statusLabel(order) }}</WorkbenchStatusBadge></td>
-                <td :data-label="text('客户名称', 'Customer name')"><button type="button" class="copy-customer" :aria-label="`${text('复制客户名称', 'Copy customer name')} ${order.customerName}`" :title="text('复制客户名称', 'Copy customer name')" @click="copyOrderValue(order, 'customerName')"><span>{{ order.customerName }}</span><Check v-if="copiedValue === `customerName:${order.id}`" :size="14" /><Copy v-else :size="14" /></button></td>
+                <td :data-label="text('客户名称', 'Customer name')"><button type="button" class="copy-customer" :aria-label="`${text('复制客户名称', 'Copy customer name')} ${order.customerName}`" :title="order.customerName || undefined" @click="copyOrderValue(order, 'customerName')"><span>{{ order.customerName }}</span><Check v-if="copiedValue === `customerName:${order.id}`" :size="14" /><Copy v-else :size="14" /></button></td>
                 <td :data-label="text('店铺', 'Store')">{{ order.storeName }}</td>
                 <td v-if="queue === 'exceptions'" class="exception-reason" :title="exceptionReason(order)" :data-label="text('异常原因', 'Exception reason')">{{ exceptionReason(order) }}</td><td v-if="queue === 'exceptions'" :data-label="text('异常时长', 'Exception age')">{{ order.exception?.hours == null ? '—' : `${order.exception.hours}h` }}</td>
                 <td v-if="queue !== 'review'" :data-label="text('发货仓库', 'Shipping warehouse')">{{ warehouseName(order.warehouse) }}</td>
@@ -593,19 +577,19 @@ const { expandedProductIds, hasExpandableProducts, allProductsExpanded, setProdu
                 <td v-if="queue === 'dispatch'" class="logistics-info-cell" :data-label="text('物流渠道 / 跟踪号', 'Channel / Tracking number')"><OrderLogisticsInfo show-all-tracking :groups="order.logisticsInfo" /></td>
                 <td v-if="queue === 'shipping'" class="tracking-cell" :data-label="text('物流渠道 / 跟踪号', 'Channel / Tracking number')"><OrderLogisticsInfo show-all-tracking :groups="order.logisticsInfo" /></td>
                 <td class="salesperson-cell" :data-label="text('业务员', 'Salesperson')"><span class="salesperson-name" :title="order.owner?.name || order.salesperson">{{ order.owner?.name || order.salesperson || '—' }}</span><RouterLink v-if="order.department" class="salesperson-department" :title="order.department.name" :to="{ name: 'Organization', query: { node: order.department.id } }">{{ order.department.name }}</RouterLink><span v-else class="salesperson-department">—</span></td>
-                <td v-if="extraConsumerTime" :data-label="text('客户付款时间', 'Customer payment time')">{{ formatDate(order.paidAt ?? null) }}</td>
-                <td v-if="showEventTime" :data-label="createdTimeLabel" :title="createdTimeHint">{{ formatDate(orderTime(order)) }}</td>
+                <td class="workbench-date-cell" v-if="extraConsumerTime" :data-label="text('客户付款时间', 'Customer payment time')">{{ formatDate(order.paidAt ?? null) }}</td>
+                <td class="workbench-date-cell" v-if="showEventTime" :data-label="createdTimeLabel" :title="createdTimeHint">{{ formatDate(orderTime(order)) }}</td>
                 <td v-if="queue === 'procurement_shipping'" class="follow-up-cell" :data-label="text('操作', 'Action')"><button type="button" class="follow-up-order" :disabled="!online" :aria-label="`${text('催办', 'Follow up')} ${order.orderNumber}`" @click="followUpOrder = { id: order.id, orderNumber: order.orderNumber }"><MessageCircle :size="14" />{{ text('催办', 'Follow up') }}</button></td>
-              </tr><tr v-if="!data.items.length"><td :colspan="columnCount"><div class="state-message" role="status"><PackageSearch :size="36" /><strong>{{ unavailable ? text('清单所需的单据数据尚未齐全', 'Required document data is incomplete') : text('暂无符合条件的订单', 'No matching orders') }}</strong><span>{{ unavailable ? text('暂时无法查询，请联系管理员确认数据同步。', 'This list is unavailable. Ask an administrator to check data synchronization.') : text('请调整搜索条件，或切换上方清单。', 'Adjust your search or select another queue.') }}</span></div></td></tr></tbody>
+              </tr><WorkbenchTableState v-if="!data?.items?.length || error" :columns="columnCount" :loading="busy" :error="error" :message="unavailable ? text('清单所需的单据数据尚未齐全，暂时无法查询。', 'Required document data is incomplete.') : text('暂无符合条件的订单，请调整搜索条件或切换清单。', 'No matching orders. Adjust your search or select another queue.')"><button v-if="error" class="workbench-button" :disabled="busy" @click="load()">{{ text('重试', 'Retry') }}</button></WorkbenchTableState></tbody>
               <TableTotals>
-                <th scope="row">{{ text('筛选合计', 'Filtered total') }} · {{ unavailable ? '—' : data.totals?.orderCount.toLocaleString() ?? '—' }} {{ text('笔订单', 'orders') }}</th>
-                <td class="quantity-total">{{ data.totals?.itemQuantity?.toLocaleString() ?? '—' }} {{ text('件', 'units') }}</td><td class="total-spacer" />
-                <td class="money amount-cell"><OrderAmountTotals :totals="data.totals" /></td>
+                <th scope="row">{{ text('筛选合计', 'Filtered total') }} · {{ unavailable ? '—' : data?.totals?.orderCount.toLocaleString() ?? '—' }} {{ text('笔订单', 'orders') }}</th>
+                <td class="quantity-total">{{ data?.totals?.itemQuantity?.toLocaleString() ?? '—' }} {{ text('件', 'units') }}</td><td class="total-spacer" />
+                <td class="money amount-cell"><OrderAmountTotals :totals="data?.totals" /></td>
                 <td :colspan="columnCount - 4" class="total-caption"><small>{{ text('全部筛选结果 · 金额按币种汇总', 'All filtered results · Amounts grouped by currency') }}</small></td>
               </TableTotals>
             </table>
           </div>
-          <footer class="pagination"><span>{{ text('按订单分页，多商品在同一订单中展示', 'Paginated by order; items stay grouped') }}</span><div><label>{{ text('每页', 'Per page') }}<select class="workbench-filter-select" :value="pageSize" :aria-label="text('每页条数', 'Page size')" @change="navigate({ pageSize: ($event.target as HTMLSelectElement).value, page: 1 })"><option v-for="size in [20, 50, 100]" :key="size" :value="size">{{ size }}</option></select></label><button :disabled="page <= 1" :aria-label="text('上一页', 'Previous page')" @click="navigate({ page: page - 1 })"><ChevronLeft :size="16" /></button><span>{{ page }} / {{ pageCount }}</span><button :disabled="page >= pageCount" :aria-label="text('下一页', 'Next page')" @click="navigate({ page: page + 1 })"><ChevronRight :size="16" /></button></div></footer>
+
         </template>
       </section>
     <RecipientDetailsDialog v-if="recipientOrder?.shippingRecipient" :recipient="recipientOrder.shippingRecipient" :country-code="recipientOrder.shippingCountryCode" :order-number="recipientOrder.orderNumber" @close="recipientOrderId = undefined" />
@@ -646,13 +630,15 @@ h2 { display: flex; gap: 12px; align-items: center; font-size: 21px; font-weight
 .result-count { white-space: nowrap; color: #8490a3; font-size: 12px; }
 .exact-filter { padding: 12px 20px; min-height: 44px; box-sizing: border-box; display: flex; align-items: center; gap: 8px 16px; font-size: 12px; line-height: 20px; }
 .exact-filter button, .error-message button { color: #5873d4; text-decoration: underline; }
-.table-scroll { width: 100%; min-width: 0; max-width: 100%; border-top: 1px solid var(--color-border); }
+.table-scroll { overflow-x: auto; width: 100%; min-width: 0; max-width: 100%; border-top: 1px solid var(--color-border); }
 table { table-layout: fixed; width: 100%; border-collapse: separate; border-spacing: 0; text-align: left; white-space: normal; overflow-wrap: anywhere; font-size: 12px; }
 th { position: sticky; top: 0; z-index: 2; background: var(--color-surface); padding: 14px 8px; border-bottom: 1px solid var(--color-border); }
 td { border-bottom: 1px solid var(--color-border); padding: 12px 8px; min-width: 0; }
 tbody tr:last-child td { border-bottom: 0; }
 tbody tr:hover td { background: color-mix(in srgb, var(--color-surface) 94%, #5873d4); }
 .order-cell { position: static; background: var(--color-surface); z-index: 1; min-width: 0; padding-left: 16px; padding-right: 16px; text-align: center; white-space: nowrap; border-right: 1px solid var(--color-border); }
+.order-identity { display:inline-flex; flex-direction:column; align-items:center; vertical-align:middle; max-width:calc(100% - 25px); }
+.order-cell .order-identity .copy-order { max-width:100%; }
 .order-cell .order-checkbox { margin-right: 7px; }
 th.order-cell { z-index: 3; }
 .order-cell strong { color: var(--color-chart-link); font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
@@ -688,9 +674,9 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 
 .dark .image-fallback { background: #253347; color: #b5c4d9; }
 
-.refresh-controls { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; justify-content: flex-end; }
-.refresh-status { color: var(--color-text-secondary); font-size: 11px; line-height: 1.8; }
-.sync-paused { color: #c68e45; }
+
+
+
 .read-only-note { color: var(--color-text-secondary); font-size: 12px; margin: -5px 0 16px; }
 .copy-order, .copy-customer { display: inline-flex; align-items: center; gap: 8px; text-align: left; user-select: text; }
 .copy-order svg, .copy-customer svg { color: var(--color-text-secondary); flex-shrink: 0; }
@@ -704,7 +690,7 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .product-sku { min-width: 0; max-width: 100%; }
 .multi-item-badge { display: block; width: fit-content; margin: 8px auto 0; color: var(--color-text-secondary); background: var(--color-surface-muted); border-radius: 4px; padding: 3px 6px; font-size: 10px; }
 .copy-feedback { position: fixed; top: 82px; right: 24px; z-index: 70; padding: 10px 16px; color: var(--color-text); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 7px; box-shadow: 0 5px 20px #0002; font-size: 12px; }
-@media (max-width: 700px) { .list-heading { flex-wrap: wrap; }.refresh-controls { justify-content: flex-start; } }
+@media (max-width: 700px) { .list-heading { flex-wrap: wrap; } }
 
 .product-sku-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 5px 8px; }
 .product-quantity { display: inline-block; font-size: 11px; color: var(--color-text); background: var(--color-background); padding: 1px 6px; border-radius: 4px; white-space: nowrap; font-variant-numeric: tabular-nums; }
@@ -763,10 +749,14 @@ a.salesperson-department:hover { color: var(--color-chart-link); }
   .pagination > div { flex-wrap: wrap; }
 }
 .order-recipient{display:flex;flex-direction:column;align-items:flex-start;gap:8px;min-width:0}.recipient-name{border:0;padding:0;background:none;color:var(--color-chart-link);font:inherit;text-align:left;line-height:1.5;white-space:normal;overflow-wrap:anywhere;max-width:100%;cursor:pointer;text-decoration:underline;text-decoration-color:transparent;text-underline-offset:3px}.recipient-name:hover,.recipient-name:focus-visible{text-decoration-color:currentColor}.recipient-empty{color:var(--color-text-secondary)}
+
+.recipient-name,.copy-customer span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;overflow-wrap:normal;min-width:0;max-width:100%}.copy-customer svg{flex-shrink:0}
 </style>
 
 <style scoped>
 .native-status-detail{display:block;margin-top:5px}
 .shipment-intercept-status { display: block; margin-top: 8px; }
 @media(max-width:700px) { .order-cell .shipment-intercept-status { flex-basis: 100%; margin-top: 0; } }
+
+.recipient-name,.copy-customer span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;overflow-wrap:normal;min-width:0;max-width:100%}.copy-customer svg{flex-shrink:0}
 </style>

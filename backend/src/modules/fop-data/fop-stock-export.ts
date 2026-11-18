@@ -1,5 +1,5 @@
 import { STOCK_BILL_STATUS_LABELS } from './fop-stock.types'
-import { singleSheetWorkbook } from '../workbench-export/single-sheet'
+import { exportProductRow, exportRowIdentity, singleSheetWorkbook } from '../workbench-export/single-sheet'
 import * as ExcelJS from 'exceljs'
 import { PayloadTooLargeException } from '@nestjs/common'
 import { FopStockOrder, STOCK_TYPE_LABELS, STOCK_PURCHASE_LABELS, STOCK_ORDER_LABELS, STOCK_LIFECYCLE_LABELS, StockFilters } from './fop-stock.types'
@@ -25,9 +25,10 @@ export async function buildStockWorkbook(rows: readonly FopStockOrder[], source:
   details.columns.forEach(column => { column.numFmt = column.key === 'quantity' ? '0.########' : '@' })
   for (const row of rows) {
     sheet.addRow({ stockNumber: row.stockNumber, products: row.items.length ? row.items.slice(0, 5).map(item => `${item.name}\n${item.sku} · ${item.variant} × ${item.quantity}`).join('\n') + (row.items.length > 5 ? `\n共 ${row.items.length} 行商品，完整内容见商品明细` : '') : '暂无商品明细',
-    reviewStatus: STOCK_BILL_STATUS_LABELS[row.rawBillStatus??'']??'—', type: STOCK_TYPE_LABELS[row.stockType], amount: row.amount, currency: row.currency, orderStatus: row.orderStatus ? STOCK_ORDER_LABELS[row.orderStatus] : '—', createdAt: row.createdAt ? new Date(Date.parse(row.createdAt) + 8 * 3600_000).toISOString().slice(0, 19).replace('T', ' ') : '—', paidAt: row.paidAt ? new Date(Date.parse(row.paidAt) + 8 * 3600_000).toISOString().slice(0, 19).replace('T', ' ') : '—',
-    customerName: row.customerName, storeName: row.storeName ?? '—', status: STOCK_PURCHASE_LABELS[row.purchaseStatus], warehouse: row.warehouse, salesperson: `${row.owner.name}\n${row.department.name}` })
-    for (const item of row.items) details.addRow({ stockNumber: row.stockNumber, name: item.name, sku: item.sku, variant: item.variant, quantity: item.quantity, imageUrl: item.imageUrl ?? '' })
+    reviewStatus: STOCK_BILL_STATUS_LABELS[row.rawBillStatus??'']??'—', type: STOCK_TYPE_LABELS[row.stockType], amount: row.amount, currency: row.currency, orderStatus: row.orderStatusName ?? (row.orderStatus ? STOCK_ORDER_LABELS[row.orderStatus] : '—'), createdAt: row.createdAt ? new Date(Date.parse(row.createdAt) + 8 * 3600_000).toISOString().slice(0, 19).replace('T', ' ') : '—', paidAt: row.paidAt ? new Date(Date.parse(row.paidAt) + 8 * 3600_000).toISOString().slice(0, 19).replace('T', ' ') : '—',
+    customerName: row.customerName, storeName: row.storeName ?? '—', status: row.purchaseStatusName ?? STOCK_PURCHASE_LABELS[row.purchaseStatus ?? 'unpurchased'], warehouse: row.warehouse, salesperson: `${row.owner.name}\n${row.department.name}` })
+    exportRowIdentity(sheet.lastRow!,row.id)
+    for (const item of row.items) exportRowIdentity(exportProductRow(details.addRow({ stockNumber: row.stockNumber, name: item.name, sku: item.sku, variant: item.variant, quantity: item.quantity, imageUrl: item.imageUrl ?? '' }), item),row.id)
   }
   sheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: rows.length + 1, column: sheet.columnCount } }
   details.autoFilter = { from: { row: 1, column: 1 }, to: { row: details.rowCount, column: details.columnCount } }

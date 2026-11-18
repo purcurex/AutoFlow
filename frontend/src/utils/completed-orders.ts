@@ -1,4 +1,3 @@
-import { hasDispatchSyncFailure } from './order-dispatch-status'
 import { matchesCollectedAllocation } from './collected-allocation'
 import { isProcurementCompleted } from './workbench-queue-rules'
 import type { FopOrder, FopOrderQueue } from '@/api/fop-orders'
@@ -20,13 +19,12 @@ export function completionTime(order: FopOrder, role: WorkbenchRole): string | n
 }
 /** Validate archive responses against completion facts, independently of pending queue rules. */
 export function matchesCompletedQueue(order: FopOrder, queue: FopOrderQueue): boolean {
-  if (queue === 'dispatch' && hasDispatchSyncFailure(order)) return false
   if (order.businessStatus && queue === 'dispatch') return order.reviewStatus === 'approved' && ['fulfilled','partial_fulfilled'].includes(order.businessStatus.order)
   if (order.businessStatus && queue === 'shipping') return order.businessStatus.outbound === 'completed'
   if (queue === 'review') return order.reviewStatus === 'approved'
   // The source header proves outbound completion even when unrelated collected facts are absent.
   if (queue === 'shipping' && order.dataQuality?.mode === 'collected' && order.dataQuality.readOnly) return order.sourceOutboundStatus === '2'
-  if (matchesCollectedAllocation(order, queue, true)) return true
+  if (queue === 'allocation_review' && order.dataQuality?.mode === 'collected' && order.dataQuality.readOnly) return matchesCollectedAllocation(order, queue, true)
   if (order.cancelled || order.paymentStatus !== 'paid') return false
   if (order.dataQuality?.mode === 'collected' && order.dataQuality.readOnly) {
     if (queue === 'dispatch' && order.nativeFactsCaptured) return order.dispatchTaskStatus === 'dispatch_synced'
@@ -37,5 +35,5 @@ export function matchesCompletedQueue(order: FopOrder, queue: FopOrderQueue): bo
   if (queue === 'dispatch') return progress.shopifySync === 'synced'
   if (queue === 'procurement') return order.sourcePurchaseStatus !== undefined ? order.procurementProgress?.purchaseOrder !== 'not_required' && ['3','4'].includes(order.sourcePurchaseStatus ?? '') : isProcurementCompleted(order.procurementProgress, progress.supplierShipment)
   return progress.allocationCreated === true && progress.allocationReview === 'approved'
-    && (queue === 'allocation_review' || queue === 'shipping' && progress.outbound === 'completed')
+    && (queue === 'allocation_review' && progress.stockReadiness === 'ready' || queue === 'shipping' && progress.outbound === 'completed')
 }

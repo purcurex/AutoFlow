@@ -1,4 +1,4 @@
-import type { AnalyticsRow, LocalAnalyticsResult } from '@/api/local-dashboard-analytics'
+import type { AnalyticsRow, LocalAnalyticsResult,TrendTarget } from '@/api/local-dashboard-analytics'
 import { formatKnownCurrency, currencyLabel } from './currency'
 import { compareBusinessDepartments, salespersonRows } from './salesperson-revenue-chart'
 export function signedComparisonPercent(current:number|null|undefined,previous:number|null|undefined){
@@ -52,7 +52,8 @@ export function comparisonChart(result:LocalAnalyticsResult,dimension:string,met
   return {name:`${prior?'上期':'本期'}${monetary&&codes.length>1?`（${currencyLabel(code)}）`:''}`,type:time?'line' as const:'bar' as const,barMaxWidth:28,lineStyle:{type:prior?'dashed' as const:'solid' as const},itemStyle:{color:prior?'#91a7d6':'#5368be'},connectNulls:false,
    data:ids.map(id=>id.startsWith('gap:')||time&&Number(id)>=days(period)?null:value(data.find(r=>r.id===(time?dateAt(period.from,Number(id)):id)&&(!monetary||r.currency===code))))}
  }))
- return {legend:{show:true,top:0,data:series.map(s=>s.name)},tooltip:{trigger:'axis' as const,renderMode:'richText' as const,formatter:(raw:unknown)=>{
+ const trendTargets:(TrendTarget|null)[]=ids.map(id=>{const row=[...a,...b].find(r=>r.id===id);if(time||!row||id==='unknown'||id.startsWith('gap:'))return null;return {dimension:row.dimension as TrendTarget['dimension'],id:grouped&&row.dimension==='department'?id.slice(5):id,name:label(id)}})
+ return {trendTargets,legend:{show:true,top:0,data:series.map(s=>s.name)},tooltip:{trigger:'axis' as const,renderMode:'richText' as const,formatter:(raw:unknown)=>{
   const points=(Array.isArray(raw)?raw:[raw]) as {dataIndex:number;seriesIndex:number;value:number|null;seriesName:string}[]
   const index=points[0]?.dataIndex??0
   if(result.chartId==='customer_orders'&&['customer','person'].includes(dimension)){

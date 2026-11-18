@@ -1,9 +1,9 @@
 import { config } from 'dotenv'
 import { resolve } from 'path'
 import { DataSource } from 'typeorm'
+import { environmentFiles } from '../config/env-files'
 
-config({ path: resolve(__dirname, '../../.env.workbench.local') })
-config({ path: resolve(__dirname, '../../.env') })
+for (const file of environmentFiles()) config({ path: resolve(process.cwd(), file), override: false })
 
 const AppDataSource = new DataSource({
   type: 'postgres',
@@ -18,6 +18,7 @@ const AppDataSource = new DataSource({
   entities: [resolve(__dirname, '../modules/**/*.entity{.ts,.js}')],
   migrations: [resolve(__dirname, 'migrations/[0-9]*{.ts,.js}')],
   migrationsTableName: 'typeorm_migrations',
+  migrationsTransactionMode: 'each',
   synchronize: false,
   logging: process.env.NODE_ENV === 'development',
 })

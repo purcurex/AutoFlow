@@ -1,5 +1,12 @@
 import { dashboardAnalyticsQuery } from './dashboard-analytics-query'
 const input = { batchId:'b', companyId:'100000', employeeIds:['70'], members:[], start:'2026-11-01',end:'2026-12-01',chartId:'order_volume',summaryOnly:false }
+it('keeps incomplete monetary periods in a trend instead of excluding them and filling false zeroes',()=>{
+ const q=dashboardAnalyticsQuery({...input,chartId:'salesperson_receipts',trend:{dimension:'person',id:'70',grain:'day'}})
+ const grouped=q.sql.split('), grouped AS (')[1]!.split(') SELECT jsonb_build_object')[0]!
+ expect(grouped).toContain('CASE WHEN count(order_amount)=count(*) THEN sum(order_amount)::text END')
+ expect(grouped).not.toContain('order_amount IS NOT NULL')
+  expect(q.params[q.params.length-1]).toBe('70')
+})
 it.each([undefined,'USD','CNY'])('keeps department performance in USD even with a legacy %s currency filter',currency=>{
  const q=dashboardAnalyticsQuery({...input,chartId:'department_receipts',currency})
  expect(q.params[7]).toBe('USD')
@@ -38,6 +45,6 @@ it('counts customer creations through exact current UserField/account IDs, filte
  expect(q.params[2]).toEqual(['70'])
  const summary=dashboardAnalyticsQuery({...input,chartId:'registrations',summaryOnly:true})
  expect(summary.sql).not.toContain("('person',")
- expect(summary.sql).not.toContain("('month',")
- expect(summary.sql).not.toContain("('day',")
+ expect(summary.sql).toContain("('month',")
+ expect(summary.sql).toContain("('day',")
 })
