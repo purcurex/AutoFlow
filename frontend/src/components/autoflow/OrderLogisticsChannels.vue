@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { LogisticsChannel, LogisticsInfo } from '@/api/fop-orders'
 import OrderLogisticsInfo from './OrderLogisticsInfo.vue'
+import LogisticsChannelName from './LogisticsChannelName.vue'
 
 const props = defineProps<{ customChannel?: string | null; channels?: LogisticsChannel[] | null; groups?: LogisticsInfo[] | null; showTracking?: boolean; missingTrackingText?: string }>()
 const { locale } = useI18n()
@@ -11,9 +12,9 @@ const actualNames = computed(() => [...new Set(props.channels?.map(channel => ch
 
 <template>
   <div class="review-channels">
-    <span class="custom-channel-name">{{ customChannel?.trim() || '—' }}</span>
+    <LogisticsChannelName class="custom-channel-name" :name="customChannel" />
     <OrderLogisticsInfo v-if="showTracking" :groups="groups" :channels="channels" :missing-tracking-text="missingTrackingText ?? (String(locale).startsWith('zh') ? '尚未获取' : 'Not yet obtained')" />
-    <span v-else class="actual-channel-name">{{ actualNames }}</span>
+    <LogisticsChannelName v-else class="actual-channel-name" :name="actualNames" />
   </div>
 </template>
 

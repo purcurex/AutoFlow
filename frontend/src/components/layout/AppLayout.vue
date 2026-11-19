@@ -5,12 +5,13 @@ import Sidebar from './Sidebar.vue'
 import Header from './Header.vue'
 import { scrollOuterPage } from '@/utils/pageWheel'
 
+const props = defineProps<{ compactNavigation?: boolean }>()
 const userStore = useUserStore()
 const isSidebarCollapsed = ref(false)
 const pageScroller = ref<HTMLElement>()
 
 onMounted(async () => {
-  if (window.innerWidth < 768) isSidebarCollapsed.value = true
+  if (window.innerWidth < 768 || props.compactNavigation && window.innerWidth <= 1600) isSidebarCollapsed.value = true
   if (userStore.isLoggedIn) await userStore.fetchUser()
 })
 

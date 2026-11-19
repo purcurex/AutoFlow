@@ -262,6 +262,14 @@ export class ListWorkflowsQueryDto {
 
 export class ListLeadsQueryDto extends ListWorkflowsQueryDto {
   @IsOptional()
+  @IsIn(['registeredOn', 'contactedOn'])
+  sortBy?: 'registeredOn' | 'contactedOn'
+
+  @IsOptional()
+  @IsIn(['asc', 'desc'])
+  sortDirection?: 'asc' | 'desc'
+
+  @IsOptional()
   @IsIn(['manual','import','automatic'])
   leadType?: 'manual' | 'import' | 'automatic'
 

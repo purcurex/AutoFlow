@@ -8,10 +8,10 @@ export type FopOrderExportQuery = Omit<FopOrderQuery, 'page' | 'pageSize'> & (
 
 export async function exportFopOrders(query: FopOrderExportQuery, signal?: AbortSignal): Promise<Blob> {
   // Explicitly allow list filters only; identity and record scope come from the session.
-  const { queue, completed, skuAssociation, timeRange, shippingCountryCode, search, orderNumber, departmentId, ownerId, warehouseCode, paidAtOrder, sortBy, sortOrder, warehouseStage, procurementStage, taskStatus, mode } = query
+  const { queue, completed, skuAssociation, timeRange, shippingCountryCode, search, orderNumber, departmentId, ownerId, warehouseCode, paidAtOrder, sortBy, sortOrder, warehouseStage, procurementStage, procurementSource, taskStatus, mode } = query
   try {
     return await api.post<Blob, Blob>('/autoflow/integrations/fop/fulfillment-orders/export', {
-      queue, ...(completed ? { completed } : {}), skuAssociation, timeRange, shippingCountryCode, search, orderNumber, departmentId, ownerId, warehouseCode, paidAtOrder, sortBy, sortOrder, warehouseStage, procurementStage, taskStatus, mode,
+      queue, ...(completed ? { completed } : {}), skuAssociation, timeRange, shippingCountryCode, search, orderNumber, departmentId, ownerId, warehouseCode, paidAtOrder, sortBy, sortOrder, warehouseStage, procurementStage, procurementSource, taskStatus, mode,
       ...(mode === 'selected' ? { orderIds: query.orderIds } : {}),
     }, { responseType: 'blob', timeout: 30000, signal })
   } catch (error) {

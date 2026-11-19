@@ -17,9 +17,12 @@ it('requires an actual 1688 number and explicit unpaid value, and excludes refun
  expect(stage(parent,demand,[purchase({hzkj_pay_status:'3'})],[])).toBeNull()
  expect(stage(parent,demand,[purchase({hzkj_pay_status:null})],[])).toBeNull()
 })
-it('recognizes actual full-payment and deposit stock usage without treating zero or absent quantities as usage',()=>{
- expect(usesReservedStock({hzkj_use_stock:'1'})).toBe(true)
- expect(usesReservedStock({hzkj_deposit_use_qty:'1'})).toBe(true)
+it('only complete consumption coverage excludes supplier demand, never a legacy selection flag or partial usage',()=>{
+ expect(usesReservedStock({hzkj_use_stock:'1'})).toBe(false)
+ expect(usesReservedStock({hzkj_deposit_use_qty:'1'})).toBe(false)
  expect(usesReservedStock({hzkj_deposit_use_qty:'0'})).toBe(false)
  expect(usesReservedStock({})).toBe(false)
+ expect(usesReservedStock({procurementSource:{complete:true,directQuantity:'6'}})).toBe(false)
+ expect(usesReservedStock({procurementSource:{complete:true,directQuantity:'0'}})).toBe(true)
+ expect(usesReservedStock({procurementSource:{complete:false,directQuantity:null}})).toBe(false)
 })

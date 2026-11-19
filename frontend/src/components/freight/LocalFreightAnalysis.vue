@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { isWorkbenchScopeError } from '@/api/workbench-dashboard'
 import { useChartQuerySchedule } from '@/composables/useChartQuerySchedule'
 import { warehouseName } from '@/utils/warehouse'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
@@ -6,7 +7,7 @@ import { useI18n } from 'vue-i18n'
 import EChart from '@/components/charts/EChart.vue'
 import FreightTrendDialog from './FreightTrendDialog.vue'
 import FreightDetailsDialog from './FreightDetailsDialog.vue'
-import { getLocalFreight, type LocalFreightQuery, type LocalFreightResult, type FreightDimension, type FreightMeasure, type LocalFreightDetailsQuery } from '@/api/local-freight'
+import { getLocalFreight, peekLocalFreight, type LocalFreightQuery, type LocalFreightResult, type FreightDimension, type FreightMeasure, type LocalFreightDetailsQuery } from '@/api/local-freight'
 import { businessYears } from '@/utils/business-years'
 import { formatCurrency } from '@/utils/currency'
 import { onSessionReset } from '@/utils/session'
@@ -46,10 +47,10 @@ async function load(force=false){
  updateClock()
  const id=++request;busy.value=true;error.value='';selected.value='';detail.value=undefined
  const submitted={...query.value}
- const baseKey=(q:LocalFreightQuery)=>JSON.stringify({...q,dimension:undefined,allDimensions:undefined})
- if(!data.value||baseKey(data.value.query)!==baseKey(submitted))data.value=undefined
+ const cached=peekLocalFreight(submitted)
+ if(cached)data.value={...cached,query:submitted,series:cached.series.map(s=>submitted.dimension==='warehouse'?{...s,label:warehouseName(s.label)}:s)}
  try{const result=await getLocalFreight(submitted,{force});if(id===request){data.value={...result,query:submitted,series:result.series.map(s=>submitted.dimension==='warehouse'?{...s,label:warehouseName(s.label)}:s)};refresh.updated(result)}}
- catch{if(id===request){data.value=undefined;warehouseOptions.value=[];error.value=t('运费数据加载失败，请重试或检查查询权限。','Unable to load freight data. Retry or check access.')}}
+ catch(cause){if(id===request){if(isWorkbenchScopeError(cause)){data.value=undefined;warehouseOptions.value=[]}error.value=t('运费数据加载失败，请重试或检查查询权限。','Unable to load freight data. Retry or check access.')}}
  finally{if(id===request)busy.value=false}
 }
 watch(year,v=>{weekOf.value=v===currentYear.value?today.value:`${v}-12-31`},{flush:'sync'})
@@ -124,18 +125,18 @@ const displayPeriods=computed(()=>data.value?.periods.map((p,index)=>({...p,inde
    </div>
    <p v-if="compare&&data.values.every(v=>v.previousAmount===null)" class="comparison-note">{{t('上期无可比数据','No comparable previous period')}}</p>
    <div v-if="ownerChart" class="owner-legend"><span><i class="department-swatch"/>{{t('部门汇总','Department')}}</span><span><i class="person-swatch"/>{{t('业务员','Salesperson')}}</span></div>
-   <div class="freight-chart" :class="{'owner-groups':ownerChart}"><EChart :option="option" @select="selectChart" :style="ownerChart?{minWidth:`${ownerChart.minWidth}px`}:undefined" :label="t('实际物流运费统计','Actual freight statistics')" /></div>
+   <div class="freight-chart" :class="{'owner-groups':ownerChart}"><EChart :logistics-colors="['channel', 'carrier'].includes(data?.query.dimension ?? '')" :option="option" @select="selectChart" :style="ownerChart?{minWidth:`${ownerChart.minWidth}px`}:undefined" :label="t('实际物流运费统计','Actual freight statistics')" /></div>
    <div v-if="data.canViewDetails" class="freight-trend-actions"><button class="ov-link" :disabled="busy" @click="openDetails()">{{t('查看发运单明细 / 导出','Dispatch details / Export')}}</button><button v-for="s in data.series" :key="s.id" class="ov-link" :disabled="busy" @click="openDetails(s.id)">{{s.label}} · {{t('明细','Details')}}</button></div>
    <div class="freight-trend-actions"><span>{{t('分组趋势','Group trends')}}</span><button v-for="s in data.series" :key="s.id" class="ov-link" @click="selected=s.id">{{s.label}} ↗</button></div>
    <details><summary>{{t('运费统计表','Freight statistics')}}</summary><div class="ov-table-scroll"><table class="ov-table"><thead><tr><th>{{t('统计周期','Period')}}</th><th>{{compare?t('合计差额','Total change'):t('合计','Total')}}</th><th v-for="s in data.series" :key="s.id">{{s.label}}</th></tr></thead><tbody><tr v-for="p in displayPeriods" :key="p.id"><th>{{p.label}} <small v-if="p.partial">{{t('非完整周期','Partial')}}</small></th><td>{{money(compare?data.values[p.index]!.delta:data.values[p.index]!.amount)}}<small v-if="compare">{{percent(data.values[p.index]!.percent)}}</small></td><td v-for="s in data.series" :key="s.id">{{money(compare?s.values[p.index]!.delta:s.values[p.index]!.amount)}}<small v-if="compare">{{percent(s.values[p.index]!.percent)}}</small></td></tr></tbody></table></div></details>
    <FreightDetailsDialog v-if="detail" :query="detail.query" :name="detail.name" @close="detail=undefined" />
-   <FreightTrendDialog v-if="selected" :name="selectedName" scope="CNY · UTC+8" @close="selected=''"><div class="freight-chart"><EChart :option="trend" :label="selectedName" /></div></FreightTrendDialog>
+   <FreightTrendDialog v-if="selected" :name="selectedName" scope="CNY · UTC+8" @close="selected=''"><div class="freight-chart"><EChart :logistics-colors="['channel', 'carrier'].includes(data?.query.dimension ?? '')" :option="trend" :label="selectedName" /></div></FreightTrendDialog>
   </template>
  </section>
 </template>
 <style scoped>
 .local-freight{container-type:inline-size;margin-top:22px;padding:24px;border:1px solid var(--color-border);border-radius:12px;background:var(--color-surface);color:var(--color-text)}
-.comparison-note{font-size:12px;color:var(--color-text-secondary);margin:12px 0}.owner-groups{overflow-x:auto;overflow-y:hidden;padding-bottom:12px}.owner-legend{display:flex;gap:18px;margin:12px 0;color:var(--color-text-secondary);font-size:12px}.owner-legend span{display:flex;align-items:center;gap:6px}.owner-legend i{width:10px;height:10px;border-radius:2px}.department-swatch{background:var(--color-primary)}.person-swatch{background:#37a3a3}
+.comparison-note{font-size:12px;color:var(--color-text-secondary);margin:12px 0}.owner-groups{overflow-x:auto;overflow-y:hidden;padding-bottom:12px}.owner-legend{display:flex;gap:18px;margin:12px 0;color:var(--color-text-secondary);font-size:12px}.owner-legend span{display:flex;align-items:center;gap:6px}.owner-legend i{width:10px;height:10px;border-radius:2px}.department-swatch{background:var(--color-primary)}.person-swatch{background:var(--color-chart-detail)}
 header{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:20px}h2{font-size:16px;font-weight:600}header small{color:var(--color-text-secondary);font-size:12px}.filters{display:flex;align-items:center;flex-wrap:wrap;gap:12px}.secondary{margin-top:18px}label{display:inline-flex;align-items:center;gap:8px;font-size:12px}select,input[type=date],button.query{height:34px;padding:7px 9px;border:1px solid var(--color-border);border-radius:6px;background:var(--color-surface);color:inherit;font-size:12px}.query{background:var(--color-primary)!important;color:white!important}.ov-table th,.ov-table td{white-space:nowrap}.ov-table small{display:block}summary{cursor:pointer;padding:12px 0}:global(.dark .local-freight){color-scheme:dark}
 /* Keep labels, values and secondary counts aligned independently of text length. */
 .freight-metrics{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:1px;margin:24px 0 12px;border:1px solid var(--color-border);border-radius:10px;background:var(--color-border);overflow:hidden}

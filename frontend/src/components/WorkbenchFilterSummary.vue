@@ -5,6 +5,7 @@ import { rmaTypeLabels } from '@/api/rma-orders'
 import { purchaseReturnLabels } from '@/api/purchase-returns'
 import { completedNames } from '@/utils/completed-orders'
 import { useWorkbenchDepartment } from '@/composables/useWorkbenchDepartment'
+import { useWorkbenchAccess } from '@/composables/useWorkbenchAccess'
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -17,12 +18,16 @@ import { procurementStageLabels, isProcurementStage } from '@/utils/procurement-
 import { stockTypes, stockStatuses, stockLifecycles, type StockLifecycle, type StockType, type StockPurchaseStatus } from '@/api/fop-stock'
 const props = defineProps<{ queue: string; labels?: Record<string, string> }>()
 const { defaultDepartmentLabel } = useWorkbenchDepartment(computed(() => props.labels ?? {}))
+const { access } = useWorkbenchAccess()
 const route = useRoute(), { locale } = useI18n()
 const zh = computed(() => String(locale.value).startsWith('zh'))
 const text = (cn: string, en: string) => zh.value ? cn : en
 const val = (key: string) => typeof route.query[key] === 'string' ? route.query[key] as string : ''
 const timeLabel = (allowAll: boolean) => { const range = allowAll ? workbenchTimeRange(route.query.timeRange, true) : workbenchTimeRange(route.query.timeRange); return range === 'all' ? text('全部', 'All') : range === '1w' ? text('近一周', 'Last week') : range === '3m' ? text('近三月', 'Last three months') : text('近一月', 'Last month') }
 const stock = computed(() => ['stock', 'stock_procurement'].includes(props.queue))
+const procurementSourceLabels = { full_payment: ['全款备货', 'Fully paid stock'], deposit: ['押金备货', 'Deposit stock'], direct: ['直接采购', 'Direct purchase'] } as const
+const showProcurementSource = computed(() => route.params.role === 'procurement' && ['procurement', 'procurement_shipping', 'completed'].includes(props.queue)
+  && (val('view') === 'fulfillment' || val('view') !== 'purchase' && access.value?.defaultProcurementView !== 'purchase'))
 // Charts apply their own filters. Describe their scope without presenting leftover
 // todo parameters as if they filtered the charts.
 const analysisPages = computed<Record<string, { title: string; scope: string }>>(() => ({
@@ -38,6 +43,8 @@ const summaryParts = computed(() => {
     `${props.queue === 'purchase_returns' ? text('出库仓库', 'Outbound warehouse') : (stock.value || props.queue === 'receipt_notices') ? text('收货仓库', 'Receiving warehouse') : text('发货仓库', 'Shipping warehouse')}：${val('warehouseCode') ? warehouseName(val('warehouseCode')) : text('全部', 'All')}`,
   ]
   if (val('ownerId')) parts.push(`${text('业务员', 'Salesperson')}：${props.labels?.[val('ownerId')] ?? text('所选业务员', 'Selected salesperson')}`)
+  const source = val('procurementSource')
+  if (showProcurementSource.value && (!source || Object.hasOwn(procurementSourceLabels, source))) parts.push(`${text('采购来源', 'Procurement source')}：${source ? procurementSourceLabels[source as keyof typeof procurementSourceLabels][zh.value ? 0 : 1] : text('全部', 'All')}`)
   if (props.queue === 'receipt_notices') {
     parts.push(`${text('入库进度', 'Inbound progress')}：${val('inboundStatus') === 'partial' ? text('部分入库', 'Partially received') : val('inboundStatus') === 'pending' ? text('待入库', 'Pending inbound') : text('全部', 'All')}`)
     if (val('search')) parts.push(`${text('关键词', 'Keyword')}：${val('search')}`)
@@ -89,6 +96,7 @@ const summaryFields = computed(() => {
     [text('备货类型', 'Stock type')]: { choices: [all, ...names(stockTypes)] },
     [text('备货阶段', 'Stock stage')]: { choices: [all, ...names(stockLifecycles)] },
     [text('采购状态', 'Purchase status')]: { choices: [all, ...names(stockStatuses)] },
+    [text('采购来源', 'Procurement source')]: { choices: [all, ...names(procurementSourceLabels)] },
     [text('客户付款时间', 'Customer payment time')]: { choices: periods },
     [text('采购进度', 'Purchase progress')]: { choices: [all, ...names(procurementStageLabels), ...names(purchaseStageLabels)] },
     [text('配货单状态', 'Allocation status')]: { choices: [all, text('未审核', 'Pending approval'), text('已审核', 'Approved')] },

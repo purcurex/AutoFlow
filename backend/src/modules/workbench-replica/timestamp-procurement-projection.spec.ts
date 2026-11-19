@@ -14,8 +14,8 @@ it('highest line stage wins while outstanding purchasing and shipping tasks may 
  const r=project(parent([line('11','2'),line('12','0'),line('13','3')]),[purchase()])
  expect(r.businessStatus.purchase).toBe('partial_received');expect(r.procurementQueueFlags).toEqual({pending:false,shipping:true,completed:false})
 })
-it('stock is purchased but never generates supplier work; cancellation suppresses all procurement queues',()=>{
- expect(project(parent([line('11','3',{hzkj_use_stock:'1'})]),[])).toMatchObject({businessStatus:{purchase:'purchased'},procurementStage:'not_required',procurementQueueFlags:{pending:false,shipping:false,completed:false}})
+it('only full ledger coverage suppresses supplier work; a selection flag never overrides receipt',()=>{
+ expect(project(parent([line('11','3',{hzkj_use_stock:'1',procurementSource:{complete:true,directQuantity:'0'}})]),[])).toMatchObject({businessStatus:{purchase:'received'},procurementStage:'not_required',procurementQueueFlags:{pending:false,shipping:false,completed:false}})
  expect(project(parent([line('11','2')],{hzkj_orderstatus:'0'}),[purchase()])).toMatchObject({procurementStage:'cancelled',procurementQueueFlags:{pending:false,shipping:false,completed:false}})
 })
 it('unresolved or cancelled purchase links cannot prove payment; missing facts remain unknown',()=>{
@@ -29,9 +29,34 @@ it('a saved active application starts purchasing before approval, using source e
  expect(project(p,[],[application]).businessStatus.purchase).toBe('purchasing')
  expect(project(p,[],[{...application,hzkj_cancelstatus:'B'}]).businessStatus.purchase).toBe('unpurchased')
 })
-it('excludes actual deposit stock use even when legacy line status still says purchasing',()=>{
- const r=project(parent([line('11','2',{hzkj_deposit_use_qty:'2'})]),[])
+it('excludes fully covered deposit demand based on records rather than a line quantity hint',()=>{
+ const r=project(parent([line('11','2',{hzkj_deposit_use_qty:'2',procurementSource:{complete:true,directQuantity:'0'}})]),[])
  expect(r.procurementQueueFlags.pending).toBe(false);expect(r.procurementStage).toBe('not_required')
+})
+it('partial stock usage keeps the paid direct-purchase remainder in supplier pending',()=>{
+ const r=project(parent([line('11','2',{hzkj_use_stock:'1',hzkj_deposit_use_qty:'1',procurementSource:{complete:true,demandQuantity:'2',directQuantity:'1',lineIds:['11']}})]),[purchase()])
+ expect(r.procurementQueueFlags.shipping).toBe(true)
+ expect(r.timestampProcurementBasis.lineCoverageVerified).toBe(true)
+})
+it.each([
+ [[{fulfillmentLineId:'11',quantity:'6'}],true],
+ [[{fulfillmentLineId:'12',quantity:'6'}],true],
+ [[{fulfillmentLineId:'11',quantity:'2'},{fulfillmentLineId:'12',quantity:'4'}],true],
+ [[{fulfillmentLineId:'11',quantity:'5'}],false],
+ [[{fulfillmentLineId:'11',quantity:'6'},{fulfillmentLineId:'12',quantity:null}],false],
+])('verifies repeated-SKU direct demand once without allocating stock to original lines (%j)',(purchased,covered)=>{
+ const procurementSource={skuId:'sku-1',complete:true,demandQuantity:'10',fullPaymentQuantity:'4',depositQuantity:'0',directQuantity:'6',lineIds:['11','12']}
+ const p=parent([line('11','2',{hzkj_qty:'6',procurementSource}),line('12','2',{hzkj_qty:'4',procurementSource})])
+ const g=purchase();g.display.rows[0].lines=purchased as any
+ const r=project(p,[g])
+ expect(r.timestampProcurementBasis.lineCoverageVerified).toBe(covered)
+ expect(r.procurementProgress.purchaseOrder).toBe(covered?'ordered':'partial')
+})
+it('cannot establish complete purchase coverage from an incomplete stock source even when all original demand is purchased',()=>{
+ const procurementSource={skuId:'sku-1',complete:false,demandQuantity:'10',directQuantity:null,lineIds:['11','12']}
+ const p=parent([line('11','2',{hzkj_qty:'6',procurementSource}),line('12','2',{hzkj_qty:'4',procurementSource})])
+ const g=purchase();g.display.rows[0].lines=[{fulfillmentLineId:'11',quantity:'6'},{fulfillmentLineId:'12',quantity:'4'}]
+ expect(project(p,[g]).timestampProcurementBasis.lineCoverageVerified).toBe(false)
 })
 it('trusts paid header for a linked order without inventing missing SKU relationships',()=>{
  const g=purchase({hasAlibabaOffer:false,hzkj_1688_order_n:''});g.display.rows[0].lines=[]

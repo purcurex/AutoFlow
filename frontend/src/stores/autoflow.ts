@@ -14,7 +14,7 @@ import type {
   WorkflowRun,
 } from '@/api/autoflow'
 
-export const useAutoFlowStore = defineStore('autoflow', () => {
+export const createAutoFlowStore = (id: string, client: typeof autoflowApi = autoflowApi) => defineStore(id, () => {
   const dashboard = ref<AutoFlowDashboard | null>(null)
   const workflows = ref<WorkflowRun[]>([])
   const leads = ref<StoreLead[]>([])
@@ -40,7 +40,7 @@ export const useAutoFlowStore = defineStore('autoflow', () => {
 
   async function fetchDashboard() {
     const session = captureSession()
-    const response = await autoflowApi.getDashboard()
+    const response = await client.getDashboard()
     assertCurrentSession(session)
     dashboard.value = response
     synchronizeDashboardWorkflows()
@@ -51,7 +51,7 @@ export const useAutoFlowStore = defineStore('autoflow', () => {
 
   async function fetchWorkflows() {
     const session = captureSession()
-    const result = await autoflowApi.getWorkflows()
+    const result = await client.getWorkflows()
     assertCurrentSession(session)
     workflows.value = result.items
     workflowsLoaded = true
@@ -68,7 +68,7 @@ export const useAutoFlowStore = defineStore('autoflow', () => {
 
   async function createWorkflow(data: CreateWorkflowRequest) {
     const session = captureSession()
-    const workflow = await autoflowApi.createWorkflow(data)
+    const workflow = await client.createWorkflow(data)
     assertCurrentSession(session)
     workflows.value.unshift(workflow)
     return workflow
@@ -76,14 +76,14 @@ export const useAutoFlowStore = defineStore('autoflow', () => {
 
   async function getWorkflow(id: string) {
     const session = captureSession()
-    const result = await autoflowApi.getWorkflow(id)
+    const result = await client.getWorkflow(id)
     assertCurrentSession(session)
     return result
   }
 
   async function reviseWorkflow(id: string, data: CreateWorkflowRequest) {
     const session = captureSession()
-    const workflow = await autoflowApi.createWorkflowRevision(id, data)
+    const workflow = await client.createWorkflowRevision(id, data)
     assertCurrentSession(session)
     workflows.value.unshift(workflow)
     return workflow
@@ -91,7 +91,7 @@ export const useAutoFlowStore = defineStore('autoflow', () => {
 
   async function deleteWorkflow(id: string) {
     const session = captureSession()
-    const result = await autoflowApi.deleteWorkflow(id)
+    const result = await client.deleteWorkflow(id)
     assertCurrentSession(session)
     workflows.value = workflows.value.filter((item) => item.id !== id)
     return result
@@ -99,7 +99,7 @@ export const useAutoFlowStore = defineStore('autoflow', () => {
 
   async function archiveWorkflow(id: string) {
     const session = captureSession()
-    const workflow = await autoflowApi.archiveWorkflow(id)
+    const workflow = await client.archiveWorkflow(id)
     assertCurrentSession(session)
     workflows.value = workflows.value.filter((item) => item.id !== id)
     return workflow
@@ -107,7 +107,7 @@ export const useAutoFlowStore = defineStore('autoflow', () => {
 
   async function startDiscovery(id: string) {
     const session = captureSession()
-    const result = await autoflowApi.startDiscovery(id)
+    const result = await client.startDiscovery(id)
     assertCurrentSession(session)
     const workflow = workflows.value.find((item) => item.id === id)
     if (workflow) {
@@ -120,12 +120,12 @@ export const useAutoFlowStore = defineStore('autoflow', () => {
 
   async function fetchLeads(status?: LeadStatus) {
     const session = captureSession()
-    const firstPage = await autoflowApi.getLeads(status, 1, 100)
+    const firstPage = await client.getLeads(status, 1, 100)
     assertCurrentSession(session)
     const items = [...firstPage.items]
     let page = 2
     while (items.length < firstPage.total) {
-      const nextPage = await autoflowApi.getLeads(status, page, 100)
+      const nextPage = await client.getLeads(status, page, 100)
       assertCurrentSession(session)
       if (!nextPage.items.length) break
       items.push(...nextPage.items)
@@ -136,7 +136,7 @@ export const useAutoFlowStore = defineStore('autoflow', () => {
 
   async function fetchLead(id: string) {
     const session = captureSession()
-    const response = await autoflowApi.getLead(id)
+    const response = await client.getLead(id)
     assertCurrentSession(session)
     currentLead.value = response
     return currentLead.value
@@ -144,7 +144,7 @@ export const useAutoFlowStore = defineStore('autoflow', () => {
 
   async function analyzeLeadContacts(id: string) {
     const session = captureSession()
-    const response = await autoflowApi.analyzeLeadContacts(id)
+    const response = await client.analyzeLeadContacts(id)
     assertCurrentSession(session)
     currentLead.value = response
     return currentLead.value
@@ -152,7 +152,7 @@ export const useAutoFlowStore = defineStore('autoflow', () => {
 
   async function generateMessage(id: string, data: GenerateMessageRequest) {
     const session = captureSession()
-    const task = await autoflowApi.generateMessage(id, data)
+    const task = await client.generateMessage(id, data)
     assertCurrentSession(session)
     outreachTasks.value.unshift(task)
     return task
@@ -160,14 +160,14 @@ export const useAutoFlowStore = defineStore('autoflow', () => {
 
   async function fetchOutreachTasks() {
     const session = captureSession()
-    const result = await autoflowApi.getOutreachTasks()
+    const result = await client.getOutreachTasks()
     assertCurrentSession(session)
     outreachTasks.value = result.items
   }
 
   async function updateOutreachTask(id: string, data: UpdateOutreachTaskRequest) {
     const session = captureSession()
-    const task = await autoflowApi.updateOutreachTask(id, data)
+    const task = await client.updateOutreachTask(id, data)
     assertCurrentSession(session)
     const index = outreachTasks.value.findIndex((item) => item.id === id)
     if (index !== -1) {
@@ -178,7 +178,7 @@ export const useAutoFlowStore = defineStore('autoflow', () => {
 
   async function fetchFollowUps() {
     const session = captureSession()
-    const response = await autoflowApi.getFollowUps()
+    const response = await client.getFollowUps()
     assertCurrentSession(session)
     followUpStages.value = response
   }
@@ -222,3 +222,5 @@ export const useAutoFlowStore = defineStore('autoflow', () => {
     loadWorkspace,
   }
 })
+
+export const useAutoFlowStore = createAutoFlowStore('autoflow')

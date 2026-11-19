@@ -4,15 +4,15 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import EChartStub from '@/components/charts/EChart.vue'
 import LocalFreightAnalysis from '@/components/freight/LocalFreightAnalysis.vue'
 import FreightDetailsDialog from '@/components/freight/FreightDetailsDialog.vue'
-import { getLocalFreight } from '@/api/local-freight'
-vi.mock('@/api/local-freight',()=>({getLocalFreight:vi.fn()}))
+import { getLocalFreight, peekLocalFreight } from '@/api/local-freight'
+vi.mock('@/api/local-freight',()=>({getLocalFreight:vi.fn(),peekLocalFreight:vi.fn()}))
 vi.mock('@/components/freight/FreightDetailsDialog.vue',()=>({default:{props:['query','name'],template:'<div />'}}))
 vi.mock('@/composables/useAnalyticsRefresh',()=>({useAnalyticsRefresh:()=>({updated:vi.fn()})}))
 vi.mock('@/components/charts/EChart.vue',()=>({default:{props:['option','label'],template:'<div class="chart-stub" />'}}))
 const measure={amount:'12.34',previousAmount:'10',delta:'2.34',percent:23.4}
 const sample={source:'local',currency:'CNY',asOf:'2026-11-17T01:00:00Z',periods:[{id:'p',label:'11-09',from:'2026-11-09',to:'2026-11-15',partial:false}],values:[measure],totals:measure,billCount:2,averagePerBill:'6.17',weightKg:'1',weightBillCount:1,costPerKg:'6.17',series:[{id:'native',label:'实际渠道中文名称',values:[measure],totals:measure,billCount:2}],currencies:['CNY'],warehouses:['HangZhou'],quality:{missingCurrencyCount:1,missingDateCount:0}}
 const mountView=()=>mount(LocalFreightAnalysis,{global:{plugins:[createI18n({legacy:false,locale:'zh-CN',messages:{}})]}})
-beforeEach(()=>{vi.useFakeTimers();vi.mocked(getLocalFreight).mockReset().mockResolvedValue(sample as any)})
+beforeEach(()=>{vi.useFakeTimers();vi.mocked(peekLocalFreight).mockReset();vi.mocked(getLocalFreight).mockReset().mockResolvedValue(sample as any)})
 afterEach(()=>vi.useRealTimers())
 describe('real local freight chart',()=>{
  it('drills chart cells into actual source records only when the backend advertises capability',async()=>{
@@ -102,7 +102,7 @@ describe('real local freight chart',()=>{
   expect(vi.mocked(getLocalFreight).mock.lastCall?.[1]).toEqual({force:true});w.unmount()
  })
  it('clears stale totals when permissions or requests fail',async()=>{
-  const w=mountView();await flushPromises();vi.mocked(getLocalFreight).mockRejectedValueOnce(Error('forbidden'))
+  const w=mountView();await flushPromises();vi.mocked(getLocalFreight).mockRejectedValueOnce({statusCode:403})
   await w.get('button.query').trigger('click');await flushPromises()
   expect(w.find('[data-freight-total]').exists()).toBe(false)
   expect(w.get('[role=alert]').text()).toContain('加载失败');w.unmount()
@@ -127,3 +127,17 @@ describe('real local freight chart',()=>{
 })
 
 async function flushPromises(){await flushVuePromises();if(vi.isFakeTimers())await vi.advanceTimersByTimeAsync(200);else await new Promise(resolve=>setTimeout(resolve,205));await flushVuePromises()}
+
+it('keeps totals visible during an uncached filter query and uses a matching cached result immediately',async()=>{
+ const w=mountView();await flushPromises()
+ let finish!:(value:any)=>void
+ vi.mocked(getLocalFreight).mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve}))
+ await w.get('select[aria-label="运费仓库"]').setValue('HangZhou');await flushPromises()
+ expect(w.find('[data-freight-total]').exists()).toBe(true)
+ finish(sample);await flushPromises()
+ vi.mocked(peekLocalFreight).mockReturnValueOnce({...sample,totals:{...measure,amount:'88.88'}} as any)
+ vi.mocked(getLocalFreight).mockImplementationOnce(()=>new Promise(()=>{}))
+ await w.get('select[aria-label="运费仓库"]').setValue('');await flushPromises()
+ expect(w.get('[data-freight-total]').text()).toContain('88.88')
+ w.unmount()
+})

@@ -79,6 +79,18 @@ describe('AutoflowService persistence boundaries', () => {
     }
   }
 
+  it('orders the whole lead query before pagination with null dates last and stable ties', async () => {
+    const {service,leads}=createService()
+    const builder:any={getManyAndCount:jest.fn().mockResolvedValue([[],0])}
+    for(const name of ['leftJoinAndSelect','loadRelationCountAndMap','where','orderBy','addOrderBy','skip','take'])builder[name]=jest.fn().mockReturnValue(builder)
+    leads.createQueryBuilder.mockReturnValue(builder)
+    await service.getLeads('owner',{page:2,pageSize:20,sortBy:'contactedOn',sortDirection:'asc'})
+    expect(builder.orderBy).toHaveBeenCalledWith('lead.contactedOn','ASC','NULLS LAST')
+    expect(builder.addOrderBy).toHaveBeenCalledWith('lead.id','DESC')
+    expect(builder.skip).toHaveBeenCalledWith(20)
+    expect(builder.orderBy.mock.invocationCallOrder[0]).toBeLessThan(builder.skip.mock.invocationCallOrder[0])
+  })
+
   it('scopes workflow lists to the authenticated owner', async () => {
     const { service, workflows, steps, jobs } = createService()
     const createdAt = new Date('2026-07-22T00:00:00.000Z')

@@ -3,6 +3,7 @@ import { withPaymentDataQuality } from './payment-data-quality'
 import { orderDispatchTaskStatus, hasDispatchSyncFailure, hasMissingObtainedTracking, missingObtainedTrackingReason, hasMissingFulfilledTracking, missingFulfilledTrackingReason, dispatchSyncFailureReason } from './order-dispatch-status'
 import Decimal from 'decimal.js'
 import { physicalBusinessLines } from './physical-business-lines'
+import { withProcurementSources } from './stock-consumption-source'
 type Row=Record<string,any>
 export type PurchaseState='unpurchased'|'purchasing'|'partial_purchased'|'purchased'|'partial_shipped'|'shipped'|'partial_received'|'received'|'not_required'|'unknown'
 /** Partial completion is determined by the most advanced line, not the least advanced line. */
@@ -23,13 +24,13 @@ export function orderBusinessStatus(raw:Row) {
  const physicalEntries=new Set(physicalBusinessLines(entries))
  const lines=entries.map(l=>{
   const excluded=!physicalEntries.has(l)
-  // Existing use_stock=1 is the full-payment stock selection in ReservedStockOrderUtil.
-  let purchase:PurchaseState=excluded?'not_required':l.hzkj_use_stock==='1'?'purchased':
+  // A stock selection/partial usage is not a purchase payment or receipt fact.
+  let purchase:PurchaseState=excluded?'not_required':
    l.hzkj_entrypurc_status==='3'?'received':l.hzkj_entrypurc_status==='4'?'shipped':
    l.supplierPaymentStatus==='paid'?'purchased':l.purchaseApplicationCreated===true||['1','2'].includes(l.hzkj_entrypurc_status)?'purchasing':
    l.hzkj_entrypurc_status==='0'?'unpurchased':'unknown'
   const required=qty(l.hzkj_qty),received=qty(l.hzkj_instock_qty)
-  if(!excluded&&l.hzkj_use_stock!=='1'&&required?.gt(0)&&received!==null&&received.gt(0))purchase=received.gte(required)?'received':'partial_received'
+  if(!excluded&&required?.gt(0)&&received!==null&&received.gt(0))purchase=received.gte(required)?'received':'partial_received'
   const outboundQty=qty(l.hzkj_outbound_qty)
   const outbound=excluded?'not_required':required?.gt(0)&&outboundQty!==null?
    outboundQty.gte(required)?'completed':outboundQty.gt(0)?'partial':'pending':
@@ -58,7 +59,7 @@ export function withOrderBusinessStatus(display:Row,raw:Row|undefined,companyId?
   const item=identities.get(String(l.id)) as Row|undefined
   return item?.isVirtual===true && item.sku===(l.hzkj_local_sku?.number??l.hzkj_local_sku_number)?{...l,isVirtual:true}:l
  })}
- const businessStatus=orderBusinessStatus(identityRaw)
+ const businessStatus=orderBusinessStatus(withProcurementSources(identityRaw,display.procurementSources))
  const items=(display.items??[]).map((item:Row)=>({...item,purchaseState:businessStatus.lines.find(l=>l.id===item.id)?.purchase??'unknown'}))
  const fulfillmentProgress={...display.fulfillmentProgress,outbound:businessStatus.outbound}
  const nativeFulfillmentProgress=display.nativeFulfillmentProgress?{...display.nativeFulfillmentProgress,outbound:businessStatus.outbound}:undefined

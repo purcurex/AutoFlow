@@ -18,7 +18,6 @@ export function useChartAccess(chartId: ChartId | (() => ChartId)) {
   function clear() { requestId++; access.value = undefined }
   async function refresh() {
     const session = captureSession(), request = ++requestId
-    access.value = undefined
     const result = await getChartAccess()
     assertCurrentSession(session)
     if (request !== requestId) throw new Error('Chart access request superseded')

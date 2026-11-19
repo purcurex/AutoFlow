@@ -26,7 +26,7 @@ describe('analytics trend dialog',()=>{
   expect(document.querySelector('.trend-total strong')?.textContent).toBe('3')
   finish({...sample,orderCount:999});await flushPromises()
   expect(document.querySelector('.trend-total strong')?.textContent).toBe('3')
-  get.mockRejectedValueOnce(new Error('Permission changed'));await w.setProps({target});await flushPromises()
+  get.mockRejectedValueOnce({statusCode:403});await w.setProps({target});await flushPromises()
   expect(document.querySelector('[data-chart]')).toBeNull()
   expect(document.querySelector('[role=alert]')?.textContent).toContain('趋势暂不可用');w.unmount()
  })

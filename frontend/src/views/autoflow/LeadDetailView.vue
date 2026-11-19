@@ -20,6 +20,8 @@ import {
 } from 'lucide-vue-next'
 import { useI18n } from 'vue-i18n'
 import { useAutoFlowStore } from '@/stores'
+import { useCrmMockStore } from '@/stores/crm-mock'
+import { isCrmMockId } from '@/mocks/crm'
 import { AppLayout } from '@/components/layout'
 import { ReturnButton, StatusBadge } from '@/components/ui'
 import GenerateOpportunityButton from '@/components/opportunities/GenerateOpportunityButton.vue'
@@ -29,7 +31,8 @@ import type { LeadAdEvidence, LeadContact } from '@/api/autoflow'
 import { contactDisplayValue, contactHref } from '@/utils/contactEvidence'
 
 const route = useRoute()
-const store = useAutoFlowStore()
+const mockLead = isCrmMockId(String(route.params.id))
+const store = mockLead ? useCrmMockStore() : useAutoFlowStore()
 const { t } = useI18n()
 const handoff = ref<FopHandoff | null>(null)
 const handoffBusy = ref(false)
@@ -39,7 +42,7 @@ const contactAnalysisError = ref('')
 onMounted(async () => {
   const leadId = String(route.params.id)
   await store.fetchLead(leadId)
-  handoff.value = await fopApi.getHandoff(leadId)
+  if (!mockLead) handoff.value = await fopApi.getHandoff(leadId)
 })
 
 const lead = computed(() => store.currentLead)
@@ -59,7 +62,7 @@ const scoreCards = computed(() => lead.value ? [
 const adEvidence = computed(() => lead.value?.adEvidence || [])
 
 async function handoffToFop() {
-  if (!lead.value || handoffBusy.value) return
+  if (mockLead || !lead.value || handoffBusy.value) return
   handoffBusy.value = true
   try { handoff.value = await fopApi.handoff(lead.value.id, 'Qualified prospect handed off from HyperZone') } finally { handoffBusy.value = false }
 }
@@ -210,11 +213,12 @@ function adLinkLabel(evidence: LeadAdEvidence) {
         </div>
 
         <div class="space-y-5">
-          <OutreachConversationPanel :lead="lead" />
+          <OutreachConversationPanel v-if="!mockLead" :lead="lead" />
+          <section v-else class="panel p-5"><h2 class="font-semibold">客户沟通</h2><p class="mt-3 text-sm text-slate-500">{{ lead.currentFollowUp }}</p><RouterLink to="/outreach" class="btn btn-secondary mt-4">查看沟通任务</RouterLink></section>
           <section class="panel p-4">
             <RouterLink :to="{ name: 'Quotes', query: { leadId: lead.id, returnTo: route.fullPath } }" class="btn btn-secondary w-full"><FileSpreadsheet class="h-4 w-4" />{{ t('leads.prepareQuote') }}</RouterLink>
             <div class="mt-3"><GenerateOpportunityButton :lead-id="lead.id" /></div>
-            <button class="btn btn-secondary mt-3 w-full" :disabled="handoffBusy || handoff?.status === 'pending' || handoff?.status === 'succeeded'" @click="handoffToFop"><Send class="h-4 w-4" />{{ handoff?.status === 'succeeded' ? t('leads.handedOff') : handoffBusy ? t('leads.handingOff') : t('leads.handoff') }}</button>
+            <button class="btn btn-secondary mt-3 w-full" :disabled="mockLead || handoffBusy || handoff?.status === 'pending' || handoff?.status === 'succeeded'" @click="handoffToFop"><Send class="h-4 w-4" />{{ handoff?.status === 'succeeded' ? t('leads.handedOff') : handoffBusy ? t('leads.handingOff') : t('leads.handoff') }}</button>
             <div v-if="handoff" class="mt-4 rounded-md border bg-slate-50 p-3 text-xs text-slate-600 dark:bg-[var(--color-surface)] dark:text-slate-300" style="border-color: var(--color-border)"><div class="flex items-center justify-between"><strong>{{ t('leads.fopSync') }}</strong><StatusBadge :status="handoff.status" /></div><p v-if="handoff.fopLeadId" class="mt-2">{{ t('leads.leadId') }}: {{ handoff.fopLeadId }}</p><p v-if="handoff.fopOpportunityId" class="mt-1">{{ t('leads.opportunityId') }}: {{ handoff.fopOpportunityId }}</p><p v-if="handoff.conflicts.length" class="mt-2 text-amber-700 dark:text-amber-300">{{ handoff.conflicts.join('; ') }}</p><p v-if="handoff.lastError" class="mt-2 text-red-600 dark:text-red-300">{{ handoff.lastError }}</p></div>
           </section>
         </div>

@@ -462,7 +462,7 @@ export const autoflowApi = {
   getLeads(status?: LeadStatus, page = 1, pageSize = 100): Promise<PaginatedResult<StoreLead>> {
     return api.get('/autoflow/leads', { params: { status, page, pageSize } })
   },
-  listRegisteredLeads(params: {page:number;pageSize:number;search?:string;status?:string;leadType?:string}): Promise<PaginatedResult<StoreLead>> {
+  listRegisteredLeads(params: {page:number;pageSize:number;search?:string;status?:string;leadType?:string;sortBy?:'registeredOn'|'contactedOn';sortDirection?:'asc'|'desc'}): Promise<PaginatedResult<StoreLead>> {
     return api.get('/autoflow/leads', {params})
   },
   registerLead(data: RegisterLeadInput): Promise<StoreLead> { return api.post('/autoflow/leads', data) },

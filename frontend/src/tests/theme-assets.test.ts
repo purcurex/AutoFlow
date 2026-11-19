@@ -16,7 +16,7 @@ it('provides eight complete themes with readable primary button labels',()=>{
 it('recolors standard chart series while preserving semantic colors and callbacks',()=>{
  const formatter=()=>'$12';const option={tooltip:{formatter},series:[{type:'bar',itemStyle:{color:'#5368be'},data:[12]},{type:'bar',itemStyle:{color:'#c25252'},data:[1]}]}
  const themed=applyChartTheme(option,false,'orange') as any
- expect(themed.series[0].itemStyle.color).toBe('#FFBE00')
+ expect(themed.series[0].itemStyle.color).toBe(palettes.orange.light[0])
  expect(themed.series[1].itemStyle.color).toBe('#c25252')
  expect(themed.tooltip.formatter).toBe(formatter)
  expect(option.series[0]!.itemStyle.color).toBe('#5368be')
@@ -41,5 +41,27 @@ it.each(Object.keys(palettes) as (keyof typeof palettes)[])('uses matching defau
   expect(option).not.toHaveProperty('color')
   const explicit=applyChartTheme({...option,color:['#c25252']},dark,palette) as any
   expect(explicit.color).toEqual(['#c25252'])
+ }
+})
+
+it('uses the shared detail token without changing total bars',()=>{
+ for(const palette of Object.keys(palettes) as (keyof typeof palettes)[]) for(const dark of [false,true]) {
+ const result=applyChartTheme({series:[{type:'bar',data:[{value:1,itemStyle:{color:'#5368be'}},{value:2,itemStyle:{color:'#37a3a3'}}]}]},dark,palette) as any
+ expect(result.series[0].data[0].itemStyle.color).toBe(palettes[palette][dark?'dark':'light'][0])
+ expect(result.series[0].data[1].itemStyle.color).toBe(palettes[palette].chartDetail[dark?'dark':'light'])
+ }
+})
+
+it('keeps Wanb on the theme primary and Yuanfeihang distinct regardless of series order',()=>{
+ for(const palette of Object.keys(palettes) as (keyof typeof palettes)[]) for(const dark of [false,true]) {
+  const source={series:[{name:'原飞航',type:'bar',data:[1]},{name:'万邦',type:'bar',data:[2]}]}
+  const result=applyChartTheme(source,dark,palette,true) as any
+  expect(result.series[1].itemStyle.color).toBe(palettes[palette][dark?'dark':'light'][0])
+  expect(result.series[0].itemStyle.color).toBe(palettes[palette].yuanfeihang[dark?'dark':'light'])
+  expect(result.series[0].itemStyle.color).not.toBe(result.series[1].itemStyle.color)
+  expect(result.series[0].lineStyle.color).toBe(result.series[0].itemStyle.color)
+  const single=applyChartTheme({series:[source.series[0]!] },dark,palette,true) as any
+  expect(single.series[0].itemStyle.color).toBe(result.series[0].itemStyle.color)
+  expect(source.series[0]).not.toHaveProperty('itemStyle')
  }
 })

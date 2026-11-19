@@ -116,7 +116,7 @@ function handleLogout() {
               </div>
             </div>
             <RouterLink to="/settings" class="block px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-white/5" @click="showUserMenu = false">{{ t('nav.settings') }}</RouterLink>
-            <button class="block w-full px-4 py-2.5 text-left text-sm font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-950" @click="handleLogout">{{ t('nav.signOut') }}</button>
+            <button class="block w-full px-4 py-2.5 text-left text-sm font-medium text-[var(--color-link)] hover:bg-[var(--color-selection-surface)] focus-visible:bg-[var(--color-selection-surface)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--color-link)]" @click="handleLogout">{{ t('nav.signOut') }}</button>
           </div>
         </div>
       </div>

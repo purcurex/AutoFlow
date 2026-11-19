@@ -6,3 +6,5 @@ export function normalizeShippingCountry(value: unknown): string | null {
   const code = value.trim().toUpperCase()
   return shippingCountries.has(code) ? code : null
 }
+
+export const ISO_COUNTRY_CODES = [...shippingCountries]

@@ -67,7 +67,7 @@ function queueLink(value: string) { return { name: 'RoleWorkbench', params: { ro
 </script>
 
 <template>
-  <AppLayout>
+  <AppLayout compact-navigation>
     <div class="app-page role-workbench">
       <header class="workbench-heading"><div><p class="eyebrow">HYPERZONE · {{ text('智能办公平台', 'INTELLIGENT WORKPLACE') }}</p><h1>{{ route.name === 'Dashboard' ? text('我的工作台', 'My Workbench') : role ? workbenchNames[role][zh ? 0 : 1] : text('岗位工作台', 'Role Workbench') }}</h1></div><div class="workbench-heading-actions"><RouterLink to="/dashboard" class="dashboard-link">{{ text('Dashboard', 'Dashboard') }}<ArrowUpRight :size="16" /></RouterLink></div></header>
       <div class="workbench-navigation"><nav class="role-tabs" :aria-label="text('岗位工作台', 'Role workbenches')"><RouterLink v-for="item in roles" :key="item" :to="roleLink(item)" :class="{ active: role === item }" :aria-current="role === item ? 'page' : undefined"><component :is="icons[item]" :size="19" /><span>{{ workbenchNames[item][zh ? 0 : 1] }}</span></RouterLink></nav><WorkbenchReplicaControls v-if="allowed" :replica="replica" :disabled="replicaDisabled" :navigation-ready="navigationReady" @synced="reloadReplica" /></div>
@@ -111,4 +111,5 @@ function queueLink(value: string) { return { name: 'RoleWorkbench', params: { ro
 .dark .role-tabs a.active { color:var(--color-on-primary);background:var(--color-primary);border-color:var(--color-primary) }
 .dark .workbench-queues a { color: #a3b1c5; }
 .dark .workbench-queues a.active { color:var(--color-link);border-color:var(--color-primary) }
+@media (min-width: 768px) and (max-width: 1600px) { .role-workbench { padding-inline: 16px; } }
 </style>

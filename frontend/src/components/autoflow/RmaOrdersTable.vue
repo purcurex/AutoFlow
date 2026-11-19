@@ -40,7 +40,10 @@ function toggle(id: string, event: Event) { emit('update:selected', (event.targe
 .rma-table th,.rma-table td{padding-left:8px;padding-right:8px}
 
 .date-cell,.rma-date{white-space:nowrap;font-variant-numeric:tabular-nums}
+@media (max-width: 767px) {
 @container rma-list (max-width:1500px){.rma-table,.rma-table tbody{display:block;width:100%}.rma-table thead{display:none}.rma-order-record{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr) minmax(0,1fr);gap:18px 24px;padding:16px 20px;border-bottom:1px solid var(--color-border)}.rma-table .rma-order-record td{display:block;padding:0;border:0;min-width:0}.rma-order-record td::before{content:attr(data-label);display:block;font-size:10px;font-weight:500;color:var(--color-text-secondary);margin-bottom:7px}.rma-table .rma-order-record .rma-order-number{grid-column:1/-1;display:flex;align-items:center;flex-wrap:wrap;gap:12px;padding-bottom:12px;border-bottom:1px solid var(--color-border)}.rma-order-record .rma-order-number::before{display:none}.rma-order-number>small{padding:0;margin:0}.rma-order-number>.rma-item-summary{margin:0 0 0 auto}.rma-order-number .rma-order-tags{margin:0;justify-content:flex-start;flex-basis:100%;order:3}.rma-order-record .rma-products{grid-column:1;grid-row:2/span 8}.rma-order-record .rma-reasons{grid-column:2;grid-row:2/span 8}}
 @container rma-list (max-width:850px){.rma-order-record{grid-template-columns:repeat(2,minmax(0,1fr));padding:16px;gap:18px}.rma-order-record .rma-products,.rma-order-record .rma-reasons{grid-column:1/-1;grid-row:auto}}
 @container rma-list (max-width:400px){.rma-order-record{grid-template-columns:minmax(0,1fr)}}
+}
+
 </style>

@@ -14,7 +14,7 @@ export interface TimestampPagedProfile {
 type QueryTransport=(parameters:Record<string,unknown>)=>Promise<{report:{success:boolean};rows:unknown[];raw:string|null}>
 /** Parse the observed native AND grammar, never predicates embedded in quoted values.
  * This binds the company filter only; it is not evidence of account-wide source coverage. */
-function assertCompanyConjunction(filter:unknown,companyId:string,orgNumber:string):void {
+export function assertCompanyConjunction(filter:unknown,companyId:string,orgNumber:string):void {
  const fail=():never=>{throw Error('timestamp_response_scope_invalid')}
  if(typeof filter!=='string'||filter.length>16000)fail()
  let rest=(filter as string).trim()

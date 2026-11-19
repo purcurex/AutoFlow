@@ -3,14 +3,26 @@ import { mount } from '@vue/test-utils'
 import { defineComponent } from 'vue'
 import { vPickingNameTooltip } from '@/directives/picking-name-tooltip'
 const wrappers: ReturnType<typeof mount>[] = []
-function setup(name = '中文配货完整名称') {
-  const wrapper = mount(defineComponent({ props: { name: String }, directives: { pickingNameTooltip: vPickingNameTooltip }, template: '<span v-picking-name-tooltip="name">{{name}}</span>' }), { props: { name }, attachTo: document.body })
+function setup(name = '中文配货完整名称', quick = false) {
+  const wrapper = mount(defineComponent({ props: { name: String }, directives: { pickingNameTooltip: vPickingNameTooltip }, template: `<span v-picking-name-tooltip${quick ? '.quick' : ''}="name">{{name}}</span>` }), { props: { name }, attachTo: document.body })
   Object.defineProperties(wrapper.element, { clientWidth: { value: 80, configurable: true }, scrollWidth: { value: 200, configurable: true } })
   ;(wrapper.element as HTMLElement).style.overflow = 'hidden'
   wrappers.push(wrapper); return wrapper
 }
 afterEach(() => { wrappers.splice(0).forEach(wrapper => wrapper.unmount()); vi.useRealTimers() })
 describe('Chinese picking name tooltip', () => {
+  it('shows a clipped order remark within one second and cancels a quick pass', async () => {
+    vi.useFakeTimers(); const wrapper = setup('请合并包装，注意防潮。\n发货前核对收件信息。', true)
+    await wrapper.trigger('pointerenter'); vi.advanceTimersByTime(300)
+    await wrapper.trigger('pointerleave'); vi.advanceTimersByTime(1000)
+    expect(document.querySelector('[role=tooltip]')).toBeNull()
+    await wrapper.trigger('pointerenter'); vi.advanceTimersByTime(599)
+    expect(document.querySelector('[role=tooltip]')).toBeNull()
+    vi.advanceTimersByTime(1)
+    expect(document.querySelector('[role=tooltip]')?.textContent).toBe('请合并包装，注意防潮。\n发货前核对收件信息。')
+    await wrapper.trigger('pointerleave')
+    expect(document.querySelector('[role=tooltip]')).toBeNull()
+  })
   it('waits 1 second, displays plain full text, and closes on leave', async () => {
     vi.useFakeTimers(); const wrapper = setup('<完整名称>')
     await wrapper.trigger('pointerenter'); vi.advanceTimersByTime(999)

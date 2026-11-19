@@ -9,6 +9,7 @@ const states = new WeakMap<HTMLElement, State>()
 export const vPickingNameTooltip: ObjectDirective<HTMLElement, string | null | undefined> = {
   mounted(element, binding) {
     element.setAttribute('data-picking-name-tooltip', '')
+    const delay = binding.modifiers.quick ? 600 : PICKING_NAME_DELAY
     let timer: ReturnType<typeof setTimeout> | undefined
     let tooltip: HTMLDivElement | undefined
     let originalDescription: string | null = null
@@ -47,7 +48,7 @@ export const vPickingNameTooltip: ObjectDirective<HTMLElement, string | null | u
         tooltip.style.top = `${Math.max(12, Math.min(bounds.bottom + 8 + box.height <= window.innerHeight - 12 ? bounds.bottom + 8 : bounds.top - box.height - 8, window.innerHeight - box.height - 12))}px`
         originalDescription = element.getAttribute('aria-describedby')
         element.setAttribute('aria-describedby', [originalDescription, tooltip.id].filter(Boolean).join(' '))
-      }, PICKING_NAME_DELAY)
+      }, delay)
     }
     const state: State = { value: binding.value?.trim() || '', close, destroy: () => {
       close()

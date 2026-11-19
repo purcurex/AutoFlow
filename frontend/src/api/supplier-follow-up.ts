@@ -4,7 +4,7 @@ export interface SupplierFollowUp {
   purchaseOrderId: string
   purchaseOrderNumber: string
   platformOrderNumber: string | null
-  supplier: { id: string; name: string; wangwangAccount: string | null }
+  supplier: { id: string; name: string | null; wangwangAccount: string | null; phone?: string | null; source?: 'purchase_logistics' }
   shipmentStatus?: 'pending' | 'partial'
   lines: { fulfillmentLineId?: string; stockLineId?: string; purchaseLineId: string; sku: string; name: string; pendingQuantity: number }[]
   availability: 'ready' | 'missing_account' | 'chat_unavailable'

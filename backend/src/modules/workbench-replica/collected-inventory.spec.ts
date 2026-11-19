@@ -54,3 +54,17 @@ it('fails closed if FOP ignores the selected customer filter',async()=>{
  await expect(s.inventory('user',{customerId:'c'},'reserved')).rejects.toMatchObject({response:{code:'fop_inventory_filter_unverified'}})
  expect(read).toHaveBeenCalledTimes(1)
 })
+it('returns native balances to company-wide readers, deduplicating selected SKUs without inventing available stock',async()=>{
+ const {s,db,read}=setup();const context=await (s as any).context();context.filter.employeeIds=null
+ const line={hzkj_material_id:'material',hzkj_local_sku_number:'SKU',hzkj_local_sku_name:'中文商品'}
+ db.query.mockResolvedValueOnce([{source_id:'c'}]).mockResolvedValueOnce([{source_id:'order',raw:{hzkj_orders_billentry:[line,line]}}])
+ read.mockResolvedValue({pageNo:1,pageSize:100,totalCount:1,lastPage:true,rows:[{id:'i',org_id:'100000',org_number:'org',material_id:'material',qty:0,warehouse_number:'01'}]})
+ const result=await s.inventory('user',{queue:'shipping',mode:'selected',orderIds:['order'],page:1,pageSize:50},'current')
+ expect(read).toHaveBeenCalledTimes(1);expect(result.items[0]).toMatchObject({sku:'SKU',onHand:0,occupied:null,free:null,pool:'unknown'})
+})
+it('preserves a distinguishable unavailable-endpoint error rather than generic loading failure',async()=>{
+ const {s,db,read}=setup()
+ db.query.mockResolvedValueOnce([{source_id:'c'}]).mockResolvedValueOnce([{source_id:'order',raw:{hzkj_orders_billentry:[{hzkj_material_id:'material',hzkj_local_sku_number:'SKU'}]}}])
+ read.mockRejectedValue(Object.assign(new Error('endpoint'),{code:'fop_endpoint_not_published'}))
+ await expect(s.inventory('user',{mode:'selected',orderIds:['order']},'current')).rejects.toMatchObject({response:{code:'fop_inventory_endpoint_unavailable'}})
+})

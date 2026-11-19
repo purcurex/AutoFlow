@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CountryPicker from '@/components/ui/CountryPicker.vue'
 import { DEFAULT_CURRENCY, currencyLabel, formatCurrency } from '@/utils/currency'
 import { sumCompleteMoney } from '@/utils/tableTotals'
 import TableTotals from '@/components/ui/TableTotals.vue'
@@ -222,12 +223,6 @@ function addTier() {
 
 function removeTier(id: number) {
   if (tiers.value.length > 1) tiers.value = tiers.value.filter((tier) => tier.id !== id)
-}
-
-function toggleCountry(country: string) {
-  selectedCountries.value = selectedCountries.value.includes(country)
-    ? selectedCountries.value.filter((item) => item !== country)
-    : [...selectedCountries.value, country]
 }
 
 function isChannelSelected(channel: FopActualLogisticsChannel) {
@@ -524,14 +519,7 @@ onMounted(loadCapabilities)
         </div>
         <div class="p-5">
           <p class="field-label">{{ t('quotes.destinationCountries') }}</p>
-          <div class="flex flex-wrap gap-2">
-            <label v-for="country in countries" :key="country.code" class="cursor-pointer">
-              <input type="checkbox" class="peer sr-only" :checked="selectedCountries.includes(country.code)" @change="toggleCountry(country.code)" />
-              <span class="selection-control inline-flex h-10 min-w-16 items-center justify-center gap-2 rounded-md border border-slate-200 px-3 text-sm font-semibold text-slate-500 transition dark:border-slate-700 dark:text-slate-400">
-                <img :src="country.flagUrl" alt="" class="h-4 w-5 rounded-[2px] object-cover shadow-sm ring-1 ring-black/10" />{{ country.code }}
-              </span>
-            </label>
-          </div>
+          <CountryPicker v-model:selected="selectedCountries" multiple label="目的国家" />
           <div class="mt-5 grid gap-3 sm:grid-cols-3 xl:grid-cols-7">
             <label><span class="field-label">{{ t('quotes.packages') }}</span><input v-model.number="packageData.quantity" type="number" min="1" class="input" /></label>
             <label><span class="field-label">{{ t('quotes.weight') }}</span><input v-model.number="packageData.weight" type="number" min="0.001" step="0.001" class="input" /></label>

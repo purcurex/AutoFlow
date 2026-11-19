@@ -39,6 +39,15 @@ it.each(['allocation','allocation_review'])('%s supports both dispatch filters b
  expect(collectedWhere('b',null,{queue,taskStatus:'invalid'}).where).toContain('(FALSE)')
 })
 import { collectedStockWhere } from './collected-stock-query'
+it('filters positive SKU source quantities before paging without multiplying orders or widening access',()=>{
+ for(const [source,field] of [['full_payment','fullPaymentQuantity'],['deposit','depositQuantity'],['direct','directQuantity']]){
+  const q=collectedWhere('batch',['employee'],{queue:'procurement_shipping',procurementSource:source})
+  expect(q.where).toContain('EXISTS(SELECT 1 FROM jsonb_array_elements')
+  expect(q.where).toContain(field);expect(q.where).toContain("->>'complete'='true'")
+  expect(q.params).toContainEqual(['employee'])
+ }
+ expect(collectedWhere('batch',null,{queue:'procurement',procurementSource:'bad'}).where).toContain('(FALSE)')
+})
 import { collectedRmaWhere } from './collected-rma-query'
 it.each([collectedWhere,collectedStockWhere,collectedRmaWhere])('searches matched local staff IDs without dropping the permission predicate',query=>{
  const result=query('batch',['123'],{queue:'review',search:'Jennie',searchOwnerIds:['123']})

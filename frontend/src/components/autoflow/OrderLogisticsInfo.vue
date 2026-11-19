@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import type { LogisticsInfo, LogisticsChannel } from '@/api/fop-orders'
 import { useI18n } from 'vue-i18n'
 import TrackingNumberCopy from './TrackingNumberCopy.vue'
+import LogisticsChannelName from './LogisticsChannelName.vue'
 const props = defineProps<{ groups?: LogisticsInfo[] | null; channels?: LogisticsChannel[] | null; carrier?: string | null; trackingNumber?: string | null; showAllTracking?: boolean; missingTrackingText?: string }>()
 const { locale } = useI18n()
 const rows = computed(() => props.groups?.length ? props.groups.map(group => ({
@@ -17,7 +18,7 @@ const labels = { full: ['QC', '全程', 'Full route'], first_mile: ['TC', '头�
 <template>
   <div class="logistics-info">
     <div v-for="(row, index) in rows" :key="index" class="logistics-group">
-      <span class="logistics-channel-name">{{ row.channelName || '—' }}</span>
+      <LogisticsChannelName class="logistics-channel-name" :name="row.channelName" />
       <div v-for="tracking in row.tracking" :key="(tracking.type ?? 'package') + ':' + tracking.number" class="logistics-tracking">
         <TrackingNumberCopy :number="tracking.number" :title="tracking.type ? `${labels[tracking.type][String(locale).startsWith('zh') ? 1 : 2]}: ${tracking.number}` : tracking.number" />
         <span v-if="tracking.type" class="tracking-type" :title="labels[tracking.type][String(locale).startsWith('zh') ? 1 : 2]">{{ labels[tracking.type][0] }}</span>

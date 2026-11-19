@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { isWorkbenchScopeError } from '@/api/workbench-dashboard'
 import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink } from 'vue-router'
@@ -17,12 +18,12 @@ let revision=0
 async function load(force=false){
  const current=++revision
  const cached=peekDashboardExceptions()
- rows.value=cached?.items??[];total.value=cached?.total??null;error.value=false;busy.value=true
+ if(cached){rows.value=cached.items;total.value=cached.total}error.value=false;busy.value=true
  try{
   const result=await getDashboardExceptions(force)
   if(current!==revision)return
   rows.value=result.items;total.value=result.total
- }catch{if(current===revision){rows.value=[];total.value=null;error.value=true}}
+ }catch(cause){if(current===revision){if(isWorkbenchScopeError(cause)){rows.value=[];total.value=null}error.value=true}}
  finally{if(current===revision)busy.value=false}
 }
 const reset=onSessionReset(()=>{revision++;rows.value=[];total.value=null;busy.value=false;error.value=false})
@@ -37,7 +38,7 @@ function typeLabel(row:FopOrder){const status=getTaskStatus(row,'exceptions');re
   <header><h2 id="dashboard-exceptions-title"><AlertCircle :size="17" />{{ text('异常订单','Order exceptions') }}<span v-if="total !== null" class="count">{{ total.toLocaleString() }}</span></h2><button :disabled="busy" @click="load(true)" :aria-label="text('刷新异常订单','Refresh order exceptions')"><RefreshCw :size="14" /></button></header>
   <div class="exception-list" :aria-busy="busy">
    <p v-if="busy && total === null" class="empty">{{ text('加载中…','Loading…') }}</p>
-   <p v-else-if="error" class="empty">{{ text('暂时无法加载，请重试','Unable to load. Please retry.') }}</p>
+   <p v-else-if="error && total === null" class="empty">{{ text('暂时无法加载，请重试','Unable to load. Please retry.') }}</p>
    <p v-else-if="total === 0" class="empty">{{ text('暂无异常订单','No order exceptions') }}</p>
    <RouterLink v-for="row in rows" :key="row.id" :to="workbenchOrderLocation('exceptions',{orderNumber:row.orderNumber})" class="exception-item">
     <div class="item-heading"><strong>{{ row.orderNumber }}</strong><span v-if="typeLabel(row)" class="type">{{ typeLabel(row) }}</span><ArrowUpRight :size="13" /></div>

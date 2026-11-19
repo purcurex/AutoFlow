@@ -45,7 +45,10 @@ function toggle(id: string, event: Event) { emit('update:selected', (event.targe
 table th,table td{padding-left:8px;padding-right:8px}
 
 .date-cell,.rma-date{white-space:nowrap;font-variant-numeric:tabular-nums}
+@media (max-width: 767px) {
 @container order-list (max-width:1680px){table,tbody{display:block;width:100%}thead{display:none}.order-record{display:grid;grid-template-columns:minmax(230px,1.15fr) minmax(260px,1fr) repeat(2,minmax(140px,.85fr));padding:16px 20px;gap:18px 22px;border-bottom:1px solid var(--color-border)}.order-record td{display:block;padding:0;border:0;background:transparent;min-width:0}.order-record td::before{content:attr(data-label);display:block;font-size:10px;font-weight:500;color:var(--color-text-secondary);margin-bottom:7px}.order-record .order-cell{grid-column:1/-1;display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding-bottom:12px;border-bottom:1px solid var(--color-border)}.order-record .order-cell::before{display:none}.order-cell .multi-item-badge{margin:0 0 0 auto}.order-record .product-cell{grid-column:1;grid-row:2/span 5}.order-record .return-links-cell{grid-column:2;grid-row:2/span 5}.order-record .amount-cell{padding-left:8px}}
 @container order-list (max-width:950px){.order-record{grid-template-columns:repeat(2,minmax(0,1fr));padding:16px;gap:18px}.order-record .product-cell,.order-record .return-links-cell{grid-column:1/-1;grid-row:auto}}
 @container order-list (max-width:400px){.order-record{grid-template-columns:minmax(0,1fr)}}
+}
+
 </style>

@@ -12,7 +12,7 @@ import {
 } from 'lucide-vue-next'
 import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
-import { useAutoFlowStore } from '@/stores'
+import { useCrmMockStore } from '@/stores/crm-mock'
 import { AppLayout } from '@/components/layout'
 import { EmptyState, PageHeader, StatusBadge } from '@/components/ui'
 import type { DiscoverySource, StoreLead } from '@/api/autoflow'
@@ -21,7 +21,7 @@ import { leadCustomerName } from '@/utils/leadDisplay'
 import { groupLeadsByWorkflow } from '@/utils/leadGrouping'
 import { withReturnTo } from '@/composables/useReturnNavigation'
 
-const store = useAutoFlowStore()
+const store = useCrmMockStore()
 const route = useRoute()
 const { t, locale } = useI18n()
 const view = ref<'list' | 'workflow'>('list')

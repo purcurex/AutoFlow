@@ -115,6 +115,7 @@ export interface FopAnalyticsData {
 }
 
 export interface FopOrderItem {
+  procurementSource?: import('./stock-consumption-source').SkuProcurementSource
   /** Explicit gift flag only; never inferred from zero price or name. */
   isGift?: boolean | null
   /** Verified FOP virtual-product classification; null/absent remains unknown. */
@@ -328,6 +329,7 @@ export interface FopOrderPageQuery {
   timeRange?: 'all' | '1w' | '1m' | '3m'; departmentId?: string; ownerId?: string; warehouseCode?: 'HZ' | 'SZ'; shippingCountryCode?: string
   sortBy?: string; sortOrder?: 'asc' | 'desc'; paidAtOrder?: 'asc' | 'desc'
   taskStatus?: string; orderIds?: readonly string[]; exportManifest?: boolean
+  procurementSource?: 'full_payment' | 'deposit' | 'direct'
 }
 export interface FopOrderPage {
   shippingCountries?: string[]

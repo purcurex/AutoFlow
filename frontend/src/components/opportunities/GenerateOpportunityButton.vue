@@ -2,6 +2,7 @@
 import { onBeforeUnmount, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { opportunitiesApi, opportunityError } from '@/api/opportunities'
+import { crmMockOpportunitiesApi, isCrmMockId } from '@/mocks/crm'
 import { onSessionReset } from '@/utils/session'
 const props = defineProps<{ leadId: string }>()
 const router = useRouter(), busy = ref(false), error = ref('')
@@ -12,7 +13,7 @@ async function generate() {
   if (busy.value) return
   const ticket = ++generation
   busy.value = true; error.value = ''
-  try { const opportunity = await opportunitiesApi.fromLead(props.leadId); if (ticket === generation) await router.push(`/opportunities/${opportunity.id}`) }
+  try { const opportunity = await (isCrmMockId(props.leadId) ? crmMockOpportunitiesApi : opportunitiesApi).fromLead(props.leadId); if (ticket === generation) await router.push(`/opportunities/${opportunity.id}`) }
   catch (e) { if (ticket === generation) error.value = opportunityError(e) }
   finally { if (ticket === generation) busy.value = false }
 }

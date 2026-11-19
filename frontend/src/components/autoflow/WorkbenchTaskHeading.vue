@@ -24,6 +24,6 @@ onBeforeUnmount(() => unregister?.())
 <style scoped>
 .workbench-task-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px 24px; margin-bottom: 20px; }
 h2 { font-size: 21px; font-weight: 750; letter-spacing: -.03em; line-height: 1.4; }
-.task-heading-actions { display:flex; align-items:center; flex-wrap:wrap; justify-content:flex-end; gap:12px; }
+.task-heading-actions { display:flex; align-items:center; flex-wrap:wrap; justify-content:flex-end; gap:12px; margin-inline-start:auto; }
 @media (max-width: 700px) { h2 { font-size: 18px; } }
 </style>

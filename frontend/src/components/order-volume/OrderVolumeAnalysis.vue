@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { peekAnalyticsQuery } from '@/utils/analytics-cache'
+import { isWorkbenchScopeError } from '@/api/workbench-dashboard'
 import { businessYears, BUSINESS_START_DATE } from '@/utils/business-years'
 import type { EffectiveChartAccess } from '@/api/fop-chart-access'
 import { useAnalyticsRefresh } from '@/composables/useAnalyticsRefresh'
@@ -70,17 +72,21 @@ function applyFilters(force = false) {
 async function load(force = false, preserveSelected = false) {
   const previousCustomer = preserveSelected ? selected.value : undefined
   const id = ++requestId
-  data.value = undefined; options.value = { departments: [], objects: [] }; error.value = ''; busy.value = true
+  error.value = ''; busy.value = true
   customerRequestId++; customers.value = undefined; clearSelected()
   try {
     const capability = await refreshChartAccess()
+    if(id===requestId&&data.value&&JSON.stringify(data.value.chartAccess)!==JSON.stringify(capability)){data.value=undefined}
     if (id !== requestId || !capability?.visible) return
-    const result = await getOrderVolume({ ...query.value, ...(category.value === 'organization' && capability.summaryDepartments.length ? { view: 'summary' } : {}) }, { force })
+    const submitted = { ...query.value, ...(category.value === 'organization' && capability.summaryDepartments.length ? { view: 'summary' as const } : {}) }
+    const cached=peekAnalyticsQuery<OrderVolumeData>('/autoflow/integrations/fop/order-volume',submitted)
+    if(cached&&JSON.stringify(cached.chartAccess)===JSON.stringify(capability)&&applyChartResponse(cached)){data.value=cached;options.value=cached.options}
+    const result = await getOrderVolume(submitted, { force })
     if (id !== requestId) return
     if (!applyChartResponse(result)) return
     data.value = result; options.value = result.options; chartRefresh.updated(result)
     if (previousCustomer && !result.chartAccess.summaryOnly) { selected.value = previousCustomer; await loadSelected(force) }
-  } catch (cause) { if (id === requestId) { reset(); error.value = fopAccessError(cause, zh.value) } }
+  } catch (cause) { if (id === requestId) { if(isWorkbenchScopeError(cause))reset(); error.value = fopAccessError(cause, zh.value) } }
   finally { if (id === requestId) busy.value = false }
 }
 function acceptRelatedResponse(result: { chartAccess?: EffectiveChartAccess }) {
@@ -99,7 +105,7 @@ async function loadSelected(force = false) {
   try {
     const result = await getOrderVolume({ ...query.value, customerId: selected.value.id }, { force })
     if (id === selectedRequestId && acceptRelatedResponse(result)) selectedData.value = result
-  } catch (cause) { if (id === selectedRequestId) { reset(); error.value = fopAccessError(cause, zh.value) } }
+  } catch (cause) { if (id === selectedRequestId) { if(isWorkbenchScopeError(cause))reset(); error.value = fopAccessError(cause, zh.value) } }
   finally { if (id === selectedRequestId) selectedBusy.value = false }
 }
 function clearSelected() { selectedRequestId++; selected.value = undefined; selectedData.value = undefined; selectedError.value = ''; selectedBusy.value = false }
@@ -121,13 +127,13 @@ async function search(page = 1) {
     customers.value = result
     const exact = result.items.filter(c => c.code.toLowerCase() === value.toLowerCase())
     if (exact.length === 1 && result.total === 1) chooseCustomer(exact[0]!)
-  } catch (cause) { if (id === customerRequestId) { reset(); error.value = fopAccessError(cause, zh.value) } }
+  } catch (cause) { if (id === customerRequestId) { if(isWorkbenchScopeError(cause))reset(); error.value = fopAccessError(cause, zh.value) } }
   finally { if (id === customerRequestId) customerBusy.value = false }
 }
 function chooseCustomer(customer: OrderCustomer) { if (!chartVisible.value || chartAccess.value?.summaryOnly) return; customerRequestId++; customerBusy.value = false; selected.value = customer; void loadSelected() }
 function selectRank(id: string, name: string, code: string) { chooseCustomer({ id, name, code, departments: [] }) }
 async function drill(result: OrderVolumeData, seriesId: string, periodId?: string, detailWarehouse?: VolumeWarehouse, receipts = false) {
-  if (!canViewDetails.value || (result.query.category === 'organization' && result.query.view === 'summary')) return
+  if (busy.value || !canViewDetails.value || (result.query.category === 'organization' && result.query.view === 'summary')) return
   const id = requestId, path = route.fullPath
   try {
     let role = isWorkbenchRole(route.params.role) ? route.params.role : undefined
@@ -138,7 +144,7 @@ async function drill(result: OrderVolumeData, seriesId: string, periodId?: strin
     }
     if (!role) { reset(); error.value = t('暂无可访问的岗位工作台，请联系管理员。', 'No workbench is available.'); return }
     await router.push({ name: receipts ? 'RoleWorkbenchReceipts' : 'RoleWorkbench', params: { role }, query: { ...result.query, ...(receipts ? { mode: 'customer' } : { queue: 'order-volume' }), seriesId, ...(periodId ? { periodId } : {}), ...(detailWarehouse ? { detailWarehouse } : {}) } })
-  } catch (cause) { if (id === requestId) { reset(); error.value = fopAccessError(cause, zh.value) } }
+  } catch (cause) { if (id === requestId) { if(isWorkbenchScopeError(cause))reset(); error.value = fopAccessError(cause, zh.value) } }
 }
 function reset() { clearChartAccess(); requestId++; customerRequestId++; data.value = undefined; customers.value = undefined; options.value = { departments: [], objects: [] }; busy.value = false; customerBusy.value = false; error.value = ''; clearSelected() }
 const off = onSessionReset(reset)
@@ -161,14 +167,14 @@ onBeforeUnmount(() => { off(); reset() })
         <label>{{ t('仓库', 'Warehouse') }}<select v-model="warehouse" aria-label="订单量仓库"><option value="ALL">{{ t('全部仓库', 'All warehouses') }}</option><option value="HZ">{{ 'HangZhou' }}</option><option value="SZ">{{ 'ShenZhen' }}</option></select></label>
         <label class="ov-checkbox"><input v-model="split" type="checkbox" :disabled="warehouse !== 'ALL'" :aria-label="customer ? '客户订单分仓对比' : '业务订单分仓对比'">{{ t('分仓对比', 'Compare warehouses') }}</label>
         <button type="submit" :class="customer ? 'ov-primary' : 'ov-secondary workbench-refresh'" :disabled="busy">{{ t('查询', 'Apply') }}</button>
-      </form>
+      </form><p v-if="busy && data" class="ov-note" role="status">正在更新，当前显示上次查询结果。</p><p v-if="error && data" class="ov-note" role="alert">查询未完成，当前显示上次查询结果。</p>
     </header>
     <div class="ov-body">
       <p v-if="customer && data?.customerOwnershipBasis && data.customerOwnershipBasis !== 'current_assignment'" class="ov-scope">{{ data.customerOwnershipBasis === 'historical_attribution' ? t('历史业务归属口径，当前客户分配待对接', 'Historical attribution; current customer assignment is pending integration') : t('部分客户当前归属待对接', 'Current assignment is pending integration for some customers') }}</p>
       <p v-if="dateError" class="ov-error" role="alert">{{ dateError }}</p>
 
-      <div v-if="busy" class="ov-empty" role="status">{{ t('正在统计订单数据…', 'Loading order statistics…') }}</div>
-      <div v-else-if="error" class="ov-error" role="alert">{{ error }}<button class="ov-link" @click="load(true)">{{ t('重试', 'Retry') }}</button></div>
+      <div v-if="busy && !data" class="ov-empty" role="status">{{ t('正在统计订单数据…', 'Loading order statistics…') }}</div>
+      <div v-else-if="error && !data" class="ov-error" role="alert">{{ error }}<button class="ov-link" @click="load(true)">{{ t('重试', 'Retry') }}</button></div>
       <component :is="customer ? CustomerOrderResults : OrderVolumeResults" v-else-if="data" :data="data" :split="split && warehouse === 'ALL'" :ranking-only="customer" :details-allowed="canViewDetails && data.query.view !== 'summary'" @drill="(s, p, w) => drill(data!, s, p, w)" @receipt="(s: string, p?: string, w?: VolumeWarehouse) => drill(data!, s, p, w, true)" @customer="selectRank" />
       <template v-if="customer && !chartAccess?.summaryOnly">
         <div class="ov-customer-search"><div><h3>{{ t('单客户订单与回款趋势', 'Individual customer trend') }}</h3></div><form @submit.prevent="search()"><Search :size="16" /><input v-model="keyword" type="search" maxlength="100" aria-label="客户名称或编码" :placeholder="t('客户名称 / 编码，如 C001', 'Customer name / code, e.g. C001')"><button v-if="keyword || selected" type="button" class="ov-secondary" @click="() => { keyword = ''; clearSelected(); customers = undefined }">{{ t('清空', 'Clear') }}</button><button class="ov-primary" :disabled="customerBusy">{{ t('搜索', 'Search') }}</button></form></div>
@@ -183,5 +189,5 @@ onBeforeUnmount(() => { off(); reset() })
       </template>
     </div>
   </section>
-  <p v-else-if="error" class="ov-error" role="alert">{{ error }}<button class="ov-link" @click="load(true)">{{ t('重试', 'Retry') }}</button></p>
+  <p v-else-if="error && !data" class="ov-error" role="alert">{{ error }}<button class="ov-link" @click="load(true)">{{ t('重试', 'Retry') }}</button></p>
 </template>

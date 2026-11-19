@@ -12,7 +12,7 @@ it('does not interpret legacy 2 (application audit) as supplier payment',()=>exp
 it('uses explicit supplier payment and application creation facts',()=>{
  expect(project([line('1','0',{supplierPaymentStatus:'paid'}),line('2','0',{purchaseApplicationCreated:true})]).lines.map(x=>x.purchase)).toEqual(['purchased','purchasing'])
 })
-it('full-payment stock use is purchased, never received merely because stock is used',()=>expect(project([line('1','3',{hzkj_use_stock:'1'})]).lines[0].purchase).toBe('purchased'))
+it('a stock selection flag does not override the native received result',()=>expect(project([line('1','3',{hzkj_use_stock:'1'})]).lines[0].purchase).toBe('received'))
 it('virtual pending lines do not make a physically completed order partially outbound',()=>{
  const r=project([line('1','3',{hzkj_outbound_status:'1'}),line('2','0',{hzkj_local_sku:{number:'HZ000020-001'},hzkj_outbound_status:'0'})]);expect(r.outbound).toBe('completed');expect(r.purchase).toBe('received')
 })

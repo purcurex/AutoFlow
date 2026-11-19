@@ -21,7 +21,8 @@ describe('quote defaults', () => {
   })
 
   it('provides a standard flag asset for every quote destination', () => {
-    expect(QUOTE_COUNTRIES.map((country) => country.code)).toEqual(['US', 'GB', 'DE', 'FR', 'CA', 'AU'])
+    expect(QUOTE_COUNTRIES).toHaveLength(249)
+    expect(QUOTE_COUNTRIES.map(country=>country.code)).toEqual(expect.arrayContaining(['US','GB','JP','BR','ZA','CN']))
     expect(QUOTE_COUNTRIES.every((country) => country.flagUrl.length > 0)).toBe(true)
   })
 })

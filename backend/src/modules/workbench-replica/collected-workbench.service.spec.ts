@@ -1,6 +1,7 @@
 import { Workbook } from 'exceljs'
 import { ConfigService } from '@nestjs/config'
 import { CollectedWorkbenchService } from './collected-workbench.service'
+import * as sourceDocuments from './collected-procurement-source-documents'
 const batch={id:'batch',workspace_owner_id:'admin',source_as_of:'2026-11-12T00:00:00Z',page_count:2}
 function setup(){
  const user:any={id:'admin',role:'admin',sessionVersion:2}
@@ -20,6 +21,13 @@ function setup(){
  return {user,users,db,service:new CollectedWorkbenchService(db as any,users as any,config)}
 }
 describe('collected local reads',()=>{
+ it('rechecks authorization after procurement source document enrichment',async()=>{
+  const {service,user}=setup(),b=batch as any
+  b.metadata={entityCaptures:{procurement:{coverage:'full_parent_scan'}}}
+  const enrichment=jest.spyOn(sourceDocuments,'withProcurementSourceDocuments').mockImplementation(async(_db,_batch,orders)=>{user.accountDisabled=true;return orders})
+  try{await expect(service.orders('admin',{queue:'procurement_shipping'},'procurement')).rejects.toThrow();expect(enrichment).toHaveBeenCalledTimes(1)}
+  finally{enrichment.mockRestore();delete b.metadata}
+ })
  it.each(['rma','review'])('blocks stale ordinary-user ownership for %s after captured reassignment',async queue=>{
   const {user,service}=setup();user.role='user';user.businessRole='salesperson';user.organizationWorkspaceOwnerId='admin';user.workbenchRoles=['sales'];(batch as any).metadata={timestampOwnershipPending:true}
   try{await expect(service.orders('admin',{queue},'sales')).rejects.toThrow('关联归属投影待重算')}finally{delete (batch as any).metadata}
@@ -167,6 +175,26 @@ it('exports review actual channel names separately from the custom channel',asyn
  expect(values).toContain('HZpacket Standard Electronics')
 })
 
+it('exports verified SKU source quantities once and preserves unknown quantities as blank',async()=>{
+ const {service}=setup()
+ jest.spyOn(service as any,'context').mockResolvedValue({user:{sessionVersion:2},batch:{id:'b',source_as_of:'2026-11-12T00:00:00Z'},signature:'same'})
+ const orders=jest.spyOn(service,'orders').mockResolvedValue({items:[{id:'1',orderNumber:'TO1',items:[
+  {id:'L1',sku:'S1',quantity:5,procurementSource:{complete:true,demandQuantity:'10',fullPaymentQuantity:'4',depositQuantity:'2',directQuantity:'4'}},
+  {id:'L2',sku:'S1',quantity:5},
+  {id:'L3',sku:'S2',quantity:1,procurementSource:{complete:false,demandQuantity:'1',fullPaymentQuantity:null,depositQuantity:null,directQuantity:null}},
+ ]}],total:1,page:1,pageSize:100,replica:{readMode:'local',datasetId:'b',revision:'r'}} as any)
+ const buffer=await service.export('admin',{queue:'procurement',mode:'filtered',procurementSource:'full_payment'},2,'orders')
+ expect(orders.mock.calls.every(c=>c[1].procurementSource==='full_payment')).toBe(true)
+ const wb=new Workbook();await wb.xlsx.load(buffer as any)
+ const rows:any[][]=[];wb.worksheets[0].eachRow(r=>rows.push(r.values as any[]))
+ const header=rows.find(r=>r.includes('全款备货数量（SKU合计）'))!
+ expect(header).toBeDefined()
+ const quantities=(label:string)=>rows.filter(r=>r.includes(label)).map(r=>r[r.indexOf(label)+1])
+ expect(quantities('全款备货数量（SKU合计）').filter(v=>v==='4')).toHaveLength(1)
+ expect(quantities('直接采购数量（SKU合计）').filter(v=>v==='4')).toHaveLength(1)
+ expect(rows.flat()).toContain('来源数据待补齐')
+})
+
 it.each([false,true])('pending dispatch uses the dispatch header number even when package tracking exists=%s',async hasPackage=>{
  const {service,db}=setup(),original=db.query.getMockImplementation()!
  db.query.mockImplementation(async(sql,params)=>{
@@ -247,6 +275,28 @@ it('purchase headers avoid product hydration; expanded rows hydrate only their p
  expect(db.query.mock.calls.filter(([sql])=>sql.includes('hz_fop_collected_entities'))).toHaveLength(3)
 })
 
+it.each([
+ ['unpurchased',6],['purchasing',6],['purchased',null],['shipped',null],['unknown',null],
+])('uncreated purchase groups aggregate repeated-SKU source demand without guessing original-line allocation (%s)',async(secondState,expected)=>{
+ const {service,db}=setup()
+ const source={skuId:'sku-1',sku:'SKU-1',lineIds:['11','12'],demandQuantity:'10',fullPaymentQuantity:'4',depositQuantity:'0',directQuantity:'6',fullPaymentReserved:'4',fullPaymentUsed:'0',depositReserved:'0',depositUsed:'0',complete:true,records:[]}
+ const raw={id:'1',billno:'TO1',billstatus:'C',hzkj_orders_billentry:[{id:'11',hzkj_qty:'6',hzkj_local_sku:{id:'sku-1',number:'SKU-1'}},{id:'12',hzkj_qty:'4',hzkj_local_sku:{id:'sku-1',number:'SKU-1'}}]}
+ const display={id:'1',orderNumber:'TO1',procurementStage:'purchase_order_pending',procurementSources:{version:1,orderId:'1',orderNumber:'TO1',status:'complete',revision:'v1',items:[source],issues:[]},businessStatus:{lines:[{id:'11',purchase:'unpurchased'},{id:'12',purchase:secondState}]},items:[{id:'11',sku:'SKU-1',name:'Product',quantity:6,procurementSource:source},{id:'12',sku:'SKU-1',name:'Product',quantity:4}]}
+ jest.spyOn(service as any,'context').mockResolvedValue({batch:{id:'b',company_id:'c',metadata:{entityCaptures:{procurement_groups:{companyId:'c'}}}},filter:{employeeIds:null},org:{nodes:[],employees:[],members:[],departments:[]},signature:'v1'})
+ jest.spyOn(service as any,'metadata').mockReturnValue({replica:{}})
+ jest.spyOn(service as any,'productDisplay').mockImplementation(async(_batch,rows)=>rows)
+ db.query.mockImplementation(async sql=>sql.includes("raw_bill_status='C'")?[{source_id:'1',raw,display}] as any:[])
+ const before=JSON.stringify(display)
+ const list=await service.purchaseGroups('admin',{queue:'procurement'})
+ expect(list.items).toHaveLength(1)
+ expect(list.items[0].quantity).toBe(expected)
+ expect(list.items[0].detailLineCount).toBe(1)
+ const details=await service.purchaseGroups('admin',{queue:'procurement'},'uncreated:1')
+ expect(details.items[0].lines).toHaveLength(1)
+ expect(details.items[0].lines[0]).toMatchObject({sku:'SKU-1',quantity:expected,fulfillmentLineId:null,fulfillmentLineIds:['11','12'],skuAggregated:true,purchaseLineId:null})
+ expect(JSON.stringify(display)).toBe(before)
+})
+
 it('warehouse SQL cache reuses matching pages and separates paging and permission versions',async()=>{
  const {service,db,user}=setup()
  const query={queue:'shipping',completed:true,page:1,pageSize:100}
@@ -269,4 +319,47 @@ it('does not report an empty production preparation as initialized or source-syn
   b.metadata.timestampSync={hzkj_orders:{watermark:'2026-11-18T00:00:00Z',state:'applied',pendingProjection:0,publicationPending:false,capturedAt:'2026-11-18T00:01:00Z'}}
   const published=await service.status('admin');expect(published.initialized).toBe(true);expect(published.replica.sourceSyncedAt).toBe('2026-11-18T00:01:00Z')
  }finally{delete b.metadata}
+})
+
+describe('pending inbound local cache freshness',()=>{
+ function inbound(){
+  const x=setup(),original=x.db.query.getMockImplementation()!
+  x.db.query.mockImplementation(async(sql,params)=>{
+   if(sql.startsWith('WITH candidates AS MATERIALIZED'))return [{counts:{total:0,quantity:null,inbound_quantity:null,pending_quantity:null},unclassified:0,rows:[]}] as any
+   if(sql.includes('SELECT CASE warehouse_code'))return [] as any
+   return original(sql,params)
+  })
+  jest.spyOn(x.service as any,'productDisplay').mockImplementation(async(_batch:any,items:any)=>items)
+  return x
+ }
+ it('reuses unchanged pages but manual refresh always rereads the local database',async()=>{
+  const {service,db}=inbound()
+  await service.receiptNotices('admin',{page:1,pageSize:100})
+  await service.receiptNotices('admin',{page:1,pageSize:100})
+  expect(db.query.mock.calls.filter(([sql])=>sql.startsWith('WITH candidates AS MATERIALIZED'))).toHaveLength(1)
+  await service.receiptNotices('admin',{page:1,pageSize:100,refresh:true})
+  await service.receiptNotices('admin',{page:1,pageSize:100,refresh:true})
+  expect(db.query.mock.calls.filter(([sql])=>sql.startsWith('WITH candidates AS MATERIALIZED'))).toHaveLength(3)
+ })
+ it('invalidates a cached page immediately after committed data changes',async()=>{
+  const {service,db}=inbound(),b=batch as any
+  try{
+   b.exception_data_revision=1;await service.receiptNotices('admin',{})
+   b.exception_data_revision=2;await service.receiptNotices('admin',{})
+   expect(db.query.mock.calls.filter(([sql])=>sql.startsWith('WITH candidates AS MATERIALIZED'))).toHaveLength(2)
+  }finally{delete b.exception_data_revision}
+ })
+ it('rechecks permission and data revision after product enrichment',async()=>{
+  const {service,user}=inbound()
+  jest.spyOn(service as any,'productDisplay').mockImplementation(async()=>{user.sessionVersion++;return []})
+  await expect(service.receiptNotices('admin',{})).rejects.toThrow('Local permission or batch changed')
+ })
+})
+it('replaces historical supplier-tab labels with locally stored logistics fields before search and paging',async()=>{
+ const {service,db}=setup(),context:any={batch:{id:'b',company_id:'c',metadata:{entityCaptures:{procurement_groups:{companyId:'c'}}}},filter:{employeeIds:null},org:{nodes:[],employees:[],members:[],departments:[]},signature:'v1'}
+ jest.spyOn(service as any,'context').mockResolvedValue(context);jest.spyOn(service as any,'metadata').mockReturnValue({replica:{}})
+ db.query.mockImplementation(async sql=>sql.includes('hz_fop_collected_entities')?[{raw:{id:'p1',hzkj_sellers_ww:'物流卖家',hzkj_sellers_phone:'0579-12345678'},display:{id:'p1',kind:'purchase',stage:'supplier_pending',purchase:{payment:'paid',supplier:{name:'无效旧资料'}},rows:[]}}] as any:[])
+ const page=await service.purchaseGroups('admin',{queue:'procurement_shipping',search:'0579-12345678'})
+ expect(page.total).toBe(1);expect(page.items[0].purchase.supplier).toMatchObject({name:'物流卖家',phone:'0579-12345678',source:'purchase_logistics'})
+ expect((await service.purchaseGroups('admin',{queue:'procurement_shipping',search:'无效旧资料'})).total).toBe(0)
 })

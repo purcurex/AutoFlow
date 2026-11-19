@@ -78,6 +78,11 @@ export function fopAccessError(error: unknown, zh: boolean): string {
     fop_mapping_required: ['业务数据暂不可用，请稍后重试或联系管理员。', 'Business data is unavailable. Retry later or contact an administrator.'],
     fop_fx_missing: ['部分运费缺少确认日的有效美元汇率，请维护金蝶历史汇率后重试。', 'Some freight costs have no valid historical US dollar exchange rate. Maintain the Kingdee rates and retry.'],
     fop_result_too_large: ['当前查询数据较多，请缩小日期范围后重试；本次未返回不完整统计。', 'Too much data for this query. Narrow the date range and retry. No partial totals were returned.'],
+    fop_inventory_endpoint_unavailable: ['库存服务暂不可用，请联系管理员。', 'Inventory service is unavailable. Contact an administrator.'],
+    fop_inventory_api_not_authorized: ['暂时无法访问库存服务，请联系管理员。', 'Inventory service access is unavailable. Contact an administrator.'],
+    fop_inventory_material_missing: ['所选商品的库存信息暂不可查询，请联系管理员。', 'Inventory information for the selected products is unavailable. Contact an administrator.'],
+    fop_inventory_scope_unavailable: ['暂时无法核实库存查看范围，请联系管理员。', 'Inventory access scope cannot be verified. Contact an administrator.'],
+    fop_inventory_unavailable: ['库存查询暂不可用，请稍后重试。', 'Inventory is temporarily unavailable. Please retry later.'],
     fop_endpoint_not_published: ['业务数据暂不可用，请稍后重试或联系管理员。', 'Business data is unavailable. Retry later or contact an administrator.'],
   }
   const message = typeof code === 'string' ? messages[code] : undefined

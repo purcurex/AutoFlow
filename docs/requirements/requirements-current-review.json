@@ -135,7 +135,12 @@
     "frontend/src/components/layout/Sidebar.vue",
     "frontend/src/components/layout/Header.vue",
     "frontend/src/components/leads/LeadRegistrationList.vue",
-    "frontend/src/views/autoflow/LeadDetailView.vue"
+    "frontend/src/views/autoflow/LeadDetailView.vue",
+    "frontend/src/components/ui/DateSortHeader.vue",
+    "frontend/src/utils/crmDateSort.ts",
+    "frontend/src/components/ui/CountryPicker.vue",
+    "frontend/src/utils/countries.ts",
+    "frontend/src/utils/countryFlags.ts"
   ],
   "currentEvidenceKeys": [
     "normalApiOperation20261118",
@@ -147,7 +152,8 @@
     "salesExceptionRemediation20261118",
     "salesExceptionIncrementalPrevention20261118",
     "customerFollowUpSimplification20261118",
-    "localOpportunityManagement20261118"
+    "localOpportunityManagement20261118",
+    "stockConsumptionSource20261118"
   ],
   "editorialChanges": [
     "撤掉三套重复清单矩阵和历史互斥方案，仅保留23现行清单视角",
@@ -195,5 +201,12 @@
   "localOptimizationEvidence": "api-integration-verification-20261116.json#localGapOptimization20261118",
   "localOptimizationScope": "L02/L03/L04/L05/L07/L08 local optimization",
   "runtimeChange": "backend restarted with automatic sync still enabled; source documents and schedule unchanged",
-  "localOpportunityEvidence": "api-integration-verification-20261116.json#localOpportunityManagement20261118"
+  "localOpportunityEvidence": "api-integration-verification-20261116.json#localOpportunityManagement20261118",
+  "stockConsumptionSourceEvidence": {
+    "source": "api-integration-verification-20261116.json#stockConsumptionSource20261118",
+    "codeChanged": true,
+    "localBackfillCompleted": true,
+    "fopDeploymentPending": true,
+    "stockIncrementalContractPending": true
+  }
 }

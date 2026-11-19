@@ -10,7 +10,41 @@ export const FOP_EXCEPTION_TYPES = ['logistics_exception', 'dispatch_exception',
 export type FopExceptionType = typeof FOP_EXCEPTION_TYPES[number]
 export const fopOrderQueues = ['unpaid', 'review', 'procurement', 'procurement_shipping', 'allocation', 'allocation_review', 'dispatch', 'shipping', 'exceptions'] as const
 export type FopOrderQueue = typeof fopOrderQueues[number]
+export type ProcurementSourceFilter = 'full_payment' | 'deposit' | 'direct'
+export interface ProcurementSourceRecord {
+  stockId: string
+  stockNumber?: string | null
+  recordId: string
+  orderNumber: string
+  skuId: string
+  skuNumber: string | null
+  stockType: '1' | '2' | null
+  /** Native purchase status of this stock order, independent of the fulfillment product line. */
+  stockPurchaseStatus?: string | null
+  status: '0' | '1' | null
+  quantity: string | null
+  usedAt: string | null
+}
+/** Verified order+SKU aggregate; attached only to the first matching product row. */
+export interface ProcurementSource {
+  skuId: string
+  sku: string | null
+  lineIds: string[]
+  demandQuantity: string
+  fullPaymentQuantity: string | null
+  depositQuantity: string | null
+  directQuantity: string | null
+  fullPaymentReserved: string | null
+  fullPaymentUsed: string | null
+  depositReserved: string | null
+  depositUsed: string | null
+  complete: boolean
+  records: ProcurementSourceRecord[]
+  /** Same-company, same-SKU document references read from the local replica. */
+  documentGroups?: { source: ProcurementSourceFilter; documents: { id: string; number: string }[]; unresolved: boolean }[]
+}
 export interface FopOrderItem {
+  procurementSource?: ProcurementSource | null
   /** Verified FOP virtual-product classification; null/absent remains unknown. */
   isVirtual?: boolean | null
   purchaseState?: string
@@ -89,6 +123,9 @@ export interface LogisticsInfo {
 export interface AllocationDocumentReference { id: string; number: string; rawBillStatus?: 'A' | 'B' | 'C' | 'D' | null; rawAllocationStatus?: 'pending' | 'available' | 'completed' | 'error' | 'voided' | null; association?: { state: string } }
 
 export interface FopOrder {
+  /** 履约订单 hzkj_note，由本地采集库提供。 */
+  orderRemark?: string | null
+  orderRemarkProvided?: boolean
   /** Display-only manual label; never written back as an upstream order number. */
   documentKind?: 'stock_order'
   sourceDocumentId?: string
@@ -96,6 +133,8 @@ export interface FopOrder {
   nativeFactsCaptured?: boolean
   procurementQueueFlags?: {pending:boolean;shipping:boolean;completed:boolean}
   nativeProcurementCaptured?: boolean
+  /** Supplier shipment across both direct purchases and stock orders, independent of pending purchase work. */
+  nativeSupplierShipment?: FulfillmentProgress['supplierShipment']
   nativeShippingReady?: boolean
   procurementStage?: string
 
@@ -214,6 +253,7 @@ export interface FopOrderQuery {
   warehouseCode?: 'HZ' | 'SZ'
   taskStatus?: TaskStatus
   procurementStage?: ProcurementStage
+  procurementSource?: ProcurementSourceFilter
   sortBy?: FopOrderSortBy
   sortOrder?: 'asc' | 'desc'
   warehouseStage?: WarehouseStage
@@ -290,6 +330,7 @@ function validateQuery(query: FopOrderQuery) {
   if (query.shippingCountryCode !== undefined && (query.queue !== 'review' || !/^[A-Z]{2}$/.test(query.shippingCountryCode))) throw new Error('Invalid destination country')
   if (query.taskStatus !== undefined && !canFilterTaskStatus(query.queue, query.taskStatus)) throw new Error('Invalid task status')
   if (query.procurementStage !== undefined && !canFilterProcurementStage(query.queue, query.procurementStage)) throw new Error('Invalid procurement stage')
+  if (query.procurementSource !== undefined && (!['procurement', 'procurement_shipping'].includes(query.queue) || !['full_payment', 'deposit', 'direct'].includes(query.procurementSource))) throw new Error('Invalid procurement source')
   if (query.sortBy !== undefined && (!isFopOrderSortBy(query.sortBy) || !canSortFopQueue(query.queue, query.sortBy))) throw new Error('Invalid sort field')
   if (query.sortOrder !== undefined && !['asc', 'desc'].includes(query.sortOrder)) throw new Error('Invalid sort direction')
   if (query.warehouseStage !== undefined && (query.queue !== 'shipping' || !isWarehouseStage(query.warehouseStage))) throw new Error('Invalid warehouse stage')
@@ -351,9 +392,9 @@ export function matchesFopQueue(order: FopOrder, queue: FopOrderQueue, warehouse
 export async function getFopOrders(query: FopOrderQuery, signal?: AbortSignal): Promise<FopQueuePage> {
   validateQuery(query)
   const { default: api } = await import('./index')
-  const { queue, projection, completed, billStatus, skuAssociation, timeRange, shippingCountryCode, search, orderNumber, departmentId, ownerId, warehouseCode, paidAtOrder, sortBy, sortOrder, warehouseStage, procurementStage, taskStatus, page, pageSize } = query
+  const { queue, projection, completed, billStatus, skuAssociation, timeRange, shippingCountryCode, search, orderNumber, departmentId, ownerId, warehouseCode, paidAtOrder, sortBy, sortOrder, warehouseStage, procurementStage, procurementSource, taskStatus, page, pageSize } = query
   const remember = beginWorkbenchCount(query)
-  const result: FopQueuePage = await api.get('/autoflow/integrations/fop/fulfillment-orders', { params: { queue, projection, ...(completed ? { completed } : {}), billStatus, skuAssociation, timeRange, shippingCountryCode, search, orderNumber, departmentId, ownerId, warehouseCode, paidAtOrder, sortBy, sortOrder, warehouseStage, procurementStage, taskStatus, page, pageSize }, ...(signal ? { signal } : {}) })
+  const result: FopQueuePage = await api.get('/autoflow/integrations/fop/fulfillment-orders', { params: { queue, projection, ...(completed ? { completed } : {}), billStatus, skuAssociation, timeRange, shippingCountryCode, search, orderNumber, departmentId, ownerId, warehouseCode, paidAtOrder, sortBy, sortOrder, warehouseStage, procurementStage, procurementSource, taskStatus, page, pageSize }, ...(signal ? { signal } : {}) })
   if (!isFopOrderPageDataValid(result)) throw new Error('Unexpected partial data')
   if (!result.dataAvailability?.missingDatasets?.length) remember?.(result.total)
   return result

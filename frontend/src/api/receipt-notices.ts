@@ -10,7 +10,7 @@ export interface ReceiptNotice {
   shippedAt: string | null; carrier: string | null; trackingNumber: string | null; status: 'pending' | 'partial' | 'unknown'
   quantity: number | null; inboundQuantity: number | null; pendingQuantity: number | null; lines: ReceiptNoticeLine[]
 }
-export interface ReceiptNoticeQuery { search?: string; departmentId?: string; ownerId?: string; warehouseCode?: string; status?: 'pending' | 'partial'; page: number; pageSize: number }
+export interface ReceiptNoticeQuery { refresh?: boolean; search?: string; departmentId?: string; ownerId?: string; warehouseCode?: string; status?: 'pending' | 'partial'; page: number; pageSize: number }
 export interface ReceiptNoticePage {
   items: ReceiptNotice[]; total: number; page: number; pageSize: number; source: 'mock' | 'fop'; refreshedAt: string
   departments: { id: string; name: string }[]; warehouses: { code: string; name: string }[]

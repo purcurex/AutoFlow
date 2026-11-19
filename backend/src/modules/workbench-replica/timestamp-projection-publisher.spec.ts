@@ -12,6 +12,9 @@ import { WorkbenchCollectedOrders1794411000000 } from '../../database/migrations
 import { CollectedEntities1794480000000 } from '../../database/migrations/1794480000000-CollectedEntities'
 import { CollectedAnalyticsFacts1794500000000 } from '../../database/migrations/1794500000000-CollectedAnalyticsFacts'
 import { CollectedBusinessChain1794580000000 } from '../../database/migrations/1794580000000-CollectedBusinessChain'
+import { CollectedStockConsumptions1795063000000 } from '../../database/migrations/1795063000000-CollectedStockConsumptions'
+import { replaceStockConsumptionSnapshot } from './collected-stock-consumptions'
+import { reprojectStockConsumptionOrders } from './stock-consumption-reproject'
 const database=process.env.TIMESTAMP_PROJECTION_TEST_DB
 const integration=database&&/^hz_timestamp_test_\d+$/.test(database)?describe:describe.skip
 integration('ordinary timestamp atomic local publication',()=>{
@@ -27,6 +30,19 @@ integration('ordinary timestamp atomic local publication',()=>{
  })
  afterAll(async()=>{await db?.destroy()})
  beforeEach(async()=>{scope={batchId:randomUUID(),tenantId:'tenant',companyId:'100000',entityCode:'hzkj_orders'};const owner=randomUUID();await db.query('INSERT INTO users(id) VALUES($1)',[owner]);await db.query("INSERT INTO hz_fop_collected_batches(id,workspace_owner_id,tenant_id,company_id,state,source_as_of) VALUES($1,$2,'tenant','100000','active',now())",[scope.batchId,owner])})
+ it('recalculates SKU direct demand on an incremental order change using the current consumption ledger',async()=>{
+  const [{ready}]=await db.query("SELECT to_regclass('hz_fop_collected_stock_consumptions') IS NOT NULL AS ready")
+  if(!ready){const q=db.createQueryRunner();try{await new CollectedStockConsumptions1795063000000().up(q)}finally{await q.release()}}
+  const header={...order('1'),hzkj_orderstatus:'2',hzkj_receipt_status:'1',hzkj_orders_billentry:[{id:'11',hzkj_local_sku_id:'91',hzkj_local_sku_number:'SKU91',hzkj_qty:'10',hzkj_entrypurc_status:'2'}]}
+  await capture('hzkj_orders',[header])
+  await db.transaction(async q=>{
+   const r=await replaceStockConsumptionSnapshot(q,scope.batchId,'100000',[{id:'B1',org_id:'100000',hzkj_stock_type:'1',hzkj_sale_order_use:[{id:'R1',hzkj_sale_order_billno:'SO1',hzkj_sales_order_sku_id:'91',hzkj_use_qty:'4',hzkj_use_status:'0'}]}],'2026-11-18T18:00:00Z')
+   await reprojectStockConsumptionOrders(q,scope.batchId,r.affectedOrders)
+  })
+  expect((await rows('hz_fop_collected_orders'))[0].display.procurementSources.items[0]).toMatchObject({demandQuantity:'10',directQuantity:'6',fullPaymentReserved:'4'})
+  await capture('hzkj_orders',[{...header,hzkj_orders_billentry:[{...header.hzkj_orders_billentry[0],hzkj_qty:'12'}]}])
+  expect((await rows('hz_fop_collected_orders'))[0].display.procurementSources.items[0]).toMatchObject({demandQuantity:'12',directQuantity:'8',fullPaymentReserved:'4'})
+ })
  it('keeps physical classification unchanged when only virtual line statuses change',async()=>{
   const physical={id:'11',seq:1,hzkj_local_sku_number:'REAL',hzkj_qty:'2',hzkj_entrypurc_status:'0',hzkj_purcqty:'0',hzkj_instock_qty:'0'}
   const virtual={id:'12',seq:2,hzkj_local_sku_number:'HZ000020-001',hzkj_qty:'10',hzkj_entrypurc_status:'3',hzkj_purcqty:'10',hzkj_instock_qty:'10'}

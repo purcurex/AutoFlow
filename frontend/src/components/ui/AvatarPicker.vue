@@ -36,14 +36,14 @@ async function upload(event: Event) {
 <template>
   <div class="avatar-picker space-y-4 border-b pb-5" style="border-color: var(--color-border)" :aria-busy="busy">
     <div class="flex items-center gap-4">
-      <button type="button" class="group relative flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full brand-avatar text-xl font-semibold focus-visible:ring-2 focus-visible:ring-blue-500 disabled:opacity-50" :aria-label="text('上传头像', 'Upload avatar')" :disabled="busy" @click="input?.click()">
+      <button type="button" class="group relative flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full brand-avatar text-xl font-semibold focus-visible:ring-2 focus-visible:ring-[var(--color-link)] disabled:opacity-50" :aria-label="text('上传头像', 'Upload avatar')" :disabled="busy" @click="input?.click()">
         <img v-if="userStore.avatarUrl" :src="userStore.avatarUrl" alt="" class="h-full w-full object-cover" />
         <span v-else>{{ userStore.displayName.charAt(0) }}</span>
         <span class="absolute inset-0 flex items-center justify-center bg-black/40 text-white opacity-0 transition group-hover:opacity-100 group-focus-visible:opacity-100"><Camera class="h-5 w-5" /></span>
       </button>
       <div class="min-w-0">
         <p class="truncate text-sm font-semibold text-slate-950 dark:text-white">{{ userStore.displayName }}</p>
-        <button type="button" class="mt-1 text-sm font-medium text-primary-700 hover:underline disabled:opacity-50 dark:text-primary-700" :disabled="busy" @click="input?.click()">{{ busy ? t('settings.saving') : text('上传头像', 'Upload avatar') }}</button>
+        <button type="button" class="avatar-upload-action mt-1 text-sm font-medium disabled:opacity-50" :disabled="busy" @click="input?.click()">{{ busy ? t('settings.saving') : text('上传头像', 'Upload avatar') }}</button>
         <p class="mt-1 text-xs text-slate-500">JPG / PNG / GIF / WebP · {{ t('settings.avatarLimit') }}</p>
       </div>
       <input ref="input" type="file" accept="image/jpeg,image/png,image/gif,image/webp" class="hidden" :disabled="busy" @change="upload" />
@@ -65,6 +65,9 @@ async function upload(event: Event) {
 </template>
 
 <style scoped>
+.avatar-upload-action { color:var(--color-link); transition:color .16s; }
+.avatar-upload-action:hover:not(:disabled) { text-decoration:underline; text-underline-offset:3px; }
+.avatar-upload-action:focus-visible { outline:2px solid var(--color-link); outline-offset:3px; border-radius:3px; }
 .avatar-picker { container-type:inline-size; }
 .avatar-style-switch { display:flex; gap:4px; padding:4px; width:fit-content; max-width:100%; border-radius:10px; background:var(--color-bg); border:1px solid var(--color-border); }
 .avatar-style-switch button { padding:7px 10px; border-radius:7px; color:var(--color-text-secondary); font-size:11px; white-space:nowrap; transition:background .16s, color .16s; }

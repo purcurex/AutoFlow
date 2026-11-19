@@ -1,6 +1,9 @@
 import { createHash } from 'node:crypto'
 import { safeWangwangUrl } from './supplier-follow-up'
+import { purchaseMatchesSourceSku, purchaseSalesReference } from './collected-purchase-association'
+import { purchaseLogisticsSupplier } from './purchase-logistics-supplier'
 type Row = Record<string, any>
+export type SupplierSourceReference={sourceType:'full_payment'|'deposit'|'direct';parent:Row;skuId?:string;sku?:string;consumption?:Row}
 export type SupplierRead = (kind: 'purchase'|'inbound'|'receipt', body: unknown) => Promise<any>
 const text = (v:unknown):string => typeof v === 'string' ? v.trim() : ''
 const exact = (v:unknown):string => { const s=text(v); if(!s || s.length>120 || !/^[\w.-]+$/.test(s))throw Error('Supplier source identity missing');return s }
@@ -28,16 +31,26 @@ export class NativeSupplierContacts {
    return r
   })();this.reads.set(key,pending);return pending
  }
- async purchase(expected:{id?:string;number?:string;platformOrderNumber?:string|null},orderNumber:string,supplierName?:string):Promise<Row>{
+ async purchase(expected:{id?:string;number?:string;platformOrderNumber?:string|null},orderNumber:string):Promise<Row>{
   const r=await this.one('purchase',expected),platform=text(r.hzkj_1688_order_n)
   if(expected.platformOrderNumber&&platform!==expected.platformOrderNumber)throw Error('1688 order changed; refresh the list')
   if(orderNumber&&!(r.hzkj_billentry??[]).some((l:Row)=>l.hzkj_salbillnumber===orderNumber))throw Error('Purchase no longer belongs to this order')
-  const account=text(r.hzkj_ww_login_id)||text(r.hzkj_sellers_ww)||null
+  const supplier=purchaseLogisticsSupplier(r),account=supplier.wangwangAccount
   const validPlatform=/^[1-9]\d{0,19}$/.test(platform)
   const url=validPlatform&&account&&!account.includes('*')?safeWangwangUrl(`aliim:sendmsg?touid=${encodeURIComponent('cnalichn'+account)}`,account):null
-  const supplier={id:account?'1688:'+account:r.id,name:supplierName||account||'供应商',wangwangAccount:account}
   const result={purchaseOrderId:r.id,purchaseOrderNumber:r.billno,platformOrderNumber:platform||null,supplier,lines:[],availability:!account?'missing_account':url?'ready':'chat_unavailable',url}
   return {...result,contactVersion:createHash('sha256').update(JSON.stringify([orderNumber,result])).digest('hex')}
+ }
+ async purchaseSources(expected:{id?:string;number?:string;platformOrderNumber?:string|null},references:SupplierSourceReference[]):Promise<Row>{
+  if(!references.length)throw Error('Supplier source relationship missing')
+  const raw=await this.one('purchase',expected)
+  if(raw.hzkj_cancelstatus==='B')throw Error('Purchase was cancelled')
+  // Every represented source must still be present on the live purchase; merged POs are checked per parent/SKU.
+  for(const ref of references)if(!(raw.hzkj_billentry??[]).some((line:Row)=>ref.skuId?purchaseMatchesSourceSku(line,ref.parent,ref.skuId):purchaseSalesReference(line).number===ref.parent.billno))throw Error('Purchase source relationship changed')
+  const contact=await this.purchase(expected,'')
+  const sourceReferences=[...new Map(references.map(r=>{const value={sourceType:r.sourceType,orderNumber:r.parent.billno,sku:r.sku??''};return [JSON.stringify(value),value]})).values()].sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b)))
+  const evidence=references.map(r=>[r.sourceType,r.parent.id,r.parent.billno,r.skuId,r.consumption]).sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b)))
+  return {...contact,sourceReferences,contactVersion:createHash('sha256').update(JSON.stringify([contact.contactVersion,evidence])).digest('hex')}
  }
  async returned(document:Row,orderNumber:string):Promise<Row[]>{
   if(!Array.isArray(document.lines)||!document.lines.length)throw Error('Return source lines missing')
@@ -49,7 +62,7 @@ export class NativeSupplierContacts {
    if(entries.length!==1||entries[0].hzkj_salbillnumber!==orderNumber)throw Error('Return source entry mismatch')
    const receipt=await this.one('receipt',{number:exact(entries[0].srcbillnumber)})
    const platform=exact(receipt.hzkj_1688_order_n)
-   const contact=await this.purchase({number:exact(receipt.hzkj_purchase_order_numbe),platformOrderNumber:platform},orderNumber,document.supplier?.name)
+   const contact=await this.purchase({number:exact(receipt.hzkj_purchase_order_numbe),platformOrderNumber:platform},orderNumber)
    contacts.set(contact.purchaseOrderId,contact)
   }
   return [...contacts.values()]

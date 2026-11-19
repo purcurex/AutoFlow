@@ -45,7 +45,7 @@ onBeforeUnmount(() => { closed = true; request++; off() })
 </script>
 <template>
   <OrganizationModal :title="text('即时库存', 'Current inventory')" @close="emit('close')">
-    <div class="inventory-context"><PackageSearch :size="18" /><div><strong>{{ selectedMode ? text(`已选 ${orderIds.length} 笔订单`, `${orderIds.length} selected orders`) : text('按 SKU 查询', 'Search by SKU') }}</strong><p>{{ selectedMode ? text('查询所选订单 SKU 的当前库存', 'Selected order SKUs only · Public and corresponding customer inventory') : text('输入 SKU 查询当前库存', 'Search SKU text to view public and customer inventory separately') }}</p></div></div>
+    <div class="inventory-context"><PackageSearch :size="18" /><div><strong>{{ selectedMode ? text(`已选 ${orderIds.length} 笔订单`, `${orderIds.length} selected orders`) : text('按 SKU 查询', 'Search by SKU') }}</strong><p>{{ selectedMode ? text('查询所选订单 SKU 的当前库存', 'Current inventory for selected order SKUs') : text('输入 SKU 查询当前库存', 'Search current inventory by SKU') }}</p></div></div>
     <form class="inventory-toolbar" @submit.prevent="submit">
       <label v-if="!selectedMode" class="inventory-search"><Search :size="16" /><input v-model="search" type="search" :aria-label="text('搜索库存 SKU', 'Search inventory SKU')" :placeholder="text('输入 SKU，支持模糊查询', 'Enter SKU text')" /></label>
       <button v-if="!selectedMode" class="btn workbench-primary" :disabled="loading || !search.trim()">{{ text('查询', 'Search') }}</button>
@@ -59,7 +59,7 @@ onBeforeUnmount(() => { closed = true; request++; off() })
       </table>
       <div v-else class="inventory-empty"><PackageSearch :size="30" /><p>{{ loading ? text('正在查询库存…', 'Loading inventory…') : result ? text('没有符合条件的库存项目', 'No matching inventory scopes') : text('输入 SKU 后查询库存', 'Enter a SKU to query inventory') }}</p></div>
     </div>
-    <p class="inventory-guidance">{{ text('实物余量 = 在库数量 − 配货占用；实际可配量还受全款备货权益保护，以 FOP 配货结果为准。公共库存按 SKU、仓库去重，未为所选订单预留。', 'Physical balance = on hand − allocated. Full-payment protections also affect allocatable stock; FOP determines the result. Public stock is listed once per SKU and warehouse and is not reserved for these orders.') }}</p>
+    <p class="inventory-guidance">{{ text('库存以查询时点为准；实际可配数量以配货结果为准，本次查询不预留库存。', 'Balances reflect the query time. Actual allocatable quantities depend on allocation results; this query does not reserve stock.') }}</p>
     <div class="inventory-bottom"><small>{{ result ? `${text('数据时间', 'As of')} ${date(result.asOf)} · UTC+8` : '' }}</small><template v-if="result"><span>{{ text(`共 ${result.total} 项`, `${result.total} pools`) }}</span><button class="btn btn-secondary" :disabled="loading || page <= 1" @click="changePage(page - 1)">‹</button><span>{{ page }} / {{ pages }}</span><button class="btn btn-secondary" :disabled="loading || page >= pages" @click="changePage(page + 1)">›</button></template></div>
     <template #footer><button class="btn btn-secondary" @click="emit('close')">{{ text('关闭', 'Close') }}</button></template>
   </OrganizationModal>

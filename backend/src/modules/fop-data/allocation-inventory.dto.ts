@@ -3,7 +3,7 @@ import { ArrayMaxSize, ArrayMinSize, ArrayUnique, IsArray, IsIn, IsInt, Validate
 export class AllocationInventoryQueryDto {
   @ValidateIf((_object, value) => value !== undefined) @IsIn(['allocation', 'shipping']) queue?: 'allocation' | 'shipping'
   @IsIn(['selected', 'search']) mode!: 'selected' | 'search'
-  @ValidateIf((_object, value) => value !== undefined) @IsArray() @ArrayMinSize(1) @ArrayMaxSize(100) @ArrayUnique() @IsString({ each: true }) @MaxLength(120, { each: true }) @Matches(/\S/, { each: true }) orderIds?: string[]
+  @ValidateIf((_object, value) => value !== undefined) @IsArray() @ArrayMinSize(1) @ArrayMaxSize(1000) @ArrayUnique() @IsString({ each: true }) @MaxLength(120, { each: true }) @Matches(/\S/, { each: true }) orderIds?: string[]
   @ValidateIf((_object, value) => value !== undefined) @IsString() @MaxLength(100) search?: string
   @ValidateIf((_object, value) => value !== undefined) @IsIn(['HZ', 'SZ']) warehouseCode?: 'HZ' | 'SZ'
   @ValidateIf((_object, value) => value !== undefined) @Type(() => Number) @IsInt() @Min(1) @Max(100000) page = 1

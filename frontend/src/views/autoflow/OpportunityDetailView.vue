@@ -1,13 +1,15 @@
 <script setup lang="ts">
+import { crmMockOpportunitiesApi, isCrmMockId } from '@/mocks/crm'
 import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { AppLayout } from '@/components/layout'
 import OpportunityFields from '@/components/opportunities/OpportunityFields.vue'
 import OpportunityStage from '@/components/opportunities/OpportunityStage.vue'
-import { opportunitiesApi, emptyOpportunity, opportunityPayload, opportunityError, optionLabel, type Opportunity, type OpportunityOptions, type FollowUpInput } from '@/api/opportunities'
+import { opportunitiesApi as realOpportunitiesApi, emptyOpportunity, opportunityPayload, opportunityError, optionLabel, type Opportunity, type OpportunityOptions, type FollowUpInput } from '@/api/opportunities'
 import { onSessionReset } from '@/utils/session'
 const route = useRoute(), router = useRouter()
 const isNew = computed(() => route.path === '/opportunities/new')
+const currentApi = () => isNew.value || isCrmMockId(String(route.params.id)) ? crmMockOpportunitiesApi : realOpportunitiesApi
 const record = ref<Opportunity | null>(null), draft = ref(emptyOpportunity())
 const options = ref<OpportunityOptions>({ stages: [], dailyVolumes: [], countries: [], currency: 'USD' })
 const busy = ref(false), saving = ref(false), loaded = ref(false), error = ref(''), notice = ref(''), showFollowUp = ref(false), showDelete = ref(false)
@@ -21,7 +23,7 @@ onBeforeUnmount(() => { generation++; cleanup() })
 function apply(value: Opportunity) { record.value = value; draft.value = opportunityPayload(value) }
 async function load() {
  clear(); const ticket = generation; busy.value = true
- try { const [choices, value] = await Promise.all([opportunitiesApi.options(), isNew.value ? Promise.resolve(null) : opportunitiesApi.get(String(route.params.id))]); if (ticket !== generation) return; options.value = choices; if (value) apply(value); loaded.value = true }
+ try { const [choices, value] = await Promise.all([currentApi().options(), isNew.value ? Promise.resolve(null) : currentApi().get(String(route.params.id))]); if (ticket !== generation) return; options.value = choices; if (value) apply(value); loaded.value = true }
  catch (e) { if (ticket === generation) error.value = opportunityError(e) }
  finally { if (ticket === generation) busy.value = false }
 }
@@ -34,7 +36,7 @@ async function save() {
  if (!payload.registeredOn) { error.value = '请填写登记日期'; return }
  if (!validateAmount(payload.monthlyAmount)) { error.value = '预计月订单额须为非负金额，最多保留两位小数'; return }
  const ticket = generation; saving.value = true; error.value = ''; notice.value = ''
- try { const result = isNew.value ? await opportunitiesApi.create(payload) : await opportunitiesApi.update(record.value!.id, { ...payload, version: record.value!.version }); if (ticket !== generation) return; apply(result); notice.value = '商机已保存'; if (isNew.value) await router.replace(`/opportunities/${result.id}`) }
+ try { const result = isNew.value ? await currentApi().create(payload) : await currentApi().update(record.value!.id, { ...payload, version: record.value!.version }); if (ticket !== generation) return; apply(result); notice.value = '商机已保存'; if (isNew.value) await router.replace(`/opportunities/${result.id}`) }
  catch (e) { if (ticket === generation) error.value = opportunityError(e) }
  finally { if (ticket === generation) saving.value = false }
 }
@@ -48,14 +50,14 @@ async function saveFollowUp() {
  if (![follow.followedOn, follow.stage, follow.dailyVolume, follow.monthlyAmount, follow.currentFollowUp.trim(), follow.nextFollowUpPlan.trim()].every(Boolean)) { error.value = '请完整填写标星的跟进信息'; return }
  if (!validateAmount(follow.monthlyAmount)) { error.value = '预计月订单额须为非负金额，最多保留两位小数'; return }
  const ticket = generation; saving.value = true; error.value = ''; notice.value = ''
- try { const result = await opportunitiesApi.followUp(record.value.id, { ...follow, currentFollowUp: follow.currentFollowUp.trim(), nextFollowUpPlan: follow.nextFollowUpPlan.trim() }); if (ticket !== generation) return; apply(result); showFollowUp.value = false; notice.value = '跟进记录已保存' }
+ try { const result = await currentApi().followUp(record.value.id, { ...follow, currentFollowUp: follow.currentFollowUp.trim(), nextFollowUpPlan: follow.nextFollowUpPlan.trim() }); if (ticket !== generation) return; apply(result); showFollowUp.value = false; notice.value = '跟进记录已保存' }
  catch (e) { if (ticket === generation) error.value = opportunityError(e) }
  finally { if (ticket === generation) saving.value = false }
 }
 async function remove() {
  if (saving.value || !record.value?.canDelete) return
  const ticket = generation; saving.value = true; error.value = ''
- try { await opportunitiesApi.remove(record.value.id, record.value.version); if (ticket === generation) await router.push('/opportunities') }
+ try { await currentApi().remove(record.value.id, record.value.version); if (ticket === generation) await router.push('/opportunities') }
  catch (e) { if (ticket === generation) error.value = opportunityError(e) }
  finally { if (ticket === generation) saving.value = false }
 }

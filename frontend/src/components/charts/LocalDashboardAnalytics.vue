@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { peekAnalyticsQuery } from '@/utils/analytics-cache'
+import { isWorkbenchScopeError } from '@/api/workbench-dashboard'
 import { useChartQuerySchedule } from '@/composables/useChartQuerySchedule'
 import { warehouseName } from '@/utils/warehouse'
 import ComparisonSummary from './ComparisonSummary.vue'
@@ -129,8 +131,10 @@ async function load(force=false,automatic=false){
  selectedTrend.value=undefined
  const request=++generation;busy.value=true;error.value=''
  const submitted=automatic&&appliedQuery?appliedQuery:{chartId:props.chartId,from:from.value,to:to.value,comparison:comparison.value||undefined,departmentId:department.value||undefined,warehouseCode:registration.value?undefined:warehouse.value||undefined,currency:monetary.value?'USD':undefined,entityType:registration.value?undefined:entity.value}
+ const cached=peekAnalyticsQuery<LocalAnalyticsResult>(props.workbench?'/workbench/analytics/workbench':'/workbench/analytics/dashboard',submitted)
+ if(cached){result.value={...cached,rows:cached.rows.map(r=>r.dimension==='warehouse'?{...r,label:warehouseName(r.label||r.id)}:r)};filters.value=cached;summaryOnly.value=cached.summaryOnly;appliedQuery={...submitted}}
  try{const value=await getLocalDashboardAnalytics(submitted,{force},props.workbench);if(request!==generation)return;appliedQuery={...submitted};chartRefresh.updated(value);result.value={...value,rows:value.rows.map(r=>r.dimension==='warehouse'?{...r,label:warehouseName(r.label||r.id)}:r)};filters.value=value;if(!department.value)department.value=value.defaultDepartmentId??value.departments.find(d=>d.name==='营销中心')?.id??value.departments[0]?.id??'';summaryOnly.value=value.summaryOnly;if(!dimensions.value.some(d=>d.id===dimension.value))dimension.value=dimensions.value[0]!.id}
- catch(e){if(request===generation){result.value=undefined;const failure=e as {code?:string;response?:{data?:{code?:string}}};const code=failure?.code??failure?.response?.data?.code;error.value=code==='comparison_window_not_captured'?'数据尚未覆盖所选对比周期，请选择较早周期。':registration.value&&code==='local_analytics_capture_unavailable'?'客户注册数据尚未完成本地采集，请稍后重试。':registration.value&&code==='registration_window_not_captured'?'所选创建日期尚未完整采集，请调整日期或补采。':'分析数据加载失败，请重试。'}}finally{if(request===generation)busy.value=false}
+ catch(e){if(request===generation){if(isWorkbenchScopeError(e))result.value=undefined;const failure=e as {code?:string;response?:{data?:{code?:string}}};const code=failure?.code??failure?.response?.data?.code;error.value=code==='comparison_window_not_captured'?'数据尚未覆盖所选对比周期，请选择较早周期。':registration.value&&code==='local_analytics_capture_unavailable'?'客户注册数据尚未完成本地采集，请稍后重试。':registration.value&&code==='registration_window_not_captured'?'所选创建日期尚未完整采集，请调整日期或补采。':'分析数据加载失败，请重试。'}}finally{if(request===generation)busy.value=false}
 }
 const stop=onSessionReset(()=>{generation++;selectedTrend.value=undefined;department.value='';warehouse.value='';result.value=undefined;filters.value={departments:[],warehouses:[],currencies:[]};error.value='';busy.value=false})
 onBeforeUnmount(()=>{generation++;stop()})
@@ -149,7 +153,7 @@ watch(department,value=>{if(result.value?.personalDepartmentId&&value!==result.v
   <label>对比<select v-model="comparison" aria-label="对比方式" :disabled="busy" @change="chooseComparison"><option value="">不对比</option><option value="week">周环比</option><option value="month">月环比</option></select></label>
   <label v-if="comparison">选择{{ comparison==='week'?'周':'月份' }}<input v-model="comparisonAnchor" type="date" aria-label="对比周期日期" :min="availableStart" :max="availableEnd" @change="chooseComparison"></label>
   <button :disabled="busy">{{ busy?'查询中…':'查询' }}</button>
- </form>
+ </form><p v-if="busy && result" class="ov-note" role="status">正在更新，当前显示上次查询结果。</p><p v-if="error && result" class="ov-note" role="alert">查询未完成，当前显示上次查询结果。</p>
  <div class="analysis-controls"><label>展示维度<select v-model="dimension" aria-label="展示维度"><option v-for="d in dimensions" :key="d.id" :value="d.id">{{ d.name }}</option></select></label><label v-if="!monetary&&!registration">指标<select v-model="metric"><option value="orders">订单数</option><option value="quantity">商品件数</option></select></label><span v-if="displayedTotals" :title="result?.personalDepartmentId?'本部门成员个人数据；其他部门仅显示部门汇总':undefined">{{ (registration?displayedTotals.registrationCount??displayedTotals.orderCount:displayedTotals.orderCount).toLocaleString() }} {{ registration?'位注册客户':'笔订单' }} · {{ registration?'按客户档案创建时间统计':monetary?'业绩收入按订单金额统计':'按客户付款时间（收款日期）统计' }}</span><button v-if="availableTrendTargets.length" type="button" class="trend-open" :disabled="busy" @click="openTrend(availableTrendTargets[0])">趋势明细</button></div>
  <div v-if="monetary&&incomeTotals.length" class="income-total"><span>业绩收入合计</span><strong v-for="total in incomeTotals" :key="total.currency">{{ total.currency==='USD'?usd(Number(total.amount)):`${total.currency} ${Number(total.amount).toLocaleString('zh-CN',{minimumFractionDigits:2,maximumFractionDigits:2})}` }}</strong></div>
  <ComparisonSummary v-if="displayedComparison" :comparison="displayedComparison" :metric="monetary?'amount':registration?'count':metric==='quantity'?'quantity':'count'"/>
@@ -163,7 +167,7 @@ watch(department,value=>{if(result.value?.personalDepartmentId&&value!==result.v
 <style scoped>
 .analysis-controls .trend-open{margin-left:auto;background:transparent;color:var(--color-chart-link,var(--color-link));border-color:var(--color-border,var(--color-border))}.trend-open:disabled{opacity:.5;cursor:default}
 .grouped-revenue{overflow-x:auto;overflow-y:hidden;padding-bottom:12px}
-.revenue-legend{display:flex;gap:18px;margin:12px 0;color:var(--color-text-secondary);font-size:12px}.revenue-legend span{display:flex;align-items:center;gap:6px}.revenue-legend i{width:10px;height:10px;border-radius:2px}.department-swatch{background:var(--color-primary)}.person-swatch{background:#37a3a3}
+.revenue-legend{display:flex;gap:18px;margin:12px 0;color:var(--color-text-secondary);font-size:12px}.revenue-legend span{display:flex;align-items:center;gap:6px}.revenue-legend i{width:10px;height:10px;border-radius:2px}.department-swatch{background:var(--color-primary)}.person-swatch{background:var(--color-chart-detail)}
 .available-range{margin:-8px 0 16px;color:var(--color-text-secondary);font-size:12px}
 .payment-date-warning{color:#a66313}:global(.dark .payment-date-warning){color:#efb65b}
 .income-total{display:flex;gap:16px;align-items:center;margin:12px 0;font-size:13px}.income-total strong{font-size:20px;font-variant-numeric:tabular-nums}

@@ -4,7 +4,7 @@ import { randomUUID } from 'crypto'
 import { User } from '../users/user.entity'
 import { readBusinessOwners } from '../users/business-data-access'
 import { normalizeShippingCountry } from '../fop-data/shipping-country'
-import { applyFollowUp, assertVersion, canWrite, exportWorkbook, FIELD_COLUMNS, opportunityOptions, validateFields, validateFollowUp, validateQuery } from './opportunity-rules'
+import { opportunityOrderBy, applyFollowUp, assertVersion, canWrite, exportWorkbook, FIELD_COLUMNS, opportunityOptions, validateFields, validateFollowUp, validateQuery } from './opportunity-rules'
 
 type Scope={actor:User;ids:string[];signature:string}
 type Store=DataSource|EntityManager
@@ -57,7 +57,7 @@ export class OpportunitiesService {
   async list(actorId:string,input:Record<string,unknown>={}) {
     const scope=await this.scope(actorId),query=validateQuery(input),{where,args}=this.conditions(scope,query)
     const totals=await this.dataSource.query(`SELECT count(*)::int AS total ${joins} WHERE ${where}`,args)
-    const rows=await this.dataSource.query(`SELECT ${projection} ${joins} WHERE ${where} ORDER BY o.registered_on DESC,o.created_at DESC,o.id DESC LIMIT $${args.length+1} OFFSET $${args.length+2}`,[...args,query.pageSize,(query.page-1)*query.pageSize])
+    const rows=await this.dataSource.query(`SELECT ${projection} ${joins} WHERE ${where} ORDER BY ${opportunityOrderBy(query)} LIMIT $${args.length+1} OFFSET $${args.length+2}`,[...args,query.pageSize,(query.page-1)*query.pageSize])
     const owners=await this.dataSource.query(`SELECT u.id,COALESCE((SELECT NULLIF(e.name,'') FROM organization_employees e WHERE e.account_id=u.id ORDER BY e.archived_at NULLS FIRST,e.created_at DESC,e.id LIMIT 1),u.username) AS name FROM users u WHERE u.id=ANY($1::uuid[]) ORDER BY name,u.id`,[scope.ids])
     const result={items:rows.map((r:any)=>this.dto(r,scope)),total:totals[0].total,page:query.page,pageSize:query.pageSize,owners}
     await this.recheck(actorId,scope);return result
@@ -157,7 +157,7 @@ export class OpportunitiesService {
   }
   async export(actorId:string,input:Record<string,unknown>={}) {
     const scope=await this.scope(actorId),query=validateQuery(input),{where,args}=this.conditions(scope,query)
-    const rows=await this.dataSource.query(`SELECT ${projection} ${joins} WHERE ${where} ORDER BY o.registered_on DESC,o.created_at DESC,o.id DESC LIMIT 10001`,args)
+    const rows=await this.dataSource.query(`SELECT ${projection} ${joins} WHERE ${where} ORDER BY ${opportunityOrderBy(query)} LIMIT 10001`,args)
     if(rows.length>10000) throw new BadRequestException('导出最多10000条，请缩小查询范围')
     const result=await exportWorkbook(rows.map((r:any)=>this.dto(r,scope)))
     await this.recheck(actorId,scope);return result

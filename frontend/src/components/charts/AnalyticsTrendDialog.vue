@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { peekAnalyticsQuery } from '@/utils/analytics-cache'
+import { isWorkbenchScopeError } from '@/api/workbench-dashboard'
 import { computed,onBeforeUnmount,onMounted,ref,useId,watch } from 'vue'
 import { X,ChartNoAxesCombined } from 'lucide-vue-next'
 import EChart from './EChart.vue'
@@ -18,10 +20,12 @@ const option=computed(()=>data.value?trendChart(data.value,props.metric,props.me
 const total=computed(()=>{const d=data.value;if(!d)return '—';const value=props.metric==='registrations'?d.registrationCount??d.orderCount:props.metric==='orders'?d.orderCount:props.metric==='quantity'?d.totalQuantity:d.amount;return value==null?'—':props.metric==='amount'?formatKnownCurrency(Number(value),d.currency??'USD'):Number(value).toLocaleString('zh-CN')})
 let request=0,opener:HTMLElement|undefined
 async function load(){
- const current=++request;busy.value=true;data.value=undefined;error.value=''
+ const current=++request;busy.value=true;error.value=''
  const {comparison:_comparison,...query}=props.query
- try{const response=await getLocalDashboardTrend({...query,dimension:props.target.dimension,id:props.target.id,grain:grain.value});if(current===request)data.value=response}
- catch{if(current===request)error.value='趋势暂不可用，请重试或检查数据权限。'}
+ const submitted={...query,dimension:props.target.dimension,id:props.target.id,grain:grain.value}
+ const cached=peekAnalyticsQuery<DashboardTrendResult>('/workbench/analytics/dashboard/trend',submitted);if(cached)data.value=cached
+ try{const response=await getLocalDashboardTrend(submitted);if(current===request)data.value=response}
+ catch(cause){if(isWorkbenchScopeError(cause)&&current===request)data.value=undefined;if(current===request)error.value='趋势暂不可用，请重试或检查数据权限。'}
  finally{if(current===request)busy.value=false}
 }
 const stop=onSessionReset(()=>{request++;data.value=undefined;emit('close')})

@@ -46,6 +46,14 @@ vi.mock('@/api/index', () => ({ default: { get: vi.fn(async (_path, { params: qu
 }) } }))
 
 describe('fulfillment order list', () => {
+  it('shows the locally supplied order remark in pending sales review', async () => {
+    const order = { ...mockFopOrders.find(o => orders.matchesFopQueue(o, 'review'))!, orderRemark: '请合并包装，注意防潮' }
+    vi.spyOn(orders, 'getFopOrders').mockResolvedValue({ source: 'fop', items: [order], total: 1, page: 1, pageSize: 100, totals: { orderCount: 1, itemQuantity: null, amountsByCurrency: [] }, departments: [], refreshedAt: new Date().toISOString() } as orders.FopQueuePage)
+    const { wrapper } = await setup('?queue=review', 'sales')
+    expect(wrapper.findAll('th').some(th => th.text() === '订单备注')).toBe(true)
+    expect(wrapper.get('[data-label="订单备注"]').text()).toBe('请合并包装，注意防潮')
+  })
+
   it.each([
     ['sales','unpaid'], ['sales','review'], ['sales','completed'], ['sales','exceptions'],
     ['dispatch','dispatch'], ['dispatch','completed'], ['procurement','procurement'],

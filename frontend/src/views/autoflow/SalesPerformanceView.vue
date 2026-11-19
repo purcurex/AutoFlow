@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { peekAnalyticsQuery } from '@/utils/analytics-cache'
+import { isWorkbenchScopeError } from '@/api/workbench-dashboard'
 import { BUSINESS_START_DATE } from '@/utils/business-years'
 import { useAnalyticsRefresh } from '@/composables/useAnalyticsRefresh'
 import { useChartAccess } from '@/composables/useChartAccess'
@@ -71,19 +73,22 @@ let forceNextQuery = false
 const chartRefresh = useAnalyticsRefresh(() => load(true), () => busy.value)
 async function load(force = false) {
   const id = ++requestId
-  data.value = undefined; owners.value = []; canSelectOwner.value = false; error.value = ''; busy.value = true; tablePage.value = 1; closeDetails()
+  error.value = ''; busy.value = true; tablePage.value = 1; closeDetails()
   try {
     const capability = await refreshChartAccess()
+    if(id===requestId&&data.value&&JSON.stringify(data.value.chartAccess)!==JSON.stringify(capability)){data.value=undefined;owners.value=[];canSelectOwner.value=false}
     if (id !== requestId || !capability?.visible) return
     const submitted = { ...query.value }
     if (capability.dataScope === 'self') { delete submitted.ownerId; delete submitted.ownerScope }
+    const cached=peekAnalyticsQuery<PerformanceData>('/autoflow/integrations/fop/sales-performance',submitted)
+    if(cached&&JSON.stringify(cached.chartAccess)===JSON.stringify(capability)&&applyChartResponse(cached)){data.value=cached;owners.value=cached.owners;canSelectOwner.value=cached.canSelectOwner}
     const result = await getSalesPerformance(submitted, { force })
     if (id !== requestId) return
     if (!applyChartResponse(result)) return
     data.value = result; chartRefresh.updated(result); owners.value = result.owners; canSelectOwner.value = result.canSelectOwner
   } catch (cause) {
     if (id !== requestId) return
-    clearChartAccess(); owners.value = []; canSelectOwner.value = false; error.value = fopAccessError(cause, String(locale.value).startsWith('zh'))
+    if(isWorkbenchScopeError(cause)){clearChartAccess();data.value=undefined;owners.value=[];canSelectOwner.value=false} error.value = fopAccessError(cause, String(locale.value).startsWith('zh'))
   } finally { if (id === requestId) busy.value = false }
 }
 const dateQuery = useDateRangeQuery(from, to, () => applyFilters(false), () => ({ min: BUSINESS_START_DATE, max: today, maxDays: 366 }))
@@ -103,7 +108,7 @@ function applyFilters(force = false) {
   else void load(force)
 }
 function openDetails(kind: 'receipts' | 'profit', period?: PerformancePeriod) {
-  if (!data.value || (!data.value.selectedOwner && !allOwners.value) || !canViewDetails.value) return
+  if (busy.value || !data.value || (!data.value.selectedOwner && !allOwners.value) || !canViewDetails.value) return
   selectedDetail.value = { query: { ...appliedRange.value, grain: grain.value, ...(allOwners.value ? { ownerScope: 'all' as const } : { ownerId: data.value.selectedOwner!.id }), kind, ...(period ? { periodId: period.id } : {}), page: 1, pageSize: 10 }, label: period ? `${period.from} — ${period.to}` : `${appliedRange.value.from} — ${appliedRange.value.to}`, owner: ownerLabel.value }
 }
 function detailFailed() {
@@ -125,12 +130,12 @@ onBeforeUnmount(() => { off(); clear() })
         <label v-if="canSelectOwner" class="performance-owner-filter">{{ t('业务员', 'Salesperson') }}<select ref="ownerSelect" :value="ownerId || data?.selectedOwner?.id || ''" :disabled="busy" aria-label="业务员" @change="ownerId = ($event.target as HTMLSelectElement).value"><option v-if="!data?.selectedOwner && !ownerId" value="" disabled>{{ t('请选择业务员', 'Select a salesperson') }}</option><option value="all">{{ t('全部', 'All') }}</option><option v-for="owner in owners" :key="owner.id" :value="owner.id">{{ owner.name }}</option></select></label>
         <label>{{ t('时间轴', 'Timeline') }}<select v-model="grain" aria-label="统计粒度"><option value="month">{{ t('按月', 'Monthly') }}</option><option value="week">{{ t('按周', 'Weekly') }}</option><option value="day">{{ t('按天', 'Daily') }}</option></select></label>
         <button class="ov-primary" type="submit" :disabled="busy">{{ t('查询', 'Apply') }}</button>
-      </form>
+      </form><p v-if="busy && data" class="ov-note" role="status">正在更新，当前显示上次查询结果。</p><p v-if="error && data" class="ov-note" role="alert">查询未完成，当前显示上次查询结果。</p>
     </header>
     <div class="ov-body">
       <p v-if="dateError" class="ov-error" role="alert">{{ dateError }}</p>
-      <p v-if="busy" class="ov-empty" role="status">{{ t('正在统计收款与毛利…', 'Loading receipts and profit…') }}</p>
-      <p v-else-if="error" class="ov-error" role="alert">{{ error }}<button class="ov-link" @click="load(true)">{{ t('重试', 'Retry') }}</button></p>
+      <p v-if="busy && !data" class="ov-empty" role="status">{{ t('正在统计收款与毛利…', 'Loading receipts and profit…') }}</p>
+      <p v-else-if="error && !data" class="ov-error" role="alert">{{ error }}<button class="ov-link" @click="load(true)">{{ t('重试', 'Retry') }}</button></p>
       <div v-else-if="data && !data.selectedOwner && !allOwners" class="performance-owner-prompt" role="status">
         <ChartNoAxesCombined :size="28" aria-hidden="true" />
         <strong>{{ canSelectOwner && owners.length ? t('请选择业务员', 'Select a salesperson') : t('暂无可查看的业务员数据', 'No salesperson data available') }}</strong>
@@ -162,7 +167,7 @@ onBeforeUnmount(() => { off(); clear() })
     </div>
     <SalesPerformanceDetails v-if="selectedDetail && canViewDetails" :query="selectedDetail.query" :scope="selectedDetail.label" :owner="selectedDetail.owner" @close="closeDetails" @failure="detailFailed" />
   </section>
-  <p v-else-if="error" class="ov-error" role="alert">{{ error }}<button class="ov-link" @click="load(true)">{{ t('重试', 'Retry') }}</button></p>
+  <p v-else-if="error && !data" class="ov-error" role="alert">{{ error }}<button class="ov-link" @click="load(true)">{{ t('重试', 'Retry') }}</button></p>
 </template>
 
 <style scoped>

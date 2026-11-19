@@ -27,9 +27,10 @@ export function currentInventoryRow(r:Row){
 
 /** SKU ID and inventory material ID are different FOP entities. */
 export function inventoryMaterial(line:Row):{id:string;sku:string;name:string}{
- const sku=line.hzkj_local_sku,a=sku?.hzkj_material?.id,b=line.hzkj_material?.id
- if(a&&b&&a!==b)throw Error('Conflicting inventory material mapping')
- const id=a??b
- if(typeof id!=='string'||!id||typeof sku?.number!=='string')throw Error('Inventory material mapping unavailable')
- return {id,sku:sku.number,name:sku.name?.zh_CN??sku.name??''}
+ const sku=line.hzkj_local_sku
+ const ids=[sku?.hzkj_material?.id,line.hzkj_material?.id,line.hzkj_material_id].filter(v=>v!==undefined&&v!==null&&v!=='')
+ if(new Set(ids).size>1)throw Error('Conflicting inventory material mapping')
+ const id=ids[0],number=sku?.number??line.hzkj_local_sku_number
+ if(typeof id!=='string'||!id||typeof number!=='string'||!number)throw Error('Inventory material mapping unavailable')
+ return {id,sku:number,name:sku?.name?.zh_CN??sku?.name??line.hzkj_local_sku_name??''}
 }

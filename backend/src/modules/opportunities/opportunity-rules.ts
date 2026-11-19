@@ -77,10 +77,12 @@ export function opportunityOptions() {
   return {stages:STAGES,dailyVolumes:DAILY_VOLUMES,countries,currency:'USD' as const}
 }
 export function validateQuery(input:Record<string,unknown>={}) {
-  const result:Record<string,any>={page:1,pageSize:50}
+  const result:Record<string,any>={page:1,pageSize:50,sortBy:'registeredOn',sortDirection:'desc'}
   for(const [key,value] of Object.entries(input)) {
     if(value===undefined || value==='') continue
     if(['page','pageSize'].includes(key)) {const n=Number(value);if(!Number.isSafeInteger(n)||n<1||n>(key==='page'?1000000:200))bad(key);result[key]=n}
+    else if(key==='sortBy') {if(value!=='registeredOn'&&value!=='lastFollowedOn')bad(key);result[key]=value}
+    else if(key==='sortDirection') {if(value!=='asc'&&value!=='desc')bad(key);result[key]=value}
     else if(key==='from'||key==='to') result[key]=validDate(value,key)
     else if(key==='country'||key==='stage') result[key]=validateFields({[key]:value})[key]
     else if(key==='search') {if(typeof value!=='string'||value.length>160)bad(key);result[key]=(value as string).trim()}
@@ -89,6 +91,11 @@ export function validateQuery(input:Record<string,unknown>={}) {
   }
   if(result.from&&result.to&&result.from>result.to)bad('日期范围')
   return result
+}
+export function opportunityOrderBy(query: Record<string,unknown>) {
+  const column = query.sortBy === 'lastFollowedOn' ? 'o.last_followed_on' : 'o.registered_on'
+  const direction = query.sortDirection === 'asc' ? 'ASC' : 'DESC'
+  return `${column} ${direction} NULLS LAST,o.created_at DESC,o.id DESC`
 }
 export async function exportWorkbook(items:Record<string,any>[]):Promise<Buffer> {
   const workbook=new Workbook(),sheet=workbook.addWorksheet('商机')

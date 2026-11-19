@@ -60,7 +60,10 @@ export function getProcurementTaskStatus(p: ProcurementProgress | undefined, shi
   if (p?.logisticsGate === 'pending_dispatch' || p?.logisticsGate === 'pending_logistics') return 'dispatch_preparation'
   return stage
 }
-export function getTaskStatus(order: Pick<FopOrder, 'reviewStatus' | 'businessStatus' | 'nativeProcurementCaptured' | 'procurementStage' | 'dispatchTaskStatus' | 'dispatchDocuments' | 'procurementProgress' | 'fulfillmentProgress' | 'exception'>, queue: string): TaskStatus {
+export function getTaskStatus(order: Pick<FopOrder, 'reviewStatus' | 'businessStatus' | 'nativeProcurementCaptured' | 'nativeSupplierShipment' | 'procurementStage' | 'dispatchTaskStatus' | 'dispatchDocuments' | 'procurementProgress' | 'fulfillmentProgress' | 'exception'>, queue: string): TaskStatus {
+  if (queue === 'procurement_shipping' && order.nativeSupplierShipment !== undefined) {
+    return order.nativeSupplierShipment === 'pending' ? 'supplier_pending' : order.nativeSupplierShipment === 'partial' ? 'supplier_partial' : order.nativeSupplierShipment === 'shipped' ? 'shipped' : order.nativeSupplierShipment === 'not_required' ? 'not_required' : 'unknown'
+  }
   if ((queue === 'procurement' || queue === 'procurement_shipping') && order.nativeProcurementCaptured && order.procurementStage && order.procurementStage in procurementStageLabels) return order.procurementStage as TaskStatus
   if (queue === 'procurement' || queue === 'procurement_shipping') return getProcurementTaskStatus(order.procurementProgress, order.fulfillmentProgress.supplierShipment)
   if (queue === 'allocation' || queue === 'allocation_review') return getDispatchCompletionStatus(order.dispatchDocuments)

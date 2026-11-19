@@ -47,6 +47,11 @@ function copy<T>(entry: Entry): T {
   if (value && typeof value === 'object') metadata.set(value, entry.queriedAt)
   return value
 }
+/** Same-session display only; analyticsQuery still validates current authorization. */
+export function peekAnalyticsQuery<T>(endpoint:string,params:object):T|undefined {
+ const key=JSON.stringify([captureSession(),scopeVersion,endpoint,canonical(params)])
+ const entry=entries.get(key);return entry?copy<T>(entry):undefined
+}
 /** Only chart aggregates use this cache. Every reuse first validates current local authorization. */
 export async function analyticsQuery<T>(endpoint: string, params: object, fetch: () => Promise<T>, options: AnalyticsQueryOptions = {}): Promise<T> {
   const session = captureSession(), access = await scope()
@@ -60,7 +65,7 @@ export async function analyticsQuery<T>(endpoint: string, params: object, fetch:
   }
   const existing = pending.get(key)
   if (!options.force && existing) { const entry = await existing as Entry; assertCurrentSession(session); return copy<T>(entry) }
-  entries.delete(key)
+  // Keep the last successful display during refresh.
   // The async closure checks its own identity after the first await.
   let request!: Promise<Entry>
   // eslint-disable-next-line prefer-const

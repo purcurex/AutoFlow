@@ -87,6 +87,10 @@ export class FulfillmentOrderFiltersDto extends CompletionFiltersDto {
   procurementStage?: ProcurementStage
 
   @IsOptional()
+  @IsIn(['full_payment', 'deposit', 'direct'])
+  procurementSource?: 'full_payment' | 'deposit' | 'direct'
+
+  @IsOptional()
   @IsIn(taskStatuses)
   taskStatus?: TaskStatus
 

@@ -16,6 +16,7 @@ import { normalizeTimestampProjectionRaw, TIMESTAMP_PROJECTION_KINDS } from './t
 import { collectedChainInputs } from './collected-chain-inputs'
 import { buildCollectedBusinessChain } from './collected-business-chain'
 import type { TimestampScope } from './timestamp-sync'
+import { readStockConsumptionSnapshot } from './collected-stock-consumptions'
 
 type Row=Record<string,any>
 const kinds:Record<string,string>=TIMESTAMP_PROJECTION_KINDS
@@ -182,7 +183,8 @@ export async function publishTimestampProjections(q:QueryRunner,scope:TimestampS
  const purchasesByParent=new Map<string,{raw:Row;display:Row}[]>()
  for(const e of entities.values())if(e.entity_type==='purchase')for(const id of new Set<string>((e.display.rows??[]).map((r:Row)=>r.orderId).filter(Boolean))){if(!purchasesByParent.has(id))purchasesByParent.set(id,[]);purchasesByParent.get(id)!.push({raw:e.raw,display:e.display})}
  const applicationsByNumber=new Map<string,Row[]>();for(const e of entities.values())if(e.entity_type==='purchase_application')for(const n of new Set<string>((e.raw.entryentity??[]).map((l:Row)=>l.hzkj_srcbillnumber).filter(Boolean))){if(!applicationsByNumber.has(n))applicationsByNumber.set(n,[]);applicationsByNumber.get(n)!.push(e.raw)}
- for(const id of touchedOrders){const o=orders.get(id);if(o){o.display=physicalBusinessProjection(o.raw,o.display,products,purchasesByParent.get(id)??[],applicationsByNumber.get(o.raw.billno)??[]);if(headerIds.has(id)&&o.display.businessStatus?.outbound==='unknown')o.display.nativeAssociationIssues=[...new Set([...(o.display.nativeAssociationIssues??[]),'current_source_outbound_status_unknown'])]}}
+ const consumptionSnapshot=await readStockConsumptionSnapshot(q,scope.batchId,batch.metadata,[...touchedOrders].map(id=>orders.get(id)?.raw.billno).filter(Boolean))
+ for(const id of touchedOrders){const o=orders.get(id);if(o){o.display=physicalBusinessProjection(o.raw,o.display,products,purchasesByParent.get(id)??[],applicationsByNumber.get(o.raw.billno)??[],consumptionSnapshot);if(headerIds.has(id)&&o.display.businessStatus?.outbound==='unknown')o.display.nativeAssociationIssues=[...new Set([...(o.display.nativeAssociationIssues??[]),'current_source_outbound_status_unknown'])]}}
  const purchaseLines=new Map<string,Row|null>()
  for(const e of entities.values())if(e.entity_type==='purchase'&&e.display.association?.state!=='conflict')for(const r of e.display.rows??[])for(const l of r.lines??[]){
   const id=text(l.purchaseLineId);if(id)purchaseLines.set(id,purchaseLines.has(id)?null:{...l,orderId:r.orderId})

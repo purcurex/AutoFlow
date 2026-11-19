@@ -1,18 +1,23 @@
 <script setup lang="ts">
+import CountryPicker from '@/components/ui/CountryPicker.vue'
+import DateSortHeader from '@/components/ui/DateSortHeader.vue'
+import { crmMockOpportunitiesApi as opportunitiesApi } from '@/mocks/crm'
 import { onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { AppLayout } from '@/components/layout'
 import { PageHeader } from '@/components/ui'
 import OpportunityStage from '@/components/opportunities/OpportunityStage.vue'
-import { opportunitiesApi, opportunityError, optionLabel, type Opportunity, type OpportunityOptions, type OpportunityQuery } from '@/api/opportunities'
+import { opportunityError, optionLabel, type Opportunity, type OpportunityOptions, type OpportunityQuery } from '@/api/opportunities'
 import { onSessionReset } from '@/utils/session'
 const options = ref<OpportunityOptions>({ stages: [], dailyVolumes: [], countries: [], currency: 'USD' })
 const rows = ref<Opportunity[]>([]), owners = ref<{ id: string; name: string }[]>([]), total = ref<number | null>(null)
 const filters = reactive({ search: '', stage: '', country: '', ownerId: '', from: '', to: '' })
 const page = ref(1), pageSize = ref(20), busy = ref(false), exporting = ref(false), error = ref(''), optionsError = ref('')
+const sortBy = ref<'registeredOn' | 'lastFollowedOn'>('registeredOn'), sortDirection = ref<'asc' | 'desc'>('desc')
+function sortDate(field: 'registeredOn' | 'lastFollowedOn') { sortDirection.value = sortBy.value === field && sortDirection.value === 'asc' ? 'desc' : 'asc'; sortBy.value = field; void load(true) }
 let generation = 0, optionsGeneration = 0, exportGeneration = 0
 const cleanup = onSessionReset(() => { generation++; optionsGeneration++; exportGeneration++; rows.value = []; owners.value = []; total.value = null; error.value = ''; optionsError.value = ''; busy.value = false; exporting.value = false })
 onBeforeUnmount(() => { generation++; optionsGeneration++; exportGeneration++; cleanup() })
-function query(): OpportunityQuery { return { ...Object.fromEntries(Object.entries(filters).filter(([, value]) => value)), page: page.value, pageSize: pageSize.value } }
+function query(): OpportunityQuery { return { ...Object.fromEntries(Object.entries(filters).filter(([, value]) => value)), page: page.value, pageSize: pageSize.value, sortBy: sortBy.value, sortDirection: sortDirection.value } }
 async function load(reset = false) {
   if (reset) page.value = 1
   const ticket = ++generation; busy.value = true; error.value = ''
@@ -42,7 +47,7 @@ const safeLink = (value: string | null) => value && /^https?:\/\//i.test(value) 
   <form class="opportunity-filters" @submit.prevent="load(true)">
    <input v-model="filters.search" class="input search" aria-label="搜索商机" placeholder="搜索客户名称 / 单号" />
    <select v-model="filters.stage" class="input" aria-label="商机阶段"><option value="">全部阶段</option><option v-for="item in options.stages" :key="item.value" :value="item.value">{{item.label}}</option></select>
-   <select v-model="filters.country" class="input" aria-label="国家"><option value="">全部国家</option><option v-for="item in options.countries" :key="item.value" :value="item.value">{{item.label}}</option></select>
+   <CountryPicker v-model="filters.country" placeholder="全部国家" />
    <select v-model="filters.ownerId" class="input" aria-label="业务员"><option value="">全部业务员</option><option v-for="item in owners" :key="item.id" :value="item.id">{{item.name}}</option></select>
    <label>登记日期 <input v-model="filters.from" type="date" class="input" aria-label="登记开始日期" /></label><span class="date-separator">至</span><input v-model="filters.to" type="date" class="input" aria-label="登记结束日期" />
    <button class="btn btn-secondary" :disabled="busy">查询</button>
@@ -51,7 +56,7 @@ const safeLink = (value: string | null) => value && /^https?:\/\//i.test(value) 
   <p v-if="error" role="alert" class="opportunity-error">{{error}} <button type="button" class="btn btn-ghost" @click="load()">重新查询</button></p>
   <p v-if="optionsError" role="alert" class="opportunity-error">选项加载失败：{{optionsError}} <button type="button" class="btn btn-ghost" @click="loadOptions">重试</button></p>
 
-  <div class="opportunity-table-scroll" :class="{'is-empty':!rows.length}" :aria-busy="busy"><table class="data-table opportunity-table"><thead><tr><th>单号 / 客户名称</th><th>状态</th><th>业务员</th><th>商机阶段</th><th>预计日均量</th><th>预计月订单额 USD</th><th>主卖产品</th><th>国家 / 城市</th><th>客户经营范围</th><th>WhatsApp</th><th>店铺链接</th><th>登记日期</th><th>最后跟进日期</th><th>本周跟进情况</th><th>下周计划</th><th>问题反馈</th></tr></thead><tbody>
+  <div class="opportunity-table-scroll" :class="{'is-empty':!rows.length}" :aria-busy="busy"><table class="data-table opportunity-table"><thead><tr><th>单号 / 客户名称</th><th>状态</th><th>业务员</th><th>商机阶段</th><th>预计日均量</th><th>预计月订单额 USD</th><th>主卖产品</th><th>国家 / 城市</th><th>客户经营范围</th><th>WhatsApp</th><th>店铺链接</th><DateSortHeader label="登记日期" :direction="sortBy==='registeredOn'?sortDirection:undefined" :disabled="busy" @sort="sortDate('registeredOn')" /><DateSortHeader label="最后跟进日期" :direction="sortBy==='lastFollowedOn'?sortDirection:undefined" :disabled="busy" @sort="sortDate('lastFollowedOn')" /><th>本周跟进情况</th><th>下周计划</th><th>问题反馈</th></tr></thead><tbody>
    <tr v-for="row in rows" :key="row.id"><td class="customer-cell"><RouterLink :to="`/opportunities/${row.id}`" class="customer-name" :title="row.customerName">{{row.customerName}}</RouterLink><RouterLink :to="`/opportunities/${row.id}`" class="number" :title="row.number">{{row.number}}</RouterLink></td><td><span class="draft-status">暂存</span></td><td><span class="truncate-cell" :title="row.ownerName">{{row.ownerName||'—'}}</span></td><td><OpportunityStage :value="row.stage" :options="options.stages" /></td><td>{{optionLabel(options.dailyVolumes,row.dailyVolume)}}</td><td class="amount">{{row.monthlyAmount??'—'}}</td><td><span class="truncate-cell" :title="row.mainProducts||undefined">{{row.mainProducts||'—'}}</span></td><td>{{optionLabel(options.countries,row.country)}}<small :title="row.city||undefined">{{row.city}}</small></td><td><span class="truncate-cell" :title="row.businessScope||undefined">{{row.businessScope||'—'}}</span></td><td><span class="truncate-cell" :title="row.whatsapp||undefined">{{row.whatsapp||'—'}}</span></td><td><a v-if="safeLink(row.storeUrl)" :href="safeLink(row.storeUrl)" class="truncate-cell" :title="row.storeUrl||undefined" target="_blank" rel="noopener noreferrer">{{row.storeUrl}}</a><span v-else>—</span></td><td>{{row.registeredOn||'—'}}</td><td>{{row.lastFollowedOn||'—'}}</td><td><span class="truncate-cell long" :title="row.currentFollowUp||undefined">{{row.currentFollowUp||'—'}}</span></td><td><span class="truncate-cell long" :title="row.nextFollowUpPlan||undefined">{{row.nextFollowUpPlan||'—'}}</span></td><td><span class="truncate-cell long" :title="row.problemFeedback||undefined">{{row.problemFeedback||'—'}}</span></td></tr>
    <tr v-if="!rows.length"><td colspan="16" class="opportunity-empty"><span>{{busy?'正在加载商机…':total===0?'暂无商机，可新增商机或从客户线索生成。':'商机查询未完成，请重试。'}}</span></td></tr>
   </tbody></table></div>

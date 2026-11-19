@@ -1,3 +1,4 @@
+import { purchaseLogisticsSupplier } from './purchase-logistics-supplier'
 import { purchasePayment } from './purchase-payment'
 import { isVirtualProduct } from './physical-business-lines'
 import Decimal from 'decimal.js'
@@ -21,6 +22,19 @@ export function purchaseFulfillmentLine(line: Row, parent: Row): Row | null {
  const ref = purchaseSalesReference(line)
  const candidates = (parent.hzkj_orders_billentry ?? []).filter((entry: Row) => ref.entryId ? String(entry.id) === ref.entryId : ref.sequence !== null && String(entry.seq) === ref.sequence)
  return candidates.length === 1 ? candidates[0] : null
+}
+/** Display/contact linkage only; does not allocate quantities or change procurement status. */
+export function purchaseMatchesSourceSku(line: Row, parent: Row, skuId: string): boolean {
+ const ref=purchaseSalesReference(line),sku=(l:Row)=>purchaseReference(l.hzkj_local_sku_id??l.hzkj_local_sku?.id)
+ if(ref.number!==parent.billno||isVirtualProduct(line))return false
+ const entries:Row[]=parent.hzkj_orders_billentry??[]
+ const byId=ref.entryId?entries.filter(e=>purchaseReference(e.id)===ref.entryId):[]
+ const bySequence=ref.sequence?entries.filter(e=>purchaseReference(e.seq)===ref.sequence):[]
+ if(byId.length>1||bySequence.length>1||byId.length&&bySequence.length&&byId[0]!==bySequence[0])return false
+ // Explicit, unique sales sequence can resolve a legacy optional ID that no longer matches.
+ const entry=byId[0]??bySequence[0],ownSku=sku(line)
+ if(entry&&(isVirtualProduct(entry)||sku(entry)!==skuId)||ownSku&&ownSku!==skuId)return false
+ return !!entry||!!ownSku
 }
 const text = (v: unknown): string | null => typeof v === 'string' && v.trim() ? v.trim() : null
 const quantity = (v: unknown): number | null => { try { if (v == null || v === '') return null; const d = new Decimal(String(v)), n = d.toNumber(); return d.isFinite() && d.gte(0) && n <= Number.MAX_SAFE_INTEGER && d.eq(String(n)) ? n : null } catch { return null } }
@@ -61,5 +75,5 @@ export function purchaseGroupFacts(raw: Row, rows: Row[], unresolved: number): R
  const placement = ['paid','refunded','partially_refunded'].includes(payment) || offline ? 'placed' : online && raw.hasAlibabaOffer === true ? (platformOrder ? 'placed' : 'pending') : 'unknown'
  const shipment = ['1','2'].includes(raw.hzkj_ship_status) || ['C','D','E','F','G'].includes(raw.hzkj_logisticsstatus) ? 'shipped' : raw.hzkj_ship_status === '0' || raw.hzkj_logisticsstatus === 'A' ? 'pending' : raw.hzkj_logisticsstatus === 'B' ? 'partial' : 'unknown'
  const stage = raw.hzkj_cancelstatus === 'B' || payment === 'cancelled' ? 'cancelled' : ['refunded','partially_refunded'].includes(payment) ? 'refund_pending' : placement === 'pending' ? 'placement_pending' : payment === 'unpaid' ? 'payment_pending' : placement === 'placed' && payment === 'paid' ? (shipment === 'shipped' ? 'shipped' : shipment === 'pending' ? 'supplier_pending' : shipment === 'partial' ? 'supplier_partial' : 'unknown') : 'unknown'
- return {id:`purchase:${raw.id}`,kind:'purchase',purchase:{id:raw.id,number:raw.billno,supplier:{id:text(raw.hzkj_supplier?.id),name:text(raw.hzkj_supplier?.name)},purchaseType:online?'online':offline?'offline':'unknown',platform:online&&raw.hasAlibabaOffer===true?'1688':null,platformOrderNumber:platformOrder,payment,paymentName:text(raw.hzkj_pay_status_title),actualPaidAmount:quantity(raw.hzkj_actual_amount),actualPaidFreight:quantity(raw.hzkj_actual_free),placement,paidAt:date(raw.hzkj_pay_time)},rawBillStatus:raw.billstatus??null,rawPaymentStatus:raw.hzkj_pay_status??null,rawStandardPaymentStatus:raw.hzkj_paystatus??null,rawCancelStatus:raw.hzkj_cancelstatus??null,shipment,stage,rows,association:{state:unresolved?'partial':'verified',unresolvedLineCount:unresolved},completedAt:null}
+ return {id:`purchase:${raw.id}`,kind:'purchase',purchase:{id:raw.id,number:raw.billno,supplier:purchaseLogisticsSupplier(raw),purchaseType:online?'online':offline?'offline':'unknown',platform:online&&raw.hasAlibabaOffer===true?'1688':null,platformOrderNumber:platformOrder,payment,paymentName:text(raw.hzkj_pay_status_title),actualPaidAmount:quantity(raw.hzkj_actual_amount),actualPaidFreight:quantity(raw.hzkj_actual_free),placement,paidAt:date(raw.hzkj_pay_time)},rawBillStatus:raw.billstatus??null,rawPaymentStatus:raw.hzkj_pay_status??null,rawStandardPaymentStatus:raw.hzkj_paystatus??null,rawCancelStatus:raw.hzkj_cancelstatus??null,shipment,stage,rows,association:{state:unresolved?'partial':'verified',unresolvedLineCount:unresolved},completedAt:null}
 }

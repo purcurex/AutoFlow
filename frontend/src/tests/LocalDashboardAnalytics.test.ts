@@ -3,7 +3,7 @@ import { describe,it,expect,vi,beforeEach,afterEach } from 'vitest'
 import LocalDashboardAnalytics from '@/components/charts/LocalDashboardAnalytics.vue'
 const get=vi.hoisted(()=>vi.fn())
 vi.mock('@/api/local-dashboard-analytics',()=>({getLocalDashboardAnalytics:get,getLocalDashboardTrend:vi.fn()}))
-vi.mock('@/utils/session',()=>({onSessionReset:()=>()=>{}}))
+vi.mock('@/utils/session',async original=>({...await original<object>(),onSessionReset:()=>()=>{}}))
 vi.mock('@/components/charts/EChart.vue',()=>({default:{name:'EChart',props:['option','label'],template:'<div data-chart />'}}))
 const value={source:'local',asOf:'2026-11-12T00:00:00Z',summaryOnly:false,rows:[{dimension:'month',id:'2026-11',label:'2026-11',currency:null,orderCount:42,amount:null,quantity:'71'}],orderCount:42,departments:[{id:'d1',name:'业务一部'}],warehouses:[],currencies:[],missingCurrencyCount:42,missingAmountCount:0,missingPaidAtCount:2}
 beforeEach(()=>{vi.useFakeTimers();get.mockReset();get.mockResolvedValue(value)})

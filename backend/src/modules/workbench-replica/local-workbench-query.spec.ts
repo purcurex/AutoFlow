@@ -39,6 +39,9 @@ describe('formal queue alignment with current list date and physical purchase fa
   })
 })
 describe('local workbench query boundary', () => {
+  it('rejects a stock-source filter before the formal replica has a verified source projection', () => {
+    expect(() => buildLocalOrderQuery(scopes, {queue:'procurement',procurementSource:'full_payment'} as any)).toThrow('采购来源')
+  })
   it('uses the UI month default for approved and sales stock, preserving explicit all',()=>{
     for(const stock of [false,true]){
       const query={queue:stock?'all':'review',completed:!stock}

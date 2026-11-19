@@ -16,7 +16,7 @@ const grouped = computed(() => {
 })
 const text = (cn: string, en: string) => String(locale.value).startsWith('zh') ? cn : en
 function change(view: string) {
-  void router.replace({ query: { ...route.query, view, page: undefined, sortBy: undefined, sortOrder: undefined, taskStatus: undefined, procurementStage: undefined, purchaseStage: undefined } })
+  void router.replace({ query: { ...route.query, view, page: undefined, sortBy: undefined, sortOrder: undefined, taskStatus: undefined, procurementStage: undefined, procurementSource: undefined, purchaseStage: undefined } })
 }
 </script>
 <template>

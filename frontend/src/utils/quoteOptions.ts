@@ -1,9 +1,4 @@
-import auFlag from 'flag-icons/flags/4x3/au.svg'
-import caFlag from 'flag-icons/flags/4x3/ca.svg'
-import deFlag from 'flag-icons/flags/4x3/de.svg'
-import frFlag from 'flag-icons/flags/4x3/fr.svg'
-import gbFlag from 'flag-icons/flags/4x3/gb.svg'
-import usFlag from 'flag-icons/flags/4x3/us.svg'
+import { COUNTRIES } from './countries'
 
 export interface ProductTierDraft {
   id: number
@@ -27,14 +22,7 @@ export interface SelectedLogisticsChannelDraft {
   logisticsProfitMarginRate: number
 }
 
-export const QUOTE_COUNTRIES: QuoteCountryOption[] = [
-  { code: 'US', flagUrl: usFlag },
-  { code: 'GB', flagUrl: gbFlag },
-  { code: 'DE', flagUrl: deFlag },
-  { code: 'FR', flagUrl: frFlag },
-  { code: 'CA', flagUrl: caFlag },
-  { code: 'AU', flagUrl: auFlag },
-]
+export const QUOTE_COUNTRIES: QuoteCountryOption[] = COUNTRIES
 
 export function createDefaultProductTiers(): ProductTierDraft[] {
   return [1, 2, 3].map((quantity) => ({

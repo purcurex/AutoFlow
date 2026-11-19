@@ -1,3 +1,4 @@
+import { clearDashboardSnapshots } from '@/utils/dashboard-snapshot'
 import { clearDashboardExceptionCache } from '@/utils/dashboard-exception-cache'
 import { getFopOrders } from '@/api/fop-orders'
 vi.mock('@/api/fop-orders',()=>({getFopOrders:vi.fn()}))
@@ -33,8 +34,24 @@ function mountView() {
   return mount(FopDashboardView, { global: { plugins: [router, createI18n({ legacy: false, locale: 'zh-CN', messages: {} })], stubs: { RouterLink: RouterLinkStub } } })
 }
 describe('FOP Dashboard interactions', () => {
+  it('renders the last snapshot immediately while refresh is pending',async()=>{
+    const first=mountView();await flushPromises();first.unmount()
+    vi.mocked(getFopDashboard).mockImplementationOnce(()=>new Promise(()=>{}))
+    const next=mountView()
+    expect(next.findAll('.summary-card')[0]!.find('strong').text()).toBe('1')
+    expect(next.find('.receipts-panel').exists()).toBe(true)
+    next.unmount()
+  })
+  it('retains the snapshot on temporary refresh failure',async()=>{
+    const first=mountView();await flushPromises();first.unmount()
+    vi.mocked(getFopDashboard).mockRejectedValueOnce(new Error('offline'))
+    const next=mountView();await flushPromises()
+    expect(next.findAll('.summary-card')[0]!.find('strong').text()).toBe('1')
+    next.unmount()
+  })
+
   afterEach(() => vi.useRealTimers())
-  beforeEach(() => { vi.mocked(getFopDashboardCharts).mockReset().mockResolvedValue(dashboardFixture(structuredClone(sample))); clearDashboardExceptionCache(); vi.mocked(getFopOrders).mockReset().mockResolvedValue({total:1,items:[{id:"authorized",orderNumber:"AUTHORIZED-ORDER",exception:{type:"allocation_exception",reason:"需要跟进配货"}}]} as never); vi.mocked(getFopDataAccess).mockClear(); vi.mocked(getFopDashboard).mockReset().mockResolvedValue(dashboardFixture(structuredClone(sample))) })
+  beforeEach(() => { clearDashboardSnapshots(); vi.mocked(getFopDashboardCharts).mockReset().mockResolvedValue(dashboardFixture(structuredClone(sample))); clearDashboardExceptionCache(); vi.mocked(getFopOrders).mockReset().mockResolvedValue({total:1,items:[{id:"authorized",orderNumber:"AUTHORIZED-ORDER",exception:{type:"allocation_exception",reason:"需要跟进配货"}}]} as never); vi.mocked(getFopDataAccess).mockClear(); vi.mocked(getFopDashboard).mockReset().mockResolvedValue(dashboardFixture(structuredClone(sample))) })
   it('loads exceptions without waiting for dashboard aggregates', async () => {
     vi.mocked(getFopDashboard).mockImplementationOnce(() => new Promise(() => {}))
     const wrapper = mountView(); await flushPromises()

@@ -350,8 +350,9 @@ export class AutoflowService {
       .leftJoinAndSelect('workflowLink.workflowRun', 'discoveryWorkflow')
       .loadRelationCountAndMap('lead.discoveryCount', 'lead.workflowLinks')
       .where('lead.owner_user_id IN (:...visibleOwnerIds)', { visibleOwnerIds: owners.ids.length ? owners.ids : ['00000000-0000-0000-0000-000000000000'] })
-      .orderBy('lead.registeredOn', 'DESC')
+      .orderBy(query.sortBy === 'contactedOn' ? 'lead.contactedOn' : 'lead.registeredOn', query.sortDirection === 'asc' ? 'ASC' : 'DESC', 'NULLS LAST')
       .addOrderBy('lead.createdAt', 'DESC')
+      .addOrderBy('lead.id', 'DESC')
       .skip((page - 1) * pageSize)
       .take(pageSize)
 

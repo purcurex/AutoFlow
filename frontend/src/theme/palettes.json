@@ -18,6 +18,36 @@
     "sidebarLight": {
       "selected": "#2B4A62",
       "text": "#E8F4FC"
+    },
+    "chartDetail": {
+      "light": "#5D98BF",
+      "dark": "#5D98BF"
+    },
+    "logisticsSeries": {
+      "light": [
+        "#287DB5",
+        "#E38B35",
+        "#765DB5",
+        "#269B87",
+        "#D36383",
+        "#899C35",
+        "#62768F",
+        "#B37345"
+      ],
+      "dark": [
+        "#68B7E5",
+        "#F0B366",
+        "#B59AE8",
+        "#63C9AF",
+        "#EA92AD",
+        "#BBCD71",
+        "#9CAFC9",
+        "#D5A178"
+      ]
+    },
+    "yuanfeihang": {
+      "light": "#D78632",
+      "dark": "#EDB36E"
     }
   },
   "green": {
@@ -39,6 +69,36 @@
     "sidebarLight": {
       "selected": "#365440",
       "text": "#EDF8EF"
+    },
+    "chartDetail": {
+      "light": "#5CA272",
+      "dark": "#5CA272"
+    },
+    "logisticsSeries": {
+      "light": [
+        "#269B87",
+        "#287DB5",
+        "#E38B35",
+        "#765DB5",
+        "#D36383",
+        "#899C35",
+        "#62768F",
+        "#B37345"
+      ],
+      "dark": [
+        "#63C9AF",
+        "#68B7E5",
+        "#F0B366",
+        "#B59AE8",
+        "#EA92AD",
+        "#BBCD71",
+        "#9CAFC9",
+        "#D5A178"
+      ]
+    },
+    "yuanfeihang": {
+      "light": "#9070BD",
+      "dark": "#B79BDC"
     }
   },
   "purple": {
@@ -60,27 +120,87 @@
     "sidebarLight": {
       "selected": "#49445F",
       "text": "#F4F0FF"
+    },
+    "chartDetail": {
+      "light": "#9792BF",
+      "dark": "#9792BF"
+    },
+    "logisticsSeries": {
+      "light": [
+        "#765DB5",
+        "#287DB5",
+        "#E38B35",
+        "#269B87",
+        "#D36383",
+        "#899C35",
+        "#62768F",
+        "#B37345"
+      ],
+      "dark": [
+        "#B59AE8",
+        "#68B7E5",
+        "#F0B366",
+        "#63C9AF",
+        "#EA92AD",
+        "#BBCD71",
+        "#9CAFC9",
+        "#D5A178"
+      ]
+    },
+    "yuanfeihang": {
+      "light": "#289B89",
+      "dark": "#67C9B7"
     }
   },
   "orange": {
     "name": "活力橙",
     "light": [
-      "#FFBE00",
-      "#FFF6D9",
-      "#91650B",
-      "#65482B",
-      "#302A20"
+      "#FF9166",
+      "#FFF2EB",
+      "#B94B25",
+      "#48362F",
+      "#30251F"
     ],
     "dark": [
-      "#D9AD43",
-      "#3B3221",
-      "#E8C879",
-      "#282219",
-      "#302A20"
+      "#F79B79",
+      "#40302A",
+      "#FFB394",
+      "#211B18",
+      "#30251F"
     ],
     "sidebarLight": {
-      "selected": "#7D5B37",
-      "text": "#FFF6E5"
+      "selected": "#60483E",
+      "text": "#FFF3EC"
+    },
+    "chartDetail": {
+      "light": "#FFAC8C",
+      "dark": "#F9B49A"
+    },
+    "logisticsSeries": {
+      "light": [
+        "#E38B35",
+        "#287DB5",
+        "#765DB5",
+        "#269B87",
+        "#D36383",
+        "#899C35",
+        "#62768F",
+        "#B37345"
+      ],
+      "dark": [
+        "#F0B366",
+        "#68B7E5",
+        "#B59AE8",
+        "#63C9AF",
+        "#EA92AD",
+        "#BBCD71",
+        "#9CAFC9",
+        "#D5A178"
+      ]
+    },
+    "yuanfeihang": {
+      "light": "#367EB5",
+      "dark": "#79B7E5"
     }
   }
 }

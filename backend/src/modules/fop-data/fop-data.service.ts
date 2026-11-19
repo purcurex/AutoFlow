@@ -1027,6 +1027,7 @@ export class FopDataService {
       && inTimeRange(query.queue === 'unpaid' ? order.sourceOrderPaidAt : order.consumerPaidAt)
       && (!query.taskStatus || matchesTaskStatus(order, query.queue, query.taskStatus))
       && (!query.procurementStage || getProcurementStage(order.procurementProgress, order.fulfillmentProgress.supplierShipment) === query.procurementStage)
+      && (!query.procurementSource || order.items.some(item=>item.procurementSource?.complete && Number(item.procurementSource[({full_payment:'fullPaymentQuantity',deposit:'depositQuantity',direct:'directQuantity'} as const)[query.procurementSource!]])>0))
       && (!query.warehouseCode || order.warehouseCode === query.warehouseCode)
       && (!query.ownerId || order.owner?.id === query.ownerId)
       && (!query.orderNumber || order.orderNumber === query.orderNumber)
@@ -1068,7 +1069,7 @@ export class FopDataService {
       const dispatch = query.queue === 'dispatch'
       const salesCompleted = query.queue === 'review' && query.completed === true
       const sourcePaymentSort = query.queue === 'review' && query.sortBy === 'consumerPaidAt'
-      if (query.warehouseStage || query.completed && !dispatch && !salesCompleted || query.shippingCountryCode !== undefined && (query.queue !== 'review' || !this.provider.supportsReviewCountryFilters)
+      if (query.procurementSource || query.warehouseStage || query.completed && !dispatch && !salesCompleted || query.shippingCountryCode !== undefined && (query.queue !== 'review' || !this.provider.supportsReviewCountryFilters)
         || salesCompleted && (query.taskStatus || query.procurementStage || query.timeRange && !['1w', '1m', '3m'].includes(query.timeRange)
           || query.sortBy && !['completedAt', 'paidAt', 'consumerPaidAt'].includes(query.sortBy))
         || unpaid && (query.taskStatus || query.procurementStage || query.sortBy !== undefined && !['paidAt', 'consumerPaidAt'].includes(query.sortBy))

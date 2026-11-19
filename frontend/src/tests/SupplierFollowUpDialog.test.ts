@@ -131,3 +131,9 @@ it('resolves return contacts on demand even when the local return has no purchas
   wrapper=mount(SupplierFollowUpDialog,{props:{orderId:'o1',orderNumber:'TO1',returnContext:{returnId:'r1',workbenchRole:'procurement'}},global:{plugins:[createI18n({legacy:false,locale:'zh-CN',messages:{}})],stubs:{Teleport:true}}})
   await flushPromises();expect(wrapper.text()).toContain('卖家p1');expect(open).toHaveBeenCalledWith('aliim:sendmsg?touid=cnalichn%E5%8D%96%E5%AE%B6p1','卖家p1')
 })
+it('shows logistics seller phone and a copy action even when Wangwang is missing',async()=>{
+ const item={...contact('p1','missing_account'),supplier:{id:'s1',name:'物流卖家',wangwangAccount:'',phone:'0579-12345678'}}
+ const w=await show([item]);expect(w.text()).toContain('联系电话');expect(w.text()).toContain('0579-12345678')
+ expect(w.find('[aria-label="复制联系电话"]').exists()).toBe(true)
+ expect(w.get('.open-chat').attributes('disabled')).toBeDefined()
+})

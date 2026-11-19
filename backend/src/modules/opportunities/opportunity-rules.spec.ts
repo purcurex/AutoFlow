@@ -57,3 +57,12 @@ describe('local opportunity boundaries', () => {
     expect(row.getCell(5).value).toBe('正式下单')
   })
 })
+
+
+describe('date sort query contract',()=>{
+ it('accepts only known date columns and directions',()=>{
+  expect(validateQuery({sortBy:'lastFollowedOn',sortDirection:'asc'})).toMatchObject({sortBy:'lastFollowedOn',sortDirection:'asc'})
+  expect(validateQuery({})).toMatchObject({sortBy:'registeredOn',sortDirection:'desc'})
+  for(const input of [{sortBy:'ownerId'},{sortBy:'registered_on;DROP TABLE users'},{sortDirection:'DESC NULLS FIRST'}]) expect(()=>validateQuery(input)).toThrow()
+ })
+})

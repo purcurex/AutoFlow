@@ -5,6 +5,7 @@ import { opportunityPayload } from '@/api/opportunities'
 import { invalidateSession } from '@/utils/session'
 const api = vi.hoisted(() => ({ options: vi.fn(), list: vi.fn(), get: vi.fn(), create: vi.fn(), update: vi.fn(), followUp: vi.fn(), remove: vi.fn(), export: vi.fn(), fromLead: vi.fn() }))
 vi.mock('@/api/opportunities', async importOriginal => ({ ...await importOriginal<any>(), opportunitiesApi: api }))
+vi.mock('@/mocks/crm', () => ({ crmMockOpportunitiesApi: api, isCrmMockId: () => false }))
 vi.mock('@/components/layout', () => ({ AppLayout: { template: '<main><slot /></main>' } }))
 const options = { stages: [{ value: 'first', label: '初步接触' }, { value: 'negotiation', label: '洽谈中' }], dailyVolumes: [{ value: 'ten', label: '1-10' }, { value: 'twenty', label: '11-20' }, { value: 'fifty', label: '20-50' }, { value: 'more', label: '50以上' }], countries: [{ value: 'US', label: '美国' }], currency: 'USD' }
 const row = { id: 'o1', number: 'SJ001', customerName: '客户甲', ownerName: '业务员甲', ownerUserId: 'u1', status: 'draft', stage: 'first', dailyVolume: 'ten', monthlyAmount: null, currency: 'USD', country: 'US', registeredOn: '2026-11-18', version: 2, canEdit: true, canDelete: true, followUps: [] }
@@ -46,4 +47,18 @@ describe('opportunity workflows', () => {
  it('prevents repeated saves while a create request is pending', async () => { let resolve!: (v: unknown) => void; api.create.mockReturnValue(new Promise(r => resolve = r)); const { wrapper: w } = await setup('detail', '/opportunities/new'); await w.get('[name="customerName"]').setValue('客户甲'); await w.get('form[data-test="opportunity-form"]').trigger('submit'); await w.get('form[data-test="opportunity-form"]').trigger('submit'); expect(api.create).toHaveBeenCalledTimes(1); resolve(row); await flushPromises(); w.unmount() })
  it('clears sensitive data on session reset and discards an old list response', async () => { const { wrapper: w } = await setup('list'); let resolve!: (v: unknown) => void; api.list.mockReturnValue(new Promise(r => resolve = r)); await w.get('select[aria-label="商机阶段"]').setValue('negotiation'); invalidateSession(); resolve({ items: [row], total: 1, owners: [] }); await flushPromises(); expect(w.text()).not.toContain('客户甲'); w.unmount() })
  it('generates from a lead with duplicate-click protection and opens the result', async () => { let resolve!: (v: unknown) => void; api.fromLead.mockReturnValue(new Promise(r => resolve = r)); const { wrapper: w, router } = await setup('button'); await w.get('button').trigger('click'); await w.get('button').trigger('click'); expect(api.fromLead).toHaveBeenCalledTimes(1); expect(api.fromLead).toHaveBeenCalledWith('lead1'); resolve(row); await flushPromises(); expect(router.currentRoute.value.path).toBe('/opportunities/o1'); w.unmount() })
+})
+
+it('resets the page on date sorting and exports in the selected order',async()=>{
+ api.list.mockResolvedValue({items:[row],total:41,page:1,pageSize:20,owners:[]})
+ const {wrapper:w}=await setup('list')
+ await w.findAll('button').find(b=>b.text()==='下一页')!.trigger('click');await flushPromises()
+ expect(api.list).toHaveBeenLastCalledWith(expect.objectContaining({page:2}))
+ await w.get('button[aria-label="最后跟进日期：按时间升序排列"]').trigger('click');await flushPromises()
+ expect(api.list).toHaveBeenLastCalledWith(expect.objectContaining({page:1,sortBy:'lastFollowedOn',sortDirection:'asc'}))
+ await w.get('button[aria-label="最后跟进日期：按时间降序排列"]').trigger('click');await flushPromises()
+ api.export.mockRejectedValue(new Error('test'));await w.get('[data-test="export"]').trigger('click');await flushPromises()
+ expect(api.export).toHaveBeenLastCalledWith(expect.objectContaining({sortBy:'lastFollowedOn',sortDirection:'desc'}))
+ expect(api.export.mock.calls.at(-1)![0]).not.toHaveProperty('page')
+ w.unmount()
 })

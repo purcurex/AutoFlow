@@ -10,7 +10,8 @@ const groups = {
   allocation: ['allocation', 'allocation_review'], shipping: ['shipping'],
 } as const
 export function isWorkbenchScopeError(cause: unknown): boolean {
-  const error = cause as { code?: string; statusCode?: number }
+  const raw = cause as { code?: string; statusCode?: number; status?: number; response?: {status?:number;data?:{code?:string}} }
+  const error = {code:raw?.code??raw?.response?.data?.code,statusCode:raw?.statusCode??raw?.status??raw?.response?.status}
   return cause instanceof StaleSessionError || error?.statusCode === 401 || error?.statusCode === 403
     || ['fop_binding_required', 'fop_binding_changed', 'fop_permission_denied', 'business_access_disabled', 'business_scope_required', 'local_organization_scope_required', 'chart_access_denied'].includes(error?.code ?? '')
 }

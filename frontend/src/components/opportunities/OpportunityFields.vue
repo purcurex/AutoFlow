@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CountryPicker from '@/components/ui/CountryPicker.vue'
 import type { OpportunityFields, OpportunityOptions } from '@/api/opportunities'
 const draft = defineModel<OpportunityFields>({ required: true })
 defineProps<{ options: OpportunityOptions; disabled?: boolean }>()
@@ -9,7 +10,7 @@ defineProps<{ options: OpportunityOptions; disabled?: boolean }>()
  <label>预计日均量<select v-model="draft.dailyVolume" name="dailyVolume" class="input"><option :value="null">请选择</option><option v-for="item in options.dailyVolumes" :key="item.value" :value="item.value">{{item.label}}</option></select></label>
  <label>预计月订单额 (USD)<input v-model="draft.monthlyAmount" name="monthlyAmount" class="input" inputmode="decimal" pattern="[0-9]+([.][0-9]{1,2})?" placeholder="请输入金额" /></label>
  <label>主卖产品<input v-model="draft.mainProducts" class="input" maxlength="4000" /></label>
- <label>国家<select v-model="draft.country" class="input"><option :value="null">请选择</option><option v-for="item in options.countries" :key="item.value" :value="item.value">{{item.label}}</option></select></label>
+ <label>国家<CountryPicker v-model="draft.country" :disabled="disabled" /></label>
  <label>城市<input v-model="draft.city" class="input" maxlength="120" /></label>
  <label>登记日期 <b>*</b><input v-model="draft.registeredOn" type="date" required class="input" /></label>
  <label>WhatsApp<input v-model="draft.whatsapp" class="input" maxlength="120" placeholder="国家区号及号码" /></label>

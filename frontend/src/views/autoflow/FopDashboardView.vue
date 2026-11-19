@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { peekDashboardSnapshot, saveDashboardSnapshot, clearDashboardSnapshots } from '@/utils/dashboard-snapshot'
+import { isWorkbenchScopeError } from '@/api/workbench-dashboard'
 import { businessYears, BUSINESS_START_DATE } from '@/utils/business-years'
 import type { DashboardPending } from '@/api/workbench-dashboard'
 import { clearWorkbenchCounts } from '@/utils/workbench-counts'
@@ -44,8 +46,8 @@ const chartBusy = ref({ registrations:false, department_receipts:false, salesper
 const chartErrors = ref({ registrations:"", department_receipts:"", salesperson_receipts:"" })
 const chartRequests = { registrations:0, department_receipts:0, salesperson_receipts:0 }
 const years = businessYears(currentYear)
-const data = ref<FopDashboardData>()
-const dashboardMode = ref<'local'|'remote'>()
+const data = ref<FopDashboardData | undefined>(peekDashboardSnapshot({from:from.value,to:to.value,year:year.value}))
+const dashboardMode = ref<'local'|'remote'|undefined>(data.value ? data.value.localAnalytics ? 'local' : 'remote' : undefined)
 const pendingData = ref<DashboardPending>()
 const pending = computed(() => pendingData.value ?? data.value)
 const chart = (id: ChartId) => data.value?.chartAccess?.find(item => item.chartId === id)
@@ -138,13 +140,12 @@ async function refresh(force = false) {
   if (force) { clearWorkbenchCounts(); exceptionRevision.value++ }
   busy.value = true
   error.value = ''
-  pendingData.value = undefined
-  appliedRange.value = ''
   const id = ++requestId
   const submitted = { from: from.value, to: to.value, year: year.value }
   try {
     const result = await getFopDashboard(submitted, undefined, counts => { if (id === requestId) pendingData.value = counts }, { force })
     if (id !== requestId) return
+    saveDashboardSnapshot(submitted,result)
     data.value = result
     dashboardMode.value = result.localAnalytics ? 'local' : 'remote'
     if (!result.receipts.departments.some(department => department.id === selectedDepartmentId.value)) selectedDepartmentId.value = result.receipts.departments[0]?.id ?? 'sales1'
@@ -152,7 +153,7 @@ async function refresh(force = false) {
     appliedRange.value = `${submitted.from} — ${submitted.to}`
     appliedYear.value = submitted.year
   } catch (cause) {
-    if (id === requestId) { data.value = undefined; pendingData.value = undefined; error.value = fopAccessError(cause, zh.value) }
+    if (id === requestId) { if(isWorkbenchScopeError(cause)){clearDashboardSnapshots();data.value=undefined;pendingData.value=undefined} error.value = fopAccessError(cause, zh.value) }
   } finally { if (id === requestId) busy.value = false }
 }
 type IndependentChart = keyof typeof chartRequests
@@ -358,7 +359,7 @@ const salespersonOption = computed(() => collectionsOption(salespersonSeries.val
             </div>
             <footer>{{ text('点击任务查看对应履约订单清单。', 'Select a task to view its fulfillment orders.') }}</footer>
           </section>
-          <DashboardExceptions v-if="!error" :key="exceptionRevision" :force-refresh="exceptionRevision > 0" />
+          <DashboardExceptions v-if="!error || data" :key="exceptionRevision" :force-refresh="exceptionRevision > 0" />
         </div>
       </div>
 

@@ -14,3 +14,7 @@ it('uses explicit material relation, never SKU identity or code as a substitute'
  expect(()=>inventoryMaterial({hzkj_local_sku:{id:'sku-id',number:'SKU'}})).toThrow()
  expect(()=>inventoryMaterial({hzkj_local_sku:{number:'SKU',hzkj_material:{id:'a'}},hzkj_material:{id:'b'}})).toThrow()
 })
+it('accepts explicit flattened material relation returned by collection APIs',()=>{
+ expect(inventoryMaterial({hzkj_material_id:'material',hzkj_local_sku_number:'SKU',hzkj_local_sku_name:'中文配货名'})).toEqual({id:'material',sku:'SKU',name:'中文配货名'})
+ expect(()=>inventoryMaterial({hzkj_material_id:'a',hzkj_material:{id:'b'},hzkj_local_sku_number:'SKU'})).toThrow('Conflicting')
+})

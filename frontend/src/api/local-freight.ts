@@ -1,5 +1,5 @@
 import api from './index'
-import { analyticsQuery, type AnalyticsQueryOptions } from '@/utils/analytics-cache'
+import { analyticsQuery, peekAnalyticsQuery, type AnalyticsQueryOptions } from '@/utils/analytics-cache'
 export type FreightDimension='carrier'|'channel'|'warehouse'|'country'|'customer'|'owner'|'department'
 export interface LocalFreightQuery {grain:'week'|'month'|'year';year:number;weekOf?:string;warehouse?:string;currency:string;dimension:FreightDimension;departmentId?:string;ownerId?:string}
 export interface FreightMeasure {amount:string;previousAmount:string|null;delta:string|null;percent:number|null}
@@ -10,6 +10,12 @@ export interface LocalFreightResult {
  totals:FreightMeasure;values:FreightMeasure[];billCount:number;averagePerBill:string|null;weightKg:string;weightBillCount:number;costPerKg:string|null
  series:FreightSeries[];departmentSeries?:FreightSeries[]
  quality:{missingCurrencyCount:number;missingDateCount:number};currencies:string[];warehouses:string[];warehouseOptions?:{id:string;name:string}[]
+}
+export function peekLocalFreight(query:LocalFreightQuery):LocalFreightResult|undefined {
+ const params={...query,currency:'CNY',dimension:'carrier' as const,allDimensions:true}
+ const result=peekAnalyticsQuery<LocalFreightResult & {dimensionSeries:Record<FreightDimension,{series:FreightSeries[];departmentSeries?:FreightSeries[]}>}>('/workbench/analytics/freight:dimensions-v1',params)
+ const view=result?.dimensionSeries?.[query.dimension]
+ return result&&view?{...result,...view,query:{...query,currency:'CNY'}}:undefined
 }
 /** All dimension summaries share the same scope, source revision and expiry. */
 export async function getLocalFreight(query:LocalFreightQuery,options?:AnalyticsQueryOptions):Promise<LocalFreightResult>{

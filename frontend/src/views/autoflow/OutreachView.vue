@@ -19,13 +19,13 @@ import {
 } from 'lucide-vue-next'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
-import { useAutoFlowStore } from '@/stores'
+import { useCrmMockStore } from '@/stores/crm-mock'
 import { AppLayout } from '@/components/layout'
 import { EmptyState, PageHeader, StatusBadge } from '@/components/ui'
 import type { OutreachChannel, OutreachStatus } from '@/api/autoflow'
 import { withReturnTo } from '@/composables/useReturnNavigation'
 
-const store = useAutoFlowStore()
+const store = useCrmMockStore()
 const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()

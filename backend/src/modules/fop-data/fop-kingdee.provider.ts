@@ -122,7 +122,7 @@ export class KingdeeFopDataProvider extends FopDataProvider {
     if(this.config.get('FOP_MANUAL_INVENTORY_ENABLED')!=='true') throw new FopIntegrationUnavailableError('fop_feature_not_configured')
     if(!this.inventoryProvider){
       const origin=new URL(this.config.get('FOP_KINGDEE_TOKEN_URL')!).origin
-      this.inventoryProvider=new KingdeeFopDataProvider({get:key=>key==='FOP_QUERIES_PAUSED'?'false':key==='FOP_NATIVE_RESERVED_INVENTORY_URL'?origin+'/kapi/v2/hzkj/hzkj_ordercenter/hzkj_stock_inventory_data/queryWorkbenchReservedStock':key==='FOP_NATIVE_CURRENT_INVENTORY_URL'?origin+'/kapi/v2/hzkj/im/im_inv_realbalance/queryWorkbenchInventoryBalance':this.config.get(key)},this.request,this.resolveBinding)
+      this.inventoryProvider=new KingdeeFopDataProvider({get:key=>key==='FOP_QUERIES_PAUSED'?'false':key==='FOP_NATIVE_RESERVED_INVENTORY_URL'?this.config.get(key)||origin+'/kapi/v2/hzkj/hzkj_ordercenter/hzkj_stock_inventory_data/queryWorkbenchReservedStock':key==='FOP_NATIVE_CURRENT_INVENTORY_URL'?this.config.get(key)||origin+'/kapi/v2/hzkj/im/im_inv_realbalance/queryWorkbenchInventoryBalance':this.config.get(key)},this.request,this.resolveBinding)
     }
     return this.inventoryProvider.performCall(kind==='reserved'?'FOP_NATIVE_RESERVED_INVENTORY_URL':'FOP_NATIVE_CURRENT_INVENTORY_URL',body)
   }

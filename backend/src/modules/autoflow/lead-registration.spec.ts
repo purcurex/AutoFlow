@@ -1,7 +1,7 @@
 import { Workbook } from 'exceljs'
 import { plainToInstance } from 'class-transformer'
 import { validate } from 'class-validator'
-import { RegisterLeadDto } from './dto/autoflow.dto'
+import { RegisterLeadDto, ListLeadsQueryDto } from './dto/autoflow.dto'
 import { leadTemplate, readLeadWorkbook } from './lead-registration'
 async function workbook(rows: unknown[][]) { const w=new Workbook();const s=w.addWorksheet('leads');rows.forEach(r=>s.addRow(r));return Buffer.from(await w.xlsx.writeBuffer()) }
 describe('lead registration import contract',()=>{
@@ -12,4 +12,10 @@ describe('lead registration import contract',()=>{
  })
  it('rejects missing required columns',async()=>{await expect(readLeadWorkbook(await workbook([['客户名称'],['Acme']]))).rejects.toThrow('国家')})
  it('rejects caller supplied origin and owner',async()=>{const dto=plainToInstance(RegisterLeadDto,{brandName:'Acme',country:'US',storeUrl:'https://acme.example',leadType:'automatic',ownerUserId:'someone'});const errors=await validate(dto,{whitelist:true,forbidNonWhitelisted:true});expect(errors.map(e=>e.property)).toEqual(expect.arrayContaining(['leadType','ownerUserId']))})
+})
+
+it('validates lead date sorting fields and directions',async()=>{
+ expect(await validate(plainToInstance(ListLeadsQueryDto,{sortBy:'contactedOn',sortDirection:'asc'}))).toHaveLength(0)
+ const errors=await validate(plainToInstance(ListLeadsQueryDto,{sortBy:'ownerUserId',sortDirection:'DESC NULLS FIRST'}))
+ expect(errors.map(e=>e.property)).toEqual(expect.arrayContaining(['sortBy','sortDirection']))
 })

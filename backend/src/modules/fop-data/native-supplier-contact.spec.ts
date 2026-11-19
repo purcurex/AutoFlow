@@ -35,3 +35,28 @@ it('versions change when the seller changes and malformed accounts cannot launch
  expect(a.contactVersion).not.toBe(b.contactVersion)
  const c=await client({'purchase:21':[{...purchase,hzkj_sellers_ww:'seller\nsecret'}]}).purchase({id:'21',number:'CG21'},'TO1');expect(c.url).toBeNull()
 })
+it('revalidates the specific stock SKU before returning or launching its seller',async()=>{
+ const parent={id:'s1',billno:'IO1',hzkj_orders_billentry:[{id:'sl1',seq:1,hzkj_local_sku_id:'sku1'},{id:'sl2',seq:2,hzkj_local_sku_id:'sku2'}]}
+ const stockPurchase={...purchase,hzkj_billentry:[{id:'pl1',hzkj_salbillnumber:'IO1',hzkj_salbillentryid:'sl1'}]}
+ const refs=[{sourceType:'deposit' as const,parent,skuId:'sku1',sku:'SKU1'}]
+ const c=await client({'purchase:21':[stockPurchase]}).purchaseSources({id:'21',number:'CG21'},refs)
+ expect(c.supplier.wangwangAccount).toBe('正确卖家');expect(c.sourceReferences).toEqual([{sourceType:'deposit',orderNumber:'IO1',sku:'SKU1'}])
+ await expect(client({'purchase:21':[{...stockPurchase,hzkj_billentry:[{...stockPurchase.hzkj_billentry[0],hzkj_salbillentryid:'sl2'}]}]}).purchaseSources({id:'21',number:'CG21'},refs)).rejects.toThrow('relationship changed')
+ await expect(client({'purchase:21':[{...stockPurchase,hzkj_cancelstatus:'B'}]}).purchaseSources({id:'21',number:'CG21'},refs)).rejects.toThrow('cancelled')
+})
+it('uses only logistics-tab seller fields even when supplier-tab values disagree',async()=>{
+ const native={...purchase,hzkj_ww_login_id:'无效旧账号',hzkj_sellers_phone:' 0579-12345678 ',hzkj_supplier:{id:'wrong',name:'无效供应商',phone:'wrong'}}
+ const c=await client({'purchase:21':[native]}).purchase({id:'21',number:'CG21'},'TO1')
+ expect(c.supplier).toMatchObject({name:'正确卖家',wangwangAccount:'正确卖家',phone:'0579-12345678',source:'purchase_logistics'})
+ const empty=await client({'purchase:21':[{...native,hzkj_sellers_ww:'',hzkj_sellers_phone:''}]}).purchase({id:'21'},'TO1')
+ expect(empty.supplier.wangwangAccount).toBeNull();expect(empty.supplier.phone).toBeNull();expect(empty.availability).toBe('missing_account')
+})
+it('return contacts use the purchase logistics seller instead of the return supplier label',async()=>{
+ const result=await client({'purchase:CG21':[{...purchase,hzkj_sellers_phone:'0579-12345678'}]}).returned({supplier:{name:'无效旧供应商'},lines:[{sourceDocumentId:'31',sourceDocumentNumber:'IN31',sourceEntryId:'311',orderNumber:'TO1'}]},'TO1')
+ expect(result[0].supplier).toMatchObject({name:'正确卖家',phone:'0579-12345678'})
+})
+it('invalidates contact versions when the logistics phone changes',async()=>{
+ const a=await client({'purchase:21':[{...purchase,hzkj_sellers_phone:'0579-11111111'}]}).purchase({id:'21'},'TO1')
+ const b=await client({'purchase:21':[{...purchase,hzkj_sellers_phone:'0579-22222222'}]}).purchase({id:'21'},'TO1')
+ expect(a.contactVersion).not.toBe(b.contactVersion)
+})

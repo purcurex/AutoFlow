@@ -9,7 +9,7 @@ import { AriaComponent, DataZoomComponent, GridComponent, LegendComponent, MarkL
 import { SVGRenderer } from 'echarts/renderers'
 
 use([BarChart, LineChart, AriaComponent, DataZoomComponent, GridComponent, LegendComponent, MarkLineComponent, TooltipComponent, ToolboxComponent, SVGRenderer])
-const props = withDefaults(defineProps<{ option: EChartsCoreOption; label: string; canExport?: boolean }>(), { canExport: undefined })
+const props = withDefaults(defineProps<{ option: EChartsCoreOption; label: string; canExport?: boolean; logisticsColors?: boolean }>(), { canExport: undefined })
 const { canExport: inheritedExport } = useChartCapabilities()
 const { isDark, palette } = useTheme()
 const allowExport = computed(() => props.canExport ?? inheritedExport.value)
@@ -32,7 +32,7 @@ function rememberRange() {
   const ranges = chart?.getOption().dataZoom as { start: number; end: number }[] | undefined
   acceptedRanges = (ranges ?? []).map(({ start, end }, dataZoomIndex) => ({ dataZoomIndex, start, end }))
 }
-function renderOption(preserveRange = false) {
+function renderOption(preserveRange = false, styleOnly = false) {
   if (!chart) return
   const raw = props.option.dataZoom
   const sliders = (Array.isArray(raw) ? raw : raw ? [raw] : [])
@@ -50,7 +50,17 @@ function renderOption(preserveRange = false) {
     return { ...item, feature }
   }
   const toolbox = props.option.toolbox
-  chart.setOption(applyChartTheme({ ...props.option, ...(toolbox ? { toolbox: Array.isArray(toolbox) ? toolbox.map(filterToolbox) : filterToolbox(toolbox) } : {}), dataZoom: sliders }, isDark.value, palette.value), { notMerge: true })
+  const themed = applyChartTheme({ ...props.option, ...(toolbox ? { toolbox: Array.isArray(toolbox) ? toolbox.map(filterToolbox) : filterToolbox(toolbox) } : {}), dataZoom: sliders }, isDark.value, palette.value, props.logisticsColors)
+  if (styleOnly) {
+    // Recolor the existing scene; preserve legend selection and avoid entry animations.
+    const current = chart.getOption()
+    if (themed.legend && current.legend) {
+      const legends = Array.isArray(themed.legend) ? themed.legend : [themed.legend]
+      const previous = current.legend as { selected?: Record<string, boolean> }[]
+      themed.legend = legends.map((legend, index) => ({ ...legend, selected: previous[index]?.selected }))
+    }
+    chart.setOption({ ...themed, animation: false }, { notMerge: false })
+  } else chart.setOption(themed, { notMerge: true })
   dragged = false
   rememberRange()
 }
@@ -88,7 +98,10 @@ onMounted(() => {
   })
   observer.observe(element.value)
 })
-watch([() => props.option, allowExport, isDark, palette], ([, , dark, color], [, , previousDark, previousColor]) => renderOption(dark !== previousDark || color !== previousColor))
+watch([() => props.option, allowExport, isDark, palette, () => props.logisticsColors], ([option, access, dark, color, logistics], [previousOption, previousAccess, previousDark, previousColor, previousLogistics]) => {
+  const styleOnly = option === previousOption && access === previousAccess && (dark !== previousDark || color !== previousColor || logistics !== previousLogistics)
+  renderOption(styleOnly, styleOnly)
+})
 onBeforeUnmount(() => {
   observer?.disconnect()
   if (frame !== undefined) cancelAnimationFrame(frame)

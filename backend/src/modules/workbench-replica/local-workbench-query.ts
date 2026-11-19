@@ -10,6 +10,7 @@ export interface LocalOrderFilters {
   billStatus?: 'A' | 'B'
   skuAssociation?: 'linked' | 'unlinked'
   purchaseGrouping?: boolean
+  procurementSource?: 'full_payment' | 'deposit' | 'direct'
   returnStatus?: string
   queue: string; completed?: boolean; search?: string; orderNumber?: string; warehouseCode?: string; shippingCountryCode?: string
   procurementStage?: string; taskStatus?: string; warehouseStage?: string; timeRange?: string; sortBy?: string; sortOrder?: 'asc' | 'desc'; paidAtOrder?: 'asc' | 'desc'
@@ -31,6 +32,7 @@ export function localResourceGrantSql(resource: string, target: string, company 
     AND NOT EXISTS (SELECT 1 FROM hz_fop_resource_grants g WHERE ${scope} AND g.target_key = ${target} AND NOT COALESCE((g.decision = 'allow' AND ${valid}), FALSE)))`
 }
 export function buildLocalOrderQuery(scopes: LocalReadScope[], query: LocalOrderFilters, stock = false) {
+  if(query.procurementSource)throw unconfigured('正式副本尚未接入已核验的采购来源投影')
   const values: unknown[] = [JSON.stringify(scopes.map(s => ({ connection_id: s.connectionId, company_id: s.companyId, dataset_id: s.datasetId, employee_ids: s.employeeIds })))]
   const bind = (value: unknown) => { values.push(value); return `$${values.length}` }
   const queue = stock ? query.queue === 'procurement' ? 'stock_procurement' : 'stock' : localQueueCode(query.queue, query.completed)

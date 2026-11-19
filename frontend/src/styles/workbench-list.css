@@ -1,4 +1,5 @@
 /* Shared controls for fulfillment and stocking task lists, in both themes. */
+:root{--workbench-filter-inline-padding:20px}
 .workbench-button{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:38px;padding:8px 14px;border:1px solid var(--color-border);border-radius:6px;background:var(--color-surface);color:var(--color-text-secondary);font-size:12px;font-weight:600;line-height:20px;white-space:nowrap;transition:background .15s,color .15s}
 .workbench-button:hover:not(:disabled){background:color-mix(in srgb,var(--color-chart-link) 10%,var(--color-surface));color:var(--color-text)}
 .workbench-button:disabled{opacity:.45;cursor:not-allowed}
@@ -7,7 +8,7 @@
 .workbench-search-field{display:flex;align-items:center;gap:9px;height:38px;padding:0 12px;border:1px solid var(--color-border);border-radius:6px;color:var(--color-text-secondary);min-width:0}
 .workbench-search-field input{width:100%;min-width:0;border:0;padding:8px 0;background:transparent;color:var(--color-text);font-size:12px;line-height:20px}
 /* All task lists: search → department → warehouse; task-specific filters follow. */
-.workbench-filter-toolbar{display:flex;flex-direction:column;gap:12px;padding:18px 20px;border-bottom:1px solid var(--color-border);min-width:0}
+.workbench-filter-toolbar{display:flex;flex-direction:column;gap:12px;padding:18px var(--workbench-filter-inline-padding);border-bottom:1px solid var(--color-border);min-width:0}
 .workbench-filter-main,.workbench-filter-secondary{display:flex;flex-wrap:wrap;align-items:center;gap:12px;min-width:0}
 .workbench-filter-search{display:flex;align-items:center;gap:8px;flex:0 1 424px;width:424px;min-width:230px;max-width:100%}
 .workbench-filter-search .workbench-search-field{flex:1;min-width:0}
@@ -16,9 +17,25 @@
 .workbench-filter-main > label:last-of-type select{width:112px}
 .workbench-filter-secondary select{width:150px}
 .workbench-filter-secondary .result-count,.workbench-filter-secondary .count{margin-left:auto;width:300px;max-width:100%;min-height:20px;flex-shrink:0;text-align:right;white-space:nowrap;font-size:12px;color:var(--color-text-secondary);font-variant-numeric:tabular-nums}
-@media(max-width:700px){.workbench-filter-toolbar{padding:14px}.workbench-filter-search{flex-basis:100%;width:100%;min-width:0}.workbench-filter-toolbar label:not(.workbench-search-field){max-width:100%}.workbench-filter-toolbar select{max-width:100%}.workbench-filter-secondary .result-count,.workbench-filter-secondary .count{margin-left:0}}
+@media(max-width:700px){:root{--workbench-filter-inline-padding:14px}.workbench-filter-toolbar{padding:14px var(--workbench-filter-inline-padding)}.workbench-filter-search{flex-basis:100%;width:100%;min-width:0}.workbench-filter-toolbar label:not(.workbench-search-field){max-width:100%}.workbench-filter-toolbar select{max-width:100%}.workbench-filter-secondary .result-count,.workbench-filter-secondary .count{margin-left:0}}
 .workbench-task-table{font-size:12px}
 .workbench-task-table th{font-size:11px;font-weight:600;line-height:1.5;color:var(--color-text-secondary)}
+
+/* Fit a whole document row inside laptop workbenches without stacking fields.
+   Zoom applies only to the table, leaving filters and actions at normal size. */
+table[data-task-layout] { table-layout:fixed; }
+table[data-task-layout] > tbody > tr > td { white-space:nowrap; overflow-wrap:normal; }
+table[data-task-layout] > tbody > tr > td[data-label="店铺"] { overflow:hidden; text-overflow:ellipsis; }
+table[data-task-layout] > thead > tr > th { white-space:nowrap; overflow-wrap:normal; }
+table[data-task-layout="compact"] :is(th,td) { padding-inline:4px!important; min-width:0!important; }
+table[data-task-layout="compact"] :is(.shopify-cell,.amount-cell) { padding-inline:7px!important; }
+table[data-task-layout="compact"] :is(.copy-customer span,.salesperson-name,.owner-name) { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+table[data-task-layout="compact"] :is(.copy-value,.stock-copy,.sort-status,.sort-payment,.sort-consumer,.follow-up-order) { white-space:nowrap; flex-wrap:nowrap; }
+table[data-task-layout="compact"] :is(.product-name,.rma-product>div>span,.product-variant) { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+table[data-task-layout="compact"] .product-sku-meta { flex-wrap:nowrap; gap:4px; }
+table[data-task-layout="compact"] .product-lines-placeholder { width:10px; min-width:10px; }
+table[data-task-layout="compact"] .product-lines-toggle { width:16px; min-width:16px; }
+table[data-task-layout="compact"] :is(.product,.stock-product,.rma-product) { gap:6px; }
 
 /* Date/time values stay complete on one line in tables and responsive cards. */
 .workbench-task-table .workbench-date-cell { white-space: nowrap; font-variant-numeric: tabular-nums; overflow-wrap: normal; }

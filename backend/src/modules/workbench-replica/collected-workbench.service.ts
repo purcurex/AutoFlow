@@ -1,3 +1,4 @@
+import { purchaseLogisticsSupplier } from '../fop-data/purchase-logistics-supplier'
 import { LocalFreightDetailsDto, localFreightDetailsQuery } from './local-freight-details'
 import { timestampRuntimeStatus } from './timestamp-runtime-status'
 import { deliveryNoticeWmsTime } from './delivery-notice-time'
@@ -10,6 +11,10 @@ import { inventoryPages, reservedInventoryRow, currentInventoryRow, inventoryMat
 import { persistedExceptionDisplaySql } from './persisted-exception-read'
 import { stockExceptionDisplay, canViewUnassignedStockExceptions } from './collected-stock-exceptions'
 import { usesReservedStock } from '../fop-data/procurement-demand'
+import { withProcurementSources } from '../fop-data/stock-consumption-source'
+import { withProcurementSourceDocuments } from './collected-procurement-source-documents'
+import { stockProcurementContactLinks, type SupplierPurchaseLink } from './stock-procurement-contact-links'
+import { purchaseMatchesSourceSku } from '../fop-data/collected-purchase-association'
 import { collectedMaterialReturnsQuery } from './collected-material-returns'
 import { withSourceOrderNumber } from '../fop-data/source-order-number'
 import { collectedOrderNotes } from '../fop-data/collected-order-notes'
@@ -24,7 +29,7 @@ import { withCollectedRmaDetails } from '../fop-data/collected-rma'
 import { STOCK_BILL_STATUS_LABELS } from '../fop-data/fop-stock.types'
 import { singleSheetWorkbook, exportRowIdentity, exportProductRow } from '../workbench-export/single-sheet'
 import { collectedProductLines } from './collected-product-display'
-import { collectedInboundQuery } from './collected-inbound-query'
+import { collectedInboundPage } from './collected-inbound-query'
 import { withOrderBusinessStatus } from '../fop-data/order-business-status'
 import { businessStatusLabel } from '../fop-data/fulfillment-source-status'
 import { collectedOrganizationQuery } from './collected-organization-query'
@@ -61,6 +66,30 @@ type Row=Record<string,any>
 type CollectedRow=Row & {items:Row[]}
 type CollectedPage={items:CollectedRow[];total:number;page:number;pageSize:number;[key:string]:any}
 const exactNumber=(value:unknown):number|null=>{if(value==null)return null;const n=Number(value);return Number.isFinite(n)&&Math.abs(n)<=Number.MAX_SAFE_INTEGER&&new Decimal(String(n)).eq(String(value))?n:null}
+/** SKU consumption is aggregate evidence, never an allocation to the original fulfillment rows. */
+function uncreatedPurchaseLines(display:Row,parent:Row):Row[]{
+ const items:Row[]=display.items??[],byId=new Map(items.map(l=>[String(l.id),l]))
+ const rawById=new Map<string,Row>((parent.hzkj_orders_billentry??[]).map((l:Row)=>[String(l.id),l]))
+ const states=new Map<string,string>((display.businessStatus?.lines??[]).map((l:Row)=>[String(l.id),l.purchase]))
+ const pending=(id:string)=>['unpurchased','purchasing'].includes(states.get(id)??'')
+ const seen=new Set<string>(),result:Row[]=[]
+ for(const item of items){
+  const id=String(item.id),raw=rawById.get(id)??{},source=raw.procurementSource
+  if(!pending(id)||usesReservedStock(raw))continue
+  if(source?.lineIds?.length>1){
+   const ids:string[]=source.lineIds.map(String),key=JSON.stringify(ids)
+   if(seen.has(key))continue
+   seen.add(key)
+   // A mixed-stage SKU may include already purchased demand; its pending share is not known.
+   const quantity=source.complete&&ids.every(lineId=>byId.has(lineId)&&pending(lineId))?exactNumber(source.directQuantity):null
+   result.push({...item,id:undefined,skuId:source.skuId,quantity,fulfillmentLineId:null,fulfillmentLineIds:ids,skuAggregated:true,purchaseLineId:null,shippedQuantity:null})
+  }else{
+   const quantity=source?(source.complete?exactNumber(source.directQuantity):null):display.procurementSources?null:item.quantity
+   result.push({...item,quantity,fulfillmentLineId:item.id,purchaseLineId:null,shippedQuantity:null})
+  }
+ }
+ return result
+}
 const missingDatasets=['allocation','dispatch','procurement','stock_orders','rma','receipt_notices','inventory','interception']
 const sourceCaptureFallback=(batch:Row)=>batch.metadata?.productionPreparation?.sourceCaptured===false?null:batch.source_as_of
 const orderCaptureTime=(batch:Row)=>publishedTimestampTime(batch.metadata?.timestampSync,sourceCaptureFallback(batch),['hzkj_orders'])
@@ -103,12 +132,29 @@ export class CollectedWorkbenchService {
    items=[await reader.purchase(purchase,sourceOrder.orderNumber)]
   }else if(query.context==='fulfillment'){
    const q=collectedWhere(c.batch.id,c.filter.employeeIds,{queue:'procurement_shipping'})
-   const orders:Row[]=await this.db.query(`SELECT source_id,display FROM hz_fop_collected_orders WHERE ${q.where} AND source_id=$${q.params.length+1}`,[...q.params,query.orderId])
+   const orders:Row[]=await this.db.query(`SELECT source_id,display,raw FROM hz_fop_collected_orders WHERE ${q.where} AND source_id=$${q.params.length+1}`,[...q.params,query.orderId])
    if(orders.length!==1)throw new NotFoundException('Order not in current queue')
    orderId=query.orderId;orderNumber=orders[0].display.orderNumber
-   const groups:Row[]=await this.db.query("SELECT display FROM hz_fop_collected_entities WHERE batch_id=$1 AND entity_type='purchase' AND display->>'stage' IN ('supplier_pending','supplier_partial') AND display->'association'->>'state'='verified' AND EXISTS(SELECT 1 FROM jsonb_array_elements(display->'rows') r WHERE r->>'orderId'=$2)",[c.batch.id,orderId])
-   if(groups.length>10)throw new BadRequestException('请从采购单视角逐单联系供应商')
-   items=[];for(const g of groups)items.push({...await reader.purchase(g.display.purchase,orderNumber),shipmentStatus:g.display.stage==='supplier_partial'?'partial':'pending'})
+   const groups:Row[]=await this.db.query("SELECT display,raw FROM hz_fop_collected_entities WHERE batch_id=$1 AND entity_type='purchase' AND display->>'stage' IN ('supplier_pending','supplier_partial') AND display->'association'->>'state'='verified' AND EXISTS(SELECT 1 FROM jsonb_array_elements(display->'rows') r WHERE r->>'orderId'=$2)",[c.batch.id,orderId])
+   const parent=orders[0].raw??{id:orderId,billno:orderNumber},products:Row[]=orders[0].display.items??[]
+   const sources:Row[]=products.map(item=>item.procurementSource).filter(Boolean)
+   const links:SupplierPurchaseLink[]=groups.flatMap(g=>{
+    const direct=sources.filter(s=>Number(s.directQuantity)>0&&(g.raw?.hzkj_billentry??[]).some((line:Row)=>purchaseMatchesSourceSku(line,parent,s.skuId)))
+    // Once quantities are known, fully stocked SKUs cannot select an unrelated direct purchase.
+    if(sources.length&&!direct.length)return []
+    return [{purchase:g.display.purchase,shipmentStatus:g.display.stage==='supplier_partial'?'partial':'pending',references:direct.length?direct.map(s=>({sourceType:'direct' as const,parent,skuId:s.skuId,sku:s.sku})): [{sourceType:'direct' as const,parent}]}]
+   })
+   links.push(...await stockProcurementContactLinks(this.db,{id:c.batch.id,company_id:c.batch.company_id},parent,products))
+   const purchases=new Map<string,SupplierPurchaseLink>()
+   for(const link of links){const prior=purchases.get(link.purchase.id);if(prior){
+    if(prior.purchase.number!==link.purchase.number||prior.purchase.platformOrderNumber!==link.purchase.platformOrderNumber)throw new ConflictException('采购关联已变化，请刷新后重试')
+    prior.references.push(...link.references)
+   }else purchases.set(link.purchase.id,link)}
+   if(purchases.size>10)throw new BadRequestException('关联采购单较多，请在 FOP 逐单联系供应商')
+   items=[];for(const link of purchases.values()){
+    const contact=await reader.purchaseSources(link.purchase,link.references)
+    items.push({...contact,shipmentStatus:link.shipmentStatus,contactVersion:createHash('sha256').update(JSON.stringify([orderId,contact.contactVersion])).digest('hex')})
+   }
   }else throw new ServiceUnavailableException({code:'fop_supplier_contacts_not_configured',message:'备货采购联系人关联待接入'})
   if((await this.context(userId,role,filters)).signature!==c.signature)throw new ConflictException('权限或数据已变化，请刷新后重试')
   if(launch){
@@ -160,24 +206,31 @@ export class CollectedWorkbenchService {
    }else{
     if(query.mode==='selected'&&!selected?.length||query.mode==='search'&&!query.search?.trim())throw new BadRequestException('SKU or selected orders required')
     const skus=new Map<string,{sku:string;name:string}>()
-    const lines:Row[]=selected?selected.flatMap(r=>r.raw.hzkj_orders_billentry??[]):(await this.db.query("SELECT DISTINCT l AS entry FROM hz_fop_collected_orders CROSS JOIN LATERAL jsonb_array_elements(coalesce(raw->'hzkj_orders_billentry','[]'::jsonb)) l WHERE batch_id=$1 AND ($2::text[] IS NULL OR owner_employee_id=ANY($2::text[])) AND position(lower($3) in lower(l->'hzkj_local_sku'->>'number'))>0 LIMIT 101",[c.batch.id,c.filter.employeeIds,query.search.trim()])).map((r:Row)=>r.entry)
-    if(!selected&&lines.length>100)throw new BadRequestException('请缩小 SKU 查询范围')
+    const lines:Row[]=selected?selected.flatMap(r=>r.raw.hzkj_orders_billentry??[]):(await this.db.query("SELECT DISTINCT l AS entry FROM hz_fop_collected_orders CROSS JOIN LATERAL jsonb_array_elements(coalesce(raw->'hzkj_orders_billentry','[]'::jsonb)) l WHERE batch_id=$1 AND ($2::text[] IS NULL OR owner_employee_id=ANY($2::text[])) AND position(lower($3) in lower(coalesce(l->'hzkj_local_sku'->>'number',l->>'hzkj_local_sku_number')))>0 LIMIT 101",[c.batch.id,c.filter.employeeIds,query.search.trim()])).map((r:Row)=>r.entry)
+    if(!selected&&lines.length>100)throw new BadRequestException({code:'fop_inventory_result_too_large',message:'请减少所选商品后查询库存'})
     for(const line of lines){
-     const material=inventoryMaterial(line)
+     let material:ReturnType<typeof inventoryMaterial>
+     try{material=inventoryMaterial(line)}catch{throw new ServiceUnavailableException({code:'fop_inventory_material_missing',message:'所选商品的库存信息暂不可查询，请联系管理员'})}
      if(skus.has(material.id)&&skus.get(material.id)!.sku!==material.sku)throw Error('Ambiguous material mapping')
      skus.set(material.id,material)
     }
-    if(skus.size>20)throw new BadRequestException('请缩小 SKU 查询范围')
+    if(skus.size>20)throw new BadRequestException({code:'fop_inventory_result_too_large',message:'请减少所选商品后查询库存'})
     items=[]
     for(const [id,sku] of skus){
      const rows=await inventoryPages(read,kind,c.batch.company_id,orgNumber,{material_id:id})
      if(rows.some(r=>r.material_id!==id))throw Error('Inventory material mismatch')
-     // auxpty is not a published public/customer scope contract. Never disclose another customer's pool.
-     if(rows.length)throw Error('Inventory pool ownership contract unavailable')
+     // Company-wide readers may inspect raw balances without claiming public ownership.
+     // Restricted readers still require an explicit customer-pool contract from FOP.
+     if(rows.length&&c.filter.employeeIds!==null)throw new ServiceUnavailableException({code:'fop_inventory_scope_unavailable',message:'暂时无法核实库存查看范围，请联系管理员'})
      items.push(...rows.map(r=>({...currentInventoryRow(r),sku:sku.sku,name:sku.name})))
     }
    }
-  }catch(error){if(error instanceof HttpException)throw error;throw new ServiceUnavailableException({code:'fop_inventory_unavailable',message:'库存查询暂不可用，请稍后重试'})}
+  }catch(error){
+   if(error instanceof HttpException)throw error
+   const upstreamCode=(error as {code?:string})?.code
+   const code=upstreamCode==='fop_endpoint_not_published'?'fop_inventory_endpoint_unavailable':upstreamCode==='fop_api_not_authorized'?'fop_inventory_api_not_authorized':'fop_inventory_unavailable'
+   throw new ServiceUnavailableException({code,message:'库存查询暂不可用，请联系管理员'})
+  }
   const latest=await this.context(userId,role,query)
   if(latest.signature!==c.signature)throw new ForbiddenException('Inventory permission changed')
   if(kind==='reserved'){
@@ -213,7 +266,7 @@ export class CollectedWorkbenchService {
   const employees=await this.db.query(collectedOrganizationQuery,[owner,tenant,company])
   const org=buildReplicaOrganization(user,owner,nodes,employees,{tenant_id:tenant,source_company_id:company},{managerAnalytics})
   const filter=localEmployeeFilter(org,org.analyticsPeers?{ownerId:query.ownerId}:query),batch=batches[0]
-  const signature=JSON.stringify([user.sessionVersion,user.role,user.dataDisplayScope,roles,org.version,org.employeeIds,filter.employeeIds,user.chartPermissions,batch.id,batch.exception_data_revision,batch.metadata?.entityCaptures,batch.metadata?.analyticsCaptures,batch.metadata?.timestampSync,batch.metadata?.businessStatusProjection,batch.metadata?.manualApprovalReadbackAt])
+  const signature=JSON.stringify([user.sessionVersion,user.role,user.dataDisplayScope,roles,org.version,org.employeeIds,filter.employeeIds,user.chartPermissions,batch.id,batch.exception_data_revision,batch.metadata?.entityCaptures,batch.metadata?.analyticsCaptures,batch.metadata?.timestampSync,batch.metadata?.businessStatusProjection,batch.metadata?.manualApprovalReadbackAt,batch.metadata?.receiptSupplement])
   return {user,org,filter,batch,signature,searchOwnerIds:org.members.filter(m=>query.search?.trim()&&m.name.toLowerCase().includes(query.search.trim().toLowerCase())).map(m=>m.employeeId)}
  }
  private metadata(batch:Row,unavailable=false){const timestamp=timestampStatus(batch.metadata?.timestampSync);const revision=batch.id+':'+createHash('sha256').update(JSON.stringify([batch.exception_data_revision,batch.metadata?.entityCaptures??{},batch.metadata?.moneyCaptureUpdatedAt??null,batch.metadata?.timestampSync??null,batch.metadata?.businessStatusProjection,batch.metadata?.manualApprovalReadbackAt??null])).digest('hex').slice(0,16);const missing=missingDatasets.filter(x=>!batch.metadata?.entityCaptures?.[x]);return {
@@ -439,7 +492,8 @@ export class CollectedWorkbenchService {
    for(const item of resolvedItems)item.wmsCreatedAt=deliveryNoticeWmsTime(grouped.get(item.id)??[])
   }
   // Sync snapshots are internal provenance, not list fields; keep source facts intact in the database.
-  const items=query.queue==='exceptions'?resolvedItems.map(({timestampProjection,...item})=>item):resolvedItems
+  const items=query.queue==='exceptions'?resolvedItems.map(({timestampProjection,...item})=>item):['procurement','procurement_shipping'].includes(query.queue)?await withProcurementSourceDocuments(this.db,{id:c.batch.id,company_id:c.batch.company_id},resolvedItems,rows.map(row=>row.raw)) as CollectedRow[]:resolvedItems
+  if(['procurement','procurement_shipping'].includes(query.queue)&&(await this.context(userId,role,query)).signature!==c.signature)throw new ConflictException('Local permission or batch changed; reload')
   return {...this.metadata(c.batch),...((nativeReady||allocationReady)?{replica:{...this.metadata(c.batch).replica,sourceSyncedAt}}:{}),...(allocationReady?{dataAvailability:{mode:'collected',complete:false,queueAvailable:true,capturedAt:allocationCapture.capturedAt,reason:'按完整履约扫描关联的有效配货单的原生齐套及审核状态展示；非一致快照，执行前仍需实时核验。'}}:{}),...(nativeReady?{dataAvailability:{mode:'collected',complete:false,queueAvailable:true,capturedAt:nativeCapture.capturedAt,coverage:'full_parent_scan',executionAvailable:false,reason:'已采集完整履约扫描关联事实，本地按当前权限分类；不代表独立单据公司全集。未知状态保留核查，缺失字段留空。'}}:{}),...(query.queue==='shipping'?{dataAvailability:{mode:'collected',complete:false,queueAvailable:true,missingFields:query.completed?['dispatchDocuments']:['shipmentInterceptStatus','dispatchDocuments'],reason:query.completed?'按本单原生已出库状态展示；缺失物流关联留空。':'按真实已齐套且已审核配货单、有效审核发运单关联展示待出库；拦截状态未知，执行仍须 FOP 实时门禁。'}}:{}),items,total:totals.total,page,pageSize,queueState:'ready',departments:localDepartments(c.org),salespeople:localSalespeople(c.org,query),shippingCountries:countries.map(row=>row.country_code),totals:{orderCount:totals.total,itemQuantity:exactNumber(totals.quantity),amountsByCurrency:[],complete:false}}
  }
  async rmaDetail(userId:string,caseId:string){
@@ -521,19 +575,16 @@ export class CollectedWorkbenchService {
  async receiptNotices(userId:string,query:Row){
   const c=await this.context(userId,'warehouse',query)
   const capture=c.batch.metadata?.entityCaptures?.fulfillment_inbound
-  const q=collectedInboundQuery(c.batch.id,c.filter.employeeIds,{...query,searchOwnerIds:c.searchOwnerIds})
   const loadWarehouses=()=>this.warehouseReads.read(JSON.stringify(['inbound-warehouses',userId,c.signature]),()=>this.db.query(`SELECT CASE warehouse_code WHEN '01' THEN 'HZ' WHEN 'HNDGLB' THEN 'SZ' ELSE warehouse_code END code,max(display->>'warehouse') name FROM hz_fop_collected_orders WHERE batch_id=$1 AND ($2::text[] IS NULL OR owner_employee_id=ANY($2)) AND warehouse_code IS NOT NULL GROUP BY 1 ORDER BY 1`,[c.batch.id,c.filter.employeeIds]))
   const page=Math.max(1,Number(query.page)||1),pageSize=Math.min(1000,Math.max(1,Number(query.pageSize)||100))
-  const key=JSON.stringify([userId,c.signature,c.batch.metadata?.receiptSupplement,c.batch.metadata?.timestampSync,c.batch.metadata?.entityCaptures,query])
-  const cached=await this.inboundPages.read(key,async()=>{
-   const [dataRows,warehouses]=await Promise.all([this.db.query(`${q.cte} SELECT
-    (SELECT row_to_json(t) FROM (SELECT count(*)::int total,sum(n.quantity) quantity,sum(n.inbound_quantity) inbound_quantity,sum(n.pending_quantity) pending_quantity ${q.from}) t) counts,
-    (SELECT count(*)::int FROM inbound_orders o JOIN notices n ON n.order_id=o.source_id WHERE n.status='unknown') unclassified,
-    coalesce((SELECT jsonb_agg(p) FROM (SELECT ${persistedExceptionDisplaySql('o')} AS display,o.raw,n.* ${q.from} ORDER BY o.paid_at ASC NULLS LAST,o.source_id LIMIT $${q.params.length+1} OFFSET $${q.params.length+2}) p),'[]'::jsonb) rows`,[...q.params,pageSize,(page-1)*pageSize]),loadWarehouses()])
+  const key=JSON.stringify([userId,c.signature,c.batch.metadata?.receiptSupplement,c.batch.metadata?.timestampSync,c.batch.metadata?.entityCaptures,{...query,refresh:undefined}])
+  const readPage=async()=>{
+   const q=collectedInboundPage(c.batch.id,c.filter.employeeIds,{...query,searchOwnerIds:c.searchOwnerIds},page,pageSize)
+   const [dataRows,warehouses]=await Promise.all([this.db.query(q.sql,q.params),loadWarehouses()])
    return {...dataRows[0],warehouses}
-  })
+  }
+  const cached=query.refresh===true?await readPage():await this.inboundPages.read(key,readPage)
   const warehouses=cached.warehouses,count=cached.counts,quality={unclassified:cached.unclassified},rows:Row[]=cached.rows
-  if((await this.context(userId,'warehouse',query)).signature!==c.signature)throw new ConflictException('Local permission or batch changed; reload')
   const quantity=exactNumber
   const items=rows.map((row:Row)=>{
    const order=localOwnership(withOrderBusinessStatus(collectedOrderMoney(withSourceOrderNumber({...row.display,...collectedOrderNotes(row.raw),rawBillStatus:row.raw.billstatus??null},row.raw),row.raw,c.batch.company_id),row.raw,c.batch.company_id,{persistedExceptions:true}),c.org)
@@ -543,7 +594,9 @@ export class CollectedWorkbenchService {
   })
   const unclassified=Number(quality?.unclassified)||0,available=count.total>0||unclassified===0
   const totalQuantity=(value:unknown)=>value==null?(available?0:null):exactNumber(value)
-  return {...this.metadata(c.batch),items:await this.productDisplay(c.batch.id,items,'lines'),total:count.total,page,pageSize,view:'fulfillment',departments:localDepartments(c.org),warehouses,
+  const displayedItems=await this.productDisplay(c.batch.id,items,'lines')
+  if((await this.context(userId,'warehouse',query)).signature!==c.signature)throw new ConflictException('Local permission or batch changed; reload')
+  return {...this.metadata(c.batch),items:displayedItems,total:count.total,page,pageSize,view:'fulfillment',departments:localDepartments(c.org),warehouses,
    totals:{quantity:totalQuantity(count.quantity),inboundQuantity:totalQuantity(count.inbound_quantity),pendingQuantity:totalQuantity(count.pending_quantity)},
    dataAvailability:{mode:'collected',complete:unclassified===0,queueAvailable:available,capturedAt:capture?.capturedAt??this.metadata(c.batch).replica.sourceSyncedAt,executionAvailable:false,unclassifiedCount:unclassified,
     missingFields:unclassified?['hzkj_orders_billentry.hzkj_entrypurc_status','hzkj_orders_billentry.hzkj_purcqty','hzkj_orders_billentry.hzkj_instock_qty']:[],
@@ -554,8 +607,8 @@ export class CollectedWorkbenchService {
   const c=await this.context(userId,'procurement',query),capture=c.batch.metadata?.entityCaptures?.procurement_groups
   if(!capture||capture.companyId!==c.batch.company_id)return this.unavailable(userId,{...query,queue:'procurement_groups'},'procurement',groupId)
   const params:unknown[]=[c.batch.id],permission=c.filter.employeeIds===null?'':` AND display->'association'->>'state' IS DISTINCT FROM 'conflict' AND EXISTS(SELECT 1 FROM jsonb_array_elements(display->'rows') r WHERE r->>'ownerEmployeeId'=ANY($2::text[]))`;if(c.filter.employeeIds!==null)params.push(c.filter.employeeIds)
-  const source:Row[]=await this.db.query(`SELECT display FROM hz_fop_collected_entities WHERE batch_id=$1 AND entity_type IN ('purchase','purchase_demand')${permission}`,params)
-  let all=source.map(r=>scopedPurchaseGroup(r.display,c.filter.employeeIds)).filter(g=>g.rows.length>0||c.filter.employeeIds===null)
+  const source:Row[]=await this.db.query(`SELECT display,raw FROM hz_fop_collected_entities WHERE batch_id=$1 AND entity_type IN ('purchase','purchase_demand')${permission}`,params)
+  let all=source.map(r=>scopedPurchaseGroup(r.display.purchase?{...r.display,purchase:{...r.display.purchase,supplier:purchaseLogisticsSupplier(r.raw??{})}}:r.display,c.filter.employeeIds)).filter(g=>g.rows.length>0||c.filter.employeeIds===null)
   if(!query.completed&&query.queue!=='procurement_shipping'){
    const scopedOrders:Row[]=await this.db.query("SELECT source_id,display,raw FROM hz_fop_collected_orders WHERE batch_id=$1 AND raw_bill_status='C' AND raw_payment_status='1' AND raw_order_status IN ('1','2','3','4','5','no') AND display->'procurementQueueFlags'->>'pending'='true' AND ($2::text[] IS NULL OR owner_employee_id=ANY($2::text[]))",[c.batch.id,c.filter.employeeIds])
    const pendingOrders=new Map(scopedOrders.map(o=>[o.source_id,o]))
@@ -566,8 +619,10 @@ export class CollectedWorkbenchService {
     return scopedPurchaseGroup({...g,rows,stage},null)
    }).filter(g=>g.rows.length>0)
    for(const o of scopedOrders)if(o.display.procurementStage==='purchase_order_pending'){
-    const d=o.display,states=new Map((d.businessStatus?.lines??[]).map((l:Row)=>[l.id,l.purchase]))
-    const lines=(d.items??[]).filter((l:Row)=>!usesReservedStock((o.raw.hzkj_orders_billentry??[]).find((e:Row)=>String(e.id)===String(l.id))??{})&&['unpurchased','purchasing'].includes(String(states.get(l.id)))).map((l:Row)=>({...l,fulfillmentLineId:l.id,purchaseLineId:null,shippedQuantity:null}))
+    const d=o.display
+    const sourced=withProcurementSources(o.raw,d.procurementSources)
+    const lines=uncreatedPurchaseLines(d,sourced)
+    if(!lines.length)continue
     all.push(scopedPurchaseGroup({id:'uncreated:'+o.source_id,kind:'uncreated',purchase:null,stage:'uncreated',association:{state:'verified'},rows:[{orderId:o.source_id,orderNumber:d.orderNumber,ownerEmployeeId:d.owner?.id,ownerName:d.owner?.name,departmentName:d.department?.name,customerName:d.customerName,storeName:d.storeName,warehouse:d.warehouse,paidAt:d.paidAt,lines}]},null))
    }
   }
@@ -575,7 +630,7 @@ export class CollectedWorkbenchService {
   const unclassifiedCount=all.filter(g=>g.stage==='unknown'||g.association?.state==='conflict').length
   all=all.filter(g=>query.purchaseStage==='unknown'?g.stage==='unknown'||g.association?.state==='conflict':g.association?.state!=='conflict'&&(query.completed?g.stage==='shipped':query.queue==='procurement_shipping'?['supplier_pending','supplier_partial'].includes(g.stage):['uncreated','dispatch_preparation','payment_pending'].includes(g.stage)))
   if(query.purchaseStage&&query.purchaseStage!=='unknown')all=all.filter(g=>g.stage===query.purchaseStage)
-  if(query.search?.trim()){const term=query.search.trim().toLowerCase();all=all.filter(g=>[g.purchase?.number,g.purchase?.platformOrderNumber,g.purchase?.supplier?.name,...g.rows.flatMap((r:Row)=>[r.orderNumber,r.customerName,r.storeName,r.ownerName,...r.lines.map((l:Row)=>l.sku)])].some(v=>typeof v==='string'&&v.toLowerCase().includes(term)))}
+  if(query.search?.trim()){const term=query.search.trim().toLowerCase();all=all.filter(g=>[g.purchase?.number,g.purchase?.platformOrderNumber,g.purchase?.supplier?.name,g.purchase?.supplier?.phone,...g.rows.flatMap((r:Row)=>[r.orderNumber,r.customerName,r.storeName,r.ownerName,...r.lines.map((l:Row)=>l.sku)])].some(v=>typeof v==='string'&&v.toLowerCase().includes(term)))}
   if(query.warehouseCode)all=all.filter(g=>g.rows.some((r:Row)=>warehouseCodes(query.warehouseCode).includes(r.warehouseCode)))
   const days:Row={'1w':7,'1m':30,'3m':90};if(days[query.timeRange])all=all.filter(g=>g.latestConsumerPaidAt&&Date.parse(g.latestConsumerPaidAt)>=Date.now()-days[query.timeRange]*86400000)
   if(query.mode==='selected')all=all.filter(g=>query.groupIds?.includes(g.id))
@@ -597,8 +652,8 @@ export class CollectedWorkbenchService {
   if(!['filtered','selected'].includes(query.mode)||query.mode==='selected'&&(!Array.isArray(query.groupIds)||!query.groupIds.length||query.groupIds.length>1000||new Set(query.groupIds).size!==query.groupIds.length)||query.mode==='filtered'&&query.groupIds!==undefined)throw new BadRequestException('Invalid export selection')
   const count=await this.purchaseGroups(userId,{...query,projection:'count'});if(count.total>10000)throw new PayloadTooLargeException('单次最多导出 10,000 张采购单')
   const result=await collectReplicaPages<any>(page=>this.purchaseGroups(userId,{...query,page,pageSize:100}));if(query.mode==='selected'&&result.items.length!==query.groupIds.length)throw new ForbiddenException('Selection outside current result')
-  const wb=new Workbook(),sheet=wb.addWorksheet('采购单');sheet.columns=[['采购单号','number'],['供应商','supplier'],['采购渠道','purchaseType'],['平台单号','platformOrderNumber'],['支付状态','payment'],['下单状态','placement'],['供应商发货状态','shipment'],['履约笔数','orderCount'],['SKU数','skuCount'],['采购数量','quantity'],['供应商发货数量','shippedQuantity'],['未发数量','pendingQuantity']].map(([header,key])=>({header,key,width:24}));const lines=wb.addWorksheet('授权关联明细');lines.columns=[['采购单号','purchaseNumber'],['履约单号','orderNumber'],['业务员','ownerName'],['SKU','sku'],['商品名称','name'],['规格','variant'],['商品图片','imageUrl'],['数量','quantity'],['供应商发货数量','shippedQuantity']].map(([header,key])=>({header,key,width:24}));let lineCount=0
-  for(const g of result.items){exportRowIdentity(sheet.addRow({...g,...g.purchase,supplier:g.purchase?.supplier?.name??null}),g.id);const details=await collectReplicaPages<any>(page=>this.purchaseGroups(userId,{...query,page,pageSize:100},g.id));for(const r of details.items)for(const l of r.lines){if(++lineCount>50000)throw new PayloadTooLargeException('单次最多导出 50,000 条明细');exportRowIdentity(exportProductRow(lines.addRow({...l,purchaseNumber:g.purchase?.number,orderNumber:r.orderNumber,ownerName:r.ownerName}),l),g.id)}}
+  const wb=new Workbook(),sheet=wb.addWorksheet('采购单');sheet.columns=[['采购单号','number'],['供应商','supplier'],['联系电话','supplierPhone'],['采购渠道','purchaseType'],['平台单号','platformOrderNumber'],['支付状态','payment'],['下单状态','placement'],['供应商发货状态','shipment'],['履约笔数','orderCount'],['SKU数','skuCount'],['采购数量','quantity'],['供应商发货数量','shippedQuantity'],['未发数量','pendingQuantity']].map(([header,key])=>({header,key,width:24}));const lines=wb.addWorksheet('授权关联明细');lines.columns=[['采购单号','purchaseNumber'],['履约单号','orderNumber'],['业务员','ownerName'],['SKU','sku'],['商品名称','name'],['规格','variant'],['商品图片','imageUrl'],['数量','quantity'],['供应商发货数量','shippedQuantity']].map(([header,key])=>({header,key,width:24}));let lineCount=0
+  for(const g of result.items){exportRowIdentity(sheet.addRow({...g,...g.purchase,supplier:g.purchase?.supplier?.name??null,supplierPhone:g.purchase?.supplier?.phone??null}),g.id);const details=await collectReplicaPages<any>(page=>this.purchaseGroups(userId,{...query,page,pageSize:100},g.id));for(const r of details.items)for(const l of r.lines){if(++lineCount>50000)throw new PayloadTooLargeException('单次最多导出 50,000 条明细');exportRowIdentity(exportProductRow(lines.addRow({...l,purchaseNumber:g.purchase?.number,orderNumber:r.orderNumber,ownerName:r.ownerName}),l),g.id)}}
   const notes=wb.addWorksheet('说明');notes.addRow(['模式','已采集履约关联覆盖，非一致快照；未知字段留空；仅含当前本地权限内明细与合计']);notes.addRow(['采集时间',c.batch.metadata.entityCaptures.procurement_groups.capturedAt]);await singleSheetWorkbook(wb,{main:'采购单',details:['授权关联明细']});const buffer=Buffer.from(await wb.xlsx.writeBuffer());if((await this.context(userId,'procurement',query)).signature!==c.signature)throw new ConflictException('Local permission or batch changed; reload');return buffer
  }
  async purchaseReturns(userId:string,query:Row):Promise<any>{
@@ -656,6 +711,8 @@ export class CollectedWorkbenchService {
   if(kind==='rma')for(let i=columns.length-1;i>=0;i--)if(['productAmount','shippingFee','taxFee','discountFee'].includes(String(columns[i][1])))columns.splice(i,1)
   sheet.columns=columns.map(([header,key,width])=>({header:String(header),key:String(key),width:Number(width)}))
   const lines=wb.addWorksheet('商品明细');lines.columns=[{header:'订单号',key:'orderNumber',width:30},{header:'SKU',key:'sku',width:25},{header:'名称',key:'name',width:40},{header:'属性',key:'variant',width:35},{header:'数量',key:'quantity',width:15},{header:'图片',key:'imageUrl',width:50}]
+  const sourceExport=kind==='orders'&&['procurement','procurement_shipping'].includes(query.queue)
+  if(sourceExport)lines.columns=[...lines.columns,...[['采购来源核验','sourceState'],['SKU需求合计','sourceDemand'],['全款备货数量（SKU合计）','fullPaymentQuantity'],['押金备货数量（SKU合计）','depositQuantity'],['直接采购数量（SKU合计）','directQuantity']].map(([header,key])=>({header,key,width:25}))]
   const returnLines=kind==='returns'?wb.addWorksheet('退料明细'):undefined
   if(returnLines)returnLines.columns=[['订单号','orderNumber'],['退料单号','returnNumber'],['单据状态','billStatusName'],['供应商','supplier'],['SKU','sku'],['中文配货名','name'],['退料数量','quantity'],['原生数量','rawQuantity'],['来源单据','sourceDocumentNumber'],['备注','reason']].map(([header,key])=>({header,key,width:24}))
   const dateText=(value:unknown)=>typeof value==='string'&&Number.isFinite(Date.parse(value))?new Date(Date.parse(value)+8*3600_000).toISOString().slice(0,19).replace('T',' '):null
@@ -663,7 +720,7 @@ export class CollectedWorkbenchService {
    sheet.addRow({...row,outboundStatusText:businessStatusLabel(row.businessStatus?.outbound,'outbound'),...(kind==='stock'?{orderStatus:row.orderStatusName??row.orderStatus,purchaseStatus:row.purchaseStatusName??row.purchaseStatus}:{}),relatedPurchaseNumbers:row.relatedPurchaseOrders?.map((p:Row)=>p.number).join(' / '),materialReturnNumbers:row.purchaseReturns?.map((d:Row)=>d.number).join(' / '),materialReturnStatuses:row.purchaseReturns?.map((d:Row)=>d.billStatusName).filter(Boolean).join(' / '),actualChannelNames:[...new Set((row.logisticsChannels??[]).map((channel:Row)=>channel.name?.trim()).filter(Boolean))].join(' / ')||null,actualLogisticsText:logisticsInfoText(row.logisticsInfo,null,null,null,true),exceptionTypeText:({procurement_exception:'采购异常',dispatch_exception:'发运异常',allocation_exception:'配货异常',logistics_exception:'订单异常',outbound_exception:'\u51fa\u5e93\u5f02\u5e38',delivery_exception:'妥投异常'} as Record<string,string>)[row.exception?.type]??'待核查',exceptionReason:row.exception?.reason??null,dispatchStatusText:row.businessStatus?.order==='partial_fulfilled'?'部分履约':({dispatch_missing:'待建发运单',dispatch_pending:'已建单未取号',dispatch_tracking:'已取号未同步',dispatch_cancelled:'已取消',dispatch_synced:'已履约'} as Record<string,string>)[row.dispatchTaskStatus]??'待确认',stockBillStatusText:STOCK_BILL_STATUS_LABELS[row.rawBillStatus??'']??null,rmaNumber:row.rmaCases?.[0]?.number,rmaRawType:row.rmaCases?.[0]?.rawType,rmaType:row.rmaCases?.[0]?.type,rmaRawStatus:row.rmaCases?.[0]?.rawStatus,rmaStage:row.rmaCases?.[0]?.stage,rmaReason:row.rmaCases?.[0]?.reason,refundAmount:row.rmaCases?.[0]?.refundAmount,refundCurrency:row.rmaCases?.[0]?.refundCurrency,associationState:row.rmaAssociation?.state,allocationNumbers:row.allocationDocuments?.map((d:Row)=>d.number).join(' / '),allocationNativeStatuses:row.allocationDocuments?.map((d:Row)=>d.rawAllocationStatus??'unknown').join(' / '),allocationNativeBillStatuses:row.allocationDocuments?.map((d:Row)=>d.rawBillStatus??'unknown').join(' / '),orderNumber:row.orderNumber??row.stockNumber,ownerName:row.owner?.name??null,departmentName:row.department?.name??null,productAmount:row.amountBreakdown?.productAmount??null,shippingFee:row.amountBreakdown?.shippingFee??null,taxFee:row.amountBreakdown?.taxAmount??null,discountFee:row.amountBreakdown?.discountAmount??null,paidAtText:dateText(row.paidAt),buyerPaidAtText:dateText(row.sourceOrderPaidAt),reviewedAtText:dateText(row.reviewedAt),procurementPaidAtText:dateText(row.procurementPaidAt),recipientName:row.shippingRecipient?.name??null,recipientPhone:row.shippingRecipient?.phone??null,recipientEmail:row.shippingRecipient?.email??null,recipientAddress:[row.shippingRecipient?.state,row.shippingRecipient?.city,row.shippingRecipient?.addressLine1,row.shippingRecipient?.addressLine2].filter(Boolean).join(', '),recipientPostalCode:row.shippingRecipient?.postalCode??null,missing:row.dataQuality?.missingFields?.join(', ')})
    exportRowIdentity(sheet.lastRow!,row.id)
    if(returnLines)for(const d of row.purchaseReturns??[])for(const line of d.lines)exportRowIdentity(exportProductRow(returnLines.addRow({...line,orderNumber:row.orderNumber,returnNumber:d.number,billStatusName:d.billStatusName,supplier:d.supplier?.name}),line),row.id)
-   for(const item of row.items)exportRowIdentity(exportProductRow(lines.addRow({...item,orderNumber:row.orderNumber??row.stockNumber}),item),row.id)
+   for(const item of row.items){const source=sourceExport?item.procurementSource:undefined;exportRowIdentity(exportProductRow(lines.addRow({...item,orderNumber:row.orderNumber??row.stockNumber,...(source?{sourceState:source.complete?'已核验':'来源数据待补齐',sourceDemand:source.demandQuantity,fullPaymentQuantity:source.complete?source.fullPaymentQuantity:null,depositQuantity:source.complete?source.depositQuantity:null,directQuantity:source.complete?source.directQuantity:null}:{})}),item),row.id)}
   }
   const uniqueOrders=kind==='rma'?result.items:[...new Map(result.items.map(row=>[row.orderNumber??row.stockNumber??row.id,row])).values()]
   sheet.addRow({orderNumber:kind==='rma'?`合计 · ${uniqueOrders.length} 张售后单`:`合计 · ${uniqueOrders.length} 笔订单`})
@@ -671,6 +728,7 @@ export class CollectedWorkbenchService {
   for(const currency of currencies){const orders=uniqueOrders.filter(row=>row.currency===currency),known=orders.filter(row=>row.amount!=null);sheet.addRow({orderNumber:known.length===orders.length?'订单金额合计':`已知金额合计（缺 ${orders.length-known.length} 笔）`,currency,amount:known.length?exactNumber(known.reduce((sum,row)=>sum.plus(row.amount),new Decimal(0)).toString()):null})}
   const notes=wb.addWorksheet('说明');notes.addRow(['采集开始时间 UTC+8',(kind==='stock'?c.batch.metadata.entityCaptures.stock_orders.capturedAt:orderCaptureTime(c.batch))?dateText(new Date(kind==='stock'?c.batch.metadata.entityCaptures.stock_orders.capturedAt:orderCaptureTime(c.batch)).toISOString()):'']);notes.addRow(['模式','已采集只读；空值表示未提供；非一致性快照']);notes.addRow(['批次',c.batch.id]);if(['allocation','allocation_review'].includes(query.queue)&&c.batch.metadata?.entityCaptures?.allocation)notes.addRow(['配货单采集时间 UTC+8',dateText(c.batch.metadata.entityCaptures.allocation.capturedAt)])
   if(kind==='rma'){notes.addRow(['售后商品数量合计',count.totals?.itemQuantity??null]);notes.addRow(['售后单采集时间 UTC+8',dateText(c.batch.metadata.entityCaptures.rma.capturedAt)]);notes.addRow(['覆盖范围','已采集付款客户的部分覆盖；筛选及合计仅针对当前本地权限内已采集售后；不能推定公司业务零']);notes.addRow(['商品口径','商品及数量取售后单本身分录，按售后单汇总，不使用原履约商品数量']);notes.addRow(['关联口径','同公司原单号与店铺唯一匹配，付款客户及原单业务员核验；仅展示营销四部内归属已核验记录'])}
+  if(sourceExport)notes.addRow(['采购来源口径','按履约订单＋SKU汇总，重复SKU仅首行填写；备货待使用与已使用为同一耗用数量的不同阶段，未知数量留空。来源数量不代表供应商实际发货数量。'])
   await singleSheetWorkbook(wb,{main:'已采集订单',details:kind==='returns'?['商品明细','退料明细']:['商品明细'],title:kind==='returns'?'采购退货清单':kind==='stock'?'备货清单':kind==='rma'?'RMA售后清单':query.completed?(query.queue==='shipping'?'已出库清单':'已完成清单'):({unpaid:'待支付清单',review:'待审核清单',dispatch:'待履约清单',procurement:'待采购清单',procurement_shipping:'已采购待发货清单',allocation:'未齐套清单',allocation_review:'已齐套未审核清单',shipping:'待出库清单',exceptions:'异常订单清单'} as Record<string,string>)[query.queue]??'待办清单'})
   const buffer=Buffer.from(await wb.xlsx.writeBuffer())
   if((await this.context(userId,role,query)).signature!==c.signature)throw new ConflictException('Local permission or batch changed; reload')

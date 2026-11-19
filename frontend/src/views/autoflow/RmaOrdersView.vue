@@ -57,7 +57,7 @@ async function exportRows(mode: 'selected' | 'filtered') {
   finally { if (!disposed && id === exportTicket) exporting.value = false }
 }
 async function copy(value: string) { const session = captureSession(); try { await navigator.clipboard.writeText(value); if (!disposed && isCurrentSession(session)) copyStatus.value = text('已复制', 'Copied') } catch { if (!disposed && isCurrentSession(session)) copyStatus.value = text('复制失败，请手动复制', 'Copy failed; copy manually') } }
-watch(() => JSON.stringify(query.value), () => { ++exportTicket; controller?.abort(); exportController?.abort(); exporting.value = false; search.value = scalar('search'); result.value = undefined; selected.value = []; exportError.value = ''; copyStatus.value = ''; void load() }, { immediate: true })
+watch(() => JSON.stringify(query.value), () => { ++exportTicket; controller?.abort(); exportController?.abort(); exporting.value = false; search.value = scalar('search'); selected.value = []; exportError.value = ''; copyStatus.value = ''; void load() }, { immediate: true })
 const unregister = onSessionReset(() => { ++ticket; ++exportTicket; controller?.abort(); exportController?.abort(); result.value = undefined; selected.value = []; search.value = ''; error.value = ''; exportError.value = ''; exporting.value = false; loading.value = false; copyStatus.value = '' })
 onBeforeUnmount(() => { disposed = true; ++ticket; ++exportTicket; controller?.abort(); exportController?.abort(); unregister() })
 const { expandedProductIds, hasExpandableProducts, allProductsExpanded, setProductExpanded, toggleAllProducts } = useProductExpansion(() => result.value?.items ?? [], row => row.items)

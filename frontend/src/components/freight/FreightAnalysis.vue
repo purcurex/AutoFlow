@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { peekAnalyticsQuery } from '@/utils/analytics-cache'
+import { isWorkbenchScopeError } from '@/api/workbench-dashboard'
 import { businessYears } from '@/utils/business-years'
 import { useAnalyticsRefresh } from '@/composables/useAnalyticsRefresh'
 import type { EffectiveChartAccess } from '@/api/fop-chart-access'
@@ -34,14 +36,17 @@ function reset() { clearChartAccess(); requestId++; navigationId++; data.value =
 const chartRefresh = useAnalyticsRefresh(() => load(true), () => busy.value)
 async function load(force = false) {
   const id = ++requestId
-  navigationId++; data.value = undefined; selected.value = undefined; error.value = ''; busy.value = true
+  navigationId++; selected.value = undefined; error.value = ''; busy.value = true
   try {
     const capability = props.mock ? props.mockAccess : await refreshChartAccess()
+    if(id===requestId&&data.value&&JSON.stringify(data.value.chartAccess)!==JSON.stringify(capability))data.value=undefined
     if (id !== requestId) return
     if (!capability?.visible) { clearChartAccess(); return }
+    const cached=!props.mock?peekAnalyticsQuery<FreightData>('/autoflow/integrations/fop/freight',query.value):undefined
+    if(cached&&JSON.stringify(cached.chartAccess)===JSON.stringify(capability)&&applyChartResponse(cached))data.value=cached
     const result = props.mock ? mockDashboardFreight({ ...query.value }, capability, mockNow) : await getFopFreight({ ...query.value }, { force })
     if (id === requestId && applyChartResponse(result)) { data.value = result; chartRefresh.updated(result) }
-  } catch (cause) { if (id === requestId) { reset(); error.value = fopAccessError(cause, String(locale.value).startsWith('zh')) } }
+  } catch (cause) { if (id === requestId) { if(isWorkbenchScopeError(cause))reset(); error.value = fopAccessError(cause, String(locale.value).startsWith('zh')) } }
   finally { if (id === requestId) busy.value = false }
 }
 watch(year, value => { if (!weekOf.value.startsWith(String(value))) weekOf.value = value === currentYear ? today : `${value}-12-31` })
@@ -49,7 +54,7 @@ watch([query, () => props.revision, () => props.mock, () => props.mockAccess], (
 watch(() => route.fullPath, () => { navigationId++; selected.value = undefined })
 async function drill(carrierCode?: FreightCarrier, periodId?: string, comparisonPeriod: 'current' | 'previous' = 'current') {
   const result = data.value
-  if (props.mock || !result || !canViewDetails.value) return
+  if (busy.value || props.mock || !result || !canViewDetails.value) return
   const id = requestId, navigation = ++navigationId, path = route.fullPath
   try {
     const access = await refreshWorkbenchAccess()
@@ -58,7 +63,7 @@ async function drill(carrierCode?: FreightCarrier, periodId?: string, comparison
     const role = isWorkbenchRole(requested) && access.roles.includes(requested) ? requested : access.roles.includes('dispatch') ? 'dispatch' : access.roles[0]
     if (!role) { reset(); error.value = t('暂无可访问的岗位工作台，请联系管理员。', 'No workbench is available.'); return }
     await router.push(freightDetailLocation(role, result.query, carrierCode, periodId, comparisonPeriod))
-  } catch (cause) { if (id === requestId && navigation === navigationId) { reset(); error.value = fopAccessError(cause, String(locale.value).startsWith('zh')) } }
+  } catch (cause) { if (id === requestId && navigation === navigationId) { if(isWorkbenchScopeError(cause))reset(); error.value = fopAccessError(cause, String(locale.value).startsWith('zh')) } }
 }
 const off = onSessionReset(reset)
 onBeforeUnmount(() => { off(); reset() })
@@ -81,11 +86,11 @@ onBeforeUnmount(() => { off(); reset() })
         <label v-if="grain === 'week'">{{ t('截至所在周', 'Week of') }}<input v-model="weekOf" type="date" :min="`${year}-01-01`" :max="year === currentYear ? today : `${year}-12-31`" required aria-label="运费周日期"></label>
         <label class="ov-checkbox"><input v-model="compare" type="checkbox" aria-label="运费上期环比">{{ t('上期环比', 'Compare previous period') }}</label>
       </div>
-    </form>
-    <div class="freight-body"><p v-if="busy" class="ov-empty" role="status">{{ t('正在统计实际运费…', 'Loading actual freight…') }}</p><p v-else-if="error" class="ov-error" role="alert">{{ error }}<button class="ov-link" @click="load(true)">{{ t('重试', 'Retry') }}</button></p><FreightResults v-else-if="data" :data="data" :compare="compare" :preview="mock" @drill="drill" @trend="selected = $event" /></div>
+    </form><p v-if="busy && data" class="ov-note" role="status">正在更新，当前显示上次查询结果。</p><p v-if="error && data" class="ov-note" role="alert">查询未完成，当前显示上次查询结果。</p>
+    <div class="freight-body" :inert="busy"><p v-if="busy && !data" class="ov-empty" role="status">{{ t('正在统计实际运费…', 'Loading actual freight…') }}</p><p v-else-if="error && !data" class="ov-error" role="alert">{{ error }}<button class="ov-link" @click="load(true)">{{ t('重试', 'Retry') }}</button></p><FreightResults v-else-if="data" :data="data" :compare="compare" :preview="mock" @drill="drill" @trend="selected = $event" /></div>
     <FreightTrendDialog v-if="selected && data" :name="freightCarrierName(selected, String(locale))" :scope="scope" @close="selected = undefined"><FreightResults :data="data" :compare="compare" :preview="mock" :carrier-code="selected" @drill="drill" /></FreightTrendDialog>
   </section>
-  <p v-else-if="error" class="ov-error" role="alert">{{ error }}<button class="ov-link" @click="load(true)">{{ t('重试', 'Retry') }}</button></p>
+  <p v-else-if="error && !data" class="ov-error" role="alert">{{ error }}<button class="ov-link" @click="load(true)">{{ t('重试', 'Retry') }}</button></p>
 </template>
 
 <style scoped>

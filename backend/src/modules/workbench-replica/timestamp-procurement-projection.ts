@@ -14,7 +14,19 @@ export function timestampProcurementProjection(parent:Row,groups:{raw:Row;displa
  const purchased=new Map<string,Decimal>(),invalid=new Set<string>()
  for(const g of linked)for(const r of g.display.rows??[])if(r.orderId===parent.id)for(const l of r.lines??[]){if(!l.fulfillmentLineId)continue;const q=number(l.quantity);if(!q)invalid.add(l.fulfillmentLineId);else purchased.set(l.fulfillmentLineId,(purchased.get(l.fulfillmentLineId)??new Decimal(0)).plus(q))}
  const excluded=new Set(orderBusinessStatus(parent).lines.filter(l=>l.excluded).map(l=>l.id))
- const lines=(parent.hzkj_orders_billentry??[]).filter((l:Row)=>!excluded.has(String(l.id))&&!usesReservedStock(l)),coverage=Array.isArray(lines)&&lines.length>0&&lines.every((l:Row)=>{const q=number(l.hzkj_qty);return q!==null&&!invalid.has(l.id)&&(purchased.get(l.id)??new Decimal(0)).gte(q)})
+ const lines:Row[]=(parent.hzkj_orders_billentry??[]).filter((l:Row)=>!excluded.has(String(l.id))&&!usesReservedStock(l))
+ const demandLines=new Map(lines.map(l=>[String(l.id),l])),checked=new Set<string>()
+ const coverage=lines.length>0&&lines.every((l:Row)=>{
+  if(checked.has(String(l.id)))return true
+  const source=l.procurementSource
+  if(source&&source.complete!==true)return false
+  // Compare the SKU total once. Stock records cannot establish how demand is split across source rows.
+  const ids:string[]=source?(Array.isArray(source.lineIds)?source.lineIds.map(String):[]):[String(l.id)]
+  const q=source?number(source.directQuantity):number(l.hzkj_qty)
+  if(q===null||!ids.includes(String(l.id))||ids.some(id=>!demandLines.has(id)||invalid.has(id)||demandLines.get(id)?.procurementSource?.complete===false))return false
+  for(const id of ids)checked.add(id)
+  return ids.reduce((total,id)=>total.plus(purchased.get(id)??0),new Decimal(0)).gte(q)
+ })
  const valid=linked.length>0&&linked.every(g=>g.raw.hzkj_cancelstatus==='A'&&g.display.association?.state!=='conflict'&&(g.display.rows??[]).filter((r:Row)=>r.orderId===parent.id).every((r:Row)=>r.associationState==='verified'))
  let stage:string,payment='unknown',placement='unknown'
  if(valid){

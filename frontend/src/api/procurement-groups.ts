@@ -2,7 +2,7 @@ import type { WorkbenchDataAvailability, WorkbenchReplicaSnapshot } from './work
 import api from './index'
 export interface PurchaseHeader {
   purchaseType: 'offline' | 'online' | 'unknown'; platform: '1688' | 'other' | null
-  id: string; number: string; supplier: { id: string; name: string }; platformOrderNumber: string | null
+  id: string; number: string; supplier: { id: string | null; name: string | null; wangwangAccount?: string | null; phone?: string | null }; platformOrderNumber: string | null
   payment: 'unpaid' | 'partial' | 'paid' | 'refunded' | 'cancelled' | 'partially_refunded' | 'unknown'; paymentName?: string | null; actualPaidAmount?: number | null; actualPaidFreight?: number | null; placement: 'pending' | 'placed' | 'unknown'; paidAt: string | null
 }
 export interface PurchaseGroup {
@@ -14,7 +14,7 @@ export interface PurchaseGroup {
 export interface PurchaseGroupRow {
   exception?: { type: string | null; reason?: string | null } | null
   orderId: string; orderNumber: string; shopifyOrderNumber: string; customerName: string; storeName: string; ownerName: string; departmentName: string; warehouse: string; paidAt: string | null; consumerPaidAt?: string | null; completedAt?: string | null
-  lines: { fulfillmentLineId: string; purchaseLineId: string | null; sku: string; name: string; imageUrl: string | null; variant: string; quantity: number | null; shippedQuantity: number | null; isVirtual?: boolean | null }[]
+  lines: { fulfillmentLineId: string | null; fulfillmentLineIds?: string[]; skuAggregated?: boolean; purchaseLineId: string | null; sku: string; name: string; imageUrl: string | null; variant: string; quantity: number | null; shippedQuantity: number | null; isVirtual?: boolean | null }[]
 }
 export const purchaseStageLabels = {
   unknown: ['待核查', 'Unconfirmed'],

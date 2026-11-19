@@ -1,8 +1,40 @@
 import { mount, flushPromises } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import { createRouter, createMemoryHistory } from 'vue-router'
-import { expect, it } from 'vitest'
+import { afterEach, expect, it } from 'vitest'
 import WorkbenchFilterSummary from '@/components/WorkbenchFilterSummary.vue'
+import { clearWorkbenchAccess, useWorkbenchAccess } from '@/composables/useWorkbenchAccess'
+afterEach(clearWorkbenchAccess)
+
+it.each([
+  ['procurement', 'full_payment', '全款备货'],
+  ['procurement_shipping', 'deposit', '押金备货'],
+  ['completed', 'direct', '直接采购'],
+])('summarizes the applied %s source and follows route changes', async (queue, source, label) => {
+  const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/workbench/:role', component: { template: '<div />' } }] })
+  await router.push(`/workbench/procurement?queue=${queue}&view=fulfillment&procurementSource=${source}`)
+  const wrapper = mount(WorkbenchFilterSummary, { props: { queue }, global: { plugins: [router, createI18n({ legacy: false, locale: 'zh-CN', messages: {} })] } })
+  expect(wrapper.get('p').text()).toContain(`采购来源：${label}`)
+  expect(wrapper.get('p').attributes('title')).toContain(`采购来源：${label}`)
+  await router.push({ query: { queue, view: 'fulfillment' } }); await flushPromises()
+  expect(wrapper.get('p').text()).toContain('采购来源：全部')
+  wrapper.unmount()
+})
+it.each([
+  ['procurement', 'procurement_shipping', 'purchase', 'fulfillment', false],
+  ['procurement', 'procurement_shipping', '', 'purchase', false],
+  ['procurement', 'procurement_shipping', '', 'fulfillment', true],
+  ['procurement', 'procurement_shipping', 'fulfillment', 'purchase', true],
+  ['sales', 'review', 'fulfillment', 'fulfillment', false],
+  ['procurement', 'stock_procurement', 'fulfillment', 'fulfillment', false],
+] as const)('limits source summary to the effective fulfillment view (%s/%s/%s/default %s)', async (role, queue, view, defaultProcurementView, visible) => {
+  useWorkbenchAccess().access.value = { roles: ['sales', 'procurement'], isAdmin: false, defaultProcurementView }
+  const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/workbench/:role', component: { template: '<div />' } }] })
+  await router.push({ path: `/workbench/${role}`, query: { queue, view: view || undefined, procurementSource: 'full_payment' } })
+  const wrapper = mount(WorkbenchFilterSummary, { props: { queue }, global: { plugins: [router, createI18n({ legacy: false, locale: 'zh-CN', messages: {} })] } })
+  expect(wrapper.get('p').text().includes('采购来源')).toBe(visible)
+  wrapper.unmount()
+})
 it('summarizes existing completed and unpaid ranges as customer payment time', async () => {
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/workbench/:role', component: { template: '<div />' } }] })
   await router.push('/workbench/dispatch?queue=completed&timeRange=1w')

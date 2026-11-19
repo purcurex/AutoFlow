@@ -145,6 +145,27 @@ describe('role workbench content', () => {
     wrapper.unmount()
   })
 
+  it('clears procurement source filters when switching procurement tabs while retaining organization scope', async () => {
+    const { wrapper, router } = await setup('/workbench/procurement?queue=procurement_shipping&view=fulfillment&departmentId=d1&ownerId=employee-1&procurementSource=deposit')
+    expect(wrapper.get<HTMLSelectElement>('select[aria-label="采购来源"]').element.value).toBe('deposit')
+    await wrapper.findAll('.workbench-queues a').find(tab => tab.text() === '待采购清单')!.trigger('click')
+    await flushPromises()
+    expect(router.currentRoute.value.query).toMatchObject({ queue: 'procurement', view: 'fulfillment', departmentId: 'd1', ownerId: 'employee-1' })
+    expect(router.currentRoute.value.query.procurementSource).toBeUndefined()
+    expect(wrapper.get<HTMLSelectElement>('select[aria-label="采购来源"]').element.value).toBe('')
+    wrapper.unmount()
+  })
+
+  it('clears fulfillment-only procurement source when switching to purchase orders', async () => {
+    const { wrapper, router } = await setup('/workbench/procurement?queue=procurement_shipping&view=fulfillment&departmentId=d1&procurementSource=deposit')
+    await wrapper.findAll('.purchase-view-switch button').find(button => button.text() === '按采购单查看')!.trigger('click')
+    await flushPromises()
+    expect(router.currentRoute.value.query).toMatchObject({ queue: 'procurement_shipping', view: 'purchase', departmentId: 'd1' })
+    expect(router.currentRoute.value.query.procurementSource).toBeUndefined()
+    expect(wrapper.find('select[aria-label="采购来源"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
   it.each([
     ['allocation', '已齐套未审核', 'allocation_review', '发运单状态'],
     ['procurement', '已采购待发货', 'procurement_shipping', '采购状态'],

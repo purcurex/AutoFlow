@@ -140,3 +140,14 @@ it('labels an exceptional fulfillment in the normal inbound list',async()=>{
  const {wrapper}=await setup()
  expect(wrapper.get('tbody .order-exception-label').text()).toBe('采购异常')
 })
+
+it('requeries when submitting unchanged filters and bypasses cached results on manual refresh',async()=>{
+ vi.mocked(getReceiptNotices).mockResolvedValue(page)
+ const {wrapper}=await setup()
+ await wrapper.get('form').trigger('submit');await flushPromises()
+ expect(getReceiptNotices).toHaveBeenCalledTimes(2)
+ expect(getReceiptNotices).toHaveBeenLastCalledWith(expect.objectContaining({refresh:true}),expect.any(AbortSignal))
+ await wrapper.get('.workbench-refresh').trigger('click');await flushPromises()
+ expect(getReceiptNotices).toHaveBeenCalledTimes(3)
+ expect(getReceiptNotices).toHaveBeenLastCalledWith(expect.objectContaining({refresh:true}),expect.any(AbortSignal))
+})

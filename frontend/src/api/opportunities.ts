@@ -19,7 +19,7 @@ export interface Opportunity extends OpportunityFields {
   sourceLeadName: string | null; status: 'draft'; currency: 'USD'; lastFollowedOn: string | null;
   version: number; createdAt: string; updatedAt: string; canEdit: boolean; canDelete: boolean; followUps?: OpportunityFollowUp[];
 }
-export interface OpportunityQuery { search?: string; stage?: string; country?: string; ownerId?: string; from?: string; to?: string; page?: number; pageSize?: number }
+export interface OpportunityQuery { sortBy?: 'registeredOn' | 'lastFollowedOn'; sortDirection?: 'asc' | 'desc'; search?: string; stage?: string; country?: string; ownerId?: string; from?: string; to?: string; page?: number; pageSize?: number }
 export interface OpportunityList { items: Opportunity[]; total: number; page: number; pageSize: number; owners: { id: string; name: string }[] }
 export const opportunitiesApi = {
   options: () => api.get<never, OpportunityOptions>('/opportunities/options'),
