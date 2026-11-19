@@ -3,7 +3,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict lzFSRLvz75yKTYBLTE6NWujsKBJ1nbNgT697zO6FkhiULTIoCWAz1QnHWKLkE6o
+\restrict 7qZD9z6x6oCEEAVKdlEOgVzyVCclp8CEzxwJir7UeGrjd1ckvEysnK7pHfSWo69
 
 -- Dumped from database version 16.15 (Homebrew)
 -- Dumped by pg_dump version 16.15 (Homebrew)
@@ -162,16 +162,6 @@ CREATE TYPE public.autoflow_workflow_step_status_enum AS ENUM (
     'completed',
     'failed',
     'skipped'
-);
-
-
---
--- Name: notes_editor_type_enum; Type: TYPE; Schema: public; Owner: -
---
-
-CREATE TYPE public.notes_editor_type_enum AS ENUM (
-    'markdown',
-    'richtext'
 );
 
 
@@ -1173,6 +1163,15 @@ BEGIN
 END $$;
 
 
+--
+-- Name: hz_lead_origin_immutable(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.hz_lead_origin_immutable() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$ BEGIN IF NEW.lead_type IS DISTINCT FROM OLD.lead_type OR NEW.registrar_user_id IS DISTINCT FROM OLD.registrar_user_id THEN RAISE EXCEPTION 'Lead origin is immutable'; END IF; RETURN NEW; END $$;
+
+
 SET default_tablespace = '';
 
 SET default_table_access_method = heap;
@@ -1305,21 +1304,6 @@ CREATE TABLE public.crm_activities (
     next_follow_up_at timestamp with time zone,
     metadata jsonb,
     created_at timestamp with time zone DEFAULT now() NOT NULL
-);
-
-
---
--- Name: folders; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.folders (
-    id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
-    user_id uuid NOT NULL,
-    parent_id uuid,
-    name character varying NOT NULL,
-    sort_order integer DEFAULT 0 NOT NULL,
-    created_at timestamp without time zone DEFAULT now() NOT NULL,
-    updated_at timestamp without time zone DEFAULT now() NOT NULL
 );
 
 
@@ -3295,31 +3279,85 @@ CREATE TABLE public.leads (
     normalized_domain character varying(255) NOT NULL,
     product_url character varying(1000),
     discovery_sources jsonb DEFAULT '[]'::jsonb NOT NULL,
+    lead_type character varying(24) DEFAULT 'automatic'::character varying NOT NULL,
+    registered_on date DEFAULT CURRENT_DATE NOT NULL,
+    contacted_on date,
+    city character varying(120) DEFAULT ''::character varying NOT NULL,
+    current_follow_up text DEFAULT ''::text NOT NULL,
+    next_follow_up_plan text DEFAULT ''::text NOT NULL,
+    registrar_user_id uuid,
+    CONSTRAINT chk_lead_type CHECK (((lead_type)::text = ANY ((ARRAY['manual'::character varying, 'import'::character varying, 'automatic'::character varying])::text[]))),
     CONSTRAINT chk_leads_scores CHECK ((((shopify_confidence >= (0)::double precision) AND (shopify_confidence <= (100)::double precision)) AND ((ad_activity_score >= (0)::double precision) AND (ad_activity_score <= (100)::double precision)) AND ((traffic_score >= (0)::double precision) AND (traffic_score <= (100)::double precision)) AND ((contact_score >= (0)::double precision) AND (contact_score <= (100)::double precision)) AND ((total_score >= (0)::double precision) AND (total_score <= (100)::double precision))))
 );
 
 
 --
--- Name: notes; Type: TABLE; Schema: public; Owner: -
+-- Name: local_opportunities; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE public.notes (
-    id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
-    user_id uuid NOT NULL,
-    folder_id uuid,
-    title character varying DEFAULT '无标题笔记'::character varying NOT NULL,
-    content text DEFAULT ''::text NOT NULL,
-    content_html text,
-    editor_type public.notes_editor_type_enum DEFAULT 'markdown'::public.notes_editor_type_enum NOT NULL,
-    tags text DEFAULT '[]'::text NOT NULL,
-    is_favorite boolean DEFAULT false NOT NULL,
-    is_deleted boolean DEFAULT false NOT NULL,
-    deleted_at timestamp without time zone,
-    created_at timestamp without time zone DEFAULT now() NOT NULL,
-    updated_at timestamp without time zone DEFAULT now() NOT NULL,
-    sort_order integer DEFAULT 0 NOT NULL,
-    workflow_run_id uuid,
-    lead_id uuid
+CREATE TABLE public.local_opportunities (
+    id uuid NOT NULL,
+    number character varying(48) NOT NULL,
+    owner_user_id uuid NOT NULL,
+    source_lead_id uuid,
+    status character varying(16) DEFAULT 'draft'::character varying NOT NULL,
+    customer_name character varying(160) NOT NULL,
+    stage character varying(64),
+    daily_volume character varying(16),
+    monthly_amount numeric(18,2),
+    currency character varying(3) DEFAULT 'USD'::character varying NOT NULL,
+    main_products character varying(4000) DEFAULT ''::character varying NOT NULL,
+    country character varying(2) DEFAULT ''::character varying NOT NULL,
+    city character varying(120) DEFAULT ''::character varying NOT NULL,
+    business_scope character varying(4000) DEFAULT ''::character varying NOT NULL,
+    whatsapp character varying(120) DEFAULT ''::character varying NOT NULL,
+    store_url character varying(1000) DEFAULT ''::character varying NOT NULL,
+    registered_on date DEFAULT ((now() AT TIME ZONE 'Asia/Shanghai'::text))::date NOT NULL,
+    last_followed_on date,
+    current_follow_up character varying(8000) DEFAULT ''::character varying NOT NULL,
+    next_follow_up_plan character varying(8000) DEFAULT ''::character varying NOT NULL,
+    problem_feedback character varying(8000) DEFAULT ''::character varying NOT NULL,
+    version integer DEFAULT 1 NOT NULL,
+    created_by uuid NOT NULL,
+    updated_by uuid NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    deleted_at timestamp with time zone,
+    deleted_by uuid,
+    CONSTRAINT chk_local_opportunities_deletion CHECK (((deleted_at IS NULL) = (deleted_by IS NULL))),
+    CONSTRAINT local_opportunities_country_check CHECK ((((country)::text = ''::text) OR ((country)::text ~ '^[A-Z]{2}$'::text))),
+    CONSTRAINT local_opportunities_currency_check CHECK (((currency)::text = 'USD'::text)),
+    CONSTRAINT local_opportunities_customer_name_check CHECK ((length(btrim((customer_name)::text)) > 0)),
+    CONSTRAINT local_opportunities_daily_volume_check CHECK (((daily_volume)::text = ANY ((ARRAY['ten'::character varying, 'twenty'::character varying, 'fifty'::character varying, 'more'::character varying])::text[]))),
+    CONSTRAINT local_opportunities_monthly_amount_check CHECK (((monthly_amount >= (0)::numeric) AND (monthly_amount <> 'NaN'::numeric))),
+    CONSTRAINT local_opportunities_stage_check CHECK (((stage)::text = ANY ((ARRAY['a_a_intentional_cooperation'::character varying, 'f_non-viable_lead'::character varying, 'a_Place_an_order'::character varying, 'b_related_stores'::character varying, 'c_registration_platform'::character varying, 'd_business_opportunity_conflict'::character varying, 'e_terminate_cooperation'::character varying])::text[]))),
+    CONSTRAINT local_opportunities_status_check CHECK (((status)::text = 'draft'::text)),
+    CONSTRAINT local_opportunities_store_url_check CHECK ((((store_url)::text = ''::text) OR ((store_url)::text ~* '^https?://'::text))),
+    CONSTRAINT local_opportunities_version_check CHECK ((version >= 1))
+);
+
+
+--
+-- Name: local_opportunity_follow_ups; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.local_opportunity_follow_ups (
+    id uuid NOT NULL,
+    opportunity_id uuid NOT NULL,
+    followed_on date NOT NULL,
+    stage character varying(64) NOT NULL,
+    daily_volume character varying(16) NOT NULL,
+    monthly_amount numeric(18,2) NOT NULL,
+    current_follow_up character varying(8000) NOT NULL,
+    next_follow_up_plan character varying(8000) NOT NULL,
+    problem_feedback character varying(8000) DEFAULT ''::character varying NOT NULL,
+    created_by uuid NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT local_opportunity_follow_ups_current_follow_up_check CHECK ((length(btrim((current_follow_up)::text)) > 0)),
+    CONSTRAINT local_opportunity_follow_ups_daily_volume_check CHECK (((daily_volume)::text = ANY ((ARRAY['ten'::character varying, 'twenty'::character varying, 'fifty'::character varying, 'more'::character varying])::text[]))),
+    CONSTRAINT local_opportunity_follow_ups_monthly_amount_check CHECK (((monthly_amount >= (0)::numeric) AND (monthly_amount <> 'NaN'::numeric))),
+    CONSTRAINT local_opportunity_follow_ups_next_follow_up_plan_check CHECK ((length(btrim((next_follow_up_plan)::text)) > 0)),
+    CONSTRAINT local_opportunity_follow_ups_stage_check CHECK (((stage)::text = ANY ((ARRAY['a_a_intentional_cooperation'::character varying, 'f_non-viable_lead'::character varying, 'a_Place_an_order'::character varying, 'b_related_stores'::character varying, 'c_registration_platform'::character varying, 'd_business_opportunity_conflict'::character varying, 'e_terminate_cooperation'::character varying])::text[])))
 );
 
 
@@ -4010,6 +4048,30 @@ ALTER TABLE ONLY public.hz_fop_workbench_receipt_notices
 
 
 --
+-- Name: local_opportunities local_opportunities_number_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.local_opportunities
+    ADD CONSTRAINT local_opportunities_number_key UNIQUE (number);
+
+
+--
+-- Name: local_opportunities local_opportunities_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.local_opportunities
+    ADD CONSTRAINT local_opportunities_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: local_opportunity_follow_ups local_opportunity_follow_ups_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.local_opportunity_follow_ups
+    ADD CONSTRAINT local_opportunity_follow_ups_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: organization_employees organization_employees_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4079,14 +4141,6 @@ ALTER TABLE ONLY public.audit_events
 
 ALTER TABLE ONLY public.crm_activities
     ADD CONSTRAINT pk_crm_activities PRIMARY KEY (id);
-
-
---
--- Name: folders pk_folders; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.folders
-    ADD CONSTRAINT pk_folders PRIMARY KEY (id);
 
 
 --
@@ -4610,14 +4664,6 @@ ALTER TABLE ONLY public.leads
 
 
 --
--- Name: notes pk_notes; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.notes
-    ADD CONSTRAINT pk_notes PRIMARY KEY (id);
-
-
---
 -- Name: outreach_draft_versions pk_outreach_draft_versions; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -5033,20 +5079,6 @@ CREATE INDEX idx_crm_activities_type ON public.crm_activities USING btree (type)
 
 
 --
--- Name: idx_folders_parent_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_folders_parent_id ON public.folders USING btree (parent_id);
-
-
---
--- Name: idx_folders_user_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_folders_user_id ON public.folders USING btree (user_id);
-
-
---
 -- Name: idx_fop_handoffs_owner_updated_at; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -5131,6 +5163,13 @@ CREATE INDEX idx_leads_owner_status ON public.leads USING btree (owner_user_id, 
 
 
 --
+-- Name: idx_leads_owner_type_registered; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_leads_owner_type_registered ON public.leads USING btree (owner_user_id, lead_type, registered_on DESC);
+
+
+--
 -- Name: idx_leads_team_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -5145,31 +5184,17 @@ CREATE INDEX idx_leads_workflow_run_id ON public.leads USING btree (workflow_run
 
 
 --
--- Name: idx_notes_folder_id; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_local_opportunities_owner_date; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_notes_folder_id ON public.notes USING btree (folder_id);
-
-
---
--- Name: idx_notes_lead_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_notes_lead_id ON public.notes USING btree (lead_id);
+CREATE INDEX idx_local_opportunities_owner_date ON public.local_opportunities USING btree (owner_user_id, registered_on DESC, created_at DESC) WHERE (deleted_at IS NULL);
 
 
 --
--- Name: idx_notes_user_id; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_local_opportunity_follow_ups_parent_date; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_notes_user_id ON public.notes USING btree (user_id);
-
-
---
--- Name: idx_notes_workflow_run_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_notes_workflow_run_id ON public.notes USING btree (workflow_run_id);
+CREATE INDEX idx_local_opportunity_follow_ups_parent_date ON public.local_opportunity_follow_ups USING btree (opportunity_id, followed_on DESC, created_at DESC);
 
 
 --
@@ -6835,6 +6860,13 @@ CREATE UNIQUE INDEX uq_leads_owner_normalized_domain ON public.leads USING btree
 
 
 --
+-- Name: uq_local_opportunities_active_lead; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX uq_local_opportunities_active_lead ON public.local_opportunities USING btree (source_lead_id) WHERE ((deleted_at IS NULL) AND (source_lead_id IS NOT NULL));
+
+
+--
 -- Name: uq_organization_employee_account; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -6923,6 +6955,13 @@ CREATE TRIGGER hz_exception_source_create_delete AFTER INSERT OR DELETE ON publi
 --
 
 CREATE TRIGGER hz_exception_source_create_delete AFTER INSERT OR DELETE ON public.hz_fop_collected_orders FOR EACH ROW EXECUTE FUNCTION public.hz_exception_source_changed_v1();
+
+
+--
+-- Name: leads lead_origin_immutable; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER lead_origin_immutable BEFORE UPDATE ON public.leads FOR EACH ROW EXECUTE FUNCTION public.hz_lead_origin_immutable();
 
 
 --
@@ -7019,22 +7058,6 @@ ALTER TABLE ONLY public.crm_activities
 
 ALTER TABLE ONLY public.crm_activities
     ADD CONSTRAINT fk_crm_activities_owner FOREIGN KEY (owner_user_id) REFERENCES public.users(id) ON DELETE RESTRICT;
-
-
---
--- Name: folders fk_folders_parent; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.folders
-    ADD CONSTRAINT fk_folders_parent FOREIGN KEY (parent_id) REFERENCES public.folders(id);
-
-
---
--- Name: folders fk_folders_user; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.folders
-    ADD CONSTRAINT fk_folders_user FOREIGN KEY (user_id) REFERENCES public.users(id);
 
 
 --
@@ -9118,38 +9141,6 @@ ALTER TABLE ONLY public.leads
 
 
 --
--- Name: notes fk_notes_folder; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.notes
-    ADD CONSTRAINT fk_notes_folder FOREIGN KEY (folder_id) REFERENCES public.folders(id);
-
-
---
--- Name: notes fk_notes_lead; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.notes
-    ADD CONSTRAINT fk_notes_lead FOREIGN KEY (lead_id) REFERENCES public.leads(id) ON DELETE SET NULL;
-
-
---
--- Name: notes fk_notes_user; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.notes
-    ADD CONSTRAINT fk_notes_user FOREIGN KEY (user_id) REFERENCES public.users(id);
-
-
---
--- Name: notes fk_notes_workflow_run; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.notes
-    ADD CONSTRAINT fk_notes_workflow_run FOREIGN KEY (workflow_run_id) REFERENCES public.workflow_runs(id) ON DELETE SET NULL;
-
-
---
 -- Name: organization_employees fk_organization_employees_department; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -9582,6 +9573,70 @@ ALTER TABLE ONLY public.hz_fop_workbench_receipt_notices
 
 
 --
+-- Name: leads leads_registrar_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.leads
+    ADD CONSTRAINT leads_registrar_user_id_fkey FOREIGN KEY (registrar_user_id) REFERENCES public.users(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: local_opportunities local_opportunities_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.local_opportunities
+    ADD CONSTRAINT local_opportunities_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: local_opportunities local_opportunities_deleted_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.local_opportunities
+    ADD CONSTRAINT local_opportunities_deleted_by_fkey FOREIGN KEY (deleted_by) REFERENCES public.users(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: local_opportunities local_opportunities_owner_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.local_opportunities
+    ADD CONSTRAINT local_opportunities_owner_user_id_fkey FOREIGN KEY (owner_user_id) REFERENCES public.users(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: local_opportunities local_opportunities_source_lead_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.local_opportunities
+    ADD CONSTRAINT local_opportunities_source_lead_id_fkey FOREIGN KEY (source_lead_id) REFERENCES public.leads(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: local_opportunities local_opportunities_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.local_opportunities
+    ADD CONSTRAINT local_opportunities_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: local_opportunity_follow_ups local_opportunity_follow_ups_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.local_opportunity_follow_ups
+    ADD CONSTRAINT local_opportunity_follow_ups_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: local_opportunity_follow_ups local_opportunity_follow_ups_opportunity_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.local_opportunity_follow_ups
+    ADD CONSTRAINT local_opportunity_follow_ups_opportunity_id_fkey FOREIGN KEY (opportunity_id) REFERENCES public.local_opportunities(id) ON DELETE RESTRICT;
+
+
+--
 -- Name: organization_employees organization_employees_account_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -9609,4 +9664,4 @@ ALTER TABLE ONLY public.organization_nodes
 -- PostgreSQL database dump complete
 --
 
-\unrestrict lzFSRLvz75yKTYBLTE6NWujsKBJ1nbNgT697zO6FkhiULTIoCWAz1QnHWKLkE6o
+\unrestrict 7qZD9z6x6oCEEAVKdlEOgVzyVCclp8CEzxwJir7UeGrjd1ckvEysnK7pHfSWo69

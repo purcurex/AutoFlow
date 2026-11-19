@@ -207,6 +207,7 @@ export interface FopOrderQuery {
   projection?: 'count'
   completed?: boolean
   /** Customer completed payment time; completed lists default to the last week. */
+  billStatus?: 'A' | 'B'
   skuAssociation?: 'linked' | 'unlinked'
   timeRange?: 'all' | '1w' | '1m' | '3m'
   shippingCountryCode?: string
@@ -350,9 +351,9 @@ export function matchesFopQueue(order: FopOrder, queue: FopOrderQueue, warehouse
 export async function getFopOrders(query: FopOrderQuery, signal?: AbortSignal): Promise<FopQueuePage> {
   validateQuery(query)
   const { default: api } = await import('./index')
-  const { queue, projection, completed, skuAssociation, timeRange, shippingCountryCode, search, orderNumber, departmentId, ownerId, warehouseCode, paidAtOrder, sortBy, sortOrder, warehouseStage, procurementStage, taskStatus, page, pageSize } = query
+  const { queue, projection, completed, billStatus, skuAssociation, timeRange, shippingCountryCode, search, orderNumber, departmentId, ownerId, warehouseCode, paidAtOrder, sortBy, sortOrder, warehouseStage, procurementStage, taskStatus, page, pageSize } = query
   const remember = beginWorkbenchCount(query)
-  const result: FopQueuePage = await api.get('/autoflow/integrations/fop/fulfillment-orders', { params: { queue, projection, ...(completed ? { completed } : {}), skuAssociation, timeRange, shippingCountryCode, search, orderNumber, departmentId, ownerId, warehouseCode, paidAtOrder, sortBy, sortOrder, warehouseStage, procurementStage, taskStatus, page, pageSize }, ...(signal ? { signal } : {}) })
+  const result: FopQueuePage = await api.get('/autoflow/integrations/fop/fulfillment-orders', { params: { queue, projection, ...(completed ? { completed } : {}), billStatus, skuAssociation, timeRange, shippingCountryCode, search, orderNumber, departmentId, ownerId, warehouseCode, paidAtOrder, sortBy, sortOrder, warehouseStage, procurementStage, taskStatus, page, pageSize }, ...(signal ? { signal } : {}) })
   if (!isFopOrderPageDataValid(result)) throw new Error('Unexpected partial data')
   if (!result.dataAvailability?.missingDatasets?.length) remember?.(result.total)
   return result

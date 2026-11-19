@@ -22,6 +22,7 @@ const navItems = computed(() => [
   { label: t('nav.dashboard'), to: '/', match: ['Dashboard', 'RoleWorkbench', 'WorkbenchAccessDenied'], icon: LayoutDashboard },
   { label: t('nav.workflows'), to: '/workflows', match: ['Workflows', 'NewWorkflow'], icon: Workflow },
   { label: t('nav.leads'), to: '/leads', match: ['Leads', 'LeadDetail'], icon: Users },
+  { label: t('nav.opportunities'), to: '/opportunities', match: ['Opportunities', 'NewOpportunity', 'OpportunityDetail'], icon: GitBranch },
   { label: t('nav.outreach'), to: '/outreach', match: ['Outreach'], icon: MessageSquareText },
   { label: t('nav.quotes'), to: '/quotes', match: ['Quotes'], icon: Calculator },
   { label: t('nav.followUps'), to: '/follow-ups', match: ['FollowUps'], icon: ListTodo },
@@ -34,12 +35,12 @@ function isActive(item: { match: string[] }) {
 
 <template>
   <aside
-    class="fixed inset-y-0 left-0 z-40 flex shrink-0 flex-col border-r bg-white transition-all duration-200 dark:bg-[var(--color-shell)] md:relative"
+    class="app-sidebar fixed inset-y-0 left-0 z-40 flex shrink-0 flex-col border-r bg-white transition-all duration-200 dark:bg-[var(--color-shell)] md:relative"
     :class="props.collapsed ? '-translate-x-full md:w-20 md:translate-x-0' : 'w-72 translate-x-0 md:w-64'"
     style="border-color: var(--color-border)"
   >
     <div class="flex h-[72px] items-center border-b px-4" style="border-color: var(--color-border)">
-      <BrandLogo :compact="props.collapsed" />
+      <BrandLogo :compact="props.collapsed" inverse />
     </div>
 
     <nav class="flex-1 space-y-1.5 overflow-y-auto px-3 py-5">
@@ -69,9 +70,6 @@ function isActive(item: { match: string[] }) {
       </RouterLink>
       <RouterLink to="/settings" :title="props.collapsed ? t('nav.settings') : undefined" class="flex h-10 items-center rounded-md text-sm font-semibold text-slate-600 transition hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-white/5 dark:hover:text-white" :class="props.collapsed ? 'justify-center' : 'px-3'" @click="emit('navigate')">
         <Settings class="h-[18px] w-[18px]" :class="props.collapsed ? '' : 'mr-3'" /><span v-if="!props.collapsed">{{ t('nav.settings') }}</span>
-      </RouterLink>
-      <RouterLink v-if="canManage && (access?.businessRole ?? userStore.user?.businessRole) === 'admin'" to="/admin" :title="props.collapsed ? t('nav.admin') : undefined" class="flex h-10 items-center rounded-md text-sm font-semibold text-slate-600 transition hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-white/5 dark:hover:text-white" :class="props.collapsed ? 'justify-center' : 'px-3'" @click="emit('navigate')">
-        <Shield class="h-[18px] w-[18px]" :class="props.collapsed ? '' : 'mr-3'" /><span v-if="!props.collapsed">{{ t('nav.admin') }}</span>
       </RouterLink>
     </div>
     <div v-if="canManage" data-management-nav class="shrink-0 space-y-1 border-t p-3" style="border-color: var(--color-border)">

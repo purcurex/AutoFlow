@@ -1,37 +1,16 @@
-import { createPinia } from 'pinia'
-import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
-import ExportDialog from '@/components/export/ExportDialog.vue'
-import Sidebar from '@/components/layout/Sidebar.vue'
 import router from '@/router'
-import { i18n } from '@/i18n'
 
-describe('legacy business record compatibility', () => {
-  it('keeps the legacy detail route out of primary navigation', async () => {
-    await router.push('/')
-    await router.isReady()
-
-    const wrapper = mount(Sidebar, {
-      props: { collapsed: false },
-      global: { plugins: [createPinia(), router, i18n] },
-    })
-
-    const route = router.getRoutes().find((item) => item.name === 'NoteDetail')
-
-    expect(route?.meta.legacySupport).toBe(true)
-    expect(wrapper.find('a[href^="/notes/"]').exists()).toBe(false)
+describe('retired business record routes', () => {
+  it.each(['/admin', '/notes/existing-record'])('does not expose the retired page %s', path => {
+    expect(router.resolve(path).name).toBe('NotFound')
   })
 
-  it('uses business record terminology in the export dialog', () => {
-    const wrapper = mount(ExportDialog, {
-      props: { visible: true, notes: [] },
-      global: {
-        plugins: [createPinia(), i18n],
-        stubs: { Teleport: true },
-      },
-    })
-
-    expect(wrapper.text()).toContain('导出业务记录')
-    expect(wrapper.text()).not.toContain('笔记')
+  it('preserves account administration and the active workbench routes', () => {
+    expect(router.resolve('/admin/workbenches').name).toBe('WorkbenchRoleAdmin')
+    expect(router.resolve('/dashboard').name).toBe('FopDashboard')
+    for (const role of ['sales', 'dispatch', 'procurement', 'allocation', 'warehouse']) {
+      expect(router.resolve(`/workbench/${role}`).name).toBe('RoleWorkbench')
+    }
   })
 })

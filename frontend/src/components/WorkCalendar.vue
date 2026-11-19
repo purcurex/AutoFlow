@@ -62,7 +62,7 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.work-calendar-card { min-width: 0; border: 1px solid var(--color-border); border-radius: 8px; overflow: hidden; background: var(--color-surface); color: var(--color-text, #243247); container-type: inline-size; }
+.work-calendar-card { min-width: 0; border: 1px solid var(--color-border); border-radius: 8px; overflow: hidden; background: var(--color-surface); color: var(--color-text); container-type: inline-size; }
 .calendar-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 15px; background: linear-gradient(110deg, #eef3fc, #f0faf7); border-bottom: 1px solid var(--color-border); }
 .calendar-heading h2 { display: flex; align-items: center; gap: 7px; color: #537ca4; font-size: 12px; font-weight: 650; white-space: nowrap; }
 .beijing-clock { display: flex; align-items: baseline; justify-content: flex-end; flex-wrap: wrap; column-gap: 7px; row-gap: 3px; font-size: 10px; color: #74859a; font-variant-numeric: tabular-nums; }

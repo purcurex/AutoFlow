@@ -8,8 +8,6 @@ declare module 'axios' {
 }
 
 export { authApi } from './auth'
-export { notesApi } from './notes'
-export { foldersApi } from './folders'
 export { aiApi } from './ai'
 export { shopifySearchApi } from './shopify-search'
 export { autoflowApi } from './autoflow'

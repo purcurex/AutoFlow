@@ -125,7 +125,24 @@ export interface LeadWorkflowDiscovery {
   score: number
 }
 
+export interface RegisterLeadInput {
+ brandName: string; country: string; storeUrl: string; registeredOn?: string; contactedOn?: string;
+ city?: string; category?: string; facebook?: string; whatsapp?: string; currentFollowUp?: string; nextFollowUpPlan?: string;
+}
+export interface LeadImportResult {
+ total:number;created:number;duplicates:number;failed:number;
+ results:{row:number;status:'created'|'duplicate'|'failed';message:string;id?:string}[];
+}
 export interface StoreLead {
+  leadType?: 'manual' | 'import' | 'automatic'
+  registeredOn?: string
+  contactedOn?: string | null
+  ownerName?: string
+  registrarName?: string
+  city?: string
+  currentFollowUp?: string
+  nextFollowUpPlan?: string
+
   id: string
   workflowRunId: string | null
   brandName: string
@@ -445,6 +462,12 @@ export const autoflowApi = {
   getLeads(status?: LeadStatus, page = 1, pageSize = 100): Promise<PaginatedResult<StoreLead>> {
     return api.get('/autoflow/leads', { params: { status, page, pageSize } })
   },
+  listRegisteredLeads(params: {page:number;pageSize:number;search?:string;status?:string;leadType?:string}): Promise<PaginatedResult<StoreLead>> {
+    return api.get('/autoflow/leads', {params})
+  },
+  registerLead(data: RegisterLeadInput): Promise<StoreLead> { return api.post('/autoflow/leads', data) },
+  importLeads(file: File): Promise<LeadImportResult> { const data=new FormData();data.append('file',file);return api.post('/autoflow/leads/import',data,{headers:{'Content-Type':'multipart/form-data'},timeout:120000}) },
+  leadImportTemplate(): Promise<Blob> {return api.get('/autoflow/leads/import-template',{responseType:'blob'})},
   getLead(id: string): Promise<StoreLead> {
     return api.get(`/autoflow/leads/${id}`)
   },

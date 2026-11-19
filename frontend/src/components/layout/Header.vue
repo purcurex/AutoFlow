@@ -27,8 +27,11 @@ const pageTitle = computed(() => ({
   RoleWorkbenchReceipts: locale.value.startsWith('zh') ? '回款明细' : 'Receipt details',
   WorkbenchRoleAdmin: t('nav.workbenchRoles'),
   Dashboard: t('nav.dashboard'), Workflows: t('nav.workflows'), NewWorkflow: t('nav.newWorkflow'), Leads: t('nav.leads'),
+  Opportunities: t('nav.opportunities'),
+  NewOpportunity: locale.value.startsWith('zh') ? '新增商机' : 'New Opportunity',
+  OpportunityDetail: locale.value.startsWith('zh') ? '商机详情' : 'Opportunity Details',
   LeadDetail: t('leads.detailEyebrow'), Outreach: t('nav.outreach'), Quotes: t('nav.quotes'), FollowUps: t('nav.followUps'),
-  NoteDetail: t('legacy.record'), Settings: t('nav.settings'), Admin: t('nav.admin'),
+  Settings: t('nav.settings'),
   ReviseWorkflow: t('workflows.reviseTitle'), WorkflowSourcing: t('sourcing.title'), PromptTemplates: t('prompts.title'),
 }[String(route.name)] || t('brand.fullName')))
 
@@ -90,7 +93,7 @@ function handleLogout() {
             <ChevronDown class="h-3 w-3 shrink-0 text-slate-400 transition-transform" :class="{ 'rotate-180': showUserMenu }" />
           </button>
 
-          <div v-if="showUserMenu" class="absolute right-0 top-full z-50 mt-2 w-72 rounded-lg border bg-white py-2 shadow-xl dark:bg-[#15181d]" style="border-color: var(--color-border)" role="menu">
+          <div v-if="showUserMenu" class="absolute right-0 top-full z-50 mt-2 w-72 rounded-lg border bg-white py-2 shadow-xl dark:bg-[var(--color-surface)]" style="border-color: var(--color-border)" role="menu">
             <div class="flex items-center gap-3 border-b px-4 py-3.5" style="border-color: var(--color-border)">
               <span class="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full brand-avatar text-base font-bold">
                 <img v-if="userStore.avatarUrl" :src="userStore.avatarUrl" alt="" class="h-full w-full object-cover" /><span v-else>{{ userStore.displayName.charAt(0) }}</span>

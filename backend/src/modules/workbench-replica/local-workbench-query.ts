@@ -7,6 +7,7 @@ import { fulfillmentSortDirection } from '../fop-data/fop-order-sort'
 
 export interface LocalReadScope { connectionId: string; companyId: string; datasetId: string; employeeIds: readonly string[] | null }
 export interface LocalOrderFilters {
+  billStatus?: 'A' | 'B'
   skuAssociation?: 'linked' | 'unlinked'
   purchaseGrouping?: boolean
   returnStatus?: string
@@ -45,6 +46,9 @@ export function buildLocalOrderQuery(scopes: LocalReadScope[], query: LocalOrder
   if(!stock && ['dispatch','procurement','allocation','allocation_review'].includes(query.queue) || pendingShipping) from += ` ${localDispatchStateJoin}`
   const conditions = ["sd.deleted_at IS NULL", `o.order_kind = '${stock ? 'stock' : 'fulfillment'}'`,
     '(scope.employee_ids IS NULL OR o.owner_employee_id = ANY(scope.employee_ids))', localResourceGrantSql(resource, 'sd.source_id')]
+  if (!query.completed && query.billStatus && ['review','allocation_review'].includes(query.queue)) {
+    conditions.push(query.queue === 'review' ? `sd.raw_bill_status=${bind(query.billStatus)}` : `EXISTS (SELECT 1 FROM hz_fop_document_relations r JOIN hz_fop_source_documents a ON a.id=r.to_document_id AND a.company_id=o.company_id AND a.dataset_id=o.dataset_id AND a.connection_id=o.connection_id AND a.entity_code='hzkj_alloc_bill' AND a.deleted_at IS NULL WHERE r.from_document_id=o.document_id AND r.relation_type='allocation' AND r.resolution_state='resolved' AND r.removed_at IS NULL AND a.raw_bill_status=${bind(query.billStatus)})`)
+  }
   if(!stock && query.queue==='unpaid') conditions.push(query.skuAssociation==='unlinked'?"native.raw_order_status='no'":"native.raw_order_status='1'")
   if(!stock && query.queue==='review' && query.completed) conditions.push("o.order_review_state='approved'")
   if(query.queue==='allocation_review' && query.completed) conditions.push("allocation_approval.review_state='approved'")

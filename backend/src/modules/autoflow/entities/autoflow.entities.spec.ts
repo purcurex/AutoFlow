@@ -1,5 +1,4 @@
 import { getMetadataArgsStorage } from 'typeorm'
-import { Note } from '../../notes/note.entity'
 import {
   CrmActivityEntity,
   LeadContactEntity,
@@ -60,14 +59,6 @@ describe('AutoFlow persistence entities', () => {
       expect(columns).toEqual(expect.arrayContaining(['ownerUserId', 'teamId']))
     },
   )
-
-  it('adds workflow and lead links to legacy business records', () => {
-    const columns = storage.columns
-      .filter((metadata) => metadata.target === Note)
-      .map((metadata) => metadata.propertyName)
-
-    expect(columns).toEqual(expect.arrayContaining(['workflowRunId', 'leadId']))
-  })
 
   it('defines owner, workflow, status, and timestamp indexes', () => {
     const indexNames = storage.indices.map((metadata) => metadata.name)

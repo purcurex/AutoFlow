@@ -104,7 +104,38 @@
     "backend/src/database/migrations/1794989000000-ExceptionReceiptDateQuality.ts",
     "backend/src/modules/fop-data/payment-data-quality.ts",
     "backend/src/modules/workbench-replica/collected-exception-classification.ts",
-    "backend/src/modules/workbench-replica/exception-audit-timestamp.postgres.spec.ts"
+    "backend/src/modules/workbench-replica/exception-audit-timestamp.postgres.spec.ts",
+    "frontend/src/views/autoflow/FollowUpView.vue",
+    "frontend/src/views/autoflow/DashboardView.vue",
+    "frontend/src/components/follow-up/FollowUpStages.vue",
+    "frontend/src/views/autoflow/WorkbenchView.vue",
+    "frontend/src/components/WorkbenchFilterSummary.vue",
+    "frontend/src/router/index.ts",
+    "frontend/src/tests/FollowUpView.test.ts",
+    "frontend/src/tests/workbench-routing.test.ts",
+    "frontend/src/tests/WorkbenchView.test.ts",
+    "frontend/src/tests/WorkbenchAnalyticsRouting.test.ts",
+    "frontend/src/tests/WorkbenchFilterSummary.test.ts",
+    "backend/src/modules/opportunities/opportunity-rules.spec.ts",
+    "backend/src/modules/opportunities/local-opportunity.entity.ts",
+    "backend/src/modules/opportunities/opportunities.module.ts",
+    "backend/src/modules/opportunities/opportunities.service.spec.ts",
+    "backend/src/modules/opportunities/opportunities.controller.ts",
+    "backend/src/modules/opportunities/opportunity-rules.ts",
+    "backend/src/modules/opportunities/local-opportunity-follow-up.entity.ts",
+    "backend/src/modules/opportunities/opportunities.service.ts",
+    "frontend/src/components/opportunities/OpportunityStage.vue",
+    "frontend/src/components/opportunities/GenerateOpportunityButton.vue",
+    "frontend/src/components/opportunities/OpportunityFields.vue",
+    "backend/src/database/migrations/1795061000000-LocalOpportunities.ts",
+    "backend/src/app.module.ts",
+    "frontend/src/api/opportunities.ts",
+    "frontend/src/views/autoflow/OpportunitiesView.vue",
+    "frontend/src/views/autoflow/OpportunityDetailView.vue",
+    "frontend/src/components/layout/Sidebar.vue",
+    "frontend/src/components/layout/Header.vue",
+    "frontend/src/components/leads/LeadRegistrationList.vue",
+    "frontend/src/views/autoflow/LeadDetailView.vue"
   ],
   "currentEvidenceKeys": [
     "normalApiOperation20261118",
@@ -114,7 +145,9 @@
     "nativeInventory20261118",
     "supplierContactNative20261118",
     "salesExceptionRemediation20261118",
-    "salesExceptionIncrementalPrevention20261118"
+    "salesExceptionIncrementalPrevention20261118",
+    "customerFollowUpSimplification20261118",
+    "localOpportunityManagement20261118"
   ],
   "editorialChanges": [
     "撤掉三套重复清单矩阵和历史互斥方案，仅保留23现行清单视角",
@@ -161,5 +194,6 @@
   },
   "localOptimizationEvidence": "api-integration-verification-20261116.json#localGapOptimization20261118",
   "localOptimizationScope": "L02/L03/L04/L05/L07/L08 local optimization",
-  "runtimeChange": "backend restarted with automatic sync still enabled; source documents and schedule unchanged"
+  "runtimeChange": "backend restarted with automatic sync still enabled; source documents and schedule unchanged",
+  "localOpportunityEvidence": "api-integration-verification-20261116.json#localOpportunityManagement20261118"
 }

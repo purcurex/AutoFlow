@@ -30,9 +30,6 @@ export default defineConfig({
         manualChunks(id) {
           if (id.includes('node_modules/zrender')) return 'charts-renderer'
           if (id.includes('node_modules/echarts')) return 'charts-echarts'
-          if (id.includes('node_modules/@tiptap') || id.includes('node_modules/prosemirror')) return 'editor-tiptap'
-          if (id.includes('node_modules/@codemirror') || id.includes('node_modules/codemirror')) return 'editor-codemirror'
-          if (id.includes('node_modules/lowlight') || id.includes('node_modules/highlight.js')) return 'editor-highlight'
         },
       },
     },

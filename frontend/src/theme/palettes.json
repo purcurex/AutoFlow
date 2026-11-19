@@ -1,0 +1,86 @@
+{
+  "blue": {
+    "name": "商务蓝",
+    "light": [
+      "#2776AA",
+      "#EAF4FB",
+      "#2776AA",
+      "#17344C",
+      "#FFFFFF"
+    ],
+    "dark": [
+      "#2776AA",
+      "#20364A",
+      "#A8D8F7",
+      "#121F2C",
+      "#FFFFFF"
+    ],
+    "sidebarLight": {
+      "selected": "#2B4A62",
+      "text": "#E8F4FC"
+    }
+  },
+  "green": {
+    "name": "清新绿",
+    "light": [
+      "#268343",
+      "#EDF8EF",
+      "#268343",
+      "#203B2B",
+      "#FFFFFF"
+    ],
+    "dark": [
+      "#268343",
+      "#203C30",
+      "#A6DEC0",
+      "#14241C",
+      "#FFFFFF"
+    ],
+    "sidebarLight": {
+      "selected": "#365440",
+      "text": "#EDF8EF"
+    }
+  },
+  "purple": {
+    "name": "典雅紫",
+    "light": [
+      "#746DAA",
+      "#F1EFF9",
+      "#746DAA",
+      "#302D48",
+      "#FFFFFF"
+    ],
+    "dark": [
+      "#746DAA",
+      "#332D49",
+      "#D0C1F0",
+      "#211D2C",
+      "#FFFFFF"
+    ],
+    "sidebarLight": {
+      "selected": "#49445F",
+      "text": "#F4F0FF"
+    }
+  },
+  "orange": {
+    "name": "活力橙",
+    "light": [
+      "#FFBE00",
+      "#FFF6D9",
+      "#91650B",
+      "#65482B",
+      "#302A20"
+    ],
+    "dark": [
+      "#D9AD43",
+      "#3B3221",
+      "#E8C879",
+      "#282219",
+      "#302A20"
+    ],
+    "sidebarLight": {
+      "selected": "#7D5B37",
+      "text": "#FFF6E5"
+    }
+  }
+}

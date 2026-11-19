@@ -1,4 +1,6 @@
+import { leadTemplate } from './lead-registration'
 import {
+  StreamableFile,
   BadRequestException,
   Body,
   Controller,
@@ -22,6 +24,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard'
 import { AutoflowService } from './autoflow.service'
 import { WorkbenchAccessService } from '../users/workbench-access.service'
 import {
+  RegisterLeadDto,
   CreateWorkflowDto,
   CreateWorkflowRevisionDto,
   GenerateMessageDto,
@@ -144,6 +147,22 @@ export class AutoflowController {
   @Get('leads')
   getLeads(@Request() req: ExpressRequest, @Query() query: ListLeadsQueryDto) {
     return this.autoflowService.getLeads(req.user!.userId, query)
+  }
+
+  @Post('leads')
+  registerLead(@Request() req: ExpressRequest, @Body() body: RegisterLeadDto) {
+    return this.autoflowService.registerLead(req.user!.userId, body)
+  }
+
+  @Get('leads/import-template')
+  async leadImportTemplate() {
+    return new StreamableFile(await leadTemplate(), {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',disposition:'attachment; filename="lead-registration.xlsx"'})
+  }
+
+  @Post('leads/import')
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 5 * 1024 * 1024, files: 1 } }))
+  importLeads(@Request() req: ExpressRequest, @UploadedFile() file: Express.Multer.File | undefined) {
+    return this.autoflowService.importLeads(req.user!.userId, file)
   }
 
   @Get('leads/:id')

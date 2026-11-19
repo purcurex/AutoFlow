@@ -75,7 +75,7 @@ onBeforeUnmount(() => {
 <style scoped>
 .info-tip { display: inline-flex; flex: 0 0 auto; vertical-align: middle; margin-inline-start: 3px; }
 .info-tip-trigger { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--color-text-secondary, #748399); opacity: .8; cursor: help; transition: color .15s, opacity .15s, background .15s; }
-.info-tip-trigger:hover, .info-tip-trigger:focus-visible { color: var(--color-text, #243247); opacity: 1; background: color-mix(in srgb, var(--color-text-secondary, #748399) 9%, transparent); }
+.info-tip-trigger:hover, .info-tip-trigger:focus-visible { color: var(--color-text); opacity: 1; background: color-mix(in srgb, var(--color-text-secondary, #748399) 9%, transparent); }
 .info-tip-custom { margin-inline-start: 0; }
 .info-tip-custom .info-tip-trigger { width: auto; height: auto; border-radius: 2px; color: var(--color-text); font: inherit; opacity: 1; }
 .info-tip-trigger:focus-visible { outline: 2px solid var(--color-chart-link, #7389bb); outline-offset: 2px; }

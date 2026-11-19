@@ -28,7 +28,7 @@ select[data-app-select]:focus { outline: none !important; box-shadow: none !impo
 }
 .app-select-option { min-height: 32px; padding: 7px 28px 7px 11px; position: relative; border-radius: 4px; white-space: nowrap; cursor: pointer; }
 .app-select-option.is-active { background: #94a5dd20; }
-.app-select-option[aria-selected=true] { color: #6478b3; font-weight: 600; }
+.app-select-option[aria-selected=true] { color: var(--color-link); font-weight: 600; }
 .app-select-option[aria-selected=true]::after { content: '✓'; position: absolute; right: 9px; }
 .app-select-option[aria-disabled=true] { opacity: .4; cursor: not-allowed; }
 .app-select-group { padding: 7px 11px 3px; white-space: nowrap; color: #8793a7; font-size: 11px; }

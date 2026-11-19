@@ -214,7 +214,7 @@ describe('Per-account organization sandbox persistence API', () => {
     try {
     const paths = [
       '/autoflow/dashboard', '/autoflow/workflows', '/autoflow/leads', '/autoflow/quotes',
-      '/notes', '/notes/admin/all', '/folders', '/ai/outreach-conversations',
+      '/ai/outreach-conversations',
       '/autoflow/integrations/fop/dashboard', '/autoflow/integrations/fop/order-volume',
       `/autoflow/quotes/${otherId}/versions/1/export.xlsx`,
       `/autoflow/workflows/${otherId}/sourcing`,
@@ -223,7 +223,7 @@ describe('Per-account organization sandbox persistence API', () => {
       const result = await request(app.getHttpServer()).get(`/api${path}`).auth(auth(), { type: 'bearer' })
       expect({ path, status: result.status, code: result.body.code }).toEqual({ path, status: 403, code: 'business_access_disabled' })
     }
-    for (const path of ['/autoflow/workflows', '/autoflow/quotes', '/notes', '/ai/outreach-conversations']) {
+    for (const path of ['/autoflow/workflows', '/autoflow/quotes', '/ai/outreach-conversations']) {
       await request(app.getHttpServer()).post(`/api${path}`).auth(auth(), { type: 'bearer' }).send({}).expect(403)
     }
     } finally { await database.query("UPDATE users SET role='admin' WHERE id=$1", [ownerId]) }

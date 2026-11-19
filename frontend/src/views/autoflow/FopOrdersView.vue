@@ -81,14 +81,19 @@ const selectedOrders = ref<string[]>([])
 const inventoryOrderIds = ref<string[]>()
 const approvalOrderIds = ref<string[]>()
 const approvalQueue = computed(() => !completed.value && (queue.value === 'review' || queue.value === 'allocation_review') ? queue.value : undefined)
-const hasApprovableSelection = computed(() => selectedOrders.value.some(id => data.value?.items.some(row => row.id === id
-  && (approvalQueue.value === 'review' || approvalQueue.value === 'allocation_review' && getTaskStatus(row, 'allocation_review') === 'dispatch_complete'))))
+const billStatus = computed(() => approvalQueue.value && ['A','B'].includes(String(route.query.billStatus)) ? route.query.billStatus as 'A' | 'B' : undefined)
+function canApproveRow(row: FopOrder) {
+  if (approvalQueue.value === 'review') return row.rawBillStatus === 'B'
+  const documents = row.allocationDocuments ?? (row.allocationDocument ? [row.allocationDocument] : [])
+  return approvalQueue.value === 'allocation_review' && documents.length === 1 && documents[0].rawBillStatus === 'B' && getTaskStatus(row, 'allocation_review') === 'dispatch_complete'
+}
+const hasApprovableSelection = computed(() => selectedOrders.value.some(id => data.value?.items.some(row => row.id === id && canApproveRow(row))))
 let unlockApproval: (() => void) | undefined
 let approvalNeedsRefresh = false
 function openApproval() {
   if (!approvalQueue.value || busy.value || !online.value || !hasApprovableSelection.value || approvalOrderIds.value) return
   approvalNeedsRefresh = false
-  approvalOrderIds.value = selectedOrders.value.filter(id => data.value?.items.some(row => row.id === id))
+  approvalOrderIds.value = selectedOrders.value.filter(id => data.value?.items.some(row => row.id === id && canApproveRow(row)))
   unlockApproval = lockApprovalNavigation()
 }
 function clearApproval() { approvalOrderIds.value = undefined; unlockApproval?.(); unlockApproval = undefined }
@@ -102,7 +107,7 @@ let listController: AbortController | undefined
 let exportController: AbortController | undefined
 function cancelExport() { exportController?.abort(); exportController = undefined; exporting.value = undefined; exportFeedback.value = '' }
 function currentFilters(): Omit<FopOrderQuery, 'page' | 'pageSize'> {
-  return { queue: queue.value!, skuAssociation: skuAssociation.value, ...(completed.value ? { completed: true } : {}), timeRange: timeRange.value, shippingCountryCode: shippingCountryCode.value || undefined, procurementStage: procurementStage.value, taskStatus: taskStatus.value, warehouseStage: !completed.value && queue.value === 'shipping' ? warehouseStage.value : undefined, departmentId: departmentId.value || undefined, ownerId: ownerId.value || undefined, warehouseCode: warehouseCode.value || undefined,
+  return { queue: queue.value!, billStatus: billStatus.value, skuAssociation: skuAssociation.value, ...(completed.value ? { completed: true } : {}), timeRange: timeRange.value, shippingCountryCode: shippingCountryCode.value || undefined, procurementStage: procurementStage.value, taskStatus: taskStatus.value, warehouseStage: !completed.value && queue.value === 'shipping' ? warehouseStage.value : undefined, departmentId: departmentId.value || undefined, ownerId: ownerId.value || undefined, warehouseCode: warehouseCode.value || undefined,
     search: typeof route.query.search === 'string' ? route.query.search : '', orderNumber: typeof route.query.orderNumber === 'string' ? route.query.orderNumber : undefined,
     paidAtOrder: paidAtOrder.value, sortBy: isFopOrderSortBy(route.query.sortBy) ? route.query.sortBy : 'consumerPaidAt',
     sortOrder: route.query.sortOrder === 'asc' || route.query.sortOrder === 'desc' ? route.query.sortOrder : completed.value ? 'desc' : undefined }
@@ -205,7 +210,7 @@ const extraConsumerTime = computed(() => completed.value || ['procurement', 'pro
 const columnCount = computed(() => 8
   + (queue.value === 'review' ? 2 : 1)
   + (queue.value !== 'unpaid' ? 1 : 0)
-  + (queue.value === 'allocation_review' ? 1 : 0)
+  + (queue.value === 'allocation_review' && completed.value ? 1 : 0)
   + (showDispatchNumbers.value ? 1 : 0)
   + (hasStatus.value ? 1 : 0)
   + (queue.value === 'exceptions' ? 2 : 0)
@@ -470,6 +475,7 @@ const { expandedProductIds, hasExpandableProducts, allProductsExpanded, setProdu
           <div class="workbench-filter-export"><WorkbenchExportButton :selected-count="selectedOrders.length" :total="data?.total ?? 0" :disabled="busy || !online || !data" :busy="!!exporting" @export="exportOrders" /></div></div>
           <div class="workbench-filter-secondary">
             <label v-if="queue === 'unpaid'" class="department-filter"><span>{{ text('关联SKU', 'SKU association') }}</span><select class="workbench-filter-select" :value="skuAssociation" :disabled="busy" :aria-label="text('关联SKU', 'SKU association')" @change="navigate({ skuAssociation: ($event.target as HTMLSelectElement).value, page: 1 })"><option value="linked">{{ text('已关联', 'Linked') }}</option><option value="unlinked">{{ text('未关联', 'Unlinked') }}</option></select></label>
+            <label v-if="approvalQueue" class="department-filter"><span>{{ text('单据状态', 'Document status') }}</span><select class="workbench-filter-select" :value="billStatus || ''" :disabled="busy" :aria-label="text('单据状态', 'Document status')" @change="navigate({ billStatus: ($event.target as HTMLSelectElement).value || undefined, page: 1 })"><option value="">{{ text('全部', 'All') }}</option><option value="A">{{ text('暂存', 'Draft') }}</option><option value="B">{{ text('已提交', 'Submitted') }}</option></select></label>
             <label v-if="completed" class="department-filter">{{ text('客户付款时间', 'Customer payment time') }}<select class="workbench-filter-select" :value="timeRange" :disabled="busy" :aria-label="text('客户付款时间范围', 'Customer payment time range')" @change="navigate({ timeRange: ($event.target as HTMLSelectElement).value, page: 1 })"><option value="1w">{{ text('近一周', 'Last week') }}</option><option value="1m">{{ text('近一月', 'Last month') }}</option><option value="3m">{{ text('近三月', 'Last three months') }}</option></select></label>
           <label v-if="queue === 'unpaid'" class="department-filter"><span>{{ text('C端付款时间', 'Buyer payment time') }}</span>
               <select class="workbench-filter-select" :value="timeRange" :disabled="busy" :aria-label="text('C端付款时间范围', 'Buyer payment time range')" @change="navigate({ timeRange: ($event.target as HTMLSelectElement).value, page: 1 })">
@@ -523,7 +529,7 @@ const { expandedProductIds, hasExpandableProducts, allProductsExpanded, setProdu
                 <th v-if="queue === 'review'">{{ text('物流信息', 'Logistics information') }}</th>
                 <th v-if="queue === 'review'">{{ text('发货仓库', 'Shipping warehouse') }}</th>
                 <th v-if="queue !== 'unpaid'" :aria-sort="sortBy !== 'paidAt' ? 'none' : paidAtOrder === 'asc' ? 'ascending' : 'descending'"><button type="button" class="sort-payment" :disabled="busy" :title="`${sortHint}（UTC+8）`" :aria-label="`${text('收款日期', 'Payment date')}：${sortHint}`" @click="sortPayment()">{{ text('收款日期', 'Payment date') }}<component :is="sortBy !== 'paidAt' ? ArrowUpDown : paidAtOrder === 'asc' ? ArrowUp : ArrowDown" :size="13" aria-hidden="true" /></button></th>
-                <th v-if="queue === 'allocation_review'">{{ text('配货单号', 'Allocation document number') }}</th>
+                <th v-if="queue === 'allocation_review' && completed">{{ text('配货单号', 'Allocation document number') }}</th>
                 <th v-if="showDispatchNumbers">{{ text('发运单编号', 'Dispatch document number') }}</th>
                 <OrderSortHeader v-if="leadingSortField" :label="statusHeading" :direction="sortDirection(leadingSortField)" :disabled="busy" :hint="leadingSortField === 'dispatchDocumentStatus' ? dispatchSortHint : undefined" @sort="sortStatus(leadingSortField)" /><th v-else-if="hasStatus">{{ statusHeading }}</th>
                 <th>{{ text('客户名称', 'Customer name') }}</th><th>{{ text('店铺', 'Store') }}</th>
@@ -540,7 +546,13 @@ const { expandedProductIds, hasExpandableProducts, allProductsExpanded, setProdu
                   <input v-model="selectedOrders" type="checkbox" class="order-checkbox" :value="order.id" :disabled="busy" :aria-label="`${text('选择订单', 'Select order')} ${order.orderNumber}`" />
                   <span class="order-identity">
                   <button type="button" class="copy-order" :aria-label="`${text('复制订单编号', 'Copy order number')} ${order.orderNumber}`" :title="order.orderNumber" @click="copyOrderValue(order, 'orderNumber')"><strong>{{ order.orderNumber }}</strong><Check v-if="copiedValue === `orderNumber:${order.id}`" :size="14" /><Copy v-else :size="14" /></button>
-<WorkbenchStatusBadge v-if="queue === 'review' && !completed && order.rawBillStatus && ['A','B','C'].includes(order.rawBillStatus)" :tone="order.rawBillStatus === 'C' ? 'success' : order.rawBillStatus === 'B' ? 'info' : 'warning'">{{ order.rawBillStatus === 'A' ? text('暂存', 'Draft') : order.rawBillStatus === 'B' ? text('已提交', 'Submitted') : text('已审核', 'Approved') }}</WorkbenchStatusBadge>
+<WorkbenchStatusBadge class="identity-bill-status" v-if="queue === 'review' && !completed && order.rawBillStatus && ['A','B','C'].includes(order.rawBillStatus)" :tone="order.rawBillStatus === 'C' ? 'success' : order.rawBillStatus === 'B' ? 'info' : 'warning'">{{ order.rawBillStatus === 'A' ? text('暂存', 'Draft') : order.rawBillStatus === 'B' ? text('已提交', 'Submitted') : text('已审核', 'Approved') }}</WorkbenchStatusBadge>
+<div v-if="!completed && (queue === 'allocation' || queue === 'allocation_review')" class="allocation-references">
+  <div v-for="document in (order.allocationDocuments ?? (order.allocationDocument ? [order.allocationDocument] : []))" :key="document.id" class="allocation-reference">
+    <span v-if="document.number?.trim()" class="allocation-reference-number">{{ document.number }}</span>
+    <WorkbenchStatusBadge v-if="document.rawBillStatus && ['A','B','C'].includes(document.rawBillStatus)" :tone="document.rawBillStatus === 'C' ? 'success' : document.rawBillStatus === 'B' ? 'info' : 'warning'">{{ document.rawBillStatus === 'A' ? text('暂存', 'Draft') : document.rawBillStatus === 'B' ? text('已提交', 'Submitted') : text('已审核', 'Approved') }}</WorkbenchStatusBadge>
+  </div>
+</div>
 <OrderExceptionLabel :exception="order.exception" /></span>
                   <span v-if="queue === 'shipping' && !completed && (order.shipmentInterceptStatus === 'intercepted' || order.shipmentInterceptStatus === 'released')" class="shipment-intercept-status"><WorkbenchStatusBadge :tone="order.shipmentInterceptStatus === 'intercepted' ? 'danger' : 'success'" current>{{ order.shipmentInterceptStatus === 'intercepted' ? text('拦截发货', 'Shipment intercepted') : text('取消拦截', 'Interception released') }}</WorkbenchStatusBadge></span>
                   <div v-if="completed && (role === 'sales' || role === 'dispatch' || order.businessStatus)" class="business-status-summary"><span v-if="role !== 'dispatch' && order.businessStatus">{{ businessStatusLabel(order.businessStatus.order, 'order', !zh) }}</span><span>{{ text('采购：', 'Purchase: ') }}{{ completedPurchaseLabel(order, role === 'sales' || role === 'dispatch', !zh) }}</span></div>
@@ -556,7 +568,7 @@ const { expandedProductIds, hasExpandableProducts, allProductsExpanded, setProdu
                 <td v-if="queue === 'review'" class="logistics-channel-cell" :data-label="text('物流信息', 'Logistics information')"><OrderLogisticsChannels :custom-channel="order.customLogisticsChannelName" :channels="order.logisticsChannels" :groups="order.logisticsInfo" :show-tracking="completed" :missing-tracking-text="order.dataQuality?.readOnly ? '—' : undefined" /></td>
                 <td v-if="queue === 'review'" :data-label="text('发货仓库', 'Shipping warehouse')">{{ warehouseName(order.warehouse) }}</td>
                 <td class="workbench-date-cell" v-if="queue !== 'unpaid'" :data-label="text('收款日期', 'Payment date')">{{ formatDate(order.paidAt) }}</td>
-                <td v-if="queue === 'allocation_review'" class="dispatch-numbers mono" :data-label="text('配货单号', 'Allocation document number')"><div v-for="document in (order.allocationDocuments ?? (order.allocationDocument ? [order.allocationDocument] : []))" :key="document.id"><button v-if="document.number?.trim()" type="button" class="copy-value" :title="document.number" :aria-label="`${text('复制配货单号', 'Copy allocation number')} ${document.number}`" @click="copyValue(document.number, `allocation:${order.id}:${document.id}`, text('配货单号', 'Allocation number'))"><span>{{ document.number }}</span><Check v-if="copiedValue === `allocation:${order.id}:${document.id}`" :size="12" /><Copy v-else :size="12" /></button><span v-else>—</span></div><span v-if="!(order.allocationDocuments ?? (order.allocationDocument ? [order.allocationDocument] : [])).length">—</span></td>
+                <td v-if="queue === 'allocation_review' && completed" class="dispatch-numbers mono" :data-label="text('配货单号', 'Allocation document number')"><div v-for="document in (order.allocationDocuments ?? (order.allocationDocument ? [order.allocationDocument] : []))" :key="document.id"><button v-if="document.number?.trim()" type="button" class="copy-value" :title="document.number" :aria-label="`${text('复制配货单号', 'Copy allocation number')} ${document.number}`" @click="copyValue(document.number, `allocation:${order.id}:${document.id}`, text('配货单号', 'Allocation number'))"><span>{{ document.number }}</span><Check v-if="copiedValue === `allocation:${order.id}:${document.id}`" :size="12" /><Copy v-else :size="12" /></button><span v-else>—</span></div><span v-if="!(order.allocationDocuments ?? (order.allocationDocument ? [order.allocationDocument] : [])).length">—</span></td>
                 <td v-if="showDispatchNumbers" class="dispatch-numbers mono" :data-label="text('发运单编号', 'Dispatch document number')"><div v-for="document in order.dispatchDocuments" :key="document.id"><button v-if="document.number?.trim()" type="button" class="copy-value" :title="document.number" :aria-label="`${text('复制发运单编号', 'Copy dispatch number')} ${document.number}`" @click="copyValue(document.number, `dispatch:${order.id}:${document.id}`, text('发运单编号', 'Dispatch number'))"><span>{{ document.number }}</span><Check v-if="copiedValue === `dispatch:${order.id}:${document.id}`" :size="12" /><Copy v-else :size="12" /></button><span v-else>—</span></div><span v-if="!order.dispatchDocuments?.length">—</span></td>
                 <td v-if="(queue === 'procurement' || queue === 'procurement_shipping') && order.sourcePurchaseStatus !== undefined" :data-label="statusHeading">
                   <WorkbenchStatusBadge :tone="order.businessStatus ? (['received','shipped','purchased'].includes(order.businessStatus.purchase) ? 'success' : order.businessStatus.purchase.startsWith('partial_') ? 'warning' : 'neutral') : ['3','4'].includes(order.sourcePurchaseStatus ?? '') ? 'success' : order.sourcePurchaseStatus === '1' ? 'warning' : 'neutral'">{{ order.businessStatus ? businessStatusLabel(order.businessStatus.purchase, 'purchase', !zh) : sourceStatusLabel(order.sourcePurchaseStatus, 'purchase', !zh) }}</WorkbenchStatusBadge>
@@ -564,7 +576,8 @@ const { expandedProductIds, hasExpandableProducts, allProductsExpanded, setProdu
                   <SupplierShipmentStatus v-if="queue === 'procurement_shipping'" class="native-status-detail" :paid-at="order.procurementPaidAt" :now="currentTime" :shipment="order.fulfillmentProgress.supplierShipment === 'partial' ? 'partial' : 'pending'" />
                 </td>
                 <td v-else-if="queue === 'shipping' && order.sourceOutboundStatus !== undefined" :data-label="statusHeading"><WorkbenchStatusBadge :tone="order.businessStatus ? (order.businessStatus.outbound === 'completed' ? 'success' : order.businessStatus.outbound === 'partial' ? 'warning' : 'neutral') : order.sourceOutboundStatus === '2' ? 'success' : order.sourceOutboundStatus === '1' ? 'warning' : 'info'">{{ order.businessStatus ? businessStatusLabel(order.businessStatus.outbound, 'outbound', !zh) : sourceStatusLabel(order.sourceOutboundStatus, 'outbound', !zh) }}</WorkbenchStatusBadge></td>
-                <td v-else-if="completed && hasStatus" :data-label="statusHeading"><WorkbenchStatusBadge tone="success">{{ role === 'allocation' ? (order.fulfillmentProgress.allocationReview === 'approved' ? text('已审核', 'Approved') : order.fulfillmentProgress.allocationReview === 'pending' ? text('未审核', 'Not approved') : text('—', '—')) : role === 'warehouse' ? text('已出库', 'Outbound completed') : role === 'dispatch' ? (order.businessStatus?.order === 'partial_fulfilled' ? text('部分履约', 'Partially fulfilled') : text('已履约', 'Fulfilled')) : text('已完成', 'Completed') }}</WorkbenchStatusBadge></td>
+                <td v-else-if="completed && hasStatus && role === 'allocation'" :data-label="statusHeading"><div class="allocation-references"><WorkbenchStatusBadge v-for="document in (order.allocationDocuments ?? (order.allocationDocument ? [order.allocationDocument] : [])).filter(document => ['A', 'B', 'C'].includes(document.rawBillStatus ?? ''))" :key="document.id" :tone="document.rawBillStatus === 'C' ? 'success' : document.rawBillStatus === 'B' ? 'info' : 'warning'">{{ document.rawBillStatus === 'C' ? text('已审核', 'Approved') : document.rawBillStatus === 'B' ? text('已提交', 'Submitted') : document.rawBillStatus === 'A' ? text('暂存', 'Draft') : '' }}</WorkbenchStatusBadge></div></td>
+                <td v-else-if="completed && hasStatus" :data-label="statusHeading"><WorkbenchStatusBadge tone="success">{{ role === 'warehouse' ? text('已出库', 'Outbound completed') : role === 'dispatch' ? (order.businessStatus?.order === 'partial_fulfilled' ? text('部分履约', 'Partially fulfilled') : text('已履约', 'Fulfilled')) : text('已完成', 'Completed') }}</WorkbenchStatusBadge></td>
                 <td v-else-if="queue === 'procurement'" :data-label="statusHeading"><ProcurementStatus :stage="getTaskStatus(order, 'procurement')" :paid-at="order.procurementPaidAt" :now="currentTime" :progress="order.procurementProgress" :shipment="order.fulfillmentProgress.supplierShipment" /></td>
                 <td v-else-if="queue === 'dispatch' || isAllocation" :data-label="statusHeading"><DispatchStatus :queue="queue ?? undefined" :stage="queue === 'dispatch' ? getTaskStatus(order, 'dispatch') as FopOrder['dispatchTaskStatus'] : order.dispatchTaskStatus" :documents="order.dispatchDocuments" :shopify-sync="order.fulfillmentProgress.shopifySync" /></td>
                 <td v-else-if="queue === 'procurement_shipping'" :data-label="statusHeading"><SupplierShipmentStatus class="status-pill" :paid-at="order.procurementPaidAt" :now="currentTime" :shipment="order.fulfillmentProgress.supplierShipment === 'partial' ? 'partial' : 'pending'" /></td>
@@ -600,6 +613,11 @@ const { expandedProductIds, hasExpandableProducts, allProductsExpanded, setProdu
 </template>
 
 <style scoped>
+.identity-bill-status { margin-top: 6px; }
+.allocation-references { display: flex; flex-direction: column; align-items: flex-start; gap: 7px; margin-top: 6px; }
+.allocation-reference { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+.allocation-reference-number { font-size: 11px; line-height: 1.5; color: var(--text-muted, #71809a); white-space: nowrap; font-variant-numeric: tabular-nums; }
+
 .native-status-detail{display:block;margin-top:5px}
 .exception-reason { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.6; color: var(--color-text-secondary); }
 
@@ -613,9 +631,9 @@ const { expandedProductIds, hasExpandableProducts, allProductsExpanded, setProdu
 .carrier-tracking { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; min-width: 0; }
 .carrier-tracking > * { max-width: 100%; }
 .dispatch-numbers { min-width: 0; line-height: 1.9; }
-.fulfillment-page { color: var(--color-text, #243247); }
+.fulfillment-page { color: var(--color-text); }
 .back-link { display: inline-flex; align-items: center; gap: 7px; color: #718096; font-size: 12px; margin-bottom: 22px; }
-.back-link:hover { color: #5873d4; }
+.back-link:hover { color:var(--color-link); }
 .list-heading { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 14px 24px; margin-bottom: 20px; }
 .eyebrow { font-size: 10px; font-weight: 700; letter-spacing: .15em; color: #7a8ba2; margin-bottom: 8px; }
 h2 { display: flex; gap: 12px; align-items: center; font-size: 21px; font-weight: 750; letter-spacing: -.03em; }
@@ -624,20 +642,20 @@ h2 { display: flex; gap: 12px; align-items: center; font-size: 21px; font-weight
 
 .queue-tabs { display: flex; gap: 6px; overflow-x: auto; margin-bottom: 18px; }
 .queue-tabs a { display: flex; align-items: center; justify-content: center; gap: 14px; padding: 11px 17px; border: 1px solid transparent; border-radius: 6px; color: #8490a3; font-size: 13px; white-space: nowrap; }
-.queue-tabs a.active { background: var(--color-surface); border-color: var(--color-border); color: #5873d4; font-weight: 700; box-shadow: 0 2px 5px #23375805; }
+.queue-tabs a.active { background: var(--color-surface); border-color: var(--color-border); color:var(--color-link); font-weight: 700; box-shadow: 0 2px 5px #23375805; }
 .list-panel { container: order-list / inline-size; width: 100%; max-width: 100%; min-width: 0; border: 1px solid var(--color-border); border-radius: 9px; overflow: hidden; background: var(--color-surface); }
 
 .result-count { white-space: nowrap; color: #8490a3; font-size: 12px; }
 .exact-filter { padding: 12px 20px; min-height: 44px; box-sizing: border-box; display: flex; align-items: center; gap: 8px 16px; font-size: 12px; line-height: 20px; }
-.exact-filter button, .error-message button { color: #5873d4; text-decoration: underline; }
+.exact-filter button, .error-message button { color:var(--color-link); text-decoration: underline; }
 .table-scroll { overflow-x: auto; width: 100%; min-width: 0; max-width: 100%; border-top: 1px solid var(--color-border); }
 table { table-layout: fixed; width: 100%; border-collapse: separate; border-spacing: 0; text-align: left; white-space: normal; overflow-wrap: anywhere; font-size: 12px; }
 th { position: sticky; top: 0; z-index: 2; background: var(--color-surface); padding: 14px 8px; border-bottom: 1px solid var(--color-border); }
 td { border-bottom: 1px solid var(--color-border); padding: 12px 8px; min-width: 0; }
 tbody tr:last-child td { border-bottom: 0; }
-tbody tr:hover td { background: color-mix(in srgb, var(--color-surface) 94%, #5873d4); }
+tbody tr:hover td { background: color-mix(in srgb, var(--color-surface) 94%, var(--color-primary)); }
 .order-cell { position: static; background: var(--color-surface); z-index: 1; min-width: 0; padding-left: 16px; padding-right: 16px; text-align: center; white-space: nowrap; border-right: 1px solid var(--color-border); }
-.order-identity { display:inline-flex; flex-direction:column; align-items:center; vertical-align:middle; max-width:calc(100% - 25px); }
+.order-identity { display:inline-flex; flex-direction:column; align-items:flex-start; vertical-align:middle; text-align:left; max-width:calc(100% - 25px); }
 .order-cell .order-identity .copy-order { max-width:100%; }
 .order-cell .order-checkbox { margin-right: 7px; }
 th.order-cell { z-index: 3; }

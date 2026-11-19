@@ -84,6 +84,19 @@ assert timestamp['optionalStrictProtocol']['requiredForFirstPhase'] is False
 assert timestamp['localImplementation']['automaticScheduler'] is True
 assert timestamp['localImplementation']['sourceLiveVerified'] is True
 api=json.loads((DEST/'api-integration-verification-20261116.json').read_text())
+opportunity=api['localOpportunityManagement20261118']
+assert opportunity['scope']=='local opportunity module; no submit or approval'
+assert opportunity['manualFopRequests']==0 and opportunity['fopBusinessWrites']==0
+assert opportunity['automaticSyncFlagsChanged'] is False
+assert opportunity['validation']['backendTargeted']['failed']==0
+assert opportunity['validation']['frontendTargeted']['failed']==0
+assert opportunity['validation']['isolatedPostgres']['passedCount']>=16
+assert opportunity['validation']['browser']['browser']['fromLeadRepeatedSameId'] is True
+assert opportunity['validation']['browser']['browser']['unsavedInputGuard'] is True
+assert all(p in manifest['inputHashes'] for p in opportunity['implementationFiles'])
+assert 'id="local-opportunities-20261118"' in s
+assert 'OPPORTUNITY_VERIFICATION_PLACEHOLDER' not in s
+assert 'FOP实际启用档案、ID及行政区划关系待提供' in s
 prevention=api['salesExceptionIncrementalPrevention20261118']
 assert prevention['ruleVersion']==7 and prevention['sourceRawAndDisplayUnchanged'] is True
 assert prevention['projectionMismatches']==0 and prevention['dirtyRowsAfterCommit']==0

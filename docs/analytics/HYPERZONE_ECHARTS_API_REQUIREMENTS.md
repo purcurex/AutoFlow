@@ -16,7 +16,7 @@
 - `VERIFICATION.md`：本次实际检查与限制。
 - `FOLLOW_UP_CHECKLIST.md`：第7章补充的后续待办与人工核对清单；按T/H编号记录优先级、建议负责人、输入、产物和完成标准，并提供脱敏验收样本及回填模板。
 
-采用 [OpenAPI Specification 3.1.1](https://spec.openapis.org/oas/v3.1.1.html) 的 `paths`、`operationId`、`parameters`、`requestBody`、`responses`、`components/schemas`、`securitySchemes` 结构。可空使用 JSON Schema 的 `null` 类型；必填与可空分别表达。该版本选择用于稳定契约，不宣称它是最新规范版本。
+采用 [OpenAPI Specification 3.1.1](https://spec.openapis.org/oas/v3.1.1.html) 的 `paths`、`operationId`、`parameters`、`requestBody`、`responses`、`components/schemas`、`securitySchemes` 结构。可空使用 JSON Schema 的 `null` 类型；必填与可空分别表达。本项目固定采用该版本维护接口契约。
 
 ## 2. 图表与业务模块总览
 
@@ -109,7 +109,7 @@
 | 月粒度 | 选定年1月至 UTC+8 当前月；历史年为12月；1月比较前一年完整12月 |
 | 周粒度 | 周一开始，锚点所在周及前三周。weekOf 默认当年今天、历史年12月31日；显式锚点必须属于 year 且不晚于今天；跨年周及其上一周完整读取 |
 | 年粒度 | 所选年及前四年，显示区间最早2020；即便首个显示年为2020，其完整2019年基期仍需读取 |
-| 未完周期 | `periods[].partial=true` 明示未结束周期（含周期末当天），本期to截到UTC+8今天。本期仅含当前已确认金额，与完整上一期比较；不能宣称为同期进度增长率或已关账数据 |
+| 未完周期 | `periods[].partial=true` 明示未结束周期（含周期末当天），本期to截到UTC+8今天。本期仅含当前已确认金额，与完整上一期比较；该指标为未完周期金额与完整上期金额的比较 |
 | 环比 | amount、previousAmount、delta 和 percent 同时返回；delta=本期−上期，percent=delta/abs(上期)×100（25表示25%）。上期0且本期>0为null，显示“上期为0”；双0为0。合计比例用合计基数重算，不能加各期百分比 |
 | 服务商 | 无 carrierCode 时合计＋YT/4PX/WB/YW/JS/OTHER；过滤单商时合计＋该商。合计不与明细再次相加；OTHER仅为可信适配器明确映射的其他真实服务商 |
 | 独立成本权限 | `freight` scope 缺失403；`allowedFreightIds` 缺失或为空返回空范围。有效范围=FOP成本授权∩租户∩本人／部门及下属／业务管理员范围；系统管理身份、订单可见性和页面筛选均不扩大权限 |
@@ -3614,7 +3614,7 @@ month=所选年年初到当前月（历史年12月）；week=锚点所在周及�
 | `currency` | "USD" | 是 | 统一分析与展示币种。 | — |
 | `confirmedAt` | string / null | 是 | hzkj_actual_freight_time，带时区的实际运费确认时刻；UTC+8归期。公开有效明细必须非空且已发生；不是最终结账或银行付款证明。 | — |
 | `reviewStatus` | string | 是 | 发运单审核；billstatus=C映射approved。 | enum=["approved", "pending"] |
-| `costStatus` | string | 是 | 适配器归一成本确认状态；不能宣称源存在同名枚举。 | enum=["confirmed", "pending"] |
+| `costStatus` | string | 是 | 适配器归一成本确认状态；源端状态编码按实际接口映射。 | enum=["confirmed", "pending"] |
 
 组合规则 `allOf`：`见 schema`。完整约束见 OpenAPI JSON。
 
@@ -3693,7 +3693,7 @@ month=所选年年初到当前月（历史年12月）；week=锚点所在周及�
 | `currency` | "USD" | 是 | 统一分析与展示币种。 | — |
 | `confirmedAt` | string / null | 是 | hzkj_actual_freight_time，带时区的实际运费确认时刻；UTC+8归期。公开有效明细必须非空且已发生；不是最终结账或银行付款证明。 | — |
 | `reviewStatus` | string | 是 | 发运单审核；billstatus=C映射approved。 | enum=["approved", "pending"] |
-| `costStatus` | string | 是 | 适配器归一成本确认状态；不能宣称源存在同名枚举。 | enum=["confirmed", "pending"] |
+| `costStatus` | string | 是 | 适配器归一成本确认状态；源端状态编码按实际接口映射。 | enum=["confirmed", "pending"] |
 | `tenantId` | string | 是 | 成本源所属租户，必须与绑定主体匹配。 | minLength=1 |
 | `departmentPathIds` | string[] | 否 | 部门及子部门范围检查；不得由浏览器传入。 | uniqueItems=true |
 
@@ -4682,7 +4682,7 @@ describe('ECharts audit: assertions of current incorrect behavior', () => {
 - 未改写 `/Library/VSCode/dtr5b`，未连接生产HyperZone FOP；本次只读核对源字段、状态、扣费和备货逻辑。真实HTTP路径、稳定收款分录ID发布方式、身份授权、退款调整与历史归属仍需生产联调。
 - 当前历史统计按记录的当前有效状态重算；不提供财务关账、退款跨期调整或收入确认制度。非USD不自动换汇；公开收款明细仅列USD，客户金额兼容字段 `excludedOrderCount` 记录排除的非USD收款分录数。
 - 缺少 `allowedReceiptIds` 不从订单授权推导；异常收款不回退到订单金额。相同Mock与生产归一契约，不代表真实后台适配器已发布。
-- 未运行本轮依赖漏洞审计或生产性能压测；不宣称完整 `ci:local` 原样执行。图例组合、导出下载、触屏、屏幕阅读器及全部岗位仍需专项验收。
+- 未运行本轮依赖漏洞审计或生产性能压测；本轮分项验证，完整 `ci:local` 待执行。图例组合、导出下载、触屏、屏幕阅读器及全部岗位仍需专项验收。
 - 历史审计附录中的修复前复现仅作为问题证据，不作为当前仍然存在的错误。
 
 ### 文档与 Git

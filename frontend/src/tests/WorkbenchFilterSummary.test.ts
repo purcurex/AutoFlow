@@ -32,7 +32,7 @@ it('summarizes applied query values without loading or data-source text and reta
   w.unmount()
 })
 
-it.each(['receipts', 'performance', 'overview'])('describes %s without reusing unrelated todo filters', async queue => {
+it.each(['receipts', 'performance'])('describes %s without reusing unrelated todo filters', async queue => {
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: { template: '<div />' } }] })
   await router.push('/?warehouseCode=HZ&search=old-todo-search&taskStatus=dispatch_tracking')
   const w = mount(WorkbenchFilterSummary, { props: { queue }, global: { plugins: [router, createI18n({ legacy: false, locale: 'zh-CN', messages: {} })] } })

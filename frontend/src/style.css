@@ -4,65 +4,16 @@
 
 @layer base {
   :root {
-    --color-primary: #f26a21;
-    --color-primary-strong: #d94d0b;
-    --color-accent: #079b83;
-    --color-account-action: #b8521d;
-    --color-account-action-hover: #a94f20;
-    --color-account-action-text: #fff7ed;
-    --color-selection-surface: #fff7ed;
-    --color-selection-text: #c2410c;
-    --color-selection-border: #f97316;
     --color-warning-surface: #fffbeb;
     --color-warning-text: #92400e;
     --color-warning-border: #f59e0b;
-    --color-background: #f5f7fa;
-    --color-surface: #ffffff;
-    --color-surface-muted: #f8fafc;
-    --color-text: #172033;
-    --color-text-secondary: #657083;
-    --color-border: #dde3eb;
-    --color-border-strong: #c8d1de;
-    --color-shell: #ffffff;
-    --color-chart-heading: #6478b3;
-    --color-chart-link: #6478b3;
-    --color-chart-muted: #8793a7;
-    --color-chart-money: #6687a3;
-    --color-summary-text: #6478b3;
-    --color-summary-surface: #f1f4fc;
-    --color-total-surface: #edf1fb;
-    --color-total-border: #d7dff2;
     --shadow-panel: 0 1px 2px rgb(15 23 42 / 0.04), 0 8px 24px rgb(15 23 42 / 0.04);
   }
 
   .dark {
-    --color-primary: #c2a58e;
-    --color-primary-strong: #d0b9a5;
-    --color-accent: #8eb9ad;
-    --color-account-action: #ac5c2e;
-    --color-account-action-hover: #a9552a;
-    --color-selection-surface: #29272a;
-    --color-selection-text: #cbb5a3;
-    --color-selection-border: #83725e;
     --color-warning-surface: #292720;
     --color-warning-text: #c9b896;
     --color-warning-border: #665a43;
-    --color-background: #0d131d;
-    --color-surface: #141d2a;
-    --color-surface-muted: #1a2535;
-    --color-text: #e7edf6;
-    --color-text-secondary: #a3b1c5;
-    --color-border: #2a374a;
-    --color-border-strong: #3b4c63;
-    --color-shell: #101722;
-    --color-chart-heading: #b9c9ed;
-    --color-chart-link: #afc2f3;
-    --color-chart-muted: #a3b1c5;
-    --color-chart-money: #adcde2;
-    --color-summary-text: #b6c4e3;
-    --color-summary-surface: #202d44;
-    --color-total-surface: #202d42;
-    --color-total-border: #35465f;
     --shadow-panel: 0 1px 2px rgb(0 0 0 / 0.3), 0 12px 32px rgb(0 0 0 / 0.18);
   }
 
@@ -78,8 +29,8 @@
 @layer components {
   .app-page { @apply min-h-full px-4 py-5 sm:px-6 lg:px-8 lg:py-7; }
   .page-header { @apply mb-6 flex flex-col gap-4 border-b pb-5 sm:flex-row sm:items-end sm:justify-between; border-color: var(--color-border); }
-  .page-eyebrow { @apply text-xs font-bold uppercase text-orange-600; letter-spacing: 0; }
-  .dark .page-eyebrow { color: var(--color-primary); }
+  .page-eyebrow { @apply text-xs font-bold uppercase text-primary-600; letter-spacing: 0; }
+  .dark .page-eyebrow { color:var(--color-link); }
   .page-title { @apply mt-1 text-2xl font-bold tracking-normal text-slate-950 dark:text-[var(--color-text)]; }
   .page-description { @apply mt-1 max-w-3xl text-sm leading-6 text-slate-500 dark:text-slate-400; }
 
@@ -89,9 +40,7 @@
   .panel-description { @apply mt-1 text-xs text-slate-500 dark:text-slate-400; }
 
   .btn { @apply inline-flex min-h-10 items-center justify-center gap-2 rounded-md border px-4 py-2 text-sm font-semibold transition duration-150 disabled:cursor-not-allowed disabled:opacity-45; letter-spacing: 0; }
-  .btn-primary { @apply border-orange-600 bg-orange-600 text-white shadow-sm hover:border-orange-700 hover:bg-orange-700 active:translate-y-px; }
-  .dark .btn-primary { background: #80583f; border-color: #987258; color: #f1e5db; box-shadow: none; }
-  .dark .btn-primary:hover { background: #855c43; border-color: #a17b62; }
+  .btn-primary { background:var(--color-primary);border-color:var(--color-primary);color:var(--color-on-primary); }
   .btn-secondary { @apply border-slate-300 bg-white text-slate-700 hover:border-slate-400 hover:bg-slate-50 dark:border-slate-700 dark:bg-[#171b21] dark:text-slate-200 dark:hover:border-slate-600 dark:hover:bg-[#20252d]; }
   .btn-danger { @apply border-red-600 bg-red-600 text-white hover:bg-red-700; }
   .brand-avatar, .btn-account { background: var(--color-account-action); color: var(--color-account-action-text); }
@@ -111,7 +60,7 @@
   .metric-card { @apply relative min-h-28 overflow-hidden rounded-lg border p-4; border-color: var(--color-border); background: var(--color-surface); box-shadow: var(--shadow-panel); }
   .metric-label { @apply text-xs font-semibold text-slate-500 dark:text-slate-400; }
   .metric-value { @apply mt-3 text-3xl font-bold tabular-nums text-slate-950 dark:text-white; }
-  .metric-icon { @apply absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-md bg-orange-50 text-orange-600 dark:bg-orange-500/10 dark:text-orange-400; }
+  .metric-icon { @apply absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-md bg-primary-50 text-primary-600 dark:bg-primary-500/10 dark:text-orange-400; }
 
   .data-table { @apply w-full min-w-[720px] text-left text-sm; }
   .data-table thead { background: var(--color-surface-muted); }
@@ -138,7 +87,7 @@
   .peer:focus-visible ~ .selection-control { outline: 2px solid var(--color-text-secondary); outline-offset: -3px; }
   .selection-marker { background: #f97316; }
   .dark .selection-marker { background: #b3947b; }
-  .dark .metric-icon { background: var(--color-selection-surface); color: var(--color-primary); }
+  .dark .metric-icon { background: var(--color-selection-surface); color:var(--color-link); }
   .dark .notice { border-left-width: 2px; }
 
   .empty-state { @apply flex min-h-48 flex-col items-center justify-center gap-3 px-6 py-10 text-center text-sm text-slate-500 dark:text-slate-400; }
@@ -158,7 +107,7 @@
   .editor-container { @apply min-h-[500px] p-4 focus:outline-none; }
   .editor-toolbar { @apply flex items-center gap-1 border-b p-2; border-color: var(--color-border); background: var(--color-surface-muted); }
   .editor-toolbar-btn { @apply rounded p-2 transition-colors hover:bg-slate-100 dark:hover:bg-slate-700; }
-  .editor-toolbar-btn.active { @apply bg-orange-100 text-orange-700; }
+  .editor-toolbar-btn.active { @apply bg-primary-100 text-primary-700; }
   .dark .editor-toolbar-btn.active { background: var(--color-selection-surface); color: var(--color-selection-text); }
 }
 
@@ -201,7 +150,4 @@ button.workbench-refresh:is(.btn, .action-button, .workbench-button, .ov-seconda
 .dark button.workbench-refresh:is(.btn, .action-button, .workbench-button, .ov-secondary):hover:not(:disabled) { color: #c4ddf2; background: #29435d; border-color: #507498; }
 button.workbench-refresh:is(.btn, .action-button, .workbench-button, .ov-secondary):focus-visible { outline: 2px solid #81b4df; outline-offset: 3px; }
 
-/* Shared workbench actions must not inherit the orange account/admin theme. */
-button.workbench-primary:is(.btn, .action-button, .workbench-button) { background: #5873d4; border-color: #5873d4; color: #fff; box-shadow: none; }
-button.workbench-primary:is(.btn, .action-button, .workbench-button):hover:not(:disabled) { background: #4f68c2; border-color: #4f68c2; color: #fff; }
-button.workbench-primary:is(.btn, .action-button, .workbench-button):focus-visible { outline: 2px solid #9aace5; outline-offset: 3px; }
+/* Workbench actions share theme/components.css. */

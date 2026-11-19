@@ -1,0 +1,34 @@
+/* Shared semantic UI contract. Status colors and dashboard card gradients are independent. */
+:root[data-palette] .btn-primary,
+:root[data-palette] .btn-account,
+:root[data-palette] button.workbench-primary:is(.btn,.action-button,.workbench-button) {
+  background:var(--color-primary);border-color:var(--color-primary);color:var(--color-on-primary);box-shadow:none;
+}
+:root[data-palette] .btn-primary:hover:not(:disabled),
+:root[data-palette] .btn-account:hover:not(:disabled),
+:root[data-palette] button.workbench-primary:hover:not(:disabled){background:var(--color-primary-strong);border-color:var(--color-primary-strong);color:var(--color-on-primary)}
+:root[data-palette] .page-eyebrow{color:var(--color-link)}
+:root[data-palette] .selection-marker{background:var(--color-primary)}
+:root[data-palette] button.workbench-refresh:is(.btn,.action-button,.workbench-button,.ov-secondary){background:var(--color-selection-surface);color:var(--color-link);border-color:var(--color-selection-border)}
+:root[data-palette] button.workbench-refresh:hover:not(:disabled){filter:brightness(.97)}
+:root[data-palette] :is(.btn-secondary,.icon-btn,.control-select){background:var(--color-surface);color:var(--color-text-secondary);border-color:var(--color-border)}
+:root[data-palette] :is(.btn-secondary,.icon-btn,.control-select):hover{background:var(--color-surface-muted);border-color:var(--color-border-strong)}
+:root[data-palette] :is(button,input,select,textarea,a):focus-visible{outline-color:var(--color-primary)}
+:root[data-palette] input[type=checkbox],:root[data-palette] input[type=radio]{accent-color:var(--color-primary)}
+:root[data-palette] .app-sidebar{background:var(--color-sidebar);border-color:#ffffff18;color:#d6e1eb}
+:root[data-palette] .app-sidebar a{color:#bdcbd7}
+:root[data-palette] .app-sidebar a:hover{background:#ffffff0d;color:#fff}
+:root[data-palette] .app-sidebar a.selection-active{background:var(--color-sidebar-selected);color:var(--color-sidebar-selected-text)}
+:root[data-palette] .app-sidebar .brand-mark{background:transparent;border:0;box-shadow:none}
+:root[data-palette] .app-sidebar .border-b,:root[data-palette] .app-sidebar .border-t{border-color:#ffffff18!important}
+.theme-picker{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:8px 0 16px}
+.theme-choice{display:flex;align-items:center;gap:9px;padding:12px;border:1px solid var(--color-border);border-radius:7px;color:var(--color-text-secondary);font-size:13px}
+.theme-choice:hover{border-color:var(--color-primary)}
+.theme-swatch{height:16px;width:16px;border-radius:50%;box-shadow:inset 0 0 0 1px #00000010}
+:root[data-palette] :is(.ov-primary,.query-button,.follow-up-create,.opportunity-primary-action){background:var(--color-primary);border-color:var(--color-primary);color:var(--color-on-primary)}
+:root[data-palette] :is(.ov-primary,.query-button,.follow-up-create,.opportunity-primary-action):hover:not(:disabled){background:var(--color-primary-strong);border-color:var(--color-primary-strong);color:var(--color-on-primary)}
+:root[data-palette] .bg-primary-600{color:var(--color-on-primary)}
+:root[data-palette] .dark :is(.text-slate-500,.text-slate-400),:root[data-palette].dark :is(.text-slate-500,.text-slate-400){color:var(--color-text-secondary)}
+:root[data-palette] .editor-toolbar-btn.active,:root[data-palette] .metric-icon{background:var(--color-selection-surface);color:var(--color-link)}
+
+:root[data-palette]:not(.dark) .app-sidebar a.selection-active .selection-marker{background:currentColor;opacity:.7}

@@ -2,15 +2,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { useUserStore } from '@/stores/user'
 import { useAutoFlowStore } from '@/stores/autoflow'
-import { useNoteStore } from '@/stores/note'
 import { autoflowApi } from '@/api/autoflow'
-import { notesApi } from '@/api/notes'
 import { authApi } from '@/api/auth'
 import { getWorkbenchAccess } from '@/api/workbench-access'
 import { refreshWorkbenchAccess, useWorkbenchAccess } from '@/composables/useWorkbenchAccess'
 
 vi.mock('@/api/autoflow', () => ({ autoflowApi: { getWorkflows: vi.fn() } }))
-vi.mock('@/api/notes', () => ({ notesApi: { getAll: vi.fn() } }))
 vi.mock('@/api/auth', () => ({ authApi: { login: vi.fn(), logout: vi.fn(), getProfile: vi.fn() } }))
 vi.mock('@/api/workbench-access', () => ({ getWorkbenchAccess: vi.fn() }))
 function deferred<T>() {
@@ -24,35 +21,27 @@ beforeEach(() => { setActivePinia(createPinia()); localStorage.clear(); vi.clear
 
 describe('account session isolation', () => {
   it('clears business state immediately, before logout completes', async () => {
-    const users = useUserStore(), flow = useAutoFlowStore(), notes = useNoteStore()
+    const users = useUserStore(), flow = useAutoFlowStore()
     flow.workflows = [{ id: 'private-a' }] as any
-    notes.notes = [{ id: 'private-note-a' }] as any
-    notes.searchQuery = 'private search'
     const logout = deferred<{ success: boolean }>()
     vi.mocked(authApi.logout).mockReturnValue(logout.promise)
     users.logout()
     expect(flow.workflows).toEqual([])
-    expect(notes.notes).toEqual([])
-    expect(notes.searchQuery).toBe('')
     logout.resolve({ success: true })
     await logout.promise
   })
 
   it('rejects old business responses after switching accounts', async () => {
-    const users = useUserStore(), flow = useAutoFlowStore(), notes = useNoteStore()
-    const oldFlow = deferred<any>(), oldNotes = deferred<any>()
+    const users = useUserStore(), flow = useAutoFlowStore()
+    const oldFlow = deferred<any>()
     vi.mocked(autoflowApi.getWorkflows).mockReturnValue(oldFlow.promise)
-    vi.mocked(notesApi.getAll).mockReturnValue(oldNotes.promise)
-    const flowRequest = flow.fetchWorkflows(), notesRequest = notes.fetchNotes()
+    const flowRequest = flow.fetchWorkflows()
     const flowRejected = expect(flowRequest).rejects.toThrow(/session/i)
-    const notesRejected = expect(notesRequest).rejects.toThrow(/session/i)
     vi.mocked(authApi.login).mockResolvedValue({ user: userB } as any)
     await users.login('b@example.test', 'password')
     oldFlow.resolve({ items: [{ id: 'private-a' }] })
-    oldNotes.resolve([{ id: 'private-note-a' }])
-    await Promise.all([flowRejected, notesRejected])
+    await flowRejected
     expect(flow.workflows).toEqual([])
-    expect(notes.notes).toEqual([])
     expect(users.user?.id).toBe('user-b')
   })
 

@@ -1,7 +1,7 @@
 {
   "asOf": "2026-11-18",
   "initialization": "Run compiled migrations, do not import schema-reference.sql as initialization.",
-  "count": 73,
+  "count": 76,
   "migrations": [
     {
       "timestamp": "1784700000000",
@@ -97,35 +97,35 @@
     },
     {
       "timestamp": "1784728000000",
-      "name": "AddAlibaba1688SourcingPagination1784728000000"
-    },
-    {
-      "timestamp": "1784728000000",
       "name": "AddWorkbenchRoles1784728000000"
     },
     {
-      "timestamp": "1784729000000",
-      "name": "AddFopUserBindings1784729000000"
+      "timestamp": "1784728000000",
+      "name": "AddAlibaba1688SourcingPagination1784728000000"
     },
     {
       "timestamp": "1784729000000",
       "name": "AddSourcingOfferProductFingerprint1784729000000"
     },
     {
-      "timestamp": "1784730000000",
-      "name": "AddOrganizationSandbox1784730000000"
+      "timestamp": "1784729000000",
+      "name": "AddFopUserBindings1784729000000"
     },
     {
       "timestamp": "1784730000000",
       "name": "AddSourcingResponseCacheMetadata1784730000000"
     },
     {
-      "timestamp": "1784731000000",
-      "name": "AddBusinessDataScopes1784731000000"
+      "timestamp": "1784730000000",
+      "name": "AddOrganizationSandbox1784730000000"
     },
     {
       "timestamp": "1784731000000",
       "name": "AddSourcingResultLimit1784731000000"
+    },
+    {
+      "timestamp": "1784731000000",
+      "name": "AddBusinessDataScopes1784731000000"
     },
     {
       "timestamp": "1784732000000",
@@ -294,6 +294,18 @@
     {
       "timestamp": "1794989000000",
       "name": "ExceptionReceiptDateQuality1794989000000"
+    },
+    {
+      "timestamp": "1795060000000",
+      "name": "LeadRegistration1795060000000"
+    },
+    {
+      "timestamp": "1795061000000",
+      "name": "LocalOpportunities1795061000000"
+    },
+    {
+      "timestamp": "1795062000000",
+      "name": "RetireLegacyBusinessRecords1795062000000"
     }
   ]
 }

@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import LeadRegistrationList from '@/components/leads/LeadRegistrationList.vue'
+import { computed, ref, watch } from 'vue'
 import {
   Clock3,
   Facebook,
@@ -23,11 +24,12 @@ import { withReturnTo } from '@/composables/useReturnNavigation'
 const store = useAutoFlowStore()
 const route = useRoute()
 const { t, locale } = useI18n()
+const view = ref<'list' | 'workflow'>('list')
 const query = ref('')
 const statuses = ['new', 'qualified', 'contacted', 'replied', 'opportunity', 'won', 'lost']
 const status = ref(statuses.includes(String(route.query.status)) ? String(route.query.status) : 'all')
 
-onMounted(() => store.fetchLeads())
+watch(view, next => { if(next === 'workflow') void store.fetchLeads() })
 watch(
   () => route.query.status,
   (nextStatus) => {
@@ -71,13 +73,16 @@ function formatDate(value: string) {
 
 <template>
   <AppLayout>
-    <div class="app-page">
+    <div class="app-page" :class="{ 'lead-list-page': view==='list' }">
       <PageHeader
         :eyebrow="t('leads.eyebrow')"
         :title="t('leads.title')"
         :description="t('leads.groupedDescription')"
       />
 
+      <div class="lead-view-tabs"><button class="btn lead-view-tab" :class="{ active: view==='list' }" :aria-pressed="view==='list'" @click="view='list'">线索登记列表</button><button class="btn lead-view-tab" :class="{ active: view==='workflow' }" :aria-pressed="view==='workflow'" @click="view='workflow'">按开发任务查看</button></div>
+      <LeadRegistrationList v-if="view==='list'" />
+      <template v-else>
       <div class="panel mb-4 flex flex-col gap-3 p-3 sm:flex-row sm:items-center">
         <label class="relative query-search-control">
           <Search class="pointer-events-none absolute left-3 top-3 h-4 w-4 text-slate-400" />
@@ -103,11 +108,11 @@ function formatDate(value: string) {
         >
           <header class="flex flex-col gap-3 border-b bg-slate-50/80 px-5 py-4 sm:flex-row sm:items-center sm:justify-between dark:bg-[#14181d]" style="border-color: var(--color-border)">
             <div class="flex min-w-0 items-center gap-3">
-              <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-orange-200 bg-orange-50 text-orange-600 dark:border-orange-900 dark:bg-orange-950/40 dark:text-orange-300">
+              <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-primary-200 bg-primary-50 text-primary-600 dark:border-primary-900 dark:bg-primary-950/40 dark:text-primary-300">
                 <Workflow class="h-5 w-5" />
               </span>
               <div class="min-w-0">
-                <p class="text-xs font-bold uppercase text-orange-600">{{ t('leads.sourceWorkflow') }}</p>
+                <p class="text-xs font-bold uppercase text-primary-600">{{ t('leads.sourceWorkflow') }}</p>
                 <div class="flex min-w-0 flex-wrap items-center gap-2">
                   <h2 class="truncate text-base font-bold text-slate-950 dark:text-white">
                     {{ group.workflowName || t('leads.unassignedWorkflow') }}
@@ -128,7 +133,7 @@ function formatDate(value: string) {
               </span>
               <span>{{ t('leads.groupLeadCount', { count: group.entries.length }) }}</span>
               <span class="inline-flex items-center gap-1.5 text-slate-700 dark:text-slate-200">
-                <Trophy class="h-4 w-4 text-orange-500" />
+                <Trophy class="h-4 w-4 text-primary-500" />
                 {{ t('leads.highestScore') }} {{ group.entries[0]?.discovery.score ?? 0 }}
               </span>
             </div>
@@ -156,7 +161,7 @@ function formatDate(value: string) {
                   <td>
                     <RouterLink
                       :to="withReturnTo(`/leads/${lead.id}`, route.fullPath)"
-                      class="font-semibold text-orange-600 hover:underline dark:text-orange-400"
+                      class="font-semibold text-primary-600 hover:underline dark:text-primary-400"
                     >
                       {{ leadCustomerName(lead.brandName) }}
                     </RouterLink>
@@ -173,7 +178,7 @@ function formatDate(value: string) {
                       <span
                         v-for="source in leadSources(lead)"
                         :key="source"
-                        class="rounded border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-semibold text-slate-600 dark:border-slate-700 dark:bg-[#171b21] dark:text-slate-300"
+                        class="rounded border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-semibold text-slate-600 dark:border-slate-700 dark:bg-[var(--color-surface)] dark:text-slate-300"
                       >
                         {{ t(`leads.source_${source}`) }}
                       </span>
@@ -186,7 +191,7 @@ function formatDate(value: string) {
                         :href="lead.productUrl"
                         target="_blank"
                         rel="noopener noreferrer"
-                        class="inline-flex h-9 w-9 items-center justify-center rounded-md border border-orange-200 bg-orange-50 text-orange-600 transition hover:border-orange-600 hover:bg-orange-600 hover:text-white dark:border-orange-900 dark:bg-orange-950/40 dark:text-orange-300 dark:hover:bg-orange-600 dark:hover:text-white"
+                        class="inline-flex h-9 w-9 items-center justify-center rounded-md border border-primary-200 bg-primary-50 text-primary-600 transition hover:border-primary-600 hover:bg-primary-600 hover:text-white dark:border-primary-900 dark:bg-primary-950/40 dark:text-primary-300 dark:hover:bg-primary-600 dark:hover:text-white"
                         :title="t('leads.openProduct')"
                       >
                         <PackageSearch class="h-[18px] w-[18px]" />
@@ -241,6 +246,19 @@ function formatDate(value: string) {
       <section v-else class="panel">
         <EmptyState :message="t('leads.noMatch')" />
       </section>
+      </template>
     </div>
   </AppLayout>
 </template>
+
+<style scoped>
+:global([data-page-scroll]:has(>.lead-list-page)){display:flex;flex-direction:column}
+.lead-list-page{display:flex;flex-direction:column;flex:1}
+.lead-list-page>:deep(.lead-register){flex:1}
+
+.lead-view-tabs{display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap}
+.lead-view-tab{background:transparent;color:var(--color-text-secondary);border:1px solid transparent;box-shadow:none}
+ .lead-view-tab:hover{background:var(--color-selection-surface);color:var(--color-link)}
+.lead-view-tab.active{background:var(--color-selection-surface);border-color:var(--color-selection-border);color:var(--color-selection-text)}
+.lead-view-tab:focus-visible{outline:2px solid var(--color-primary);outline-offset:2px}
+</style>

@@ -205,6 +205,8 @@ export class WorkflowExecutionService {
 
       for (const candidate of evidence.candidates) {
         const values = leadRepository.create({
+          leadType: 'automatic',
+          registrarUserId: workflow.ownerUserId,
           workflowRunId: workflow.id,
           ownerUserId: workflow.ownerUserId,
           teamId: workflow.teamId,

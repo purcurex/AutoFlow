@@ -9,5 +9,5 @@ const label=computed(()=>props.exception?.type?.endsWith('_exception') ? taskSta
 </script>
 <template><div v-if="label" class="order-exception-label"><WorkbenchStatusBadge tone="danger" :title="exception?.reason || undefined" :tabindex="exception?.reason ? 0 : undefined">{{ label }}</WorkbenchStatusBadge></div></template>
 <style scoped>
-.order-exception-label{display:flex;justify-content:center;margin-top:6px;white-space:nowrap}
+.order-exception-label{display:flex;justify-content:flex-start;margin-top:6px;white-space:nowrap}
 </style>

@@ -164,7 +164,6 @@ try {
     ['/quotes', '07-quotes.png'],
     ['/follow-ups', '08-follow-ups.png'],
     ['/settings', '09-settings.png'],
-    ['/admin', '10-admin.png'],
   ]
   for (const [path, name] of pages) {
     await navigate(client, path)

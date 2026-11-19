@@ -27,6 +27,7 @@ describe('organization management navigation', () => {
     expect(wrapper.find('nav a[href="/organization"]').exists()).toBe(false)
     expect(wrapper.find('a[href="/organization"]').exists()).toBe(isAdmin)
     expect(wrapper.find('a[href="/admin/workbenches"]').exists()).toBe(isAdmin)
+    expect(wrapper.find('a[href="/admin"]').exists()).toBe(false)
     if (isAdmin) {
       expect(wrapper.find('[data-management-nav] a[href="/organization"]').exists()).toBe(true)
       expect(wrapper.find('[data-management-nav]').findAll('a').map(link => link.attributes('href'))).toEqual(['/organization', '/admin/workbenches'])

@@ -5,13 +5,10 @@ import {
   Column,
   CreateDateColumn,
   UpdateDateColumn,
-  OneToMany,
   Unique,
 } from 'typeorm'
 import type { BusinessRole } from './business-scope'
 import type { FopEmployeeBindingDetails } from '../fop-data/fop-employee-binding'
-import { Note } from '../notes/note.entity'
-import { Folder } from '../folders/folder.entity'
 import type { WorkbenchRole } from './workbench-role'
 import type { ChartPermissionOverride } from './chart-permissions'
 
@@ -121,12 +118,6 @@ export class User {
   /** 一人一绑定的可信身份及本地/金蝶映射；历史裸ID绑定需重新验证，不推测员工身份。 */
   @Column({ name: 'fop_binding_details', type: 'jsonb', nullable: true })
   fopBindingDetails: FopEmployeeBindingDetails | null
-
-  @OneToMany(() => Note, (note) => note.user)
-  notes: Note[]
-
-  @OneToMany(() => Folder, (folder) => folder.user)
-  folders: Folder[]
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date

@@ -146,5 +146,43 @@
     "deployment/database/migration-inventory.json",
     "docs/manuals/source/production-deployment.body.html",
     "docs/manuals/HyperZone生产部署指导手册.html"
-  ]
+  ],
+  "latestBuild": {
+    "asOf": "2026-11-18",
+    "version": "20261118-candidate.2",
+    "build": {
+      "frontend": true,
+      "backend": true,
+      "packagedFrontend": true,
+      "compiledMigrations": 77
+    },
+    "frontend": {
+      "passed": 1116,
+      "failed": 9,
+      "skipped": 2,
+      "suitesPassed": 120,
+      "suitesFailed": 3,
+      "failingSuites": [
+        "FopOrdersView.test.ts",
+        "WorkbenchGlobalSync.test.ts",
+        "WorkbenchRefreshNavigation.test.ts"
+      ]
+    },
+    "backend": {
+      "passed": 2485,
+      "failed": 0,
+      "skipped": 218,
+      "suitesPassed": 205,
+      "suitesSkipped": 26
+    },
+    "deploymentScriptTests": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 2,
+      "skipReason": "Isolated database tests require a dedicated hz_deploy_test database"
+    },
+    "requirementsBuildAndValidation": true,
+    "realProductionValidated": false,
+    "note": "Earlier verification entries are historical evidence. This rebuild does not rerun production runtime, backup/restore, E2E or dependency audit. Frontend test failures remain to be resolved; unchanged manuals were retained."
+  }
 }

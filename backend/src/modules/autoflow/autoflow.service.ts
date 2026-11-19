@@ -1,9 +1,12 @@
+import { readLeadWorkbook } from './lead-registration'
+import { normalizeDomain } from '../discovery/discovery-normalizer'
 import { readBusinessOwners } from '../users/business-data-access'
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common'
 import { InjectRepository } from '@nestjs/typeorm'
 import { DataSource, EntityManager, In, IsNull, Repository } from 'typeorm'
 import type { QueryDeepPartialEntity } from 'typeorm/query-builder/QueryPartialEntity'
 import {
+  RegisterLeadDto,
   CreateWorkflowDto,
   CreateWorkflowRevisionDto,
   GenerateMessageDto,
@@ -92,6 +95,7 @@ export class AutoflowService {
         this.leadRepository
           .createQueryBuilder('lead')
           .leftJoinAndSelect('lead.contacts', 'contact')
+      .leftJoinAndSelect('lead.owner', 'leadOwner')
           .loadRelationCountAndMap('lead.discoveryCount', 'lead.workflowLinks')
           .where('lead.owner_user_id IN (:...visibleOwnerIds)', { visibleOwnerIds: owners.ids.length ? owners.ids : ['00000000-0000-0000-0000-000000000000'] })
           .orderBy('lead.totalScore', 'DESC')
@@ -289,6 +293,50 @@ export class AutoflowService {
     })
   }
 
+  async registerLead(ownerUserId: string, data: RegisterLeadDto, leadType: 'manual' | 'import' = 'manual') {
+    await readBusinessOwners(this.dataSource, ownerUserId)
+    return this.persistRegisteredLead(ownerUserId, data, leadType)
+  }
+
+  private async persistRegisteredLead(ownerUserId: string, data: RegisterLeadDto, leadType: 'manual' | 'import') {
+    const domain=normalizeDomain(data.storeUrl)
+    if (!domain || !data.brandName.trim() || !data.country.trim()) throw new BadRequestException('客户名称、国家和有效店铺链接必填')
+    try {
+      return await this.dataSource.transaction(async manager => {
+        const repository=manager.getRepository(LeadEntity)
+        const lead=await repository.save(repository.create({
+          ownerUserId, registrarUserId:ownerUserId, leadType, workflowRunId:null, teamId:null,
+          brandName:data.brandName.trim(), domain, normalizedDomain:domain, storeUrl:data.storeUrl.trim(),
+          country:data.country.trim(), category:data.category?.trim()||'', city:data.city?.trim()||'',
+          registeredOn:data.registeredOn?.slice(0,10)||new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Shanghai'}).format(new Date()),
+          contactedOn:data.contactedOn?.slice(0,10)||null, currentFollowUp:data.currentFollowUp?.trim()||'', nextFollowUpPlan:data.nextFollowUpPlan?.trim()||'',
+          source:leadType, discoverySources:[], status:'new', language:'English', productUrl:null, recommendedAngle:'',
+          shopifyConfidence:0, adActivityScore:0, trafficScore:0, contactScore:0, totalScore:0,
+        }))
+        const contacts=manager.getRepository(LeadContactEntity)
+        lead.contacts=[]
+        for(const [type,value] of [['facebook',data.facebook],['whatsapp',data.whatsapp]] as const) if(value?.trim()) lead.contacts.push(await contacts.save(contacts.create({leadId:lead.id,type,value:value.trim(),label:null,verified:false,sourceType:leadType,verificationStatus:'unverified',confidence:0,isPrimary:true,sourceUrl:null,evidence:{}})))
+        return this.mapLead(lead)
+      })
+    } catch(error) {
+      if((error as {code?:string}).code==='23505') throw new ConflictException('该业务员已有相同店铺域名的线索，请在现有线索中跟进')
+      throw error
+    }
+  }
+
+  async importLeads(ownerUserId: string, file: Express.Multer.File | undefined) {
+    if(!file || !/\.xlsx$/i.test(file.originalname)) throw new BadRequestException('请上传.xlsx文件')
+    await readBusinessOwners(this.dataSource, ownerUserId)
+    const rows=await readLeadWorkbook(file.buffer)
+    const results: {row:number;status:'created'|'duplicate'|'failed';message:string;id?:string}[]=[]
+    for(const row of rows) {
+      if(row.error){results.push({row:row.row,status:'failed',message:row.error});continue}
+      try {const lead=await this.persistRegisteredLead(ownerUserId,row.data,'import');results.push({row:row.row,status:'created',message:'已导入',id:lead.id})}
+      catch(error){if(error instanceof ConflictException)results.push({row:row.row,status:'duplicate',message:error.message});else if(error instanceof BadRequestException)results.push({row:row.row,status:'failed',message:error.message});else throw error}
+    }
+    return {total:results.length,created:results.filter(r=>r.status==='created').length,duplicates:results.filter(r=>r.status==='duplicate').length,failed:results.filter(r=>r.status==='failed').length,results}
+  }
+
   async getLeads(ownerUserId: string, query: ListLeadsQueryDto): Promise<PaginatedResult<StoreLead>> {
     const owners = await readBusinessOwners(this.dataSource, ownerUserId)
     const page = query.page ?? 1
@@ -296,16 +344,18 @@ export class AutoflowService {
     const builder = this.leadRepository
       .createQueryBuilder('lead')
       .leftJoinAndSelect('lead.contacts', 'contact')
+      .leftJoinAndSelect('lead.owner', 'leadOwner')
       .leftJoinAndSelect('lead.workflowRun', 'primaryWorkflow')
       .leftJoinAndSelect('lead.workflowLinks', 'workflowLink')
       .leftJoinAndSelect('workflowLink.workflowRun', 'discoveryWorkflow')
       .loadRelationCountAndMap('lead.discoveryCount', 'lead.workflowLinks')
       .where('lead.owner_user_id IN (:...visibleOwnerIds)', { visibleOwnerIds: owners.ids.length ? owners.ids : ['00000000-0000-0000-0000-000000000000'] })
-      .orderBy('lead.totalScore', 'DESC')
+      .orderBy('lead.registeredOn', 'DESC')
       .addOrderBy('lead.createdAt', 'DESC')
       .skip((page - 1) * pageSize)
       .take(pageSize)
 
+    if (query.leadType) builder.andWhere('lead.lead_type = :leadType', { leadType: query.leadType })
     if (query.status) builder.andWhere('lead.status = :status', { status: query.status })
     if (query.workflowRunId) {
       builder.andWhere(
@@ -866,13 +916,16 @@ export class AutoflowService {
 
     return {
       id: lead.id,
+      leadType: lead.leadType || 'automatic', registeredOn: lead.registeredOn, contactedOn: lead.contactedOn,
+      ownerName: lead.owner?.username || '', registrarName: lead.owner?.username || '', city: lead.city,
+      currentFollowUp: lead.currentFollowUp, nextFollowUpPlan: lead.nextFollowUpPlan,
       workflowRunId: lead.workflowRunId,
       brandName: lead.brandName,
       domain: lead.domain,
       storeUrl: lead.storeUrl,
       productUrl: lead.productUrl,
       ownerFacebookUrl: (lead.contacts || []).find((contact) => (
-        contact.type === 'facebook' && contact.sourceType === 'google_owner_search'
+        contact.type === 'facebook' && (contact.sourceType === 'google_owner_search' || contact.sourceType === 'manual' || contact.sourceType === 'import')
       ))?.value || null,
       discoverySources: lead.discoverySources || [],
       source: lead.source,

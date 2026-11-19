@@ -262,6 +262,10 @@ export class ListWorkflowsQueryDto {
 
 export class ListLeadsQueryDto extends ListWorkflowsQueryDto {
   @IsOptional()
+  @IsIn(['manual','import','automatic'])
+  leadType?: 'manual' | 'import' | 'automatic'
+
+  @IsOptional()
   @IsIn(LEAD_STATUSES)
   status?: LeadStatus
 
@@ -283,4 +287,18 @@ export class ListOutreachTasksQueryDto extends ListWorkflowsQueryDto {
   @IsOptional()
   @IsUUID()
   leadId?: string
+}
+
+export class RegisterLeadDto {
+ @IsString() @MinLength(1) @MaxLength(160) brandName: string
+ @IsUrl({ protocols: ['http','https'], require_protocol: true }) @MaxLength(500) storeUrl: string
+ @IsString() @MinLength(1) @MaxLength(80) country: string
+ @IsOptional() @IsString() @MaxLength(120) city?: string
+ @IsOptional() @IsString() @MaxLength(120) category?: string
+ @IsOptional() @IsISO8601({ strict: true }) registeredOn?: string
+ @IsOptional() @IsISO8601({ strict: true }) contactedOn?: string
+ @IsOptional() @IsUrl({ protocols: ['http','https'], require_protocol: true }) @MaxLength(500) facebook?: string
+ @IsOptional() @IsString() @MaxLength(80) whatsapp?: string
+ @IsOptional() @IsString() @MaxLength(2000) currentFollowUp?: string
+ @IsOptional() @IsString() @MaxLength(2000) nextFollowUpPlan?: string
 }

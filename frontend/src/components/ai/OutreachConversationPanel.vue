@@ -260,7 +260,7 @@ function getErrorMessage(error: unknown) {
         <textarea v-model="verifiedQuoteContext" class="input mt-2 min-h-24 resize-y" :placeholder="t(`leads.quoteContext_${quoteMode}`)" />
       </label>
       <div class="mt-4 space-y-2 border-y py-3" style="border-color: var(--color-border)">
-        <label class="flex cursor-pointer items-center gap-3 text-sm font-semibold"><input v-model="includeProductVisual" type="checkbox" class="h-4 w-4 accent-orange-600" /><ImageIcon class="h-4 w-4 text-orange-500" />{{ t('leads.includeProductVisual') }}</label>
+        <label class="flex cursor-pointer items-center gap-3 text-sm font-semibold"><input v-model="includeProductVisual" type="checkbox" class="h-4 w-4 accent-orange-600" /><ImageIcon class="h-4 w-4 text-primary-500" />{{ t('leads.includeProductVisual') }}</label>
         <label class="flex cursor-pointer items-center gap-3 text-sm font-semibold"><input v-model="emphasizeSupplier" type="checkbox" class="h-4 w-4 accent-orange-600" /><PackageCheck class="h-4 w-4 text-emerald-600" />{{ t('leads.emphasizeSupplier') }}</label>
         <label class="flex cursor-pointer items-center gap-3 text-sm font-semibold"><input v-model="emphasizeLogistics" type="checkbox" class="h-4 w-4 accent-orange-600" /><Truck class="h-4 w-4 text-sky-600" />{{ t('leads.emphasizeLogistics') }}</label>
       </div>
@@ -286,7 +286,7 @@ function getErrorMessage(error: unknown) {
         >
           <div
             class="max-w-[88%] rounded-md px-3 py-2 text-sm leading-6"
-            :class="message.role === 'user' ? 'bg-orange-600 text-white' : 'border bg-white text-slate-700 dark:bg-[#171b21] dark:text-slate-200'"
+            :class="message.role === 'user' ? 'bg-primary-600 text-white' : 'border bg-white text-slate-700 dark:bg-[var(--color-surface)] dark:text-slate-200'"
             style="border-color: var(--color-border)"
           >
             {{ message.content }}
@@ -320,7 +320,7 @@ function getErrorMessage(error: unknown) {
 
         <div v-if="currentDraft" class="mt-4 space-y-4">
           <div class="flex items-center justify-between">
-            <span class="inline-flex items-center gap-2 text-sm font-bold"><Languages class="h-4 w-4 text-orange-500" />{{ t('leads.bilingualDraft') }} R{{ currentDraft.version }}</span>
+            <span class="inline-flex items-center gap-2 text-sm font-bold"><Languages class="h-4 w-4 text-primary-500" />{{ t('leads.bilingualDraft') }} R{{ currentDraft.version }}</span>
             <StatusBadge :status="currentDraft.status" />
           </div>
           <section class="rounded-md border p-3" style="border-color: var(--color-border)">

@@ -202,6 +202,15 @@ export interface LeadWorkflowDiscovery {
 }
 
 export interface StoreLead {
+  leadType?: 'manual' | 'import' | 'automatic'
+  registeredOn?: string
+  contactedOn?: string | null
+  ownerName?: string
+  registrarName?: string
+  city?: string
+  currentFollowUp?: string
+  nextFollowUpPlan?: string
+
   id: string
   workflowRunId: string | null
   brandName: string

@@ -4477,7 +4477,7 @@
         "tags": [
           "Workbench"
         ],
-        "description": "销售review与配货allocation_review支持单笔/批量审核；先预检确认后提交，仅已提交B可执行，暂存A需先在FOP提交，已审核C不重复执行。JWT、当前账号及本地营销部门/员工范围均实时复核。native模式销售调用已发布auditFulfillmentOrder，由绑定FOP身份执行平台audit权限及业务校验；配货另需approvalActions包含allocation_review，调用allocation-approval-targets与allocation-approve。配货一对一、齐套且有效发运单全部已审核，取消发运单不参与，不等待Shopify同步。写前复核版本及资格，未知结果不自动重试；成功回读C后定向刷新本地事实，保留金额商品，清理本单失效配货关联。FOP_MANUAL_APPROVAL_ENABLED为独立开关，自动同步暂停不影响已开启的显式审核。测试环境两类真实审核已验证；普通员工逐岗位实单回归及已部署配货插件对应源码仍待补。标准audit无expectedVersion参数，仅支持写前复核，不能宣称原子版本比较。",
+        "description": "销售review与配货allocation_review支持单笔/批量审核；先预检确认后提交，仅已提交B可执行，暂存A需先在FOP提交，已审核C不重复执行。JWT、当前账号及本地营销部门/员工范围均实时复核。native模式销售调用已发布auditFulfillmentOrder，由绑定FOP身份执行平台audit权限及业务校验；配货另需approvalActions包含allocation_review，调用allocation-approval-targets与allocation-approve。配货一对一、齐套且有效发运单全部已审核，取消发运单不参与，不等待Shopify同步。写前复核版本及资格，未知结果不自动重试；成功回读C后定向刷新本地事实，保留金额商品，清理本单失效配货关联。FOP_MANUAL_APPROVAL_ENABLED为独立开关，自动同步暂停不影响已开启的显式审核。测试环境两类真实审核已验证；普通员工逐岗位实单回归及已部署配货插件对应源码仍待补。标准audit无expectedVersion参数，仅支持写前复核，原子版本比较待源端接口支持。",
         "requestBody": {
           "required": true,
           "content": {
@@ -4564,7 +4564,7 @@
         "tags": [
           "Workbench"
         ],
-        "description": "销售review与配货allocation_review支持单笔/批量审核；先预检确认后提交，仅已提交B可执行，暂存A需先在FOP提交，已审核C不重复执行。JWT、当前账号及本地营销部门/员工范围均实时复核。native模式销售调用已发布auditFulfillmentOrder，由绑定FOP身份执行平台audit权限及业务校验；配货另需approvalActions包含allocation_review，调用allocation-approval-targets与allocation-approve。配货一对一、齐套且有效发运单全部已审核，取消发运单不参与，不等待Shopify同步。写前复核版本及资格，未知结果不自动重试；成功回读C后定向刷新本地事实，保留金额商品，清理本单失效配货关联。FOP_MANUAL_APPROVAL_ENABLED为独立开关，自动同步暂停不影响已开启的显式审核。测试环境两类真实审核已验证；普通员工逐岗位实单回归及已部署配货插件对应源码仍待补。标准audit无expectedVersion参数，仅支持写前复核，不能宣称原子版本比较。",
+        "description": "销售review与配货allocation_review支持单笔/批量审核；先预检确认后提交，仅已提交B可执行，暂存A需先在FOP提交，已审核C不重复执行。JWT、当前账号及本地营销部门/员工范围均实时复核。native模式销售调用已发布auditFulfillmentOrder，由绑定FOP身份执行平台audit权限及业务校验；配货另需approvalActions包含allocation_review，调用allocation-approval-targets与allocation-approve。配货一对一、齐套且有效发运单全部已审核，取消发运单不参与，不等待Shopify同步。写前复核版本及资格，未知结果不自动重试；成功回读C后定向刷新本地事实，保留金额商品，清理本单失效配货关联。FOP_MANUAL_APPROVAL_ENABLED为独立开关，自动同步暂停不影响已开启的显式审核。测试环境两类真实审核已验证；普通员工逐岗位实单回归及已部署配货插件对应源码仍待补。标准audit无expectedVersion参数，仅支持写前复核，原子版本比较待源端接口支持。",
         "requestBody": {
           "required": true,
           "content": {
@@ -12287,7 +12287,7 @@
           },
           "costStatus": {
             "type": "string",
-            "description": "适配器归一成本确认状态；不能宣称源存在同名枚举。",
+            "description": "适配器归一成本确认状态；源端状态编码按实际接口映射。",
             "enum": [
               "confirmed",
               "pending"
@@ -12518,7 +12518,7 @@
           },
           "costStatus": {
             "type": "string",
-            "description": "适配器归一成本确认状态；不能宣称源存在同名枚举。",
+            "description": "适配器归一成本确认状态；源端状态编码按实际接口映射。",
             "enum": [
               "confirmed",
               "pending"

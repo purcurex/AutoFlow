@@ -2,7 +2,7 @@ import { collectedDiagnosticTypeSql, collectedOutboundUnverifiedSql, collectedAl
 import { collectedPaymentDataExceptionSql } from './collected-payment-data-quality'
 import { warehouseCodes } from './warehouse-codes'
 import { collectedDispatchTaskSql, collectedDispatchExceptionSql } from './collected-dispatch-status'
-import { collectedAllocationPredicate, collectedAllocationCompletedAt } from './collected-allocation-query'
+import { collectedAllocationBillStatus, collectedAllocationPredicate, collectedAllocationCompletedAt } from './collected-allocation-query'
 type Query = Record<string, any>
 /** Same effective-document rule as the allocation UI; empty/only cancelled is incomplete. */
 export function collectedDispatchCompletePredicate(){
@@ -56,6 +56,7 @@ export function collectedWhere(batchId:string,employeeIds:readonly string[]|null
  }
  const membershipIndex=clauses.length
  clauses.push(queues[q.queue]||'FALSE')
+ if(!q.completed && ['A','B'].includes(q.billStatus) && ['review','allocation_review'].includes(q.queue)) clauses.push(q.queue==='review' ? `raw_bill_status=${bind(q.billStatus)}` : collectedAllocationBillStatus(bind(q.billStatus)))
  if(q.queue==='unpaid')clauses.push(q.skuAssociation==='unlinked'?"raw_order_status='no'":"raw_order_status='1'")
  if(q.queue==='shipping'&&q.warehouseStage==='pending_review')clauses.push('FALSE')
  const exceptionTypeIndex=q.queue==='exceptions'&&q.taskStatus&&q.taskStatus!=='all'?clauses.length:-1

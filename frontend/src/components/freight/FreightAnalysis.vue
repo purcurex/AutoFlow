@@ -101,7 +101,7 @@ onBeforeUnmount(() => { off(); reset() })
 .freight-analysis .freight-filters select[aria-label="运费年份"]{width:88px}
 .freight-analysis .freight-filters select[aria-label="运费仓库"]{min-width:112px}
 .freight-analysis .freight-filters select[aria-label="运费时间轴"]{min-width:90px}
-.freight-analysis .freight-filters button.freight-query{background:#5368be;border-color:#5368be;color:white;white-space:nowrap}
+.freight-analysis .freight-filters button.freight-query{background:var(--color-primary);border-color:var(--color-primary);color:white;white-space:nowrap}
 .freight-body{padding:0}
 :global(.dark .freight-analysis){color-scheme:dark}
 </style>

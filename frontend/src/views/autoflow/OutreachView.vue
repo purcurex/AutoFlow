@@ -120,7 +120,7 @@ function nextPrimaryAction(task: { status: string }) {
           <div class="flex flex-col gap-4 border-b px-5 py-4 lg:flex-row lg:items-center lg:justify-between" style="border-color: var(--color-border)">
             <div class="min-w-0">
               <div class="flex flex-wrap items-center gap-2">
-                <span class="inline-flex h-8 w-8 items-center justify-center rounded-md bg-orange-50 text-orange-600 dark:bg-orange-950/40 dark:text-orange-300">
+                <span class="inline-flex h-8 w-8 items-center justify-center rounded-md bg-primary-50 text-primary-600 dark:bg-primary-950/40 dark:text-primary-300">
                   <component :is="channelIcons[task.channel]" class="h-4 w-4" />
                 </span>
                 <p class="font-bold text-slate-950 dark:text-white">{{ channelLabel(task.channel) }}</p>
@@ -129,7 +129,7 @@ function nextPrimaryAction(task: { status: string }) {
               <p class="mt-2 text-xs text-slate-500">
                 {{ t('common.owner') }}: {{ task.owner }} · {{ t('outreach.followUp') }}: {{ task.nextFollowUpAt || t('outreach.notScheduled') }}
               </p>
-              <p class="mt-1 text-xs font-medium text-orange-600 dark:text-orange-400">{{ task.recommendedNextAction }}</p>
+              <p class="mt-1 text-xs font-medium text-primary-600 dark:text-primary-400">{{ task.recommendedNextAction }}</p>
             </div>
             <div class="flex flex-wrap gap-2">
               <a v-if="task.status === 'ready' && task.sendUrl" :href="task.sendUrl" target="_blank" rel="noopener noreferrer" class="btn btn-secondary">
@@ -146,8 +146,8 @@ function nextPrimaryAction(task: { status: string }) {
 
           <div class="grid lg:grid-cols-[320px_minmax(0,1fr)]">
             <section class="border-b p-5 lg:border-b-0 lg:border-r" style="border-color: var(--color-border)">
-              <p class="text-xs font-bold uppercase text-orange-600">{{ t('outreach.customerProfile') }}</p>
-              <RouterLink :to="withReturnTo(`/leads/${task.leadId}`, route.fullPath)" class="mt-2 block text-lg font-bold text-slate-950 hover:text-orange-600 dark:text-white dark:hover:text-orange-300">
+              <p class="text-xs font-bold uppercase text-primary-600">{{ t('outreach.customerProfile') }}</p>
+              <RouterLink :to="withReturnTo(`/leads/${task.leadId}`, route.fullPath)" class="mt-2 block text-lg font-bold text-slate-950 hover:text-primary-600 dark:text-white dark:hover:text-primary-300">
                 {{ task.customer.name }}
               </RouterLink>
               <p class="mt-1 truncate text-sm text-slate-500">{{ task.customer.domain }}</p>
@@ -193,7 +193,7 @@ function nextPrimaryAction(task: { status: string }) {
               </div>
               <p v-if="task.subject" class="mb-2 text-xs font-semibold text-slate-500">{{ t('outreach.subject') }}: {{ task.subject }}</p>
               <img v-if="task.templateOptions.productImageUrl" :src="task.templateOptions.productImageUrl" alt="" class="mb-3 max-h-52 rounded-md border object-contain" style="border-color: var(--color-border)" />
-              <p class="whitespace-pre-wrap rounded-md border bg-slate-50 p-4 text-sm leading-7 text-slate-700 dark:bg-[#171b21] dark:text-slate-300" style="border-color: var(--color-border)">{{ task.message }}</p>
+              <p class="whitespace-pre-wrap rounded-md border bg-slate-50 p-4 text-sm leading-7 text-slate-700 dark:bg-[var(--color-surface)] dark:text-slate-300" style="border-color: var(--color-border)">{{ task.message }}</p>
             </section>
           </div>
         </article>

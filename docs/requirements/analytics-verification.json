@@ -2619,7 +2619,7 @@
       ".runtime/warehouse-filter-audit/ui.json",
       ".runtime/warehouse-filter-audit/sales-shenzhen.png"
     ],
-    "remaining": "实物采购退货正式API仍待提供；无实际数据的清单只验证筛选与本地查询链路，不宣称业务已接通。",
+    "remaining": "实物采购退货正式API仍待提供；无实际数据的清单只验证筛选与本地查询链路，真实业务数据接入待验证。",
     "receiptWarehouseOptions": {
       "verifiedAt": "2026-11-17T03:31:15.854Z",
       "options": [

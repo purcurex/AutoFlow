@@ -28,7 +28,6 @@ const stock = computed(() => ['stock', 'stock_procurement'].includes(props.queue
 const analysisPages = computed<Record<string, { title: string; scope: string }>>(() => ({
   receipts: { title: text('回款明细', 'Receipt details'), scope: text('履约订单及全款备货实际收款，按所选支付期间统计，押金备货不计入。', 'Fulfillment and full-payment stock receipts by selected payment period; deposit stock is excluded.') },
   performance: { title: text('业绩收入与毛利', 'Revenue and profit'), scope: text('按所选业务员、收款日期及业务部门统计订单金额。', 'Order amounts by salesperson, receipt date and business department.') },
-  overview: { title: text('客户开发概览', 'Prospecting overview'), scope: text('按注册日期、业务员及部门查看客户注册和订单分布。', 'Customer registrations and orders by registration date, salesperson and department.') },
 }))
 const analysis = computed(() => analysisPages.value[props.queue])
 const queueName = computed(() => analysis.value?.title ?? (props.queue === 'completed' && isWorkbenchRole(route.params.role) ? completedNames[route.params.role][zh.value ? 0 : 1] : props.queue === 'receipt_notices' ? text('待入库清单', 'Pending inbound') : props.queue === 'rma' ? text('RMA售后清单', 'RMA after-sales') : props.queue === 'purchase_returns' ? text('采购退货清单', 'Purchase returns') : props.queue === 'stock' ? text('备货清单', 'Stock orders') : props.queue === 'stock_procurement' ? text('备货待采购清单', 'Stock procurement') : queueNames[props.queue as keyof typeof queueNames]?.[zh.value ? 0 : 1] ?? text('工作台', 'Workbench')))

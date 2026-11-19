@@ -41,11 +41,11 @@ async function handleLogin() {
       <div class="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-orange-600 via-amber-400 to-emerald-500" />
       <BrandLogo />
       <div class="my-auto max-w-xl">
-        <p class="text-xs font-bold uppercase text-orange-600 dark:text-orange-400">HYPERZONE · INTELLIGENT WORKPLACE</p>
+        <p class="text-xs font-bold uppercase text-primary-600 dark:text-primary-400">HYPERZONE · INTELLIGENT WORKPLACE</p>
         <h1 class="mt-5 text-5xl font-bold leading-tight tracking-normal">{{ t('auth.welcome') }}</h1>
         <p class="mt-5 max-w-lg text-lg leading-8 text-slate-600 dark:text-slate-300">{{ t('auth.platformIntro') }}</p><p class="mt-4 max-w-lg text-sm leading-7 text-slate-500 dark:text-slate-400">{{ t('auth.audience') }}</p>
         <div class="mt-10 grid grid-cols-3 gap-3 text-sm">
-          <div class="border-l-2 border-orange-500 pl-3"><strong class="block text-slate-950 dark:text-slate-200">{{ t('auth.discover') }}</strong><span class="text-slate-500 dark:text-slate-400">{{ t('auth.discoverCaption') }}</span></div>
+          <div class="border-l-2 border-primary-500 pl-3"><strong class="block text-slate-950 dark:text-slate-200">{{ t('auth.discover') }}</strong><span class="text-slate-500 dark:text-slate-400">{{ t('auth.discoverCaption') }}</span></div>
           <div class="border-l-2 border-amber-500 pl-3"><strong class="block text-slate-950 dark:text-slate-200">{{ t('auth.qualify') }}</strong><span class="text-slate-500 dark:text-slate-400">{{ t('auth.qualifyCaption') }}</span></div>
           <div class="border-l-2 border-emerald-500 pl-3"><strong class="block text-slate-950 dark:text-slate-200">{{ t('auth.connect') }}</strong><span class="text-slate-500 dark:text-slate-400">{{ t('auth.connectCaption') }}</span></div>
         </div>
@@ -56,7 +56,7 @@ async function handleLogin() {
     <section class="flex min-h-screen flex-col px-5 py-5 sm:px-10 lg:px-14">
       <div class="flex items-center justify-between lg:justify-end"><BrandLogo class="lg:hidden" /><div class="flex gap-2"><LanguageSwitch /><ThemeToggle /></div></div>
       <div class="my-auto w-full max-w-sm self-center py-10">
-        <p class="text-xs font-bold uppercase text-orange-600 dark:text-orange-400">HyperZone</p>
+        <p class="text-xs font-bold uppercase text-primary-600 dark:text-primary-400">HyperZone</p>
         <h2 class="mt-2 text-3xl font-bold tracking-normal text-slate-950 dark:text-white">{{ t('auth.signInTitle') }}</h2>
         <p class="mt-2 text-sm text-slate-500 dark:text-slate-400">{{ t('auth.loginHint') }}</p>
 
@@ -67,7 +67,7 @@ async function handleLogin() {
             <div class="relative">
               <LockKeyhole class="pointer-events-none absolute left-3 top-3 h-4 w-4 text-slate-400" />
               <input id="login-password" v-model="password" :type="showPassword ? 'text' : 'password'" class="input pl-10 pr-12" :placeholder="t('auth.passwordPlaceholder')" autocomplete="current-password" required />
-              <button type="button" class="absolute inset-y-0 right-0 flex w-11 items-center justify-center rounded-r-md text-slate-400 transition hover:text-orange-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-orange-500 dark:hover:text-orange-400" :aria-label="t(showPassword ? 'auth.hidePassword' : 'auth.showPassword')" :title="t(showPassword ? 'auth.hidePassword' : 'auth.showPassword')" aria-controls="login-password" @click="showPassword = !showPassword">
+              <button type="button" class="absolute inset-y-0 right-0 flex w-11 items-center justify-center rounded-r-md text-slate-400 transition hover:text-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary-500 dark:hover:text-primary-400" :aria-label="t(showPassword ? 'auth.hidePassword' : 'auth.showPassword')" :title="t(showPassword ? 'auth.hidePassword' : 'auth.showPassword')" aria-controls="login-password" @click="showPassword = !showPassword">
                 <EyeOff v-if="showPassword" class="h-4 w-4" aria-hidden="true" />
                 <Eye v-else class="h-4 w-4" aria-hidden="true" />
               </button>
@@ -76,7 +76,7 @@ async function handleLogin() {
           <div v-if="error" class="rounded-md border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300">{{ error }}</div>
           <button type="submit" class="btn btn-primary w-full" :disabled="isLoading"><span>{{ isLoading ? t('auth.loggingIn') : t('auth.login') }}</span><ArrowRight v-if="!isLoading" class="h-4 w-4" /></button>
         </form>
-        <p class="mt-7 text-center text-sm text-slate-500">{{ t('auth.noAccount') }} <RouterLink to="/register" class="font-semibold text-orange-600 hover:text-orange-700 dark:text-orange-400">{{ t('auth.registerNow') }}</RouterLink></p>
+        <p class="mt-7 text-center text-sm text-slate-500">{{ t('auth.noAccount') }} <RouterLink to="/register" class="font-semibold text-primary-600 hover:text-primary-700 dark:text-primary-400">{{ t('auth.registerNow') }}</RouterLink></p>
       </div>
     </section>
   </main>

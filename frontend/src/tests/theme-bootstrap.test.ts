@@ -18,7 +18,7 @@ it.each([
   runBootstrap()
   expect(document.documentElement.classList.contains('dark')).toBe(dark)
   expect(document.documentElement.style.colorScheme).toBe(dark ? 'dark' : 'light')
-  expect(document.querySelector('meta[name="theme-color"]')?.getAttribute('content')).toBe(dark ? '#0d131d' : '#f5f7fa')
+  expect(document.querySelector('meta[name="theme-color"]')?.getAttribute('content')).toBe(dark ? '#101720' : '#f5f7fa')
   const { useTheme } = await import('@/composables/useTheme')
   expect(useTheme().isDark.value).toBe(dark)
   expect(document.documentElement.classList.contains('dark')).toBe(dark)
@@ -35,3 +35,20 @@ it('allows startup and manual switching when storage is disabled', async () => {
   expect(theme.isDark.value).toBe(true)
   expect(document.documentElement.classList.contains('dark')).toBe(true)
 })
+
+ it.each(['blue','green','purple','orange'] as const)('persists %s in both modes without changing the other preference', async palette => {
+  const { useTheme } = await import('@/composables/useTheme')
+  const theme = useTheme()
+  for (const dark of [false,true]) {
+    theme.setPalette(palette); theme.setTheme(dark); runBootstrap()
+    expect(document.documentElement.dataset.palette).toBe(palette)
+    expect(localStorage.getItem('autoflow-palette')).toBe(palette)
+    expect(document.documentElement.classList.contains('dark')).toBe(dark)
+    expect(theme.palette.value).toBe(palette)
+  }
+ })
+ it('defaults to business blue when palette is absent or invalid', () => {
+   runBootstrap(); expect(document.documentElement.dataset.palette).toBe('blue')
+   localStorage.setItem('autoflow-palette','invalid'); runBootstrap()
+   expect(document.documentElement.dataset.palette).toBe('blue')
+ })

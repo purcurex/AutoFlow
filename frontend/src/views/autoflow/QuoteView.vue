@@ -491,7 +491,7 @@ onMounted(loadCapabilities)
                 <td><input v-model.number="tier.maxQuantity" type="number" :min="tier.minQuantity" class="input" :placeholder="t('quotes.noLimit')" /></td>
                 <td>
                   <div class="relative min-w-36">
-                    <input :value="tier.purchaseCost" readonly class="input bg-slate-50 pr-14 dark:bg-[#11151a]" :placeholder="t('quotes.pendingFop')" />
+                    <input :value="tier.purchaseCost" readonly class="input bg-slate-50 pr-14 dark:bg-[var(--color-surface)]" :placeholder="t('quotes.pendingFop')" />
                     <span class="absolute right-3 top-3 text-xs font-semibold text-slate-400">{{ currencyLabel(currency) }}</span>
                   </div>
                 </td>
@@ -545,7 +545,7 @@ onMounted(loadCapabilities)
 
         <div class="border-t p-5" style="border-color: var(--color-border)">
           <div class="mb-4 flex items-center gap-2">
-            <Truck class="h-5 w-5 text-orange-600 dark:text-[var(--color-primary)]" />
+            <Truck class="h-5 w-5 text-primary-600 dark:text-[var(--color-primary)]" />
             <div>
               <h3 class="text-sm font-bold text-slate-950 dark:text-white">{{ t('quotes.logisticsChannels') }}</h3>
             </div>

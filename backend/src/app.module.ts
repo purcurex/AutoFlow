@@ -3,8 +3,6 @@ import { ConfigModule, ConfigService } from '@nestjs/config'
 import { TypeOrmModule } from '@nestjs/typeorm'
 import { AuthModule } from './modules/auth/auth.module'
 import { UsersModule } from './modules/users/users.module'
-import { NotesModule } from './modules/notes/notes.module'
-import { FoldersModule } from './modules/folders/folders.module'
 import { AiModule } from './modules/ai/ai.module'
 import { ShopifySearchModule } from './modules/shopify-search/shopify-search.module'
 import { FacebookAdsModule } from './modules/facebook-ads/facebook-ads.module'
@@ -18,6 +16,7 @@ import { HealthModule } from './modules/health/health.module'
 import { FopIntegrationModule } from './modules/fop-integration/fop-integration.module'
 import { QuotationModule } from './modules/quotation/quotation.module'
 import { ObservabilityModule } from './modules/observability/observability.module'
+import { OpportunitiesModule } from './modules/opportunities/opportunities.module'
 import { OrganizationModule } from './modules/organization/organization.module'
 
 @Module({
@@ -63,8 +62,6 @@ import { OrganizationModule } from './modules/organization/organization.module'
 
     AuthModule,
     UsersModule,
-    NotesModule,
-    FoldersModule,
     AiModule,
     ShopifySearchModule,
     FacebookAdsModule,
@@ -75,6 +72,7 @@ import { OrganizationModule } from './modules/organization/organization.module'
     QuotationModule,
     ObservabilityModule,
     OrganizationModule,
+    OpportunitiesModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })

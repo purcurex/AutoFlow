@@ -84,3 +84,18 @@ it.each([collectedWhere,collectedStockWhere,collectedRmaWhere,collectedInboundQu
   expect(q.params).toContainEqual(aliases);expect(q.params).toContainEqual(['employee'])
  }
 })
+
+describe('approval document status filter', () => {
+ it.each(['A','B'])('filters sales by its own bill status %s', billStatus => {
+  const result = collectedWhere('batch', null, {queue:'review',billStatus})
+  expect(result.where).toContain('raw_bill_status=$2')
+  expect(result.params).toEqual(['batch',billStatus])
+ })
+ it('filters allocations by allocation document status', () => {
+  const result = collectedWhere('batch', null, {queue:'allocation_review',billStatus:'B'})
+  expect(result.where).toContain("a.display->>'rawBillStatus'=$2")
+  expect(result.where).toContain("a.display->>'sourceOrderId'=hz_fop_collected_orders.source_id")
+  expect(result.where).not.toContain("jsonb_array_elements(coalesce(display->'allocationDocuments'")
+  expect(result.params).toEqual(['batch','B'])
+ })
+})

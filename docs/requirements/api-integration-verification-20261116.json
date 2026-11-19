@@ -903,7 +903,18 @@
     "backend/.env.example",
     "backend/src/modules/workbench-replica/timestamp-maintenance.ts",
     "backend/src/modules/workbench-replica/timestamp-maintenance.postgres.spec.ts",
-    "backend/src/modules/workbench-replica/timestamp-paged-source.spec.ts"
+    "backend/src/modules/workbench-replica/timestamp-paged-source.spec.ts",
+    "backend/src/database/migrations/1795062000000-RetireLegacyBusinessRecords.ts",
+    "backend/src/app.module.ts",
+    "backend/src/modules/users/user.entity.ts",
+    "backend/src/database/seed.ts",
+    "backend/src/database/consolidate-local-directory.ts",
+    "frontend/src/views/SettingsView.vue",
+    "frontend/src/utils/export.ts",
+    "frontend/src/tests/SettingsView.test.ts",
+    "frontend/src/tests/legacy-records.test.ts",
+    "deployment/database/schema-reference.sql",
+    "deployment/database/migration-inventory.json"
   ],
   "timestampPublication": {
     "implemented": true,
@@ -9484,7 +9495,7 @@
         "mixedExport": true
       },
       "browser": "真实本地数据 IO20260523000002：备货编号、Shopify备货订单、Customer---、本单字段、两项原因已核对",
-      "frontendFullFile": "165 passed, 7 failed；失败涉及发运筛选及采购附加状态的既有断言，与本次新增备货异常专项测试分别记录，不宣称全量通过"
+      "frontendFullFile": "165 passed, 7 failed；失败涉及发运筛选及采购附加状态的既有断言，与本次新增备货异常专项测试分别记录，全量回归中的失败项待处理"
     },
     "evidence": [
       ".runtime/stock-exceptions/backend-tests.log",
@@ -12744,7 +12755,7 @@
           "ReceiptNoticesView.test.ts": 1,
           "WorkbenchRefreshNavigation.test.ts": 3
         },
-        "description": "旧断言与当前业务口径存在不一致：默认每页50/100、采购/发运分类、商品行状态、配货完成模拟数据、分页恢复。此次未修改这些业务规则；不得宣称完整前端回归全绿。"
+        "description": "旧断言与当前业务口径存在不一致：默认每页50/100、采购/发运分类、商品行状态、配货完成模拟数据、分页恢复。此次未修改这些业务规则；完整前端回归结果保留失败项。"
       }
     },
     "implementationFiles": [
@@ -13310,5 +13321,505 @@
     "fopBusinessWrites": 0,
     "evidenceDirectory": ".runtime/exception-prevention-20261118",
     "html": "deliverables/exception-audit-20261118.html#verified"
+  },
+  "customerFollowUpMerge20261118": {
+    "status": "implemented-and-targeted-verified",
+    "scope": "customer-development-overview-moved-to-follow-ups",
+    "route": "/follow-ups",
+    "legacyRoutes": [
+      "/workbench/sales?queue=overview",
+      "/?queue=overview"
+    ],
+    "features": {
+      "metrics": 6,
+      "followUpStages": 8,
+      "workflowActivity": true,
+      "outreachQueue": true,
+      "highScoringLeads": true,
+      "detailReturnNavigation": true,
+      "singleRefresh": true
+    },
+    "access": "preserve former sales/admin/sales_performance display grant; original stage view and server owner scope retained",
+    "data": {
+      "endpoints": [
+        "GET /api/autoflow/dashboard",
+        "GET /api/autoflow/follow-ups"
+      ],
+      "singleAggregateResponse": true,
+      "qualifiedCount": "complete qualified funnel count, not top lead subset",
+      "fopRequests": 0,
+      "databaseWrites": 0,
+      "sourceSyncChanged": false
+    },
+    "verification": {
+      "targetedTests": {
+        "passed": 57,
+        "failed": 0,
+        "files": 5
+      },
+      "frontendBuild": "passed",
+      "fullFrontendSnapshot": {
+        "passed": 1100,
+        "failed": 9,
+        "skipped": 2,
+        "failedSuites": 1,
+        "scopeOfRemainingFailures": "9 approval/allocation assertions outside follow-up merge; security-routing import failure in this snapshot passed 2 tests in subsequent recheck"
+      },
+      "ui": {
+        "viewport": {
+          "width": 2560,
+          "height": 1440
+        },
+        "themes": [
+          "light",
+          "dark"
+        ],
+        "narrowWidth": 764,
+        "pageOverflow": false,
+        "refresh": true,
+        "stageLink": true,
+        "legacyRedirect": true,
+        "consoleErrors": 0
+      },
+      "permissionRevocationAndLateResponse": true,
+      "failureFallbackAndRetry": true,
+      "securityRoutingRecheck": {
+        "passed": 2,
+        "failed": 0,
+        "previousImportFailureResolved": true
+      }
+    },
+    "evidenceFiles": [
+      ".runtime/follow-up-merge-20261118/targeted-final.log",
+      ".runtime/follow-up-merge-20261118/frontend-build.log",
+      ".runtime/follow-up-merge-20261118/frontend-full-final.log",
+      ".runtime/follow-up-merge-20261118/follow-up-light.png",
+      ".runtime/follow-up-merge-20261118/follow-up-dark.png",
+      ".runtime/follow-up-merge-20261118/frontend-build-final.log",
+      ".runtime/follow-up-merge-20261118/security-routing-recheck.log"
+    ],
+    "implementationFiles": [
+      "frontend/src/views/autoflow/FollowUpView.vue",
+      "frontend/src/views/autoflow/DashboardView.vue",
+      "frontend/src/components/follow-up/FollowUpStages.vue",
+      "frontend/src/views/autoflow/WorkbenchView.vue",
+      "frontend/src/components/WorkbenchFilterSummary.vue",
+      "frontend/src/router/index.ts",
+      "frontend/src/tests/FollowUpView.test.ts",
+      "frontend/src/tests/workbench-routing.test.ts",
+      "frontend/src/tests/WorkbenchView.test.ts",
+      "frontend/src/tests/WorkbenchAnalyticsRouting.test.ts",
+      "frontend/src/tests/WorkbenchFilterSummary.test.ts"
+    ]
+  },
+  "localOpportunityManagement20261118": {
+    "status": "implemented-local-save-and-follow-up",
+    "scope": "local opportunity module; no submit or approval",
+    "manualFopRequests": 0,
+    "fopBusinessWrites": 0,
+    "automaticSyncFlagsChanged": false,
+    "tables": [
+      "local_opportunities",
+      "local_opportunity_follow_ups"
+    ],
+    "migration": {
+      "at": "2026-11-19T00:31:57.970Z",
+      "migration": "LocalOpportunities1795061000000",
+      "existingCountsUnchanged": true,
+      "before": [
+        {
+          "leads": 0,
+          "users": 36
+        }
+      ],
+      "after": [
+        {
+          "leads": 0,
+          "users": 36
+        }
+      ],
+      "newTables": [
+        "local_opportunities",
+        "local_opportunity_follow_ups"
+      ]
+    },
+    "implementationFiles": [
+      "backend/src/modules/opportunities/opportunity-rules.spec.ts",
+      "backend/src/modules/opportunities/local-opportunity.entity.ts",
+      "backend/src/modules/opportunities/opportunities.module.ts",
+      "backend/src/modules/opportunities/opportunities.service.spec.ts",
+      "backend/src/modules/opportunities/opportunities.controller.ts",
+      "backend/src/modules/opportunities/opportunity-rules.ts",
+      "backend/src/modules/opportunities/local-opportunity-follow-up.entity.ts",
+      "backend/src/modules/opportunities/opportunities.service.ts",
+      "frontend/src/components/opportunities/OpportunityStage.vue",
+      "frontend/src/components/opportunities/GenerateOpportunityButton.vue",
+      "frontend/src/components/opportunities/OpportunityFields.vue",
+      "backend/src/database/migrations/1795061000000-LocalOpportunities.ts",
+      "backend/src/app.module.ts",
+      "frontend/src/api/opportunities.ts",
+      "frontend/src/views/autoflow/OpportunitiesView.vue",
+      "frontend/src/views/autoflow/OpportunityDetailView.vue",
+      "frontend/src/components/layout/Sidebar.vue",
+      "frontend/src/components/layout/Header.vue",
+      "frontend/src/router/index.ts",
+      "frontend/src/components/leads/LeadRegistrationList.vue",
+      "frontend/src/views/autoflow/LeadDetailView.vue"
+    ],
+    "validation": {
+      "backendTargeted": {
+        "passed": 28,
+        "failed": 0
+      },
+      "backendFull": {
+        "passed": 2486,
+        "skipped": 218,
+        "failed": 0
+      },
+      "frontendTargeted": {
+        "passed": 21,
+        "failed": 0
+      },
+      "frontendFull": {
+        "passed": 1098,
+        "skipped": 2,
+        "failed": 11,
+        "scope": "shared working tree before final input-guard fix",
+        "failedFiles": [
+          "FopOrdersView.test.ts",
+          "WorkbenchAnalyticsRouting.test.ts",
+          "WorkbenchFilterSummary.test.ts",
+          "WorkbenchGlobalSync.test.ts",
+          "WorkbenchRefreshNavigation.test.ts"
+        ]
+      },
+      "backendBuild": "passed",
+      "frontendBuild": "passed",
+      "isolatedPostgres": {
+        "database": "hz_opportunity_test_1795048007545",
+        "realBusinessRowsCopied": 0,
+        "passed": [
+          "new tables and seven FOP stage options",
+          "draft saved with nullable USD amount",
+          "exact decimal amount storage",
+          "owner/company/manager read boundaries",
+          "manager can read but cannot edit another owner",
+          "disabled account cannot read",
+          "manager self setting applies",
+          "admin can edit same-company record",
+          "stale version rejected and no overwrite",
+          "invalid URL, amount and dates rejected",
+          "concurrent lead conversion is idempotent and retains source owner/data",
+          "follow-up history and header atomically persisted",
+          "historical follow-up does not overwrite latest header",
+          "concurrent edit only one version succeeds",
+          "filters and Excel export use same scoped data",
+          "soft delete preserves follow-ups and permits fresh lead conversion"
+        ],
+        "passedCount": 16
+      },
+      "browser": {
+        "at": "2026-11-19T00:37:40.752Z",
+        "viewport": {
+          "width": 2560,
+          "height": 1440
+        },
+        "browser": {
+          "create": true,
+          "save": true,
+          "reloadPersisted": true,
+          "followUp": true,
+          "unsavedInputGuard": true,
+          "fromLead": true,
+          "fromLeadRepeatedSameId": true,
+          "sourceFieldsCopied": true,
+          "stageAutoQuery": true,
+          "filteredExcelRows": 1,
+          "noSubmitApproval": true
+        },
+        "database": {
+          "tablesVerified": true,
+          "sampleRecordsVerified": 2,
+          "followUpsVerified": 1
+        },
+        "anonymousHttpStatus": 401,
+        "testDataCleanup": {
+          "opportunities": 2,
+          "followUps": 1,
+          "leads": 1,
+          "onlyOwnedIds": true
+        },
+        "screenshots": [
+          ".runtime/opportunities-20261118/opportunity-detail-wide.jpg",
+          ".runtime/opportunities-20261118/opportunity-list-wide.jpg"
+        ]
+      },
+      "independentReview": "unsaved draft overwritten by follow-up fixed and regression verified",
+      "document": {
+        "httpStatus": 200,
+        "servedDocumentMatchesFile": true,
+        "newSectionVisible": true,
+        "logoLoaded": true,
+        "horizontalOverflow": false,
+        "viewport": {
+          "width": 2560,
+          "height": 1440
+        }
+      }
+    },
+    "pending": [
+      "FOP bd_country enabled records and stable IDs",
+      "FOP bd_admindivision city records and country relations"
+    ],
+    "excluded": [
+      "submit/approve",
+      "FOP opportunity synchronization",
+      "customer penetration",
+      "follow-up attachments"
+    ],
+    "uiAlignment": {
+      "reference": "LeadRegistrationList.vue / LeadsView.vue",
+      "actions": "card top-left: create and Excel export; filters right; pagination footer",
+      "primaryColor": "#5c70a5",
+      "tests": {
+        "passed": 21,
+        "failed": 0
+      },
+      "build": "passed",
+      "browser": {
+        "wide": "2560x1440",
+        "narrow": "1280x800",
+        "emptyMessageVisible": true,
+        "pageOverflow": false,
+        "newAndBackNavigation": true,
+        "saveButtonColorVerified": true,
+        "screenshot": ".runtime/opportunity-ui-20261118/opportunities-aligned-wide.jpg"
+      },
+      "backendChanged": false
+    }
+  },
+  "customerFollowUpSimplification20261118": {
+    "status": "implemented-and-targeted-verified",
+    "scope": "deduplicate-customer-follow-up-board",
+    "supersedesUi": "customerFollowUpMerge20261118",
+    "layout": {
+      "mainPanels": 2,
+      "removedStandaloneMetricCards": 6,
+      "leadStages": 8,
+      "leadTotalOccurrences": 1,
+      "qualifiedStatisticOccurrences": 1,
+      "taskTabs": [
+        "development",
+        "communication"
+      ],
+      "taskMetricUnits": [
+        "running workflows",
+        "ready outreach tasks"
+      ],
+      "highScoringLeadsInsideLeadPanel": true,
+      "singleRefresh": true
+    },
+    "compatibility": {
+      "apiContractsUnchanged": true,
+      "permissionsUnchanged": true,
+      "legacyRedirectPreserved": true,
+      "stageFiltersPreserved": true,
+      "readyOutreachFilterPreserved": true,
+      "leadDetailReturnPreserved": true,
+      "noNewFopRequests": true,
+      "sourceWrites": 0
+    },
+    "verification": {
+      "targeted": {
+        "passed": 58,
+        "failed": 0
+      },
+      "frontendBuild": "passed",
+      "fullFrontend": {
+        "passed": 1104,
+        "failed": 9,
+        "skipped": 2,
+        "failureNames": [
+          " src/tests/FopOrdersView.test.ts > fulfillment order list > keeps collected fields read-only while allowing a separate realtime audit precheck",
+          " src/tests/FopOrdersView.test.ts > fulfillment order list > closes a stale approval preview and reloads when source sync completes during review",
+          " src/tests/FopOrdersView.test.ts > fulfillment order list > reuses the allocation list for completed records with its default time range and no pending actions",
+          " src/tests/FopOrdersView.test.ts > fulfillment order list > copies raw identifiers and each SKU in allocation_review without selecting the order",
+          " src/tests/FopOrdersView.test.ts > fulfillment order list > shows allocation document numbers, binary dispatch filters and enables approval for completed selections",
+          " src/tests/FopOrdersView.test.ts > fulfillment order list > places sales approval first in the action bar and previews selected orders",
+          " src/tests/WorkbenchGlobalSync.test.ts > defers shared sync completion until the current approval dialog is closed",
+          " src/tests/WorkbenchRefreshNavigation.test.ts > allows review-list navigation without invoking approval APIs merely by selecting rows",
+          " src/tests/WorkbenchRefreshNavigation.test.ts > keeps an in-flight approval visible when a previously started lazy navigation finishes"
+        ]
+      },
+      "browser": {
+        "wide": [
+          2560,
+          1440
+        ],
+        "narrowWidth": 750,
+        "themes": [
+          "light",
+          "dark"
+        ],
+        "pageOverflow": false,
+        "taskTabSwitch": true,
+        "readyOutreachNavigation": true
+      }
+    },
+    "evidenceFiles": [
+      ".runtime/follow-up-merge-20261118/simplify-targeted.log",
+      ".runtime/follow-up-merge-20261118/simplify-build.log",
+      ".runtime/follow-up-merge-20261118/simplify-full.log",
+      ".runtime/follow-up-merge-20261118/simplified-light.png",
+      ".runtime/follow-up-merge-20261118/simplified-dark.png"
+    ],
+    "implementationFiles": [
+      "frontend/src/views/autoflow/FollowUpView.vue",
+      "frontend/src/views/autoflow/DashboardView.vue",
+      "frontend/src/components/follow-up/FollowUpStages.vue",
+      "frontend/src/tests/FollowUpView.test.ts"
+    ]
+  },
+  "legacyBusinessRecordsCleanup20261118": {
+    "status": "completed-local",
+    "migration": "RetireLegacyBusinessRecords1795062000000",
+    "scope": "Retired notes/folders module only; FOP workbenches, analytics and CRM records retained.",
+    "deletedRows": {
+      "notes": 2,
+      "folders": 1
+    },
+    "droppedTables": [
+      "notes",
+      "folders"
+    ],
+    "droppedType": "notes_editor_type_enum",
+    "preservedTableCount": 107,
+    "preservedSchemaUnchanged": true,
+    "preservedRowCountsUnchanged": true,
+    "backup": {
+      "privateDirectory": ".runtime/record-data-cleanup-20261118",
+      "isolatedRestoreVerified": true,
+      "unexpectedDependencyRollsBack": true
+    },
+    "freshDatabase": {
+      "at": "2026-11-19T00:49:21.179Z",
+      "migrationCount": 76,
+      "replayCount": 0,
+      "tableCount": 107,
+      "legacySchemaAbsent": true,
+      "entityMetadataValid": true
+    },
+    "localHttp": {
+      "queryWindow": {
+        "from": "2026-01-01",
+        "to": "2026-11-16"
+      },
+      "registrationWindowNote": "Uses the existing customer registration capture window; no source data recapture performed.",
+      "results": [
+        {
+          "kind": "queue",
+          "id": "review",
+          "status": 200,
+          "total": 87,
+          "rowHash": "3fc890907a642839f080217a868cf52d4c385af9ce4f10d9948bb50062d6a5a4"
+        },
+        {
+          "kind": "queue",
+          "id": "dispatch",
+          "status": 200,
+          "total": 342,
+          "rowHash": "4acea8340bc52d72556a8c8d19ba8e516c08bf51d956585d615976102b73e4b1"
+        },
+        {
+          "kind": "queue",
+          "id": "procurement",
+          "status": 200,
+          "total": 834,
+          "rowHash": "81e5c4a4ed4ef912f88fbb5bc74f0ec3a80752d93da8a1a3fa3e1a26f37e9c38"
+        },
+        {
+          "kind": "queue",
+          "id": "allocation",
+          "status": 200,
+          "total": 726,
+          "rowHash": "c0acacafc9f3629d746c1525728aec2f08691659e6e1851b807705a7314cccfc"
+        },
+        {
+          "kind": "queue",
+          "id": "shipping",
+          "status": 200,
+          "total": 520,
+          "rowHash": "d99cdeba6be32f7f3c67eec97dd1a30339bf77d50f5eea5f1b3272d8881e2554"
+        },
+        {
+          "kind": "analytics",
+          "id": "registrations",
+          "status": 200,
+          "orderCount": 408,
+          "registrationCount": 408,
+          "rowCount": 170,
+          "rowHash": "a008f1f6860113f97210d9c799145519cc480761b248508eb4e53fbc3f5ea15c"
+        },
+        {
+          "kind": "analytics",
+          "id": "department_receipts",
+          "status": 200,
+          "orderCount": 15119,
+          "rowCount": 152,
+          "rowHash": "0e4385fe59aa4536af2b79538dc0c90846d39f7aac1c1a5c829ec9adc0b505dc"
+        },
+        {
+          "kind": "analytics",
+          "id": "salesperson_receipts",
+          "status": 200,
+          "orderCount": 15119,
+          "rowCount": 171,
+          "rowHash": "6cc50068d2de97d7625464142fe491760626cb35907b3a03757b7dffdc2d2fde"
+        },
+        {
+          "kind": "analytics",
+          "id": "order_volume",
+          "status": 200,
+          "orderCount": 15119,
+          "rowCount": 244,
+          "rowHash": "e133cbd7ec3994133f2ab4823fac31349512b70bdf40a8d77033e17032658070"
+        },
+        {
+          "kind": "analytics",
+          "id": "customer_orders",
+          "status": 200,
+          "orderCount": 15119,
+          "rowCount": 318,
+          "rowHash": "a78a384e2a6716c7bac9de1ee200c3d271bfcb12ec553c6c1ba4a53e0aacf376"
+        }
+      ],
+      "matchesBeforeCleanup": true,
+      "legacyApisNotFound": true,
+      "automaticSyncPreserved": true
+    },
+    "verification": {
+      "backendBuild": "passed",
+      "frontendBuild": "passed",
+      "backendTargetedTests": {
+        "files": 9,
+        "passed": 130
+      },
+      "frontendTargetedTests": {
+        "files": 8,
+        "passed": 72
+      },
+      "frontendExtendedRegression": {
+        "passed": 355,
+        "failed": 6,
+        "existingFailures": "Same six approval/allocation failures in pre-cleanup .runtime/opportunities-20261118/frontend-full-tests.log; not repaired by record cleanup."
+      }
+    },
+    "evidence": [
+      ".runtime/record-data-cleanup-20261118/live-migration-verification.json",
+      ".runtime/record-data-cleanup-20261118/isolated-verification.json",
+      ".runtime/record-data-cleanup-20261118/fresh-verification.json",
+      ".runtime/record-data-cleanup-20261118/http-before.json",
+      ".runtime/record-data-cleanup-20261118/http-after.json"
+    ]
   }
 }

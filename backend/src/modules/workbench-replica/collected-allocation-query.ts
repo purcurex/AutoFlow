@@ -15,3 +15,8 @@ export function collectedAllocationDisplay(completed=false,ready=false){
 }
 
 export function collectedAllocationCompletedAt(){return `(SELECT CASE WHEN count(a.display->>'approvedAt')=count(*) THEN max(NULLIF(a.display->>'approvedAt','')::timestamptz) END FROM hz_fop_collected_entities a WHERE ${relation} AND a.display->>'rawAllocationStatus' IS DISTINCT FROM 'voided')`}
+
+/** Filter persisted allocation entities, before response projection adds allocationDocuments. */
+export function collectedAllocationBillStatus(parameter: string) {
+ return `EXISTS(SELECT 1 FROM hz_fop_collected_entities a WHERE ${relation} AND a.display->>'rawAllocationStatus' IS DISTINCT FROM 'voided' AND coalesce(a.display->'association'->>'state','verified')='verified' AND a.display->>'rawBillStatus'=${parameter})`
+}

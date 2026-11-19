@@ -17,7 +17,7 @@ async function setup(path:string){
  await router.push(path)
  const wrapper=mount(WorkbenchView,{global:{plugins:[router,createI18n({legacy:false,locale:'zh-CN',messages:{}})]}});await flushPromises();return wrapper
 }
-it.each(['overview','performance'])('routes the current %s page to local analytics instead of legacy source details',async page=>{
+it.each(['performance'])('routes the current %s page to local analytics instead of legacy source details',async page=>{
  const wrapper=await setup('/workbench/sales?queue='+page)
  expect(wrapper.get('[data-testid=local-analysis]').text()).toBe(page)
  expect(wrapper.find('[data-testid=orders]').exists()).toBe(false)

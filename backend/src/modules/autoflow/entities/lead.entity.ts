@@ -30,6 +30,21 @@ import { WorkflowLeadEntity } from './workflow-lead.entity'
   'shopify_confidence BETWEEN 0 AND 100 AND ad_activity_score BETWEEN 0 AND 100 AND traffic_score BETWEEN 0 AND 100 AND contact_score BETWEEN 0 AND 100 AND total_score BETWEEN 0 AND 100',
 )
 export class LeadEntity {
+  @Column({ name: 'lead_type', type: 'varchar', length: 24, default: 'automatic' })
+  leadType: 'manual' | 'import' | 'automatic'
+  @Column({ name: 'registered_on', type: 'date', default: () => 'CURRENT_DATE' })
+  registeredOn: string
+  @Column({ name: 'contacted_on', type: 'date', nullable: true })
+  contactedOn: string | null
+  @Column({ length: 120, default: '' })
+  city: string
+  @Column({ name: 'current_follow_up', type: 'text', default: '' })
+  currentFollowUp: string
+  @Column({ name: 'next_follow_up_plan', type: 'text', default: '' })
+  nextFollowUpPlan: string
+  @Column({ name: 'registrar_user_id', type: 'uuid', nullable: true })
+  registrarUserId: string | null
+
   @PrimaryGeneratedColumn('uuid')
   id: string
 

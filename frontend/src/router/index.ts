@@ -82,6 +82,9 @@ const routes: RouteRecordRaw[] = [
     props: true,
     meta: { requiresAuth: true }
   },
+  { path: '/opportunities', name: 'Opportunities', component: () => import('@/views/autoflow/OpportunitiesView.vue'), meta: { requiresAuth: true } },
+  { path: '/opportunities/new', name: 'NewOpportunity', component: () => import('@/views/autoflow/OpportunityDetailView.vue'), meta: { requiresAuth: true } },
+  { path: '/opportunities/:id', name: 'OpportunityDetail', component: () => import('@/views/autoflow/OpportunityDetailView.vue'), meta: { requiresAuth: true } },
   {
     path: '/leads',
     name: 'Leads',
@@ -129,12 +132,6 @@ const routes: RouteRecordRaw[] = [
     meta: { guest: true }
   },
   {
-    path: '/notes/:id',
-    name: 'NoteDetail',
-    component: () => import('@/views/NoteDetailView.vue'),
-    meta: { requiresAuth: true, legacySupport: true }
-  },
-  {
     path: '/prompt-templates',
     name: 'PromptTemplates',
     component: () => import('@/views/PromptTemplatesView.vue'),
@@ -145,12 +142,6 @@ const routes: RouteRecordRaw[] = [
     name: 'Settings',
     component: () => import('@/views/SettingsView.vue'),
     meta: { requiresAuth: true }
-  },
-  {
-    path: '/admin',
-    name: 'Admin',
-    component: () => import('@/views/AdminView.vue'),
-    meta: { requiresAuth: true, requiresAdmin: true }
   },
   {
     path: '/:pathMatch(.*)*',
@@ -169,6 +160,8 @@ router.beforeEach(async (to, _from, next) => {
   const hasSession = Boolean(localStorage.getItem('user'))
   if (to.meta.requiresAuth && !hasSession) return next({ name: 'Login', query: { redirect: to.fullPath } })
   if (to.meta.guest && hasSession) return next({ name: 'Dashboard' })
+  // The former sales overview now lives in the customer follow-up module.
+  if (to.query.queue === 'overview' && (to.name === 'Dashboard' || to.name === 'RoleWorkbench' && to.params.role === 'sales')) return next({ name: 'FollowUps', query: {}, replace: true })
   // Retired workbench analytics use Dashboard's own chart grants and filters.
   if (['Dashboard', 'RoleWorkbench'].includes(String(to.name)) && ['order-analysis', 'order-volume', 'freight'].includes(String(to.query.queue))) return next({ name: 'FopDashboard', query: {}, replace: true })
   if (!to.meta.requiresAuth) return next()
@@ -180,7 +173,6 @@ router.beforeEach(async (to, _from, next) => {
     if (access.businessRole === 'none' && !managementPage) {
       return next({ name: access.isAdmin ? 'WorkbenchRoleAdmin' : 'WorkbenchAccessDenied' })
     }
-    if (to.meta.requiresAdmin && (!access.isAdmin || access.businessRole !== 'admin')) return next({ name: 'Dashboard' })
     if (['Dashboard', 'RoleWorkbench', 'RoleWorkbenchReceipts'].includes(String(to.name))) {
       if (!access.isAdmin && (to.name === 'RoleWorkbenchReceipts' || ['performance','overview','receipts'].includes(String(to.query.queue)))) return next({ name: 'WorkbenchAccessDenied' })
       const requested = to.name === 'Dashboard' ? (access.roles.includes('sales') ? 'sales' : access.roles[0]) : to.params.role

@@ -22,6 +22,7 @@ import { useI18n } from 'vue-i18n'
 import { useAutoFlowStore } from '@/stores'
 import { AppLayout } from '@/components/layout'
 import { ReturnButton, StatusBadge } from '@/components/ui'
+import GenerateOpportunityButton from '@/components/opportunities/GenerateOpportunityButton.vue'
 import OutreachConversationPanel from '@/components/ai/OutreachConversationPanel.vue'
 import { fopApi, type FopHandoff } from '@/api/fop'
 import type { LeadAdEvidence, LeadContact } from '@/api/autoflow'
@@ -118,10 +119,18 @@ function adLinkLabel(evidence: LeadAdEvidence) {
         <div class="min-w-0 space-y-5">
           <section class="panel overflow-hidden">
             <div class="flex flex-col gap-4 border-b px-5 py-5 sm:flex-row sm:items-start sm:justify-between" style="border-color: var(--color-border)">
-              <div class="min-w-0"><p class="page-eyebrow">{{ t('leads.detailEyebrow') }}</p><h1 class="mt-1 truncate text-2xl font-bold text-slate-950 dark:text-white">{{ lead.brandName }}</h1><a :href="lead.storeUrl" target="_blank" rel="noopener noreferrer" class="mt-2 inline-flex items-center gap-1.5 text-sm font-medium text-orange-600 hover:underline dark:text-orange-400"><Globe2 class="h-4 w-4" />{{ lead.domain }}<ExternalLink class="h-3 w-3" /></a><div class="mt-3 flex flex-wrap gap-1.5"><span v-for="source in discoverySources" :key="source" class="rounded border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-semibold text-slate-600 dark:border-slate-700 dark:bg-[#171b21] dark:text-slate-300">{{ t(`leads.source_${source}`) }}</span></div></div>
+              <div class="min-w-0"><p class="page-eyebrow">{{ t('leads.detailEyebrow') }}</p><h1 class="mt-1 truncate text-2xl font-bold text-slate-950 dark:text-white">{{ lead.brandName }}</h1><a :href="lead.storeUrl" target="_blank" rel="noopener noreferrer" class="mt-2 inline-flex items-center gap-1.5 text-sm font-medium text-primary-600 hover:underline dark:text-primary-400"><Globe2 class="h-4 w-4" />{{ lead.domain }}<ExternalLink class="h-3 w-3" /></a><div class="mt-3 flex flex-wrap gap-1.5"><span v-for="source in discoverySources" :key="source" class="rounded border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-semibold text-slate-600 dark:border-slate-700 dark:bg-[var(--color-surface)] dark:text-slate-300">{{ t(`leads.source_${source}`) }}</span></div></div>
               <div class="flex items-center gap-3"><StatusBadge :status="lead.status" /><span class="rounded-md bg-slate-950 px-3 py-2 text-sm font-bold text-white dark:bg-white dark:text-black">{{ t('common.score') }} {{ lead.totalScore }}</span></div>
             </div>
-            <div class="grid gap-px bg-slate-200 dark:bg-slate-800 sm:grid-cols-2 xl:grid-cols-4"><div v-for="item in scoreCards" :key="item.label" class="bg-white p-4 dark:bg-[#111419]"><div class="flex items-center justify-between"><p class="text-xs font-semibold text-slate-500">{{ item.label }}</p><component :is="item.icon" class="h-4 w-4 text-orange-500" /></div><p class="mt-3 text-2xl font-bold tabular-nums text-slate-950 dark:text-white">{{ item.value }}</p></div></div>
+            <div class="grid gap-4 p-5 text-sm sm:grid-cols-2 xl:grid-cols-4">
+              <div><p class="text-xs text-slate-500">线索类型</p><p class="mt-1">{{ {manual:'手工录入',import:'批量导入',automatic:'自动任务'}[lead.leadType || 'automatic'] }}</p></div>
+              <div><p class="text-xs text-slate-500">登记日期</p><p class="mt-1">{{lead.registeredOn || lead.createdAt.slice(0,10)}}</p></div>
+              <div><p class="text-xs text-slate-500">联系日期</p><p class="mt-1">{{lead.contactedOn}}</p></div>
+              <div><p class="text-xs text-slate-500">国家 / 城市</p><p class="mt-1">{{lead.country}} {{lead.city}}</p></div>
+              <div class="sm:col-span-2"><p class="text-xs text-slate-500">目前跟进情况</p><p class="mt-1 whitespace-pre-wrap break-words">{{lead.currentFollowUp}}</p></div>
+              <div class="sm:col-span-2"><p class="text-xs text-slate-500">下一步跟进计划</p><p class="mt-1 whitespace-pre-wrap break-words">{{lead.nextFollowUpPlan}}</p></div>
+            </div>
+            <div class="grid gap-px bg-slate-200 dark:bg-slate-800 sm:grid-cols-2 xl:grid-cols-4"><div v-for="item in scoreCards" :key="item.label" class="bg-white p-4 dark:bg-[var(--color-surface)]"><div class="flex items-center justify-between"><p class="text-xs font-semibold text-slate-500">{{ item.label }}</p><component :is="item.icon" class="h-4 w-4 text-primary-500" /></div><p class="mt-3 text-2xl font-bold tabular-nums text-slate-950 dark:text-white">{{ item.value }}</p></div></div>
             <div class="p-5"><div class="flex flex-wrap gap-2"><a v-if="lead.productUrl" :href="lead.productUrl" target="_blank" rel="noopener noreferrer" class="btn btn-primary"><ShoppingBag class="h-4 w-4" />{{ t('leads.openProduct') }}<ExternalLink class="h-3.5 w-3.5" /></a><a v-if="lead.ownerFacebookUrl" :href="lead.ownerFacebookUrl" target="_blank" rel="noopener noreferrer" class="btn btn-secondary text-blue-700 dark:text-blue-300"><Facebook class="h-4 w-4" />{{ t('leads.openOwnerFacebook') }}<ExternalLink class="h-3.5 w-3.5" /></a></div><h2 class="panel-title mt-5">{{ t('leads.recommendedAngle') }}</h2><p class="mt-2 text-sm leading-7 text-slate-600 dark:text-slate-300">{{ lead.recommendedAngle }}</p></div>
           </section>
 
@@ -164,10 +173,10 @@ function adLinkLabel(evidence: LeadAdEvidence) {
             </div>
             <p v-if="contactAnalysisError" class="notice mx-4 mt-4 border-red-500 bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-300">{{ contactAnalysisError }}</p>
             <div v-if="lead.contacts.length" class="grid gap-px bg-slate-200 dark:bg-slate-800 md:grid-cols-2">
-              <article v-for="contact in lead.contacts" :key="`${contact.type}-${contact.value}`" class="bg-white p-5 dark:bg-[#111419]">
+              <article v-for="contact in lead.contacts" :key="`${contact.type}-${contact.value}`" class="bg-white p-5 dark:bg-[var(--color-surface)]">
                 <div class="flex items-start justify-between gap-3">
                   <div class="flex min-w-0 items-center gap-3">
-                    <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-orange-50 text-orange-600 dark:bg-orange-500/10 dark:text-orange-400">
+                    <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary-50 text-primary-600 dark:bg-primary-500/10 dark:text-primary-400">
                       <component :is="contactIcon(contact.type)" class="h-4.5 w-4.5" />
                     </span>
                     <div class="min-w-0">
@@ -177,7 +186,7 @@ function adLinkLabel(evidence: LeadAdEvidence) {
                   </div>
                   <StatusBadge :status="contact.verificationStatus" />
                 </div>
-                <div class="mt-4 rounded-md border bg-slate-50 p-3 text-xs leading-5 text-slate-600 dark:bg-[#171b21] dark:text-slate-300" style="border-color: var(--color-border)">
+                <div class="mt-4 rounded-md border bg-slate-50 p-3 text-xs leading-5 text-slate-600 dark:bg-[var(--color-surface)] dark:text-slate-300" style="border-color: var(--color-border)">
                   <p class="font-semibold text-slate-800 dark:text-slate-100">{{ evidenceSummary(contact) }}</p>
                   <p class="mt-1">{{ t('leads.evidencePage') }}：{{ contact.sourcePageTitle || t(`leads.evidencePage_${contact.sourcePageKind || 'unknown'}`) }}</p>
                   <p class="mt-1">{{ t('leads.confidence') }}：{{ contact.confidence }}%</p>
@@ -204,8 +213,9 @@ function adLinkLabel(evidence: LeadAdEvidence) {
           <OutreachConversationPanel :lead="lead" />
           <section class="panel p-4">
             <RouterLink :to="{ name: 'Quotes', query: { leadId: lead.id, returnTo: route.fullPath } }" class="btn btn-secondary w-full"><FileSpreadsheet class="h-4 w-4" />{{ t('leads.prepareQuote') }}</RouterLink>
+            <div class="mt-3"><GenerateOpportunityButton :lead-id="lead.id" /></div>
             <button class="btn btn-secondary mt-3 w-full" :disabled="handoffBusy || handoff?.status === 'pending' || handoff?.status === 'succeeded'" @click="handoffToFop"><Send class="h-4 w-4" />{{ handoff?.status === 'succeeded' ? t('leads.handedOff') : handoffBusy ? t('leads.handingOff') : t('leads.handoff') }}</button>
-            <div v-if="handoff" class="mt-4 rounded-md border bg-slate-50 p-3 text-xs text-slate-600 dark:bg-[#171b21] dark:text-slate-300" style="border-color: var(--color-border)"><div class="flex items-center justify-between"><strong>{{ t('leads.fopSync') }}</strong><StatusBadge :status="handoff.status" /></div><p v-if="handoff.fopLeadId" class="mt-2">{{ t('leads.leadId') }}: {{ handoff.fopLeadId }}</p><p v-if="handoff.fopOpportunityId" class="mt-1">{{ t('leads.opportunityId') }}: {{ handoff.fopOpportunityId }}</p><p v-if="handoff.conflicts.length" class="mt-2 text-amber-700 dark:text-amber-300">{{ handoff.conflicts.join('; ') }}</p><p v-if="handoff.lastError" class="mt-2 text-red-600 dark:text-red-300">{{ handoff.lastError }}</p></div>
+            <div v-if="handoff" class="mt-4 rounded-md border bg-slate-50 p-3 text-xs text-slate-600 dark:bg-[var(--color-surface)] dark:text-slate-300" style="border-color: var(--color-border)"><div class="flex items-center justify-between"><strong>{{ t('leads.fopSync') }}</strong><StatusBadge :status="handoff.status" /></div><p v-if="handoff.fopLeadId" class="mt-2">{{ t('leads.leadId') }}: {{ handoff.fopLeadId }}</p><p v-if="handoff.fopOpportunityId" class="mt-1">{{ t('leads.opportunityId') }}: {{ handoff.fopOpportunityId }}</p><p v-if="handoff.conflicts.length" class="mt-2 text-amber-700 dark:text-amber-300">{{ handoff.conflicts.join('; ') }}</p><p v-if="handoff.lastError" class="mt-2 text-red-600 dark:text-red-300">{{ handoff.lastError }}</p></div>
           </section>
         </div>
       </div>

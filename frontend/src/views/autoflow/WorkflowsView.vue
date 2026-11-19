@@ -502,8 +502,8 @@ async function confirmLifecycleAction() {
               <span class="field-label">{{ t('workflows.productImage') }} <em class="font-normal not-italic text-red-500">*</em></span>
               <input ref="imageInput" type="file" accept="image/png,image/jpeg,image/webp" class="sr-only" @change="handleImageSelection" />
               <div
-                class="flex min-h-44 cursor-pointer items-center justify-center rounded-md border border-dashed p-4 text-center transition focus:outline-none focus:ring-2 focus:ring-orange-500/30"
-                :class="resolvedImagePreviewUrl ? 'border-slate-300 bg-slate-50 dark:border-slate-700 dark:bg-[#11151a]' : 'border-slate-300 bg-white hover:border-orange-400 hover:bg-orange-50/40 dark:border-slate-700 dark:bg-[#171b21] dark:hover:border-orange-500'"
+                class="flex min-h-44 cursor-pointer items-center justify-center rounded-md border border-dashed p-4 text-center transition focus:outline-none focus:ring-2 focus:ring-primary-500/30"
+                :class="resolvedImagePreviewUrl ? 'border-slate-300 bg-slate-50 dark:border-slate-700 dark:bg-[var(--color-surface)]' : 'border-slate-300 bg-white hover:border-primary-400 hover:bg-primary-50/40 dark:border-slate-700 dark:bg-[var(--color-surface)] dark:hover:border-primary-500'"
                 role="button"
                 tabindex="0"
                 @click="openImagePicker"
@@ -523,26 +523,26 @@ async function confirmLifecycleAction() {
                   <button type="button" class="icon-btn self-start" :title="t('workflows.removeImage')" :disabled="isUploadingImage" @click.stop="removeImage"><Trash2 class="h-4 w-4" /></button>
                 </div>
                 <div v-else class="max-w-lg py-4">
-                  <ImagePlus class="mx-auto h-8 w-8 text-orange-500" />
+                  <ImagePlus class="mx-auto h-8 w-8 text-primary-500" />
                   <p class="mt-3 text-sm font-semibold text-slate-950 dark:text-white">{{ t('workflows.imageDropTitle') }}</p>
                   <p class="mt-1 text-xs leading-5 text-slate-500">{{ t('workflows.imageDropHint') }}</p>
                 </div>
               </div>
-              <div v-if="isUploadingImage" class="mt-2 flex items-center gap-2 text-xs font-medium text-orange-700 dark:text-orange-300"><LoaderCircle class="h-4 w-4 animate-spin" />{{ t('workflows.imageUploading') }}</div>
+              <div v-if="isUploadingImage" class="mt-2 flex items-center gap-2 text-xs font-medium text-primary-700 dark:text-primary-300"><LoaderCircle class="h-4 w-4 animate-spin" />{{ t('workflows.imageUploading') }}</div>
               <p v-if="imageUploadError" class="mt-2 text-xs font-medium text-red-600 dark:text-red-400">{{ imageUploadError }}</p>
               <p v-else-if="imageUpload && !imageUpload.providerReady" class="notice mt-3 tone-warning">{{ t('workflows.imageProviderWarning') }}</p>
               <label class="mt-3 block"><span class="field-label">{{ t('workflows.imageUrlAlternative') }}</span><input v-model="form.seedValue" class="input" :placeholder="t('workflows.imagePastePlaceholder')" required @paste="handleImagePaste" /></label>
               <span class="field-help">{{ t('workflows.helperImage') }}</span>
             </div>
             <fieldset v-if="form.seedType === 'keyword'" class="md:col-span-2 rounded-md border p-4" style="border-color: var(--color-border)">
-              <legend class="flex items-center gap-2 px-2 text-sm font-semibold text-slate-950 dark:text-white"><SearchCode class="h-4 w-4 text-orange-500" />{{ t('workflows.googleAdvanced') }}</legend>
+              <legend class="flex items-center gap-2 px-2 text-sm font-semibold text-slate-950 dark:text-white"><SearchCode class="h-4 w-4 text-primary-500" />{{ t('workflows.googleAdvanced') }}</legend>
               <div class="grid gap-2 sm:grid-cols-2">
                 <label v-for="option in googleOptionFields" :key="option.key" class="flex cursor-pointer items-center justify-between gap-3 rounded-md border px-3 py-2.5 text-sm font-medium" style="border-color: var(--color-border)">
                   <span>{{ t(option.labelKey) }}</span>
                   <input v-model="form.searchOptions[option.key]" type="checkbox" class="h-4 w-4 accent-orange-600" />
                 </label>
               </div>
-              <div class="mt-3 rounded-md bg-slate-50 px-3 py-2 dark:bg-[#171b21]"><p class="text-[11px] font-semibold text-slate-500">{{ t('workflows.queryPreview') }}</p><code class="mt-1 block break-all text-xs leading-5 text-slate-700 dark:text-slate-300">{{ googleQueryPreview }}</code></div>
+              <div class="mt-3 rounded-md bg-slate-50 px-3 py-2 dark:bg-[var(--color-surface)]"><p class="text-[11px] font-semibold text-slate-500">{{ t('workflows.queryPreview') }}</p><code class="mt-1 block break-all text-xs leading-5 text-slate-700 dark:text-slate-300">{{ googleQueryPreview }}</code></div>
             </fieldset>
             <fieldset class="md:col-span-2">
               <legend class="field-label">{{ t('workflows.targetMarket') }}</legend>
@@ -551,7 +551,7 @@ async function confirmLifecycleAction() {
                   v-for="market in targetMarkets"
                   :key="market.code"
                   class="relative flex min-h-24 cursor-pointer flex-col items-center justify-center gap-1 rounded-md border px-3 py-3 text-center transition"
-                  :class="form.targetMarket === market.value ? 'selection-active shadow-sm' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:bg-[#171b21] dark:text-slate-300 dark:hover:bg-[#20252d]'"
+                  :class="form.targetMarket === market.value ? 'selection-active shadow-sm' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:bg-[var(--color-surface)] dark:text-slate-300 dark:hover:bg-[#20252d]'"
                 >
                   <input v-model="form.targetMarket" type="radio" name="target-market" :value="market.value" class="sr-only" required />
                   <img :src="market.flagUrl" alt="" class="h-5 w-7 rounded-sm object-cover shadow-sm ring-1 ring-slate-200" aria-hidden="true" />
@@ -577,7 +577,7 @@ async function confirmLifecycleAction() {
         <div v-if="store.workflows.length" class="flex items-center gap-3 border-b px-4 py-3" style="border-color: var(--color-border)">
           <div v-if="actionMessage" class="notice flex-1 border-sky-500 bg-sky-50 text-sky-800 dark:bg-sky-950 dark:text-sky-200">{{ actionMessage }}</div>
           <span v-else class="flex-1" />
-          <RouterLink to="/workflows/new" class="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-orange-600 text-white shadow-sm transition hover:bg-orange-700" :title="t('nav.newWorkflow')" :aria-label="t('nav.newWorkflow')"><Plus class="h-4 w-4" /></RouterLink>
+          <RouterLink to="/workflows/new" class="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary-600 text-white shadow-sm transition hover:bg-primary-700" :title="t('nav.newWorkflow')" :aria-label="t('nav.newWorkflow')"><Plus class="h-4 w-4" /></RouterLink>
         </div>
         <div v-if="store.workflows.length" class="overflow-x-auto">
           <table class="data-table min-w-[1380px]">
@@ -604,7 +604,7 @@ async function confirmLifecycleAction() {
                 <td><span class="inline-flex items-center gap-2 font-semibold text-slate-800 dark:text-slate-100"><img :src="resolveTargetMarket(workflow.targetMarket).flagUrl" alt="" class="h-4 w-6 rounded-[2px] object-cover shadow-sm ring-1 ring-black/10" aria-hidden="true" />{{ resolveTargetMarket(workflow.targetMarket).code }}</span></td>
                 <td>{{ $te(`status.${workflow.currentStage}`) ? $t(`status.${workflow.currentStage}`) : workflow.currentStage }}</td>
                 <td class="font-semibold tabular-nums">{{ workflow.leadCount }}</td>
-                <td><div class="flex min-w-32 items-center gap-2"><div class="h-1.5 flex-1 rounded-full bg-slate-100 dark:bg-slate-800"><div class="h-full rounded-full bg-orange-500" :style="{ width: `${workflowProgressDisplay(workflow).percent}%` }" /></div><span class="whitespace-nowrap text-xs tabular-nums text-slate-500">{{ t(workflowProgressDisplay(workflow).labelKey, workflowProgressDisplay(workflow).labelParams || {}) }}</span></div></td>
+                <td><div class="flex min-w-32 items-center gap-2"><div class="h-1.5 flex-1 rounded-full bg-slate-100 dark:bg-slate-800"><div class="h-full rounded-full bg-primary-500" :style="{ width: `${workflowProgressDisplay(workflow).percent}%` }" /></div><span class="whitespace-nowrap text-xs tabular-nums text-slate-500">{{ t(workflowProgressDisplay(workflow).labelKey, workflowProgressDisplay(workflow).labelParams || {}) }}</span></div></td>
                 <td><StatusBadge :status="workflow.status" /></td>
                 <td class="min-w-72 text-right">
                   <div class="flex items-center justify-end gap-2">
@@ -634,7 +634,7 @@ async function confirmLifecycleAction() {
       </section>
 
       <div v-if="detailWorkflow" class="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/50 p-4" role="dialog" aria-modal="true" :aria-label="t('workflows.failureDetails')" @click.self="detailWorkflow = null">
-        <section class="w-full max-w-xl overflow-hidden rounded-md border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-[#15181d]">
+        <section class="w-full max-w-xl overflow-hidden rounded-md border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-[var(--color-surface)]">
           <div class="panel-header"><div><h2 class="panel-title">{{ t('workflows.failureDetails') }}</h2><p class="panel-description">{{ detailWorkflow.name }}</p></div><button class="icon-btn" :title="t('common.close')" @click="detailWorkflow = null"><X class="h-4 w-4" /></button></div>
           <div class="space-y-4 p-5">
             <div class="notice border-red-300 bg-red-50 text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200"><CircleAlert class="h-5 w-5 shrink-0" /><div><p class="font-semibold">{{ failureLabel(detailWorkflow) }}</p><p class="mt-1 text-sm">{{ t('workflows.failureGuidance') }}</p></div></div>
@@ -652,7 +652,7 @@ async function confirmLifecycleAction() {
       </div>
 
       <div v-if="lifecycleTarget && lifecycleMode" class="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/50 p-4" role="dialog" aria-modal="true" :aria-label="lifecycleMode === 'delete' ? t('workflows.deleteWorkflow') : t('workflows.archiveWorkflow')" @click.self="closeLifecycleDialog">
-        <section class="w-full max-w-lg overflow-hidden rounded-md border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-[#15181d]">
+        <section class="w-full max-w-lg overflow-hidden rounded-md border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-[var(--color-surface)]">
           <div class="panel-header"><div><h2 class="panel-title">{{ lifecycleMode === 'delete' ? t('workflows.deleteConfirmTitle') : t('workflows.archiveConfirmTitle') }}</h2><p class="panel-description">{{ lifecycleTarget.name }}</p></div><button class="icon-btn" :title="t('common.close')" :disabled="lifecycleBusy" @click="closeLifecycleDialog"><X class="h-4 w-4" /></button></div>
           <div class="space-y-4 p-5">
             <p class="text-sm leading-6 text-slate-700 dark:text-slate-300">{{ lifecycleMode === 'delete' ? t('workflows.deleteConfirmDescription') : t('workflows.archiveConfirmDescription') }}</p>

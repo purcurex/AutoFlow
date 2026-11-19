@@ -16,7 +16,7 @@
 - `VERIFICATION.md`：本次实际检查与限制。
 - `FOLLOW_UP_CHECKLIST.md`：第7章补充的后续待办与人工核对清单；按T/H编号记录优先级、建议负责人、输入、产物和完成标准，并提供脱敏验收样本及回填模板。
 
-采用 [OpenAPI Specification 3.1.1](https://spec.openapis.org/oas/v3.1.1.html) 的 `paths`、`operationId`、`parameters`、`requestBody`、`responses`、`components/schemas`、`securitySchemes` 结构。可空使用 JSON Schema 的 `null` 类型；必填与可空分别表达。该版本选择用于稳定契约，不宣称它是最新规范版本。
+采用 [OpenAPI Specification 3.1.1](https://spec.openapis.org/oas/v3.1.1.html) 的 `paths`、`operationId`、`parameters`、`requestBody`、`responses`、`components/schemas`、`securitySchemes` 结构。可空使用 JSON Schema 的 `null` 类型；必填与可空分别表达。本项目固定采用该版本维护接口契约。
 
 ## 2. 图表与业务模块总览
 
@@ -109,7 +109,7 @@
 | 月粒度 | 选定年1月至 UTC+8 当前月；历史年为12月；1月比较前一年完整12月 |
 | 周粒度 | 周一开始，锚点所在周及前三周。weekOf 默认当年今天、历史年12月31日；显式锚点必须属于 year 且不晚于今天；跨年周及其上一周完整读取 |
 | 年粒度 | 所选年及前四年，显示区间最早2020；即便首个显示年为2020，其完整2019年基期仍需读取 |
-| 未完周期 | `periods[].partial=true` 明示未结束周期（含周期末当天），本期to截到UTC+8今天。本期仅含当前已确认金额，与完整上一期比较；不能宣称为同期进度增长率或已关账数据 |
+| 未完周期 | `periods[].partial=true` 明示未结束周期（含周期末当天），本期to截到UTC+8今天。本期仅含当前已确认金额，与完整上一期比较；该指标为未完周期金额与完整上期金额的比较 |
 | 环比 | amount、previousAmount、delta 和 percent 同时返回；delta=本期−上期，percent=delta/abs(上期)×100（25表示25%）。上期0且本期>0为null，显示“上期为0”；双0为0。合计比例用合计基数重算，不能加各期百分比 |
 | 服务商 | 无 carrierCode 时合计＋YT/4PX/WB/YW/JS/OTHER；过滤单商时合计＋该商。合计不与明细再次相加；OTHER仅为可信适配器明确映射的其他真实服务商 |
 | 独立成本权限 | `freight` scope 缺失403；`allowedFreightIds` 缺失或为空返回空范围。有效范围=FOP成本授权∩租户∩本人／部门及下属／业务管理员范围；系统管理身份、订单可见性和页面筛选均不扩大权限 |

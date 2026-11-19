@@ -363,7 +363,7 @@ function offerLink(offer: SourcingOffer) {
 
         <div
           v-if="!loading && summary?.workflowInput"
-          class="grid gap-3 border-b bg-slate-50 px-5 py-4 text-sm dark:bg-[#171b21] sm:grid-cols-2 xl:grid-cols-4"
+          class="grid gap-3 border-b bg-slate-50 px-5 py-4 text-sm dark:bg-[var(--color-surface)] sm:grid-cols-2 xl:grid-cols-4"
           style="border-color: var(--color-border)"
           data-test="sourcing-match-context"
         >
@@ -440,11 +440,11 @@ function offerLink(offer: SourcingOffer) {
           <article
             v-for="offer in offers"
             :key="offer.id"
-            class="bg-white p-5 dark:bg-[#111419]"
+            class="bg-white p-5 dark:bg-[var(--color-surface)]"
             data-test="sourcing-offer"
           >
             <div class="flex min-w-0 gap-4">
-              <div class="flex h-28 w-28 shrink-0 items-center justify-center overflow-hidden rounded-md border bg-slate-50 dark:bg-[#171b21]" style="border-color: var(--color-border)">
+              <div class="flex h-28 w-28 shrink-0 items-center justify-center overflow-hidden rounded-md border bg-slate-50 dark:bg-[var(--color-surface)]" style="border-color: var(--color-border)">
                 <img
                   v-if="safeExternalUrl(offer.imageUrl)"
                   :src="safeExternalUrl(offer.imageUrl) || undefined"
@@ -474,7 +474,7 @@ function offerLink(offer: SourcingOffer) {
             </div>
 
             <div class="mt-5 grid grid-cols-2 gap-px overflow-hidden rounded-md border bg-slate-200 dark:bg-slate-800 sm:grid-cols-4" style="border-color: var(--color-border)">
-              <div class="bg-slate-50 p-3 dark:bg-[#171b21]">
+              <div class="bg-slate-50 p-3 dark:bg-[var(--color-surface)]">
                 <p class="text-xs font-semibold text-slate-500">{{ t('sourcing.price') }}</p>
                 <p class="mt-1 font-bold text-slate-950 dark:text-white">
                   <template v-if="offerPriceParts(offer).minimum">
@@ -485,18 +485,18 @@ function offerLink(offer: SourcingOffer) {
                   <template v-else>{{ t('sourcing.notAvailable') }}</template>
                 </p>
               </div>
-              <div class="bg-slate-50 p-3 dark:bg-[#171b21]">
+              <div class="bg-slate-50 p-3 dark:bg-[var(--color-surface)]">
                 <p class="text-xs font-semibold text-slate-500">{{ t('sourcing.moq') }}</p>
                 <p class="mt-1 font-bold text-slate-950 dark:text-white">
                   {{ displayNumber(offer.moq) || t('sourcing.notAvailable') }}
                   <span v-if="offer.moq && offer.unit" class="text-xs font-medium text-slate-500">{{ offer.unit }}</span>
                 </p>
               </div>
-              <div class="bg-slate-50 p-3 dark:bg-[#171b21]">
+              <div class="bg-slate-50 p-3 dark:bg-[var(--color-surface)]">
                 <p class="text-xs font-semibold text-slate-500">{{ t('sourcing.sales') }}</p>
                 <p class="mt-1 font-bold text-slate-950 dark:text-white">{{ displayNumber(offer.salesVolume) || t('sourcing.notAvailable') }}</p>
               </div>
-              <div class="bg-slate-50 p-3 dark:bg-[#171b21]">
+              <div class="bg-slate-50 p-3 dark:bg-[var(--color-surface)]">
                 <p class="text-xs font-semibold text-slate-500">{{ t('sourcing.repurchase') }}</p>
                 <p class="mt-1 font-bold text-slate-950 dark:text-white">{{ displayPercent(offer.repurchaseRate) || t('sourcing.notAvailable') }}</p>
               </div>

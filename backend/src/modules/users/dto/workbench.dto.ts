@@ -62,6 +62,10 @@ export class CompletionFiltersDto {
 
 export class FulfillmentOrderFiltersDto extends CompletionFiltersDto {
   @IsOptional()
+  @IsIn(['A', 'B'])
+  billStatus?: 'A' | 'B'
+
+  @IsOptional()
   @IsIn(['linked', 'unlinked'])
   skuAssociation?: 'linked' | 'unlinked'
 

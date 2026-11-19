@@ -6,6 +6,7 @@
   <meta name="color-scheme" content="light">
   <title>AutoFlow 系统操作手册 | HyperZone</title>
   <style>
+    .content section p{text-indent:2em}.content h1,.content h2,.content h3,.content h4,.content .paragraph-title{text-indent:0}
     :root{--orange:#ea580c;--orange-soft:#fff7ed;--amber:#fbbf24;--green:#059669;--green-soft:#ecfdf5;--blue:#2563eb;--blue-soft:#eff6ff;--blueprint:#eaf4ff;--blueprint-strong:#dbeafe;--ink:#172033;--muted:#64748b;--line:#dbe2ea;--paper:#fff;--canvas:#f3f6f9;--dark:#111318;--radius:8px;--shadow:0 8px 28px rgba(15,23,42,.08)}
     *{box-sizing:border-box}html{scroll-behavior:smooth;scroll-padding-top:24px}body{margin:0;background:var(--canvas);color:var(--ink);font-family:Inter,"Noto Sans SC","Microsoft YaHei",Arial,sans-serif;font-size:15px;line-height:1.75;letter-spacing:0}a{color:var(--orange);text-decoration:none}a:hover{text-decoration:underline}img{max-width:100%}code{padding:.12rem .35rem;border-radius:4px;background:#f1f5f9;color:#9a3412;font-family:Consolas,monospace;font-size:.9em}button{font:inherit}
     .shell{display:grid;grid-template-columns:286px minmax(0,1fr);max-width:1600px;margin:auto;min-height:100vh;background:var(--paper);box-shadow:0 0 40px rgba(15,23,42,.08)}
@@ -89,7 +90,7 @@
         <table><thead><tr><th>角色</th><th>主要操作</th><th>关键责任</th></tr></thead><tbody>
           <tr><td>外贸销售员</td><td>创建工作流、筛选线索、核验联系人、审核话术、发送建联、准备报价</td><td>保证联系对象、话术和状态回填真实准确。</td></tr>
           <tr><td>销售主管</td><td>查看线索质量、建联进度、报价完整性和 FOP 移交状态</td><td>监督业务质量与异常处理。</td></tr>
-          <tr><td>系统管理员</td><td>账号权限、配置检查、兼容业务记录管理和运行排障</td><td>保护密钥、数据和管理员权限。</td></tr>
+          <tr><td>系统管理员</td><td>组织架构、账号权限、配置检查和运行排障</td><td>保护密钥、数据和管理员权限。</td></tr>
           <tr><td>FOP 业务人员</td><td>维护正式线索、商机、成本、运费、订单和后续跟进</td><td>维护正式业务记录的权威性。</td></tr>
         </tbody></table>
       </section>
@@ -230,11 +231,10 @@
       <section id="settings" class="chapter">
         <h2 class="chapter-title"><span class="chapter-no">12</span>个人设置与系统管理</h2>
         <h3>12.1 个人设置</h3>
-        <ol class="step-list"><li>进入“个人设置”。</li><li>可修改用户名；邮箱当前不可修改。</li><li>单击头像上传 JPG、JPEG、PNG、GIF 或 WebP，文件最大 5 MB。</li><li>在“界面偏好”中切换语言和显示主题。</li><li>数据管理可导出兼容层业务记录 PDF；导入功能仍在开发中。</li><li>公共电脑使用结束后单击“退出当前账号”。</li></ol>
-        <figure class="screenshot"><img src="assets/user-manual/09-settings.png" alt="AutoFlow 个人设置"><figcaption><span class="fig-no">图 12</span><span>个人设置：资料、语言、主题、数据管理和账户安全分区展示。</span></figcaption></figure>
+        <ol class="step-list"><li>进入“个人设置”。</li><li>可修改用户名；邮箱当前不可修改。</li><li>单击头像上传 JPG、JPEG、PNG、GIF 或 WebP，文件最大 5 MB。</li><li>在“界面偏好”中切换语言和显示主题。</li><li>公共电脑使用结束后单击“退出当前账号”。</li></ol>
+        <figure class="screenshot"><img src="assets/user-manual/09-settings.png" alt="AutoFlow 个人设置"><figcaption><span class="fig-no">图 12</span><span>个人设置：资料、头像、语言、主题和账户安全。</span></figcaption></figure>
         <h3>12.2 管理员页面</h3>
-        <p>只有管理员能进入“系统管理”。当前页面管理原系统兼容层业务记录，可按标题或作者搜索、按表头排序、预览安全过滤后的内容及删除记录。</p>
-        <figure class="screenshot"><img src="assets/user-manual/10-admin.png" alt="AutoFlow 系统管理"><figcaption><span class="fig-no">图 13</span><span>系统管理：显示兼容业务记录和涉及用户数。删除不可恢复，必须确认数据归属。</span></figcaption></figure>
+        <p>系统管理员可在左侧“系统管理”进入“组织架构”和“账号与权限”，维护组织、员工及账号授权。普通账号、部门经理与协同岗位不显示这两个管理入口。</p>
       </section>
 
       <section id="states" class="chapter">

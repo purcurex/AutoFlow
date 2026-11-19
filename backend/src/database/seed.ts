@@ -1,7 +1,5 @@
 import * as bcrypt from 'bcrypt'
 import { User } from '../modules/users/user.entity'
-import { Note } from '../modules/notes/note.entity'
-import { Folder } from '../modules/folders/folder.entity'
 import AppDataSource from './data-source'
 
 async function seed() {
@@ -21,8 +19,6 @@ async function seed() {
     await AppDataSource.destroy()
     return
   }
-  const noteRepository = AppDataSource.getRepository(Note)
-  const folderRepository = AppDataSource.getRepository(Folder)
 
   let testUser = await userRepository.findOne({
     where: [{ email: 'test@autoflow.local' }, { username: 'sales_user' }],
@@ -49,47 +45,6 @@ async function seed() {
 
   console.log('  email: test@autoflow.local')
   console.log('  password: configured by DEV_SEED_PASSWORD (local default is documented in .env.example)')
-
-  let salesFolder = await folderRepository.findOne({
-    where: { name: 'Customer Development Records' },
-  })
-
-  if (!salesFolder) {
-    salesFolder = folderRepository.create({
-      name: 'Customer Development Records',
-      userId: testUser.id,
-    })
-    await folderRepository.save(salesFolder)
-    console.log('Customer development record category created')
-  }
-
-  const existingNotes = await noteRepository.count({ where: { userId: testUser.id } })
-  if (existingNotes === 0) {
-    const records = [
-      {
-        title: 'AutoFlow Customer Development Playbook',
-        content:
-          '# AutoFlow Customer Development Playbook\n\nUse this workspace to track product ideas, target stores, buyer contacts, outreach drafts, quotes, and CRM follow-up notes for Dropshipping sales development.',
-        userId: testUser.id,
-        folderId: salesFolder.id,
-        tags: ['autoflow', 'sales'],
-      },
-      {
-        title: 'Sample Outreach Research Record',
-        content:
-          '# Sample Outreach Research Record\n\n- Product keyword: phone case\n- Target store: example-shop.myshopify.com\n- Channel: WhatsApp\n- Next action: verify contact and prepare first message',
-        userId: testUser.id,
-        folderId: salesFolder.id,
-        tags: ['lead', 'outreach'],
-      },
-    ]
-
-    for (const recordData of records) {
-      const record = noteRepository.create(recordData)
-      await noteRepository.save(record)
-    }
-    console.log('Sample sales records created')
-  }
 
   await AppDataSource.destroy()
   console.log('Seed data initialized')

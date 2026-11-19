@@ -47,13 +47,16 @@ describe('role workbench content', () => {
     }
   })
 
-  it('remounts analysis on tab changes so registration coverage cannot inherit order dates',async()=>{
+  it('removes prospecting content from the sales workbench while retaining performance', async () => {
     const {wrapper,router}=await setup('/workbench/sales?queue=performance',undefined,undefined,true)
-    const previous=wrapper.findComponent({name:'WorkbenchAnalytics'}).vm
-    await router.push('/workbench/sales?queue=overview');await flushPromises()
-    const current=wrapper.findComponent({name:'WorkbenchAnalytics'})
-    expect(current.vm).not.toBe(previous)
-    expect(current.props('page')).toBe('overview')
+    expect(wrapper.findComponent({name:'WorkbenchAnalytics'}).exists()).toBe(true)
+    await router.push('/workbench/sales?queue=overview'); await flushPromises()
+    expect(wrapper.findComponent({name:'WorkbenchAnalytics'}).exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('Sales activities')
+    expect(wrapper.get('.workbench-queues').text()).not.toContain('客户开发概览')
+    await router.push('/workbench/sales?queue=performance'); await flushPromises()
+    expect(wrapper.findComponent({name:'WorkbenchAnalytics'}).exists()).toBe(true)
+    expect(wrapper.text()).not.toContain('Sales activities')
     wrapper.unmount()
   })
 
@@ -105,7 +108,7 @@ describe('role workbench content', () => {
     wrapper.unmount()
   })
 
-  it('opens sales review by default while retaining the overview and assigned workbench tabs', async () => {
+  it('opens sales review by default with assigned workbench tabs and no duplicate prospecting entry', async () => {
     const { wrapper, router } = await setup('/workbench/sales', ['sales'], undefined, true)
     expect(wrapper.find('h1').text()).toBe('销售工作台')
     expect(wrapper.find('h2').text()).toContain('待审核清单')
@@ -122,9 +125,7 @@ describe('role workbench content', () => {
     await router.push('/workbench/sales'); await flushPromises()
     expect(wrapper.find('h2').text()).toContain('待审核清单')
     expect(wrapper.find('.workbench-queues a.active').text()).toBe('待审核清单')
-    await wrapper.findAll('.workbench-queues a').find(a => a.text().includes('客户开发概览'))!.trigger('click')
-    await flushPromises()
-    expect(wrapper.findComponent({ name: 'WorkbenchAnalytics' }).exists()).toBe(true)
+    expect(wrapper.get('.workbench-queues').text()).not.toContain('客户开发概览')
     wrapper.unmount()
   })
 

@@ -43,7 +43,7 @@ async function upload(event: Event) {
       </button>
       <div class="min-w-0">
         <p class="truncate text-sm font-semibold text-slate-950 dark:text-white">{{ userStore.displayName }}</p>
-        <button type="button" class="mt-1 text-sm font-medium text-blue-600 hover:underline disabled:opacity-50 dark:text-blue-400" :disabled="busy" @click="input?.click()">{{ busy ? t('settings.saving') : text('上传头像', 'Upload avatar') }}</button>
+        <button type="button" class="mt-1 text-sm font-medium text-primary-700 hover:underline disabled:opacity-50 dark:text-primary-700" :disabled="busy" @click="input?.click()">{{ busy ? t('settings.saving') : text('上传头像', 'Upload avatar') }}</button>
         <p class="mt-1 text-xs text-slate-500">JPG / PNG / GIF / WebP · {{ t('settings.avatarLimit') }}</p>
       </div>
       <input ref="input" type="file" accept="image/jpeg,image/png,image/gif,image/webp" class="hidden" :disabled="busy" @change="upload" />
@@ -69,15 +69,15 @@ async function upload(event: Event) {
 .avatar-style-switch { display:flex; gap:4px; padding:4px; width:fit-content; max-width:100%; border-radius:10px; background:var(--color-bg); border:1px solid var(--color-border); }
 .avatar-style-switch button { padding:7px 10px; border-radius:7px; color:var(--color-text-secondary); font-size:11px; white-space:nowrap; transition:background .16s, color .16s; }
 .avatar-style-switch button[aria-pressed=true] { color:var(--color-text); background:var(--color-surface); box-shadow:0 1px 3px #0000000c; }
-.avatar-style-switch button:focus-visible { outline:2px solid #687bd2; outline-offset:2px; }
+.avatar-style-switch button:focus-visible { outline:2px solid var(--color-link); outline-offset:2px; }
 .pet-avatar-grid { display:grid; grid-template-columns:repeat(3, minmax(0, 76px)); gap:10px; }
 .pet-avatar-option { position:relative; display:flex; flex-direction:column; align-items:center; gap:8px; padding:9px 5px 8px; border:1px solid var(--color-border); border-radius:16px; background:var(--color-surface); transition:background .16s, border-color .16s; }
-.pet-avatar-option:hover { background:var(--color-bg); border-color:#9aa9de; }
-.pet-avatar-option:focus-visible { outline:2px solid #687bd2; outline-offset:3px; }
-.pet-avatar-option.selected { border-color:#687bd2; background:color-mix(in srgb, #687bd2 10%, var(--color-surface)); }
+.pet-avatar-option:hover { background:var(--color-bg); border-color:var(--color-primary); }
+.pet-avatar-option:focus-visible { outline:2px solid var(--color-link); outline-offset:3px; }
+.pet-avatar-option.selected { border-color:var(--color-link); background:color-mix(in srgb, var(--color-link) 10%, var(--color-surface)); }
 .pet-avatar-option:disabled { opacity:.5; }
 .pet-avatar-art { width:52px; height:52px; border-radius:50%; }
 .pet-avatar-name { font-size:10px; line-height:1.4; color:var(--color-text-secondary); }
-.pet-avatar-check { position:absolute; right:7px; top:7px; padding:2px; border-radius:50%; color:white; background:#5c70c4; }
+.pet-avatar-check { position:absolute; right:7px; top:7px; padding:2px; border-radius:50%; color:var(--color-on-primary); background:var(--color-primary); }
 @container(min-width:510px) { .pet-avatar-grid { grid-template-columns:repeat(6, minmax(0, 76px)); } }
 </style>

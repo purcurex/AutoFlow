@@ -20,6 +20,12 @@ describe('role workbench navigation', () => {
     expect(router.currentRoute.value.query).toMatchObject({ queue, orderNumber: 'DEMO-SO-10241', search: 'Northstar', page: '2' })
   })
 
+  it.each(['/workbench/sales?queue=overview&departmentId=outside&page=4', '/?queue=overview'])('moves the retired overview into customer follow-up without stale workbench filters: %s', async path => {
+    await router.push(path)
+    expect(router.currentRoute.value.name).toBe('FollowUps')
+    expect(router.currentRoute.value.query).toEqual({})
+  })
+
   it('keeps workbench routes behind the existing login requirement', async () => {
     localStorage.clear()
     await router.push('/workbench/warehouse?queue=shipping')

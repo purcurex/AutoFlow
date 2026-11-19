@@ -19,6 +19,6 @@ const time=(v:string)=>new Date(v).toLocaleString('zh-CN',{timeZone:'Asia/Shangh
  </section>
 </template>
 <style scoped>
-.comparison-summary{margin:16px 0;padding:14px 16px;border:1px solid var(--border-color,#dce3ee);border-radius:8px;background:var(--bg-card,transparent);font-size:12px}.comparison-summary p{margin:0 0 8px;color:var(--color-text-secondary,#8793a5);line-height:1.7}.comparison-values{display:flex;flex-wrap:wrap;gap:12px 24px;line-height:1.8}.comparison-values b{margin-left:5px;font-variant-numeric:tabular-nums;color:var(--color-text-primary,inherit)}
-:global(.dark .comparison-summary){background:#151d29;border-color:#334155;color:#dbe4ef}:global(.dark .comparison-values b){color:inherit}
+.comparison-summary{margin:16px 0;padding:14px 16px;border:1px solid var(--border-color,var(--color-border));border-radius:8px;background:var(--bg-card,transparent);font-size:12px}.comparison-summary p{margin:0 0 8px;color:var(--color-text-secondary,#8793a5);line-height:1.7}.comparison-values{display:flex;flex-wrap:wrap;gap:12px 24px;line-height:1.8}.comparison-values b{margin-left:5px;font-variant-numeric:tabular-nums;color:var(--color-text-primary,inherit)}
+:global(.dark .comparison-summary){background:var(--color-surface);border-color:#334155;color:var(--color-text)}:global(.dark .comparison-values b){color:inherit}
 </style>

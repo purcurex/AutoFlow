@@ -29,7 +29,7 @@ onClickOutside(root, () => { open.value = false })
   <div ref="root" class="relative">
     <button
       type="button"
-      class="flex h-10 w-[140px] items-center gap-2 rounded-md border border-slate-200 bg-white px-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:bg-[#15181d] dark:text-slate-100 dark:hover:bg-[#20242b]"
+      class="flex h-10 w-[140px] items-center gap-2 rounded-md border border-slate-200 bg-white px-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:bg-[var(--color-surface)] dark:text-slate-100 dark:hover:bg-[#20242b]"
       :aria-label="$t('common.language')"
       :aria-expanded="open"
       aria-haspopup="menu"
@@ -43,7 +43,7 @@ onClickOutside(root, () => { open.value = false })
 
     <div
       v-if="open"
-      class="absolute right-0 top-full z-50 mt-1.5 w-[140px] overflow-hidden rounded-md border border-slate-200 bg-white p-1 shadow-lg dark:border-slate-700 dark:bg-[#15181d]"
+      class="absolute right-0 top-full z-50 mt-1.5 w-[140px] overflow-hidden rounded-md border border-slate-200 bg-white p-1 shadow-lg dark:border-slate-700 dark:bg-[var(--color-surface)]"
       role="menu"
     >
       <button

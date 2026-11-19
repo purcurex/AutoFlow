@@ -11,7 +11,7 @@ import { SVGRenderer } from 'echarts/renderers'
 use([BarChart, LineChart, AriaComponent, DataZoomComponent, GridComponent, LegendComponent, MarkLineComponent, TooltipComponent, ToolboxComponent, SVGRenderer])
 const props = withDefaults(defineProps<{ option: EChartsCoreOption; label: string; canExport?: boolean }>(), { canExport: undefined })
 const { canExport: inheritedExport } = useChartCapabilities()
-const { isDark } = useTheme()
+const { isDark, palette } = useTheme()
 const allowExport = computed(() => props.canExport ?? inheritedExport.value)
 export interface ChartClick { seriesId?: string; seriesIndex?:number; dataIndex?: number; name?: string }
 export interface ChartZoom { start?: number; end?: number; startValue?: number; endValue?: number; batch?: ChartZoom[] }
@@ -50,7 +50,7 @@ function renderOption(preserveRange = false) {
     return { ...item, feature }
   }
   const toolbox = props.option.toolbox
-  chart.setOption(applyChartTheme({ ...props.option, ...(toolbox ? { toolbox: Array.isArray(toolbox) ? toolbox.map(filterToolbox) : filterToolbox(toolbox) } : {}), dataZoom: sliders }, isDark.value), { notMerge: true })
+  chart.setOption(applyChartTheme({ ...props.option, ...(toolbox ? { toolbox: Array.isArray(toolbox) ? toolbox.map(filterToolbox) : filterToolbox(toolbox) } : {}), dataZoom: sliders }, isDark.value, palette.value), { notMerge: true })
   dragged = false
   rememberRange()
 }
@@ -88,7 +88,7 @@ onMounted(() => {
   })
   observer.observe(element.value)
 })
-watch([() => props.option, allowExport, isDark], ([, , dark], [, , previousDark]) => renderOption(dark !== previousDark))
+watch([() => props.option, allowExport, isDark, palette], ([, , dark, color], [, , previousDark, previousColor]) => renderOption(dark !== previousDark || color !== previousColor))
 onBeforeUnmount(() => {
   observer?.disconnect()
   if (frame !== undefined) cancelAnimationFrame(frame)

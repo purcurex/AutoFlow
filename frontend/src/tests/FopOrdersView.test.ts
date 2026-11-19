@@ -411,26 +411,21 @@ describe('fulfillment order list', () => {
     expect(orders.matchesFopQueue({ ...row, allocationDocuments: [] }, queue, undefined, completed)).toBe(false)
   })
 
-  it('renders and copies every real allocation number, keeping missing numbers blank', async () => {
-    const copy = vi.fn().mockResolvedValue(undefined)
-    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: copy } })
-    const base = mockFopOrders.find(row => orders.matchesFopQueue(row, 'allocation_review'))!
-    const rows = [
-      { ...base, id: 'multiple', allocationDocument: null, allocationDocuments: [{ id: 'a1', number: 'AO-001' }, { id: 'a2', number: 'AO-002' }] },
-      { ...base, id: 'unknown', allocationDocument: null, allocationDocuments: [{ id: 'a3', number: '' }] },
-    ]
-    vi.spyOn(orders, 'getFopOrders').mockResolvedValue({ source: 'mock', items: rows, total: 2, page: 1, pageSize: 50, departments: [], refreshedAt: '', totals: { orderCount: 2, itemQuantity: 2, amountsByCurrency: [] } })
-    const { wrapper } = await setup('?queue=allocation_review', 'allocation')
-    const cells = wrapper.findAll('td[data-label="配货单号"]')
-    expect(cells[0]!.text()).toContain('AO-001')
-    expect(cells[0]!.text()).toContain('AO-002')
-    for (const number of ['AO-001', 'AO-002']) {
-      await cells[0]!.get(`button[aria-label="复制配货单号 ${number}"]`).trigger('click')
-      await flushPromises()
-      expect(copy).toHaveBeenLastCalledWith(number)
-    }
-    expect(cells[1]!.text()).toBe('—')
-    expect(cells[1]!.find('button').exists()).toBe(false)
+  it.each(['allocation', 'allocation_review'])('shows allocation numbers and own bill statuses under order identity without copy in %s', async (queue) => {
+    const base = mockFopOrders.find(row => orders.matchesFopQueue(row, queue as orders.FopOrderQueue))!
+    const rows = [{ ...base, id: 'multiple', allocationDocument: null, allocationDocuments: [
+      { id: 'a1', number: 'AO-001', rawBillStatus: 'A' as const },
+      { id: 'a2', number: 'AO-002', rawBillStatus: 'B' as const },
+    ] }]
+    vi.spyOn(orders, 'getFopOrders').mockResolvedValue({ source: 'mock', items: rows, total: 1, page: 1, pageSize: 100, departments: [], refreshedAt: '', totals: { orderCount: 1, itemQuantity: 2, amountsByCurrency: [] } })
+    const { wrapper } = await setup(`?queue=${queue}`, 'allocation')
+    const identity = wrapper.get('.order-identity')
+    expect(identity.text()).toContain('AO-001')
+    expect(identity.text()).toContain('AO-002')
+    expect(identity.text()).toContain('暂存')
+    expect(identity.text()).toContain('已提交')
+    expect(identity.find('.allocation-references button').exists()).toBe(false)
+    expect(wrapper.find('td[data-label="配货单号"]').exists()).toBe(false)
   })
 
   it('sorts procurement by actual order approval time and preserves newest receipt default and filters', async () => {

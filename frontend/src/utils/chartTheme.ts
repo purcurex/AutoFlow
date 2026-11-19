@@ -1,3 +1,4 @@
+import palettes from '@/theme/palettes.json'
 import type { EChartsCoreOption } from 'echarts/core'
 
 type ComponentOption = Record<string, any>
@@ -6,10 +7,23 @@ function mapComponents(value: any, transform: (item: ComponentOption) => Compone
   return Array.isArray(value) ? value.map(transform) : transform(value)
 }
 
-/** Theme chart chrome without touching series, formatters, filters or caller-owned options. */
-export function applyChartTheme(option: EChartsCoreOption, dark: boolean): EChartsCoreOption {
+/** Resolve shared chart colors and chrome without changing data, callbacks or caller-owned options. */
+export function applyChartTheme(option: EChartsCoreOption, dark: boolean, palette: keyof typeof palettes = 'blue'): EChartsCoreOption {
+  const tokens = palettes[palette][dark ? 'dark' : 'light']
+  // Replace only the standard comparison hues; semantic categories retain their colors.
+  const recolor = (value: any): any => {
+    if (typeof value === 'string') {
+      if (['#5364b8','#5465bc','#5873d4','#5566c2','#5470c6','#5368be'].includes(value.toLowerCase())) return tokens[0]
+      if (['#91a8d6','#91a7d5','#91a7d6'].includes(value.toLowerCase())) return dark ? tokens[2] : '#' + tokens[0].slice(1).match(/../g)!.map(h => Math.round(parseInt(h,16)*.45+255*.55).toString(16).padStart(2,'0')).join('')
+      return value
+    }
+    if (Array.isArray(value)) return value.map(recolor)
+    if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, recolor(item)]))
+    return value
+  }
+  option = recolor({ ...option, color: option.color ?? [tokens[0], '#37a3a3', '#c89c4d', '#8f9db1', '#b77f99'] })
   if (!dark) return option
-  const themed: EChartsCoreOption = { ...option, backgroundColor: '#141d2a', darkMode: true }
+  const themed: EChartsCoreOption = { ...option, backgroundColor: '#18222E', darkMode: true }
   const axis = (item: ComponentOption) => ({
     ...item,
     axisLabel: { ...item.axisLabel, color: '#a9b9cf' },

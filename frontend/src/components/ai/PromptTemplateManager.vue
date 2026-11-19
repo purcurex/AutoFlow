@@ -99,7 +99,7 @@ async function remove() {
       <div class="space-y-4">
         <label><span class="field-label">{{ t('settings.promptModule') }}</span><select v-model="moduleKey" class="input" @change="changeModule"><option v-for="item in catalog.modules" :key="item.moduleKey" :value="item.moduleKey">{{ t(`settings.promptModule_${item.moduleKey}`) }}</option></select></label>
         <label><span class="field-label">{{ t('settings.promptTemplate') }}</span><select :value="templateId" class="input" @change="selectTemplateFromEvent"><option v-for="item in currentModule?.templates" :key="item.id" :value="item.id">{{ item.name }}{{ item.isActive ? ` - ${t('settings.activePrompt')}` : '' }}</option></select></label>
-        <div class="flex flex-wrap gap-1.5"><code v-for="variable in catalog.variables" :key="variable" class="rounded bg-slate-100 px-2 py-1 text-[11px] text-slate-600 dark:bg-[#171b21] dark:text-slate-300">{{ formatVariable(variable) }}</code></div>
+        <div class="flex flex-wrap gap-1.5"><code v-for="variable in catalog.variables" :key="variable" class="rounded bg-slate-100 px-2 py-1 text-[11px] text-slate-600 dark:bg-[var(--color-surface)] dark:text-slate-300">{{ formatVariable(variable) }}</code></div>
       </div>
       <div class="space-y-4">
         <label><span class="field-label">{{ t('settings.promptName') }}</span><input v-model="draftName" class="input" :disabled="!canEdit" maxlength="80" /></label>

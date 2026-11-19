@@ -38,10 +38,7 @@ export async function consolidateLocalDirectory(db: DataSource, options: Consoli
     if (existing) await users.update(adminId, { ...grants, sessionVersion: () => 'session_version + 1' })
     else await users.insert({ id: adminId, email: 'admin@hzdrop.com', username: 'admin@hzdrop.com', password: await bcrypt.hash(options.password, 10), ...grants, fopTenantId: null, fopUserId: null })
     if (removedIds.length) {
-      // Preserve local notes rather than deleting unrelated work. Other restrictive
-      // business FKs intentionally abort the transaction for explicit reconciliation.
-      await manager.query('UPDATE folders SET user_id = $1 WHERE user_id = ANY($2::uuid[])', [adminId, removedIds])
-      await manager.query('UPDATE notes SET user_id = $1 WHERE user_id = ANY($2::uuid[])', [adminId, removedIds])
+      // Restrictive business FKs abort the transaction for explicit reconciliation.
       await employees.createQueryBuilder().delete().where('owner_user_id IN (:...ids)', { ids: removedIds }).execute()
       await users.delete(removedIds)
     }
