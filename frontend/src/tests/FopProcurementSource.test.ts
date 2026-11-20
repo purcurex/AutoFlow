@@ -176,10 +176,13 @@ describe('SKU procurement sources', () => {
     expect(wrapper.find('.procurement-source-summary').exists()).toBe(Boolean(expected))
     if (expected) expect(wrapper.get('.procurement-source-summary').text()).toBe(expected)
   })
-  it('keeps source controls out of sales fulfillment views', async () => {
-    const { wrapper } = await setup(source, 'review', 'sales')
-    expect(wrapper.find('.procurement-source-summary').exists()).toBe(false)
+  it.each([['review', 'sales'], ['unpaid', 'sales'], ['dispatch', 'dispatch'], ['allocation', 'allocation'], ['shipping', 'warehouse'], ['exceptions', 'sales']])('shares source quantities and details in %s without changing filters', async (queue, role) => {
+    const { wrapper } = await setup(source, queue, role)
+    expect(wrapper.get('.procurement-source-summary').text()).toBe('全款 4 · 押金 2 · 直采 4')
     expect(wrapper.find('select[aria-label="采购来源"]').exists()).toBe(false)
+    expect(wrapper.find('.product-purchase-status').exists()).toBe(false)
+    await wrapper.get('.procurement-source-summary').trigger('click')
+    expect(wrapper.get('dialog .source-demand').text()).toContain('SKU需求数量10')
   })
   it.each(['procurement', 'procurement_shipping'])('applies and clears the source filter in %s without changing main columns', async queue => {
     const { wrapper, router } = await setup(source, queue)

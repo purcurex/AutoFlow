@@ -5,6 +5,20 @@ import {randomUUID} from 'node:crypto'
 import bcrypt from 'bcrypt'
 import {prepareProductionAdmin,prepareProductionBatch} from './initialize-production.mjs'
 const enabled=/^hz_deploy_test_\d+$/.test(process.env.DB_DATABASE??'')
+test('admin bootstrap uses the six-character policy and preserves the exact bcrypt input',async()=>{
+ for(const password of ['abc123','ABC123','abc12!',' a123 ','a1'+'x'.repeat(70),'a1中'+'x'.repeat(67)]){
+  let hash
+  const client={async query(sql,params){if(sql.startsWith('INSERT INTO users'))hash=params[3];return {rows:sql.includes('pg_try_advisory_xact_lock')?[{locked:true}]:[]}}}
+  const result=await prepareProductionAdmin(client,{email:'test@example.invalid',username:'test',password,organizationName:'Test'})
+  assert.equal(result.created,true);assert.ok(await bcrypt.compare(password,hash))
+ }
+})
+test('admin bootstrap rejects invalid passwords before writing anything',async()=>{
+ const client={async query(){assert.fail('invalid password must not reach the database')}}
+ for(const password of ['', 'ab123','abcdefghijk','123456789012','a1'+'x'.repeat(71),'a1中'+'x'.repeat(68),null,123456]){
+  await assert.rejects(prepareProductionAdmin(client,{email:'test@example.invalid',username:'test',password,organizationName:'Test'}),/production_init_admin_input_invalid/)
+ }
+})
 test('production bootstrap creates admin and empty batch idempotently without fake FOP bindings',{skip:!enabled},async()=>{
  const c=new Client({host:process.env.DB_HOST,port:+process.env.DB_PORT,user:process.env.DB_USERNAME,password:process.env.DB_PASSWORD,database:process.env.DB_DATABASE});await c.connect()
  try{

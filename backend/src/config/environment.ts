@@ -1,3 +1,4 @@
+import { isValidAccountPassword, ACCOUNT_PASSWORD_MESSAGE } from '../common/account-password-policy'
 const TRUE_VALUES = new Set(['true', '1', 'yes'])
 import { workbenchMockEnabled } from '../modules/workbench-replica/workbench-mock'
 import { ConfigService } from '@nestjs/config'
@@ -53,8 +54,7 @@ export function validateEnvironment(config: Record<string, unknown>): Record<str
 
   if (enabled(config.ENABLE_ADMIN_BOOTSTRAP)) {
     requireValue(config, 'ADMIN_BOOTSTRAP_EMAIL')
-    const password = requireValue(config, 'ADMIN_BOOTSTRAP_PASSWORD')
-    if (password.length < 12) throw new Error('ADMIN_BOOTSTRAP_PASSWORD must contain at least 12 characters.')
+    if (!isValidAccountPassword(config.ADMIN_BOOTSTRAP_PASSWORD)) throw new Error(`ADMIN_BOOTSTRAP_PASSWORD: ${ACCOUNT_PASSWORD_MESSAGE}`)
   }
 
   if (enabled(config.ALIBABA_1688_ENABLED)) {

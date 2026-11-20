@@ -2,6 +2,7 @@
 <h2 id="release">01 · 交付范围与部署准备</h2>
 <p>本手册用于HyperZone智能办公平台的全新生产环境部署。交付包包含前后端编译产物、全部数据库迁移、同步worker、生产配置模板、初始化命令、参数与账号绑定清单及文件校验清单。不含测试业务数据、真实凭据、用户密码或node_modules；在目标服务器按锁文件安装生产依赖。唯一业务契约仍为《HyperZone智能办公平台项目开发需求说明书》。</p>
 <p>当前已完成安装、建库及启动演练。后续准备包括：补齐生产租户、公司/组织ID、组织编码、接口地址、集成凭据与逐人绑定信息，执行生产数据首次采集，并核验权限和业务办理功能。初始同步命令覆盖履约订单、配货单、发运单、发货通知四实体；其他业务来源按对应生产API分别采集和验证。</p>
+<p>2026-11-19密码规则专项已通过前端9项、后端25项及部署脚本7项验证；1项隔离数据库部署集成测试未启用。新包基于ae0629a及本次密码规则调整构建，未包含并行开发的业务清单变更；既有业务回归未通过项见需求说明书，未执行生产部署。</p>
 <h2 id="inputs">02 · 上线准备清单</h2>
 <table><thead><tr><th>准备事项</th><th>必须提供或确认</th><th>验收依据</th></tr></thead><tbody>
 <tr><td>生产范围</td><td>租户ID、公司/组织ID、组织编码；FOP_REPLICA与FOP_KINGDEE对应值一致。所有ID按文本保存，不能使用测试环境值。</td><td>生产配置预检＋真实身份响应核验。</td></tr>
@@ -43,10 +44,11 @@ node scripts/deployment/migrate-compiled.mjs run
 node scripts/deployment/migrate-compiled.mjs show</code></pre>
 <p>数据库先由运维创建独立空库和迁移账号；可采用现有PostgreSQL或deployment/docker-compose.postgres.yml，并填写postgres.env。DB_SYNCHRONIZE=false、DB_MIGRATIONS_RUN=false保持不变。迁移按each执行，允许并发索引在事务外创建；重复执行仅运行未应用迁移。若并发索引中断，先检查pg_index.indisvalid和迁移表，定位无效索引并由DBA修复后重试，不直接重跑全部DDL。包内schema-reference.sql仅供结构核对，禁止与迁移同时导入。</p>
 <pre><code># 初始管理员：在backend/.env中填入ADMIN_BOOTSTRAP_EMAIL、USERNAME、PASSWORD与PRODUCTION_ORGANIZATION_NAME
-# 密码至少16字符、至多72字符；ENABLE_ADMIN_BOOTSTRAP保持false
+# 密码至少6位，包含字母和数字，最多72字节；ENABLE_ADMIN_BOOTSTRAP保持false
 node scripts/deployment/initialize-production.mjs admin --execute
 # 命令成功后删除ADMIN_BOOTSTRAP_PASSWORD，保留管理员邮箱用于创建批次
 node scripts/deployment/verify-runtime.mjs</code></pre>
+<p>账号密码统一为至少6位，包含英文字母和数字，UTF-8编码长度最多72字节。不要求大小写混合或特殊符号，允许使用特殊符号。规则适用于部署初始化、注册、员工开户和密码重置；已有账号的登录密码不因规则调整而变更。</p>
 <p>管理员命令创建本地管理员和组织根节点，密码仅散列入库，不创建任何FOP身份绑定。重复命令不重置已有密码；账号冲突会拒绝执行。verify-runtime在独立端口启动验证实例，强制暂停源端调用和自动同步，只检查数据库、打包前端与HTTP安全响应；验证后退出。</p>
 <h2 id="source">05 · 生产范围、首次采集与增量启用</h2>
 <p>收到正式固定值及凭据后填写backend/.env：NODE_ENV与WORKBENCH_TIMESTAMP_ENVIRONMENT均为production；两组认证配置一致，源站必须HTTPS且与允许源站完全一致。FOP_ORGANIZATION_NUMBERS按JSON对象填写，例如{"生产公司ID":"生产组织编码"}，不是组织编码数组。填写FOP_DATA_MODE=kingdee、目录及实际办理所需已发布API，空接口留空并记录影响，不填写猜测地址。</p>

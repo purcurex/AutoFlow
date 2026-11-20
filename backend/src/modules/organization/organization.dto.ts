@@ -1,5 +1,6 @@
+import { IsAccountPassword } from '../../common/account-password-policy'
 import { Transform, Type } from 'class-transformer'
-import { ArrayMaxSize, ArrayMinSize, ArrayUnique, IsArray, IsEmail, IsIn, IsInt, IsObject, IsOptional, IsString, IsUUID, Max, MaxLength, Min, MinLength, ValidateIf, ValidateNested, ValidateBy } from 'class-validator'
+import { ArrayMaxSize, ArrayMinSize, ArrayUnique, IsArray, IsEmail, IsIn, IsInt, IsObject, IsOptional, IsString, IsUUID, Max, MaxLength, Min, MinLength, ValidateIf, ValidateNested } from 'class-validator'
 import { WORKBENCH_ROLES, WorkbenchRole } from '../users/workbench-role'
 import { UpdateFopBindingDto } from '../users/dto/fop-binding.dto'
 import { BindFopEmployeeDto } from '../fop-data/fop-employee-binding'
@@ -30,8 +31,7 @@ export class AssignOrganizationEmployeeDto {
 
 export class CreateEmployeeAccountDto {
   @Transform(trimName) @IsString() @MinLength(2) @MaxLength(50) username: string
-  @IsString() @MinLength(10) @MaxLength(72)
-  @ValidateBy({ name: 'passwordBytes', validator: { validate: value => typeof value === 'string' && Buffer.byteLength(value, 'utf8') <= 72 } }, { message: '密码 UTF-8 长度不能超过 72 字节' })
+  @IsString() @IsAccountPassword()
   password: string
   @IsOptional() @IsObject() @ValidateNested() @Type(() => UpdateFopBindingDto) fopBinding?: UpdateFopBindingDto | null
   @IsOptional() @IsObject() @ValidateNested() @Type(() => BindFopEmployeeDto) kingdeeEmployee?: BindFopEmployeeDto
@@ -64,7 +64,6 @@ export class RemoveOrganizationEmployeesDto {
 export class UpdateEmployeeAccountDto {
   @Transform(trimName) @IsString() @MinLength(2) @MaxLength(50) username: string
   @Transform(({ value }) => typeof value === 'string' ? value.trim().toLowerCase() : value) @IsEmail() @MaxLength(160) email: string
-  @ValidateIf((_o, value) => value !== undefined) @IsString() @MinLength(10) @MaxLength(72)
-  @ValidateBy({ name: 'passwordBytes', validator: { validate: value => typeof value === 'string' && Buffer.byteLength(value, 'utf8') <= 72 } }) password?: string
+  @ValidateIf((_o, value) => value !== undefined) @IsString() @IsAccountPassword() password?: string
   @IsOptional() @IsObject() @ValidateNested() @Type(() => UpdateFopBindingDto) fopBinding?: UpdateFopBindingDto | null
 }

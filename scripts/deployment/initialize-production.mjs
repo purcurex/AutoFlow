@@ -1,3 +1,4 @@
+import {isValidAccountPassword} from '../../backend/dist/src/common/account-password-policy.js'
 import {randomUUID} from 'node:crypto'
 import {resolve} from 'node:path'
 import {fileURLToPath} from 'node:url'
@@ -11,7 +12,7 @@ async function transaction(c,key,fn){
  try{const lock=(await c.query('SELECT pg_try_advisory_xact_lock(hashtextextended($1,0)) AS locked',[key])).rows[0];if(!lock.locked)throw Error('production_init_busy');const result=await fn();await c.query('COMMIT');return result}catch(error){await c.query('ROLLBACK');throw error}
 }
 export async function prepareProductionAdmin(c,{email,username,password,organizationName}){
- if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email??'')||!username?.trim()||username.length>100||!organizationName?.trim()||organizationName.length>100||typeof password!=='string'||password.length<16||password.length>72||/replace-with|待填写/.test(password))throw Error('production_init_admin_input_invalid')
+ if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email??'')||!username?.trim()||username.length>100||!organizationName?.trim()||organizationName.length>100||!isValidAccountPassword(password))throw Error('production_init_admin_input_invalid')
  email=email.trim().toLowerCase();username=username.trim()
  return transaction(c,'production-initial-administrator',async()=>{
   const existing=(await c.query('SELECT id,email,username,role,account_disabled,organization_workspace_owner_id FROM users WHERE lower(email)=$1 OR username=$2 FOR UPDATE',[email,username])).rows

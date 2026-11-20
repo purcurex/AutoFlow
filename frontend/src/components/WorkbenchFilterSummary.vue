@@ -35,8 +35,9 @@ const analysisPages = computed<Record<string, { title: string; scope: string }>>
   performance: { title: text('业绩收入与毛利', 'Revenue and profit'), scope: text('按所选业务员、收款日期及业务部门统计订单金额。', 'Order amounts by salesperson, receipt date and business department.') },
 }))
 const analysis = computed(() => analysisPages.value[props.queue])
-const queueName = computed(() => analysis.value?.title ?? (props.queue === 'completed' && isWorkbenchRole(route.params.role) ? completedNames[route.params.role][zh.value ? 0 : 1] : props.queue === 'receipt_notices' ? text('待入库清单', 'Pending inbound') : props.queue === 'rma' ? text('RMA售后清单', 'RMA after-sales') : props.queue === 'purchase_returns' ? text('采购退货清单', 'Purchase returns') : props.queue === 'stock' ? text('备货清单', 'Stock orders') : props.queue === 'stock_procurement' ? text('备货待采购清单', 'Stock procurement') : queueNames[props.queue as keyof typeof queueNames]?.[zh.value ? 0 : 1] ?? text('工作台', 'Workbench')))
+const queueName = computed(() => props.queue === 'progress' ? text('履约进度查询', 'Order progress') : analysis.value?.title ?? (props.queue === 'completed' && isWorkbenchRole(route.params.role) ? completedNames[route.params.role][zh.value ? 0 : 1] : props.queue === 'receipt_notices' ? text('待入库清单', 'Pending inbound') : props.queue === 'rma' ? text('RMA售后清单', 'RMA after-sales') : props.queue === 'purchase_returns' ? text('采购退货清单', 'Purchase returns') : props.queue === 'stock' ? text('备货清单', 'Stock orders') : props.queue === 'stock_procurement' ? text('备货待采购清单', 'Stock procurement') : queueNames[props.queue as keyof typeof queueNames]?.[zh.value ? 0 : 1] ?? text('工作台', 'Workbench')))
 const summaryParts = computed(() => {
+  if (props.queue === 'progress') return [`${text('订单编号', 'Order number')}：${val('number') || text('未输入', 'Not entered')}`]
   if (analysis.value) return [analysis.value.scope]
   const parts = [
     `${text('业务部门', 'Department')}：${val('departmentId') ? props.labels?.[val('departmentId')] ?? text('所选部门', 'Selected department') : defaultDepartmentLabel.value}`,

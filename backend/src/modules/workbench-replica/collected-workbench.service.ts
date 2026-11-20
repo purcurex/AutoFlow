@@ -1,3 +1,5 @@
+import { readInboundStockGroups } from './inbound-stock-groups'
+import { readOrderProgress } from './order-progress'
 import { purchaseLogisticsSupplier } from '../fop-data/purchase-logistics-supplier'
 import { LocalFreightDetailsDto, localFreightDetailsQuery } from './local-freight-details'
 import { timestampRuntimeStatus } from './timestamp-runtime-status'
@@ -422,6 +424,14 @@ export class CollectedWorkbenchService {
    amountBasis:registrations?null:'order_amount',timeBasis:registrations?'customer_created_at':'customer_paid_at',canExport:false,canViewDetails:false}
 
  }
+ async orderProgress(userId:string,number:string){
+  if(!this.enabled)throw new ServiceUnavailableException('Local data is not enabled')
+  if(typeof number!=='string'||!number.trim()||number.trim().length>100)throw new BadRequestException('请输入有效订单编号')
+  const c=await this.context(userId,'sales')
+  const result=await readOrderProgress(this.db,c.batch,c.filter.employeeIds,number.trim(),effectiveWorkbenchRoles(c.user))
+  if((await this.context(userId,'sales')).signature!==c.signature)throw new ConflictException('Permission or source changed; reload')
+  return result
+ }
  async businessChain(userId:string,orderId:string):Promise<Row>{
   if(!this.enabled)throw new ServiceUnavailableException('Collected business chain is not enabled')
   if(!/^[A-Za-z0-9_-]{1,100}$/.test(orderId))throw new BadRequestException('Invalid source order ID')
@@ -492,8 +502,9 @@ export class CollectedWorkbenchService {
    for(const item of resolvedItems)item.wmsCreatedAt=deliveryNoticeWmsTime(grouped.get(item.id)??[])
   }
   // Sync snapshots are internal provenance, not list fields; keep source facts intact in the database.
-  const items=query.queue==='exceptions'?resolvedItems.map(({timestampProjection,...item})=>item):['procurement','procurement_shipping'].includes(query.queue)?await withProcurementSourceDocuments(this.db,{id:c.batch.id,company_id:c.batch.company_id},resolvedItems,rows.map(row=>row.raw)) as CollectedRow[]:resolvedItems
-  if(['procurement','procurement_shipping'].includes(query.queue)&&(await this.context(userId,role,query)).signature!==c.signature)throw new ConflictException('Local permission or batch changed; reload')
+  const sourcedItems=await withProcurementSourceDocuments({query:readPageSql},{id:c.batch.id,company_id:c.batch.company_id},resolvedItems,rows.map(row=>row.raw)) as CollectedRow[]
+  const items=query.queue==='exceptions'?sourcedItems.map(({timestampProjection,...item})=>item):sourcedItems
+  if((await this.context(userId,role,query)).signature!==c.signature)throw new ConflictException('Local permission or batch changed; reload')
   return {...this.metadata(c.batch),...((nativeReady||allocationReady)?{replica:{...this.metadata(c.batch).replica,sourceSyncedAt}}:{}),...(allocationReady?{dataAvailability:{mode:'collected',complete:false,queueAvailable:true,capturedAt:allocationCapture.capturedAt,reason:'按完整履约扫描关联的有效配货单的原生齐套及审核状态展示；非一致快照，执行前仍需实时核验。'}}:{}),...(nativeReady?{dataAvailability:{mode:'collected',complete:false,queueAvailable:true,capturedAt:nativeCapture.capturedAt,coverage:'full_parent_scan',executionAvailable:false,reason:'已采集完整履约扫描关联事实，本地按当前权限分类；不代表独立单据公司全集。未知状态保留核查，缺失字段留空。'}}:{}),...(query.queue==='shipping'?{dataAvailability:{mode:'collected',complete:false,queueAvailable:true,missingFields:query.completed?['dispatchDocuments']:['shipmentInterceptStatus','dispatchDocuments'],reason:query.completed?'按本单原生已出库状态展示；缺失物流关联留空。':'按真实已齐套且已审核配货单、有效审核发运单关联展示待出库；拦截状态未知，执行仍须 FOP 实时门禁。'}}:{}),items,total:totals.total,page,pageSize,queueState:'ready',departments:localDepartments(c.org),salespeople:localSalespeople(c.org,query),shippingCountries:countries.map(row=>row.country_code),totals:{orderCount:totals.total,itemQuantity:exactNumber(totals.quantity),amountsByCurrency:[],complete:false}}
  }
  async rmaDetail(userId:string,caseId:string){
@@ -581,7 +592,9 @@ export class CollectedWorkbenchService {
   const readPage=async()=>{
    const q=collectedInboundPage(c.batch.id,c.filter.employeeIds,{...query,searchOwnerIds:c.searchOwnerIds},page,pageSize)
    const [dataRows,warehouses]=await Promise.all([this.db.query(q.sql,q.params),loadWarehouses()])
-   return {...dataRows[0],warehouses}
+   const stockIds=[...new Set<string>((dataRows[0].parcels??[]).filter((p:Row)=>p.parcel_key.startsWith('stock:')).map((p:Row)=>p.parcel_key.slice(6)))]
+   const stockGroups=await readInboundStockGroups(this.db,c.batch,stockIds,c.filter.employeeIds)
+   return {...dataRows[0],warehouses,parcels:(dataRows[0].parcels??[]).map((p:Row)=>({...p,stockGroup:stockGroups.get(p.parcel_key.slice(6))??null}))}
   }
   const cached=query.refresh===true?await readPage():await this.inboundPages.read(key,readPage)
   const warehouses=cached.warehouses,count=cached.counts,quality={unclassified:cached.unclassified},rows:Row[]=cached.rows
@@ -592,11 +605,15 @@ export class CollectedWorkbenchService {
    const lines=order.items.map((line:Row)=>({...line,purchaseQuantity:facts.get(line.id)?.purchaseQuantity??null,inboundQuantity:facts.get(line.id)?.inboundQuantity??null,pendingQuantity:facts.get(line.id)?.pendingQuantity??null,rawPurchaseStatus:facts.get(line.id)?.rawPurchaseStatus??null}))
    return {...order,number:order.orderNumber,noticeNumbers:row.notices.map((n:Row)=>n.number),status:row.status,lines,quantity:quantity(row.quantity),inboundQuantity:quantity(row.inbound_quantity),pendingQuantity:quantity(row.pending_quantity),supplier:null,logistics:receiptLogistics(row.notices),shippedAt:null,carrier:null,trackingNumber:null}
   })
-  const unclassified=Number(quality?.unclassified)||0,available=count.total>0||unclassified===0
+  const unclassified=Number(quality?.unclassified)||0,available=count.total>0||(query.view==='parcel'&&cached.parcel_total>0)||unclassified===0
   const totalQuantity=(value:unknown)=>value==null?(available?0:null):exactNumber(value)
-  const displayedItems=await this.productDisplay(c.batch.id,items,'lines')
+  const sourcedItems=await withProcurementSourceDocuments(this.db,{id:c.batch.id,company_id:c.batch.company_id},items.map(item=>({...item,items:item.lines})),rows.map(row=>row.raw))
+  const displayedItems=await this.productDisplay(c.batch.id,sourcedItems.map(item=>({...item,lines:item.items})),'lines')
+  const stockDisplays=await this.productDisplay(c.batch.id,(cached.parcels??[]).filter((p:Row)=>p.stockGroup).map((p:Row)=>p.stockGroup),'products')
+  const stockDisplayMap=new Map(stockDisplays.map((s:Row)=>[s.id,s]))
+  const parcels=(cached.parcels??[]).map((p:Row)=>({...p,stockGroup:p.stockGroup?stockDisplayMap.get(p.stockGroup.id):null}))
   if((await this.context(userId,'warehouse',query)).signature!==c.signature)throw new ConflictException('Local permission or batch changed; reload')
-  return {...this.metadata(c.batch),items:displayedItems,total:count.total,page,pageSize,view:'fulfillment',departments:localDepartments(c.org),warehouses,
+  return {...this.metadata(c.batch),items:displayedItems,parcelGroups:query.view==='parcel'?parcels.map((p:Row)=>({id:p.parcel_key,carrier:p.carrier,trackingNumber:p.tracking_number,shippedAt:receiptLogistics([{id:p.parcel_key,shippedAt:p.shipped_at}])[0]?.shippedAt??null,noticeNumbers:p.notice_numbers??[],orderIds:p.order_ids,stockGroup:p.stockGroup??undefined})):undefined,total:query.view==='parcel'?cached.parcel_total:count.total,orderTotal:count.total,page,pageSize,view:query.view==='parcel'?'parcel':'fulfillment',departments:localDepartments(c.org),warehouses,
    totals:{quantity:totalQuantity(count.quantity),inboundQuantity:totalQuantity(count.inbound_quantity),pendingQuantity:totalQuantity(count.pending_quantity)},
    dataAvailability:{mode:'collected',complete:unclassified===0,queueAvailable:available,capturedAt:capture?.capturedAt??this.metadata(c.batch).replica.sourceSyncedAt,executionAvailable:false,unclassifiedCount:unclassified,
     missingFields:unclassified?['hzkj_orders_billentry.hzkj_entrypurc_status','hzkj_orders_billentry.hzkj_purcqty','hzkj_orders_billentry.hzkj_instock_qty']:[],
@@ -711,7 +728,7 @@ export class CollectedWorkbenchService {
   if(kind==='rma')for(let i=columns.length-1;i>=0;i--)if(['productAmount','shippingFee','taxFee','discountFee'].includes(String(columns[i][1])))columns.splice(i,1)
   sheet.columns=columns.map(([header,key,width])=>({header:String(header),key:String(key),width:Number(width)}))
   const lines=wb.addWorksheet('商品明细');lines.columns=[{header:'订单号',key:'orderNumber',width:30},{header:'SKU',key:'sku',width:25},{header:'名称',key:'name',width:40},{header:'属性',key:'variant',width:35},{header:'数量',key:'quantity',width:15},{header:'图片',key:'imageUrl',width:50}]
-  const sourceExport=kind==='orders'&&['procurement','procurement_shipping'].includes(query.queue)
+  const sourceExport=kind==='orders'
   if(sourceExport)lines.columns=[...lines.columns,...[['采购来源核验','sourceState'],['SKU需求合计','sourceDemand'],['全款备货数量（SKU合计）','fullPaymentQuantity'],['押金备货数量（SKU合计）','depositQuantity'],['直接采购数量（SKU合计）','directQuantity']].map(([header,key])=>({header,key,width:25}))]
   const returnLines=kind==='returns'?wb.addWorksheet('退料明细'):undefined
   if(returnLines)returnLines.columns=[['订单号','orderNumber'],['退料单号','returnNumber'],['单据状态','billStatusName'],['供应商','supplier'],['SKU','sku'],['中文配货名','name'],['退料数量','quantity'],['原生数量','rawQuantity'],['来源单据','sourceDocumentNumber'],['备注','reason']].map(([header,key])=>({header,key,width:24}))

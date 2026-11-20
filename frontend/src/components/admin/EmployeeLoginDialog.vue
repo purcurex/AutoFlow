@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { isValidAccountPassword } from '@/utils/account-password'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getEmployeeLogin, updateEmployeeLogin, type EmployeeLogin } from '@/api/organization'
@@ -24,7 +25,7 @@ async function load() {
 async function save() {
   if (saving.value || bindingBusy.value || !loaded.value) return
   error.value = ''
-  if (draft.password && (draft.password.length < 10 || new TextEncoder().encode(draft.password).length > 72 || draft.password !== draft.confirmPassword)) { error.value = text('新密码至少10个字符、最多72字节，两次输入需一致。', 'Use a matching password of 10 or more characters and at most 72 UTF-8 bytes.'); return }
+  if (draft.password && (!isValidAccountPassword(draft.password) || draft.password !== draft.confirmPassword)) { error.value = text('新密码至少6位，包含字母和数字，最多72字节，两次输入需一致。', 'Use a matching password of at least 6 characters with letters and digits, up to 72 UTF-8 bytes.'); return }
   if (!draft.password && draft.confirmPassword) { error.value = text('请输入新密码。', 'Enter the new password.'); return }
   saving.value = true; const session = captureSession(), targetId = props.accountId
   try {
@@ -58,8 +59,8 @@ onBeforeUnmount(() => { active = false; draft.password = ''; draft.confirmPasswo
     <form id="employee-login-form" @submit.prevent="save"><fieldset :disabled="loading || saving || bindingBusy || !loaded"><div class="org-fields">
       <label><span class="field-label">{{ text('登录名称', 'Login name') }}</span><input v-model="draft.username" class="input" aria-label="登录名称" required minlength="2" maxlength="50" /></label>
       <label><span class="field-label">{{ text('登录邮箱', 'Login email') }}</span><input v-model="draft.email" class="input" aria-label="登录邮箱" type="email" required maxlength="160" /></label>
-      <label><span class="field-label">{{ text('新密码（留空不修改）', 'New password (optional)') }}</span><input v-model="draft.password" class="input" aria-label="新密码" type="password" autocomplete="new-password" maxlength="72" /></label>
-      <label><span class="field-label">{{ text('确认新密码', 'Confirm new password') }}</span><input v-model="draft.confirmPassword" class="input" aria-label="确认新密码" type="password" autocomplete="new-password" maxlength="72" /></label>
+      <label><span class="field-label">{{ text('新密码（留空不修改）', 'New password (optional)') }}</span><input v-model="draft.password" class="input" aria-label="新密码" type="password" autocomplete="new-password" minlength="6" maxlength="72" /></label>
+      <label><span class="field-label">{{ text('确认新密码', 'Confirm new password') }}</span><input v-model="draft.confirmPassword" class="input" aria-label="确认新密码" type="password" autocomplete="new-password" minlength="6" maxlength="72" /></label>
     </div><p class="mt-5 text-xs leading-6 text-slate-500">{{ text('邮箱与员工档案同步。修改密码后旧登录会话失效；角色与数据权限请在账号权限中分配。', 'Email is synchronized with the employee record. Resetting the password revokes previous sessions. Assign access on the permissions page.') }}</p></fieldset></form>
     <section v-if="loaded" class="mt-5 space-y-3 border-t pt-4" :aria-label="text('金蝶员工绑定', 'Kingdee employee binding')">
       <p class="field-label">{{ text('金蝶员工绑定', 'Kingdee employee binding') }}</p>

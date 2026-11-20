@@ -8,7 +8,7 @@ integration('native fulfillment pending inbound in PostgreSQL',()=>{
  let db:DataSource
  beforeAll(async()=>{db=new DataSource({type:'postgres',host:'127.0.0.1',port:55432,username:'autoflow_demo',database,password:readFileSync(resolve(__dirname,'../../../../.runtime/local-demo/database-password'),'utf8').trim(),synchronize:false});await db.initialize()})
  afterAll(async()=>{if(db?.isInitialized)await db.destroy()})
- const line=(id:string,state='4',purchase='10',received='0',extra={})=>({id,hzkj_entrypurc_status:state,hzkj_purcqty:purchase,hzkj_instock_qty:received,hzkj_local_sku:{number:'SKU'+id},...extra})
+ const line=(id:string,state='4',purchase='10',received='0',extra={})=>({id,hzkj_entrypurc_status:state,hzkj_purcqty:purchase,hzkj_qty:purchase,hzkj_instock_qty:received,hzkj_local_sku:{number:'SKU'+id},...extra})
  async function result(lines:any[],patch={},query={},employees=['employee']){
   const q=collectedInboundPage('batch',employees,query,1,100)
   const order={batch_id:'batch',source_id:'10',owner_employee_id:'employee',warehouse_code:'01',search_text:'to10 sku1',raw:{hzkj_purchase_status:'4',hzkj_orderstatus:'3',hzkj_orders_billentry:lines,...patch},display:{},paid_at:null,is_exception:false,exception_type:null,exception_reason:null,exception_code:null}
@@ -29,9 +29,9 @@ integration('native fulfillment pending inbound in PostgreSQL',()=>{
  })
  it('retains received/unreceived items together and excludes fully received orders',async()=>{expect(await result([line('1','3','2','2'),line('2','4','3','0')])).toMatchObject([{status:'partial',quantity:5,pending_quantity:3}]);expect(await result([line('1','3','2','2')])).toEqual([])})
  it('preserves explicit zero purchase facts in displayed lines without counting them as pending',async()=>{const [r]=await result([line('1','4','2','0'),line('2','0','0','0')]);expect(r.quantity).toBe(2);expect(r.inbound_lines.find((l:any)=>l.id==='2')).toMatchObject({purchaseQuantity:0,inboundQuantity:0,pendingQuantity:0})})
- it('uses purchase quantity, not the consumer order quantity',async()=>{expect(await result([line('1','3','8','3',{hzkj_qty:'3'})])).toMatchObject([{status:'partial',pending_quantity:5}])})
+ it('uses SKU demand even when the purchased amount is higher',async()=>{expect(await result([line('1','3','8','3',{hzkj_qty:'3'})])).toEqual([]);expect(await result([line('1','4','8','2',{hzkj_qty:'3'})])).toMatchObject([{status:'partial',quantity:3,pending_quantity:1}])})
  it('does not cancel out shortages against another SKU excess',async()=>{expect(await result([line('1','3','5','7'),line('2','4','5','3')])).toMatchObject([{status:'partial',pending_quantity:2}])})
- it('does not call an order fully received before the line received status is set',async()=>{expect(await result([line('1','4','5','5')])).toMatchObject([{status:'partial'}])})
+ it('completes at or above each physical SKU demand despite a lagging line state',async()=>{for(const received of ['5','7']){expect(await result([line('1','4','5',received)])).toEqual([]);expect(await result([line('1','3','5',received)],{},{status:'completed'})).toMatchObject([{status:'completed',pending_quantity:0}])}})
  it('excludes virtual and combination-parent rows from physical quantities',async()=>{expect(await result([line('1','4','10','0',{hzkj_local_sku:{number:'HZ000020-001'}}),line('2','4','20','0'),line('3','4','3','0',{pid:'2'})])).toMatchObject([{quantity:3,pending_quantity:3}])})
  it('does not invent zero for missing, null or invalid receipt quantities',async()=>{for(const value of [undefined,null,'','bad','-1'])expect(await result([line('1','4','10','0',{hzkj_instock_qty:value})])).toEqual([])})
  it('excludes unshipped, foreign-owner and zero-purchase records',async()=>{expect(await result([line('1','2')],{hzkj_purchase_status:'4'})).toEqual([]);expect(await result([line('1')],{}, {},['foreign'])).toEqual([]);expect(await result([line('1','4','0','0')])).toEqual([])})

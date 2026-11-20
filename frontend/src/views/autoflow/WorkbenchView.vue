@@ -7,6 +7,7 @@ import { useI18n } from 'vue-i18n'
 import { ArrowUpRight, BriefcaseBusiness, Boxes, PackageCheck, Send, Warehouse } from 'lucide-vue-next'
 import { AppLayout } from '@/components/layout'
 import FopOrdersView from './FopOrdersView.vue'
+import OrderProgressView from './OrderProgressView.vue'
 import StockOrdersView from './StockOrdersView.vue'
 import ReceiptNoticesView from './ReceiptNoticesView.vue'
 import PurchaseReturnsView from './PurchaseReturnsView.vue'
@@ -74,6 +75,7 @@ function queueLink(value: string) { return { name: 'RoleWorkbench', params: { ro
       <template v-if="allowed && role">
         <WorkbenchFilterSummary :queue="String(choice)" :labels="filterLabels" />
         <nav class="workbench-queues" :aria-label="text('工作台功能', 'Workbench functions')">
+          <RouterLink v-if="role === 'sales'" :to="queueLink('progress')" :class="{ active: choice === 'progress' }">{{ text('履约进度查询', 'Order progress') }}</RouterLink>
           <RouterLink v-if="role === 'warehouse'" :to="queueLink('receipt_notices')" :class="{ active: choice === 'receipt_notices' }">{{ text('待入库清单', 'Pending inbound') }}</RouterLink>
           <template v-for="item in workbenchQueues[role]" :key="item">
             <RouterLink v-if="role === 'sales' && item === 'exceptions'" :to="queueLink('rma')" :class="{ active: choice === 'rma' }">{{ text('RMA售后清单', 'RMA after-sales') }}</RouterLink>
@@ -88,6 +90,7 @@ function queueLink(value: string) { return { name: 'RoleWorkbench', params: { ro
         </nav>
         <div v-if="!analyticsAllowed" class="access-message" role="alert">{{ text('暂无此功能权限，请选择其他工作台功能。', 'This feature is not available for your account.') }}</div>
         <WorkbenchAnalytics v-else-if="['performance','receipts'].includes(String(choice))" :key="String(choice)" :page="String(choice)" />
+        <OrderProgressView v-else-if="choice === 'progress' && role === 'sales'" />
         <StockOrdersView v-else-if="choice === 'stock' && role === 'sales' || choice === 'stock_procurement' && role === 'procurement'" :key="`${dataRevision}-${choice}`" :procurement="role === 'procurement'" @filter-labels="updateFilterLabels" />
         <RmaOrdersView v-else-if="choice === 'rma' && role === 'sales'" :key="dataRevision" @filter-labels="updateFilterLabels" />
         <ReceiptNoticesView v-else-if="choice === 'receipt_notices' && role === 'warehouse'" :key="dataRevision" @filter-labels="updateFilterLabels" />

@@ -39,8 +39,8 @@ describe('warehouse receipt notices',()=>{
   expect(wrapper.get('.result-count').text()).toBe('—')
   expect(wrapper.text()).not.toContain('收货通知单数据尚未接入')
   expect(wrapper.text()).not.toContain('暂无符合条件')
-  expect(wrapper.get('footer').text()).toContain('采购 — 件')
-  expect(wrapper.get('footer').text()).not.toContain('采购 0 件')
+  expect(wrapper.get('footer').text()).toContain('需求 — 件')
+  expect(wrapper.get('footer').text()).not.toContain('需求 0 件')
  })
  it('renders one notice row with all products, quantities and combined logistics',async()=>{
   vi.mocked(getReceiptNotices).mockResolvedValue(page);const {wrapper,router}=await setup()
@@ -73,7 +73,7 @@ it('renders collected quantities with unknown progress explicitly marked for inv
  expect(wrapper.get('td[data-label="发货时间"]').text()).toBe('—')
  expect(wrapper.get('td[data-label="入库进度"]').text()).toBe('待核查')
  expect(wrapper.get('.product').text()).toContain('待入库 —')
- expect(wrapper.get('footer').text()).toContain('采购 6 件 · 已入库 — 件 · 待入库 — 件')
+ expect(wrapper.get('footer').text()).toContain('需求 6 件 · 已入库 — 件 · 待入库 — 件')
 })
 it('collapses three receipt source lines locally and retains each inbound quantity after expansion', async () => {
  const first=page.items[0]!

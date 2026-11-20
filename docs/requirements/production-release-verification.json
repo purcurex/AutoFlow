@@ -184,5 +184,53 @@
     "requirementsBuildAndValidation": true,
     "realProductionValidated": false,
     "note": "Earlier verification entries are historical evidence. This rebuild does not rerun production runtime, backup/restore, E2E or dependency audit. Frontend test failures remain to be resolved; unchanged manuals were retained."
+  },
+  "accountPasswordPolicy20261119": {
+    "verifiedOn": "2026-11-19",
+    "policy": {
+      "minimumCharacters": 6,
+      "requiredCharacterClasses": [
+        "ASCII letter",
+        "digit"
+      ],
+      "maximumUtf8Bytes": 72,
+      "mixedCaseRequired": false,
+      "symbolRequired": false,
+      "symbolsAllowed": true
+    },
+    "scope": [
+      "registration",
+      "employee account creation",
+      "password reset",
+      "administrator bootstrap",
+      "directory provisioning scripts",
+      "production initialization"
+    ],
+    "existingLoginPolicyChanged": false,
+    "realPasswordsChanged": false,
+    "productionDatabaseTouched": false,
+    "fopCalls": 0,
+    "verification": {
+      "frontend": {
+        "passed": 9,
+        "failed": 0
+      },
+      "backend": {
+        "passed": 25,
+        "failed": 0
+      },
+      "deploymentScripts": {
+        "passed": 7,
+        "failed": 0,
+        "skipped": 1,
+        "skipReason": "PostgreSQL bootstrap integration requires an isolated hz_deploy_test database; bcrypt and initialization SQL boundary tested using a fake database client."
+      },
+      "frontendBackendBuild": "passed",
+      "changedFilesLint": "passed"
+    },
+    "baselineFullSuite": "gitMainVerification20261119 retains earlier unrelated failing tests; this change uses targeted verification, not a new full-suite result.",
+    "packageVersion": "20261119-password-policy.1",
+    "packageSource": "ae0629a08590862602c4a89e5d4c13c66d257d02 plus account password changes; excludes concurrent business-list changes",
+    "productionLiveValidated": false
   }
 }

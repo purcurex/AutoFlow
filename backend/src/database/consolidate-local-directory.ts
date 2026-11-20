@@ -1,3 +1,4 @@
+import { isValidAccountPassword } from '../common/account-password-policy'
 import { randomUUID } from 'crypto'
 import { mkdir, writeFile } from 'fs/promises'
 import { join } from 'path'
@@ -13,7 +14,7 @@ export async function consolidateLocalDirectory(db: DataSource, options: Consoli
   const connection = db.options as { host?: string; database?: string }
   if (!['localhost', '127.0.0.1'].includes(connection.host ?? '') || !['autoflow_local_demo', 'autoflow_test'].includes(connection.database ?? '')) throw new Error('账号清理仅支持明确的本机开发/测试数据库')
   if (!options.keepEmails.length || options.removeEmails.some(email => options.keepEmails.includes(email) || email === 'admin@hzdrop.com')) throw new Error('保留与删除账号列表冲突')
-  if (options.password.length < 10 || Buffer.byteLength(options.password) > 72) throw new Error('初始密码长度无效')
+  if (!isValidAccountPassword(options.password)) throw new Error('初始密码长度无效')
   return db.transaction(async manager => {
     await manager.query("SELECT pg_advisory_xact_lock(hashtextextended('autoflow:management-roles', 0))")
     const users = manager.getRepository(User), employees = manager.getRepository(OrganizationEmployeeEntity)

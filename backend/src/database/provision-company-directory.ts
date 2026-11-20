@@ -1,3 +1,4 @@
+import { isValidAccountPassword } from '../common/account-password-policy'
 import { randomUUID } from 'crypto'
 import { mkdir, writeFile } from 'fs/promises'
 import { join } from 'path'
@@ -15,7 +16,7 @@ export async function provisionCompanyDirectory(db: DataSource, members: Directo
   const ownerEmail = options.ownerEmail ?? 'ethan@hzdrop.com'
   const ownerMember = members.find(member => member.email === ownerEmail)
   if (!ownerMember || directoryPolicy(ownerMember).role !== 'admin' || ownerMember.disabled) throw new Error('公司目录所有者必须是本批启用的指定管理员')
-  if (options.apply && (!options.password || options.password.length < 10 || Buffer.byteLength(options.password) > 72 || !options.backupDirectory)) throw new Error('执行需要10字符以上初始密码及备份目录')
+  if (options.apply && (!isValidAccountPassword(options.password) || !options.backupDirectory)) throw new Error('执行需要至少6位、包含字母和数字且不超过72字节的初始密码及备份目录')
   return db.transaction(async manager => {
     await manager.query("SELECT pg_advisory_xact_lock(hashtextextended('autoflow:management-roles', 0))")
     await manager.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [`autoflow:directory-import:${ownerEmail}`])

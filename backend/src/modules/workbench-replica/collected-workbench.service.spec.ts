@@ -7,7 +7,7 @@ function setup(){
  const user:any={id:'admin',role:'admin',sessionVersion:2}
  const users={findById:jest.fn(async()=>user)}
  const db={query:jest.fn(async(sql:string,_params?:unknown[])=>{
-  if(sql.startsWith('WITH candidates AS MATERIALIZED'))return [{total:1,quantity:null,countries:['US'],rows:[{raw:{},display:{id:'1',items:[],amount:null,currency:null}}]}]
+  if(sql.startsWith('WITH candidates AS MATERIALIZED')||sql.startsWith('WITH stock_exception_rows AS MATERIALIZED'))return [{total:1,quantity:null,countries:['US'],rows:[{raw:{},display:{id:'1',items:[],amount:null,currency:null}}]}]
   if(sql.includes('SELECT owner_user_id'))return []
   if(sql.includes('FROM hz_fop_collected_batches'))return [batch]
   if(sql.includes('FROM organization_nodes'))return []
@@ -21,11 +21,11 @@ function setup(){
  return {user,users,db,service:new CollectedWorkbenchService(db as any,users as any,config)}
 }
 describe('collected local reads',()=>{
- it('rechecks authorization after procurement source document enrichment',async()=>{
+ it.each(['procurement_shipping','review','exceptions'])('rechecks authorization after %s source document enrichment',async(queue)=>{
   const {service,user}=setup(),b=batch as any
   b.metadata={entityCaptures:{procurement:{coverage:'full_parent_scan'}}}
   const enrichment=jest.spyOn(sourceDocuments,'withProcurementSourceDocuments').mockImplementation(async(_db,_batch,orders)=>{user.accountDisabled=true;return orders})
-  try{await expect(service.orders('admin',{queue:'procurement_shipping'},'procurement')).rejects.toThrow();expect(enrichment).toHaveBeenCalledTimes(1)}
+  try{await expect(service.orders('admin',{queue},queue==='procurement_shipping'?'procurement':'sales')).rejects.toThrow();expect(enrichment).toHaveBeenCalledTimes(1)}
   finally{enrichment.mockRestore();delete b.metadata}
  })
  it.each(['rma','review'])('blocks stale ordinary-user ownership for %s after captured reassignment',async queue=>{
@@ -156,7 +156,7 @@ it.each(['dispatch','shipping'])('exports %s actual logistics with typed trackin
 it.each([1,2])('uses the captured fulfillment actual Chinese channel without guessing across %s dispatch groups',async count=>{
  const {service,db}=setup();const original=db.query.getMockImplementation()!
  db.query.mockImplementation(async(sql,params)=>{
-  if(sql.startsWith('WITH candidates AS MATERIALIZED'))return [{total:1,quantity:null,countries:[],rows:[{raw:{hzkj_logistics_channel:{name:'云途德国专线',number:'YT-DE'}},display:{id:'1',items:[],logisticsInfo:Array.from({length:count},(_,i)=>({channelName:null,trackingNumbers:[{type:'full',number:'00'+i}]}))}}]}] as any
+  if(sql.startsWith('WITH candidates AS MATERIALIZED')||sql.startsWith('WITH stock_exception_rows AS MATERIALIZED'))return [{total:1,quantity:null,countries:[],rows:[{raw:{hzkj_logistics_channel:{name:'云途德国专线',number:'YT-DE'}},display:{id:'1',items:[],logisticsInfo:Array.from({length:count},(_,i)=>({channelName:null,trackingNumbers:[{type:'full',number:'00'+i}]}))}}]}] as any
   return original(sql,params)
  })
  const result=await service.orders('admin',{queue:'dispatch',completed:true},'dispatch')
@@ -325,7 +325,7 @@ describe('pending inbound local cache freshness',()=>{
  function inbound(){
   const x=setup(),original=x.db.query.getMockImplementation()!
   x.db.query.mockImplementation(async(sql,params)=>{
-   if(sql.startsWith('WITH candidates AS MATERIALIZED'))return [{counts:{total:0,quantity:null,inbound_quantity:null,pending_quantity:null},unclassified:0,rows:[]}] as any
+   if(sql.startsWith('WITH candidates AS MATERIALIZED')||sql.startsWith('WITH stock_exception_rows AS MATERIALIZED'))return [{counts:{total:0,quantity:null,inbound_quantity:null,pending_quantity:null},unclassified:0,rows:[]}] as any
    if(sql.includes('SELECT CASE warehouse_code'))return [] as any
    return original(sql,params)
   })

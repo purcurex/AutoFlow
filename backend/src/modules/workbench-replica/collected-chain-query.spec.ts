@@ -16,5 +16,5 @@ it('returns only projected relation fields with explicit incomplete provenance',
  const db={query:jest.fn().mockResolvedValue([row()])},result=await readCollectedChain(db,batch,['staff'],'1')
  expect(result.dataAvailability).toMatchObject({complete:false,sourceVersionsVerified:false,executionAvailable:false})
  expect(db.query.mock.calls[0][0]).toContain('f.owner_employee_id=ANY($3::text[])')
- expect(db.query.mock.calls[0][0]).not.toContain('payload')
+ expect(db.query.mock.calls[0][0]).not.toContain("'payload',")
 })

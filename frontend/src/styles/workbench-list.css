@@ -73,3 +73,9 @@ table[data-task-layout="compact"] :is(.product,.stock-product,.rma-product) { ga
 
 /* Page selection shares the first-column checkbox treatment across workbenches. */
 input.workbench-page-checkbox{width:15px;height:15px;min-width:15px;margin:0 7px 0 0;padding:0;vertical-align:middle;accent-color:#8398c9;cursor:pointer}input.workbench-page-checkbox:disabled{cursor:default}
+
+/* One rounded focus indicator for all task-list search controls. */
+.workbench-search-field{transition:border-color .15s,box-shadow .15s}
+.workbench-search-field:focus-within{border-color:color-mix(in srgb,var(--color-link) 55%,var(--color-border));box-shadow:0 0 0 2px color-mix(in srgb,var(--color-link) 10%,transparent)}
+.workbench-search-field input:focus,.workbench-search-field input:focus-visible{outline:none;box-shadow:none}
+@media(forced-colors:active){.workbench-search-field:focus-within{outline:2px solid Highlight;outline-offset:2px}}

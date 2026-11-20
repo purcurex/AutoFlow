@@ -1,3 +1,4 @@
+import { isValidAccountPassword } from '../common/account-password-policy'
 import { randomUUID } from 'crypto'
 import * as bcrypt from 'bcrypt'
 import { DataSource } from 'typeorm'
@@ -77,7 +78,7 @@ export async function provisionLocalRoleAccounts(db: DataSource, options: LocalR
         throw new Error(`测试身份冲突，未修改任何账号：${definition.email}`)
       }
       const password = options.passwords?.[definition.email]
-      if (options.apply && !account && (!password || password.length < 16 || Buffer.byteLength(password) > 72)) {
+      if (options.apply && !account && (!isValidAccountPassword(password))) {
         throw new Error(`缺少符合要求的独立测试口令：${definition.email}`)
       }
       plan.push({ definition, departmentId, account, employee, accountId: account?.id ?? randomUUID(), employeeId: employee?.id ?? randomUUID() })

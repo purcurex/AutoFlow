@@ -18,7 +18,7 @@ export async function buildProductionPackage({root=rootDefault,version,sourceRev
  const workers=JSON.parse(readFileSync(join(root,'scripts/deployment/sync-worker-files.json'),'utf8'))
  if(!Array.isArray(workers)||workers.some(f=>!/^[-a-z]+\.mjs$/.test(f)))throw Error('package_invalid_worker_manifest')
  fixed.push('scripts/deployment/sync-worker-files.json',...workers.map(f=>'scripts/'+f))
- for(const p of [...fixed,'backend/dist/src/main.js','backend/dist/public/index.html','backend/dist/src/database/migrations','backend/dist/src/modules/workbench-replica/timestamp-postgres.js'])if(!existsSync(join(root,p)))throw Error('package_missing_'+p)
+ for(const p of [...fixed,'backend/dist/src/common/account-password-policy.js','backend/dist/src/main.js','backend/dist/public/index.html','backend/dist/src/database/migrations','backend/dist/src/modules/workbench-replica/timestamp-postgres.js'])if(!existsSync(join(root,p)))throw Error('package_missing_'+p)
  const sourceFiles=[...fixed,...optionalFiles.filter(p=>existsSync(join(root,p))),...walk(join(root,'backend/dist')).map(p=>relative(root,p).replaceAll('\\','/')).filter(compiledAllowed)]
  mkdirSync(directory,{recursive:true})
  for(const p of new Set(sourceFiles)){if(lstatSync(join(root,p)).isSymbolicLink())throw Error('package_symlink_forbidden');mkdirSync(dirname(join(directory,p)),{recursive:true});cpSync(join(root,p),join(directory,p))}

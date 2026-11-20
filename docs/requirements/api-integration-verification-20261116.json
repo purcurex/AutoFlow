@@ -17008,5 +17008,228 @@
     "fullSuitePassed": false,
     "notes": "保留未通过测试事实；本次提交未修改相关业务规则或移除失败断言。跳过用例计数按测试报告保留。",
     "evidenceDirectory": ".runtime/git-main-20261119"
+  },
+  "accountPasswordPolicy20261119": {
+    "verifiedOn": "2026-11-19",
+    "policy": {
+      "minimumCharacters": 6,
+      "requiredCharacterClasses": [
+        "ASCII letter",
+        "digit"
+      ],
+      "maximumUtf8Bytes": 72,
+      "mixedCaseRequired": false,
+      "symbolRequired": false,
+      "symbolsAllowed": true
+    },
+    "scope": [
+      "registration",
+      "employee account creation",
+      "password reset",
+      "administrator bootstrap",
+      "directory provisioning scripts",
+      "production initialization"
+    ],
+    "existingLoginPolicyChanged": false,
+    "realPasswordsChanged": false,
+    "productionDatabaseTouched": false,
+    "fopCalls": 0,
+    "verification": {
+      "frontend": {
+        "passed": 9,
+        "failed": 0
+      },
+      "backend": {
+        "passed": 25,
+        "failed": 0
+      },
+      "deploymentScripts": {
+        "passed": 7,
+        "failed": 0,
+        "skipped": 1,
+        "skipReason": "PostgreSQL bootstrap integration requires an isolated hz_deploy_test database; bcrypt and initialization SQL boundary tested using a fake database client."
+      },
+      "frontendBackendBuild": "passed",
+      "changedFilesLint": "passed"
+    },
+    "baselineFullSuite": "gitMainVerification20261119 retains earlier unrelated failing tests; this change uses targeted verification, not a new full-suite result.",
+    "packageVersion": "20261119-password-policy.1",
+    "packageSource": "ae0629a08590862602c4a89e5d4c13c66d257d02 plus account password changes; excludes concurrent business-list changes",
+    "productionLiveValidated": false
+  },
+  "warehouseInboundDemandAndOutboundLayout20261119": {
+    "status": "implemented-current-collected-mode",
+    "scope": [
+      "待入库逐实物SKU按订单需求数量判断完成，入库量>=需求量",
+      "超收不跨SKU抵扣；虚拟商品和组合父件不重复统计",
+      "待出库移除客户名称列、保留店铺、出库状态置于订单编号下；保留排序"
+    ],
+    "sourceFields": {
+      "demand": "hzkj_qty",
+      "received": "hzkj_instock_qty",
+      "purchaseDisplayOnly": "hzkj_purcqty"
+    },
+    "localDataCheck": [
+      {
+        "batch": "ce79b730-2b01-4f12-8cce-8696c538285b",
+        "counts": [
+          {
+            "status": "completed",
+            "count": 10258
+          },
+          {
+            "status": "partial",
+            "count": 195
+          },
+          {
+            "status": "unknown",
+            "count": 8
+          },
+          {
+            "status": "pending",
+            "count": 572
+          }
+        ],
+        "overReceipt": [
+          {
+            "status": "completed",
+            "count": 162
+          },
+          {
+            "status": "partial",
+            "count": 7
+          }
+        ]
+      }
+    ],
+    "browser": {
+      "viewport": "2560x1440",
+      "theme": "purple/light",
+      "pendingInboundTotal": 767,
+      "outboundHeadersChecked": true,
+      "screenshots": [
+        ".runtime/warehouse-20261119/pending-inbound-wide.png",
+        ".runtime/warehouse-20261119/pending-outbound-wide.png"
+      ]
+    },
+    "validation": {
+      "backendTargetedPassed": 17,
+      "frontendTargetedPassed": 25,
+      "frontendTargetedSkipped": 184,
+      "frontendBroaderPassed": 200,
+      "frontendBroaderFailed": 9,
+      "frontendBroaderFailureScope": "审核交互、配货状态与采购明细状态显示，未在本轮逐项修复；详情保留于frontend-tests.log",
+      "backendBuild": "passed",
+      "frontendBuild": "passed",
+      "evidenceDirectory": ".runtime/warehouse-20261119"
+    },
+    "runtimeApplied": true,
+    "manualFopCalls": 0,
+    "businessDatabaseWrites": false,
+    "databaseMigration": false,
+    "limitations": [
+      "正式副本模式待入库对齐仍属L03，不因当前collected规则修复视为已验收。"
+    ]
+  },
+  "receiptColumnLayout20261119": {
+    "status": "implemented",
+    "scope": "仅待入库清单启用专用列宽及局部对齐",
+    "tests": {
+      "command": "npx vitest run src/tests/task-table-layout.test.ts src/tests/ReceiptNoticesView.test.ts --root frontend",
+      "passed": 25
+    },
+    "visual": {
+      "theme": "purple/light",
+      "wide": "2560x1440",
+      "wideProductWidth": 632,
+      "laptop": "1440x900",
+      "laptopProductWidth": 319.5,
+      "laptopTableWidth": 1315,
+      "laptopPageOverflow": false,
+      "screenshots": [
+        ".runtime/inbound-layout-20261119/wide.png",
+        ".runtime/inbound-layout-20261119/laptop.png"
+      ]
+    },
+    "evidenceDirectory": ".runtime/inbound-layout-20261119",
+    "businessRulesChanged": false,
+    "manualFopCalls": 0,
+    "frontendBuild": "passed"
+  },
+  "completedProductSummary20261119": {
+    "status": "implemented",
+    "scope": "仓库已出库清单商品栏重复汇总隐藏，保留首列汇总及展开收起",
+    "frontendTestsPassed": 12,
+    "frontendBuild": "passed",
+    "browserVerification": {
+      "order": "TO261109049436",
+      "identitySummary": "4 款商品 · 9 件",
+      "expandedProducts": 4,
+      "duplicateSummaryCount": 0,
+      "viewport": "2560x1440",
+      "theme": "purple/light",
+      "screenshot": ".runtime/completed-product-summary-20261119/wide.png"
+    },
+    "evidenceDirectory": ".runtime/completed-product-summary-20261119",
+    "manualFopCalls": 0
+  },
+  "allQueueProductInfo20261119": {
+    "status": "implemented",
+    "confirmedScope": "商品栏统一采购来源及数量；保留整单采购进度、备货原生采购状态及筛选逻辑",
+    "summaryDeduplication": [
+      "通用履约清单",
+      "销售及采购备货",
+      "待入库履约清单",
+      "采购退货",
+      "RMA售后"
+    ],
+    "summaryRetained": "采购单展开关联履约明细首列没有商品数量汇总；单个虚拟商品且首列无汇总时保留商品栏汇总",
+    "sourceDisplay": [
+      "销售履约清单",
+      "发运履约清单",
+      "采购履约清单",
+      "配货履约清单",
+      "仓库履约清单",
+      "履约维度待入库"
+    ],
+    "sourceRules": "复用现有订单+SKU耗用投影和三类数量，同SKU仅首行展示；不改变来源计算、阶段、筛选及原生状态；无来源不默认直采",
+    "localRead": "当前页批量查询相关采购及备货单号，返回前重新校验权限；采购和仓库通用列表复用本地短缓存，无来源的页面不增加单据查询",
+    "verification": {
+      "frontendSuitesPassed": 133,
+      "frontendStatusCasesPassed": 10,
+      "backendCasesPassed": 97,
+      "backendBuild": "passed",
+      "frontendBuild": "passed",
+      "warehouseOrder": "TO261109049436",
+      "expandedSources": [
+        "全款 1",
+        "全款 4",
+        "全款 4"
+      ],
+      "sourcePurchaseDocument": "CGDD20261020000072",
+      "sourceStockDocument": "IO20261020000002",
+      "inboundRows": 100,
+      "inboundDuplicateSummaryCount": 0,
+      "warehouseDuplicateSummaryCount": 0,
+      "viewport": "2560x1440",
+      "theme": "purple/light",
+      "salesSameOrderSource": "全款 1",
+      "salesDuplicateSummaryCount": 0
+    },
+    "evidenceDirectory": ".runtime/all-queue-product-info-20261119",
+    "screenshots": [
+      ".runtime/all-queue-product-info-20261119/warehouse-wide.png",
+      ".runtime/all-queue-product-info-20261119/warehouse-source-detail.png",
+      ".runtime/all-queue-product-info-20261119/inbound-wide.png",
+      ".runtime/all-queue-product-info-20261119/sales-wide.png"
+    ],
+    "manualFopCalls": 0,
+    "databaseMigration": false,
+    "businessDatabaseWrites": false,
+    "runtimeApplied": true,
+    "limitations": [
+      "未审核履约当前无有效采购来源投影时不推算三类数量；沿用原接入口径。",
+      "真实耗用样本尚无押金与混合来源，专项测试覆盖两类，不描述为真实联调。"
+    ]
   }
 }

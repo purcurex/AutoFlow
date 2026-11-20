@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { isValidAccountPassword } from '@/utils/account-password'
 import type { FopEmployeeSelection } from '@/api/fop-access'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, useId, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -45,7 +46,7 @@ async function save() {
   error.value = ''
   if (!draft.name.trim() || !draft.code.trim() || !draft.email.trim() || !departments.value.some(node => node.id === draft.departmentId)) { error.value = text('请填写员工信息并选择所属部门。', 'Complete the employee details and choose a department.'); return }
   if (createLogin.value) {
-    if (draft.username.trim().length < 2 || draft.password.length < 10 || new TextEncoder().encode(draft.password).length > 72) { error.value = text('登录名称至少2个字符；初始密码至少10个字符，UTF-8长度不超过72字节。', 'Use at least 2 characters for the login name and 10 characters for the password (up to 72 UTF-8 bytes).'); return }
+    if (draft.username.trim().length < 2 || !isValidAccountPassword(draft.password)) { error.value = text('登录名称至少2个字符；初始密码至少6位，包含字母和数字，UTF-8长度不超过72字节。', 'Use at least 2 characters for the login name and 6 characters with letters and digits for the password (up to 72 UTF-8 bytes).'); return }
     if (draft.password !== draft.confirmPassword) { error.value = text('两次密码不一致，请重新输入。', 'The passwords do not match.'); return }
     if (bindFop.value && !kingdeeEmployee.value) { error.value = text('请选择对应的金蝶员工。', 'Choose the corresponding Kingdee employee.'); return }
   }
@@ -116,7 +117,7 @@ onBeforeUnmount(() => { active = false; clearPasswords(); off(); disposeDropdown
           <template v-if="createLogin">
             <p class="employee-note">{{ text('默认外贸业务员，仅查看本人业务。角色在“账号与权限”中调整。', 'Defaults to Sales representative with own-record access. Manage roles in Accounts & access.') }}</p>
             <label class="block mb-4"><span class="field-label">{{ text('登录名称', 'Login name') }}</span><input v-model="draft.username" class="input" :aria-label="text('登录名称', 'Login name')" minlength="2" maxlength="50" autocomplete="off" required /></label>
-            <div class="employee-fields"><label><span class="field-label">{{ text('初始密码', 'Initial password') }}</span><input v-model="draft.password" type="password" class="input" :aria-label="text('初始密码', 'Initial password')" minlength="10" maxlength="72" autocomplete="new-password" required /></label><label><span class="field-label">{{ text('确认初始密码', 'Confirm initial password') }}</span><input v-model="draft.confirmPassword" type="password" class="input" :aria-label="text('确认初始密码', 'Confirm initial password')" minlength="10" maxlength="72" autocomplete="new-password" required /></label></div>
+            <div class="employee-fields"><label><span class="field-label">{{ text('初始密码', 'Initial password') }}</span><input v-model="draft.password" type="password" class="input" :aria-label="text('初始密码', 'Initial password')" minlength="6" maxlength="72" autocomplete="new-password" required /></label><label><span class="field-label">{{ text('确认初始密码', 'Confirm initial password') }}</span><input v-model="draft.confirmPassword" type="password" class="input" :aria-label="text('确认初始密码', 'Confirm initial password')" minlength="6" maxlength="72" autocomplete="new-password" required /></label></div>
             <label class="employee-check mt-5"><input v-model="bindFop" type="checkbox" :aria-label="text('同时绑定金蝶员工', 'Link Kingdee employee now')" />{{ text('同时绑定金蝶员工', 'Link Kingdee employee now') }}<span class="text-xs text-slate-400">{{ text('可稍后设置', 'Optional') }}</span></label>
             <KingdeeEmployeePicker v-if="bindFop" v-model="kingdeeEmployee" class="mt-4" :disabled="saving" @busy="bindingBusy = $event" />
             <p class="employee-note">{{ text('选择金蝶已有员工，保存时验证身份及账号状态。账号权限仍需单独分配。', 'Choose an existing Kingdee employee. Identity and account status are verified before saving. Assign account access separately.') }}</p>

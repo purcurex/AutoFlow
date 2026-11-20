@@ -1,3 +1,4 @@
+import { IsAccountPassword } from '../../../common/account-password-policy'
 import { IsEmail, IsString, MinLength, IsNotEmpty, Length, Matches, MaxLength } from 'class-validator'
 
 export class SendCodeDto {
@@ -15,8 +16,7 @@ export class RegisterDto {
   username: string
 
   @IsString()
-  @MinLength(10)
-  @MaxLength(72)
+  @IsAccountPassword()
   password: string
 
   @IsString()

@@ -35,6 +35,12 @@ import { LocalFreightQueryDto } from '../workbench-replica/local-freight'
 export class WorkbenchController {
   constructor(private readonly access: WorkbenchAccessService, private readonly collected: CollectedWorkbenchService) {}
 
+  @Get('order-progress')
+  @Header('Cache-Control', 'private, no-store')
+  getOrderProgress(@Request() req: ExpressRequest, @Query('number') number: string) {
+    return this.collected.orderProgress(req.user!.userId, number)
+  }
+
   @Get('orders/:orderId/business-chain')
   @Header('Cache-Control', 'private, no-store')
   getBusinessChain(@Request() req: ExpressRequest, @Param('orderId') orderId: string) {

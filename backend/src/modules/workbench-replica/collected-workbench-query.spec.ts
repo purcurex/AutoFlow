@@ -108,3 +108,13 @@ describe('approval document status filter', () => {
   expect(result.params).toEqual(['batch','B'])
  })
 })
+
+it('searches captured logistics fields without relying on legacy search indexes',()=>{
+ const q=collectedWhere('batch',['employee'],{queue:'review',search:'HZ%_channel',searchOwnerIds:['employee']})
+ expect(q.where).toContain("display->>'customLogisticsChannelName'")
+ expect(q.where).toContain("display->'logisticsInfo'")
+ expect(q.where).toContain("display->>'carrier'")
+ expect(q.params).toContain('%hz\\%\\_channel%')
+ expect(q.where).not.toContain('HZ%_channel')
+ expect(q.where).toContain('owner_employee_id = ANY')
+})

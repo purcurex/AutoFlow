@@ -67,7 +67,10 @@ export function collectedWhere(batchId:string,employeeIds:readonly string[]|null
   clauses.push(['procurement','procurement_shipping'].includes(q.queue)&&field[q.procurementSource]?`EXISTS(SELECT 1 FROM jsonb_array_elements(coalesce(display->'procurementSources'->'items','[]'::jsonb)) source WHERE source->>'complete'='true' AND CASE WHEN source->>'${field[q.procurementSource]}' ~ '^[0-9]+([.][0-9]+)?$' THEN (source->>'${field[q.procurementSource]}')::numeric>0 ELSE false END)`:'FALSE')
  }
  const like=(v:string)=>`%${v.toLowerCase().replace(/[\\%_]/g,'\\$&')}%`
- if(q.search?.trim())clauses.push(`search_text LIKE ${bind(like(q.search.trim()))}${q.searchOwnerIds?.length?` OR owner_employee_id = ANY(${bind(q.searchOwnerIds)}::text[])`:''}`)
+ if(q.search?.trim()){
+  const term=bind(like(q.search.trim()))
+  clauses.push(`search_text LIKE ${term} OR lower(concat_ws(' ',display->>'customLogisticsChannelName',display->>'carrier',display->>'carrierCode',(SELECT string_agg(concat_ws(' ',v->>'name',v->>'code'),' ') FROM jsonb_array_elements(CASE WHEN jsonb_typeof(display->'logisticsChannels')='array' THEN display->'logisticsChannels' ELSE '[]'::jsonb END) v),(SELECT string_agg(concat_ws(' ',v->>'carrierName',v->>'channelName',v->>'channelCode'),' ') FROM jsonb_array_elements(CASE WHEN jsonb_typeof(display->'logisticsInfo')='array' THEN display->'logisticsInfo' ELSE '[]'::jsonb END) v))) LIKE ${term}${q.searchOwnerIds?.length?` OR owner_employee_id = ANY(${bind(q.searchOwnerIds)}::text[])`:''}`)
+ }
  if(q.orderNumber?.trim())clauses.push(`lower(order_number) LIKE ${bind(like(q.orderNumber.trim()))}`)
  if(q.shippingCountryCode)clauses.push(`country_code = ${bind(q.shippingCountryCode)}`)
  if(q.warehouseCode)clauses.push(`warehouse_code = ANY(${bind(warehouseCodes(q.warehouseCode))}::text[])`)

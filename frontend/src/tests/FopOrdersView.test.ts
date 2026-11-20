@@ -46,6 +46,17 @@ vi.mock('@/api/index', () => ({ default: { get: vi.fn(async (_path, { params: qu
 }) } }))
 
 describe('fulfillment order list', () => {
+  it('places outbound status beneath the order number and removes only the customer name column in pending outbound',async()=>{
+    const {wrapper}=await setup('?queue=shipping','warehouse')
+    expect(wrapper.find('th').exists()).toBe(true)
+    expect(wrapper.findAll('thead th').map(th=>th.text())).not.toContain('客户名称')
+    expect(wrapper.findAll('thead th').map(th=>th.text())).not.toContain('出库进度')
+    expect(wrapper.findAll('thead th').map(th=>th.text())).toContain('店铺')
+    expect(wrapper.find('.order-identity .identity-outbound-status').exists()).toBe(true)
+    const count=wrapper.findAll('thead th').length
+    expect(wrapper.get('tbody tr.order-record').findAll('td')).toHaveLength(count)
+  })
+
   it('shows the locally supplied order remark in pending sales review', async () => {
     const order = { ...mockFopOrders.find(o => orders.matchesFopQueue(o, 'review'))!, orderRemark: '请合并包装，注意防潮' }
     vi.spyOn(orders, 'getFopOrders').mockResolvedValue({ source: 'fop', items: [order], total: 1, page: 1, pageSize: 100, totals: { orderCount: 1, itemQuantity: null, amountsByCurrency: [] }, departments: [], refreshedAt: new Date().toISOString() } as orders.FopQueuePage)
@@ -564,7 +575,7 @@ describe('fulfillment order list', () => {
     vi.spyOn(orders, 'getFopOrders').mockResolvedValue({ source: 'mock', refreshedAt: new Date().toISOString(), departments: [], items: [row], total: 1, page: 1, pageSize: 50, totals: { orderCount: 1, itemQuantity: 1, amountsByCurrency: [] } })
     const { wrapper } = await setup(query, role)
     const headings = wrapper.findAll('thead th').map(cell => cell.text())
-    if(role==='warehouse') expect(wrapper.get('td[data-label="出库状态"]').text()).toBe(query.includes('completed')?'已出库':'部分出库')
+    if(role==='warehouse') expect(wrapper.get(query.includes('completed') ? 'td[data-label="出库状态"]' : '.order-identity .identity-outbound-status').text()).toBe(query.includes('completed')?'已出库':'部分出库')
     expect(headings).toContain('物流渠道 / 跟踪号')
     expect(headings).not.toContain('物流商')
     expect(headings).not.toContain('跟踪号')
@@ -1354,7 +1365,7 @@ it.each([
  ['unpaid','sales'], ['review','sales'], ['exceptions','sales'],
  ['dispatch','dispatch'], ['procurement','procurement'], ['procurement_shipping','procurement'],
  ['allocation','allocation'], ['allocation_review','allocation'], ['shipping','warehouse'],
-] as const)('keeps only the applicable native line status in product cells in %s / %s',async(queue,role)=>{
+] as const)('does not repeat native purchase labels in product cells in %s / %s',async(queue,role)=>{
  const base=mockFopOrders.find(order=>orders.matchesFopQueue(order,queue))!
  expect(base).toBeDefined()
  const row:orders.FopOrder={...base,
@@ -1368,22 +1379,21 @@ it.each([
   expect(cell.text()).not.toMatch(/已支付|待支付|采购：|未采购|部分采购|待确认/)
  }
  expect(wrapper.find('.business-status-summary').exists()).toBe(false)
- expect(wrapper.find('.product-purchase-status').exists()).toBe(role==='procurement')
+ expect(wrapper.find('.product-purchase-status').exists()).toBe(false)
  if(role==='procurement') {
-  expect(wrapper.get('.product-purchase-status').text()).toBe('未采购')
   expect(wrapper.get('td.product-cell').text()).not.toMatch(/已支付|待支付|采购：|部分采购|待确认/)
  }
  expect(wrapper.find('.source-shipment-status').exists()).toBe(false)
  if(queue==='procurement' || queue==='procurement_shipping') expect(wrapper.findComponent({name:queue==='procurement'?'ProcurementStatus':'SupplierShipmentStatus'}).exists()).toBe(true)
  if(queue==='dispatch' || queue==='allocation' || queue==='allocation_review') expect(wrapper.findComponent({name:'DispatchStatus'}).exists()).toBe(true)
 })
-it('preserves separate native order purchase, line purchase and manual source statuses on completed sales rows',async()=>{
+it('preserves native order purchase and source statuses while removing the old product status on completed sales rows',async()=>{
  const row={...mockFopOrders[0]!,reviewStatus:'approved' as const,sourcePurchaseStatus:'1' as const,businessStatus:{version:1,order:'processing',purchase:'partial_received',outbound:'unknown',sourceShipment:'manual',missingFields:['lineOutboundStatus']},items:[{...mockFopOrders[0]!.items[0]!,purchaseState:'received'}]}
  vi.spyOn(orders,'getFopOrders').mockResolvedValue({source:'fop',items:[row],total:1,page:1,pageSize:50,departments:[],refreshedAt:'',totals:{orderCount:1,itemQuantity:1,amountsByCurrency:[],complete:false}})
  const {wrapper}=await setup('?queue=completed','sales')
  expect(wrapper.get('.business-status-summary').text()).toContain('处理中')
  expect(wrapper.get('.business-status-summary').text()).toContain('采购：部分采购')
- expect(wrapper.get('.product-purchase-status').text()).toBe('已入库')
+ expect(wrapper.find('.product-purchase-status').exists()).toBe(false)
  expect(wrapper.get('.source-shipment-status').text()).toBe('手工订单')
 })
 it.each([

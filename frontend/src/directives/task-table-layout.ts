@@ -42,7 +42,19 @@ export function fitTaskColumns(intrinsic: number[], labels: string[], available:
   return { widths, width, scale: Math.min(1, available / width), compact }
 }
 
-type State = { frame: number; observer?: ResizeObserver; group: HTMLTableColElement; disposed: boolean; signature?: string }
+export type TaskTableColumns = { widths: number[]; grow: number[] }
+
+export function fitConfiguredTaskColumns(intrinsic: number[], available: number, columns: TaskTableColumns) {
+  const base = columns.widths.map((width, index) => Math.max(width, intrinsic[index] ?? 0))
+  const total = base.reduce((sum, width) => sum + width, 0)
+  const extra = Math.max(0, available - total)
+  const weight = columns.grow.reduce((sum, value) => sum + value, 0) || 1
+  const widths = base.map((width, index) => width + extra * (columns.grow[index] ?? 0) / weight)
+  const width = Math.max(available, total)
+  return { widths, width, scale: Math.min(1, available / width), compact: available < 1800 }
+}
+
+type State = { config?: TaskTableColumns; frame: number; observer?: ResizeObserver; group: HTMLTableColElement; disposed: boolean; signature?: string }
 const states = new WeakMap<HTMLTableElement, State>()
 function columns(table: HTMLTableElement, state: State) {
   const count = table.tHead?.rows[0]?.cells.length ?? 0
@@ -61,7 +73,7 @@ function measure(table: HTMLTableElement, state: State) {
   }
   const available = table.parentElement.clientWidth
   if (!available) return
-  const signature = `${available}:${table.tHead.textContent}`
+  const signature = `${available}:${table.tHead.textContent}:${JSON.stringify(state.config)}`
   if (signature === state.signature) return
   state.signature = signature
   // Measure an inert clone in one layout pass. Never alter the visible table while measuring.
@@ -93,7 +105,9 @@ function measure(table: HTMLTableElement, state: State) {
     const headers = [...clone.tHead!.rows[0]!.cells]
     const labels = headers.map(cell => cell.textContent?.trim() ?? '')
     const intrinsic = headers.map(cell => Math.ceil(cell.getBoundingClientRect().width))
-    const layout = fitTaskColumns(intrinsic, labels, available)
+    const layout = state.config?.widths.length === labels.length
+      ? fitConfiguredTaskColumns(intrinsic, available, state.config)
+      : fitTaskColumns(intrinsic, labels, available)
     ;[...state.group.children].forEach((col, index) => { (col as HTMLElement).style.width = `${layout.widths[index]}px` })
     table.dataset.taskLayout = layout.compact ? 'compact' : 'wide'
     table.style.width = `${layout.width}px`
@@ -108,11 +122,11 @@ function schedule(table: HTMLTableElement) {
   if (state.frame) cancelAnimationFrame(state.frame)
   if (typeof requestAnimationFrame === 'function') state.frame = requestAnimationFrame(() => { state.frame = 0; measure(table, state) })
 }
-export const vTaskTableLayout: ObjectDirective<HTMLTableElement> = {
-  mounted(table) {
+export const vTaskTableLayout: ObjectDirective<HTMLTableElement, TaskTableColumns | undefined> = {
+  mounted(table, binding) {
     const group = document.createElement('colgroup')
     table.prepend(group)
-    const state: State = { frame: 0, group, disposed: false }
+    const state: State = { config: binding.value, frame: 0, group, disposed: false }
     states.set(table, state)
     if (typeof ResizeObserver !== 'undefined' && table.parentElement) {
       state.observer = new ResizeObserver(() => schedule(table))
@@ -121,7 +135,11 @@ export const vTaskTableLayout: ObjectDirective<HTMLTableElement> = {
     schedule(table)
     void document.fonts?.ready.then(() => { if (!state.disposed) { state.signature = undefined; schedule(table) } })
   },
-  updated: schedule,
+  updated(table, binding) {
+    const state = states.get(table)
+    if (state) state.config = binding.value
+    schedule(table)
+  },
   beforeUnmount(table) {
     const state = states.get(table)
     if (!state) return

@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { ChevronDown, ChevronRight } from 'lucide-vue-next'
 import { orderItemQuantity } from '@/api/fop-orders'
 import { isVirtualProduct, physicalProductsFirst } from '@/utils/product-display'
-const props = withDefaults(defineProps<{ items: T[]; label: string; lineCount?: number | null; totalQuantity?: number | null; expanded?: boolean }>(), { expanded: undefined })
+const props = withDefaults(defineProps<{ items: T[]; label: string; lineCount?: number | null; totalQuantity?: number | null; expanded?: boolean; showSummary?: boolean }>(), { expanded: undefined, showSummary: true })
 const emit = defineEmits<{ 'update:expanded': [value: boolean] }>()
 const { locale } = useI18n()
 const zh = computed(() => String(locale.value).startsWith('zh'))
@@ -29,7 +29,7 @@ watch(() => props.items, () => { localExpanded.value = false }, { deep: true })
     <span v-else class="product-lines-placeholder" aria-hidden="true" />
     <div :id="contentId" class="product-lines-content">
       <slot v-for="{ item, index } in visibleItems" :key="index" :item="item" :index="index" />
-      <small v-if="collapsible" class="product-lines-summary">{{ zh ? `${count} 行商品 · ${quantity ?? '—'} 件` : `${count} product lines · ${quantity ?? '—'} units` }}</small>
+      <small v-if="collapsible && showSummary" class="product-lines-summary">{{ zh ? `${count} 行商品 · ${quantity ?? '—'} 件` : `${count} product lines · ${quantity ?? '—'} units` }}</small>
     </div>
   </div>
 </template>
