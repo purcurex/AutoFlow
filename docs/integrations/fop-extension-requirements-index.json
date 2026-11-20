@@ -1,6 +1,6 @@
 {
   "document": "../requirements/HyperZone智能办公平台项目开发需求说明书.html",
-  "focus": "current-implementation-and-gaps",
+  "focus": "fop-outstanding-requirements",
   "preferredSync": "timestamp-with-reconciliation",
   "firstPhaseCapabilities": [
     "TIME_QUERY",

@@ -23,7 +23,7 @@ class Audit(HTMLParser):
 x=Audit();x.feed(s)
 assert ''.join(x.headings)==TITLE and ''.join(x.titles)==TITLE
 assert len(x.ids)==len(set(x.ids)),'Duplicate anchors'
-assert len([h for h in x.h2 if re.match(r'0[1-8] ·',h)])==8
+assert len([h for h in x.h2 if re.match(r'0[1-6] ·',h)])==6
 assert 'HyperZone 统一需求说明</h2>' in s
 for link in x.links:
  u=urlsplit(link)
@@ -44,30 +44,19 @@ assert review['asOf']=='2026-11-18' and review['scope']=='current-collected-impl
 assert review['businessCodeChanged'] is True and review['fopRequests']==0
 assert review['localOptimizationEvidence']=='api-integration-verification-20261116.json#localGapOptimization20261118'
 assert review['localDatabaseAccess']=='source-read-only; exception-projection-v7-rebuilt' and review['historicalEvidencePreserved'] is True
-scope=s.split('<div id="queue-readable-current">',1)[1].split('<h3 id="business-status-implementation">',1)[0]
-ids=re.findall(r'data-readable-scope-id="(Q\d{2})"',scope)
-assert ids==review['queueIds']==[f'Q{i:02}' for i in range(1,24)]
-assert not re.search(r'\b[ABCDGLOPS]\s*[=∈]|billstatus|hzkj_|raw_',scope),'Use business names in queue descriptions'
+# The current publication is FOP-only; historical local scope evidence remains intact.
 assert re.findall(r'data-fop-gap="(F\d{2})"',s)==review['fopGapIds']
-assert re.findall(r'data-local-gap="(L\d{2})"',s)==review['localGapIds']
-assert len(review['fopGapIds'])==10 and len(review['localGapIds'])==8
-assert len(re.findall(r'data-chart-id="[a-z_]+"',s))==6
-for marker in ['id="local-gaps"','id="queue-scope-review"','id="fop"',
- '本地已采集模式','正式副本','已接入','待验收','待提供','未关联本地SKU','C端付款时间',
- '部分履约','待制作发运单','实物退料','当前按履约订单汇总','备货收款日期待补齐',
- 'id="exception-v6-status"','未收窄范围的系统管理员','商品行ID','先裁剪权限',
- '全部展开（本页）／全部收起（本页）','默认每页100条','2560×1440',
- 'id="frontend-request-policy"','id="sync-time-policy"','id="sync-runtime-boundary"',
- 'projection=count','08:30','09:00—18:30','合计27个时点','FOP_QUERIES_PAUSED=false',
- 'WORKBENCH_AUTOMATIC_CALLS_ENABLED=true','WORKBENCH_SYNC_ENABLED=true','WORKBENCH_TIMESTAMP_SYNC_ENABLED=true',
- 'createtime','modifytime','afterTime','afterId','时间水位','最终一致','不再作为首期前置条件',
- 'canViewDetails=false','canExport=false','2026年6月1日','GET /api/workbench/analytics/dashboard']:
+assert len(review['fopGapIds'])==10
+assert 'data-local-gap=' not in s and 'data-chart-id=' not in s
+for marker in ['id="scope"','id="fop"','id="sync-api"','id="relations"','id="realtime"','id="acceptance"',
+ '待部署／授权','待核验','待开发','修改时间',
+ 'queryWorkbenchInventoryBalance','同一时间','归档','解除','已提交','幂等','全款／押金',
+ '未重新调用测试环境API','不要求包裹与耗用逐行对应','7项前端']:
  assert marker in s,marker
-# Editorial size cap catches accidental reattachment of the retired history.
-assert 10000<len(s)<85000,'Unexpected current-document size'
+assert 10000<len(s)<45000,'Unexpected FOP-only document size'
 manifest=json.loads((DEST/'build-manifest.json').read_text())
-assert manifest['focus']=='current-implementation-and-gaps' and manifest['sections']==8
-assert manifest['analyticsChapter'] and manifest['queueScopeReview'] and manifest['upstreamCalled'] is False
+assert manifest['focus']=='fop-outstanding-requirements' and manifest['sections']==6
+assert not manifest['analyticsChapter'] and not manifest['queueScopeReview'] and manifest['upstreamCalled'] is False
 assert manifest['sha256']==hashlib.sha256(P.read_bytes()).hexdigest()
 for path,digest in manifest['inputHashes'].items():
  assert hashlib.sha256((ROOT/path).read_bytes()).hexdigest()==digest,path
@@ -94,9 +83,7 @@ assert opportunity['validation']['isolatedPostgres']['passedCount']>=16
 assert opportunity['validation']['browser']['browser']['fromLeadRepeatedSameId'] is True
 assert opportunity['validation']['browser']['browser']['unsavedInputGuard'] is True
 assert all(p in manifest['inputHashes'] for p in opportunity['implementationFiles'])
-assert 'id="local-opportunities-20261118"' in s
 assert 'OPPORTUNITY_VERIFICATION_PLACEHOLDER' not in s
-assert 'FOP实际启用档案、ID及行政区划关系待提供' in s
 prevention=api['salesExceptionIncrementalPrevention20261118']
 assert prevention['ruleVersion']==7 and prevention['sourceRawAndDisplayUnchanged'] is True
 assert prevention['projectionMismatches']==0 and prevention['dirtyRowsAfterCommit']==0
@@ -112,15 +99,12 @@ assert optimization['backend']['numFailedTests']==0 and optimization['frontend']
 assert all(optimization['build'][component]=='passed' for component in ['backend','frontend'])
 assert optimization['sourceActions']['manualFopRequests']==0 and optimization['runtime']['syncFlagsChanged'] is False
 assert optimization['browser']['warehouse']['chartOrders']==optimization['browser']['warehouse']['detailOrders']
-for marker in ['id="local-gap-optimization-20261118"','GET /api/workbench/analytics/freight/details','/api/workbench/analytics/freight/export','正式副本','未切换']:
- assert marker in s,marker
 normal=api['normalApiOperation20261118']
 readiness=api['syncProductionReadiness20261118']
 assert readiness['productionDeployed'] is False and readiness['productionRequests']==0
 assert readiness['validation']['backendBuildPassed'] and readiness['validation']['isolatedRealPostgres']
 assert readiness['configuration']['sameAutomaticCredentialBundle']
 assert readiness['recovery']['failedWatermarkUnchanged'] and readiness['recovery']['deletionInference'] is False
-assert 'id="sync-production-readiness"' in s and '401／612' in s
 assert all(p in manifest['inputHashes'] for p in readiness['implementationFiles'])
 assert timestamp['localImplementation']['automaticSchedule']['productionRuntime']['liveProductionValidated'] is False
 assert normal['automaticCallsEnabled'] is True and normal['paused'] is False
@@ -145,7 +129,7 @@ with zipfile.ZipFile(package) as z:
  expected=[DEST/'production-release-verification.json',ROOT/'docs/manuals/HyperZone生产部署指导手册.html',DEST/'requirements-current-review.json',DEST/'fop-package-logistics-gap.json',DEST/'api-integration-verification-20261116.json',ROOT/'docs/openapi/fop-api-field-audit-20261116.json',ROOT/'docs/openapi/fop-query-timestamp-capabilities.json',ROOT/'docs/openapi/fop-timestamp-paged-profile.example.json',DEST/'employee-directory-verification.json',P,ROOT/'docs/openapi/fop-replica-service-contract.json',ROOT/'docs/openapi/fop-replica-domain.schema.json',ROOT/'docs/openapi/fop-timestamp-sync-contract.json',ROOT/'docs/openapi/fop-timestamp-profile.example.json',DEST/'timestamp-verification.json',DEST/'analytics-verification.json',DEST/'purchase-return-verification.json',DEST/'sales-unpaid-verification.json',DEST/'sales-review-stock-verification.json',DEST/'business-status-verification.json']
  assert set(z.namelist())=={str(p.relative_to(ROOT/'docs')) for p in expected}
  for p in expected:assert z.read(str(p.relative_to(ROOT/'docs')))==p.read_bytes(),p
-print(json.dumps({'ok':True,'sections':8,'queueViews':len(ids),'localGaps':8,'fopGaps':10,'currentRulesOnly':True,'timestampRuntimeEnabled':True,'sourceHashesVerified':True,'packageVerified':True,'upstreamCalled':False},ensure_ascii=False))
+print(json.dumps({'ok':True,'sections':6,'localNarrativesPublished':False,'fopGaps':10,'currentRulesOnly':True,'timestampRuntimeEnabled':True,'sourceHashesVerified':True,'packageVerified':True,'upstreamCalled':False},ensure_ascii=False))
 
 production=json.loads((DEST/'production-release-verification.json').read_text())
 assert production['isolatedDeploymentReady'] is True

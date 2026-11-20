@@ -5,16 +5,16 @@ const logisticsColumnWidth = 224
 
 /** Fixed identity/product columns; every other column receives the same surplus. */
 export function distributeTaskColumns(intrinsic: number[], available: number): number[] {
-  const base = intrinsic.map((width, index) => index === 0 ? 196 : index === 1 ? 340 : Math.min(280, Math.max(88, Math.ceil(width))))
+  const base = intrinsic.map((width, index) => index === 0 ? 196 : index === 1 ? 380 : Math.min(280, Math.max(88, Math.ceil(width))))
   const flexible = Math.max(0, base.length - 2)
   const extra = flexible ? Math.max(0, available - base.reduce((sum, width) => sum + width, 0)) / flexible : 0
   return base.map((width, index) => width + (index > 1 ? extra : 0))
 }
 
-/** Laptop widths are schema-based; long row values never move adjacent fields. */
+/** Content widths are bounded so unusually long values cannot dominate the table. */
 export function compactTaskColumn(label: string, index: number): number {
   if (index === 0) return /备货|Stock/i.test(label) ? 176 : 164
-  if (index === 1) return 220
+  if (index === 1) return 240
   if (/Shopify/i.test(label)) return 76
   if (/时间|日期|time|date|paid at|created at|shipped at/i.test(label)) return 124
   if (logisticsColumn.test(label)) return logisticsColumnWidth
@@ -27,19 +27,41 @@ export function compactTaskColumn(label: string, index: number): number {
   if (/操作|action/i.test(label)) return 56
   if (/原因|备注|reason|remark/i.test(label)) return 160
   if (/退货|return/i.test(label)) return 228
-  if (/状态|进度|status|progress/i.test(label)) return 118
+  if (/状态|进度|status|progress/i.test(label)) return 104
   return 104
 }
 export function fitTaskColumns(intrinsic: number[], labels: string[], available: number) {
   const compact = available < 1800
-  const base = compact
-    ? labels.map((label, index) => Math.max(compactTaskColumn(label, index), intrinsic[index] ?? 0))
-    : distributeTaskColumns(intrinsic.map((width, index) => logisticsColumn.test(labels[index] ?? '') ? Math.max(width, logisticsColumnWidth) : width), available)
-  const total = base.reduce((sum, width) => sum + width, 0)
-  const surplus = Math.max(0, available - total) / Math.max(1, base.length - 2)
-  const widths = compact ? base.map((width, index) => width + (index > 1 ? surplus : 0)) : base
+  const content = intrinsic.map(value => Math.min(280, Math.max(0, value)))
+  const minimum = labels.map((label, index) => {
+    if (index === 0) return compact ? compactTaskColumn(label, index) : 196
+    if (index === 1) return compact ? 240 : 380
+    if (/备注|remark/i.test(label)) return 240
+    return compact ? compactTaskColumn(label, index) : logisticsColumn.test(label) ? logisticsColumnWidth : 88
+  })
+  const base = minimum.map((value, index) => index < 2 ? value : Math.max(value, content[index] ?? 0))
+  const total = base.reduce((sum, value) => sum + value, 0)
+  // Water-fill the whitespace, rather than adding equal width on top of unequal
+  // schema reserves. Columns with generous minimum widths join only when needed.
+  let low = 0, high = Math.max(0, available - total) + Math.max(0, ...minimum)
+  const sumAt = (gap: number) => minimum.reduce((sum, floor, index) => sum + (index < 2 ? floor : Math.max(floor, (content[index] ?? 0) + gap)), 0)
+  if (available > total && labels.length > 2) {
+    for (let iteration = 0; iteration < 40; iteration++) {
+      const middle = (low + high) / 2
+      if (sumAt(middle) > available) high = middle
+      else low = middle
+    }
+  }
+  const widths = base.map((value, index) => index < 2 ? value : Math.max(value, (content[index] ?? 0) + low))
   const width = Math.max(available, widths.reduce((sum, value) => sum + value, 0))
   return { widths, width, scale: Math.min(1, available / width), compact }
+}
+
+/** Estimate a single displayed line at the shared 12px type size, including cell padding/icons. */
+export function boundedContentWidth(value: string): number {
+  let width = 28
+  for (const char of value.trim().slice(0, 256)) width += /[\u2e80-\uffff]/.test(char) ? 12 : /[MW@%]/.test(char) ? 10 : 7
+  return Math.min(280, Math.ceil(width))
 }
 
 export type TaskTableColumns = { widths: number[]; grow: number[] }
@@ -73,15 +95,17 @@ function measure(table: HTMLTableElement, state: State) {
   }
   const available = table.parentElement.clientWidth
   if (!available) return
-  const signature = `${available}:${table.tHead.textContent}:${JSON.stringify(state.config)}`
+  const rows = Array.from(table.tBodies).flatMap(body => Array.from(body.rows))
+    .filter(row => row.cells.length === table.tHead!.rows[0]!.cells.length && Array.from(row.cells).every(cell => cell.colSpan === 1)).slice(0, 100)
+  const content = rows.map(row => Array.from(row.cells).slice(2).map(cell => cell.innerText ?? cell.textContent ?? ''))
+  const signature = `${available}:${table.tHead.textContent}:${JSON.stringify(state.config)}:${JSON.stringify(content)}`
   if (signature === state.signature) return
   state.signature = signature
   // Measure an inert clone in one layout pass. Never alter the visible table while measuring.
   const clone = table.cloneNode(true) as HTMLTableElement
   clone.setAttribute('aria-hidden', 'true')
   clone.inert = true
-  // Column widths belong to the list schema, not to whichever rows arrive first.
-  // Long product/customer text and loading placeholders must not move the headers.
+  // Measure headings separately from bounded business text; ignore loading/colspan rows.
   clone.querySelectorAll('colgroup,tbody,tfoot').forEach(node => node.remove())
   clone.querySelectorAll('[id]').forEach(node => node.removeAttribute('id'))
   clone.removeAttribute('id')
@@ -104,7 +128,12 @@ function measure(table: HTMLTableElement, state: State) {
   try {
     const headers = [...clone.tHead!.rows[0]!.cells]
     const labels = headers.map(cell => cell.textContent?.trim() ?? '')
-    const intrinsic = headers.map(cell => Math.ceil(cell.getBoundingClientRect().width))
+    const intrinsic = headers.map((cell, index) => {
+      const headingWidth = Math.ceil(cell.getBoundingClientRect().width)
+      if (index < 2 || state.config) return headingWidth
+      const values = content.flatMap(row => (row[index - 2] ?? '').split(/\n/))
+      return Math.max(headingWidth, ...values.map(value => boundedContentWidth(value)))
+    })
     const layout = state.config?.widths.length === labels.length
       ? fitConfiguredTaskColumns(intrinsic, available, state.config)
       : fitTaskColumns(intrinsic, labels, available)

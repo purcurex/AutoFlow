@@ -36,10 +36,10 @@ function isActive(item: { match: string[] }) {
 <template>
   <aside
     class="app-sidebar fixed inset-y-0 left-0 z-40 flex shrink-0 flex-col border-r bg-white transition-all duration-200 dark:bg-[var(--color-shell)] md:relative"
-    :class="props.collapsed ? '-translate-x-full md:w-20 md:translate-x-0' : 'w-72 translate-x-0 md:w-64'"
+    :class="props.collapsed ? '-translate-x-full md:w-20 md:translate-x-0' : 'w-64 translate-x-0 md:w-[232px]'"
     style="border-color: var(--color-border)"
   >
-    <div class="flex h-[72px] items-center border-b px-4" style="border-color: var(--color-border)">
+    <div class="flex h-[60px] items-center border-b px-4" style="border-color: var(--color-border)">
       <BrandLogo :compact="props.collapsed" inverse />
     </div>
 

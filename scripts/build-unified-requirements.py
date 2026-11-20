@@ -45,9 +45,9 @@ def build():
  assert set(contract['operations'])=={x[2] for x in SERVICES}
  # Current requirements contain one normative rule per topic. Historical captures
  # stay in evidence JSON; never append obsolete conclusions back into the document.
- body=SOURCE.read_text()+ANALYTICS.read_text()
+ body=SOURCE.read_text()
  proof=json.loads(ANALYTICS_PROOF.read_text())
- body+=QUEUE_SCOPE.read_text()
+ # Local implementation narratives remain historical sources, not FOP requirements.
  css='''<style>
 .sidebar h2{font-size:15px;white-space:nowrap;letter-spacing:0}.project-subtitle{display:block;color:#c4d7e8;font-size:12px;margin-top:5px}.cover h1{font-size:30px}.cover .subtitle{font-size:16px}
 section{margin-bottom:36px}section h3{margin-top:24px}p{text-indent:2em}h1,h2,h3,summary{text-indent:0}table{table-layout:fixed;width:100%}th,td{vertical-align:top;overflow-wrap:anywhere}th:first-child,td:first-child{width:120px;white-space:nowrap;overflow-wrap:normal}code{white-space:normal;overflow-wrap:anywhere;font-size:12px}.services th:nth-child(2){width:21%}.services th:nth-child(3){width:31%}.configuration th:nth-child(2){width:40%}
@@ -63,7 +63,7 @@ section{margin-bottom:36px}section h3{margin-top:24px}p{text-indent:2em}h1,h2,h3
 </style>'''
  spec=importlib.util.spec_from_file_location('hz_theme','/Library/VSCode/.hyperzone/html-style/render_html.py')
  theme=importlib.util.module_from_spec(spec);spec.loader.exec_module(theme)
- document=theme.render(TITLE,'现行实现 · 清单取数 · 本项目缺口 · FOP待补',css+body,'现行实现核对版','2026-11-18')
+ document=theme.render(TITLE,'FOP改造需求 · 接口补充 · 源端核验 · 交付验收',css+body,'FOP待办精简版','2026-11-19')
  document=document.replace('<h2>'+TITLE+'</h2>','<h2>HyperZone 统一需求说明</h2><small class="project-subtitle">智能办公平台项目</small>',1)
  theme.validate(document);OUTPUT.write_text(document)
  inputs=[CURRENT_REVIEW,PACKAGE_LOGISTICS_PROOF,API_PROOF,API_AUDIT,TIME_CAPABILITIES,PAGED_PROFILE,EMPLOYEE_PROOF,SOURCE,CONTRACT,DOMAIN,TIMESTAMP,TIMESTAMP_PROFILE,TIMESTAMP_PROOF,ANALYTICS,QUEUE_SCOPE,ANALYTICS_PROOF,PURCHASE_RETURN_PROOF,SALES_UNPAID_PROOF,SALES_REVIEW_PROOF,BUSINESS_STATUS_PROOF,Path(__file__).resolve()]
@@ -163,12 +163,12 @@ section{margin-bottom:36px}section h3{margin-top:24px}p{text-indent:2em}h1,h2,h3
  inputs += [ROOT/p for p in review['implementationFiles']]
  production_proof=json.loads(PRODUCTION_PROOF.read_text())
  inputs += [PRODUCTION_PROOF]+[ROOT/p for p in production_proof['implementationFiles']]
- manifest={'document':str(OUTPUT.relative_to(ROOT)),'audience':'FOP and local application developers','focus':'current-implementation-and-gaps','preferredSync':'timestamp-with-reconciliation','timestampRuntimeEnabled':api_proof.get('normalApiOperation20261118',{}).get('automaticCallsEnabled') is True,'strictServicesOptional':True,'sections':8,'analyticsChapter':True,'queueScopeReview':True,'services':[x[0] for x in SERVICES],'operations':[x[2] for x in SERVICES],'upstreamCalled':False,'sha256':hashlib.sha256(document.encode()).hexdigest(),'inputHashes':{str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest() for p in inputs}}
+ manifest={'document':str(OUTPUT.relative_to(ROOT)),'audience':'FOP and local application developers','focus':'fop-outstanding-requirements','preferredSync':'timestamp-with-reconciliation','timestampRuntimeEnabled':api_proof.get('normalApiOperation20261118',{}).get('automaticCallsEnabled') is True,'strictServicesOptional':True,'sections':6,'analyticsChapter':False,'queueScopeReview':False,'services':[x[0] for x in SERVICES],'operations':[x[2] for x in SERVICES],'upstreamCalled':False,'sha256':hashlib.sha256(document.encode()).hexdigest(),'inputHashes':{str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest() for p in inputs}}
  (DEST/'build-manifest.json').write_text(json.dumps(manifest,ensure_ascii=False,indent=2)+'\n')
- index={'document':'../requirements/'+OUTPUT.name,'focus':'current-implementation-and-gaps','preferredSync':'timestamp-with-reconciliation','firstPhaseCapabilities':['TIME_QUERY','FULL_DETAIL','RECONCILE'],'strictServicesOptional':True,'services':[{'id':code,'operation':key,'title':label,'anchor':'sync-api','optional':True} for code,label,key,_ in SERVICES]}
+ index={'document':'../requirements/'+OUTPUT.name,'focus':'fop-outstanding-requirements','preferredSync':'timestamp-with-reconciliation','firstPhaseCapabilities':['TIME_QUERY','FULL_DETAIL','RECONCILE'],'strictServicesOptional':True,'services':[{'id':code,'operation':key,'title':label,'anchor':'sync-api','optional':True} for code,label,key,_ in SERVICES]}
  (ROOT/'docs/integrations/fop-extension-requirements-index.json').write_text(json.dumps(index,ensure_ascii=False,indent=2)+'\n')
  package=DEST/'HyperZoneFOP同步服务开发交付包.zip'
  with zipfile.ZipFile(package,'w',zipfile.ZIP_DEFLATED) as z:
   for p in [PRODUCTION_PROOF,PRODUCTION_MANUAL,CURRENT_REVIEW,PACKAGE_LOGISTICS_PROOF,API_PROOF,API_AUDIT,TIME_CAPABILITIES,PAGED_PROFILE,EMPLOYEE_PROOF,OUTPUT,CONTRACT,DOMAIN,TIMESTAMP,TIMESTAMP_PROFILE,TIMESTAMP_PROOF,ANALYTICS_PROOF,PURCHASE_RETURN_PROOF,SALES_UNPAID_PROOF,SALES_REVIEW_PROOF,BUSINESS_STATUS_PROOF]:z.write(p,str(p.relative_to(ROOT/'docs')))
- print(json.dumps({'document':str(OUTPUT),'sections':8,'preferredSync':'timestamp-with-reconciliation','optionalStrictServices':6,'timestampRuntimeEnabled':api_proof.get('normalApiOperation20261118',{}).get('automaticCallsEnabled') is True,'htmlBytes':OUTPUT.stat().st_size,'package':str(package),'upstreamCalled':False},ensure_ascii=False))
+ print(json.dumps({'document':str(OUTPUT),'sections':6,'preferredSync':'timestamp-with-reconciliation','optionalStrictServices':6,'timestampRuntimeEnabled':api_proof.get('normalApiOperation20261118',{}).get('automaticCallsEnabled') is True,'htmlBytes':OUTPUT.stat().st_size,'package':str(package),'upstreamCalled':False},ensure_ascii=False))
 if __name__=='__main__':build()

@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import WorkbenchAnalytics from '@/components/charts/WorkbenchAnalytics.vue'
 import { completedNames } from '@/utils/completed-orders'
-import { computed, ref, watch } from 'vue'
+import { computed, provide, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { ArrowUpRight, BriefcaseBusiness, Boxes, PackageCheck, Send, Warehouse } from 'lucide-vue-next'
+import { BriefcaseBusiness, Boxes, PackageCheck, Send, Warehouse } from 'lucide-vue-next'
 import { AppLayout } from '@/components/layout'
 import FopOrdersView from './FopOrdersView.vue'
 import OrderProgressView from './OrderProgressView.vue'
@@ -13,14 +13,14 @@ import ReceiptNoticesView from './ReceiptNoticesView.vue'
 import PurchaseReturnsView from './PurchaseReturnsView.vue'
 import RmaOrdersView from './RmaOrdersView.vue'
 import ProcurementOrdersView from './ProcurementOrdersView.vue'
-import WorkbenchReplicaControls from '@/components/autoflow/WorkbenchReplicaControls.vue'
 import { provideWorkbenchReplica } from '@/composables/workbenchReplicaContext'
-import WorkbenchFilterSummary from '@/components/WorkbenchFilterSummary.vue'
+import { workbenchRefreshTarget } from '@/composables/workbenchRefreshTarget'
+import { useWorkbenchListScroll, workbenchListScrollKey } from '@/composables/useWorkbenchListScroll'
 import { useWorkbenchAccess } from '@/composables/useWorkbenchAccess'
 import { sessionEpoch } from '@/utils/session'
 import { defaultWorkbenchQueue, isWorkbenchRole, queueNames, workbenchNames, workbenchQueues, type WorkbenchRole } from '@/utils/workbench'
 
-const { replica, disabled: replicaDisabled, navigationReady, reload: reloadReplica } = provideWorkbenchReplica()
+provideWorkbenchReplica()
 const route = useRoute()
 const router = useRouter()
 const { locale } = useI18n()
@@ -35,10 +35,12 @@ const analyticsAllowed = computed(() => {
   if (page === 'receipts') return chartVisible('salesperson_receipts')
   return true
 })
+const listRoot = ref<HTMLElement | null>(null)
+const refreshTarget = ref<HTMLElement | null>(null)
+provide(workbenchRefreshTarget, refreshTarget)
+provide(workbenchListScrollKey, useWorkbenchListScroll(listRoot))
 const dataRevision = ref(0)
-const filterLabels = ref<Record<string, string>>({})
-function updateFilterLabels(rows: { id: string; name: string }[]) { for (const row of rows) filterLabels.value[row.id] = row.name }
-watch(sessionEpoch, () => { filterLabels.value = {} })
+
 // User input only; survives the guard's child unmount without retaining business records.
 const searchRecovery = ref<{ token: symbol; from: string; to: string; search: string }>()
 function clearSearchRecovery(token: symbol) { if (searchRecovery.value?.token === token) searchRecovery.value = undefined }
@@ -69,12 +71,10 @@ function queueLink(value: string) { return { name: 'RoleWorkbench', params: { ro
 
 <template>
   <AppLayout compact-navigation>
-    <div class="app-page role-workbench">
-      <header class="workbench-heading"><div><p class="eyebrow">HYPERZONE · {{ text('智能办公平台', 'INTELLIGENT WORKPLACE') }}</p><h1>{{ route.name === 'Dashboard' ? text('我的工作台', 'My Workbench') : role ? workbenchNames[role][zh ? 0 : 1] : text('岗位工作台', 'Role Workbench') }}</h1></div><div class="workbench-heading-actions"><RouterLink to="/dashboard" class="dashboard-link">{{ text('Dashboard', 'Dashboard') }}<ArrowUpRight :size="16" /></RouterLink></div></header>
-      <div class="workbench-navigation"><nav class="role-tabs" :aria-label="text('岗位工作台', 'Role workbenches')"><RouterLink v-for="item in roles" :key="item" :to="roleLink(item)" :class="{ active: role === item }" :aria-current="role === item ? 'page' : undefined"><component :is="icons[item]" :size="19" /><span>{{ workbenchNames[item][zh ? 0 : 1] }}</span></RouterLink></nav><WorkbenchReplicaControls v-if="allowed" :replica="replica" :disabled="replicaDisabled" :navigation-ready="navigationReady" @synced="reloadReplica" /></div>
+    <div ref="listRoot" class="app-page role-workbench">
+      <div class="workbench-navigation"><nav class="role-tabs" :aria-label="text('岗位工作台', 'Role workbenches')"><RouterLink v-for="item in roles" :key="item" :to="roleLink(item)" :class="{ active: role === item }" :aria-current="role === item ? 'page' : undefined"><component :is="icons[item]" :size="19" /><span>{{ workbenchNames[item][zh ? 0 : 1] }}</span></RouterLink></nav></div>
       <template v-if="allowed && role">
-        <WorkbenchFilterSummary :queue="String(choice)" :labels="filterLabels" />
-        <nav class="workbench-queues" :aria-label="text('工作台功能', 'Workbench functions')">
+        <div class="workbench-queue-row"><nav class="workbench-queues" :aria-label="text('工作台功能', 'Workbench functions')">
           <RouterLink v-if="role === 'sales'" :to="queueLink('progress')" :class="{ active: choice === 'progress' }">{{ text('履约进度查询', 'Order progress') }}</RouterLink>
           <RouterLink v-if="role === 'warehouse'" :to="queueLink('receipt_notices')" :class="{ active: choice === 'receipt_notices' }">{{ text('待入库清单', 'Pending inbound') }}</RouterLink>
           <template v-for="item in workbenchQueues[role]" :key="item">
@@ -87,16 +87,16 @@ function queueLink(value: string) { return { name: 'RoleWorkbench', params: { ro
           <RouterLink v-if="role === 'procurement' || role === 'warehouse'" :to="queueLink('purchase_returns')" :class="{ active: choice === 'purchase_returns' }">{{ text('采购退货清单', 'Purchase returns') }}</RouterLink>
           <RouterLink v-if="role !== 'sales'" :to="queueLink('completed')" :class="{ active: choice === 'completed' }">{{ completedNames[role][zh ? 0 : 1] }}</RouterLink>
           <RouterLink v-if="role === 'sales' && chartVisible('sales_performance')" :to="queueLink('performance')" :class="{ active: choice === 'performance' }">{{ text('业绩收入与毛利', 'Revenue and profit') }}</RouterLink>
-        </nav>
+        </nav><div ref="refreshTarget" class="workbench-queue-refresh" /></div>
         <div v-if="!analyticsAllowed" class="access-message" role="alert">{{ text('暂无此功能权限，请选择其他工作台功能。', 'This feature is not available for your account.') }}</div>
         <WorkbenchAnalytics v-else-if="['performance','receipts'].includes(String(choice))" :key="String(choice)" :page="String(choice)" />
         <OrderProgressView v-else-if="choice === 'progress' && role === 'sales'" />
-        <StockOrdersView v-else-if="choice === 'stock' && role === 'sales' || choice === 'stock_procurement' && role === 'procurement'" :key="`${dataRevision}-${choice}`" :procurement="role === 'procurement'" @filter-labels="updateFilterLabels" />
-        <RmaOrdersView v-else-if="choice === 'rma' && role === 'sales'" :key="dataRevision" @filter-labels="updateFilterLabels" />
-        <ReceiptNoticesView v-else-if="choice === 'receipt_notices' && role === 'warehouse'" :key="dataRevision" @filter-labels="updateFilterLabels" />
-        <PurchaseReturnsView v-else-if="choice === 'purchase_returns' && (role === 'procurement' || role === 'warehouse')" :key="`${role}-${dataRevision}`" @filter-labels="updateFilterLabels" />
-        <ProcurementOrdersView :key="dataRevision" :search-recovery="searchRecovery" :recover-page="recoverOrderPage" @clear-search-recovery="clearSearchRecovery" v-else-if="validChoice && role === 'procurement' && (choice === 'procurement' || choice === 'procurement_shipping' || choice === 'completed')" @filter-labels="updateFilterLabels" />
-        <FopOrdersView @filter-labels="updateFilterLabels" v-else-if="validChoice" :key="dataRevision" :search-recovery="searchRecovery" :recover-page="recoverOrderPage" @clear-search-recovery="clearSearchRecovery" />
+        <StockOrdersView v-else-if="choice === 'stock' && role === 'sales' || choice === 'stock_procurement' && role === 'procurement'" :key="`${dataRevision}-${choice}`" :procurement="role === 'procurement'" />
+        <RmaOrdersView v-else-if="choice === 'rma' && role === 'sales'" :key="dataRevision" />
+        <ReceiptNoticesView v-else-if="choice === 'receipt_notices' && role === 'warehouse'" :key="dataRevision" />
+        <PurchaseReturnsView v-else-if="choice === 'purchase_returns' && (role === 'procurement' || role === 'warehouse')" :key="`${role}-${dataRevision}`" />
+        <ProcurementOrdersView :key="dataRevision" :search-recovery="searchRecovery" :recover-page="recoverOrderPage" @clear-search-recovery="clearSearchRecovery" v-else-if="validChoice && role === 'procurement' && (choice === 'procurement' || choice === 'procurement_shipping' || choice === 'completed')" />
+        <FopOrdersView v-else-if="validChoice" :key="dataRevision" :search-recovery="searchRecovery" :recover-page="recoverOrderPage" @clear-search-recovery="clearSearchRecovery" />
         <div v-else class="access-message" role="alert">{{ text('该清单不属于当前工作台，请选择上方功能。', 'This list does not belong to the selected workbench. Choose a function above.') }}</div>
       </template>
       <div v-else class="access-message" role="alert">{{ text('暂时无法访问此工作台，请联系管理员分配岗位。', 'You do not have access to this workbench. Contact an administrator.') }}</div>

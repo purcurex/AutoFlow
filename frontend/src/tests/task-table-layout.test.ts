@@ -1,8 +1,16 @@
 import { describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { defineComponent } from 'vue'
-import { distributeTaskColumns, fitTaskColumns, vTaskTableLayout } from '@/directives/task-table-layout'
+import { boundedContentWidth, distributeTaskColumns, fitTaskColumns, vTaskTableLayout } from '@/directives/task-table-layout'
 describe('task table width distribution', () => {
+  it('caps exceptional text while reserving more room for longer ordinary values', () => {
+    expect(boundedContentWidth('客户')).toBeLessThan(boundedContentWidth('Alexander Kaziev'))
+    expect(boundedContentWidth('超长异常原因'.repeat(100))).toBe(280)
+    const layout = fitTaskColumns([999, 999, 10000, 120], ['订单编号', '商品信息', '客户名称', '金额'], 1400)
+    expect(layout.widths[0]).toBe(164)
+    expect(layout.widths[1]).toBe(240)
+    expect(layout.widths[2]! - 280).toBeCloseTo(layout.widths[3]! - 120)
+  })
   it.each([1241, 2227])('reserves space for the longest current custom channel at %ipx without overflow', available => {
     const labels = ['订单编号', '商品信息', '物流信息', 'Logistics channel', '客户名称']
     const layout = fitTaskColumns(labels.map(() => 40), labels, available)
@@ -10,16 +18,23 @@ describe('task table width distribution', () => {
     expect(layout.widths[3]).toBeGreaterThanOrEqual(224)
     expect(layout.width * layout.scale).toBeCloseTo(available)
   })
+  it('balances whitespace across customer/store/owner and remark columns', () => {
+    const layout = fitTaskColumns([100,100,90,90,110,80], ['订单编号','商品信息','客户名称','店铺','业务员','订单备注'], 2200)
+    const gaps = layout.widths.slice(2).map((width, index) => width - [90,90,110,80][index]!)
+    gaps.forEach(gap => expect(gap).toBeCloseTo(gaps[0]!))
+    expect(layout.widths[5]).toBeGreaterThanOrEqual(240)
+    expect(layout.widths.reduce((a,b)=>a+b,0)).toBeCloseTo(2200)
+  })
   it('fixes the first two columns and shares surplus equally, not proportionally', () => {
     const result = distributeTaskColumns([900, 900, 100, 150, 200], 1200)
-    expect(result.slice(0, 2)).toEqual([196, 340])
+    expect(result.slice(0, 2)).toEqual([196, 380])
     const extra = result.slice(2).map((width, index) => width - [100, 150, 200][index]!)
     expect(extra[0]).toBeCloseTo(extra[1]!)
     expect(extra[1]).toBeCloseTo(extra[2]!)
     expect(result.reduce((sum, width) => sum + width, 0)).toBeCloseTo(1200)
   })
   it('bounds long text and keeps readable widths when there is no surplus', () => {
-    expect(distributeTaskColumns([20, 20, 5, 1000, 140], 500)).toEqual([196, 340, 88, 280, 140])
+    expect(distributeTaskColumns([20, 20, 5, 1000, 140], 500)).toEqual([196, 380, 88, 280, 140])
   })
   it.each([1014, 1174, 1254, 1328, 1488, 2240])('fits every column into a %ipx workbench without horizontal scrolling', available => {
     const labels = ['订单编号', '商品图片 / 商品信息', 'Shopify 单号', '订单金额', 'Customer', '收款日期', '供应商发货状态', '客户名称', '店铺', '发货仓库', '业务员', '客户付款时间', '采购付款时间', '操作']

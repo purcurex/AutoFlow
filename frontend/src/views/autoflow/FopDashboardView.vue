@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { installDashboardPanelSnap } from '@/utils/dashboard-panel-snap'
 import { peekDashboardSnapshot, saveDashboardSnapshot, clearDashboardSnapshots } from '@/utils/dashboard-snapshot'
 import { isWorkbenchScopeError } from '@/api/workbench-dashboard'
 import { businessYears, BUSINESS_START_DATE } from '@/utils/business-years'
@@ -14,7 +15,7 @@ import TableTotals from '@/components/ui/TableTotals.vue'
 import ReceiptChangeValue from '@/components/charts/ReceiptChangeValue.vue'
 import { receiptChanges, totalReceiptChange, formatReceiptChange } from '@/utils/receiptChanges'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { ClipboardCheck, Clock3, PackageCheck, ShoppingCart, Send, Truck, Users, Wallet } from 'lucide-vue-next'
+import { ClipboardCheck, Clock3, PackageCheck, RefreshCw, ShoppingCart, Send, Truck, Users, Wallet } from 'lucide-vue-next'
 import { refreshWorkbenchAccess } from '@/composables/useWorkbenchAccess'
 import { RouterLink, useRouter } from 'vue-router'
 import { workbenchOrderLocation, queueNames } from '@/utils/workbench'
@@ -30,6 +31,9 @@ import { fopAccessError } from '@/api/fop-access'
 import { useTheme } from '@/composables/useTheme'
 import { getFopDashboard, getFopDashboardCharts, localDate, type FopDashboardData, type ReceiptSeries, type DashboardQueueState } from '@/api/fop-dashboard'
 
+const dashboardViewport = ref<HTMLElement | null>(null)
+const dashboardCards = ref<HTMLElement | null>(null)
+let stopPanelSnap: (() => void) | undefined
 const { locale } = useI18n()
 const router = useRouter()
 const { isDark } = useTheme()
@@ -185,8 +189,11 @@ async function refreshChart(kind: IndependentChart, force = false) {
   } finally { if (id === chartRequests[kind]) chartBusy.value[kind] = false }
 }
 const offSession = onSessionReset(() => { dashboardMode.value = undefined; requestId++; for (const key of Object.keys(chartRequests) as IndependentChart[]) { chartRequests[key]++; chartBusy.value[key]=false; chartErrors.value[key]='' } data.value = undefined; pendingData.value = undefined; busy.value = false; error.value = ''; appliedRange.value = ''; registrationScope.value = 'marketing'; selectedDepartmentId.value = 'sales1' })
-onBeforeUnmount(() => { requestId++; offSession() })
-onMounted(() => refresh())
+onBeforeUnmount(() => { stopPanelSnap?.(); requestId++; offSession() })
+onMounted(() => {
+  if (dashboardViewport.value && dashboardCards.value) stopPanelSnap = installDashboardPanelSnap(dashboardViewport.value, dashboardCards.value)
+  void refresh()
+})
 const axisColor = computed(() => isDark.value ? '#94a3b8' : '#8793a7')
 const gridColor = computed(() => isDark.value ? '#293241' : '#edf0f7')
 // Use one aggregate color in every chart; detail colors retain their order across views.
@@ -300,15 +307,20 @@ const salespersonOption = computed(() => collectionsOption(salespersonSeries.val
 <template>
   <AppLayout>
     <main class="app-page fop-dashboard" :aria-busy="busy">
+      <div class="dashboard-fixed">
       <header class="dashboard-heading">
-        <div><p class="eyebrow">HYPERZONE · DASHBOARD</p><h1>Dashboard <span class="mock-badge">{{ text('业务概览', 'BUSINESS OVERVIEW') }}</span></h1></div>
+        <h1>Dashboard <span class="overview-badge">{{ text('业务概览', 'BUSINESS OVERVIEW') }}</span></h1>
+        <div v-if="dashboardMode !== 'remote'" class="dashboard-actions">
+          <div class="dashboard-update" aria-live="polite">
+            <span>{{ text('更新', 'Updated') }} {{ updated }} · UTC+8</span>
+          </div>
+          <button type="button" class="btn btn-secondary workbench-refresh dashboard-refresh" :disabled="busy" :aria-busy="busy" @click="refresh(true)">
+            <RefreshCw :size="14" :class="{ spinning: busy }" aria-hidden="true" />{{ text('刷新', 'Refresh') }}
+          </button>
+        </div>
+        <FopDataAccessNotice v-else class="dashboard-access-notice" :busy="busy" @recheck="refresh(true)" />
       </header>
-      <div v-if="dashboardMode === 'local'" class="panel-top dashboard-footnote"><span>按当前账号权限展示 · 更新 {{ updated }} · UTC+8</span><button :disabled="busy" @click="refresh(true)">{{ busy ? '查询中…' : '刷新数据' }}</button></div>
-      <FopDataAccessNotice v-else-if="dashboardMode === 'remote'" :busy="busy" @recheck="refresh(true)" />
-      <p v-if="data?.analyticsUnavailable" class="dashboard-footnote" role="alert">{{ text('统计图表加载失败，待办统计以各卡片显示为准。', 'Analytics failed to load. Pending counts are shown on each card.') }}</p>
-      <p v-if="error" class="error-message" role="alert">{{ error }}</p>
-
-      <section class="summary-grid" :aria-label="text('履约概览', 'Fulfillment overview')">
+      <section ref="dashboardCards" class="summary-grid" :aria-label="text('履约概览', 'Fulfillment overview')">
         <article v-for="card in cards" :key="card.id" class="summary-card" :class="card.color" :aria-label="card.label">
           <component :is="card.parts.length <= 1 && card.state === 'ready' ? RouterLink : 'div'" v-bind="card.parts.length <= 1 && card.state === 'ready' ? { to: workbenchOrderLocation(card.id), 'aria-label': text(`查看${card.label}清单`, `View ${card.label} orders`) } : {}" class="card-content">
             <div class="card-top"><span>{{ card.label }}</span><component :is="card.icon" :size="21" :stroke-width="1.6" /></div>
@@ -321,11 +333,16 @@ const salespersonOption = computed(() => collectionsOption(salespersonSeries.val
           </div>
           <span class="card-decoration" aria-hidden="true" />
         </article>
-        <WorkCalendar />
       </section>
+      </div>
+
+      <section ref="dashboardViewport" class="dashboard-scroll" data-page-scroll-target tabindex="0" :aria-label="text('Dashboard 数据面板', 'Dashboard data panels')">
+      <p v-if="data?.analyticsUnavailable" class="dashboard-footnote" role="alert">{{ text('统计图表加载失败，待办统计以各卡片显示为准。', 'Analytics failed to load. Pending counts are shown on each card.') }}</p>
+      <p v-if="error" class="error-message" role="alert">{{ error }}</p>
+      <WorkCalendar data-dashboard-panel class="dashboard-calendar" />
 
       <div class="insights-grid">
-        <section v-if="!data?.localAnalytics && visible('registrations')" class="dashboard-panel registration-panel">
+        <section v-if="!data?.localAnalytics && visible('registrations')" data-dashboard-panel class="dashboard-panel registration-panel">
           <div class="panel-top statistics-heading"><h2><Users :size="17" />{{ text('每日注册会员统计', 'Daily registrations') }}</h2><div class="statistics-filters">
             <label class="year-filter">{{ text('统计维度', 'Dimension') }}<select v-model="registrationScope" :disabled="chartBusy.registrations" :aria-label="text('注册统计维度', 'Registration dimension')"><option value="marketing">{{ text('营销中心', 'Marketing center') }}</option><option v-for="department in data?.registrationDepartments" :key="department.id" :value="department.id">{{ department.name }}</option></select></label>
           </div></div>
@@ -344,7 +361,7 @@ const salespersonOption = computed(() => collectionsOption(salespersonSeries.val
         <p v-if="chartErrors.registrations" role="alert">{{ chartErrors.registrations }}</p></section>
 
         <div class="activity-column">
-          <section class="dashboard-panel task-panel">
+          <section data-dashboard-panel class="dashboard-panel task-panel">
             <div class="panel-top"><h2><Clock3 :size="17" />{{ text('履约待办', 'Fulfillment Tasks') }}</h2><span class="subtle-label">{{ text('按优先级处理', 'PRIORITY QUEUE') }}</span></div>
             <div class="activity-list">
               <component :is="(pending?.queueBreakdown?.[task.kind]?.length ?? 0) > 1 ? 'div' : RouterLink" v-for="task in pending?.tasks" :key="task.id" v-bind="(pending?.queueBreakdown?.[task.kind]?.length ?? 0) > 1 ? {} : { to: workbenchOrderLocation(task.kind) }" class="task-row">
@@ -359,18 +376,18 @@ const salespersonOption = computed(() => collectionsOption(salespersonSeries.val
             </div>
             <footer>{{ text('点击任务查看对应履约订单清单。', 'Select a task to view its fulfillment orders.') }}</footer>
           </section>
-          <DashboardExceptions v-if="!error || data" :key="exceptionRevision" :force-refresh="exceptionRevision > 0" />
+          <DashboardExceptions data-dashboard-panel v-if="!error || data" :key="exceptionRevision" :force-refresh="exceptionRevision > 0" />
         </div>
       </div>
 
-      <section v-if="!data?.localAnalytics && visible('department_receipts')" class="dashboard-panel receipts-panel">
+      <section v-if="!data?.localAnalytics && visible('department_receipts')" data-dashboard-panel class="dashboard-panel receipts-panel">
         <div class="panel-top receipts-heading statistics-heading"><div><h2><Wallet :size="17" />{{ text('部门月度回款分析', 'Monthly collections by department') }}</h2></div><div class="statistics-filters"><label class="year-filter">{{ text('年份', 'Year') }}<select v-model.number="year" :aria-label="text('回款年份', 'Collections year')" :disabled="chartBusy.department_receipts" @change="refreshChart('department_receipts')"><option v-for="item in years" :key="item" :value="item">{{ item }}</option></select></label><label class="mom-filter"><input v-model="departmentMom" type="checkbox" aria-label="部门回款上月环比">{{ text('上月环比', 'Month-over-month') }}</label></div></div>
         <div v-if="departmentMom" class="receipt-summary mom-summary"><span>{{ latestReceiptMonth }} · {{ text('营销中心较上月', 'Marketing center change') }}</span><ReceiptChangeValue :value="latestMarketingChange" /><small>{{ momHint }}</small></div>
         <div v-else class="receipt-summary"><span>{{ appliedYear }} {{ text('年部门回款合计', 'department collections total') }}</span><strong>{{ data?.departmentReceipts.departments.length ? money(receiptTotal) : '—' }}</strong><small>{{ marketingBreakdown }}{{ marketingBreakdown ? ' · ' : '' }}{{ text('默认展示最近 6 个月，可向左拖动查看历史；全年合计不重复累加。', 'Latest 6 months shown; drag left for earlier months. Annual totals are counted once.') }}</small></div>
         <div class="receipts-chart"><p v-if="!data?.departmentReceipts.departments.length" class="empty-message">{{ text('暂无可查看的回款统计', 'No collections statistics available') }}</p><EChart v-else :option="receiptOption" :can-export="chart('department_receipts')?.canExport === true" :label="text('各部门月度回款对比柱状图', 'Monthly collections by department')" /></div>
         <details :open="departmentDetailsOpen" class="data-details" @toggle="departmentDetailsOpen = ($event.target as HTMLDetailsElement).open"><summary>{{ departmentMom ? text('部门环比明细 · 差额 / 比例', 'Department changes · Amount / Rate') : text('查看回款明细数据', 'View collections data') }}</summary><div class="table-scroll"><table class="receipt-table" :style="{ minWidth: `${160 + receiptSeries.length * 132}px` }"><colgroup><col class="receipt-month-column"><col v-for="item in receiptSeries" :key="item.id"></colgroup><thead><tr><th>{{ text('月份', 'Month') }}</th><th v-for="dept in receiptSeries" :key="dept.id" :class="{ 'aggregate-cell': dept.id === data?.departmentReceipts.marketingCenter?.id }">{{ dept.name || departments[dept.id] || dept.id }}</th></tr></thead><tbody><tr v-for="{ month, index } in receiptRows" :key="month"><td>{{ month }}</td><td v-for="dept in receiptSeries" :key="dept.id" :class="{ 'aggregate-cell': dept.id === data?.departmentReceipts.marketingCenter?.id }"><ReceiptChangeValue v-if="departmentMom" :value="changesFor(dept)[index]" /><span v-else class="receipt-amount" :title="receiptBreakdown(dept, index)">{{ money(dept.amounts[index] ?? 0) }}</span></td></tr></tbody><TableTotals><th scope="row">{{ departmentMom ? text('差额合计（可比月份）', 'Total change (comparable months)') : text('合计（所选年份）', 'Total (selected year)') }}</th><td v-for="dept in receiptSeries" :key="dept.id"><ReceiptChangeValue v-if="departmentMom" :value="changeTotalFor(dept)" /><span v-else class="receipt-amount">{{ money(sumMoney(dept.amounts)) }}</span></td></TableTotals></table></div></details><p class="mom-note" :class="{ 'mom-note-hidden': !departmentMom }" :aria-hidden="!departmentMom">{{ text('合计比例 = 差额合计 ÷ 对应上月金额合计；缺少上月数据的月份不计入合计。上月为 0 时，非零差额不计算比例。', 'Total rate = total change ÷ total prior-month amounts; missing comparisons are excluded. Nonzero changes from zero have no percentage rate.') }}</p>
       <p v-if="chartErrors.department_receipts" role="alert">{{ chartErrors.department_receipts }}</p></section>
-      <section v-if="!data?.localAnalytics && visible('salesperson_receipts')" class="dashboard-panel receipts-panel salesperson-panel">
+      <section v-if="!data?.localAnalytics && visible('salesperson_receipts')" data-dashboard-panel class="dashboard-panel receipts-panel salesperson-panel">
         <div class="panel-top receipts-heading statistics-heading">
           <div><h2><Users :size="17" />{{ text('业务员月度回款分析', 'Monthly collections by salesperson') }}</h2></div>
           <div class="statistics-filters"><label class="year-filter">{{ text('年份', 'Year') }}<select v-model.number="salespersonYear" aria-label="业务员回款年份" :disabled="chartBusy.salesperson_receipts" @change="refreshChart('salesperson_receipts')"><option v-for="item in years" :key="item" :value="item">{{ item }}</option></select></label><label class="year-filter">{{ text('部门', 'Department') }}<select v-model="selectedDepartmentId" :disabled="chartBusy.salesperson_receipts || !data?.receipts.departments.length" :aria-label="text('业务员回款部门', 'Salesperson collections department')"><option v-for="department in data?.receipts.departments" :key="department.id" :value="department.id">{{ department.name || departments[department.id] || department.id }}</option></select></label><label class="mom-filter"><input v-model="salespersonMom" type="checkbox" aria-label="业务员回款上月环比">{{ text('上月环比', 'Month-over-month') }}</label></div>
@@ -382,29 +399,30 @@ const salespersonOption = computed(() => collectionsOption(salespersonSeries.val
         <details v-if="salespersonSeries.length" :open="salespersonDetailsOpen" class="data-details" @toggle="salespersonDetailsOpen = ($event.target as HTMLDetailsElement).open"><summary>{{ salespersonMom ? text('部门与业务员环比明细 · 差额 / 比例', 'Department and salesperson changes · Amount / Rate') : text('部门与业务员回款明细', 'Department and salesperson collections data') }}</summary><div class="table-scroll"><table class="receipt-table" :style="{ minWidth: `${160 + salespersonSeries.length * 132}px` }"><colgroup><col class="receipt-month-column"><col v-for="item in salespersonSeries" :key="item.id"></colgroup><thead><tr><th>{{ text('月份', 'Month') }}</th><th v-for="(person, personIndex) in salespersonSeries" :key="person.id" :class="{ 'aggregate-cell': personIndex === 0 }">{{ person.name }}</th></tr></thead><tbody><tr v-for="{ month, index } in salespersonReceiptRows" :key="month"><td>{{ month }}</td><td v-for="(person, personIndex) in salespersonSeries" :key="person.id" :class="{ 'aggregate-cell': personIndex === 0 }"><ReceiptChangeValue v-if="salespersonMom" :value="changesFor(person)[index]" /><button v-else :disabled="!canDetails('salesperson_receipts')" class="receipt-amount receipt-link" :title="receiptBreakdown(person, index)" @click="openReceipts(month, selectedDepartmentId, personIndex === 0 ? undefined : person.id)">{{ money(person.amounts[index] ?? 0) }}</button></td></tr></tbody><TableTotals><th scope="row">{{ salespersonMom ? text('差额合计（可比月份）', 'Total change (comparable months)') : text('合计（所选年份）', 'Total (selected year)') }}</th><td v-for="person in salespersonSeries" :key="person.id"><ReceiptChangeValue v-if="salespersonMom" :value="changeTotalFor(person)" /><span v-else class="receipt-amount">{{ money(sumMoney(person.amounts)) }}</span></td></TableTotals></table></div></details><p class="mom-note" :class="{ 'mom-note-hidden': !salespersonMom }" :aria-hidden="!salespersonMom">{{ text('合计比例 = 差额合计 ÷ 对应上月金额合计；缺少上月数据的月份不计入合计。上月为 0 时，非零差额不计算比例。', 'Total rate = total change ÷ total prior-month amounts; missing comparisons are excluded. Nonzero changes from zero have no percentage rate.') }}</p>
       <p v-if="chartErrors.salesperson_receipts" role="alert">{{ chartErrors.salesperson_receipts }}</p></section>
       <template v-if="data?.localAnalytics">
-        <LocalDashboardAnalytics v-if="visible('registrations')" chart-id="registrations" title="客户注册统计" :available-window="data?.registrationWindow" />
-        <LocalDashboardAnalytics v-if="visible('department_receipts')" chart-id="department_receipts" title="部门业绩分析" />
-        <LocalDashboardAnalytics v-if="visible('salesperson_receipts')" chart-id="salesperson_receipts" title="业务员业绩分析" />
-        <LocalDashboardAnalytics v-if="visible('order_volume')" chart-id="order_volume" title="订单量分析" />
-        <LocalDashboardAnalytics v-if="visible('customer_orders')" chart-id="customer_orders" title="客户订单分析" />
+        <LocalDashboardAnalytics data-dashboard-panel v-if="visible('registrations')" chart-id="registrations" title="客户注册统计" :available-window="data?.registrationWindow" />
+        <LocalDashboardAnalytics data-dashboard-panel v-if="visible('department_receipts')" chart-id="department_receipts" title="部门业绩分析" />
+        <LocalDashboardAnalytics data-dashboard-panel v-if="visible('salesperson_receipts')" chart-id="salesperson_receipts" title="业务员业绩分析" />
+        <LocalDashboardAnalytics data-dashboard-panel v-if="visible('order_volume')" chart-id="order_volume" title="订单量分析" />
+        <LocalDashboardAnalytics data-dashboard-panel v-if="visible('customer_orders')" chart-id="customer_orders" title="客户订单分析" />
       </template>
       <template v-if="!data?.localAnalytics && data?.analyticsConfigured === false">
         <template v-for="panel in [
           { id: 'order_volume' as const, title: text('订单量分析', 'Order volume analysis') },
           { id: 'customer_orders' as const, title: text('客户订单分析', 'Customer order analysis') },
         ]" :key="panel.id">
-          <section v-if="visible(panel.id)" class="dashboard-panel receipts-panel" :data-analytics-empty="panel.id">
+          <section v-if="visible(panel.id)" data-dashboard-panel class="dashboard-panel receipts-panel" :data-analytics-empty="panel.id">
             <header class="panel-top"><h2>{{ panel.title }}</h2></header>
             <div class="receipts-chart"><p class="empty-message">{{ text('暂无可展示的数据', 'No data available') }}</p></div>
           </section>
         </template>
       </template>
       <template v-if="!data?.localAnalytics && data?.analyticsConfigured !== false">
-        <OrderVolumeAnalysis v-if="visible('order_volume')" />
-        <OrderVolumeAnalysis v-if="visible('customer_orders')" customer />
+        <OrderVolumeAnalysis data-dashboard-panel v-if="visible('order_volume')" />
+        <OrderVolumeAnalysis data-dashboard-panel v-if="visible('customer_orders')" customer />
       </template>
       <p v-else-if="!data?.localAnalytics" class="dashboard-footnote">{{ text('日期筛选用于注册趋势，年份筛选用于回款分析。', 'Dates filter registrations; year filters collections.') }}</p>
-      <FreightAnalysis v-if="visible('freight')" />
+      <FreightAnalysis data-dashboard-panel v-if="visible('freight')" />
+      </section>
     </main>
   </AppLayout>
 </template>
@@ -424,19 +442,34 @@ const salespersonOption = computed(() => collectionsOption(salespersonSeries.val
 .statistics-heading { flex-wrap: wrap; }
 .statistics-heading h2 { flex-shrink: 0; }
 .statistics-filters { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 10px; margin-left: auto; }
-.fop-dashboard { --aggregate-color: v-bind(aggregateColor); --aggregate-text: var(--color-summary-text); --aggregate-surface: var(--color-summary-surface); color: var(--color-text); }
-.dashboard-heading { display: flex; justify-content: space-between; align-items: center; gap: 20px; margin-bottom: 24px; }
-.eyebrow { color: #687995; font-size: 10px; font-weight: 700; letter-spacing: .16em; margin-bottom: 6px; }
-h1 { display: flex; align-items: center; gap: 12px; font-size: 28px; font-weight: 750; letter-spacing: -.035em; }
-.mock-badge { border: 1px solid #f4d59a; color: #ae7616; background: #fff8e8; border-radius: 5px; padding: 3px 7px; font-size: 10px; letter-spacing: .06em; font-weight: 700; }
+.fop-dashboard { --aggregate-color: v-bind(aggregateColor); --aggregate-text: var(--color-summary-text); --aggregate-surface: var(--color-summary-surface); --dashboard-inline-padding: 16px; color: var(--color-text); display: flex; flex-direction: column; height: 100%; min-height: 0; padding: 0; overflow: hidden; }
+.dashboard-fixed { flex: none; padding: 12px var(--dashboard-inline-padding) 0; overflow: hidden; scrollbar-gutter: stable; }
+.dashboard-scroll { flex: 1; min-height: 0; padding: 0 var(--dashboard-inline-padding) 28px; overflow-x: hidden; overflow-y: auto; overscroll-behavior-y: contain; scrollbar-gutter: stable; }
+.dashboard-calendar { margin-bottom: 20px; }
+@media (min-width: 640px) { .fop-dashboard { --dashboard-inline-padding: 24px; } }
+@media (min-width: 1024px) { .fop-dashboard { --dashboard-inline-padding: 32px; } }
+.dashboard-heading { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px 24px; min-height: 36px; margin-bottom: 12px; }
+.dashboard-heading h1 { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 0; font-size: 24px; line-height: 1.3; font-weight: 750; letter-spacing: -.025em; }
+.overview-badge { border: 1px solid var(--color-selection-border); color: var(--color-link); background: var(--color-selection-surface); border-radius: 5px; padding: 3px 7px; font-size: 11px; line-height: 16px; letter-spacing: .02em; font-weight: 600; white-space: nowrap; }
+.dashboard-actions { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+.dashboard-update { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px 12px; color: var(--color-text-secondary); font-size: 11px; line-height: 18px; text-align: right; font-variant-numeric: tabular-nums; }
+.dashboard-update span { white-space: nowrap; }
+.dashboard-refresh { display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-height: 30px; padding: 5px 10px; font-size: 12px; line-height: 18px; flex-shrink: 0; }
+.dashboard-refresh .spinning { animation: dashboard-refresh-spin 1s linear infinite; }
+.dashboard-access-notice { margin: 0 0 0 auto; padding: 0; border: 0; background: transparent; gap: 14px; color: var(--color-text-secondary); }
+.dashboard-access-notice :deep(div) { text-align: right; font-size: 11px; }
+.dashboard-access-notice :deep(button) { min-height: 30px; padding: 5px 10px; border: 1px solid var(--color-selection-border); border-radius: 6px; color: var(--color-link); background: var(--color-selection-surface); }
+@keyframes dashboard-refresh-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .dashboard-refresh .spinning { animation: none; } }
+@media (max-width: 900px) { .dashboard-update { flex-direction: column; gap: 0; } }
 .heading-description { color: #8490a3; font-size: 12px; margin-top: 5px; line-height: 1.6; }
 .query-button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; border-radius: 6px; padding: 9px 13px; font-size: 12px; font-weight: 600; white-space: nowrap; }
 
 button:disabled { opacity: .5; cursor: wait; }
-.summary-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 16px; margin-bottom: 22px; }.work-calendar-card { grid-column: 1 / -1; }
+.summary-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 16px; margin-bottom: 16px; }
 .summary-card:hover { transform: translateY(-2px); filter: brightness(1.04); }
 .exception-row:hover, .task-row:hover { background: #5873d408; }
-.summary-card { display: block; transition: transform .15s, filter .15s; position: relative; overflow: hidden; padding: 27px 18px 20px; min-height: 176px; box-sizing: border-box; border-radius: 8px; color: white; box-shadow: 0 5px 13px #30446010; }
+.summary-card { display: block; transition: transform .15s, filter .15s; position: relative; overflow: hidden; padding: 20px 18px 18px; min-height: 160px; box-sizing: border-box; border-radius: 8px; color: white; box-shadow: 0 5px 13px #30446010; }
 .review { background: linear-gradient(115deg, #099fdd, #32b7df); }.allocation { background: linear-gradient(115deg, #19b8c8, #70cbd5); }.fulfillment { background: linear-gradient(115deg, #37ac47, #36cd58); }.procurement { background: linear-gradient(115deg, #7c82d3, #a29bdf); }.shipping { background: linear-gradient(115deg, #f0a535, #dfce56); }
 .card-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 15px; font-weight: 600; }.card-top svg { opacity: .85; }
 .summary-card strong { display: block; font-size: 33px; line-height: 1.2; margin: 10px 0 12px; font-weight: 700; font-variant-numeric: tabular-nums; }
@@ -446,12 +479,18 @@ button:disabled { opacity: .5; cursor: wait; }
 
 .insights-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; align-items: stretch; }.dashboard-panel { min-width: 0; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 8px; box-shadow: 0 2px 6px #27395004; overflow: hidden; }.panel-top { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 19px 20px; border-bottom: 1px solid var(--color-border); }.panel-top h2 { display: flex; align-items: center; gap: 8px; color: var(--color-link); font-size: 13px; font-weight: 650; }.subtle-label { font-size: 9px; color: #97a1b1; letter-spacing: .04em; }.date-filter { display: flex; align-items: end; gap: 8px; padding: 18px 20px 0; flex-wrap: wrap; }.date-filter label > span { display: block; font-size: 10px; color: #8a95a7; margin-bottom: 5px; }.date-filter input, .year-filter select { color: inherit; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 5px; padding: 7px 9px; font-size: 11px; }.date-dash { padding-bottom: 7px; color: #b7c0ce; }.query-button { color:var(--color-on-primary); background: var(--color-primary); padding: 8px 16px; }.chart-summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; padding: 20px 22px 0; }.chart-summary strong { font-size: 28px; font-weight: 700; letter-spacing: -.04em; }.chart-summary span { font-size: 11px; color: #8490a3; }.chart-summary small { margin-left: auto; font-size: 10px; color: #9aa4b4; }.registration-chart { height: 285px; padding: 0 10px; }.activity-column { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; order: -1; }.activity-column > .dashboard-panel { height: 420px; display: flex; flex-direction: column; }.activity-column .panel-top, .activity-column footer { flex: 0 0 auto; }.activity-column .activity-list { flex: 1; min-height: 0; max-height: none; }.activity-column .empty-message:only-child { height: 100%; display: grid; place-content: center; margin: 0; }.activity-list { padding: 0 20px; max-height: 260px; overflow-y: auto; }.exception-row, .task-row { display: flex; align-items: center; gap: 10px; padding: 15px 0; border-bottom: 1px solid var(--color-border); }.exception-row:last-child, .task-row:last-child { border-bottom: 0; }.exception-row > div, .task-row > div { flex: 1; min-width: 0; }.row-heading { font-size: 11px; font-weight: 600; }.row-heading span { display: block; color: #8d98a9; font-weight: 400; font-size: 10px; margin-top: 3px; }.row-description { color: #8b95a6; font-size: 10px; margin-top: 5px; }.status-dot { width: 6px; height: 6px; border-radius: 50%; background: #f2a24c; flex-shrink: 0; }.age-badge { padding: 3px 7px; font-size: 10px; color: #d68b2e; background: #fff7e8; border-radius: 4px; }.count-badge { font-size: 10px; color: #e1a041; background: #fff5e4; border-radius: 4px; padding: 2px 6px; }.dashboard-panel footer { border-top: 1px solid var(--color-border); padding: 10px 20px; font-size: 9px; color: #9aa4b4; }.task-time { color: #8c97a9; font-size: 11px; width: 42px; font-variant-numeric: tabular-nums; }.priority { font-size: 9px; padding: 3px 7px; border-radius: 4px; }.priority.high { color: #e48858; background: #fff2ea; }.priority.normal { color: #7c8caa; background: #eff3fa; }
 .receipts-panel { margin-top: 20px; }.receipts-heading > div > p { color: #9aa4b4; font-size: 10px; margin-top: 6px; }.year-filter { display: flex; align-items: center; gap: 8px; font-size: 11px; color: #8d98a9; }.receipt-summary { display: flex; align-items: baseline; flex-wrap: wrap; gap: 12px; padding: 18px 20px 10px; }.receipt-summary > span { color: #8a95a6; font-size: 11px; }.receipt-summary strong { font-size: 23px; font-weight: 700; letter-spacing: -.03em; }.receipt-summary small { margin-left: auto; font-size: 10px; color: #98a3b3; }.receipts-chart { height: 355px; padding: 10px 15px 0; }.dashboard-footnote { font-size: 10px; color: #98a3b3; margin-top: 16px; line-height: 1.8; }.data-details { padding: 10px 20px; font-size: 10px; color: #8290a5; border-top: 1px solid var(--color-border); }.data-details summary { cursor: pointer; }.table-scroll { max-height: 240px; overflow: auto; margin-top: 8px; }table { width: 100%; border-collapse: collapse; white-space: nowrap; }th, td { padding: 8px; text-align: right; border-bottom: 1px solid var(--color-border); }th:first-child, td:first-child { text-align: left; }.error-message { color: #dc2626; padding: 12px; background: #fef2f2; border-radius: 6px; margin-bottom: 16px; font-size: 12px; }.empty-message { padding: 30px; text-align: center; color: #8a95a6; font-size: 12px; }
-.dark .mock-badge { background: #382b17; border-color: #60491f; color: #f5c76c; }.dark .age-badge, .dark .count-badge, .dark .priority.high { background: #352b22; }.dark .priority.normal { background: #263145; }
-@media (max-width: 1280px) { .summary-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }.work-calendar-card { grid-column: 1 / -1; }.subtle-label { display: none; } }
+.dark .age-badge, .dark .count-badge, .dark .priority.high { background: #352b22; }.dark .priority.normal { background: #263145; }
+@media (max-width: 1280px) { .summary-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }.subtle-label { display: none; } }
 @media (max-width: 1024px) { .summary-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }.insights-grid { grid-template-columns: 1fr; }.activity-column { grid-template-columns: repeat(2, minmax(0, 1fr)); }.summary-card:hover { transform: translateY(-2px); filter: brightness(1.04); }
 .exception-row:hover, .task-row:hover { background: #5873d408; }
-.summary-card { display: block; transition: transform .15s, filter .15s; padding: 25px 17px 18px; }.card-top { font-size: 14px; } }
-@media (max-width: 640px) { .dashboard-heading { align-items: flex-start; gap: 12px; }h1 { font-size: 24px; }.heading-description { max-width: 240px; }.summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }.activity-column { grid-template-columns: 1fr; }.panel-top { padding: 16px; }.date-filter { padding: 14px 14px 0; gap: 5px; }.date-filter input { padding: 7px 4px; max-width: 128px; }.query-button { padding: 8px; }.chart-summary small { width: 100%; margin: 0; }.receipt-summary small { width: 100%; margin: 0; }.receipts-chart { padding: 0; height: 355px; }.registration-chart { padding: 0; }.receipts-heading { align-items: flex-start; } }
+.summary-card { display: block; transition: transform .15s, filter .15s; padding: 18px 17px 16px; }.card-top { font-size: 14px; } }
+@media (max-width: 640px) { .dashboard-heading { gap: 10px; }.dashboard-heading h1 { font-size: 22px; }.dashboard-actions, .dashboard-access-notice { width: 100%; }.dashboard-update { margin-right: auto; text-align: left; }.heading-description { max-width: 240px; }.summary-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }.activity-column { grid-template-columns: 1fr; }.panel-top { padding: 16px; }.date-filter { padding: 14px 14px 0; gap: 5px; }.date-filter input { padding: 7px 4px; max-width: 128px; }.query-button { padding: 8px; }.chart-summary small { width: 100%; margin: 0; }.receipt-summary small { width: 100%; margin: 0; }.receipts-chart { padding: 0; height: 355px; }.registration-chart { padding: 0; }.receipts-heading { align-items: flex-start; } }
+
+@media (max-width: 640px) {
+  .summary-card { min-height: 124px; padding: 12px; }
+  .summary-card strong { font-size: 26px; margin: 6px 0; }
+  .card-top { font-size: 13px; }
+}
 
 /* Amount and MoM views share one layout; only their values change. */
 .receipts-panel .receipt-summary {

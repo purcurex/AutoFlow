@@ -71,7 +71,7 @@ function handleLogout() {
 </script>
 
 <template>
-  <header class="relative z-20 h-[72px] shrink-0 border-b bg-white/95 px-3 backdrop-blur dark:bg-[var(--color-shell)] sm:px-5" style="border-color: var(--color-border)">
+  <header class="relative z-20 h-[60px] shrink-0 border-b bg-white/95 px-3 backdrop-blur dark:bg-[var(--color-shell)] sm:px-5" style="border-color: var(--color-border)">
     <div class="flex h-full min-w-0 items-center gap-3">
       <button class="icon-btn" :title="sidebarCollapsed ? t('nav.expand') : t('nav.collapse')" @click="emit('toggle-sidebar')"><PanelLeft class="h-5 w-5" /></button>
       <div class="min-w-0">

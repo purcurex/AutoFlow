@@ -1,11 +1,14 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, inject } from 'vue'
+import { workbenchRefreshTarget } from '@/composables/workbenchRefreshTarget'
 import { useI18n } from 'vue-i18n'
 import { RefreshCw } from 'lucide-vue-next'
 
 defineProps<{ busy?: boolean; disabled?: boolean; offline?: boolean; refreshedAt?: string | null }>()
 defineEmits<{ refresh: [] }>()
 const { locale } = useI18n()
+const target = inject(workbenchRefreshTarget, undefined)
+const refreshTarget = computed(() => target?.value ?? null)
 const zh = computed(() => String(locale.value).startsWith('zh'))
 const text = (cn: string, en: string) => zh.value ? cn : en
 function time(value?: string | null) {
@@ -16,6 +19,7 @@ function time(value?: string | null) {
 </script>
 
 <template>
+  <Teleport :to="refreshTarget || 'body'" :disabled="!refreshTarget">
   <div class="workbench-refresh-control">
     <span class="workbench-refresh-status" aria-live="polite">
       <span>{{ offline ? text('网络已断开', 'Offline') : busy ? text('正在查询…', 'Loading…') : text('手动刷新', 'Manual refresh') }}</span>
@@ -25,6 +29,7 @@ function time(value?: string | null) {
       <RefreshCw :size="15" :class="{ spinning: busy }" />{{ text('刷新', 'Refresh') }}
     </button>
   </div>
+  </Teleport>
 </template>
 
 <style scoped>

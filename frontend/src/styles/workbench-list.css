@@ -14,7 +14,7 @@
 .workbench-filter-search .workbench-search-field{flex:1;min-width:0}
 .workbench-filter-toolbar label:not(.workbench-search-field){display:flex;align-items:center;gap:8px;margin:0;white-space:nowrap;font-size:12px;color:var(--color-text-secondary)}
 .workbench-filter-main > label select{width:136px;min-width:0}
-.workbench-filter-main > label:last-of-type select{width:112px}
+.workbench-filter-main > label.warehouse-filter select{width:112px}
 .workbench-filter-secondary select{width:150px}
 .workbench-filter-secondary .result-count,.workbench-filter-secondary .count{margin-left:auto;width:300px;max-width:100%;min-height:20px;flex-shrink:0;text-align:right;white-space:nowrap;font-size:12px;color:var(--color-text-secondary);font-variant-numeric:tabular-nums}
 @media(max-width:700px){:root{--workbench-filter-inline-padding:14px}.workbench-filter-toolbar{padding:14px var(--workbench-filter-inline-padding)}.workbench-filter-search{flex-basis:100%;width:100%;min-width:0}.workbench-filter-toolbar label:not(.workbench-search-field){max-width:100%}.workbench-filter-toolbar select{max-width:100%}.workbench-filter-secondary .result-count,.workbench-filter-secondary .count{margin-left:0}}
@@ -63,7 +63,7 @@ table[data-task-layout="compact"] :is(.product,.stock-product,.rma-product) { ga
 /* Query export sits on the search row; pagination stays above the document list. */
 .workbench-filter-export{display:flex;justify-content:flex-end;margin-left:auto;flex-shrink:0}
 .workbench-list-pagination{margin-left:auto;min-width:0;max-width:100%}
-.workbench-export-trigger{width:136px;flex-shrink:0}
+.workbench-export-trigger{width:112px;flex-shrink:0;justify-content:center;gap:6px}
 .workbench-button[data-testid="toggle-all-products"]{width:184px;flex-shrink:0}
 /* Feedback overlays never insert a new row above the list header. */
 .workbench-feedback{position:fixed!important;top:82px;right:24px;z-index:70;max-width:min(480px,calc(100vw - 48px));margin:0!important;padding:12px 16px!important;border:1px solid var(--color-border);border-radius:7px;background:var(--color-surface);box-shadow:0 5px 20px #0002;font-size:12px}
@@ -79,3 +79,111 @@ input.workbench-page-checkbox{width:15px;height:15px;min-width:15px;margin:0 7px
 .workbench-search-field:focus-within{border-color:color-mix(in srgb,var(--color-link) 55%,var(--color-border));box-shadow:0 0 0 2px color-mix(in srgb,var(--color-link) 10%,transparent)}
 .workbench-search-field input:focus,.workbench-search-field input:focus-visible{outline:none;box-shadow:none}
 @media(forced-colors:active){.workbench-search-field:focus-within{outline:2px solid Highlight;outline-offset:2px}}
+
+/* Compact workbench shell: shared across all five roles and both color modes. */
+.role-workbench.app-page{padding-top:12px;padding-bottom:8px}
+.role-workbench.app-page .workbench-heading{margin-bottom:10px;gap:12px}
+.role-workbench.app-page .workbench-heading .eyebrow{display:none}
+.role-workbench.app-page .workbench-heading h1{font-size:22px;line-height:1.3}
+.role-workbench.app-page .workbench-navigation{margin-bottom:10px;gap:16px}
+.role-workbench.app-page .role-tabs a{padding:9px 13px;gap:8px;min-width:118px}
+.role-workbench.app-page .workbench-queues{margin-bottom:10px;gap:20px}
+.role-workbench.app-page .workbench-queues a{padding-bottom:8px}
+.role-workbench.app-page .workbench-task-heading{margin-bottom:10px;gap:8px 16px}
+.role-workbench.app-page .workbench-task-heading h2{font-size:18px}
+.role-workbench.app-page .task-heading-description{margin-top:3px;font-size:12px;line-height:1.5}
+.role-workbench.app-page .workbench-filter-toolbar{flex-direction:row;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:10px 16px}
+.role-workbench.app-page .workbench-filter-main,.role-workbench.app-page .workbench-filter-secondary{display:contents}
+.role-workbench.app-page .workbench-filter-toolbar .result-count,.role-workbench.app-page .workbench-filter-toolbar .count{width:auto;min-width:80px;margin-left:auto}
+.role-workbench.app-page .workbench-filter-search{flex:0 1 424px}
+.role-workbench.app-page :is(.table-actions,.stock-actions,.receipt-expansion-actions,.parcel-actions,.list-actions,.purchase-actions){padding-top:8px;padding-bottom:8px;gap:10px}
+.role-workbench.app-page .workbench-scroll-viewport{height:var(--list-viewport-height);max-height:var(--list-viewport-height);min-height:0;overflow:auto!important;overscroll-behavior:contain;scrollbar-gutter:stable;position:relative}
+.role-workbench.app-page .workbench-scroll-viewport>table{border-collapse:separate;border-spacing:0}
+.role-workbench.app-page .workbench-scroll-viewport>table>thead>tr>th{position:sticky;top:0;z-index:5;background:var(--color-surface-muted);box-shadow:0 1px 0 var(--color-border)}
+
+.workbench-scroll-shortcuts button{display:flex;align-items:center;justify-content:center;width:30px;height:30px;color:var(--color-text-secondary)}
+.workbench-scroll-shortcuts button:hover:not(:disabled){background:var(--color-selection-surface);color:var(--color-link)}
+.workbench-scroll-shortcuts button:disabled{opacity:.3}
+.workbench-scroll-shortcuts button:focus-visible{outline:2px solid var(--color-link);outline-offset:-3px}
+@media(max-width:700px){.role-workbench.app-page .workbench-filter-search{flex-basis:100%}.role-workbench.app-page .workbench-filter-toolbar{padding:10px}.role-workbench.app-page .workbench-navigation{gap:8px}.role-workbench.app-page .workbench-heading h1{font-size:20px}}
+
+.role-workbench.app-page .workbench-scroll-viewport > .purchase-columns { position: sticky; top: 0; z-index: 5; background: var(--color-surface-muted); }
+
+/* Compact list chrome: the active tab identifies the list; actions live beside filters. */
+.role-workbench.app-page { padding-top: 16px; }
+.role-workbench.app-page .workbench-task-heading { display: none; }
+.role-workbench.app-page .workbench-inline-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; order: 10; margin-left: auto; }
+.role-workbench.app-page .workbench-inline-actions .workbench-refresh-control { display: flex; margin: 0; gap: 0; }
+.role-workbench.app-page .workbench-inline-actions .workbench-refresh-status { display: none; }
+.role-workbench.app-page .workbench-list-actions { padding: 6px 16px; gap: 8px; }
+.role-workbench.app-page .workbench-list-actions .workbench-button { min-height: 32px; padding-top: 6px; padding-bottom: 6px; }
+
+/* Refresh belongs to the tab row; filters stay contiguous and export ends the toolbar. */
+.role-workbench.app-page .workbench-queue-row { display:flex; align-items:center; gap:16px; border-bottom:1px solid var(--color-border); margin-bottom:10px; }
+.role-workbench.app-page .workbench-queue-row .workbench-queues { flex:1; min-width:0; margin-bottom:0; border-bottom:0; }
+.role-workbench.app-page .workbench-queue-refresh { flex-shrink:0; padding-bottom:6px; }
+.role-workbench.app-page .workbench-queue-refresh .workbench-refresh-control { display:flex; margin:0; }
+.role-workbench.app-page .workbench-queue-refresh .workbench-refresh-status { display:none; }
+.role-workbench.app-page .workbench-queue-refresh .workbench-refresh { min-height:30px; padding:5px 10px; }
+.role-workbench.app-page .workbench-filter-search { flex:0 1 350px; max-width:350px; }
+.role-workbench.app-page .workbench-inline-actions { order:-1; margin-left:0; }
+.role-workbench.app-page .workbench-inline-actions:empty { display:none; }
+.role-workbench.app-page .workbench-filter-toolbar :is(.result-count,.count) { order:20; margin-left:0; }
+.role-workbench.app-page .workbench-filter-export { order:30; margin-left:auto; }
+@media(max-width:700px){.role-workbench.app-page .workbench-filter-search { flex-basis:100%;max-width:none; }}
+/* Match the filter panel's 16px padding plus its 1px border. */
+.role-workbench.app-page .workbench-queue-refresh { margin-right: 17px; }
+@media(max-width:700px){.role-workbench.app-page .workbench-queue-refresh { margin-right:11px; }}
+/* Compact, consistent control scale beneath the workbench navigation. */
+.role-workbench.app-page :is(.workbench-filter-toolbar,.workbench-list-actions,.workbench-queue-refresh) .workbench-button {
+  height:32px;min-height:32px;padding:5px 12px;gap:6px;font-size:12px;line-height:20px;
+}
+.role-workbench.app-page :is(.workbench-filter-toolbar,.workbench-list-actions) .workbench-filter-select {
+  height:32px;padding-top:5px;padding-bottom:5px;font-size:12px;line-height:20px;
+}
+.role-workbench.app-page .workbench-filter-toolbar .workbench-search-field { height:32px;gap:7px;padding-inline:10px; }
+.role-workbench.app-page .workbench-filter-toolbar .workbench-search-field input { padding-block:5px;font-size:12px;line-height:20px; }
+.role-workbench.app-page .workbench-filter-toolbar { padding-top:8px;padding-bottom:8px;gap:7px 10px; }
+.role-workbench.app-page .workbench-list-actions { padding-top:5px;padding-bottom:5px;font-size:12px;line-height:18px; }
+.role-workbench.app-page .workbench-selection-summary { font-size:11px;line-height:18px; }
+.role-workbench.app-page .workbench-inline-actions button { font-size:12px;line-height:20px; }
+
+/* Approval toolbar uses a quieter, compact text-only primary action. */
+.role-workbench.app-page .workbench-list-actions { padding-block:4px; }
+.role-workbench.app-page .workbench-list-actions .workbench-button { height:30px;min-height:30px;padding-block:4px; }
+.role-workbench.app-page .workbench-list-actions .workbench-filter-select { height:30px;padding-block:4px; }
+.role-workbench.app-page [data-testid="open-approval"] { min-width:56px;padding-inline:14px; }
+/* Readable list hierarchy: 12px headers, 12px primary values, 11px supporting text. */
+.role-workbench.app-page .workbench-scroll-viewport table { font-size:12px;line-height:1.5; }
+.role-workbench.app-page .workbench-scroll-viewport th { font-size:12px;font-weight:600;line-height:18px;padding-block:10px; }
+.role-workbench.app-page .workbench-scroll-viewport td { font-size:12px;line-height:18px;vertical-align:middle;padding-block:8px; }
+.role-workbench.app-page .workbench-scroll-viewport :is(.product-name,.stock-product p,.rma-product>div>span,.order-cell strong,.stock-number .stock-copy,.purchase-number) { font-size:12px;line-height:18px; }
+.role-workbench.app-page .workbench-scroll-viewport :is(.product-sku,.product-variant,.stock-product .sku,.stock-product small,.owner-department,.product-lines-summary,small) { font-size:11px;line-height:17px; }
+.role-workbench.app-page .workbench-scroll-viewport .product { min-height:54px;padding-block:3px; }
+.role-workbench.app-page .workbench-scroll-viewport .product-details { gap:3px; }
+.role-workbench.app-page .workbench-scroll-viewport .stock-product+.stock-product { margin-top:8px; }
+.role-workbench.app-page .workbench-scroll-viewport .product-lines-summary { margin-top:5px; }
+.role-workbench.app-page .workbench-scroll-viewport :is(.money,.numeric,.amount-cell,.workbench-date-cell) { font-variant-numeric:tabular-nums; }
+.role-workbench.app-page .purchase-columns { font-size:12px;line-height:18px;padding-block:10px; }
+.role-workbench.app-page .group-head { font-size:12px;line-height:18px;padding-block:10px; }
+.role-workbench.app-page .workbench-scroll-viewport td.empty { padding-block:64px; }
+.role-workbench.app-page .workbench-scroll-viewport :is(.workbench-status-badge,.parcel-table .status,.root-header .type) { display:inline-flex;align-items:center;min-height:20px;padding:1px 6px;font-size:11px;line-height:16px;border-radius:4px; }
+
+/* Minimal list jump actions follow pagination. */
+.workbench-scroll-shortcuts { display:inline-flex;align-items:center;gap:2px;margin-left:4px; }
+.workbench-scroll-shortcuts button { width:28px;height:28px;padding:0;border:0;border-radius:4px; }
+
+/* Status labels share the document number's left edge, never the checkbox edge. */
+.role-workbench.app-page .workbench-scroll-viewport :is(td.order-cell,td.stock-number,td.rma-order-number) { text-align:left; }
+.role-workbench.app-page :is(.stock-order-identity,.rma-order-identity) { display:inline-flex;flex-direction:column;align-items:flex-start;text-align:left;vertical-align:middle;max-width:calc(100% - 25px); }
+.role-workbench.app-page .stock-order-identity .stock-review-line { margin:6px 0 0; }
+.role-workbench.app-page .stock-order-identity .stock-copy { max-width:100%; }
+.role-workbench.app-page .rma-order-main { justify-content:flex-start; }
+.role-workbench.app-page :is(.rma-order-tags,.order-exception-label,.allocation-reference) { justify-content:flex-start;text-align:left; }
+.role-workbench.app-page :is(.order-identity,.stock-order-identity,.rma-order-identity) :is(.multi-item-badge,.stock-item-summary,.rma-item-summary) { margin-left:0;margin-right:0; }
+
+/* Gentle row snapping, accounting for the sticky header. Oversized orders remain scrollable. */
+.role-workbench.app-page .workbench-scroll-viewport { scroll-snap-type:y proximity;scroll-padding-top:var(--list-sticky-header-height,0px); }
+.role-workbench.app-page .workbench-scroll-viewport > table > tbody > tr:not(:has(>td[colspan])),
+.role-workbench.app-page .workbench-scroll-viewport > table > tbody > tr.stock-root,
+.role-workbench.app-page .workbench-scroll-viewport > .purchase-group { scroll-snap-align:start;scroll-snap-stop:normal; }
