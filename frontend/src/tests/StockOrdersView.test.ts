@@ -58,7 +58,7 @@ it('applies lifecycle and customer payment range together, clears selection and 
   expect(range!.element.closest('label')?.textContent).toContain('客户付款时间')
   expect(wrapper.get('.stock-heading').text()).toContain('可按备货阶段和客户付款时间查询')
   expect(stage!.findAll('option').map(o=>o.text())).toEqual(['全部', '已创建待支付', '已支付待采购', '采购完成已入库'])
-  expect((range!.element as HTMLSelectElement).value).toBe('1m')
+  expect((range!.element as HTMLSelectElement).value).toBe('3m')
   await wrapper.get('tbody input[type=checkbox]').setValue(true)
   await stage!.setValue('pending_procurement'); await flushPromises()
   await range!.setValue('1w'); await flushPromises()

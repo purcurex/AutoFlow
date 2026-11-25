@@ -1,7 +1,7 @@
 import { collectedWhere } from './collected-workbench-query'
 describe('collected orders filters',()=>{
  it('defaults approved queries to the same month as the UI while retaining explicit periods',()=>{
-  expect(collectedWhere('b',null,{queue:'review',completed:true})).toEqual(collectedWhere('b',null,{queue:'review',completed:true,timeRange:'1m'}))
+  expect(collectedWhere('b',null,{queue:'review',completed:true})).toEqual(collectedWhere('b',null,{queue:'review',completed:true,timeRange:'3m'}))
   expect(collectedWhere('b',null,{queue:'review',completed:true,timeRange:'all'}).where).not.toContain('paid_at >=')
  })
  it('binds batch and employee authorization',()=>{const q=collectedWhere('batch',['employee'],{queue:'review'});expect(q.params).toEqual(['batch',['employee']]);expect(q.where).toContain('owner_employee_id = ANY');expect(q.where).toContain("raw_order_status='2' AND raw_bill_status IN ('A','B')")})

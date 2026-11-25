@@ -1,3 +1,4 @@
+import { orderDocumentType } from './order-document-type'
 import { collectedPackageSource } from './collected-actual-channel'
 import { withPaymentDataQuality } from './payment-data-quality'
 import { orderDispatchTaskStatus, hasDispatchSyncFailure, hasMissingObtainedTracking, missingObtainedTrackingReason, hasMissingFulfilledTracking, missingFulfilledTrackingReason, dispatchSyncFailureReason } from './order-dispatch-status'
@@ -54,7 +55,7 @@ export function withOrderBusinessStatus(display:Row,raw:Row|undefined,companyId?
  const items=(display.items??[]).map((item:Row)=>({...item,purchaseState:businessStatus.lines.find(l=>l.id===item.id)?.purchase??'unknown'}))
  const fulfillmentProgress={...display.fulfillmentProgress,outbound:businessStatus.outbound}
  const nativeFulfillmentProgress=display.nativeFulfillmentProgress?{...display.nativeFulfillmentProgress,outbound:businessStatus.outbound}:undefined
- display={...display,fulfillmentProgress,...(nativeFulfillmentProgress?{nativeFulfillmentProgress}:{})}
+ display={...display,...orderDocumentType(raw),fulfillmentProgress,...(nativeFulfillmentProgress?{nativeFulfillmentProgress}:{})}
  if(options.persistedExceptions)return {...display,businessStatus,dispatchTaskStatus:orderDispatchTaskStatus({...display,businessStatus}),items}
  const dispatchFailure=hasDispatchSyncFailure({...display,businessStatus})
  const packageRaw=collectedPackageSource(display,raw,companyId)

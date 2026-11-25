@@ -90,7 +90,7 @@ export function collectedWhere(batchId:string,employeeIds:readonly string[]|null
  if(q.warehouseCode)clauses.push(`warehouse_code = ANY(${bind(warehouseCodes(q.warehouseCode))}::text[])`)
  const paymentTime=q.queue==='unpaid'?'consumer_paid_at':'paid_at'
  const days:Record<string,number>={'1w':7,'1m':30,'3m':90}
- const range=q.timeRange??(q.completed&&q.queue==='review'?'1m':undefined);if(days[range])clauses.push(`${paymentTime} >= now() - (${bind(days[range])} * interval '1 day') AND ${paymentTime} <= now()`)
+ const range=q.timeRange??(q.completed||q.queue==='unpaid'?'3m':undefined);if(days[range])clauses.push(`${paymentTime} >= now() - (${bind(days[range])} * interval '1 day') AND ${paymentTime} <= now()`)
  if(q.mode==='selected')clauses.push(`source_id = ANY(${bind(q.orderIds)}::text[])`)
  const sorts:Record<string,string>={...(q.queue==='dispatch'?{dispatchDocumentStatus:`array_position(ARRAY['dispatch_pending','dispatch_tracking','dispatch_cancelled','dispatch_synced'],${collectedDispatchTaskSql})`}:{}),paidAt:'paid_at',consumerPaidAt:paymentTime,reviewedAt:"NULLIF(display->>'reviewedAt','')::timestamptz",completedAt:['allocation','allocation_review'].includes(q.queue)?collectedAllocationCompletedAt():`NULLIF(display->>'${q.queue==='dispatch'?'dispatchApprovedAt':q.queue==='procurement'?'procurementCompletedAt':q.queue==='shipping'?'outboundCompletedAt':'reviewedAt'}','')::timestamptz`}
  return {where:clauses.map(x=>`(${x})`).join(' AND '),

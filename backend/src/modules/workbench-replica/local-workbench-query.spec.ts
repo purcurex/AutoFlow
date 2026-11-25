@@ -18,13 +18,13 @@ describe('formal queue alignment with current list date and physical purchase fa
     expect(completed.where).not.toContain('allocation_approval')
     expect(completed.where).not.toContain('delivery.incomplete')
   })
-  it.each(['review', 'dispatch', 'procurement', 'allocation_review', 'shipping'])('defaults completed %s to the last 30 days of customer payment', queue => {
+  it.each(['review', 'dispatch', 'procurement', 'allocation_review', 'shipping'])('defaults completed %s to the last 90 days of customer payment', queue => {
     const sql = buildLocalOrderQuery(scopes, { queue, completed: true })
-    expect(sql.where).toContain("o.customer_paid_at >= CURRENT_TIMESTAMP - INTERVAL '30 days'")
+    expect(sql.where).toContain("o.customer_paid_at >= CURRENT_TIMESTAMP - INTERVAL '90 days'")
     expect(sql.where).not.toContain('phase_completed_at >=')
   })
-  it('defaults unpaid to 30 days of source payment and preserves unrestricted ordinary queues', () => {
-    expect(buildLocalOrderQuery(scopes, { queue: 'unpaid' }).where).toContain("o.consumer_paid_at >= CURRENT_TIMESTAMP - INTERVAL '30 days'")
+  it('defaults unpaid to 90 days of source payment and preserves unrestricted ordinary queues', () => {
+    expect(buildLocalOrderQuery(scopes, { queue: 'unpaid' }).where).toContain("o.consumer_paid_at >= CURRENT_TIMESTAMP - INTERVAL '90 days'")
     for (const queue of ['review', 'procurement', 'procurement_shipping', 'allocation', 'allocation_review', 'shipping', 'purchase_returns']) {
       expect(buildLocalOrderQuery(scopes, { queue }).where).not.toContain('customer_paid_at >=')
     }
@@ -45,7 +45,7 @@ describe('local workbench query boundary', () => {
   it('uses the UI month default for approved and sales stock, preserving explicit all',()=>{
     for(const stock of [false,true]){
       const query={queue:stock?'all':'review',completed:!stock}
-      expect(buildLocalOrderQuery(scopes,query,stock)).toEqual(buildLocalOrderQuery(scopes,{...query,timeRange:'1m'},stock))
+      expect(buildLocalOrderQuery(scopes,query,stock)).toEqual(buildLocalOrderQuery(scopes,{...query,timeRange:'3m'},stock))
       expect(buildLocalOrderQuery(scopes,{...query,timeRange:'all'},stock).where).not.toContain('customer_paid_at >=')
     }
   })

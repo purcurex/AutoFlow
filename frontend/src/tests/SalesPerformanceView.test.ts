@@ -28,7 +28,7 @@ const owner = { id: 'owner-1', name: 'Alice', department: { id: 'dept-1', name: 
 const otherOwner = { id: 'owner-2', name: 'Bob', department: { id: 'dept-2', name: '业务二部' } }
 const sample = {
   chartAccess: chartAccessFixture().charts.find(item => item.chartId === 'sales_performance')!,
-  source: 'mock', query: { from: '2026-01-01', to: '2026-10-23', grain: 'month' }, timeZone: 'UTC+8', currency: 'USD', asOf: '2026-10-22T16:30:00Z',
+  source: 'mock', query: { from: '2026-10-01', to: '2026-10-23', grain: 'month' }, timeZone: 'UTC+8', currency: 'USD', asOf: '2026-10-22T16:30:00Z',
   owners: [owner, otherOwner], selectedOwner: owner, canSelectOwner: true,
   periods: [
     { ...metrics, id: '2026-09', label: '2026-09', from: '2026-09-01', to: '2026-09-30', profitStatus: 'settled' },
@@ -92,9 +92,9 @@ describe('sales performance workbench', () => {
     invalidateSession(); await vi.advanceTimersByTimeAsync(400); await flushPromises()
     expect(get).toHaveBeenCalledTimes(count)
   })
-  it('loads the UTC+8 year-to-date scope without identity claims and names the selected person', async () => {
+  it('loads the UTC+8 month-to-date scope without identity claims and names the selected person', async () => {
     const { wrapper } = await setup()
-    expect(get).toHaveBeenCalledWith('/autoflow/integrations/fop/sales-performance', { params: { from: '2026-01-01', to: '2026-10-23', grain: 'month' } })
+    expect(get).toHaveBeenCalledWith('/autoflow/integrations/fop/sales-performance', { params: { from: '2026-10-01', to: '2026-10-23', grain: 'month' } })
     expect(wrapper.text()).toContain('Alice · 业务一部')
     expect(wrapper.find('.performance-scope').text()).toContain('UTC+8 · $')
     expect(wrapper.text()).not.toContain('USD')
@@ -166,7 +166,7 @@ describe('sales performance workbench', () => {
     expect(dialog.text()).toContain('2026/10/1')
     expect(dialog.find('tfoot').text()).toContain('$300.00')
     await dialog.findAll('button').find(b => b.text() === '下一页')!.trigger('click'); await flushPromises()
-    expect(get).toHaveBeenLastCalledWith('/autoflow/integrations/fop/sales-performance/details', { params: { from: '2026-01-01', to: '2026-10-23', grain: 'month', ownerId: 'owner-1', kind: 'receipts', periodId: '2026-10', page: 2, pageSize: 10 } })
+    expect(get).toHaveBeenLastCalledWith('/autoflow/integrations/fop/sales-performance/details', { params: { from: '2026-10-01', to: '2026-10-23', grain: 'month', ownerId: 'owner-1', kind: 'receipts', periodId: '2026-10', page: 2, pageSize: 10 } })
     await dialog.trigger('cancel'); await flushPromises()
     expect(document.querySelector('dialog')).toBeNull()
   })
@@ -286,7 +286,7 @@ describe('sales performance workbench', () => {
     await wrapper.find('form').trigger('submit'); await flushPromises()
     expect(wrapper.find('[role=alert]').text()).toContain('有效日期')
     expect(get).toHaveBeenCalledTimes(1)
-    expect(wrapper.find('.performance-scope').text()).toContain('2026-01-01')
+    expect(wrapper.find('.performance-scope').text()).toContain('2026-10-01')
   })
   it('limits the query to 366 inclusive days and explains the range limit before requesting', async () => {
     vi.setSystemTime(new Date('2027-10-22T16:30:00Z'))

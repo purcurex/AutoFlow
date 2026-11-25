@@ -57,6 +57,11 @@ export class CompletionFiltersDto {
   @IsOptional()
   @Transform(({ value }) => value === 'true' ? true : value === 'false' ? false : value)
   @IsBoolean()
+  refresh?: boolean
+
+  @IsOptional()
+  @Transform(({ value }) => value === 'true' ? true : value === 'false' ? false : value)
+  @IsBoolean()
   completed?: boolean
 }
 

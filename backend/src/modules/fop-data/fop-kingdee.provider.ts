@@ -1,3 +1,4 @@
+import { fopBudgetedFetch } from './fop-rate-limit'
 import { assertActiveFopEndpoint } from './fop-interface-policy'
 import { compareFulfillmentOrders, fulfillmentSortDirection, fulfillmentSortField } from './fop-order-sort'
 import Decimal from 'decimal.js'
@@ -89,6 +90,7 @@ export class KingdeeFopDataProvider extends FopDataProvider {
   private readonly rmaDiscoveryCache: RmaDiscoveryCache = {}
   constructor(protected readonly config: Configuration, private readonly request: typeof fetch = fetch, private readonly resolveBinding?: BindingResolver) {
     super()
+    if (request === globalThis.fetch) this.request = fopBudgetedFetch(config, request)
     this.configuredOrganizations = (config.get('FOP_KINGDEE_ORGANIZATION_IDS') ?? '').split(',').map(value => value.trim()).filter(Boolean)
   }
 
@@ -970,6 +972,7 @@ export class KingdeeFopDataProvider extends FopDataProvider {
         accountId: this.config.get('FOP_KINGDEE_ACCOUNT_ID')!.trim(), username: this.config.get('FOP_KINGDEE_USERNAME')!.trim(),
         nonce: randomUUID(), timestamp: new Date().toISOString(), language: 'zh_CN',
       }) })
+    this.assertGatewayBudget(response)
     if (!response.ok) { await response.body?.cancel(); throw new FopPermissionDeniedError('Kingdee token request failed', 'fop_authentication_expired') }
     const envelope = await this.responseEnvelope(response, 64 * 1024)
     if (envelope.status !== true || String(envelope.errorCode) !== '0') {
@@ -982,6 +985,14 @@ export class KingdeeFopDataProvider extends FopDataProvider {
     if (!Number.isSafeInteger(duration) || duration <= 30_000) throw new Error('Invalid Kingdee token expiry')
     this.cachedToken = { value, expiresAt: Date.now() + duration }
     return value
+  }
+
+  private assertGatewayBudget(response: Response): void {
+    const reason=response.headers.get('x-fop-admission')
+    if(response.status===429||reason){
+      void response.body?.cancel().catch(()=>{})
+      throw new FopIntegrationUnavailableError(reason==='billing'?'fop_source_billing_blocked':reason==='budget_unavailable'?'fop_rate_budget_unavailable':'fop_source_rate_limited')
+    }
   }
 
   private endpoint(key: string): URL {
@@ -1048,6 +1059,7 @@ export class KingdeeFopDataProvider extends FopDataProvider {
         if (readOnly && retries++ === 0) continue
         throw new Error('Kingdee query transport unavailable')
       }
+      this.assertGatewayBudget(response)
       if (response.status === 401) {
         await response.body?.cancel()
         if (readOnly && !refreshed && this.automaticTokenConfigured()) { refreshed = true; token = await this.accessToken(token); continue }

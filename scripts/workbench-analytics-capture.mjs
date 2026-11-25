@@ -62,7 +62,7 @@ async function main() {
   const require = createRequire(import.meta.url)
   require('ts-node').register({ project: path.resolve('backend/tsconfig.json'), transpileOnly: true })
   const { KingdeeFopDataProvider } = require('../backend/src/modules/fop-data/fop-kingdee.provider')
-  const config = { ...cfg, FOP_QUERIES_PAUSED: 'false' }
+  const config = { ...env, ...cfg, FOP_QUERIES_PAUSED: 'false' }
   const provider = new KingdeeFopDataProvider({ get: key => config[key] })
   const connection = await provider.getConnectionContext()
   if (connection.subject.tenantId !== cfg.FOP_KINGDEE_TENANT_ID || connection.subject.userId !== cfg.FOP_KINGDEE_USER_ID || connection.currentOrganization.id !== '100000') throw Error('connection_mismatch')

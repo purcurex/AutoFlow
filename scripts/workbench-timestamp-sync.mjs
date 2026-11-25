@@ -6,6 +6,7 @@ import {resolve,dirname} from 'node:path'
 import {fileURLToPath} from 'node:url'
 import {createRequire} from 'node:module'
 import {getToken} from './fop-openapi-smoke.mjs'
+import {budgetedFetch} from './fop-budgeted-fetch.mjs'
 import {runQuery} from './fop-workbench-openapi.mjs'
 import {confirmedFopOrigin} from './fop-confirmed-origin.mjs'
 import {readSyncConfig,syncDatabaseOptions,syncRuntimeRequire} from './workbench-sync-runtime.mjs'
@@ -99,7 +100,7 @@ async function main(){
   prepared=await prepareTimestampPagedExecution(config,profile,{getConnection:()=>provider.getConnectionContext()})
  }
  const source=profile.version===2?new TimestampPagedSource(profile,()=>config.FOP_QUERIES_PAUSED?.trim().toLowerCase()==='true',prepared.query,prepared.identityBasis):new TimestampHttpSource(profile,{paused:()=>config.FOP_QUERIES_PAUSED?.trim().toLowerCase()==='true',identity:config.FOP_OPENAPI_IDENTITY,tokenHeader:config.FOP_OPENAPI_TOKEN_HEADER,
-  token:async()=>token??(token=await getToken(config))})
+  token:async()=>token??(token=await getToken(config))},budgetedFetch(config))
  source.assertReady(scope)
  const {DataSource}=require('typeorm'),db=await new DataSource(syncDatabaseOptions(config)).initialize()
  try{

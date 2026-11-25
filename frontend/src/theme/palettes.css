@@ -19,7 +19,7 @@
   --color-total-surface: #EAF4FB;
   --color-total-border: var(--color-selection-border);
   --color-accent: #2776AA;
-  --color-chart-detail: #5D98BF;
+  --color-chart-detail: #75AACB;
   --color-sidebar-selected: #2B4A62;
   --color-sidebar-selected-text: #E8F4FC;
   --color-background: #F5F7FA;
@@ -52,7 +52,7 @@
   --color-total-surface: #EDF8EF;
   --color-total-border: var(--color-selection-border);
   --color-accent: #268343;
-  --color-chart-detail: #5CA272;
+  --color-chart-detail: #78B38A;
   --color-sidebar-selected: #365440;
   --color-sidebar-selected-text: #EDF8EF;
   --color-background: #F5F7FA;
@@ -85,7 +85,7 @@
   --color-total-surface: #F1EFF9;
   --color-total-border: var(--color-selection-border);
   --color-accent: #746DAA;
-  --color-chart-detail: #9792BF;
+  --color-chart-detail: #ABA6D0;
   --color-sidebar-selected: #49445F;
   --color-sidebar-selected-text: #F4F0FF;
   --color-background: #F5F7FA;
@@ -118,7 +118,7 @@
   --color-total-surface: #FFF2EB;
   --color-total-border: var(--color-selection-border);
   --color-accent: #FF9166;
-  --color-chart-detail: #FFAC8C;
+  --color-chart-detail: #D47151;
   --color-sidebar-selected: #60483E;
   --color-sidebar-selected-text: #FFF3EC;
   --color-background: #F5F7FA;
@@ -151,7 +151,7 @@
   --color-total-surface: #20364A;
   --color-total-border: var(--color-selection-border);
   --color-accent: #2776AA;
-  --color-chart-detail: #5D98BF;
+  --color-chart-detail: #85B6D4;
   --color-sidebar-selected: #20364A;
   --color-sidebar-selected-text: #A8D8F7;
   --color-background: #101720;
@@ -184,7 +184,7 @@
   --color-total-surface: #203C30;
   --color-total-border: var(--color-selection-border);
   --color-accent: #268343;
-  --color-chart-detail: #5CA272;
+  --color-chart-detail: #85C49A;
   --color-sidebar-selected: #203C30;
   --color-sidebar-selected-text: #A6DEC0;
   --color-background: #101720;
@@ -217,7 +217,7 @@
   --color-total-surface: #332D49;
   --color-total-border: var(--color-selection-border);
   --color-accent: #746DAA;
-  --color-chart-detail: #9792BF;
+  --color-chart-detail: #B6AFDA;
   --color-sidebar-selected: #332D49;
   --color-sidebar-selected-text: #D0C1F0;
   --color-background: #101720;
@@ -250,7 +250,7 @@
   --color-total-surface: #40302A;
   --color-total-border: var(--color-selection-border);
   --color-accent: #F79B79;
-  --color-chart-detail: #F9B49A;
+  --color-chart-detail: #CA785A;
   --color-sidebar-selected: #40302A;
   --color-sidebar-selected-text: #FFB394;
   --color-background: #101720;

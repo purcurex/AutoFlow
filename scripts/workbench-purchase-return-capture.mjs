@@ -45,7 +45,7 @@ async function main(){
  const require=createRequire(import.meta.url);require('ts-node').register({project:path.resolve('backend/tsconfig.json'),transpileOnly:true})
  const {KingdeeFopDataProvider}=require('../backend/src/modules/fop-data/fop-kingdee.provider')
  // Process-local override for this explicit read only. Persistent files and app processes stay paused.
- const config={...cfg,FOP_QUERIES_PAUSED:'false'},provider=new KingdeeFopDataProvider({get:key=>config[key]})
+ const config={...env,...cfg,FOP_QUERIES_PAUSED:'false'},provider=new KingdeeFopDataProvider({get:key=>config[key]})
  const c=await provider.getConnectionContext()
  if(c.subject.tenantId!==cfg.FOP_KINGDEE_TENANT_ID||c.subject.userId!==cfg.FOP_KINGDEE_USER_ID||c.currentOrganization.id!=='100000')throw Error('connection_mismatch')
  config.FOP_OPENAPI_ACCESS_TOKEN=await getToken(config)

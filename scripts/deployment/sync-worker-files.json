@@ -13,5 +13,6 @@
   "workbench-analytics-import.cjs",
   "workbench-customer-registrations-import.cjs",
   "workbench-customer-registrations-capture.mjs",
-  "fop-interface-policy.cjs"
+  "fop-interface-policy.cjs",
+  "fop-budgeted-fetch.mjs"
 ]

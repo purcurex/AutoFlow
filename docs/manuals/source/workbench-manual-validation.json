@@ -1,0 +1,48 @@
+{
+  "date": "2026-11-25",
+  "theme": "purple",
+  "mode": "light",
+  "viewport": {
+    "width": 2560,
+    "height": 1440
+  },
+  "sections": 33,
+  "figures": 30,
+  "captures": {
+    "allocation-completed.jpg": "28c012272d60d54d68634d76a4963ab78b71d0b31e0a7938a79001559db19126",
+    "allocation-review.jpg": "df692f5f44bffd7cfee673296094788679076ff3febe68c502f67f1bdfaf2681",
+    "allocation.jpg": "df692f5f44bffd7cfee673296094788679076ff3febe68c502f67f1bdfaf2681",
+    "dispatch-completed.jpg": "ef5ecf0bd5f2fc53b829344c080febd0dde9a0a8d01277653fb638667f689e22",
+    "dispatch.jpg": "c54701428cc4453903e0805a853a0aded2e5987acd45a237b52bd0712f34a375",
+    "instant-inventory.jpg": "75d27876d280f2ec8134147f3a81102434ce7efa2f1ac518d50c032d880bec4b",
+    "procurement-completed.jpg": "2fe20323dae7a58dff54ff4e8247fee64faf385c7af563837f7c9d2c8c251586",
+    "procurement-purchase.jpg": "2959b01cf5aca04755fb3369c3c56f35b648365473480e275535c6d0e8d7d963",
+    "procurement-returns.jpg": "a600cb77d3d1dd2e29ed6d8189c4cff06fdd880939c2c7b630013ef8d7942cba",
+    "procurement-shipping-purchase.jpg": "4e55396f27ca912bf162712c618478e93eaef5dc97a7e31b6c2b4b28c404c671",
+    "procurement-shipping.jpg": "c4737154060b94f1d723b01d4adfe1c0ade9856e73c4ff1b958f7c7dd8b2c771",
+    "procurement.jpg": "adf889b5f0712e804f02b86fc075f9fecdc9eaf06ff9bbb0b5b9015dfb91c026",
+    "sales-completed.jpg": "cb6ee7ecc3ee8bdc4a4fe89a2e2ad9aea8765f31723d0d7f374dc88e844f33fe",
+    "sales-exceptions.jpg": "73c526f6a599400ecab56570ffab8e267e1b2759ca5b08c97591cc4f68a53a96",
+    "sales-performance.jpg": "a5da3048f40463a0b8296d7990bf03a1111b7d1b317dbd08a125149434cc521d",
+    "sales-progress.jpg": "e1039720eb24562062389a10fd3afe8610bcd54f78ec637332ba038036677cc1",
+    "sales-review.jpg": "d1fa7880a0daacde72d382c594c94bbd587ecdc1e99fcf5a813e1d18e9814ab6",
+    "sales-rma.jpg": "36edc7e9e2f1818b058f838c76d3d9d9aab42768a0969957400be9e6b6957571",
+    "sales-stock.jpg": "7d2aad0d012a3be7f8693c7786105d9a754a5b0a2606584caa019b4041a1a146",
+    "sales-unpaid.jpg": "31617e4e8f5b3e7666de83863786b0a9eb7c799627e82e4afece7a46ae1d63bf",
+    "settings.jpg": "26a447e8ace0fbac3f3b248f3381b7e21821b847e60e51f32ecba4662174cf92",
+    "stock-inventory.jpg": "55e72d6408881f2f2584b3c4f8da23e7865a7e55d561690f2630a1a4bf558327",
+    "stock-procurement.jpg": "753676a6fcd3a488b4fdd6c2cd89152da056c14ea9bacbff090c26eea1c8533e",
+    "warehouse-completed.jpg": "c131f85a3b3259724914624b80811da0985c53a6a262ff5dc8ab0915bcdf68ea",
+    "warehouse-parcels-expanded.jpg": "db3818cc7c193559e32fbf7948fe715b494a59ff1f704992f1d8d70a773819c0",
+    "warehouse-parcels.jpg": "efc4ed24cda5c7c68ea9c40f08ecacab1b45a7265f0ba291d5b442275efa516c",
+    "warehouse-receipts.jpg": "261c4db41a27f222e6bcdc8efb208785cd5f3a9087300c98a1204bac51a72799",
+    "warehouse-returns.jpg": "3eefa22a4df5302ae25c546bb73ec39d29297e17d33af5f35be636f89d30b29a",
+    "warehouse-shipping.jpg": "2cc12107ab211e04a9bd5645482af78e9d9d6bf652e86e65cd943427289c974d"
+  },
+  "validation": {
+    "anchors": true,
+    "embeddedImages": true,
+    "independentCompletedSections": 5,
+    "businessAuditExecuted": false
+  }
+}

@@ -93,7 +93,7 @@ export function buildLocalOrderQuery(scopes: LocalReadScope[], query: LocalOrder
     conditions.push(`(lower(concat_ws(' ', o.order_number, o.shopify_order_number, o.customer_name, o.store_name)) LIKE ${param} ESCAPE '\\' OR EXISTS (SELECT 1 FROM hz_fop_workbench_order_lines search_line WHERE search_line.order_document_id = o.document_id AND search_line.company_id = o.company_id AND search_line.dataset_id = o.dataset_id AND search_line.projection_revision = o.projection_revision AND lower(concat_ws(' ', search_line.sku_code, search_line.product_name)) LIKE ${param} ESCAPE '\\') ${extraSearch.length ? ' OR '+extraSearch.join(' OR ') : ''})`)
   }
   const paymentTime = !stock && query.queue === 'unpaid' ? 'o.consumer_paid_at' : 'o.customer_paid_at'
-  const range = query.timeRange ?? (query.completed || !stock && query.queue === 'unpaid' || stock && query.queue !== 'procurement' ? '1m' : undefined)
+  const range = query.timeRange ?? (query.completed || !stock && query.queue === 'unpaid' || stock && query.queue !== 'procurement' ? '3m' : undefined)
   if (range && range !== 'all') {
     if (!['1w', '1m', '3m'].includes(range)) throw new BadRequestException('Invalid payment range')
     conditions.push(`${paymentTime} >= CURRENT_TIMESTAMP - INTERVAL '${range === '1w' ? '7 days' : range === '1m' ? '30 days' : '90 days'}' AND ${paymentTime} <= CURRENT_TIMESTAMP`)

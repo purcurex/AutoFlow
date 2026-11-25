@@ -1,5 +1,5 @@
-import { Type } from 'class-transformer'
-import { ArrayMaxSize, ArrayMinSize, ArrayUnique, IsArray, IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min, Matches, IsNotEmpty } from 'class-validator'
+import { Type, Transform } from 'class-transformer'
+import { ArrayMaxSize, ArrayMinSize, ArrayUnique, IsBoolean, IsArray, IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min, Matches, IsNotEmpty } from 'class-validator'
 import { purchaseReturnStatuses, type PurchaseReturnStatus } from './purchase-returns'
 export class PurchaseReturnFiltersDto {
   @IsIn(['procurement', 'warehouse']) workbenchRole: 'procurement' | 'warehouse'
@@ -11,6 +11,7 @@ export class PurchaseReturnFiltersDto {
   @IsOptional() @IsIn(['HZ', 'SZ']) warehouseCode?: 'HZ' | 'SZ'
 }
 export class PurchaseReturnQueryDto extends PurchaseReturnFiltersDto {
+  @IsOptional() @Transform(({value})=>value==='true'?true:value==='false'?false:value) @IsBoolean() refresh?: boolean
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(1000000) page = 1
   @IsOptional() @Type(() => Number) @IsIn([20, 50, 100, 200, 500, 1000]) pageSize = 100
 }

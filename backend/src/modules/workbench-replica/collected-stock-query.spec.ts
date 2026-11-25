@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process'
 import { collectedStockWhere } from './collected-stock-query'
 it('defaults sales stock to a month but leaves procurement and explicit all unbounded',()=>{
- expect(collectedStockWhere('b',null,{})).toEqual(collectedStockWhere('b',null,{timeRange:'1m'}))
+ expect(collectedStockWhere('b',null,{})).toEqual(collectedStockWhere('b',null,{timeRange:'3m'}))
  expect(collectedStockWhere('b',null,{queue:'procurement'}).where).not.toContain('BETWEEN')
  expect(collectedStockWhere('b',null,{timeRange:'all'}).where).not.toContain('BETWEEN')
 })

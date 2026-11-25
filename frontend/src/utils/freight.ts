@@ -1,3 +1,4 @@
+import { freightBarLayout } from './freight-chart-layout'
 import type { EChartsCoreOption } from 'echarts/core'
 import type { FreightCarrier, FreightData, FreightQuery, FreightSeries, FreightValue } from '@/api/fop-freight'
 import type { WorkbenchRole } from './workbench'
@@ -44,6 +45,6 @@ export function freightChartOption(data: FreightData, compare: boolean, locale: 
     xAxis: { type: 'category', data: data.periods.map((_, index) => periodName(index)), axisLine: { lineStyle: { color: '#8793a733' } }, axisTick: { show: false }, axisLabel: { color: '#8793a7', fontSize: 10, hideOverlap: true } },
     yAxis: { type: 'value', name: compare ? zh ? '环比差额 · $' : 'Change · $' : '$', axisLabel: { formatter: (n: number) => `$${new Intl.NumberFormat(locale, { notation: 'compact', maximumFractionDigits: 1 }).format(n)}`, color: '#8793a7' }, splitLine: { lineStyle: { color: '#8793a718' } } },
     dataZoom: [{ type: 'slider', xAxisIndex: 0, bottom: 7, height: 18, start: Math.max(0, (data.periods.length - 6) / Math.max(1, data.periods.length) * 100), end: 100, brushSelect: false, zoomLock: true, showDetail: false, borderColor: 'transparent', fillerColor: '#94a5dd30', handleStyle: { color: '#94A5DD' } }],
-    series: series.map(row => ({ id: row.id, name: rowName(row), type: carrierCode && !compare ? 'line' : 'bar', symbolSize: 6, smooth: false, barMaxWidth: carrierCode ? 30 : 18, barGap: '15%', itemStyle: { color: colors[row.kind === 'total' ? 0 : freightCarriers.indexOf(row.carrierCode!) + 1], borderRadius: [3, 3, 0, 0] }, data: row.values.map(value => compare ? value.delta : value.amount) })),
+    series: series.map(row => ({ id: row.id, name: rowName(row), type: carrierCode && !compare ? 'line' : 'bar', symbolSize: 6, smooth: false, ...freightBarLayout, itemStyle: { color: colors[row.kind === 'total' ? 0 : freightCarriers.indexOf(row.carrierCode!) + 1], borderRadius: [3, 3, 0, 0] }, data: row.values.map(value => compare ? value.delta : value.amount) })),
   }
 }

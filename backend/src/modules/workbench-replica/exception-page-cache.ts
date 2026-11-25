@@ -5,13 +5,14 @@ export class ExceptionPageCache<T> {
  private inFlight=new Map<string,Promise<T>>()
  private bytes=0
  constructor(private readonly now=()=>Date.now(),private readonly ttl=10_000,private readonly maxEntries=32,private readonly maxBytes=8*1024*1024){}
- async read(key:string,load:()=>Promise<T>):Promise<T>{
+ async read(key:string,load:()=>Promise<T>,refresh=false):Promise<T>{
+  if(refresh){const old=this.entries.get(key);if(old){this.bytes-=old.bytes;this.entries.delete(key)}this.inFlight.delete(key)}
   const existing=this.entries.get(key)
   if(existing&&existing.expires>this.now())return JSON.parse(existing.json)
   if(existing){this.bytes-=existing.bytes;this.entries.delete(key)}
   const pending=this.inFlight.get(key);if(pending)return structuredClone(await pending)
   const task=load().then(result=>{
-   if(result==null)return result
+   if(result==null||this.inFlight.get(key)!==task)return result
    const json=JSON.stringify(result),bytes=Buffer.byteLength(json)
    if(bytes<=this.maxBytes){
     for(const [k,v] of this.entries)if(v.expires<=this.now()){this.entries.delete(k);this.bytes-=v.bytes}
@@ -22,6 +23,6 @@ export class ExceptionPageCache<T> {
   })
   const tracked=this.inFlight.size<this.maxEntries
   if(tracked)this.inFlight.set(key,task)
-  try{return structuredClone(await task)}finally{if(tracked)this.inFlight.delete(key)}
+  try{return structuredClone(await task)}finally{if(tracked&&this.inFlight.get(key)===task)this.inFlight.delete(key)}
  }
 }

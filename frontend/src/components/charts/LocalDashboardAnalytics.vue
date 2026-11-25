@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ChartUpdateStatus from '@/components/charts/ChartUpdateStatus.vue'
 import { peekAnalyticsQuery } from '@/utils/analytics-cache'
 import { isWorkbenchScopeError } from '@/api/workbench-dashboard'
 import { useChartQuerySchedule } from '@/composables/useChartQuerySchedule'
@@ -23,7 +24,7 @@ const props=defineProps<{chartId:LocalChartId;title:string;workbench?:boolean;re
 const today=localDate(new Date())
 const availableEnd=computed(()=>props.chartId==='registrations'&&props.availableWindow? [today,props.availableWindow.to].sort()[0]! : today)
 const availableStart=computed(()=>[BUSINESS_START_DATE,props.chartId==='registrations'?props.availableWindow?.from??'':''].sort().at(-1)!)
-const initialFrom=[`${availableEnd.value.slice(0,4)}-01-01`,availableStart.value??''].sort().at(-1)!
+const initialFrom=[`${availableEnd.value.slice(0,7)}-01`,availableStart.value??''].sort().at(-1)!
 const from=ref(initialFrom),to=ref(availableEnd.value),department=ref(''),warehouse=ref('')
 const comparison=ref<''|ComparisonMode>(''),comparisonAnchor=ref(availableEnd.value)
 const comparisonRange=computed(()=>comparison.value?comparisonDates(comparison.value,comparisonAnchor.value,availableEnd.value):undefined)
@@ -32,6 +33,33 @@ const displayTo=computed({get:()=>comparisonRange.value?.to??to.value,set:(value
 function chooseComparison(){
  if(comparison.value){const dates=periodDates(comparison.value,comparisonAnchor.value,availableEnd.value);from.value=dates.from<availableStart.value?availableStart.value:dates.from;to.value=dates.to}
  filterQuery.schedule()
+}
+type DateShortcut='current'|'previous'|'last6months'
+const receiptShortcut=ref<DateShortcut>('current')
+function quickReceiptRange(shortcut:DateShortcut='current'){
+ const current=availableEnd.value
+ // Six months follows today's calendar; registration coverage may shorten either end.
+ const [year,month]=(shortcut==='last6months'?today:current).split('-').map(Number)
+ const start=new Date(Date.UTC(year!,month!-1-(shortcut==='previous'?1:shortcut==='last6months'?5:0),1)).toISOString().slice(0,10)
+ const end=shortcut==='previous'?new Date(Date.UTC(year!,month!-1,0)).toISOString().slice(0,10):current
+ return {from:start<availableStart.value?availableStart.value:start,to:end}
+}
+function chooseReceiptRange(shortcut:DateShortcut='current'){
+ const range=quickReceiptRange(shortcut)
+ if(range.from>range.to)return
+ receiptShortcut.value=shortcut
+ // An unchanged applied range needs no query; refresh remains available separately.
+ if(!busy.value&&!error.value&&receiptRangeSelected(shortcut)&&appliedQuery?.from===range.from&&appliedQuery.to===range.to&&appliedQuery.departmentId===(department.value||undefined)&&appliedQuery.warehouseCode===(registration.value?undefined:warehouse.value||undefined)&&appliedQuery.entityType===(registration.value?undefined:entity.value)&&!appliedQuery.comparison)return
+ comparison.value=''
+ from.value=range.from;to.value=range.to
+ void load()
+}
+function receiptRangeSelected(shortcut:DateShortcut='current'){
+ const range=quickReceiptRange(shortcut)
+ const selected=quickReceiptRange(receiptShortcut.value)
+ // At the business start, several shortcuts can share the same dates; highlight one.
+ if(shortcut!==receiptShortcut.value&&range.from===selected.from&&range.to===selected.to)return false
+ return !comparison.value&&from.value===range.from&&to.value===range.to
 }
 const entity=ref<'fulfillment'|'stock'>('fulfillment'),metric=ref('orders')
 const filters=ref<Pick<LocalAnalyticsResult,'departments'|'warehouses'|'currencies'>>({departments:[],warehouses:[],currencies:[]})
@@ -143,17 +171,22 @@ watch(department,value=>{if(result.value?.personalDepartmentId&&value!==result.v
 </script>
 <template>
 <section class="local-analytics" :data-local-chart="chartId">
- <header><h2>{{ title }}</h2><small v-if="result">更新 {{ new Date(result.asOf).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false}) }}</small></header>
+ <header><h2>{{ title }}</h2><ChartUpdateStatus :busy="busy" :as-of="result?.asOf" /></header>
  <p v-if="registration&&availableWindow" class="available-range">可查询至 {{ availableEnd }} · UTC+8</p>
  <form @submit.prevent="load(true)">
+  <div class="receipt-month-shortcuts" role="group" :aria-label="registration?'注册日期快捷选择':'收款日期快捷选择'">
+   <button type="button" :aria-pressed="receiptRangeSelected()" @click="chooseReceiptRange()">本月</button>
+   <button type="button" :aria-pressed="receiptRangeSelected('previous')" :disabled="quickReceiptRange('previous').from>quickReceiptRange('previous').to" @click="chooseReceiptRange('previous')">上月</button>
+   <button type="button" :aria-pressed="receiptRangeSelected('last6months')" :disabled="quickReceiptRange('last6months').from>quickReceiptRange('last6months').to" @click="chooseReceiptRange('last6months')">近半年</button>
+  </div>
   <label>{{ registration?'客户创建时间':'收款日期' }}<input v-model="displayFrom" type="date" required :min="comparisonRange?.from ?? availableStart" :max="displayTo"></label><span>—</span><input v-model="displayTo" :aria-label="registration?'客户创建结束日期':'收款结束日期'" type="date" required :min="displayFrom" :max="availableEnd">
   <label>业务部门<select v-model="department" @change="filterQuery.schedule()" aria-label="业务部门" :disabled="busy||!filters.departments.length"><option v-if="!filters.departments.length" value="">{{ initialDepartmentLabel }}</option><option v-for="d in filters.departments" :key="d.id" :value="d.id">{{ d.name }}</option></select></label>
   <label v-if="!monetary&&!registration">订单类型<select v-model="entity" @change="filterQuery.schedule()" aria-label="订单类型"><option value="fulfillment">履约订单</option><option value="stock">备货订单</option></select></label>
   <label v-if="!registration">仓库<select v-model="warehouse" @change="filterQuery.schedule()" aria-label="仓库"><option value="">全部</option><option v-for="w in warehouseChoices" :key="w.id" :value="w.id">{{ warehouseName(w.name || w.id) }}</option></select></label>
   <label>对比<select v-model="comparison" aria-label="对比方式" :disabled="busy" @change="chooseComparison"><option value="">不对比</option><option value="week">周环比</option><option value="month">月环比</option></select></label>
   <label v-if="comparison">选择{{ comparison==='week'?'周':'月份' }}<input v-model="comparisonAnchor" type="date" aria-label="对比周期日期" :min="availableStart" :max="availableEnd" @change="chooseComparison"></label>
-  <button :disabled="busy">{{ busy?'查询中…':'查询' }}</button>
- </form><p v-if="busy && result" class="ov-note" role="status">正在更新，当前显示上次查询结果。</p><p v-if="error && result" class="ov-note" role="alert">查询未完成，当前显示上次查询结果。</p>
+  <button :disabled="busy">查询</button>
+ </form><p v-if="error && result" class="ov-note" role="alert">查询未完成，当前显示上次查询结果。</p>
  <div class="analysis-controls"><label>展示维度<select v-model="dimension" aria-label="展示维度"><option v-for="d in dimensions" :key="d.id" :value="d.id">{{ d.name }}</option></select></label><label v-if="!monetary&&!registration">指标<select v-model="metric"><option value="orders">订单数</option><option value="quantity">商品件数</option></select></label><span v-if="displayedTotals" :title="result?.personalDepartmentId?'本部门成员个人数据；其他部门仅显示部门汇总':undefined">{{ (registration?displayedTotals.registrationCount??displayedTotals.orderCount:displayedTotals.orderCount).toLocaleString() }} {{ registration?'位注册客户':'笔订单' }} · {{ registration?'按客户档案创建时间统计':monetary?'业绩收入按订单金额统计':'按客户付款时间（收款日期）统计' }}</span><button v-if="availableTrendTargets.length" type="button" class="trend-open" :disabled="busy" @click="openTrend(availableTrendTargets[0])">趋势明细</button></div>
  <div v-if="monetary&&incomeTotals.length" class="income-total"><span>业绩收入合计</span><strong v-for="total in incomeTotals" :key="total.currency">{{ total.currency==='USD'?usd(Number(total.amount)):`${total.currency} ${Number(total.amount).toLocaleString('zh-CN',{minimumFractionDigits:2,maximumFractionDigits:2})}` }}</strong></div>
  <ComparisonSummary v-if="displayedComparison" :comparison="displayedComparison" :metric="monetary?'amount':registration?'count':metric==='quantity'?'quantity':'count'"/>
@@ -165,6 +198,13 @@ watch(department,value=>{if(result.value?.personalDepartmentId&&value!==result.v
 </section>
 </template>
 <style scoped>
+.receipt-month-shortcuts{display:inline-flex;align-items:center;gap:4px}
+.receipt-month-shortcuts button{background:transparent;color:var(--color-text-secondary);padding:5px 8px;font-size:11px;line-height:18px}
+.receipt-month-shortcuts button:hover:not(:disabled){color:var(--color-selection-text);background:var(--color-selection-surface);border-color:var(--color-selection-border)}
+.receipt-month-shortcuts button[aria-pressed="true"]{color:var(--color-selection-text);background:color-mix(in srgb,var(--color-primary) 12%,var(--color-selection-surface));border-color:var(--color-selection-border);font-weight:600}
+.receipt-month-shortcuts button:focus-visible{outline:2px solid var(--color-selection-text);outline-offset:2px}
+.receipt-month-shortcuts button:disabled{opacity:.5;cursor:default}
+
 .analysis-controls .trend-open{margin-left:auto;background:transparent;color:var(--color-chart-link,var(--color-link));border-color:var(--color-border,var(--color-border))}.trend-open:disabled{opacity:.5;cursor:default}
 .grouped-revenue{overflow-x:auto;overflow-y:hidden;padding-bottom:12px}
 .revenue-legend{display:flex;gap:18px;margin:12px 0;color:var(--color-text-secondary);font-size:12px}.revenue-legend span{display:flex;align-items:center;gap:6px}.revenue-legend i{width:10px;height:10px;border-radius:2px}.department-swatch{background:var(--color-primary)}.person-swatch{background:var(--color-chart-detail)}

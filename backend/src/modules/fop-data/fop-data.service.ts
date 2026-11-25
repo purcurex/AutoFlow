@@ -468,6 +468,9 @@ export class FopDataService {
       if (error instanceof FopPermissionDeniedError) throw new ForbiddenException({ code: error.code, message: 'FOP denied access to this employee account' })
       if (error instanceof FopIntegrationUnavailableError) {
         const realtimeMessages: Partial<Record<typeof error.code, string>> = {
+          fop_source_rate_limited: 'FOP 接口调用额度已达限制，冷却结束后可重试。',
+          fop_source_billing_blocked: 'FOP 接口调用权益已耗尽，请管理员处理后恢复调用。',
+          fop_rate_budget_unavailable: '接口限流协调暂不可用，请稍后重试。',
           fop_queries_paused: 'FOP 测试环境数据访问已暂停，待集成方案调整后恢复。',
           fop_approval_not_configured: 'FOP 专用审核 API 尚未配置。',
           fop_current_inventory_not_configured: 'FOP 即时库存 API 尚未配置。',

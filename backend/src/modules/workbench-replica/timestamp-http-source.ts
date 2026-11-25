@@ -1,3 +1,4 @@
+import { fopBudgetedFetch } from '../fop-data/fop-rate-limit'
 import { sameTimestampScope, sourceTime, sourceId, validateTimestampDocument, type TimestampSource, type TimestampScope, type TimestampQuery, type TimestampDocument } from './timestamp-sync'
 type ObjectMap=Record<string,any>
 type Action={path:string;body:ObjectMap}
@@ -21,7 +22,7 @@ function bind(value:unknown,vars:ObjectMap):unknown{
 }
 /** Explicit mappings to existing read APIs. No default URLs or guessed server filter syntax. */
 export class TimestampHttpSource implements TimestampSource {
- constructor(private readonly profile:TimestampProfile,private readonly auth:{paused:()=>boolean;token:()=>Promise<string>;identity:string;tokenHeader?:string},private readonly request:typeof fetch=fetch){}
+ constructor(private readonly profile:TimestampProfile,private readonly auth:{paused:()=>boolean;token:()=>Promise<string>;identity:string;tokenHeader?:string},private readonly request:typeof fetch=fetch){if(request===globalThis.fetch)this.request=fopBudgetedFetch({get:key=>process.env[key]},request)}
  assertReady(scope:TimestampScope){
   if(this.auth.paused())throw Error('fop_queries_paused')
   const p=this.profile

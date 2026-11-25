@@ -32,13 +32,13 @@ const pages = computed(() => Math.max(1, Math.ceil((result.value?.total ?? 0) / 
 let ticket = 0, exportTicket = 0, disposed = false, controller: AbortController | undefined, exportController: AbortController | undefined
 async function navigate(changes: Record<string, string | number | undefined>) { await router.replace({ query: { ...route.query, ...changes } }) }
 function reloadReplica() { ++exportTicket; exportController?.abort(); exporting.value = false; selected.value = []; exportError.value = ''; copyStatus.value = ''; void load() }
-async function load() {
+async function load(refresh = false) {
   if (exporting.value) return
   if (['interception', 'cancellation', 'interception_release'].includes(scalar('rmaType'))) { await navigate({ rmaType: undefined, page: 1 }); if (disposed) return }
   controller?.abort(); controller = new AbortController()
   const id = ++ticket, session = captureSession(); loading.value = true; error.value = ''
   try {
-    const page = await getRmaOrders(query.value, controller.signal)
+    const page = await getRmaOrders({...query.value,...(refresh?{refresh:true}:{})}, controller.signal)
     if (disposed || id !== ticket || !isCurrentSession(session)) return
     if (page.items.some(row => hasRmaTypeConflict(row.rmaCases))) throw { code: 'rma_type_conflict' }
     if (query.value.page > Math.max(1, Math.ceil(page.total / query.value.pageSize))) { await navigate({ page: 1 }); return }
@@ -67,7 +67,7 @@ const { expandedProductIds, hasExpandableProducts, allProductsExpanded, setProdu
     <WorkbenchTaskHeading :data-availability="result?.dataAvailability" :replica="result?.replica" :sync-disabled="loading || exporting" @replica-synced="reloadReplica" :title="text('RMA售后清单', 'RMA after-sales')" :description="text('按售后单展示仅退款、退货退款及补发货，相关操作在 FOP 完成。', 'Track refund-only, return-refund and reshipment cases; process in FOP.')"></WorkbenchTaskHeading>
     <div class="rma-panel">
       <form class="workbench-filter-toolbar" @submit.prevent="navigate({ search: search.trim() || undefined, page: 1 })">
-          <div class="workbench-inline-actions"><WorkbenchRefreshControl :busy="loading" :disabled="loading || exporting" :refreshed-at="result?.refreshedAt" @refresh="load" /></div><div class="workbench-filter-main">
+          <div class="workbench-inline-actions"><WorkbenchRefreshControl :busy="loading" :disabled="loading || exporting" :refreshed-at="result?.refreshedAt" @refresh="load(true)" /></div><div class="workbench-filter-main">
         <div class="workbench-filter-search"><label class="workbench-search-field"><Search :size="15" /><input v-model="search" :aria-label="text('搜索RMA售后', 'Search RMA')" :placeholder="text('订单 / 售后单 / 客户 / 业务员 / SKU / 原因', 'Order / RMA / customer / salesperson / SKU / reason')" @input="!search && navigate({ search: undefined, page: 1 })"></label><button type="submit" class="workbench-button workbench-primary" :disabled="exporting">{{ text('查询', 'Search') }}</button></div>
 
           <label>{{ text('售后类型', 'RMA type') }}<select class="workbench-filter-select" :aria-label="text('售后类型筛选', 'Filter RMA type')" :value="query.type || ''" :disabled="exporting" @change="navigate({ rmaType: ($event.target as HTMLSelectElement).value || undefined, page: 1 })"><option value="">{{ text('全部', 'All') }}</option><option v-for="(label, type) in rmaTypeLabels" :key="type" :value="type">{{ label[zh ? 0 : 1] }}</option></select></label>

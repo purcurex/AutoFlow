@@ -38,7 +38,7 @@ async function main(){
   if(a.fresh){
    if(config.FOP_KINGDEE_USERNAME!=='limingsong'||config.FOP_KINGDEE_TENANT_ID!=='hyperzone.test'||config.FOP_KINGDEE_ORGANIZATION_IDS!=='100000')throw Error('authorized_connection_mismatch')
    fs.mkdirSync(output,{mode:0o700})
-   provider=new KingdeeFopDataProvider({get:k=>k==='FOP_QUERIES_PAUSED'?'false':config[k]})
+   provider=new KingdeeFopDataProvider({get:k=>k==='FOP_QUERIES_PAUSED'?'false':({...db,...config})[k]})
    const connection=await provider.getConnectionContext()
    if(connection.subject.tenantId!=='hyperzone.test'||connection.currentOrganization.id!=='100000'||connection.subject.userId!==config.FOP_KINGDEE_USER_ID||!connection.resources.includes('orders'))throw Error('authenticated_subject_or_company_mismatch')
    context={tenantId:connection.subject.tenantId,userId:connection.subject.userId,companyId:connection.currentOrganization.id}

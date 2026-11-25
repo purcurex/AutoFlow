@@ -35,13 +35,13 @@ const pages = computed(() => Math.max(1, Math.ceil((result.value?.total ?? 0) / 
 let ticket = 0, exportTicket = 0, disposed = false, controller: AbortController | undefined, exportController: AbortController | undefined
 async function navigate(changes: Record<string, string | number | undefined>) { await router.replace({ query: { ...route.query, ...changes } }) }
 function reloadReplica() { ++exportTicket; exportController?.abort(); exporting.value = false; selected.value = []; exportError.value = ''; copyStatus.value = ''; void load() }
-async function load() {
+async function load(refresh = false) {
   if (exporting.value) return
   contact.value = undefined
   controller?.abort(); controller = new AbortController()
   const id = ++ticket, session = captureSession(); loading.value = true; error.value = ''
   try {
-    const page = await getPurchaseReturns(query.value, controller.signal)
+    const page = await getPurchaseReturns({...query.value,...(refresh?{refresh:true}:{})}, controller.signal)
     if (disposed || id !== ticket || !isCurrentSession(session)) return
     if (query.value.page > Math.max(1, Math.ceil(page.total / query.value.pageSize))) { await navigate({ page: 1 }); return }
     result.value = page; selected.value = selected.value.filter(id => page.items.some(row => row.id === id)); emit('filter-labels', page.departments)
@@ -70,7 +70,7 @@ const { expandedProductIds, hasExpandableProducts, allProductsExpanded, setProdu
     <WorkbenchTaskHeading :data-availability="result?.dataAvailability" :replica="result?.replica" :sync-disabled="loading || exporting" @replica-synced="reloadReplica" :title="text('采购退货清单', 'Purchase returns')" :description="text('按履约订单跟进采购退货，关联退货单及物流信息，相关操作在 FOP 完成。', 'Track purchase returns by fulfillment order; process returns in FOP.')"></WorkbenchTaskHeading>
     <div class="return-panel">
       <form class="workbench-filter-toolbar" @submit.prevent="navigate({ search: search.trim() || undefined, page: 1 })">
-          <div class="workbench-inline-actions"><WorkbenchRefreshControl :busy="loading" :disabled="loading || exporting" :refreshed-at="result?.refreshedAt" @refresh="load" /></div>
+          <div class="workbench-inline-actions"><WorkbenchRefreshControl :busy="loading" :disabled="loading || exporting" :refreshed-at="result?.refreshedAt" @refresh="load(true)" /></div>
         <div class="workbench-filter-main">
           <div class="workbench-filter-search"><label class="workbench-search-field"><Search :size="15" /><input v-model="search" :aria-label="text('搜索采购退货', 'Search purchase returns')" :placeholder="text('退货单 / 采购单 / 供应商 / 关联订单 / SKU', 'Return / purchase / supplier / order / SKU')" @input="!search && navigate({ search: undefined, page: 1 })"></label><button type="submit" class="workbench-button workbench-primary" :disabled="exporting">{{ text('查询', 'Search') }}</button></div>
 

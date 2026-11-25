@@ -1,7 +1,7 @@
 {
-  "asOf": "2026-11-25T15:11:23.297Z",
+  "asOf": "2026-11-25T15:27:55.010Z",
   "initialization": "Run compiled migrations, do not import schema-reference.sql as initialization.",
-  "count": 78,
+  "count": 79,
   "migrations": [
     {
       "timestamp": "1784700000000",
@@ -314,6 +314,10 @@
     {
       "timestamp": "1795560000000",
       "name": "AutomaticRelations1795560000000"
+    },
+    {
+      "timestamp": "1795650000000",
+      "name": "FopApiBudgets1795650000000"
     }
   ],
   "sourceHashes": {
@@ -394,14 +398,15 @@
     "1795061000000-LocalOpportunities.ts": "03db198a4099a59fe0472b542812a15b38280876653a70c793ec2cbcf469e602",
     "1795062000000-RetireLegacyBusinessRecords.ts": "ce76580617ff7e43b7b09d81d5845c48d0b2f3c7c67fa3a1da925ce445d14c56",
     "1795063000000-CollectedStockConsumptions.ts": "383e2c88ab947ad88707f2f8be132360bb172244ff63d5a1e45a4e3fa639e1fe",
-    "1795560000000-AutomaticRelations.ts": "7164a10b1567140264169b3f1e591abc70166e91b0efe288484d78c7d99c0a00"
+    "1795560000000-AutomaticRelations.ts": "7164a10b1567140264169b3f1e591abc70166e91b0efe288484d78c7d99c0a00",
+    "1795650000000-FopApiBudgets.ts": "22037bf4d9e98356dede9dd76ba3290c4444e8368d6aed7f07adb3f6c5775681"
   },
   "verification": {
     "emptyDatabase": true,
     "rerunExecuted": 0,
-    "tables": 110,
-    "indexes": 413,
-    "constraints": 683,
+    "tables": 111,
+    "indexes": 414,
+    "constraints": 685,
     "seedUsersBeforeBootstrap": 0,
     "bootstrapVerified": true,
     "invalidIndexes": 0,
@@ -420,6 +425,7 @@
     "hz_fop_action_targets",
     "hz_fop_allocation_line_details",
     "hz_fop_allocations",
+    "hz_fop_api_budgets",
     "hz_fop_bootstrap_batches",
     "hz_fop_bootstrap_pages",
     "hz_fop_collected_analytics_facts",

@@ -1,3 +1,4 @@
+import { budgetedFetch } from './fop-budgeted-fetch.mjs'
 import interfacePolicy from './fop-interface-policy.cjs'
 import { existsSync, readFileSync, mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
@@ -179,7 +180,7 @@ function confirmedOrigin(config) {
 export function retryAfterMs(value) {
   if(!value)return null
   const ms=/^\d+$/.test(value)?Number(value)*1000:/^[A-Za-z]{3}, /.test(value)?Date.parse(value)-Date.now():NaN
-  return Number.isFinite(ms)&&ms>=0?Math.min(86400000,Math.ceil(ms)):null
+  return Number.isSafeInteger(ms)&&ms>=0?Math.ceil(ms):null
 }
 async function boundedResponse(fetcher, url, init) {
   const controller = new AbortController()
@@ -244,6 +245,7 @@ function validate(json, body, operation) {
 
 export async function runQuery(config, options = {}, fetcher = fetch) {
   if (config.FOP_QUERIES_PAUSED?.trim().toLowerCase() === 'true') fail('fop_queries_paused')
+  fetcher = budgetedFetch(config, fetcher)
   const base = confirmedOrigin(config)
   const { operation, saveResponse = false, ...parameters } = options
   if (typeof saveResponse !== 'boolean') fail('invalid-request')
@@ -258,7 +260,12 @@ export async function runQuery(config, options = {}, fetcher = fetch) {
     token = await getToken(config, async (url, init) => {
       try {
         const result = await boundedResponse(fetcher, url, init)
-        return new Response([204, 205, 304].includes(result.status) ? null : result.raw, { status: result.status })
+        if(!result.ok&&[429,403,503].includes(result.status)){
+          report.httpStatus=result.status;report.retryAfterMs=result.retryAfterMs
+          tokenTransportError=result.status===429?'rate-limit':result.status===403?'forbidden':'http-error'
+        }
+        return new Response([204, 205, 304].includes(result.status) ? null : result.raw, { status: result.status,
+          headers:result.retryAfterMs!=null?{'Retry-After':String(Math.ceil(result.retryAfterMs/1000))}:{} })
       } catch (error) { tokenTransportError = error.category; throw error }
     })
   } catch { return failure(tokenTransportError || 'authentication-error') }

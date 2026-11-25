@@ -1,3 +1,4 @@
+import { budgetedFetch } from './fop-budgeted-fetch.mjs'
 // Explicit one-shot Chinese-locale capture for orders whose linked store name is missing.
 import fs from 'node:fs'
 import path from 'node:path'
@@ -14,7 +15,7 @@ if (env.DB_DATABASE !== 'autoflow_local_demo' || env.DB_PORT !== '55432' || !['l
 if (env.FOP_QUERIES_PAUSED !== 'true' || env.WORKBENCH_SYNC_ENABLED !== 'false' || env.WORKBENCH_AUTOMATIC_CALLS_ENABLED !== 'false') throw Error('persistent_pause_required')
 if (cfg.FOP_KINGDEE_TENANT_ID !== 'hyperzone.test' || cfg.FOP_KINGDEE_ORGANIZATION_IDS !== '100000' || cfg.FOP_KINGDEE_USERNAME !== 'limingsong') throw Error('confirmed_identity_required')
 // Obtain a fresh zh_CN token; do not reuse a token of unknown locale.
-const token = await getToken({ ...cfg, FOP_OPENAPI_ACCESS_TOKEN: '', FOP_QUERIES_PAUSED: 'false' })
+const token = await getToken({ ...env, ...cfg, FOP_OPENAPI_ACCESS_TOKEN: '', FOP_QUERIES_PAUSED: 'false' })
 fs.mkdirSync(directory, { mode: 0o700 })
 const db = new pg.Client({ host: env.DB_HOST, port: +env.DB_PORT, user: env.DB_USERNAME, password: env.DB_PASSWORD, database: env.DB_DATABASE })
 await db.connect()
@@ -33,7 +34,7 @@ try {
   const headers = { 'Content-Type': 'application/json', [cfg.FOP_OPENAPI_TOKEN_HEADER || 'access_token']: token, 'x-acgw-identity': cfg.FOP_OPENAPI_IDENTITY }
   for (const sample of samples.values()) {
     const query = { scopeRole: 'admin', organizationIds: ['100000'], rawWorkbenchFacts: true, queue: 'review', page: 1, pageSize: 1, afterOrderId: String(BigInt(sample.source_id) - 1n) }
-    const response = await fetch('https://hyperzone.test.kdgalaxy.com/kapi/v2/hzkj/ocbsoc/employee-orders/page', { method: 'POST', headers, body: JSON.stringify({ query }), redirect: 'error', signal: AbortSignal.timeout(20000) })
+    const response = await budgetedFetch({...env,...cfg})('https://hyperzone.test.kdgalaxy.com/kapi/v2/hzkj/ocbsoc/employee-orders/page', { method: 'POST', headers, body: JSON.stringify({ query }), redirect: 'error', signal: AbortSignal.timeout(20000) })
     const raw = await response.text(), body = JSON.parse(raw), rows = body.data?.items
     const file = `shop-${sample.shop_id}.json`, sha256 = createHash('sha256').update(raw).digest('hex')
     fs.writeFileSync(path.join(directory, file), raw, { mode: 0o600, flag: 'wx' })

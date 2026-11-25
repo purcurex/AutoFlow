@@ -1,3 +1,5 @@
+import { defaultCollectedCompany } from './collected-company-default'
+import { orderDocumentType } from '../fop-data/order-document-type'
 import { readInboundStockGroups } from './inbound-stock-groups'
 import { readOrderProgress } from './order-progress'
 import { purchaseLogisticsSupplier } from '../fop-data/purchase-logistics-supplier'
@@ -99,10 +101,11 @@ const orderCaptureTime=(batch:Row)=>publishedTimestampTime(batch.metadata?.times
 export class CollectedWorkbenchService {
  constructor(private readonly db:DataSource,private readonly users:UsersService,private readonly config:ConfigService){}
  get enabled(){return this.config.get<string>('WORKBENCH_COLLECTED_ENABLED')==='true'}
- private readonly inboundPages=new ExceptionPageCache<Row>()
- private readonly procurementReads=new ExceptionPageCache<Row[]>()
- private readonly warehouseReads=new ExceptionPageCache<Row[]>()
- private readonly exceptionPages=new ExceptionPageCache<Row>()
+ private readonly inboundPages=new ExceptionPageCache<Row>(()=>Date.now(),30_000)
+ private readonly procurementReads=new ExceptionPageCache<Row[]>(()=>Date.now(),30_000)
+ private readonly warehouseReads=new ExceptionPageCache<Row[]>(()=>Date.now(),30_000)
+ private readonly salesReads=new ExceptionPageCache<Row[]>(()=>Date.now(),30_000)
+ private readonly exceptionPages=new ExceptionPageCache<Row>(()=>Date.now(),30_000)
  private nativeInventory?: KingdeeFopDataProvider
  private nativeSupplier?: KingdeeFopDataProvider
  async supplierContacts(userId:string,query:FopSupplierContext,launch?:{contactVersion:string;purchaseOrderId?:string}):Promise<any>{
@@ -244,8 +247,12 @@ export class CollectedWorkbenchService {
   const page=query.page??1,pageSize=query.pageSize??50,asOf=new Date().toISOString()
   return {items:items.slice((page-1)*pageSize,page*pageSize),total:items.length,page,pageSize,source:'fop',asOf,refreshedAt:asOf,customerId:query.customerId??null}
  }
- private async productDisplay<T extends Row>(batchId:string,records:T[],field='items'):Promise<T[]>{
-  const sets=await collectedProductLines(this.db,batchId,records.map(record=>record[field]??[]))
+ private listReader(userId:string,role:WorkbenchRole,c:Awaited<ReturnType<CollectedWorkbenchService['context']>>,query:Row){
+  const cache=role==='warehouse'?this.warehouseReads:role==='procurement'?this.procurementReads:this.salesReads
+  return {query:(sql:string,params:any[]=[])=>cache.read(JSON.stringify([role,userId,c.signature,sql,params]),()=>this.db.query(sql,params),query.refresh===true)}
+ }
+ private async productDisplay<T extends Row>(batchId:string,records:T[],field='items',reader:{query:(sql:string,params:any[])=>Promise<Row[]>}=this.db):Promise<T[]>{
+  const sets=await collectedProductLines(reader,batchId,records.map(record=>record[field]??[]))
   return records.map((record,index)=>({...publicStoreNameDisplay(record),[field]:sets[index]}))
  }
  private async context(userId:string,role?:WorkbenchRole,query:Row={},managerAnalytics=false){
@@ -267,8 +274,8 @@ export class CollectedWorkbenchService {
   const nodes=await this.db.query('SELECT id,parent_id,name,kind FROM organization_nodes WHERE owner_user_id=$1 ORDER BY id',[owner])
   const employees=await this.db.query(collectedOrganizationQuery,[owner,tenant,company])
   const org=buildReplicaOrganization(user,owner,nodes,employees,{tenant_id:tenant,source_company_id:company},{managerAnalytics})
-  const filter=localEmployeeFilter(org,org.analyticsPeers?{ownerId:query.ownerId}:query),batch=batches[0]
-  const signature=JSON.stringify([user.sessionVersion,user.role,user.dataDisplayScope,roles,org.version,org.employeeIds,filter.employeeIds,user.chartPermissions,batch.id,batch.exception_data_revision,batch.metadata?.entityCaptures,batch.metadata?.analyticsCaptures,batch.metadata?.timestampSync,batch.metadata?.businessStatusProjection,batch.metadata?.manualApprovalReadbackAt,batch.metadata?.receiptSupplement])
+  const filter=localEmployeeFilter(org,org.analyticsPeers?{ownerId:query.ownerId}:query),batch=defaultCollectedCompany(batches[0])
+  const signature=JSON.stringify([user.sessionVersion,user.role,user.dataDisplayScope,roles,org.version,org.employeeIds,filter.employeeIds,user.chartPermissions,batch.id,batch.source_as_of,batch.metadata?.moneyCaptureUpdatedAt,batch.exception_data_revision,batch.metadata?.entityCaptures,batch.metadata?.analyticsCaptures,batch.metadata?.timestampSync,batch.metadata?.businessStatusProjection,batch.metadata?.manualApprovalReadbackAt,batch.metadata?.receiptSupplement])
   return {user,org,filter,batch,signature,searchOwnerIds:org.members.filter(m=>query.search?.trim()&&m.name.toLowerCase().includes(query.search.trim().toLowerCase())).map(m=>m.employeeId)}
  }
  private metadata(batch:Row,unavailable=false){const timestamp=timestampStatus(batch.metadata?.timestampSync);const revision=batch.id+':'+createHash('sha256').update(JSON.stringify([batch.exception_data_revision,batch.metadata?.entityCaptures??{},batch.metadata?.moneyCaptureUpdatedAt??null,batch.metadata?.timestampSync??null,batch.metadata?.businessStatusProjection,batch.metadata?.manualApprovalReadbackAt??null])).digest('hex').slice(0,16);const missing=missingDatasets.filter(x=>!batch.metadata?.entityCaptures?.[x]);return {
@@ -480,10 +487,10 @@ export class CollectedWorkbenchService {
   const q=collectedWhere(c.batch.id,c.filter.employeeIds,{...query,searchOwnerIds:c.searchOwnerIds})
   const pageQuery=query.queue==='exceptions'?collectedExceptionPage(c.batch.id,c.filter.employeeIds,{...query,searchOwnerIds:c.searchOwnerIds},page,pageSize,{includeStock:true,includeUnassigned:canViewUnassignedStockExceptions(c,query)}):query.queue==='dispatch'&&query.completed?collectedDispatchPage(c.batch.id,c.filter.employeeIds,{...query,searchOwnerIds:c.searchOwnerIds},page,pageSize):null
   const loadPage=async()=>pageQuery?(await this.db.query(pageQuery.sql,pageQuery.params))[0]:null
-  const cacheable=query.queue==='exceptions'&&c.batch.exception_data_revision!=null&&(!query.timeRange||query.timeRange==='all')
+  const cacheable=!!pageQuery&&c.batch.exception_data_revision!=null
   const cacheKey=JSON.stringify([userId,role,c.signature,c.filter.employeeIds,pageQuery?.params,pageQuery?.sql])
-  const combinedPage=cacheable?await this.exceptionPages.read(cacheKey,loadPage):await loadPage()
-  const readPageSql=(sql:string,params:unknown[]):Promise<Row[]>=>['procurement','warehouse'].includes(role)?(role==='warehouse'?this.warehouseReads:this.procurementReads).read(JSON.stringify([role,userId,c.signature,sql,params]),()=>this.db.query(sql,params)):this.db.query(sql,params)
+  const combinedPage=cacheable?await this.exceptionPages.read(cacheKey,loadPage,query.refresh===true):await loadPage()
+  const readPageSql=this.listReader(userId,role,c,query).query
   const projection=allocationReady?collectedAllocationDisplay(!!query.completed,query.queue==='allocation_review'):query.queue==='shipping'?"display || jsonb_build_object('logisticsInfo',display->'warehouseLogistics')":query.queue==='dispatch'?"display || jsonb_build_object('logisticsInfo',display->'dispatchLogistics')":'display'
   const countryQuery=collectedWhere(c.batch.id,c.filter.employeeIds,{...query,searchOwnerIds:c.searchOwnerIds,shippingCountryCode:undefined})
   const [totalRows,rows,countries]:[Row[],Row[],Row[]]=await Promise.all([
@@ -494,7 +501,7 @@ export class CollectedWorkbenchService {
   const totals=totalRows[0]
   if((await this.context(userId,role,query)).signature!==c.signature)throw new ConflictException('Local permission or batch changed; reload')
   const sourceSyncedAt=publishedTimestampTime(c.batch.metadata?.timestampSync,(nativeCapture??allocationCapture)?.capturedAt??sourceCaptureFallback(c.batch),['hzkj_orders',...(['dispatch','shipping','allocation','allocation_review'].includes(query.queue)?['hzkj_deliver_bill']:[]),...(['shipping','allocation','allocation_review'].includes(query.queue)?['hzkj_alloc_bill']:[])])
-  const resolvedItems=await this.productDisplay(c.batch.id,rows.map(row=>localOwnership(row.documentKind==='stock_order'?stockExceptionDisplay(row.display,row.raw,true):withOrderBusinessStatus(withCollectedOrderLogistics(collectedOrderMoney(withSourceOrderNumber({...row.display,...collectedOrderNotes(row.raw),rawBillStatus:row.raw.billstatus??null},row.raw),row.raw,c.batch.company_id),row.raw,c.batch.company_id,query),row.raw,c.batch.company_id,{persistedExceptions:true}),c.org) as CollectedRow))
+  const resolvedItems=await this.productDisplay(c.batch.id,rows.map(row=>localOwnership(row.documentKind==='stock_order'?stockExceptionDisplay(row.display,row.raw,true):withOrderBusinessStatus(withCollectedOrderLogistics(collectedOrderMoney(withSourceOrderNumber({...row.display,...collectedOrderNotes(row.raw),rawBillStatus:row.raw.billstatus??null},row.raw),row.raw,c.batch.company_id),row.raw,c.batch.company_id,query),row.raw,c.batch.company_id,{persistedExceptions:true}),c.org) as CollectedRow),'items',{query:readPageSql})
   if(query.queue==='shipping'&&resolvedItems.length){
    const notices:Row[]=await readPageSql(`SELECT display->>'sourceOrderId' order_id,raw->>'billstatus' billstatus,raw->>'auditdate' auditdate FROM hz_fop_collected_entities WHERE batch_id=$1 AND entity_type='delivery_notice' AND display->'association'->>'state'='verified' AND display->>'sourceOrderId'=ANY($2::text[])`,[c.batch.id,resolvedItems.map(item=>item.id)])
    const grouped=new Map<string,Row[]>()
@@ -515,13 +522,14 @@ export class CollectedWorkbenchService {
   const {items,...metadata}=result;return {...metadata,item:items[0]}
  }
  private async rmaOrders(userId:string,query:Row,role:WorkbenchRole,c:Awaited<ReturnType<CollectedWorkbenchService['context']>>):Promise<CollectedPage>{
+  const reader=this.listReader(userId,role,c,query)
   const capture=c.batch.metadata?.entityCaptures?.rma
   if(!capture||capture.companyId!==c.batch.company_id){const result=await this.diagnostic(c,query);if((await this.context(userId,role,query)).signature!==c.signature)throw new ConflictException('Local permission or batch changed; reload');return result}
   const q=collectedRmaWhere(c.batch.id,c.filter.employeeIds,{...query,searchOwnerIds:c.searchOwnerIds,includeAssociationExceptions:c.user.role==='admin'}),page=Math.max(1,Number(query.page)||1),pageSize=Math.min(1000,Math.max(1,Number(query.pageSize)||100))
-  const [counts]=await this.db.query(`SELECT count(*)::int AS total,count(DISTINCT display->>'sourceOrderId')::int AS order_count FROM hz_fop_collected_entities WHERE ${q.where}`,q.params)
+  const [counts]=await reader.query(`SELECT count(*)::int AS total,count(DISTINCT display->>'sourceOrderId')::int AS order_count FROM hz_fop_collected_entities WHERE ${q.where}`,q.params)
   // Amount and product quantities belong to each RMA case; only order_count deduplicates parents.
-  const monies:Row[]=await this.db.query(`SELECT display->>'currency' AS currency,CASE WHEN count(display->>'amount')=count(*) THEN sum((display->>'amount')::numeric)::text END AS amount FROM (SELECT display FROM hz_fop_collected_entities WHERE ${q.where}) scoped GROUP BY display->>'currency'`,q.params)
-  const [quantity]=await this.db.query(`SELECT CASE WHEN count(*) FILTER(WHERE
+  const monies:Row[]=await reader.query(`SELECT display->>'currency' AS currency,CASE WHEN count(display->>'amount')=count(*) THEN sum((display->>'amount')::numeric)::text END AS amount FROM (SELECT display FROM hz_fop_collected_entities WHERE ${q.where}) scoped GROUP BY display->>'currency'`,q.params)
+  const [quantity]=await reader.query(`SELECT CASE WHEN count(*) FILTER(WHERE
    jsonb_typeof(raw->'case'->'hzkj_after_entryentity') IS DISTINCT FROM 'array'
    OR (line IS NOT NULL AND qty.value IS NULL))=0 THEN coalesce(sum(qty.value),0)::text END AS quantity
    FROM hz_fop_collected_entities
@@ -529,27 +537,30 @@ export class CollectedWorkbenchService {
    LEFT JOIN LATERAL (SELECT CASE WHEN jsonb_typeof(line->'hzkj_qty') IN ('number','string') AND line->>'hzkj_qty' ~ '^[0-9]+([.][0-9]+)?$'
      THEN CASE WHEN (line->>'hzkj_qty')::numeric <= 9007199254740991 THEN (line->>'hzkj_qty')::numeric END END AS value) qty ON true
    WHERE ${q.where}`,q.params)
-  const rows:Row[]=query.projection==='count'?[]:await this.db.query(`SELECT display,raw->'case' AS raw FROM hz_fop_collected_entities WHERE ${q.where} ORDER BY ${q.orderBy} LIMIT $${q.params.length+1} OFFSET $${q.params.length+2}`,[...q.params,pageSize,(page-1)*pageSize])
-  if((await this.context(userId,role,query)).signature!==c.signature)throw new ConflictException('Local permission or batch changed; reload')
+  const rows:Row[]=query.projection==='count'?[]:await reader.query(`SELECT display,raw->'case' AS raw FROM hz_fop_collected_entities WHERE ${q.where} ORDER BY ${q.orderBy} LIMIT $${q.params.length+1} OFFSET $${q.params.length+2}`,[...q.params,pageSize,(page-1)*pageSize])
+  const parentIds=rows.filter(r=>r.display.rmaAssociation?.state==='verified').map(r=>r.display.sourceOrderId).filter(Boolean)
+  const parents:Row[]=parentIds.length?await reader.query('SELECT source_id,raw FROM hz_fop_collected_orders WHERE batch_id=$1 AND source_id=ANY($2::text[]) AND ($3::text[] IS NULL OR owner_employee_id=ANY($3::text[]))',[c.batch.id,parentIds,c.filter.employeeIds]):[]
+  const parentTypes=new Map(parents.map(r=>[r.source_id,orderDocumentType(r.raw)]))
+  for(const row of rows)row.display={...row.display,...(parentTypes.get(row.display.sourceOrderId)??{orderTypeCode:null,orderTypeName:null})}
   if((await this.context(userId,role,query)).signature!==c.signature)throw new ConflictException('Local permission or batch changed; reload')
   const meta=this.metadata(c.batch)
-  return {...meta,replica:{...meta.replica,sourceSyncedAt:capture.capturedAt},items:await this.productDisplay(c.batch.id,rows.map(row=>localOwnership(withCollectedRmaDetails(row.display,row.raw),c.org) as CollectedRow)),total:counts.total,page,pageSize,queueState:'ready',departments:localDepartments(c.org),salespeople:localSalespeople(c.org,query),shippingCountries:[],totals:{caseCount:counts.total,orderCount:counts.order_count,itemQuantity:exactNumber(quantity.quantity),amountsByCurrency:monies.filter(m=>m.currency&&exactNumber(m.amount)!==null).map(m=>({currency:m.currency,amount:exactNumber(m.amount)})),complete:counts.total>0&&exactNumber(quantity.quantity)!==null&&monies.length>0&&monies.every(m=>!!m.currency&&exactNumber(m.amount)!==null)},dataAvailability:{mode:'collected',complete:false,queueAvailable:true,capturedAt:capture.capturedAt,coverage:capture.coverage,provesBusinessZero:false,executionAvailable:false,reason:'已采集付款客户范围内的真实售后单；当前为部分客户覆盖，计数仅指当前权限和筛选内已采集记录，不代表公司全部售后或业务零。仅展示业务归属已核验的记录；此售后采集范围尚未纳入时间增量，执行仍须 FOP 实时接口。'}}
+  return {...meta,replica:{...meta.replica,sourceSyncedAt:capture.capturedAt},items:await this.productDisplay(c.batch.id,rows.map(row=>localOwnership(withCollectedRmaDetails(row.display,row.raw),c.org) as CollectedRow),'items',reader),total:counts.total,page,pageSize,queueState:'ready',departments:localDepartments(c.org),salespeople:localSalespeople(c.org,query),shippingCountries:[],totals:{caseCount:counts.total,orderCount:counts.order_count,itemQuantity:exactNumber(quantity.quantity),amountsByCurrency:monies.filter(m=>m.currency&&exactNumber(m.amount)!==null).map(m=>({currency:m.currency,amount:exactNumber(m.amount)})),complete:counts.total>0&&exactNumber(quantity.quantity)!==null&&monies.length>0&&monies.every(m=>!!m.currency&&exactNumber(m.amount)!==null)},dataAvailability:{mode:'collected',complete:false,queueAvailable:true,capturedAt:capture.capturedAt,coverage:capture.coverage,provesBusinessZero:false,executionAvailable:false,reason:'已采集付款客户范围内的真实售后单；当前为部分客户覆盖，计数仅指当前权限和筛选内已采集记录，不代表公司全部售后或业务零。仅展示业务归属已核验的记录；此售后采集范围尚未纳入时间增量，执行仍须 FOP 实时接口。'}}
  }
  private async stockOrders(userId:string,query:Row,role:WorkbenchRole,c:Awaited<ReturnType<CollectedWorkbenchService['context']>>):Promise<CollectedPage>{
+  const reader=this.listReader(userId,role,c,query)
   const q=collectedStockWhere(c.batch.id,c.filter.employeeIds,{...query,searchOwnerIds:c.searchOwnerIds}),page=Math.max(1,Number(query.page)||1),pageSize=Math.min(1000,Math.max(1,Number(query.pageSize)||100))
-  const table=await this.db.query("SELECT to_regclass('public.hz_fop_collected_entities') AS name")
+  const table=await reader.query("SELECT to_regclass('public.hz_fop_collected_entities') AS name")
   if(!table[0].name)return this.empty(c,query)
   const initialized=c.batch.metadata?.entityCaptures?.stock_orders
   if(!initialized)return this.empty(c,query)
-  const totals=await this.db.query(`SELECT count(*)::int AS total FROM hz_fop_collected_entities WHERE ${q.where}`,q.params)
-  const warehouses=await this.db.query(`SELECT DISTINCT display->>'warehouseCode' AS code,display->>'warehouse' AS name FROM hz_fop_collected_entities WHERE ${q.where} ORDER BY code`,q.params)
-  const aggregates=await this.db.query(`SELECT display->>'currency' AS currency,CASE WHEN count(display->>'amount')=count(*) AND count(display->>'currency')=count(*) THEN sum((display->>'amount')::numeric)::text END AS amount FROM hz_fop_collected_entities WHERE ${q.where} GROUP BY display->>'currency'`,q.params)
-  const [quantity]=await this.db.query(`SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM hz_fop_collected_entities WHERE ${q.where} AND display->'dataQuality'->'missingFields' ? 'items') AND count(line->>'quantity')=count(*) THEN sum((line->>'quantity')::numeric)::text END AS quantity FROM hz_fop_collected_entities CROSS JOIN LATERAL jsonb_array_elements(display->'items') line WHERE ${q.where}`,q.params)
-  const rows=query.projection==='count'?[]:await this.db.query(`SELECT ${persistedExceptionDisplaySql('hz_fop_collected_entities')} AS display FROM hz_fop_collected_entities WHERE ${q.where} ORDER BY ${q.orderBy} LIMIT $${q.params.length+1} OFFSET $${q.params.length+2}`,[...q.params,pageSize,(page-1)*pageSize])
-  if((await this.context(userId,role,query)).signature!==c.signature)throw new ConflictException('Local permission or batch changed; reload')
+  const totals=await reader.query(`SELECT count(*)::int AS total FROM hz_fop_collected_entities WHERE ${q.where}`,q.params)
+  const warehouses=await reader.query(`SELECT DISTINCT display->>'warehouseCode' AS code,display->>'warehouse' AS name FROM hz_fop_collected_entities WHERE ${q.where} ORDER BY code`,q.params)
+  const aggregates=await reader.query(`SELECT display->>'currency' AS currency,CASE WHEN count(display->>'amount')=count(*) AND count(display->>'currency')=count(*) THEN sum((display->>'amount')::numeric)::text END AS amount FROM hz_fop_collected_entities WHERE ${q.where} GROUP BY display->>'currency'`,q.params)
+  const [quantity]=await reader.query(`SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM hz_fop_collected_entities WHERE ${q.where} AND display->'dataQuality'->'missingFields' ? 'items') AND count(line->>'quantity')=count(*) THEN sum((line->>'quantity')::numeric)::text END AS quantity FROM hz_fop_collected_entities CROSS JOIN LATERAL jsonb_array_elements(display->'items') line WHERE ${q.where}`,q.params)
+  const rows=query.projection==='count'?[]:await reader.query(`SELECT ${persistedExceptionDisplaySql('hz_fop_collected_entities')} AS display FROM hz_fop_collected_entities WHERE ${q.where} ORDER BY ${q.orderBy} LIMIT $${q.params.length+1} OFFSET $${q.params.length+2}`,[...q.params,pageSize,(page-1)*pageSize])
   if((await this.context(userId,role,query)).signature!==c.signature)throw new ConflictException('Local permission or batch changed; reload')
   const meta=this.metadata(c.batch)
-  return {...meta,replica:{...meta.replica,sourceSyncedAt:initialized.capturedAt},items:await this.productDisplay(c.batch.id,rows.map((r:Row)=>localOwnership(r.display,c.org) as CollectedRow)),total:totals[0].total,page,pageSize,queueState:'ready',departments:localDepartments(c.org),salespeople:localSalespeople(c.org,query),warehouses,totals:{orderCount:totals[0].total,itemQuantity:exactNumber(quantity.quantity),amounts:aggregates.map((a:Row)=>({currency:a.currency,amount:exactNumber(a.amount)})),complete:quantity.quantity!==null&&aggregates.every((a:Row)=>a.amount!==null&&a.currency!==null)},dataAvailability:{mode:'collected',complete:false,reason:'备货订单已采集入库；缺失字段留空，此实体修改时间增量契约仍待核验。',capturedAt:initialized.capturedAt}}
+  return {...meta,replica:{...meta.replica,sourceSyncedAt:initialized.capturedAt},items:await this.productDisplay(c.batch.id,rows.map((r:Row)=>localOwnership(r.display,c.org) as CollectedRow),'items',reader),total:totals[0].total,page,pageSize,queueState:'ready',departments:localDepartments(c.org),salespeople:localSalespeople(c.org,query),warehouses,totals:{orderCount:totals[0].total,itemQuantity:exactNumber(quantity.quantity),amounts:aggregates.map((a:Row)=>({currency:a.currency,amount:exactNumber(a.amount)})),complete:quantity.quantity!==null&&aggregates.every((a:Row)=>a.amount!==null&&a.currency!==null)},dataAvailability:{mode:'collected',complete:false,reason:'备货订单已采集入库；缺失字段留空，此实体修改时间增量契约仍待核验。',capturedAt:initialized.capturedAt}}
  }
  private async diagnostic(c:Awaited<ReturnType<CollectedWorkbenchService['context']>>,query:Row){
   const gaps:Record<string,string[]>={procurement:['hzkj_purchase_status','stock_usage_requires_procurement'],procurement_shipping:['hzkj_purchase_status'],shipping:['allocationDocument','allocationReview','stockReadiness','shipmentInterceptStatus'],dispatch:['dispatchDocuments','hzkj_delivery_status'],allocation:['allocationDocument','hzkj_alloc_status'],allocation_review:['allocationDocument','billstatus'],rma:['rma_cases','salesperson_or_verified_parent_relation'],purchase_returns:['physical_return_document','hzkj_rf_kind','hzkj_rf_applyqty','returned_quantity','physical_return_status','return_logistics','verified_fulfillment_line_relation'],receipt_notices:['receipt_notice_entity','receipt_notice_status'],procurement_groups:['purchase_entity','authorized_fulfillment_relations']}
@@ -586,7 +597,8 @@ export class CollectedWorkbenchService {
  async receiptNotices(userId:string,query:Row){
   const c=await this.context(userId,'warehouse',query)
   const capture=c.batch.metadata?.entityCaptures?.fulfillment_inbound
-  const loadWarehouses=()=>this.warehouseReads.read(JSON.stringify(['inbound-warehouses',userId,c.signature]),()=>this.db.query(`SELECT CASE warehouse_code WHEN '01' THEN 'HZ' WHEN 'HNDGLB' THEN 'SZ' ELSE warehouse_code END code,max(display->>'warehouse') name FROM hz_fop_collected_orders WHERE batch_id=$1 AND ($2::text[] IS NULL OR owner_employee_id=ANY($2)) AND warehouse_code IS NOT NULL GROUP BY 1 ORDER BY 1`,[c.batch.id,c.filter.employeeIds]))
+  const readSql=this.listReader(userId,'warehouse',c,query).query
+  const loadWarehouses=()=>readSql(`SELECT CASE warehouse_code WHEN '01' THEN 'HZ' WHEN 'HNDGLB' THEN 'SZ' ELSE warehouse_code END code,max(display->>'warehouse') name FROM hz_fop_collected_orders WHERE batch_id=$1 AND ($2::text[] IS NULL OR owner_employee_id=ANY($2)) AND warehouse_code IS NOT NULL GROUP BY 1 ORDER BY 1`,[c.batch.id,c.filter.employeeIds])
   const page=Math.max(1,Number(query.page)||1),pageSize=Math.min(1000,Math.max(1,Number(query.pageSize)||100))
   const key=JSON.stringify([userId,c.signature,c.batch.metadata?.receiptSupplement,c.batch.metadata?.timestampSync,c.batch.metadata?.entityCaptures,{...query,refresh:undefined}])
   const readPage=async()=>{
@@ -596,7 +608,7 @@ export class CollectedWorkbenchService {
    const stockGroups=await readInboundStockGroups(this.db,c.batch,stockIds,c.filter.employeeIds)
    return {...dataRows[0],warehouses,parcels:(dataRows[0].parcels??[]).map((p:Row)=>({...p,stockGroup:stockGroups.get(p.parcel_key.slice(6))??null}))}
   }
-  const cached=query.refresh===true?await readPage():await this.inboundPages.read(key,readPage)
+  const cached=await this.inboundPages.read(key,readPage,query.refresh===true)
   const warehouses=cached.warehouses,count=cached.counts,quality={unclassified:cached.unclassified},rows:Row[]=cached.rows
   const quantity=exactNumber
   const items=rows.map((row:Row)=>{
@@ -607,9 +619,9 @@ export class CollectedWorkbenchService {
   })
   const unclassified=Number(quality?.unclassified)||0,available=count.total>0||(query.view==='parcel'&&cached.parcel_total>0)||unclassified===0
   const totalQuantity=(value:unknown)=>value==null?(available?0:null):exactNumber(value)
-  const sourcedItems=await withProcurementSourceDocuments(this.db,{id:c.batch.id,company_id:c.batch.company_id},items.map(item=>({...item,items:item.lines})),rows.map(row=>row.raw))
-  const displayedItems=await this.productDisplay(c.batch.id,sourcedItems.map(item=>({...item,lines:item.items})),'lines')
-  const stockDisplays=await this.productDisplay(c.batch.id,(cached.parcels??[]).filter((p:Row)=>p.stockGroup).map((p:Row)=>p.stockGroup),'products')
+  const sourcedItems=await withProcurementSourceDocuments({query:readSql},{id:c.batch.id,company_id:c.batch.company_id},items.map(item=>({...item,items:item.lines})),rows.map(row=>row.raw))
+  const displayedItems=await this.productDisplay(c.batch.id,sourcedItems.map(item=>({...item,lines:item.items})),'lines',{query:readSql})
+  const stockDisplays=await this.productDisplay(c.batch.id,(cached.parcels??[]).filter((p:Row)=>p.stockGroup).map((p:Row)=>p.stockGroup),'products',{query:readSql})
   const stockDisplayMap=new Map(stockDisplays.map((s:Row)=>[s.id,s]))
   const parcels=(cached.parcels??[]).map((p:Row)=>({...p,stockGroup:p.stockGroup?stockDisplayMap.get(p.stockGroup.id):null}))
   if((await this.context(userId,'warehouse',query)).signature!==c.signature)throw new ConflictException('Local permission or batch changed; reload')
@@ -623,11 +635,12 @@ export class CollectedWorkbenchService {
  async purchaseGroups(userId:string,query:Row,groupId?:string):Promise<any>{
   const c=await this.context(userId,'procurement',query),capture=c.batch.metadata?.entityCaptures?.procurement_groups
   if(!capture||capture.companyId!==c.batch.company_id)return this.unavailable(userId,{...query,queue:'procurement_groups'},'procurement',groupId)
+  const reader=this.listReader(userId,'procurement',c,query)
   const params:unknown[]=[c.batch.id],permission=c.filter.employeeIds===null?'':` AND display->'association'->>'state' IS DISTINCT FROM 'conflict' AND EXISTS(SELECT 1 FROM jsonb_array_elements(display->'rows') r WHERE r->>'ownerEmployeeId'=ANY($2::text[]))`;if(c.filter.employeeIds!==null)params.push(c.filter.employeeIds)
-  const source:Row[]=await this.db.query(`SELECT display,raw FROM hz_fop_collected_entities WHERE batch_id=$1 AND entity_type IN ('purchase','purchase_demand')${permission}`,params)
+  const source:Row[]=await reader.query(`SELECT display,raw FROM hz_fop_collected_entities WHERE batch_id=$1 AND entity_type IN ('purchase','purchase_demand')${permission}`,params)
   let all=source.map(r=>scopedPurchaseGroup(r.display.purchase?{...r.display,purchase:{...r.display.purchase,supplier:purchaseLogisticsSupplier(r.raw??{})}}:r.display,c.filter.employeeIds)).filter(g=>g.rows.length>0||c.filter.employeeIds===null)
   if(!query.completed&&query.queue!=='procurement_shipping'){
-   const scopedOrders:Row[]=await this.db.query("SELECT source_id,display,raw FROM hz_fop_collected_orders WHERE batch_id=$1 AND raw_bill_status='C' AND raw_payment_status='1' AND raw_order_status IN ('1','2','3','4','5','no') AND display->'procurementQueueFlags'->>'pending'='true' AND ($2::text[] IS NULL OR owner_employee_id=ANY($2::text[]))",[c.batch.id,c.filter.employeeIds])
+   const scopedOrders:Row[]=await reader.query("SELECT source_id,display,raw FROM hz_fop_collected_orders WHERE batch_id=$1 AND raw_bill_status='C' AND raw_payment_status='1' AND raw_order_status IN ('1','2','3','4','5','no') AND display->'procurementQueueFlags'->>'pending'='true' AND ($2::text[] IS NULL OR owner_employee_id=ANY($2::text[]))",[c.batch.id,c.filter.employeeIds])
    const pendingOrders=new Map(scopedOrders.map(o=>[o.source_id,o]))
    all=all.filter(g=>g.kind!=='uncreated').map(g=>{
     const rows=g.rows.filter((r:Row)=>pendingOrders.has(r.orderId))
@@ -656,11 +669,11 @@ export class CollectedWorkbenchService {
   if((await this.context(userId,'procurement',query)).signature!==c.signature)throw new ConflictException('Local permission or batch changed; reload')
   if(groupId){
    const group=all.find(g=>g.id===groupId);if(!group)throw new NotFoundException('Purchase group not found in current result')
-   const items=await this.productDisplay(c.batch.id,group.rows.slice((page-1)*pageSize,page*pageSize),'lines')
-   const facts:Row[]=items.length?await this.db.query(`SELECT source_id,${persistedExceptionDisplaySql()} AS display,raw FROM hz_fop_collected_orders WHERE batch_id=$1 AND source_id=ANY($2::text[]) AND ($3::text[] IS NULL OR owner_employee_id=ANY($3::text[]))`,[c.batch.id,items.map((r:Row)=>r.orderId).filter(Boolean),c.filter.employeeIds]):[]
-   const exceptions=new Map(facts.map(r=>[r.source_id,withOrderBusinessStatus(r.display,r.raw,c.batch.company_id,{persistedExceptions:true}).exception]))
+   const items=await this.productDisplay(c.batch.id,group.rows.slice((page-1)*pageSize,page*pageSize),'lines',reader)
+   const facts:Row[]=items.length?await reader.query(`SELECT source_id,${persistedExceptionDisplaySql()} AS display,raw FROM hz_fop_collected_orders WHERE batch_id=$1 AND source_id=ANY($2::text[]) AND ($3::text[] IS NULL OR owner_employee_id=ANY($3::text[]))`,[c.batch.id,items.map((r:Row)=>r.orderId).filter(Boolean),c.filter.employeeIds]):[]
+   const orderLabels=new Map(facts.map(r=>[r.source_id,{...orderDocumentType(r.raw),exception:withOrderBusinessStatus(r.display,r.raw,c.batch.company_id,{persistedExceptions:true}).exception}]))
    if((await this.context(userId,'procurement',query)).signature!==c.signature)throw new ConflictException('Local permission or batch changed; reload')
-   return{...meta,group:{...group,rows:undefined},items:items.map((r:Row)=>({...r,exception:exceptions.get(r.orderId)??null})),total:group.rows.length}
+   return{...meta,group:{...group,rows:undefined},items:items.map((r:Row)=>({...r,...(orderLabels.get(r.orderId)??{orderTypeCode:null,orderTypeName:null,exception:null})})),total:group.rows.length}
   }
   return{...meta,items:query.projection==='count'?[]:all.slice((page-1)*pageSize,page*pageSize).map(g=>({...g,rows:undefined})),total:all.length,totals:{groupCount:all.length,purchaseCount:all.filter(g=>g.kind==='purchase').length,orderCount:new Set(all.flatMap(g=>g.rows.map((r:Row)=>r.orderId))).size,uncreatedCount:all.filter(g=>g.kind==='uncreated').length,pendingQuantity:null}}
  }
@@ -675,13 +688,14 @@ export class CollectedWorkbenchService {
  }
  async purchaseReturns(userId:string,query:Row):Promise<any>{
   const role=query.workbenchRole as WorkbenchRole,c=await this.context(userId,role,query)
+  const reader=this.listReader(userId,role,c,query)
   const capture=c.batch.metadata?.entityCaptures?.purchase_material_return
   if(!capture||capture.companyId!==c.batch.company_id)return this.unavailable(userId,{...query,queue:'purchase_returns'},role)
   const q=collectedMaterialReturnsQuery(c.batch.id,c.filter.employeeIds,query)
   const page=Math.max(1,Number(query.page)||1),pageSize=Math.min(1000,Math.max(1,Number(query.pageSize)||100))
   const [countRows,rows]=await Promise.all([
-   this.procurementReads.read(JSON.stringify(['return-count',userId,c.signature,q.params,q.cte]),()=>this.db.query(`${q.cte} SELECT (SELECT count(*)::int FROM matched) total,(SELECT count(DISTINCT return_id)::int FROM linked) return_count,(SELECT sum((l->>'quantity')::numeric) FROM linked CROSS JOIN LATERAL jsonb_array_elements(document->'lines') l) quantity`,q.params)),
-   query.projection==='count'?Promise.resolve([]):this.db.query(`${q.cte} SELECT o.display,o.raw,m.documents FROM matched m JOIN hz_fop_collected_orders o ON o.batch_id=$1 AND o.source_id=m.source_id ORDER BY o.paid_at ${query.paidAtOrder==='asc'?'ASC':'DESC'} NULLS LAST,o.source_id LIMIT $${q.params.length+1} OFFSET $${q.params.length+2}`,[...q.params,pageSize,(page-1)*pageSize])
+   reader.query(`${q.cte} SELECT (SELECT count(*)::int FROM matched) total,(SELECT count(DISTINCT return_id)::int FROM linked) return_count,(SELECT sum((l->>'quantity')::numeric) FROM linked CROSS JOIN LATERAL jsonb_array_elements(document->'lines') l) quantity`,q.params),
+   query.projection==='count'?Promise.resolve([]):reader.query(`${q.cte} SELECT o.display,o.raw,m.documents FROM matched m JOIN hz_fop_collected_orders o ON o.batch_id=$1 AND o.source_id=m.source_id ORDER BY o.paid_at ${query.paidAtOrder==='asc'?'ASC':'DESC'} NULLS LAST,o.source_id LIMIT $${q.params.length+1} OFFSET $${q.params.length+2}`,[...q.params,pageSize,(page-1)*pageSize])
   ])
   const counts=countRows[0]
   const sum=(values:(number|null)[])=>values.every(v=>v!==null)?values.reduce((a,b)=>a!+b!,0):null
@@ -693,7 +707,7 @@ export class CollectedWorkbenchService {
   })
   if((await this.context(userId,role,query)).signature!==c.signature)throw new ConflictException('Local permission or data changed; reload')
   const meta=this.metadata(c.batch)
-  return {...meta,replica:{...meta.replica,sourceSyncedAt:capture.capturedAt},items:await this.productDisplay(c.batch.id,items),total:counts.total,page,pageSize,departments:localDepartments(c.org),totals:{orderCount:counts.total,returnCount:counts.return_count,quantity:counts.quantity==null?null:Number(counts.quantity),returnedQuantity:null,itemQuantity:null,amountsByCurrency:[]},dataAvailability:{mode:'collected',queueAvailable:true,complete:false,executionAvailable:false,missingFields:['return_execution_status','return_logistics','purchase_order_relation','fulfillment_line_id'],capturedAt:capture.capturedAt}}
+  return {...meta,replica:{...meta.replica,sourceSyncedAt:capture.capturedAt},items:await this.productDisplay(c.batch.id,items,'items',reader),total:counts.total,page,pageSize,departments:localDepartments(c.org),totals:{orderCount:counts.total,returnCount:counts.return_count,quantity:counts.quantity==null?null:Number(counts.quantity),returnedQuantity:null,itemQuantity:null,amountsByCurrency:[]},dataAvailability:{mode:'collected',queueAvailable:true,complete:false,executionAvailable:false,missingFields:['return_execution_status','return_logistics','purchase_order_relation','fulfillment_line_id'],capturedAt:capture.capturedAt}}
  }
  async unavailable(userId:string,query:Row,role:WorkbenchRole,groupId?:string){const c=await this.context(userId,role,query);const result=await this.diagnostic(c,{...query,queue:groupId?'procurement_groups':query.queue??(role==='warehouse'?'receipt_notices':'purchase_returns')});if((await this.context(userId,role,query)).signature!==c.signature)throw new ConflictException('Local permission or batch changed; reload');return {...result,...(groupId?{group:null}:{})}}
  async export(userId:string,query:Row,version:number,kind:string):Promise<Buffer>{

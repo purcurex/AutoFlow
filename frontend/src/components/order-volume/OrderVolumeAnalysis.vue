@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ChartUpdateStatus from '@/components/charts/ChartUpdateStatus.vue'
 import { peekAnalyticsQuery } from '@/utils/analytics-cache'
 import { isWorkbenchScopeError } from '@/api/workbench-dashboard'
 import { businessYears, BUSINESS_START_DATE } from '@/utils/business-years'
@@ -31,8 +32,8 @@ const today = new Date(Date.now() + 8 * 3600_000).toISOString().slice(0, 10)
 const currentYear = Number(today.slice(0, 4))
 const years = businessYears(currentYear)
 const category = ref<VolumeCategory>(props.customer ? 'customer' : 'organization')
-const grain = ref<VolumeGrain>('month'), year = ref(currentYear), month = ref(Number(today.slice(5, 7))), weekOf = ref(today)
-const from = ref(`${currentYear}-01-01`), to = ref(today)
+const grain = ref<VolumeGrain>('day'), year = ref(currentYear), month = ref(Number(today.slice(5, 7))), weekOf = ref(today)
+const from = ref(`${today.slice(0,7)}-01`), to = ref(today)
 const appliedRange = ref({ from: from.value, to: to.value }), dateError = ref('')
 const department = ref(''), objectId = ref(''), warehouse = ref<'ALL' | VolumeWarehouse>('ALL'), split = ref(false)
 const data = ref<OrderVolumeData>(), selectedData = ref<OrderVolumeData>(), busy = ref(false), selectedBusy = ref(false), error = ref(''), selectedError = ref('')
@@ -153,7 +154,7 @@ onBeforeUnmount(() => { off(); reset() })
 
 <template>
   <section v-if="chartVisible" class="ov-panel" :data-module="customer ? 'customer-volume' : 'order-volume'">
-    <header class="ov-header"><div class="ov-heading"><h2><component :is="customer ? UsersRound : BarChart3" :size="18" />{{ customer ? t('客户订单分析', 'Customer fulfillment and collections') : t('业务订单量分析', 'Business order analysis') }}</h2></div>
+    <header class="ov-header"><div class="ov-heading"><h2><component :is="customer ? UsersRound : BarChart3" :size="18" />{{ customer ? t('客户订单分析', 'Customer fulfillment and collections') : t('业务订单量分析', 'Business order analysis') }}</h2><ChartUpdateStatus :locale="String(locale)" :busy="busy" :as-of="data?.asOf" /></div>
       <form class="ov-filters" @submit.prevent="applyFilters(true)">
         <label v-if="!customer && grain !== 'week'">{{ t('年份', 'Year') }}<select v-model.number="year" aria-label="订单量年份"><option v-for="y in years" :key="y">{{ y }}</option></select></label>
         <label v-if="!customer">{{ t('查询类别', 'Category') }}<select v-model="category" aria-label="订单量查询类别"><option v-if="chartAccess?.dataScope !== 'none'" value="carrier">{{ t('物流服务商', 'Carrier') }}</option><option value="organization">{{ t('组织', 'Organization') }}</option><option v-if="chartAccess?.dataScope !== 'none'" value="salesperson">{{ t('业务员', 'Salesperson') }}</option></select></label>
@@ -167,7 +168,7 @@ onBeforeUnmount(() => { off(); reset() })
         <label>{{ t('仓库', 'Warehouse') }}<select v-model="warehouse" aria-label="订单量仓库"><option value="ALL">{{ t('全部仓库', 'All warehouses') }}</option><option value="HZ">{{ 'HangZhou' }}</option><option value="SZ">{{ 'ShenZhen' }}</option></select></label>
         <label class="ov-checkbox"><input v-model="split" type="checkbox" :disabled="warehouse !== 'ALL'" :aria-label="customer ? '客户订单分仓对比' : '业务订单分仓对比'">{{ t('分仓对比', 'Compare warehouses') }}</label>
         <button type="submit" :class="customer ? 'ov-primary' : 'ov-secondary workbench-refresh'" :disabled="busy">{{ t('查询', 'Apply') }}</button>
-      </form><p v-if="busy && data" class="ov-note" role="status">正在更新，当前显示上次查询结果。</p><p v-if="error && data" class="ov-note" role="alert">查询未完成，当前显示上次查询结果。</p>
+      </form><p v-if="error && data" class="ov-note" role="alert">查询未完成，当前显示上次查询结果。</p>
     </header>
     <div class="ov-body">
       <p v-if="customer && data?.customerOwnershipBasis && data.customerOwnershipBasis !== 'current_assignment'" class="ov-scope">{{ data.customerOwnershipBasis === 'historical_attribution' ? t('历史业务归属口径，当前客户分配待对接', 'Historical attribution; current customer assignment is pending integration') : t('部分客户当前归属待对接', 'Current assignment is pending integration for some customers') }}</p>
@@ -191,3 +192,7 @@ onBeforeUnmount(() => { off(); reset() })
   </section>
   <p v-else-if="error && !data" class="ov-error" role="alert">{{ error }}<button class="ov-link" @click="load(true)">{{ t('重试', 'Retry') }}</button></p>
 </template>
+
+<style scoped>
+.ov-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;flex-wrap:wrap}
+</style>

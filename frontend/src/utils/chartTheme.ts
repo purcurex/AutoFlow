@@ -25,11 +25,14 @@ export function applyChartTheme(option: EChartsCoreOption, dark: boolean, palett
   }
   option = recolor({ ...option, color: option.color ?? [tokens[0], '#37a3a3', '#c89c4d', '#8f9db1', '#b77f99'] })
   if (logistics) {
+    const reserved = [tokens[0], palettes[palette].yuanfeihang[dark ? 'dark' : 'light']]
+    const colors = palettes[palette].logisticsSeries[dark ? 'dark' : 'light'].filter(color => !reserved.includes(color))
+    let colorIndex = 0
     const carrierColor = (series: ComponentOption) => {
       const identity = `${series.id ?? ''} ${series.name ?? ''}`
       const color = /原飞航|yuan\s*fei\s*hang|yfhex|\bYFH\b/i.test(identity)
         ? palettes[palette].yuanfeihang[dark ? 'dark' : 'light']
-        : /万邦|wanb(?:ang)?|\bWB\b/i.test(identity) ? tokens[0] : undefined
+        : /万邦|wanb(?:ang)?|\bWB\b/i.test(identity) ? tokens[0] : colors[colorIndex++ % colors.length]
       return color ? { ...series, itemStyle: { ...series.itemStyle, color }, lineStyle: { ...series.lineStyle, color } } : series
     }
     option = { ...option, color: palettes[palette].logisticsSeries[dark ? 'dark' : 'light'],

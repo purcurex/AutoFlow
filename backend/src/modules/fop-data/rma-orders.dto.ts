@@ -1,5 +1,5 @@
-import { Type } from 'class-transformer'
-import { ArrayMaxSize, ArrayMinSize, ArrayUnique, IsArray, IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator'
+import { Type, Transform } from 'class-transformer'
+import { ArrayMaxSize, ArrayMinSize, ArrayUnique, IsBoolean, IsArray, IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator'
 import { rmaTypes, type RmaType } from './rma-orders'
 export class RmaFiltersDto {
   @IsOptional() @IsIn(rmaTypes) type?: RmaType
@@ -10,6 +10,7 @@ export class RmaFiltersDto {
   @IsOptional() @IsIn(['HZ', 'SZ']) warehouseCode?: 'HZ' | 'SZ'
 }
 export class RmaQueryDto extends RmaFiltersDto {
+  @IsOptional() @Transform(({value})=>value==='true'?true:value==='false'?false:value) @IsBoolean() refresh?: boolean
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(1000000) page = 1
   @IsOptional() @Type(() => Number) @IsIn([20, 50, 100, 200, 500, 1000]) pageSize = 100
 }

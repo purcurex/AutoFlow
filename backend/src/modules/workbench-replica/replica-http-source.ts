@@ -1,3 +1,4 @@
+import { fopBudgetedFetch } from '../fop-data/fop-rate-limit'
 import { ConfigService } from '@nestjs/config'
 import { DataSource } from 'typeorm'
 import type { ReplicaBarrier, ReplicaDatasetScope } from './replica-change-contract'
@@ -12,7 +13,7 @@ export const REPLICA_REFERENCES = ['customer','supplier','sku','store','warehous
 
 /** New source contract only: configured URLs are supplied by FOP, never inferred from archived list APIs. */
 export class ReplicaHttpSource implements ReplicaSourceApi {
-  constructor(private readonly config: ConfigService, private readonly db: DataSource, private readonly request: typeof fetch = fetch) {}
+  constructor(private readonly config: ConfigService, private readonly db: DataSource, private readonly request: typeof fetch = fetch) { if (request === globalThis.fetch) this.request = fopBudgetedFetch(config, request) }
   isConfigured(): boolean {
     return !!this.config.get<string>('FOP_REPLICA_ACCESS_TOKEN')?.trim() && REPLICA_API_KEYS.every(key=>{
       try { this.endpoint(key); return true } catch { return false }

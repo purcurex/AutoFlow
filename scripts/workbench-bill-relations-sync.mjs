@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // Explicit repair uses the same durable queue and generation guards as automatic sync.
+import {budgetedFetch} from './fop-budgeted-fetch.mjs'
 import {createRequire} from 'node:module'
 import {resolve} from 'node:path'
 import {readSyncConfig,syncDatabaseOptions,syncRuntimeRequire,syncScope} from './workbench-sync-runtime.mjs'
@@ -16,7 +17,8 @@ async function main(){
  try{await q.connect();const key=`timestamp-scheduled:${scope.tenantId}:${scope.companyId}`;const [lock]=await q.query('SELECT pg_try_advisory_lock(hashtextextended($1,0)) acquired',[key]);if(!lock.acquired)throw Error('timestamp_scope_busy')
  const bs=await db.query("SELECT id FROM hz_fop_collected_batches WHERE state='active' AND tenant_id=$1 AND company_id=$2",[scope.tenantId,scope.companyId]);if(bs.length!==1)throw Error('active_batch_ambiguous')
  const {KingdeeFopDataProvider}=rt('fop-data/fop-kingdee.provider'),{normalizeApiRelations}=rt('workbench-replica/collected-api-relations');let last=0
- const request=async(...p)=>{await new Promise(r=>setTimeout(r,Math.max(0,500-(Date.now()-last))));last=Date.now();return fetch(...p)}
+ const sharedFetch=budgetedFetch(c)
+ const request=async(...p)=>{await new Promise(r=>setTimeout(r,Math.max(0,500-(Date.now()-last))));last=Date.now();return sharedFetch(...p)}
  const provider=new KingdeeFopDataProvider({get:k=>c[k]},request),enabled=()=>readSyncConfig().FOP_QUERIES_PAUSED!=='true'
  const prepared=await prepareTimestampPagedExecution(c,scheduledProfile('hzkj_orders',c),{getConnection:()=>provider.getConnectionContext(),acquireToken:v=>getToken(v,request),query:(v,p)=>scheduledPageQuery({parameters:p,enabled,query:()=>runQuery(v,p,request)})})
  await seedRelationCompensation(db,bs[0].id)

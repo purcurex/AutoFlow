@@ -53,7 +53,8 @@ for marker in ['id="scope"','id="fop"','id="sync-api"','id="relations"','id="rea
  'queryWorkbenchInventoryBalance','同一时间','归档','解除','已提交','幂等','全款／押金',
  '未重新调用测试环境API','不要求包裹与耗用逐行对应','7项前端']:
  assert marker in s,marker
-assert 10000<len(s)<45000,'Unexpected FOP-only document size'
+# Allow the standard-space budget/recovery contract while retaining the concise six-section scope.
+assert 10000<len(s)<50000,'Unexpected FOP-only document size'
 manifest=json.loads((DEST/'build-manifest.json').read_text())
 assert manifest['focus']=='fop-outstanding-requirements' and manifest['sections']==6
 assert not manifest['analyticsChapter'] and not manifest['queueScopeReview'] and manifest['upstreamCalled'] is False
@@ -73,6 +74,14 @@ assert timestamp['optionalStrictProtocol']['requiredForFirstPhase'] is False
 assert timestamp['localImplementation']['automaticScheduler'] is True
 assert timestamp['localImplementation']['sourceLiveVerified'] is True
 api=json.loads((DEST/'api-integration-verification-20261116.json').read_text())
+rate=api['publicCloudRateLimits20261125']
+assert rate['standardSpaceLimits']=={'qps':20,'qpm':500,'qph':10000,'qpd':200000}
+assert rate['projectDefaults']=={'qps':16,'qpm':400,'qph':8000,'qpd':160000,'minStartIntervalMs':500,'shortQueueMaxMs':5000}
+assert rate['localMigrationApplied'] and not rate['productionDeploymentVerified']
+assert rate['verificationFopRequests']==0 and not rate['productionPressureTest']
+assert all(p in manifest['inputHashes'] for p in rate['implementationFiles'])
+for marker in ['id="fop-public-cloud-rate-limits"','hz_fop_api_budgets','2526','2528','2055','FOP_RATE_LIMIT_QPS','16／400','8,000／160,000']:
+ assert marker in s,marker
 opportunity=api['localOpportunityManagement20261118']
 assert opportunity['scope']=='local opportunity module; no submit or approval'
 assert opportunity['manualFopRequests']==0 and opportunity['fopBusinessWrites']==0

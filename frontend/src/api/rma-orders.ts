@@ -9,7 +9,7 @@ export type RmaOrderTag = keyof typeof rmaOrderTagLabels
 export interface RmaCase { id: string; orderId: string | null; rawType?: string | null; rawStatus?: string | null; type: RmaCaseType; isOpen: boolean | null; number: string | null; stage: string | null; reason: string | null; refundAmount?: number | null; refundCurrency?: string | null; requestedAmount: number | null; currency: string | null; createdAt: string | null; updatedAt: string | null }
 export interface RmaOrder extends FopOrder { sourceOrderId?: string | null; rmaAssociation?: { state: string }; rmaCases: RmaCase[]; rmaUpdatedAt: string | null; orderTags?: RmaOrderTag[]; refundAmounts?: { currency: string | null; amount: number | null }[] }
 export interface RmaFilters { type?: RmaType; flowStatus: 'active' | 'closed' | 'all'; search?: string; departmentId?: string; ownerId?: string; warehouseCode?: 'HZ' | 'SZ' }
-export interface RmaQuery extends RmaFilters { page: number; pageSize: number }
+export interface RmaQuery extends RmaFilters { refresh?: boolean; page: number; pageSize: number }
 export interface RmaPage {
   dataAvailability?: WorkbenchDataAvailability; replica?: WorkbenchReplicaSnapshot
  items: RmaOrder[]; total: number; page: number; pageSize: number; departments: { id: string; name: string }[]; totals: FopOrderTotals & { caseCount: number }; source: 'mock' | 'fop'; refreshedAt: string }
@@ -18,7 +18,7 @@ export function hasRmaTypeConflict(cases: readonly (Pick<RmaCase, 'type'> & Part
   return active.some(item => item.type === 'refund') && active.some(item => item.type === 'return_refund' || item.type === 'reshipment')
 }
 const filters = (q: RmaFilters) => ({ type: q.type, flowStatus: q.flowStatus, search: q.search, departmentId: q.departmentId, ownerId: q.ownerId, warehouseCode: q.warehouseCode })
-export function getRmaOrders(query: RmaQuery, signal?: AbortSignal): Promise<RmaPage> { return api.get('/autoflow/integrations/fop/rma-orders', { params: { ...filters(query), page: query.page, pageSize: query.pageSize }, signal }) }
+export function getRmaOrders(query: RmaQuery, signal?: AbortSignal): Promise<RmaPage> { return api.get('/autoflow/integrations/fop/rma-orders', { params: { ...filters(query), ...(query.refresh?{refresh:true}:{}), page: query.page, pageSize: query.pageSize }, signal }) }
 export function getRmaOrder(caseId: string, signal?: AbortSignal): Promise<Omit<RmaPage, 'items'> & { item: RmaOrder }> { return api.get(`/autoflow/integrations/fop/rma-orders/${encodeURIComponent(caseId)}`, { signal }) }
 export async function exportRmaOrders(query: RmaFilters, mode: 'selected' | 'filtered', caseIds: string[], signal?: AbortSignal): Promise<Blob> {
   try { return await api.post('/autoflow/integrations/fop/rma-orders/export', { ...filters(query), mode, ...(mode === 'selected' ? { caseIds } : {}) }, { responseType: 'blob', timeout: 30000, signal }) }

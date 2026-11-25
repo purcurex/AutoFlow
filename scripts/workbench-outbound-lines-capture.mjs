@@ -1,3 +1,4 @@
+import { budgetedFetch } from './fop-budgeted-fetch.mjs'
 // Explicit read-only company scan. Does not enable scheduled FOP calls or write the database.
 import fs from 'node:fs';
 import {parseEnv} from 'node:util';
@@ -10,16 +11,16 @@ fs.mkdirSync(directory,{recursive:true,mode:0o700});
 const manifest=fs.existsSync(directory+'/manifest.json')?JSON.parse(fs.readFileSync(directory+'/manifest.json','utf8')):{entityType:'fulfillment',companyId:'100000',context:{tenantId:'hyperzone.test'},coverage:'full_company_scan',startedAt:new Date().toISOString(),complete:false,consistentSnapshot:false,pages:[],rowCount:0};
 if(manifest.complete||manifest.companyId!=='100000'||manifest.context?.tenantId!=='hyperzone.test'||manifest.entityType!=='fulfillment')throw Error('invalid_resume_capture');
 const save=()=>fs.writeFileSync(directory+'/manifest.json',JSON.stringify(manifest,null,2),{mode:0o600});save();
-const token=await getToken({...config,FOP_QUERIES_PAUSED:'false'}),seen=new Set();let total;
+const token=await getToken({...local,...config,FOP_QUERIES_PAUSED:'false'}),seen=new Set();let total;
 const end=manifest.endModifyTime??new Date(Date.parse(manifest.startedAt)+86400000).toISOString().slice(0,10)+' 00:00:00';manifest.endModifyTime=end;
 async function page(n){
  let raw;
  const previous=manifest.pages[n-1];
  if(previous){raw=fs.readFileSync(directory+'/'+previous.file,'utf8');if(createHash('sha256').update(raw).digest('hex')!==previous.sha256)throw Error('resume_hash_mismatch')}
  else for(let attempt=0;attempt<3;attempt++){
-  try{const response=await fetch('https://hyperzone.test.kdgalaxy.com/kapi/v2/hzkj/hzkj_ordercenter/hzkj_orders/queryOrderList',{method:'POST',headers:{'Content-Type':'application/json',[config.FOP_OPENAPI_TOKEN_HEADER||'accessToken']:token,'x-acgw-identity':config.FOP_OPENAPI_IDENTITY},body:JSON.stringify({data:{org_number:'hyperzone.test',start_modifytime:'2020-01-01 00:00:00',end_modifytime:end},pageNo:n,pageSize:100}),signal:AbortSignal.timeout(20000)});
+  try{const response=await budgetedFetch({...local,...config})('https://hyperzone.test.kdgalaxy.com/kapi/v2/hzkj/hzkj_ordercenter/hzkj_orders/queryOrderList',{method:'POST',headers:{'Content-Type':'application/json',[config.FOP_OPENAPI_TOKEN_HEADER||'accessToken']:token,'x-acgw-identity':config.FOP_OPENAPI_IDENTITY},body:JSON.stringify({data:{org_number:'hyperzone.test',start_modifytime:'2020-01-01 00:00:00',end_modifytime:end},pageNo:n,pageSize:100}),signal:AbortSignal.timeout(20000)});
    if(!response.ok)throw Error('capture_http_'+response.status);raw=await response.text();JSON.parse(raw);break;
-  }catch(error){if(attempt===2)throw error;await new Promise(resolve=>setTimeout(resolve,1000*(attempt+1)))}
+  }catch(error){if(attempt===2||/^capture_http_(429|403|519)$/.test(error.message))throw error;await new Promise(resolve=>setTimeout(resolve,1000*(attempt+1)))}
  }
  const body=JSON.parse(raw),d=body.data;
  if(body.status!==true||String(body.errorCode)!=='0'||!d?.filter?.includes('org in (100000)')||!d.filter.includes("org.number = 'hyperzone.test'")||d.pageNo!==n||!Array.isArray(d.rows))throw Error('invalid_page_'+n);

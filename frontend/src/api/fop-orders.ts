@@ -123,6 +123,9 @@ export interface LogisticsInfo {
 export interface AllocationDocumentReference { id: string; number: string; rawBillStatus?: 'A' | 'B' | 'C' | 'D' | null; rawAllocationStatus?: 'pending' | 'available' | 'completed' | 'error' | 'voided' | null; association?: { state: string } }
 
 export interface FopOrder {
+  /** Native fulfillment bill type; used only for the sample-order label. */
+  orderTypeCode?: string | null
+  orderTypeName?: string | null
   /** 履约订单 hzkj_note，由本地采集库提供。 */
   orderRemark?: string | null
   orderRemarkProvided?: boolean
@@ -243,6 +246,7 @@ export function canSortFopQueue(queue: FopOrderQueue, field: FopOrderSortBy): bo
   return field === 'paidAt' || !!queues[field]?.includes(queue)
 }
 export interface FopOrderQuery {
+  refresh?: boolean
   projection?: 'count'
   completed?: boolean
   /** Customer completed payment time; completed lists default to the last week. */
@@ -394,9 +398,9 @@ export function matchesFopQueue(order: FopOrder, queue: FopOrderQueue, warehouse
 export async function getFopOrders(query: FopOrderQuery, signal?: AbortSignal): Promise<FopQueuePage> {
   validateQuery(query)
   const { default: api } = await import('./index')
-  const { queue, projection, completed, billStatus, skuAssociation, timeRange, shippingCountryCode, search, orderNumber, departmentId, ownerId, warehouseCode, paidAtOrder, sortBy, sortOrder, warehouseStage, procurementStage, procurementSource, fulfillmentStage, taskStatus, page, pageSize } = query
+  const { queue, projection, completed, refresh, billStatus, skuAssociation, timeRange, shippingCountryCode, search, orderNumber, departmentId, ownerId, warehouseCode, paidAtOrder, sortBy, sortOrder, warehouseStage, procurementStage, procurementSource, fulfillmentStage, taskStatus, page, pageSize } = query
   const remember = beginWorkbenchCount(query)
-  const result: FopQueuePage = await api.get('/autoflow/integrations/fop/fulfillment-orders', { params: { queue, projection, ...(completed ? { completed } : {}), billStatus, skuAssociation, timeRange, shippingCountryCode, search, orderNumber, departmentId, ownerId, warehouseCode, paidAtOrder, sortBy, sortOrder, warehouseStage, procurementStage, procurementSource, fulfillmentStage, taskStatus, page, pageSize }, ...(signal ? { signal } : {}) })
+  const result: FopQueuePage = await api.get('/autoflow/integrations/fop/fulfillment-orders', { params: { queue, projection, ...(refresh ? { refresh } : {}), ...(completed ? { completed } : {}), billStatus, skuAssociation, timeRange, shippingCountryCode, search, orderNumber, departmentId, ownerId, warehouseCode, paidAtOrder, sortBy, sortOrder, warehouseStage, procurementStage, procurementSource, fulfillmentStage, taskStatus, page, pageSize }, ...(signal ? { signal } : {}) })
   if (!isFopOrderPageDataValid(result)) throw new Error('Unexpected partial data')
   if (!result.dataAvailability?.missingDatasets?.length) remember?.(result.total)
   return result

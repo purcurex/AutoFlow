@@ -195,6 +195,9 @@ export interface LogisticsInfo {
 export interface AllocationDocumentReference { id: string; number: string }
 
 export interface FopOrder {
+  /** Native fulfillment bill type; used only for the sample-order label. */
+  orderTypeCode?: string | null
+  orderTypeName?: string | null
   /** Display-only manual label; never written back as an upstream order number. */
   documentKind?: 'stock_order'
   sourceDocumentId?: string
@@ -430,7 +433,7 @@ export class FopPermissionDeniedError extends Error {
   constructor(message = 'FOP access denied', readonly code: 'fop_permission_denied' | 'fop_authentication_expired' | 'fop_binding_required' | 'fop_employee_unavailable' | 'fop_proxy_user_required' | 'fop_api_not_authorized' | 'fop_employee_number_mismatch' | 'fop_employee_number_ambiguous' = 'fop_permission_denied') { super(message) }
 }
 export class FopIntegrationUnavailableError extends Error {
-  constructor(readonly code: 'fop_queries_paused' | 'fop_supplier_contacts_not_configured' | 'fop_reserved_customers_search_required' | 'fop_approval_not_configured' | 'fop_current_inventory_not_configured' | 'fop_reserved_inventory_not_configured' | 'fop_rma_not_configured' | 'fop_feature_not_configured' | 'fop_endpoint_not_published' | 'fop_mapping_required' | 'fop_fx_missing' | 'fop_result_too_large') { super(code) }
+  constructor(readonly code: 'fop_source_rate_limited' | 'fop_source_billing_blocked' | 'fop_rate_budget_unavailable' | 'fop_queries_paused' | 'fop_supplier_contacts_not_configured' | 'fop_reserved_customers_search_required' | 'fop_approval_not_configured' | 'fop_current_inventory_not_configured' | 'fop_reserved_inventory_not_configured' | 'fop_rma_not_configured' | 'fop_feature_not_configured' | 'fop_endpoint_not_published' | 'fop_mapping_required' | 'fop_fx_missing' | 'fop_result_too_large') { super(code) }
 }
 export class FopOrganizationSummaryNotConfiguredError extends Error {}
 

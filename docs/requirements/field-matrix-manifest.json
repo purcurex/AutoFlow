@@ -85,11 +85,11 @@
     },
     {
       "path": "backend/src/modules/workbench-replica/collected-workbench-query.ts",
-      "sha256": "d3fdff012ce4059b3223748c34fd2648c2454d1dce4fda2317edc83b5f6c7ff9"
+      "sha256": "4fdeff68e9ae70c8e1aff1c9b6b652f9e34fe12073078e48d92dc646db275d5a"
     },
     {
       "path": "backend/src/modules/workbench-replica/collected-workbench.service.ts",
-      "sha256": "f013d413825f9a9ce8cca3d8f91c9fcd1f732661487e63bedc9c4c43c04510ae"
+      "sha256": "578a6f9d53efa6e66e9046196a6d5571be2939e48aab9a596a63614ab0b81b3d"
     },
     {
       "path": "backend/src/modules/workbench-replica/dashboard-analytics-query.ts",
@@ -117,35 +117,35 @@
     },
     {
       "path": "docs/requirements/api-integration-verification-20261116.json",
-      "sha256": "2216f2c6463b49aa7665a870886b07db6800063ebd5d84d02fc03e13d97899b1"
+      "sha256": "f02514e14afa93509e3b30f4000bf408791484ed285a09a1a992082a74a360dd"
     },
     {
       "path": "frontend/src/components/autoflow/PurchaseReturnOrdersTable.vue",
-      "sha256": "8712c2ad2a10bca2b486c9b2b3c45c5903b85838d5fcf883c181f6ca98a22f91"
+      "sha256": "6ba0b5b68859d3b0d3c372a712b45ced2d1ae904b08bd4233791d180f5d667a1"
     },
     {
       "path": "frontend/src/components/autoflow/RmaOrdersTable.vue",
-      "sha256": "1d3d3fb809313dd3565cb7ebcc695aa0e5330fd163ce7d1a0b0b73552ec3a024"
+      "sha256": "ff6f4386f7b5a23483b41e3624dfdc29dbf1a148edbcaf648a321ea442ecf62a"
     },
     {
       "path": "frontend/src/views/autoflow/FopOrdersView.vue",
-      "sha256": "2d745f7b07b148318d95504554958ba91db82c78b9b16d69e7ec84ebd697c22c"
+      "sha256": "258d0ac27c4d2f69a6909f580221319eecd4e70eb77cad4163925bb622b26045"
     },
     {
       "path": "frontend/src/views/autoflow/PurchaseGroupsView.vue",
-      "sha256": "596edc0f782fe2b9e1dda455ae88280f84a103b15ced286362b0012a6d433e9f"
+      "sha256": "de11791864de711cf69466f7310db378969ccd9e636cbe69cd39056d18390689"
     },
     {
       "path": "frontend/src/views/autoflow/ReceiptNoticesView.vue",
-      "sha256": "731a922eb3f022a69b040c211f367ec1268acac54ce98ebc45190f2bf778c508"
+      "sha256": "45271c78efab056d8774aacad0aa7883524d247778e2990182b37a194b7d56d5"
     },
     {
       "path": "frontend/src/views/autoflow/StockOrdersView.vue",
-      "sha256": "d7a4dc5df22c57459004f441871c8e94ed2c6bf327c62b96d6a205afe26fefb5"
+      "sha256": "4efcf15982852d4ed3160e0fd118d5a6ec0e1364a17f8392429239a24ab49f5c"
     },
     {
       "path": "frontend/src/views/autoflow/WorkbenchView.vue",
-      "sha256": "7165374eef2bbf33a88722242306aecada83f770566136aa468e0713de3e7774"
+      "sha256": "19b51540276bae66be17bbe7705e5cde2ef514198db5b071b42b2e1842ac52a4"
     },
     {
       "path": "scripts/build-standalone-field-matrix.py",
@@ -173,7 +173,7 @@
     },
     {
       "path": "scripts/workbench-authorized-catalog-import.mjs",
-      "sha256": "a878f36c58ea6e1aa73bc99a5edb9344e9992e0f8cb1e35af2478c1a857596f0"
+      "sha256": "ce2fc375e6598dfde2d129f03f8f8a57f72a474a14378040616b50bc1bc2bb6d"
     },
     {
       "path": "scripts/workbench-automatic-catalog.mjs",
@@ -185,7 +185,7 @@
     },
     {
       "path": "scripts/workbench-scheduled-sync.mjs",
-      "sha256": "6052b2fda4d2ad5d349c9ecbfb81682ca35cb86ef2901d2519d9050adb3816eb"
+      "sha256": "c19e98b39747861e6433cbc06549fea3b8c8499528f75592c9708d70f706f902"
     }
   ]
 }

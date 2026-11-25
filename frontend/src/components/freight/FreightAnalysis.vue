@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ChartUpdateStatus from '@/components/charts/ChartUpdateStatus.vue'
 import { peekAnalyticsQuery } from '@/utils/analytics-cache'
 import { isWorkbenchScopeError } from '@/api/workbench-dashboard'
 import { businessYears } from '@/utils/business-years'
@@ -73,20 +74,20 @@ onBeforeUnmount(() => { off(); reset() })
   <section v-if="chartVisible" class="ov-panel freight-analysis" data-module="freight" :data-source="mock ? 'mock' : data?.source">
     <header class="freight-header">
       <h2>{{ t('物流运费分析', 'Logistics freight analysis') }}<span v-if="mock" class="ov-badge">Mock</span></h2>
-      <small v-if="data">{{ t('更新', 'Updated') }} {{ new Date(data.asOf).toLocaleString(String(locale), { timeZone: 'Asia/Shanghai', hour12: false }) }}</small>
+      <ChartUpdateStatus :locale="String(locale)" :busy="busy" :as-of="data?.asOf" />
     </header>
     <form class="ov-filters freight-filters" @submit.prevent="load(true)">
       <div class="freight-query-filters">
         <label>{{ t('年份', 'Year') }}<select v-model.number="year" aria-label="运费年份"><option v-for="y in years" :key="y" :value="y">{{ y }}</option></select></label>
         <label>{{ t('仓库', 'Warehouse') }}<select v-model="warehouse" aria-label="运费仓库"><option value="ALL">{{ t('全部仓库', 'All warehouses') }}</option><option value="HZ">{{ 'HangZhou' }}</option><option value="SZ">{{ 'ShenZhen' }}</option></select></label>
-        <button class="freight-query" :disabled="busy">{{ busy ? t('查询中…', 'Loading…') : t('查询', 'Apply') }}</button>
+        <button class="freight-query" :disabled="busy">{{ t('查询', 'Apply') }}</button>
       </div>
       <div class="freight-view-controls">
         <label>{{ t('时间轴', 'Timeline') }}<select v-model="grain" aria-label="运费时间轴"><option value="week">{{ t('按周', 'Weekly') }}</option><option value="month">{{ t('按月', 'Monthly') }}</option><option value="year">{{ t('按年', 'Yearly') }}</option></select></label>
         <label v-if="grain === 'week'">{{ t('截至所在周', 'Week of') }}<input v-model="weekOf" type="date" :min="`${year}-01-01`" :max="year === currentYear ? today : `${year}-12-31`" required aria-label="运费周日期"></label>
         <label class="ov-checkbox"><input v-model="compare" type="checkbox" aria-label="运费上期环比">{{ t('上期环比', 'Compare previous period') }}</label>
       </div>
-    </form><p v-if="busy && data" class="ov-note" role="status">正在更新，当前显示上次查询结果。</p><p v-if="error && data" class="ov-note" role="alert">查询未完成，当前显示上次查询结果。</p>
+    </form><p v-if="error && data" class="ov-note" role="alert">查询未完成，当前显示上次查询结果。</p>
     <div class="freight-body" :inert="busy"><p v-if="busy && !data" class="ov-empty" role="status">{{ t('正在统计实际运费…', 'Loading actual freight…') }}</p><p v-else-if="error && !data" class="ov-error" role="alert">{{ error }}<button class="ov-link" @click="load(true)">{{ t('重试', 'Retry') }}</button></p><FreightResults v-else-if="data" :data="data" :compare="compare" :preview="mock" @drill="drill" @trend="selected = $event" /></div>
     <FreightTrendDialog v-if="selected && data" :name="freightCarrierName(selected, String(locale))" :scope="scope" @close="selected = undefined"><FreightResults :data="data" :compare="compare" :preview="mock" :carrier-code="selected" @drill="drill" /></FreightTrendDialog>
   </section>

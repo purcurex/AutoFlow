@@ -5,13 +5,15 @@ import DecimalJs from 'decimal.js'
 const Decimal=DecimalJs.clone({precision:80})
 type Decimal=DecimalJs
 import { freightPeriods } from '../fop-data/fop-freight'
-import { DAY_MS } from '../fop-data/fop-business-time'
+import { businessDate, DAY_MS } from '../fop-data/fop-business-time'
 
 export const dimensions = ['carrier','channel','warehouse','country','customer','owner','department'] as const
 export class LocalFreightQueryDto {
  @IsIn(['week','month','year']) grain: 'week'|'month'|'year' = 'week'
  @Type(()=>Number) @IsInt() @Min(2026) year: number
  @IsOptional() @Matches(/^\d{4}-\d{2}-\d{2}$/) weekOf?: string
+ @IsOptional() @Matches(/^\d{4}-(0[1-9]|1[0-2])$/) monthOf?: string
+ @IsOptional() @IsIn(['last6months']) range?: 'last6months'
  @IsOptional() @IsString() @MaxLength(128) warehouse?: string
  @IsOptional() @Matches(/^[A-Z]{3}$/) currency = 'CNY'
  @IsOptional() @IsIn(dimensions) dimension: typeof dimensions[number] = 'carrier'
@@ -22,8 +24,18 @@ export class LocalFreightQueryDto {
 export const FREIGHT_START_DATE = '2026-06-01'
 const isoDay=(time:number)=>new Date(time).toISOString().slice(0,10)
 export function localFreightPeriods(query: LocalFreightQueryDto, now = new Date()) {
- // Keep shared validation, but freight displays the full selected-year timeline.
- const {periods:base} = freightPeriods({grain:query.grain,year:query.year,weekOf:query.weekOf,warehouse:'ALL'},now)
+ // Explicit year views retain their full timeline; the default rolling range may span two years.
+ let {periods:base} = freightPeriods({grain:query.grain,year:query.year,weekOf:query.weekOf,warehouse:'ALL'},now)
+ if(query.range!==undefined){
+  const today=businessDate(now)
+  if(query.range!=='last6months'||query.grain!=='month'||query.monthOf!==undefined||query.year!==Number(today.slice(0,4)))throw new BadRequestException('Invalid freight range')
+  const start=isoDay(Date.UTC(query.year,Number(today.slice(5,7))-6,1))
+  if(Number(start.slice(0,4))<query.year&&query.year>2026){
+   const previous=freightPeriods({grain:'month',year:query.year-1,warehouse:'ALL'},now).periods
+   base=[...previous,...base]
+  }
+  base=base.filter(p=>p.from>=start)
+ }
  let periods:typeof base
  if(query.grain==='week'){
   const end=base[base.length-1].to
@@ -40,6 +52,10 @@ export function localFreightPeriods(query: LocalFreightQueryDto, now = new Date(
   periods=base.filter(p=>p.to>=FREIGHT_START_DATE).map(p=>p.from<FREIGHT_START_DATE?{
    ...p,from:FREIGHT_START_DATE,label:`${p.label}（6月起）`,partial:true,previousFrom:'2025-06-01',
   }:p)
+ }
+ if(query.monthOf!==undefined){
+  if(query.grain!=='month'||!/^\d{4}-(0[1-9]|1[0-2])$/.test(query.monthOf)||Number(query.monthOf.slice(0,4))!==query.year)throw new BadRequestException('Invalid freight month')
+  periods=periods.filter(p=>p.from.slice(0,7)===query.monthOf)
  }
  if(!periods.length)throw new BadRequestException('Freight starts in June 2026')
  return periods.map(p=>{

@@ -1,7 +1,7 @@
 import api from './index'
 import { analyticsQuery, peekAnalyticsQuery, type AnalyticsQueryOptions } from '@/utils/analytics-cache'
 export type FreightDimension='carrier'|'channel'|'warehouse'|'country'|'customer'|'owner'|'department'
-export interface LocalFreightQuery {grain:'week'|'month'|'year';year:number;weekOf?:string;warehouse?:string;currency:string;dimension:FreightDimension;departmentId?:string;ownerId?:string}
+export interface LocalFreightQuery {grain:'week'|'month'|'year';year:number;weekOf?:string;monthOf?:string;range?:'last6months';warehouse?:string;currency:string;dimension:FreightDimension;departmentId?:string;ownerId?:string}
 export interface FreightMeasure {amount:string;previousAmount:string|null;delta:string|null;percent:number|null}
 export interface FreightSeries {id:string;label:string;totals:FreightMeasure;values:FreightMeasure[];billCount:number;departmentId?:string|null;departmentName?:string|null;englishName?:string|null}
 export interface LocalFreightResult {

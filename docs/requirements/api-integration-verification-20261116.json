@@ -914,7 +914,32 @@
     "frontend/src/tests/SettingsView.test.ts",
     "frontend/src/tests/legacy-records.test.ts",
     "deployment/database/schema-reference.sql",
-    "deployment/database/migration-inventory.json"
+    "deployment/database/migration-inventory.json",
+    "backend/src/modules/fop-data/fop-rate-limit.ts",
+    "backend/src/modules/fop-data/fop-rate-limit.spec.ts",
+    "backend/src/database/migrations/1795650000000-FopApiBudgets.ts",
+    "backend/src/modules/fop-data/fop-kingdee.provider.ts",
+    "backend/src/modules/fop-data/fop-data.types.ts",
+    "backend/src/modules/workbench-replica/replica-http-source.ts",
+    "backend/src/modules/workbench-replica/timestamp-http-source.ts",
+    "frontend/src/api/fop-access.ts",
+    "scripts/fop-budgeted-fetch.mjs",
+    "scripts/fop-rate-limit.database.test.mjs",
+    "scripts/workbench-bill-relations-sync.mjs",
+    "scripts/workbench-store-name-capture.mjs",
+    "scripts/workbench-outbound-lines-capture.mjs",
+    "scripts/workbench-order-money-list-capture.mjs",
+    "scripts/workbench-collected-stock-capture.cjs",
+    "scripts/workbench-collected-initialize.cjs",
+    "scripts/validate-unified-requirements.py",
+    "frontend/src/components/autoflow/InboundParcelTable.vue",
+    "frontend/src/tests/PurchaseGroupsView.test.ts",
+    "backend/src/modules/workbench-replica/local-freight.ts",
+    "backend/src/modules/workbench-replica/local-freight.spec.ts",
+    "backend/src/modules/workbench-replica/local-freight-details.spec.ts",
+    "frontend/src/api/local-freight.ts",
+    "frontend/src/tests/LocalFreightAnalysis.test.ts",
+    "frontend/src/tests/WorkbenchAnalyticsRouting.test.ts"
   ],
   "timestampPublication": {
     "implemented": true,
@@ -17994,5 +18019,258 @@
         "published": 1
       }
     }
+  },
+  "publicCloudRateLimits20261125": {
+    "standardSpaceLimits": {
+      "qps": 20,
+      "qpm": 500,
+      "qph": 10000,
+      "qpd": 200000
+    },
+    "projectDefaults": {
+      "qps": 16,
+      "qpm": 400,
+      "qph": 8000,
+      "qpd": 160000,
+      "minStartIntervalMs": 500,
+      "shortQueueMaxMs": 5000
+    },
+    "scope": "canonical source origin; all application accounts, processes and API routes share the same PostgreSQL ledger",
+    "migration": "FopApiBudgets1795650000000",
+    "localMigrationApplied": true,
+    "productionDeploymentVerified": false,
+    "nativeGatewayCodes": {
+      "rateLimit": [
+        "429",
+        "2526",
+        "2528"
+      ],
+      "billingBlock": [
+        "2055"
+      ],
+      "identityFailureNotRateLimit": [
+        "2508"
+      ]
+    },
+    "coverage": [
+      "backend provider",
+      "replica source",
+      "timestamp source",
+      "scheduled worker",
+      "catalogue and relation reads",
+      "legacy explicit capture scripts",
+      "OAuth",
+      "each physical retry",
+      "business writes without automatic replay"
+    ],
+    "recovery": [
+      "persistent Retry-After including more than 24 hours",
+      "shared cooldown across restarts",
+      "billing manual recovery",
+      "database unavailable fails closed",
+      "unchanged watermark on incomplete publication",
+      "redirects disabled"
+    ],
+    "capacityEstimate": {
+      "basis": "2026-11-25 collected catalogue row counts; estimate, not production telemetry",
+      "catalogueRequestsPerFullCycle": 1085,
+      "at27CyclesPerDay": 29295,
+      "relationRequestsAt500PerCycle": 13500,
+      "excludes": "four-entity synchronization, OAuth, retries, explicit reads and other applications"
+    },
+    "tests": {
+      "backendSuites": 13,
+      "backendPassed": 333,
+      "nodeScriptPassed": 60,
+      "realPostgresLocalGatewayPassed": 2,
+      "independentMigrations": 79,
+      "rerunMigrations": 0,
+      "backendBuild": "passed",
+      "frontendBuild": "passed",
+      "review": "completed; configuration propagation, redirects and broken response streams corrected"
+    },
+    "verificationFopRequests": 0,
+    "productionPressureTest": false,
+    "remainingConditions": [
+      "Production must apply the new migration and deploy all callers together.",
+      "All instances must share one database and canonical source origin; external applications and alternate aliases are not observed.",
+      "Catalogue modification-time or reliable change feeds remain required to replace repeated complete scans; incomplete captures are never published."
+    ],
+    "officialReference": "https://vip.kingdee.com/knowledge/specialDetail/272110040385964032?category=272111020880021504&id=646787188905978624&lang=zh-CN&productLineId=40",
+    "implementationFiles": [
+      "backend/src/modules/fop-data/fop-rate-limit.ts",
+      "backend/src/modules/fop-data/fop-rate-limit.spec.ts",
+      "backend/src/database/migrations/1795650000000-FopApiBudgets.ts",
+      "backend/src/modules/fop-data/fop-kingdee.provider.ts",
+      "backend/src/modules/fop-data/fop-data.service.ts",
+      "backend/src/modules/fop-data/fop-data.types.ts",
+      "backend/src/modules/workbench-replica/replica-http-source.ts",
+      "backend/src/modules/workbench-replica/timestamp-http-source.ts",
+      "frontend/src/api/fop-access.ts",
+      "deployment/.env.production.example",
+      "deployment/database/migration-inventory.json",
+      "deployment/database/schema-reference.sql",
+      "scripts/fop-budgeted-fetch.mjs",
+      "scripts/fop-rate-limit.database.test.mjs",
+      "scripts/fop-openapi-smoke.mjs",
+      "scripts/fop-workbench-openapi.mjs",
+      "scripts/fop-retry-after.test.mjs",
+      "scripts/workbench-scheduled-sync.mjs",
+      "scripts/workbench-bill-relations-sync.mjs",
+      "scripts/workbench-timestamp-sync.mjs",
+      "scripts/deployment/sync-worker-files.json",
+      "scripts/workbench-store-name-capture.mjs",
+      "scripts/workbench-outbound-lines-capture.mjs",
+      "scripts/workbench-order-money-list-capture.mjs",
+      "scripts/workbench-analytics-capture.mjs",
+      "scripts/workbench-purchase-return-capture.mjs",
+      "scripts/workbench-collected-stock-capture.cjs",
+      "scripts/workbench-collected-initialize.cjs",
+      "scripts/validate-unified-requirements.py"
+    ]
+  },
+  "taskIdentityHeading20261125": {
+    "scope": "all workbench task-list identity headers",
+    "labels": {
+      "fulfillment": "订单编号",
+      "stock": "备货单号",
+      "purchaseGroups": "采购订单编号",
+      "inboundParcels": "国内快递单号"
+    },
+    "removed": [
+      "outbound-status sort button and aria-sort from order identity header",
+      "combined purchase/1688 header",
+      "combined parcel/stock header"
+    ],
+    "unchanged": [
+      "row values",
+      "status classification",
+      "copy and expansion",
+      "selection",
+      "backend API"
+    ],
+    "verification": {
+      "targetedIdentityAndSortingPassed": 5,
+      "purchaseGroupsAndReceiptNoticesPassed": 47,
+      "frontendBuild": "passed"
+    },
+    "upstreamCalled": false,
+    "implementationFiles": [
+      "frontend/src/views/autoflow/FopOrdersView.vue",
+      "frontend/src/views/autoflow/PurchaseGroupsView.vue",
+      "frontend/src/components/autoflow/InboundParcelTable.vue",
+      "frontend/src/tests/FopOrdersView.test.ts",
+      "frontend/src/tests/PurchaseGroupsView.test.ts"
+    ]
+  },
+  "freightSixMonthDefault20261125": {
+    "scope": "物流运费分析默认近半年，包含本月及前五个月，按月连续展示六组；本月、上月单月快捷查询保留。",
+    "rangeContract": "range=last6months；仅用于当前业务年份、按月查询，与 monthOf 互斥。UTC+8 日期，支持跨年，2026-06-01 起点前不补造数据。",
+    "localOnly": true,
+    "implementationFiles": [
+      "backend/src/modules/workbench-replica/local-freight.ts",
+      "backend/src/modules/workbench-replica/local-freight.spec.ts",
+      "backend/src/modules/workbench-replica/local-freight-details.spec.ts",
+      "frontend/src/api/local-freight.ts",
+      "frontend/src/components/freight/LocalFreightAnalysis.vue",
+      "frontend/src/tests/LocalFreightAnalysis.test.ts"
+    ],
+    "verification": {
+      "backendTests": 25,
+      "frontendTests": 14,
+      "backendBuild": "passed",
+      "frontendBuild": "passed",
+      "liveLocalApi": {
+        "aggregateStatus": 200,
+        "source": "local",
+        "periods": [
+          {
+            "id": "2026-06",
+            "from": "2026-06-01",
+            "to": "2026-06-30"
+          },
+          {
+            "id": "2026-07",
+            "from": "2026-07-01",
+            "to": "2026-07-31"
+          },
+          {
+            "id": "2026-08",
+            "from": "2026-08-01",
+            "to": "2026-08-31"
+          },
+          {
+            "id": "2026-09",
+            "from": "2026-09-01",
+            "to": "2026-09-30"
+          },
+          {
+            "id": "2026-10",
+            "from": "2026-10-01",
+            "to": "2026-10-31"
+          },
+          {
+            "id": "2026-11",
+            "from": "2026-11-01",
+            "to": "2026-11-26"
+          }
+        ],
+        "detailStatus": 200,
+        "detailRange": [
+          "2026-06-01",
+          "2026-11-26"
+        ],
+        "billCount": 12904,
+        "fullExport": {
+          "status": 413,
+          "message": "单次最多导出 10,000 笔发运单，请缩小筛选范围"
+        },
+        "periodExport": {
+          "status": 200,
+          "periodId": "2026-06",
+          "billCount": 201,
+          "bytes": 25290
+        }
+      }
+    },
+    "exportLimit": "沿用单次最多10,000笔的现有导出限制；近半年12,904笔返回413提示缩小范围，6月201笔导出成功。",
+    "deployment": "本机前端热更新，后端已重启并健康检查通过；未部署生产。"
+  },
+  "analyticsSixMonthShortcut20261125": {
+    "scope": [
+      "registrations",
+      "department_receipts",
+      "salesperson_receipts",
+      "order_volume",
+      "customer_orders"
+    ],
+    "default": "本月；物流运费继续默认近半年。",
+    "shortcut": "近半年：北京时间本月及之前五个月；注册采集范围与2026年业务起点截断。点击立即查询，本地from/to接口、原权限、日期口径及维度不变。",
+    "filters": "保留部门、仓库、订单类型、展示维度；切换快捷范围退出单周或单月环比，趋势明细沿用所选期间。",
+    "deduplication": "重复点击已应用范围不重复查询，快捷选择取消日期防抖待执行请求，图表之间互不覆盖。",
+    "verification": {
+      "relatedFrontendTests": 129,
+      "suites": 6,
+      "frontendBuild": "passed",
+      "requirementsValidation": "passed",
+      "boundaryCases": [
+        "UTC+8跨年",
+        "2026年业务起点",
+        "注册采集日期截断",
+        "工作台入口",
+        "不重复请求",
+        "保持本月默认",
+        "物流运费仍默认近半年"
+      ]
+    },
+    "testHarnessRepair": "工作台路由测试补充浏览器ResizeObserver替身；不修改应用滚动逻辑。",
+    "implementationFiles": [
+      "frontend/src/components/charts/LocalDashboardAnalytics.vue",
+      "frontend/src/tests/LocalDashboardAnalytics.test.ts",
+      "frontend/src/tests/WorkbenchAnalyticsRouting.test.ts"
+    ],
+    "upstreamCalled": false,
+    "databaseChanged": false,
+    "productionDeployed": false
   }
 }

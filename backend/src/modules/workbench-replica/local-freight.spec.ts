@@ -2,6 +2,25 @@ import { aggregateLocalFreight, localFreightPeriods, localFreightQuery } from '.
 const query = { grain: 'month' as const, year: 2026, currency: 'CNY', dimension: 'carrier' as const }
 const now = new Date('2026-11-16T08:00:00Z')
 const row = (patch: Record<string, unknown> = {}) => ({ day: '2026-11-09', currency: 'CNY', dimension_id: '1', label: '服务商', amount: '0.10', bill_count: 1, weight_kg: '0.2', weighted_amount: '0.10', weight_count: 1, ...patch })
+describe('rolling six-month freight range',()=>{
+ it.each([
+  ['2026-11-25T02:00:00Z',2026,'2026-06-01','2026-11-25'],
+  ['2026-12-31T16:01:00Z',2027,'2026-08-01','2027-01-01'],
+  ['2027-09-05T02:00:00Z',2027,'2027-04-01','2027-09-05'],
+ ])('returns six consecutive months at %s', (at,year,from,to)=>{
+  const periods=localFreightPeriods({...query,year,range:'last6months'} as any,new Date(at))
+  expect(periods).toHaveLength(6)
+  expect(periods[0].from).toBe(from);expect(periods[5].to).toBe(to)
+  for(let i=1;i<periods.length;i++)expect(Date.parse(periods[i].from)-Date.parse(periods[i-1].to)).toBe(86400000)
+ })
+ it('shares the range with totals and rejects conflicting filters',()=>{
+  const at=new Date('2027-01-05T02:00:00Z'),q={...query,year:2027,range:'last6months'} as any
+  const result=aggregateLocalFreight([row({day:'2026-07-15',amount:'99'}),row({day:'2026-08-15',amount:'10'}),row({day:'2027-01-04',amount:'20'})],q,at)
+  expect(result.totals.amount).toBe('30');expect(result.values).toHaveLength(6)
+  expect(result.values.map(v=>v.amount)).toEqual(['10','0','0','0','0','20'])
+  for(const patch of [{grain:'week'},{monthOf:'2027-01'},{range:'invalid'},{year:2026}])expect(()=>localFreightPeriods({...q,...patch},at)).toThrow()
+ })
+})
 describe('local dispatch freight', () => {
  it('keeps department order independent of revenue ranking',()=>{
   const labels=['业务四部','业务三部','业务二部','业务一部']
@@ -80,4 +99,18 @@ describe('local dispatch freight', () => {
   expect(result.sql).not.toContain('untrusted-value')
   expect(result.sql).toContain('WITH warehouse_names AS MATERIALIZED (')
  })
+})
+
+it('limits month shortcuts to the requested month and its comparison range',()=>{
+ const current=localFreightPeriods({...query,monthOf:'2026-11'},now)
+ expect(current).toHaveLength(1)
+ expect(current[0]).toMatchObject({from:'2026-11-01',to:'2026-11-16',previousFrom:'2026-10-01',previousTo:'2026-10-16'})
+ const previous=localFreightPeriods({...query,monthOf:'2026-10'},now)
+ expect(previous).toHaveLength(1)
+ expect(previous[0]).toMatchObject({from:'2026-10-01',to:'2026-10-31'})
+ expect(localFreightPeriods({...query,year:2028,monthOf:'2028-02'},new Date('2028-03-05T02:00:00Z'))[0].to).toBe('2028-02-29')
+ expect(localFreightPeriods({...query,monthOf:'2026-12'},new Date('2027-01-05T02:00:00Z'))[0].to).toBe('2026-12-31')
+ for(const patch of [{monthOf:'2026-13'},{monthOf:'2027-01'},{monthOf:'2026-12'},{monthOf:'2026-05'},{monthOf:'2026-11',grain:'week' as const}])expect(()=>localFreightPeriods({...query,...patch},now)).toThrow()
+ const result=aggregateLocalFreight([row(),row({day:'2026-10-01',amount:'20'})],{...query,monthOf:'2026-11'},now)
+ expect(result.totals.amount).toBe('0.1')
 })

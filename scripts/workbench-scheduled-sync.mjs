@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { budgetedFetch } from './fop-budgeted-fetch.mjs'
 import { runAutomaticCatalogues } from './workbench-automatic-catalog.mjs'
 // Persistent collected-mode scheduler. No source business writes or credential output.
 import { resolve, dirname } from 'node:path'
@@ -45,7 +46,7 @@ export function scheduledPreflight(config) {
   return { ...report, automaticCallsEnabled: scheduledEnabled(config), schedule: 'UTC+8; 27 daily slots; missed slots coalesced', entities: ENTITIES }
 }
 const QUERY_ENTITIES = { 'fulfillment-ids': 'hzkj_orders', 'order-list': 'hzkj_orders', allocation: 'hzkj_alloc_bill', dispatch: 'hzkj_deliver_bill', 'delivery-notice': 'hzkj_deliver_order' }
-const SAFE_QUERY_CATEGORIES = new Set(['timeout', 'network-error', 'http-error', 'api-not-subscribed', 'authentication-error', 'configuration-error', 'invalid-request', 'invalid-origin', 'invalid-response', 'invalid-id', 'invalid-json', 'business-error', 'redirect-error', 'response-too-large', 'fop_queries_paused'])
+const SAFE_QUERY_CATEGORIES = new Set(['rate-limit', 'forbidden', 'timeout', 'network-error', 'http-error', 'api-not-subscribed', 'authentication-error', 'configuration-error', 'invalid-request', 'invalid-origin', 'invalid-response', 'invalid-id', 'invalid-json', 'business-error', 'redirect-error', 'response-too-large', 'fop_queries_paused'])
 /** Retry one transient read only. No raw payload, URL, exception text or credential reaches diagnostics. */
 export async function scheduledPageQuery({ parameters, query, enabled, refreshCredentials, record = () => {}, sleep = ms => new Promise(resolve => setTimeout(resolve, ms)) }) {
   for (let attempt = 1; attempt <= 2; attempt++) {
@@ -61,7 +62,7 @@ export async function scheduledPageQuery({ parameters, query, enabled, refreshCr
     const errorCategory = report?.success === true ? null : SAFE_QUERY_CATEGORIES.has(report?.errorCategory) ? report.errorCategory : 'query-error'
     const transient = report?.success !== true && ((httpStatus === null && ['timeout', 'network-error'].includes(errorCategory))
       || (errorCategory === 'http-error' && httpStatus >= 500 && httpStatus <= 599 && httpStatus !== 519))
-    const cooldown=Number.isFinite(report?.retryAfterMs)?Math.min(86400000,Math.max(0,report.retryAfterMs)):0
+    const cooldown=Number.isFinite(report?.retryAfterMs)?Math.max(0,report.retryAfterMs):0
     const unauthorized=report?.success!==true&&(httpStatus===401||errorCategory==='authentication-error')
     const refresh=unauthorized&&attempt===1&&!!refreshCredentials
     const retryScheduled = (transient||refresh) && attempt === 1 && cooldown<=60000
@@ -136,7 +137,7 @@ export async function runScheduledCycle({ config, db, prepare, runEntity, nextRe
           const count=Math.min(4,Math.max(0,Number(entityRetry[entityCode]?.count)||0)+1)
           entityRetry[entityCode]={count,errorCode,nextAttemptAt:scheduledNext(now(),count,nextReplicaSync)}
           globalFailure=['timestamp_source_rate_limited','timestamp_source_unauthorized','timestamp_source_forbidden','timestamp_source_unavailable'].includes(errorCode)
-          if(globalFailure)cooldownUntil=Math.max(getSourceBlock()?.until??0,now().getTime()+(Number.isFinite(error?.retryAfterMs)?Math.min(86400000,Math.max(0,error.retryAfterMs)):0))
+          if(globalFailure)cooldownUntil=Math.max(getSourceBlock()?.until??0,now().getTime()+(Number.isFinite(error?.retryAfterMs)?Math.max(0,error.retryAfterMs):0))
         }
         const diagnostics = getEntityDiagnostics(entityCode)
         if (diagnostics.length) state.entities.at(-1).sourceDiagnostics = diagnostics
@@ -194,6 +195,7 @@ async function main() {
         lastBlockedReport=undefined
         const enabled = () => !stopped && parentAlive() && scheduledPreflight(readScheduledConfig()).executable
         db = await new DataSource(syncDatabaseOptions(config)).initialize()
+        const sharedFetch = budgetedFetch(config)
         let lastRequestAt = 0, requests = 0, minStartIntervalMs = null,sourceBlock=null
         const diagnostics = new Map()
         const record = detail => { const rows = diagnostics.get(detail.entityCode) ?? []; rows.push(detail); diagnostics.set(detail.entityCode, rows.slice(-8)) }
@@ -205,9 +207,9 @@ async function main() {
           const startedAt = Date.now()
           if (lastRequestAt) minStartIntervalMs = Math.min(minStartIntervalMs ?? Infinity, startedAt - lastRequestAt)
           lastRequestAt = startedAt; requests++
-          const response=await fetch(...parameters)
+          const response=await sharedFetch(...parameters)
           const cooldown=retryAfterMs(response.headers.get('retry-after'))??0
-          if(response.status===429||response.status===503&&cooldown>60000)sourceBlock={code:response.status===429?'timestamp_source_rate_limited':'timestamp_source_unavailable',until:Date.now()+cooldown}
+          if(response.status===429||response.headers.get('x-fop-admission')||response.status===503&&cooldown>60000)sourceBlock={code:response.status===429?'timestamp_source_rate_limited':response.status===403?'timestamp_source_forbidden':'timestamp_source_unavailable',until:Date.now()+cooldown}
           return response
         }
         let refreshed=false

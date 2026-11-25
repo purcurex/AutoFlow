@@ -64,13 +64,13 @@ const allSelected = computed(() => !!result.value?.items.length && result.value.
 const date = (value: string | null) => value && Number.isFinite(Date.parse(value)) ? new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(value)) : '—'
 const money = (amount: number | null, currency: string | null) => amount == null || !Number.isFinite(amount) ? '—' : `${currency === 'USD' ? '$' : currency ? currency + ' ' : ''}${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 function reloadReplica() { selected.value = []; inventoryOpen.value = false; followUpOrder.value = undefined; exportController?.abort(); exporting.value = false; exportError.value = ''; void load() }
-async function load() {
+async function load(refresh = false) {
   currentTime.value = Date.now()
   const ticket = ++request, session = captureSession()
   listController?.abort(); listController = new AbortController()
   loading.value = true; error.value = ''
   try {
-    const next = await getStockOrders(query.value, listController.signal)
+    const next = await getStockOrders({...query.value,...(refresh?{refresh:true}:{})}, listController.signal)
     if (disposed || ticket !== request || !isCurrentSession(session)) return
     result.value = next
     emit('filter-labels', [...next.departments, ...next.items.flatMap(row => row.owner ? [row.owner] : [])])
@@ -112,7 +112,7 @@ const { expandedProductIds, hasExpandableProducts, allProductsExpanded, setProdu
     <WorkbenchTaskHeading :data-availability="result?.dataAvailability" :replica="result?.replica" :sync-disabled="loading || exporting" @replica-synced="reloadReplica" class="stock-heading" :title="props.procurement ? text('备货待采购清单', 'Stock procurement') : text('备货清单', 'Stock orders')" :description="props.procurement ? text('已审核的备货订单，跟进采购及供应商发货；可查询备货库存，采购处理请在 FOP 完成。', 'Approved stock orders awaiting procurement or supplier shipment. Check stock here; process purchases in FOP.') : text('全款与押金备货订单，覆盖待支付、采购跟进及已入库记录，可按备货阶段和客户付款时间查询。', 'Full-payment and deposit stock orders, from unpaid to procurement and receipt. Filter by stock stage and customer payment time.')"></WorkbenchTaskHeading>
     <div class="stock-panel">
       <form class="stock-filters workbench-filter-toolbar" @submit.prevent="submit">
-          <div class="workbench-inline-actions"><WorkbenchRefreshControl :busy="loading" :disabled="loading" :refreshed-at="result?.refreshedAt" @refresh="load" /></div>
+          <div class="workbench-inline-actions"><WorkbenchRefreshControl :busy="loading" :disabled="loading" :refreshed-at="result?.refreshedAt" @refresh="load(true)" /></div>
         <div class="workbench-filter-main">
           <div class="workbench-filter-search"><div class="stock-search workbench-search-field"><Search :size="15" /><input v-model="search" type="search" maxlength="200" :aria-label="text('搜索备货订单', 'Search stock orders')" :placeholder="text('业务员 / 备货单 / 客户 / SKU', 'Salesperson / Stock no. / Customer / SKU')" /></div><button class="workbench-button workbench-primary" :disabled="loading">{{ text('查询', 'Search') }}</button></div>
 
@@ -123,7 +123,7 @@ const { expandedProductIds, hasExpandableProducts, allProductsExpanded, setProdu
           <label>{{ text('采购状态', 'Purchase status') }}<select class="workbench-filter-select" :value="filters.purchaseStatus ?? ''" :aria-label="text('采购状态', 'Purchase status')" @change="choose($event, 'purchaseStatus')"><option value="">{{ text('全部', 'All') }}</option><template v-for="(names, key) in stockStatuses" :key="key"><option v-if="key !== 'unknown' && (!props.procurement || key === 'unpurchased' || key === 'partial' || key === 'in_progress' || key === 'purchased')" :value="key">{{ names[zh ? 0 : 1] }}</option></template></select></label>
           <label>{{ text('业务部门', 'Department') }}<select class="workbench-filter-select" :value="filters.departmentId ?? ''" @change="choose($event, 'departmentId')"><option :value="defaultDepartmentValue(result?.departments, filters.departmentId)">{{ defaultDepartmentLabel }}</option><option v-if="filters.departmentId && !result?.departments.some(d => d.id === filters.departmentId)" :value="filters.departmentId">{{ text('所选部门', 'Selected department') }}</option><option v-for="department in departmentOptions(result?.departments)" :key="department.id" :value="department.id">{{ department.name }}</option></select></label>
           <label>{{ text('收货仓库', 'Receiving warehouse') }}<select class="workbench-filter-select" :value="filters.warehouseCode ?? ''" @change="choose($event, 'warehouseCode')"><option value="">{{ text('全部', 'All') }}</option><option value="HZ">{{ 'HangZhou' }}</option><option value="SZ">{{ 'ShenZhen' }}</option></select></label>
-          <label v-if="!props.procurement">{{ text('客户付款时间', 'Customer payment time') }}<select class="workbench-filter-select" :value="filters.timeRange ?? 'all'" :aria-label="text('客户付款时间范围', 'Customer payment time range')" @change="choose($event, 'timeRange')"><option value="all">{{ text('全部', 'All') }}</option><option value="1w">{{ text('近一周', 'Last week') }}</option><option value="1m">{{ text('近一月', 'Last month') }}</option><option value="3m">{{ text('近三月', 'Last three months') }}</option></select></label>
+          <label v-if="!props.procurement">{{ text('客户付款时间', 'Customer payment time') }}<select class="workbench-filter-select" :value="filters.timeRange ?? '3m'" :aria-label="text('客户付款时间范围', 'Customer payment time range')" @change="choose($event, 'timeRange')"><option value="all">{{ text('全部', 'All') }}</option><option value="1w">{{ text('近一周', 'Last week') }}</option><option value="1m">{{ text('近一月', 'Last month') }}</option><option value="3m">{{ text('近三月', 'Last three months') }}</option></select></label>
         <div class="workbench-filter-export"><WorkbenchExportButton :selected-count="selected.length" :total="result?.total ?? 0" :disabled="loading" :busy="exporting" @export="download" /></div></div>
         <div class="workbench-filter-secondary">
 

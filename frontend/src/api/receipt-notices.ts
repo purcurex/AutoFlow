@@ -4,6 +4,9 @@ import type { WorkbenchDataAvailability, WorkbenchReplicaSnapshot } from './work
 export interface ReceiptNoticeLine { procurementSource?: ProcurementSource | null; id: string; sku: string; name: string; variant: string; imageUrl: string | null; quantity: number | null; inboundQuantity: number | null; purchaseQuantity?: number | null; pendingQuantity?: number | null; rawPurchaseStatus?: string | null; isVirtual?: boolean | null }
 /** Collected mode is one fulfillment order per row; quantities come from its native purchase/receipt lines. */
 export interface ReceiptNotice {
+  /** Native fulfillment bill type; used only for the sample-order label. */
+  orderTypeCode?: string | null
+  orderTypeName?: string | null
   exception?: { type: string | null; reason?: string | null } | null
   id: string; number: string; noticeNumbers?: string[]; amount?: number | null; currency?: string | null; supplier: string | null; warehouse: string | null; warehouseCode: string | null
   /** FOP logistics tab: hzkj_logistics_company + hzkj_waybill_number; never fulfillment shipping channels. */
@@ -17,7 +20,7 @@ export interface InboundStockGroup {
  products:{sku:string;name:string|null;quantity:number;reservedQuantity:number|null;usedQuantity:number|null;unassignedQuantity:number|null}[]
  purchases:{id:string;number:string;status:string|null;paymentStatus:string|null;quantity:number|null}[]
  packages:{id:string;trackingNumber:string|null;carrier:string|null;shippedAt:string|null;noticeNumbers:string[];purchaseIds:string[];statuses:(string|null)[]}[]
- orders:{id:string;number:string;customerName:string|null;reservedQuantity:number;usedQuantity:number;skus:string[]}[]
+ orders:{id:string;number:string;orderTypeCode?:string|null;orderTypeName?:string|null;customerName:string|null;reservedQuantity:number;usedQuantity:number;skus:string[]}[]
  totals:{stockQuantity:number|null;purchaseQuantity:number|null;reservedQuantity:number|null;usedQuantity:number|null;unassignedQuantity:number|null}
 }
 export interface ReceiptNoticePage {

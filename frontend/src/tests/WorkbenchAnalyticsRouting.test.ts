@@ -2,7 +2,7 @@ import {mount,flushPromises,enableAutoUnmount} from '@vue/test-utils'
 import {createRouter,createMemoryHistory} from 'vue-router'
 import {createI18n} from 'vue-i18n'
 import {ref} from 'vue'
-import {afterEach,expect,it,vi} from 'vitest'
+import {afterEach,beforeEach,expect,it,vi} from 'vitest'
 import WorkbenchView from '@/views/autoflow/WorkbenchView.vue'
 const state=vi.hoisted(()=>({admin:true}))
 vi.mock('@/composables/useWorkbenchAccess',()=>({useWorkbenchAccess:()=>({roles:ref(['sales']),isAdmin:ref(state.admin),access:ref({isAdmin:state.admin})})}))
@@ -11,7 +11,8 @@ vi.mock('@/components/autoflow/WorkbenchReplicaControls.vue',()=>({default:{temp
 vi.mock('@/components/charts/WorkbenchAnalytics.vue',()=>({default:{props:['page'],template:'<div data-testid="local-analysis">{{page}}</div>'}}))
 vi.mock('@/views/autoflow/FopOrdersView.vue',()=>({default:{template:'<div data-testid="orders" />'}}))
 enableAutoUnmount(afterEach)
-afterEach(()=>{state.admin=true})
+beforeEach(()=>vi.stubGlobal('ResizeObserver',class {observe(){} disconnect(){}}))
+afterEach(()=>{state.admin=true;vi.unstubAllGlobals()})
 async function setup(path:string){
  const router=createRouter({history:createMemoryHistory(),routes:[{path:'/workbench/:role',name:'RoleWorkbench',component:WorkbenchView},{path:'/workbench/:role/receipts',name:'RoleWorkbenchReceipts',component:WorkbenchView},{path:'/dashboard',component:{template:'<div />'}}]})
  await router.push(path)

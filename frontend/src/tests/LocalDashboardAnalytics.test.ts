@@ -349,7 +349,7 @@ it('defaults registrations to the captured business day after the calendar advan
   get.mockResolvedValue({...value,rows:[{...value.rows[0],dimension:'day',id:'2026-11-09',label:'2026-11-09',registrationCount:42}],registrationCount:42})
   const w=mount(LocalDashboardAnalytics,{props:{chartId:'registrations',title:'客户注册统计',availableWindow:{from:'1970-01-01',to:'2026-11-16',asOf:'2026-11-16T10:41:50Z'}}})
   await flushPromises()
-  expect(get.mock.lastCall?.[0]).toMatchObject({from:'2026-01-01',to:'2026-11-16'})
+  expect(get.mock.lastCall?.[0]).toMatchObject({from:'2026-11-01',to:'2026-11-16'})
   expect((w.get('input[aria-label="客户创建结束日期"]').element as HTMLInputElement).value).toBe('2026-11-16')
   expect(w.get('input[aria-label="客户创建结束日期"]').attributes('max')).toBe('2026-11-16')
   expect(w.text()).toContain('可查询至 2026-11-16');expect(w.text()).toContain('42 位注册客户')
@@ -532,5 +532,118 @@ it('opens the actual clicked comparison period rather than the parent date range
  expect(w.findComponent({name:'AnalyticsTrendDialog'}).props('query')).toMatchObject({...previous,comparison:undefined})
  chart.vm.$emit('select',{dataIndex:0,seriesIndex:1});await flushPromises()
  expect(w.findComponent({name:'AnalyticsTrendDialog'}).props('query')).toMatchObject({...current,comparison:undefined})
+ w.unmount()
+})
+
+it.each([
+ ['2027-01-15T02:00:00Z','2027-01-01','2027-01-15','2026-12-01','2026-12-31'],
+ ['2028-03-15T02:00:00Z','2028-03-01','2028-03-15','2028-02-01','2028-02-29'],
+ ['2026-11-30T17:00:00Z','2026-12-01','2026-12-01','2026-11-01','2026-11-30'],
+])('applies receipt month shortcuts in business time at %s without changing another chart',async(now,start,end,previousStart,previousEnd)=>{
+ vi.setSystemTime(new Date(now))
+ const first=mount(LocalDashboardAnalytics,{props:{chartId:'department_receipts',title:'部门'}})
+ const other=mount(LocalDashboardAnalytics,{props:{chartId:'salesperson_receipts',title:'业务员'}})
+ await flushPromises()
+ const untouched=(other.find('input[type="date"]').element as HTMLInputElement).value
+ get.mockClear()
+ await first.get('.receipt-month-shortcuts button').trigger('click');await flushPromises()
+ expect(get).toHaveBeenCalledTimes(1)
+ expect(get.mock.calls[0]![0]).toMatchObject({from:start,to:end,departmentId:'d1',chartId:'department_receipts'})
+ expect((other.find('input[type="date"]').element as HTMLInputElement).value).toBe(untouched)
+ get.mockClear()
+ await first.findAll('.receipt-month-shortcuts button')[1]!.trigger('click');await flushPromises()
+ expect(get).toHaveBeenCalledTimes(1)
+ expect(get.mock.calls[0]![0]).toMatchObject({from:previousStart,to:previousEnd,comparison:undefined})
+ await vi.advanceTimersByTimeAsync(400)
+ expect(get).toHaveBeenCalledTimes(1)
+ first.unmount();other.unmount();vi.useRealTimers()
+})
+it('offers registration month shortcuts using the registration date basis',async()=>{
+ const w=mount(LocalDashboardAnalytics,{props:{chartId:'registrations',title:'注册'}});await flushPromises()
+ expect(w.get('.receipt-month-shortcuts').attributes('aria-label')).toBe('注册日期快捷选择');expect(w.get('.receipt-month-shortcuts button').attributes('aria-pressed')).toBe('true');w.unmount()
+})
+
+it('avoids re-querying the selected receipt month and lets a newer month supersede a slow request',async()=>{
+ const w=mount(LocalDashboardAnalytics,{props:{chartId:'department_receipts',title:'部门'}})
+ await flushPromises()
+ const buttons=w.findAll('.receipt-month-shortcuts button')
+ await buttons[0]!.trigger('click');await flushPromises()
+ get.mockClear()
+ await buttons[0]!.trigger('click');await flushPromises()
+ expect(get).not.toHaveBeenCalled()
+ let resolvePrevious!:(v:any)=>void
+ get.mockImplementationOnce(()=>new Promise(resolve=>{resolvePrevious=resolve})).mockResolvedValue({...value,orderCount:222})
+ await buttons[1]!.trigger('click');await flushVuePromises()
+ expect(buttons[0]!.attributes('disabled')).toBeUndefined()
+ expect(w.text()).toContain('笔订单')
+ await buttons[0]!.trigger('click');await flushPromises()
+ expect(w.text()).toContain('222 笔订单')
+ resolvePrevious({...value,orderCount:999});await flushPromises()
+ expect(w.text()).not.toContain('999 笔订单')
+ expect(get).toHaveBeenCalledTimes(2)
+ w.unmount()
+})
+
+it.each(['registrations','department_receipts','salesperson_receipts','order_volume','customer_orders'] as const)('initially queries this month and selects its shortcut for %s',async chartId=>{
+ vi.setSystemTime(new Date('2026-11-25T02:00:00Z'))
+ const w=mount(LocalDashboardAnalytics,{props:{chartId,title:'分析'}});await flushPromises()
+ expect(get.mock.calls[0]![0]).toMatchObject({from:'2026-11-01',to:'2026-11-25'})
+ expect(w.get('.receipt-month-shortcuts button').attributes('aria-pressed')).toBe('true')
+ w.unmount()
+})
+
+it.each(['registrations','department_receipts','salesperson_receipts','order_volume','customer_orders'] as const)('offers an immediate six-month query while keeping the month default for %s',async chartId=>{
+ vi.setSystemTime(new Date('2026-11-25T02:00:00Z'))
+ const w=mount(LocalDashboardAnalytics,{props:{chartId,title:'分析',workbench:true}});await flushPromises()
+ expect(get.mock.calls[0]![0]).toMatchObject({from:'2026-11-01',to:'2026-11-25'})
+ const recent=w.findAll('.receipt-month-shortcuts button').find(b=>b.text()==='近半年')
+ expect(recent).toBeDefined()
+ expect(recent!.attributes('aria-pressed')).toBe('false')
+ const dimension=(w.get('select[aria-label="展示维度"]').element as HTMLSelectElement).value
+ get.mockClear()
+ await recent!.trigger('click');await flushPromises();await vi.advanceTimersByTimeAsync(400)
+ expect(get).toHaveBeenCalledTimes(1)
+ expect(get).toHaveBeenLastCalledWith(expect.objectContaining({chartId,from:'2026-06-01',to:'2026-11-25',departmentId:'d1',comparison:undefined}),{force:false},true)
+ expect(w.findAll('input[type="date"]').map(i=>(i.element as HTMLInputElement).value)).toEqual(['2026-06-01','2026-11-25'])
+ expect(recent!.attributes('aria-pressed')).toBe('true')
+ expect((w.get('select[aria-label="展示维度"]').element as HTMLSelectElement).value).toBe(dimension)
+ get.mockClear();await recent!.trigger('click');await flushPromises()
+ expect(get).not.toHaveBeenCalled()
+ await w.findAll('.receipt-month-shortcuts button').find(b=>b.text()==='本月')!.trigger('click');await flushPromises()
+ expect(get.mock.lastCall?.[0]).toMatchObject({from:'2026-11-01',to:'2026-11-25'})
+ w.unmount()
+})
+
+it.each([
+ ['2026-12-31T16:30:00Z',undefined,'2026-08-01','2027-01-01'],
+ ['2026-01-15T02:00:00Z',undefined,'2026-01-01','2026-01-15'],
+ ['2026-02-15T02:00:00Z',undefined,'2026-01-01','2026-02-15'],
+ ['2027-01-15T02:00:00Z',{from:'2026-09-10',to:'2026-12-31',asOf:'2027-01-01T00:00:00Z'},'2026-09-10','2026-12-31'],
+] as const)('bounds the six-month query by the business start and registration capture at %s',async(now,availableWindow,start,end)=>{
+ vi.setSystemTime(new Date(now))
+ const w=mount(LocalDashboardAnalytics,{props:{chartId:'registrations',title:'注册',availableWindow}});await flushPromises()
+ const recent=w.findAll('.receipt-month-shortcuts button').find(b=>b.text()==='近半年')
+ expect(recent).toBeDefined()
+ expect(w.findAll('.receipt-month-shortcuts [aria-pressed="true"]').map(b=>b.text())).toEqual(['本月'])
+ await recent!.trigger('click');await flushPromises()
+ expect(get.mock.lastCall?.[0]).toMatchObject({from:start,to:end})
+ expect(w.findAll('.receipt-month-shortcuts [aria-pressed="true"]').map(b=>b.text())).toEqual(['近半年'])
+ w.unmount()
+})
+
+it('preserves business filters and exits period comparison for the six-month query',async()=>{
+ vi.setSystemTime(new Date('2026-11-25T02:00:00Z'))
+ get.mockResolvedValue({...value,warehouses:[{id:'HangZhou',name:'杭州仓'}]})
+ const w=mount(LocalDashboardAnalytics,{props:{chartId:'order_volume',title:'订单量'}});await flushPromises()
+ await w.get('select[aria-label="仓库"]').setValue('HangZhou')
+ await w.get('select[aria-label="订单类型"]').setValue('stock')
+ await w.get('select[aria-label="对比方式"]').setValue('month');await flushPromises()
+ get.mockClear()
+ const recent=w.findAll('.receipt-month-shortcuts button').find(b=>b.text()==='近半年')
+ expect(recent).toBeDefined()
+ await recent!.trigger('click');await flushPromises();await vi.advanceTimersByTimeAsync(400)
+ expect(get).toHaveBeenCalledTimes(1)
+ expect(get.mock.lastCall?.[0]).toMatchObject({from:'2026-06-01',to:'2026-11-25',departmentId:'d1',warehouseCode:'HangZhou',entityType:'stock',comparison:undefined})
+ expect((w.get('select[aria-label="对比方式"]').element as HTMLSelectElement).value).toBe('')
  w.unmount()
 })

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ChartUpdateStatus from '@/components/charts/ChartUpdateStatus.vue'
 import { peekAnalyticsQuery } from '@/utils/analytics-cache'
 import { isWorkbenchScopeError } from '@/api/workbench-dashboard'
 import { computed,onBeforeUnmount,onMounted,ref,useId,watch } from 'vue'
@@ -35,7 +36,7 @@ onBeforeUnmount(()=>{request++;stop();dialog.value?.close();if(opener?.isConnect
 </script>
 <template>
  <Teleport to="body"><dialog ref="dialog" class="analytics-trend-dialog" :aria-labelledby="titleId" aria-modal="true" @cancel.prevent="emit('close')" @click.self="emit('close')">
-  <header><div class="trend-heading"><ChartNoAxesCombined :size="20"/><div><h2 :id="titleId">{{target.name}} · {{metricLabel}}趋势</h2><p>{{title}}</p></div></div><button ref="closeButton" class="trend-close" aria-label="关闭趋势" @click="emit('close')"><X :size="19"/></button></header>
+  <header><div class="trend-heading"><ChartNoAxesCombined :size="20"/><div><h2 :id="titleId">{{target.name}} · {{metricLabel}}趋势</h2><p>{{title}}</p></div></div><ChartUpdateStatus :busy="busy" :as-of="data?.asOf" /><button ref="closeButton" class="trend-close" aria-label="关闭趋势" @click="emit('close')"><X :size="19"/></button></header>
   <div class="trend-body">
    <div class="trend-toolbar"><label>分析对象<select :value="selected" aria-label="趋势分析对象" @change="emit('select',targets[Number(($event.target as HTMLSelectElement).value)]!)"><option v-for="(t,index) in targets" :key="`${t.dimension}:${t.id}`" :value="index">{{t.dimension==='department'?'部门 · ':t.dimension==='person'?'业务员 · ':''}}{{t.name}}</option></select></label><div class="trend-grain" role="group" aria-label="趋势时间维度"><button :class="{active:grain==='day'}" :aria-pressed="grain==='day'" @click="grain='day'">按日</button><button :class="{active:grain==='month'}" :aria-pressed="grain==='month'" @click="grain='month'">按月</button></div></div>
    <div class="trend-context"><span>{{query.from}} — {{query.to}}</span><span>{{scope}}</span><span>{{query.chartId==='registrations'?'客户创建时间':'收款日期'}} · UTC+8</span></div>

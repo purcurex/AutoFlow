@@ -142,12 +142,12 @@ it('preserves shipment overdue severity on the emphasized current stage', async 
   expect(wrapper.get('.group-badges [data-current=true]').attributes('data-tone')).toBe('danger')
   expect(wrapper.get('.group-badges [data-current=true]').attributes('title')).toContain('超过48小时')
 })
-it('filters purchase progress in the secondary toolbar and carries it through details and export', async () => {
+it('filters purchase progress and carries it through details and export', async () => {
   vi.stubGlobal('URL', Object.assign(URL, { createObjectURL: vi.fn(() => 'blob:test'), revokeObjectURL: vi.fn() }))
   vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
   vi.mocked(api.post).mockResolvedValue(new Blob(['xlsx']))
   const { wrapper, router } = await setup('/workbench/procurement?queue=procurement&departmentId=d1')
-  await wrapper.get('.workbench-filter-secondary select[aria-label="采购进度筛选"]').setValue('payment_pending'); await flushPromises()
+  await wrapper.get('select[aria-label="采购进度筛选"]').setValue('payment_pending'); await flushPromises()
   expect(router.currentRoute.value.query.purchaseStage).toBe('payment_pending')
   expect(api.get).toHaveBeenLastCalledWith(expect.stringContaining('purchase-groups'), expect.objectContaining({ params: expect.objectContaining({ purchaseStage: 'payment_pending', departmentId: 'd1', page: 1 }) }))
   expect(wrapper.find('tbody').exists()).toBe(false)
@@ -165,7 +165,7 @@ it.each(['procurement', 'procurement_shipping'])('shows the account department f
   useWorkbenchAccess().access.value = { roles: [], isAdmin: false, businessRole: 'salesperson', businessDepartment: { id: 'd1', name: '业务一部' } }
   vi.mocked(api.get).mockResolvedValue({ ...page, items: [], departments: [], total: 0 })
   const { wrapper, router } = await setup(`/workbench/procurement?queue=${queue}`)
-  expect(wrapper.findAll('select')[0].get('option[value=""]').text()).toBe('业务一部')
+  expect(wrapper.findAll('label').find(label => label.text().startsWith('业务部门'))!.get('select option[value=""]').text()).toBe('业务一部')
   expect(router.currentRoute.value.query.departmentId).toBeUndefined()
 })
 
@@ -185,7 +185,7 @@ it('uses customer payment ranges for completed groups and carries the scope thro
   vi.mocked(api.post).mockRejectedValue(new Error('download unavailable'))
   vi.mocked(api.get).mockImplementation(async url => String(url).includes('/purchase%3Ap1') ? { ...detail, items: [{ ...row, completedAt: '2026-10-28T01:00:00Z', consumerPaidAt: '2026-10-27T00:00:00Z' }] } : page)
   const { wrapper, router } = await setup('/workbench/procurement?queue=completed&departmentId=d1')
-  expect(wrapper.get('select[aria-label="客户付款时间范围"]').element).toHaveProperty('value', '1m')
+  expect(wrapper.get('select[aria-label="客户付款时间范围"]').element).toHaveProperty('value', '3m')
   expect(wrapper.findAll('button').some(b => b.text() === '最新客户付款优先')).toBe(true)
   await wrapper.get('select[aria-label="客户付款时间范围"]').setValue('3m'); await flushPromises()
   expect(router.currentRoute.value.query).toMatchObject({ queue: 'completed', timeRange: '3m', departmentId: 'd1' })

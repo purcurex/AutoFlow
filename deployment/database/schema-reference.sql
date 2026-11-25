@@ -1918,6 +1918,25 @@ COMMENT ON COLUMN public.hz_fop_allocations.idempotency_key IS 'FOP 幂等键；
 
 
 --
+-- Name: hz_fop_api_budgets; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.hz_fop_api_budgets (
+    scope text NOT NULL,
+    state jsonb DEFAULT '{}'::jsonb NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT hz_fop_api_budgets_state_check CHECK ((jsonb_typeof(state) = 'object'::text))
+);
+
+
+--
+-- Name: TABLE hz_fop_api_budgets; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.hz_fop_api_budgets IS 'Shared per-source rolling API budgets and persistent gateway cooldown; no tokens or business payloads.';
+
+
+--
 -- Name: hz_fop_bootstrap_batches; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -11177,6 +11196,14 @@ ALTER TABLE ONLY public.typeorm_migrations ALTER COLUMN id SET DEFAULT nextval('
 
 ALTER TABLE ONLY public.typeorm_migrations
     ADD CONSTRAINT "PK_bb2f075707dd300ba86d0208923" PRIMARY KEY (id);
+
+
+--
+-- Name: hz_fop_api_budgets hz_fop_api_budgets_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.hz_fop_api_budgets
+    ADD CONSTRAINT hz_fop_api_budgets_pkey PRIMARY KEY (scope);
 
 
 --

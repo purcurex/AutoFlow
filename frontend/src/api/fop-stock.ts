@@ -36,7 +36,7 @@ export interface StockOrder {
 }
 export interface StockScope { search?: string; warehouseCode?: string; departmentId?: string; ownerId?: string }
 export interface StockFilters extends StockScope { queue?: 'all' | 'procurement'; stockType?: StockType; purchaseStatus?: StockPurchaseStatus; orderStatus?: StockOrderStatus; reviewStatus?: 'pending' | 'approved'; sortBy?: StockSortField; sortOrder?: 'asc' | 'desc'; lifecycle?: StockLifecycle; timeRange?: 'all' | '1w' | '1m' | '3m' }
-export interface StockQuery extends StockFilters { page: number; pageSize: number }
+export interface StockQuery extends StockFilters { refresh?: boolean; page: number; pageSize: number }
 export interface StockPage {
   dataAvailability?: WorkbenchDataAvailability; replica?: WorkbenchReplicaSnapshot
 

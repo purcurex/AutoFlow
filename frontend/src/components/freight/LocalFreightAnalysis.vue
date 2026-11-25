@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { isWorkbenchScopeError } from '@/api/workbench-dashboard'
 import { useChartQuerySchedule } from '@/composables/useChartQuerySchedule'
+import { freightBarLayout } from '@/utils/freight-chart-layout'
 import { warehouseName } from '@/utils/warehouse'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -21,11 +22,27 @@ const {locale}=useI18n()
 const t=(cn:string,en:string)=>String(locale.value).startsWith('zh')?cn:en
 const businessToday=()=>new Date(Date.now()+8*3600000).toISOString().slice(0,10)
 const today=ref(businessToday()),currentYear=computed(()=>Number(today.value.slice(0,4)))
-const year=ref(currentYear.value),grain=ref<LocalFreightQuery['grain']>('week'),weekOf=ref(today.value),warehouse=ref(''),dimension=ref<FreightDimension>('carrier'),compare=ref(false)
+const year=ref(currentYear.value),grain=ref<LocalFreightQuery['grain']>('month'),weekOf=ref(today.value),warehouse=ref(''),dimension=ref<FreightDimension>('carrier'),compare=ref(false)
+const shortcut=ref<''|'current'|'previous'|'last6months'>('last6months')
+const selectedMonth=computed(()=>{
+ const [y,m]=today.value.split('-').map(Number)
+ return new Date(Date.UTC(y!,m!-1-(shortcut.value==='previous'?1:0),1)).toISOString().slice(0,7)
+})
+function chooseMonth(previous=false){
+ updateClock()
+ const choice=previous?'previous':'current'
+ if(shortcut.value===choice&&!error.value)return
+ shortcut.value=choice
+ year.value=Number(selectedMonth.value.slice(0,4));grain.value='month'
+}
+function chooseRecentMonths(){
+ updateClock()
+ shortcut.value='last6months';year.value=currentYear.value;grain.value='month'
+}
 const detail=ref<{query:LocalFreightDetailsQuery;name:string}>()
 const data=ref<LocalFreightResult>(),busy=ref(false),error=ref(''),selected=ref('')
 const dimensions=computed(()=>[{id:'carrier',name:t('物流服务商','Carrier')},{id:'channel',name:t('物流渠道','Channel')},{id:'owner',name:t('业务员','Salesperson')},{id:'department',name:t('业务部门','Department')},{id:'country',name:t('国家','Country')},{id:'warehouse',name:t('仓库','Warehouse')},{id:'customer',name:t('客户','Customer')}])
-const query=computed<LocalFreightQuery>(()=>({grain:grain.value,year:year.value,...grain.value==='week'?{weekOf:weekOf.value}:{},...warehouse.value?{warehouse:warehouse.value}:{},currency:'CNY',dimension:dimension.value}))
+const query=computed<LocalFreightQuery>(()=>({grain:grain.value,year:year.value,...grain.value==='week'?{weekOf:weekOf.value}:{},...warehouse.value?{warehouse:warehouse.value}:{},...(shortcut.value==='last6months'?{range:'last6months' as const}:shortcut.value?{monthOf:selectedMonth.value}:{}),currency:'CNY',dimension:dimension.value}))
 const money=(n:string|number|null)=>n===null?'—':formatCurrency(Number(n),data.value?.currency??'CNY',String(locale.value))
 const number=(n:string|number)=>Number(n).toLocaleString(String(locale.value),{maximumFractionDigits:3})
 const percent=(n:number|null)=>n===null?'—':`${n>0?'+':''}${n.toFixed(2)}%`
@@ -37,7 +54,8 @@ function updateClock(){
  updatingClock=true
  const followsToday=year.value===oldYear&&weekOf.value===oldToday
  today.value=next
- if(followsToday){year.value=currentYear.value;weekOf.value=next}
+ if(shortcut.value)year.value=Number(selectedMonth.value.slice(0,4))
+ if(followsToday&&!shortcut.value){year.value=currentYear.value;weekOf.value=next}
  updatingClock=false
 }
 const filterQuery=useChartQuerySchedule(()=>load(),()=>{request++;busy.value=true})
@@ -67,7 +85,8 @@ const ownerChart=computed(()=>{
   measures.set(`${s.dimension}:${s.id}`,s.totals)
   return {dimension:s.dimension,id:s.id,label:s.label,englishName:s.englishName,departmentId:s.departmentId,departmentName:s.departmentName,currency:d.currency,amount:compare.value?s.totals.delta:s.totals.amount,orderCount:s.billCount,quantity:null}
  })
- return salespersonGroupedChart(rows,'amount',{amount:compare.value?t('运费变化','Freight change'):t('实际运费','Actual freight'),count:t('发运单量','Dispatches'),...(compare.value?{extraTooltip:(row:AnalyticsRow)=>comparisonText(measures.get(`${row.dimension}:${row.id}`),'\n')}:{})})
+ const grouped=salespersonGroupedChart(rows,'amount',{amount:compare.value?t('运费变化','Freight change'):t('实际运费','Actual freight'),count:t('发运单量','Dispatches'),...(compare.value?{extraTooltip:(row:AnalyticsRow)=>comparisonText(measures.get(`${row.dimension}:${row.id}`),'\n')}:{})})
+ return {...grouped,option:{...grouped.option,series:(grouped.option.series as any[]).map(s=>({...s,...freightBarLayout}))}}
 })
 function comparisonText(value:FreightMeasure|undefined,separator='<br>'){
  if(!value)return '—'
@@ -79,7 +98,7 @@ function chart(group?:string){
  return {tooltip:{trigger:'axis',confine:true,formatter:(items:any[])=>items.map(x=>`${escape(String(x.seriesName))}: ${compare.value?comparisonText(rows[x.seriesIndex]?.values[x.dataIndex]):money(x.value??null)}`).join('<br>')},
   legend:{type:'scroll',bottom:0},grid:{left:75,right:24,top:25,bottom:65},xAxis:{type:'category',data:d.periods.map(p=>p.label)},
   yAxis:{type:'value',name:compare.value?`${t('差额','Change')} · ${d.currency}`:d.currency,axisLabel:{formatter:(v:number)=>v.toLocaleString(String(locale.value))}},
-  series:rows.map(s=>({id:s.id,name:s.label,type:group&&!compare.value?'line':'bar',data:s.values.map(v=>compare.value?v.delta===null?null:Number(v.delta):Number(v.amount)),emphasis:{focus:'series'}}))}
+  series:rows.map(s=>({id:s.id,name:s.label,type:group&&!compare.value?'line':'bar',...freightBarLayout,data:s.values.map(v=>compare.value?v.delta===null?null:Number(v.delta):Number(v.amount)),emphasis:{focus:'series'}}))}
 }
 const option=computed(()=>ownerChart.value?.option??chart()),trend=computed(()=>chart(selected.value)),selectedName=computed(()=>data.value?.series.find(s=>s.id===selected.value)?.label??'')
 function openDetails(dimensionId?:string,periodId?:string){
@@ -99,13 +118,18 @@ const displayPeriods=computed(()=>data.value?.periods.map((p,index)=>({...p,inde
  <section class="ov-panel freight-analysis local-freight" data-module="freight" data-source="local" :aria-busy="busy">
   <header><h2>{{t('物流运费分析','Logistics freight analysis')}}</h2><small v-if="data">{{t('最近同步','Last synced')}} {{new Date(data.asOf).toLocaleString(String(locale),{timeZone:'Asia/Shanghai'})}} · UTC+8</small></header>
   <div class="filters">
-   <label>{{t('年份','Year')}}<select v-model="year" aria-label="运费年份"><option v-for="y in businessYears(currentYear)" :key="y" :value="y">{{y}}</option></select></label>
+   <label>{{t('年份','Year')}}<select v-model="year" @change="shortcut=''" aria-label="运费年份"><option v-for="y in businessYears(currentYear)" :key="y" :value="y">{{y}}</option></select></label>
    <label>{{t('仓库','Warehouse')}}<select v-model="warehouse" aria-label="运费仓库"><option value="">{{t('全部仓库','All warehouses')}}</option><option v-for="w in warehouseOptions" :key="w.id" :value="w.id">{{warehouseName(w.name || w.id)}}</option></select></label>
    <label>{{t('统计维度','Group by')}}<select v-model="dimension" aria-label="运费统计维度"><option v-for="d in dimensions" :key="d.id" :value="d.id">{{d.name}}</option></select></label>
    <button class="query" :disabled="busy" @click="load(true)">{{t('查询','Query')}}</button>
   </div>
   <div class="filters secondary">
-   <label>{{t('时间轴','Period')}}<select v-model="grain" aria-label="运费时间轴"><option value="week">{{t('按周','Weekly')}}</option><option value="month">{{t('按月','Monthly')}}</option><option value="year">{{t('按年','Yearly')}}</option></select></label>
+   <div class="month-shortcuts" role="group" aria-label="运费月份快捷选择">
+    <button type="button" :aria-pressed="shortcut==='last6months'" @click="chooseRecentMonths()">{{t('近半年','Last 6 months')}}</button>
+    <button type="button" :aria-pressed="shortcut==='current'" @click="chooseMonth()">{{t('本月','This month')}}</button>
+    <button type="button" :aria-pressed="shortcut==='previous'" :disabled="today<'2026-07-01'" @click="chooseMonth(true)">{{t('上月','Last month')}}</button>
+   </div>
+   <label>{{t('时间轴','Period')}}<select v-model="grain" @change="shortcut=''" aria-label="运费时间轴"><option value="week">{{t('按周','Weekly')}}</option><option value="month">{{t('按月','Monthly')}}</option><option value="year">{{t('按年','Yearly')}}</option></select></label>
    <label v-if="grain==='week'">{{t('截至周','Through week')}}<input v-model="weekOf" type="date" :min="year===2026?'2026-06-01':`${year}-01-01`" :max="year===currentYear?today:`${year}-12-31`"></label>
    <label :title="t('上期为零或无可比数据时，增长率显示—；未结束周期按相同已覆盖天数比较。','Growth rate is unavailable for a zero or missing baseline; partial periods compare equal elapsed days.')"><input v-model="compare" type="checkbox">{{t('环比','Period comparison')}}</label>
   </div>
@@ -135,6 +159,13 @@ const displayPeriods=computed(()=>data.value?.periods.map((p,index)=>({...p,inde
  </section>
 </template>
 <style scoped>
+.month-shortcuts{display:inline-flex;align-items:center;gap:4px}
+.month-shortcuts button{height:32px;padding:5px 8px;font-size:11px;line-height:18px;border:1px solid var(--color-border);border-radius:6px;background:transparent;color:var(--color-text-secondary)}
+.month-shortcuts button:hover:not(:disabled){background:var(--color-selection-surface);color:var(--color-selection-text)}
+.month-shortcuts button[aria-pressed="true"]{background:color-mix(in srgb,var(--color-primary) 12%,var(--color-selection-surface));color:var(--color-selection-text);border-color:var(--color-selection-border);font-weight:600}
+.month-shortcuts button:focus-visible{outline:2px solid var(--color-selection-text);outline-offset:2px}
+.month-shortcuts button:disabled{opacity:.5;cursor:default}
+
 .local-freight{container-type:inline-size;margin-top:22px;padding:24px;border:1px solid var(--color-border);border-radius:12px;background:var(--color-surface);color:var(--color-text)}
 .comparison-note{font-size:12px;color:var(--color-text-secondary);margin:12px 0}.owner-groups{overflow-x:auto;overflow-y:hidden;padding-bottom:12px}.owner-legend{display:flex;gap:18px;margin:12px 0;color:var(--color-text-secondary);font-size:12px}.owner-legend span{display:flex;align-items:center;gap:6px}.owner-legend i{width:10px;height:10px;border-radius:2px}.department-swatch{background:var(--color-primary)}.person-swatch{background:var(--color-chart-detail)}
 header{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:20px}h2{font-size:16px;font-weight:600}header small{color:var(--color-text-secondary);font-size:12px}.filters{display:flex;align-items:center;flex-wrap:wrap;gap:12px}.secondary{margin-top:18px}label{display:inline-flex;align-items:center;gap:8px;font-size:12px}select,input[type=date],button.query{height:34px;padding:7px 9px;border:1px solid var(--color-border);border-radius:6px;background:var(--color-surface);color:inherit;font-size:12px}.query{background:var(--color-primary)!important;color:white!important}.ov-table th,.ov-table td{white-space:nowrap}.ov-table small{display:block}summary{cursor:pointer;padding:12px 0}:global(.dark .local-freight){color-scheme:dark}

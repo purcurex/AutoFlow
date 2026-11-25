@@ -198,7 +198,7 @@ test('CLI honors the project pause even with an alternate config and never calls
   const dir=realpathSync(mkdtempSync(join(tmpdir(),'hz-cli-pause-')))
   try{
     mkdirSync(join(dir,'scripts'));mkdirSync(join(dir,'backend'))
-    for(const name of ['fop-workbench-openapi.mjs','fop-openapi-smoke.mjs','fop-confirmed-origin.mjs','fop-interface-policy.cjs'])cpSync(fileURLToPath(new URL('./'+name,import.meta.url)),join(dir,'scripts',name))
+    for(const name of ['fop-workbench-openapi.mjs','fop-openapi-smoke.mjs','fop-confirmed-origin.mjs','fop-interface-policy.cjs','fop-budgeted-fetch.mjs','workbench-sync-runtime.mjs'])cpSync(fileURLToPath(new URL('./'+name,import.meta.url)),join(dir,'scripts',name))
     writeFileSync(join(dir,'backend/.env.fop-pause'),'FOP_QUERIES_PAUSED=true\n')
     const result = spawnSync(process.execPath, ['--import', `data:text/javascript,${encodeURIComponent(preload)}`, join(dir,'scripts/fop-workbench-openapi.mjs'), '--config', '/nonexistent/fop-fake-test.env', '--operation', 'order-detail', '--id', '123'], { encoding: 'utf8', env: config })
     assert.equal(result.status, 1)

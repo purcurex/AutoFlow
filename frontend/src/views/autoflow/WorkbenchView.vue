@@ -66,7 +66,7 @@ const icons = { sales: BriefcaseBusiness, procurement: Boxes, allocation: Packag
 const departmentQuery = computed(() => typeof route.query.departmentId === 'string' && route.query.departmentId ? { departmentId: route.query.departmentId } : {})
 const todoScopeQuery = computed(() => ({ ...departmentQuery.value, ...(typeof route.query.ownerId === 'string' && route.query.ownerId ? { ownerId: route.query.ownerId } : {}) }))
 function roleLink(value: WorkbenchRole) { return { name: 'RoleWorkbench', params: { role: value }, query: todoScopeQuery.value } }
-function queueLink(value: string) { return { name: 'RoleWorkbench', params: { role: role.value }, query: { ...(role.value === 'procurement' && ['fulfillment', 'purchase'].includes(String(route.query.view)) ? { view: route.query.view } : {}), ...(['stock', 'stock_procurement', 'completed', 'purchase_returns', 'rma', 'receipt_notices'].includes(value) || role.value && workbenchQueues[role.value].some(queue => queue === value) ? todoScopeQuery.value : departmentQuery.value), queue: value, ...(['completed', 'unpaid', 'stock'].includes(value) ? { timeRange: '1m' } : {}) } } }
+function queueLink(value: string) { return { name: 'RoleWorkbench', params: { role: role.value }, query: { ...(role.value === 'procurement' && ['fulfillment', 'purchase'].includes(String(route.query.view)) ? { view: route.query.view } : {}), ...(['stock', 'stock_procurement', 'completed', 'purchase_returns', 'rma', 'receipt_notices'].includes(value) || role.value && workbenchQueues[role.value].some(queue => queue === value) ? todoScopeQuery.value : departmentQuery.value), queue: value, ...(['completed', 'unpaid', 'stock'].includes(value) ? { timeRange: '3m' } : {}) } } }
 </script>
 
 <template>

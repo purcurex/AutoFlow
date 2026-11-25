@@ -228,7 +228,7 @@ describe('fulfillment order list', () => {
     if (role === 'allocation') { expect(wrapper.findAll('thead th').map(th => th.text())).toContain('审核状态'); expect(wrapper.get('td[data-label="审核状态"]').text()).toBe('已审核') }
     expect(wrapper.get('thead button[aria-label^="客户付款时间："]').element.closest('th')?.getAttribute('aria-sort')).toBe('descending')
     const rangeLabel = '客户付款时间范围'
-    expect(wrapper.get(`select[aria-label="${rangeLabel}"]`).element).toHaveProperty('value', '1m')
+    expect(wrapper.get(`select[aria-label="${rangeLabel}"]`).element).toHaveProperty('value', '3m')
     if (role === 'dispatch') {
       expect(wrapper.get('thead').text()).not.toContain('发运单审核时间')
       expect(wrapper.get('thead').text()).not.toContain('Shopify同步时间')
@@ -242,7 +242,7 @@ describe('fulfillment order list', () => {
     expect(wrapper.findAll('tfoot th,tfoot td').reduce((sum,cell)=>sum+Number(cell.attributes('colspan')||1),0)).toBe(columnCount)
     expect(wrapper.find('[data-testid="open-approval"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="open-inventory"]').exists()).toBe(false)
-    expect(get).toHaveBeenLastCalledWith(expect.objectContaining({ queue, completed: true, timeRange: '1m', sortBy: 'consumerPaidAt', sortOrder: 'desc' }), expect.any(AbortSignal))
+    expect(get).toHaveBeenLastCalledWith(expect.objectContaining({ queue, completed: true, timeRange: '3m', sortBy: 'consumerPaidAt', sortOrder: 'desc' }), expect.any(AbortSignal))
     await wrapper.get(`select[aria-label="${rangeLabel}"]`).setValue('1m'); await flushPromises()
     expect(router.currentRoute.value.query).toMatchObject({ queue: 'completed', timeRange: '1m' })
     expect(get).toHaveBeenLastCalledWith(expect.objectContaining({ completed: true, timeRange: '1m' }), expect.any(AbortSignal))
@@ -731,8 +731,8 @@ describe('fulfillment order list', () => {
     vi.spyOn(downloads, 'downloadBlob').mockImplementation(() => {})
     const { wrapper, router } = await setup('?queue=unpaid&page=2&departmentId=d1', 'sales')
     const range = wrapper.get('select[aria-label="C端付款时间范围"]')
-    expect(range.element).toHaveProperty('value', '1m')
-    expect(get).toHaveBeenLastCalledWith(expect.objectContaining({ timeRange: '1m' }), expect.any(AbortSignal))
+    expect(range.element).toHaveProperty('value', '3m')
+    expect(get).toHaveBeenLastCalledWith(expect.objectContaining({ timeRange: '3m' }), expect.any(AbortSignal))
     expect(range.findAll('option').map(o => o.text())).toEqual(['全部', '近一周', '近一月', '近三月'])
     await range.setValue(timeRange); await flushPromises()
     expect(router.currentRoute.value.query).toMatchObject({ timeRange, page: '1', departmentId: 'd1' })
@@ -1130,15 +1130,19 @@ describe('fulfillment order list', () => {
     ['warehouse', 'shipping', '出库状态', 'outboundStatus'],
   ])('sorts %s/%s %s and retains filters across refresh', async (role, queue, label, field) => {
     const { wrapper, router } = await setup(`?queue=${queue}&departmentId=d1&search=DEMO`, role)
-    const button = () => wrapper.get(`thead button[aria-label^="${label}："]`)
+    const firstHeading = wrapper.get('thead th')
+    expect(firstHeading.text()).toBe('订单编号')
+    expect(firstHeading.find('button').exists()).toBe(false)
+    expect(firstHeading.attributes('aria-sort')).toBeUndefined()
+    const button = () => queue === 'shipping' ? wrapper.get('.compact-status-sort') : wrapper.get(`thead button[aria-label^="${label}："]`)
     await button().trigger('click'); await flushPromises()
     expect(router.currentRoute.value.query).toMatchObject({ sortBy: field, sortOrder: 'asc', page: '1', departmentId: 'd1', search: 'DEMO' })
-    expect(button().element.closest('th')?.getAttribute('aria-sort')).toBe('ascending')
+    if (queue !== 'shipping') expect(button().element.closest('th')?.getAttribute('aria-sort')).toBe('ascending')
     expect(wrapper.get('button.sort-payment').element.closest('th')?.getAttribute('aria-sort')).toBe('none')
     expect(wrapper.get('.compact-status-sort').attributes('aria-label')).toContain('当前升序')
     await wrapper.get('.compact-status-sort').trigger('click'); await flushPromises()
     expect(router.currentRoute.value.query.sortOrder).toBe('desc')
-    expect(button().element.closest('th')?.getAttribute('aria-sort')).toBe('descending')
+    if (queue !== 'shipping') expect(button().element.closest('th')?.getAttribute('aria-sort')).toBe('descending')
     await wrapper.get('button.refresh-orders').trigger('click'); await flushPromises()
     expect(api.get).toHaveBeenLastCalledWith('/autoflow/integrations/fop/fulfillment-orders', { params: expect.objectContaining({ sortBy: field, sortOrder: 'desc', departmentId: 'd1', search: 'DEMO' }), signal: expect.any(AbortSignal) })
     if (queue === 'shipping') {

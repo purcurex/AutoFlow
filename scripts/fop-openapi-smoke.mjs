@@ -1,3 +1,4 @@
+import { budgetedFetch } from './fop-budgeted-fetch.mjs'
 import { existsSync, readFileSync, mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -43,6 +44,7 @@ export function assertFopQueriesEnabled(config) {
 
 export async function getToken(config, fetcher = fetch) {
   assertFopQueriesEnabled(config)
+  fetcher = budgetedFetch(config, fetcher)
   const base = baseUrl(config)
   required(config, 'FOP_OPENAPI_IDENTITY')
   if (config.FOP_OPENAPI_ACCESS_TOKEN?.trim()) return config.FOP_OPENAPI_ACCESS_TOKEN.trim()
@@ -82,6 +84,7 @@ export async function runAuthCheck(config, fetcher = fetch) {
 
 export async function runCheck(config, { probe = false, operation = 'order', body } = {}, fetcher = fetch) {
   assertFopQueriesEnabled(config)
+  fetcher = budgetedFetch(config, fetcher)
   const base = baseUrl(config)
   const target = OPERATIONS[operation]
   if (!target) throw new Error('Unknown read-only operation')

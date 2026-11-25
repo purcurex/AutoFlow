@@ -1,5 +1,5 @@
 import { Type, Transform } from 'class-transformer'
-import { IsArray, ArrayMaxSize, ArrayMinSize, ArrayUnique, IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min, MinLength, ValidateIf } from 'class-validator'
+import { IsBoolean, IsArray, ArrayMaxSize, ArrayMinSize, ArrayUnique, IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min, MinLength, ValidateIf } from 'class-validator'
 import { STOCK_TYPES, STOCK_PURCHASE_STATUSES, STOCK_ORDER_STATUSES, STOCK_SORT_FIELDS, STOCK_LIFECYCLES, StockLifecycle, StockSortField, StockType, StockPurchaseStatus, StockOrderStatus } from './fop-stock.types'
 
 export class StockScopeDto {
@@ -20,6 +20,7 @@ export class StockFiltersDto extends StockScopeDto {
   @ValidateIf((_object, value) => value !== undefined) @IsIn(['all', '1w', '1m', '3m']) timeRange?: 'all' | '1w' | '1m' | '3m'
 }
 export class StockOrdersQueryDto extends StockFiltersDto {
+  @IsOptional() @Transform(({value})=>value==='true'?true:value==='false'?false:value) @IsBoolean() refresh?: boolean
   @Type(() => Number) @IsInt() @Min(1) @Max(1000000) page = 1
   @Type(() => Number) @IsIn([20, 50, 100, 200, 500, 1000]) pageSize = 100
 }

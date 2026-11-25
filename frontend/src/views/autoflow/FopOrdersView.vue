@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import OrderTypeLabel from '@/components/autoflow/OrderTypeLabel.vue'
 import WorkbenchPagination from '@/components/autoflow/WorkbenchPagination.vue'
 import OrderExceptionLabel from '@/components/autoflow/OrderExceptionLabel.vue'
 import { vPickingNameTooltip } from '@/directives/picking-name-tooltip'
@@ -240,7 +241,7 @@ const columnCount = computed(() => 8 - (pendingOutbound.value ? 2 : 0)
 let requestId = 0
 
 function reloadReplica() { inventoryOrderIds.value = undefined; recipientOrderId.value = undefined; followUpOrder.value = undefined; clearApproval(); approvalNeedsRefresh = false; cancelExport(); selectedOrders.value = []; void load(true) }
-async function load(reset = false, afterApproval = false) {
+async function load(reset = false, afterApproval = false, refresh = false) {
   currentTime.value = Date.now()
   if (approvalOrderIds.value && !afterApproval) return
   // The access guard temporarily unmounts this child before committing navigation.
@@ -347,7 +348,7 @@ async function load(reset = false, afterApproval = false) {
   const selectedQueue = queue.value
   listController = new AbortController()
   try {
-    const result = await getFopOrders({ ...currentFilters(), page: page.value, pageSize: pageSize.value }, listController.signal)
+    const result = await getFopOrders({ ...currentFilters(), ...(refresh || afterApproval ? { refresh: true } : {}), page: page.value, pageSize: pageSize.value }, listController.signal)
     if (currentRequest !== requestId) return
     if (!isFopOrderPageDataValid(result)) throw new Error('Unexpected partial data')
     if (!result.items.every(order => matchesFopQueue(order, selectedQueue, warehouseStage.value, completed.value) && (!taskStatus.value || matchesTaskStatus(order, selectedQueue, taskStatus.value)) && (!procurementStage.value || getTaskStatus(order, selectedQueue) === procurementStage.value))) throw new Error('Unexpected queue data')
@@ -489,7 +490,7 @@ const { expandedProductIds, hasExpandableProducts, allProductsExpanded, setProdu
       <p v-if="copyMessage" class="copy-feedback" role="status">{{ copyMessage }}</p>
       <section class="list-panel">
         <div class="list-toolbar workbench-filter-toolbar">
-          <div class="workbench-inline-actions"><slot name="heading-actions" /><WorkbenchRefreshControl :busy="busy" :disabled="busy || !queue || !online" :refreshed-at="data?.refreshedAt" :offline="!online" @refresh="load()" /></div>
+          <div class="workbench-inline-actions"><slot name="heading-actions" /><WorkbenchRefreshControl :busy="busy" :disabled="busy || !queue || !online" :refreshed-at="data?.refreshedAt" :offline="!online" @refresh="load(false, false, true)" /></div>
           <div class="query-controls workbench-filter-main">
             <form class="search-form workbench-filter-search" @submit.prevent="submitSearch"><label class="search-field workbench-search-field"><Search :size="16" /><input v-model="search" type="search" @input="clearSearchIfEmpty" :aria-label="text('搜索履约订单', 'Search fulfillment orders')" :placeholder="searchPlaceholder" :title="searchHint" /></label><button class="workbench-button workbench-primary" :disabled="busy || !queue">{{ text('查询', 'Search') }}</button></form>
 
@@ -550,7 +551,7 @@ const { expandedProductIds, hasExpandableProducts, allProductsExpanded, setProdu
             <table v-task-table-layout class="workbench-task-table">
 
               <thead><tr>
-                <th class="order-cell" :aria-sort="pendingOutbound ? sortDirection('outboundStatus') === 'asc' ? 'ascending' : sortDirection('outboundStatus') === 'desc' ? 'descending' : 'none' : undefined"><input type="checkbox" class="order-checkbox" :checked="pageSelected" :indeterminate="!!selectedOrders.length && !pageSelected" :disabled="busy || !data?.items?.length" :aria-label="text('全选当前页订单', 'Select all orders on this page')" @change="togglePage(($event.target as HTMLInputElement).checked)" />{{ text('订单编号', 'Order number') }}<button v-if="pendingOutbound" type="button" class="identity-outbound-sort" :disabled="busy" :aria-label="`${statusHeading}：${sortDirection('outboundStatus') === 'asc' ? '当前升序，点击降序' : sortDirection('outboundStatus') === 'desc' ? '当前降序，点击升序' : '点击按状态升序排列'}`" @click="sortStatus('outboundStatus')">{{statusHeading}}<component :is="sortDirection('outboundStatus') === 'asc' ? ArrowUp : sortDirection('outboundStatus') === 'desc' ? ArrowDown : ArrowUpDown" :size="12" /></button></th>
+                <th class="order-cell"><input type="checkbox" class="order-checkbox" :checked="pageSelected" :indeterminate="!!selectedOrders.length && !pageSelected" :disabled="busy || !data?.items?.length" :aria-label="text('全选当前页订单', 'Select all orders on this page')" @change="togglePage(($event.target as HTMLInputElement).checked)" />{{ text('订单编号', 'Order number') }}</th>
                 <th class="product-cell">{{ text('商品图片 / 商品信息', 'Product image / details') }}</th>
                 <th class="shopify-cell">{{ text('Shopify 单号', 'Shopify order') }}</th><th class="amount-cell">{{ text('订单金额', 'Order amount') }}</th>
                 <th :title="text('订单收货国家', 'Delivery destination country')">Customer</th>
@@ -574,6 +575,7 @@ const { expandedProductIds, hasExpandableProducts, allProductsExpanded, setProdu
                   <input v-model="selectedOrders" type="checkbox" class="order-checkbox" :value="order.id" :disabled="busy" :aria-label="`${text('选择订单', 'Select order')} ${order.orderNumber}`" />
                   <span class="order-identity">
                   <button type="button" class="copy-order" :aria-label="`${text('复制订单编号', 'Copy order number')} ${order.orderNumber}`" :title="order.orderNumber" @click="copyOrderValue(order, 'orderNumber')"><strong>{{ order.orderNumber }}</strong><Check v-if="copiedValue === `orderNumber:${order.id}`" :size="14" /><Copy v-else :size="14" /></button>
+<OrderTypeLabel v-if="order.documentKind !== 'stock_order'" :code="order.orderTypeCode" :name="order.orderTypeName" />
 <WorkbenchStatusBadge v-if="queue === 'unpaid' && !completed" class="identity-bill-status" tone="warning">{{ text('未支付', 'Unpaid') }}</WorkbenchStatusBadge>
 <div v-if="pendingOutbound"><WorkbenchStatusBadge v-if="order.sourceOutboundStatus !== undefined" class="identity-bill-status identity-outbound-status" :tone="order.businessStatus ? (order.businessStatus.outbound === 'completed' ? 'success' : order.businessStatus.outbound === 'partial' ? 'warning' : 'neutral') : order.sourceOutboundStatus === '2' ? 'success' : order.sourceOutboundStatus === '1' ? 'warning' : 'info'">{{ order.businessStatus ? businessStatusLabel(order.businessStatus.outbound, 'outbound', !zh) : sourceStatusLabel(order.sourceOutboundStatus, 'outbound', !zh) }}</WorkbenchStatusBadge><WorkbenchStatusBadge v-else class="identity-bill-status identity-outbound-status" tone="info">{{ statusLabel(order) }}</WorkbenchStatusBadge></div>
 <WorkbenchStatusBadge class="identity-bill-status" v-if="queue === 'review' && !completed && order.rawBillStatus && ['A','B','C'].includes(order.rawBillStatus)" :tone="order.rawBillStatus === 'C' ? 'success' : order.rawBillStatus === 'B' ? 'info' : 'warning'">{{ order.rawBillStatus === 'A' ? text('暂存', 'Draft') : order.rawBillStatus === 'B' ? text('已提交', 'Submitted') : text('已审核', 'Approved') }}</WorkbenchStatusBadge>
@@ -644,7 +646,6 @@ const { expandedProductIds, hasExpandableProducts, allProductsExpanded, setProdu
 </template>
 
 <style scoped>
-.identity-outbound-sort{display:flex;align-items:center;gap:4px;margin:6px 0 0 24px;font-size:11px;color:var(--color-text-secondary);background:none;border:0;cursor:pointer}
 
 .identity-bill-status { margin-top: 6px; }
 .allocation-references { display: flex; flex-direction: column; align-items: flex-start; gap: 7px; margin-top: 6px; }
