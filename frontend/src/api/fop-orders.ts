@@ -333,7 +333,7 @@ function validateQuery(query: FopOrderQuery) {
   if (query.sortBy === 'completedAt' && !query.completed) throw new Error('Completion sorting requires a completed list')
   if (query.timeRange !== undefined && (!query.completed && query.queue !== 'unpaid' || !['all', '1w', '1m', '3m'].includes(query.timeRange))) throw new Error('Invalid payment time range')
   if (query.shippingCountryCode !== undefined && (query.queue !== 'review' || !/^[A-Z]{2}$/.test(query.shippingCountryCode))) throw new Error('Invalid destination country')
-  if (query.fulfillmentStage && (query.queue !== 'review' || !query.completed || !['unfulfilled','fulfilled','unpurchased','purchased','unallocated','allocated','unshipped','shipped'].includes(query.fulfillmentStage))) throw new Error('Invalid fulfillment progress filter')
+  if (query.fulfillmentStage && (!(query.queue === 'review' || query.queue === 'dispatch' && ['unshipped','shipped'].includes(query.fulfillmentStage)) || !query.completed || !['unfulfilled','fulfilled','unpurchased','purchased','unallocated','allocated','unshipped','shipped'].includes(query.fulfillmentStage))) throw new Error('Invalid fulfillment progress filter')
   if (query.taskStatus !== undefined && !canFilterTaskStatus(query.queue, query.taskStatus)) throw new Error('Invalid task status')
   if (query.procurementStage !== undefined && !canFilterProcurementStage(query.queue, query.procurementStage)) throw new Error('Invalid procurement stage')
   if (query.procurementSource !== undefined && (!['procurement', 'procurement_shipping'].includes(query.queue) || !['full_payment', 'deposit', 'direct'].includes(query.procurementSource))) throw new Error('Invalid procurement source')

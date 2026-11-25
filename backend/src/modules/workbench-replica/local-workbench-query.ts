@@ -57,7 +57,7 @@ export function buildLocalOrderQuery(scopes: LocalReadScope[], query: LocalOrder
   if(query.queue==='allocation_review' && query.completed) conditions.push("allocation_approval.review_state='approved'")
   if(query.queue==='dispatch') conditions.push("sd.raw_bill_status='C'", query.completed ? "sd.payload->>'hzkj_fulfillment_status'='fulfilled'" : "native.raw_order_status NOT IN ('0','6') AND (CASE WHEN sd.payload ? 'hzkj_fulfillment_status' THEN coalesce(NULLIF(sd.payload->>'hzkj_fulfillment_status',''),'unfulfilled') END) IN ('unfulfilled','partial')")
   if(query.fulfillmentStage){
-    if(stock || query.queue!=='review' || !query.completed) throw new BadRequestException('Fulfillment progress requires approved sales orders')
+    if(stock || !(query.queue==='review'||query.queue==='dispatch'&&['unshipped','shipped'].includes(query.fulfillmentStage)) || !query.completed) throw new BadRequestException('Fulfillment progress requires approved sales orders')
     const allocations=`SELECT a.raw_allocation_status,d.raw_bill_status FROM hz_fop_allocations a JOIN hz_fop_source_documents d ON d.id=a.document_id AND d.company_id=a.company_id AND d.dataset_id=a.dataset_id WHERE a.company_id=o.company_id AND a.dataset_id=o.dataset_id AND a.source_order_id=sd.source_id AND d.connection_id=o.connection_id AND d.deleted_at IS NULL AND a.raw_allocation_status IS DISTINCT FROM 'voided'`
     const stages:Record<string,string>={
       unfulfilled:"(CASE WHEN sd.payload ? 'hzkj_fulfillment_status' THEN coalesce(NULLIF(sd.payload->>'hzkj_fulfillment_status',''),'unfulfilled') END) IN ('unfulfilled','partial')",fulfilled:"sd.payload->>'hzkj_fulfillment_status'='fulfilled'",

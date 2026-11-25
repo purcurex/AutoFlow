@@ -74,3 +74,9 @@ it('retains both native dispatch failure and missing package facts with precise 
  expect(withOrderBusinessStatus(display,raw).exception.reason).toBe('发运审核同步状态与履约状态不一致；履约订单物流跟踪号为空')
  expect(withOrderBusinessStatus({id:'1',reviewStatus:'approved'},{...raw,hzkj_logistics_info:undefined}).exception.reason).toBe('履约订单物流信息待核验')
 })
+it('refreshes all header display codes from the same raw fulfillment document',()=>{
+ const result=withOrderBusinessStatus({id:'1',sourcePurchaseStatus:'3',sourcePurchaseStatusName:'已入库',sourceOutboundStatus:'2',rawBillStatus:'C',items:[]},{id:'1',billstatus:'B',hzkj_orderstatus:'2',hzkj_purchase_status:'0',hzkj_purchase_status_title:'未采购',hzkj_delivery_status:'0'},undefined,{persistedExceptions:true})
+ expect(result).toMatchObject({rawBillStatus:'B',sourcePurchaseStatus:'0',sourcePurchaseStatusName:'未采购',sourceOutboundStatus:'0',businessStatus:{order:'paid',purchase:'unpurchased'}})
+ const missing=withOrderBusinessStatus(result,{id:'1'},undefined,{persistedExceptions:true})
+ expect(missing.sourcePurchaseStatus).toBeNull();expect(missing.sourceOutboundStatus).toBeNull()
+})

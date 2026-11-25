@@ -23,8 +23,8 @@ export function businessStatusLabel(value:string|undefined,kind:'purchase'|'outb
  return (businessStatusLabels[value??'unknown']??businessStatusLabels.unknown)[english?1:0]
 }
 
-/** Mixed virtual orders use the physical-only order aggregate, never the polluted native header. */
-export function completedPurchaseLabel(order:{items?:{isVirtual?:boolean|null}[];businessStatus?:{purchase:string};sourcePurchaseStatusName?:string|null;sourcePurchaseStatus?:string|null},native:boolean,english=false):string{
- if(!native||order.items?.some(item=>item.isVirtual===true))return businessStatusLabel(order.businessStatus?.purchase,'purchase',english)
- return order.sourcePurchaseStatusName||sourceStatusLabel(order.sourcePurchaseStatus,'purchase',english)
+/** One display slot always reads the fulfillment header purchase field. */
+export function completedPurchaseLabel(order:{items?:{isVirtual?:boolean|null}[];businessStatus?:{purchase:string};sourcePurchaseStatusName?:string|null;sourcePurchaseStatus?:string|null},_native:boolean,english=false):string{
+ if(order.sourcePurchaseStatus==null||order.sourcePurchaseStatus==='')return ''
+ return !english&&order.sourcePurchaseStatusName ? order.sourcePurchaseStatusName : sourceStatusLabel(order.sourcePurchaseStatus,'purchase',english)
 }

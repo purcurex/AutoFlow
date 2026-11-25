@@ -1,3 +1,4 @@
+import { orderOutboundTime } from './order-outbound-time'
 import { orderDocumentType } from './order-document-type'
 import { collectedPackageSource } from './collected-actual-channel'
 import { withPaymentDataQuality } from './payment-data-quality'
@@ -55,7 +56,7 @@ export function withOrderBusinessStatus(display:Row,raw:Row|undefined,companyId?
  const items=(display.items??[]).map((item:Row)=>({...item,purchaseState:businessStatus.lines.find(l=>l.id===item.id)?.purchase??'unknown'}))
  const fulfillmentProgress={...display.fulfillmentProgress,outbound:businessStatus.outbound}
  const nativeFulfillmentProgress=display.nativeFulfillmentProgress?{...display.nativeFulfillmentProgress,outbound:businessStatus.outbound}:undefined
- display={...display,...orderDocumentType(raw),fulfillmentProgress,...(nativeFulfillmentProgress?{nativeFulfillmentProgress}:{})}
+ display={...display,outboundCompletedAt:orderOutboundTime(raw.hzkj_outbound_time),rawBillStatus:raw.billstatus??null,sourcePurchaseStatus:raw.hzkj_purchase_status==null?null:String(raw.hzkj_purchase_status),sourcePurchaseStatusName:raw.hzkj_purchase_status_title??null,sourceOutboundStatus:raw.hzkj_delivery_status==null?null:String(raw.hzkj_delivery_status),sourceOutboundStatusName:raw.hzkj_delivery_status_title??null,...orderDocumentType(raw),fulfillmentProgress,...(nativeFulfillmentProgress?{nativeFulfillmentProgress}:{})}
  if(options.persistedExceptions)return {...display,businessStatus,dispatchTaskStatus:orderDispatchTaskStatus({...display,businessStatus}),items}
  const dispatchFailure=hasDispatchSyncFailure({...display,businessStatus})
  const packageRaw=collectedPackageSource(display,raw,companyId)

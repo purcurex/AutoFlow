@@ -84,3 +84,10 @@ it('normalizes review actual channel names from the fulfillment freight calculat
  const n=normalizeCollectedOrder(raw({hzkj_logistics_info:[{hzkj_combofield:'1',hzkj_channel:{name:'万邦快线含电',number:'WB'}}]}),{companyId:'100000'})
  expect(n.display.logisticsChannels).toEqual([{name:'万邦快线含电',code:'WB'}])
 })
+
+it.each([['2026-11-09 18:50:27','2026-11-09T10:50:27.000Z'],['2026-11-09T18:50:27+08:00','2026-11-09T10:50:27.000Z'],[null,null],['',null],['2026-02-30 10:00:00',null]])('persists native outbound timestamp %p',(value,expected)=>{
+ const source=raw({hzkj_outbound_time:value})
+ const normalized=normalizeCollectedOrder(source,{companyId:'100000'})
+ expect(normalized.display.outboundCompletedAt).toBe(expected)
+ expect(normalized.raw).toEqual(source)
+})

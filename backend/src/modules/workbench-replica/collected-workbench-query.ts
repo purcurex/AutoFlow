@@ -66,7 +66,7 @@ export function collectedWhere(batchId:string,employeeIds:readonly string[]|null
    allocated:collectedAllocationPredicate('allocation_review',true),
    unshipped:`raw_delivery_status IN ('0','1')`,shipped:`raw_delivery_status='2'`,
   }
-  clauses.push(q.queue==='review'&&q.completed ? progress[q.fulfillmentStage]||'FALSE' : 'FALSE')
+  clauses.push(q.completed&&(q.queue==='review'||q.queue==='dispatch'&&['unshipped','shipped'].includes(q.fulfillmentStage)) ? progress[q.fulfillmentStage]||'FALSE' : 'FALSE')
  }
  const membershipIndex=clauses.length
  clauses.push(queues[q.queue]||'FALSE')

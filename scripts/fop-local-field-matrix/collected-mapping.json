@@ -566,12 +566,13 @@
     ]
   },
   "出库完成时间": {
-    "display": "outboundStatus / outboundAt / wmsCreatedAt",
-    "local": "hz_fop_collected_orders.raw；hz_fop_collected_entities[delivery_notice/outbound].raw",
-    "source": "履约hzkj_delivery_status；发货通知auditdate为WMS创建时间；出库事实时间",
-    "rule": "整单出库；订单出库状态不单独证明待出库，需有效发货通知。",
+    "display": "outboundCompletedAt",
+    "local": "hz_fop_collected_orders.raw.hzkj_outbound_time / display.outboundCompletedAt",
+    "source": "履约订单 hzkj_outbound_time，出库时由FOP回写",
+    "rule": "固定读取履约订单出库时间；无时区按北京时间转换；缺失或无效留空，不以发货通知审核时间替代。",
     "evidence": [
-      "backend/src/modules/fop-data/collected-native-facts.ts",
+      "backend/src/modules/fop-data/order-outbound-time.ts",
+      "backend/src/modules/fop-data/order-business-status.ts",
       "backend/src/modules/workbench-replica/collected-workbench-query.ts"
     ]
   },
