@@ -25,7 +25,7 @@
     "RECONCILE"
   ],
   "upstreamCalled": false,
-  "sha256": "cfabc3dc8022ead495b0548dcbf213326d563e822c3b9c35093078d92f81403d",
+  "sha256": "a171d25c438ced46d92c8a3b10f193008315ed97e69276bf86cae39d39edb6e1",
   "inputHashes": {
     "docs/requirements/HyperZone23清单字段对照表.html": "05d29a46e54595498abc78e31c6d5d3b984e0261aef1f48783c06811bf0efdb5",
     "docs/requirements/field-matrix-manifest.json": "107dd8d16fcc8b07961ac1d34c3e0e5ef3a46744a603f342f56074cf629ca746",
@@ -37,7 +37,7 @@
     "docs/openapi/fop-query-timestamp-capabilities.json": "802fff421209c5d1a52e360d94db1f804be7cb1f6ce25ded00f5dbb7ebe87219",
     "docs/openapi/fop-timestamp-paged-profile.example.json": "a02f8f18bfb3c17e37f529f02a8c5e1a96696705790e924be623dabeccad332e",
     "docs/requirements/employee-directory-verification.json": "4185a5f0f631305367a020580ad7a6dcd370f0bf7c777f5c1083625cfdd533dc",
-    "docs/requirements/source/fop-sync-requirements.html": "9c766000579446b41747aa21b47370c4036afc8eea49b2570188d78543329b97",
+    "docs/requirements/source/fop-sync-requirements.html": "abafd5c5d17b96cdef74aa0a43d3f5bf163578969ff37008df0b1808b5cdc85f",
     "docs/openapi/fop-replica-service-contract.json": "dea91ec0ad74f1052ae5df3ebbd98421234bd3b4da938e84e2650eca237055ca",
     "docs/openapi/fop-replica-domain.schema.json": "4fdb70bbeef469384d0392adca51da6a16a3083de448a1e29a46512ecce31afb",
     "docs/openapi/fop-timestamp-sync-contract.json": "5c02c12c97eb93482eaf65c884db531c082e2113b9038e1fdfd227f23f247bf5",
@@ -280,7 +280,7 @@
     "frontend/src/components/autoflow/WorkbenchListActions.vue": "ebb44c6fe2c5dad6cc9923defd34e7592a90418c8ccdf30f1de4f5c049cc45e6",
     "frontend/src/components/autoflow/WorkbenchPagination.vue": "6145157f1a6064aea3482da7c60c5dbdeb67af2054cc1c9b7fe020717dc20699",
     "frontend/src/directives/task-table-layout.ts": "e3126265d0070a368e1aab366024e48a0e1b4e43767bacda423bb2ddd1d8ed05",
-    "frontend/src/styles/workbench-list.css": "5d3e4c0459883677a4738b6368ebfd305592fecde3d812948365e63c207ea907",
+    "frontend/src/styles/workbench-list.css": "22c0b5a90baa2e00e772e0d16369a821bcb304616aa462da3db80be314817667",
     "frontend/src/components/layout/AppLayout.vue": "74c1e85f1d08ddab7f8f61b2264bb4ded282e4fc915272c0b59bea6aa93a86cd",
     "scripts/workbench-sync-runtime.mjs": "7d7b8484bce58977295ffe673b9e4f05aca02135021b2f6621f82ea066c04e08",
     "scripts/fop-confirmed-origin.mjs": "48648568ae4247f48a314dbeeb6a2ff3869d22409ecfdcdf91231d2d6e7ee2f8",

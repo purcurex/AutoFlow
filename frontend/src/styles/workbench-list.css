@@ -119,9 +119,9 @@ input.workbench-page-checkbox{width:15px;height:15px;min-width:15px;margin:0 7px
 .role-workbench.app-page .workbench-list-actions .workbench-button { min-height: 32px; padding-top: 6px; padding-bottom: 6px; }
 
 /* Refresh belongs to the tab row; filters stay contiguous and export ends the toolbar. */
-.role-workbench.app-page .workbench-queue-row { display:flex; align-items:center; gap:16px; border-bottom:1px solid var(--color-border); margin-bottom:10px; }
+.role-workbench.app-page .workbench-queue-row { display:flex; min-height:39px; align-items:center; gap:16px; border-bottom:1px solid var(--color-border); margin-bottom:10px; }
 .role-workbench.app-page .workbench-queue-row .workbench-queues { flex:1; min-width:0; margin-bottom:0; border-bottom:0; }
-.role-workbench.app-page .workbench-queue-refresh { flex-shrink:0; padding-bottom:6px; }
+.role-workbench.app-page .workbench-queue-refresh { flex-shrink:0; min-width:68px; min-height:38px; display:flex; align-items:center; justify-content:flex-end; padding-bottom:6px; box-sizing:border-box; }
 .role-workbench.app-page .workbench-queue-refresh .workbench-refresh-control { display:flex; margin:0; }
 .role-workbench.app-page .workbench-queue-refresh .workbench-refresh-status { display:none; }
 .role-workbench.app-page .workbench-queue-refresh .workbench-refresh { min-height:30px; padding:5px 10px; }
