@@ -58,9 +58,9 @@ it.each([collectedWhere,collectedStockWhere,collectedRmaWhere])('searches matche
 
 it('dispatch pending is approved native paid/processing/cancelled fulfillment, independent of dispatch capture',()=>{
  const q=collectedWhere('b',null,{queue:'dispatch'})
- expect(q.where).toContain("raw_bill_status='C' AND raw_order_status IN ('2','3')")
+ expect(q.where).toContain("raw_bill_status='C' AND raw_order_status NOT IN ('0','6')")
  expect(q.where).not.toContain('nativeFactsCaptured');expect(q.where).not.toContain('raw_payment_status')
- expect(collectedWhere('b',null,{queue:'dispatch',completed:true}).where).toContain("raw_order_status IN ('4','5')")
+ expect(collectedWhere('b',null,{queue:'dispatch',completed:true}).where).toContain("='fulfilled'")
 })
 
 it('uses source payment for unpaid range and ordering only',()=>{
@@ -77,7 +77,7 @@ it('filters unnumbered dispatches before paging using missing and pending, retai
  expect(q.where).toContain("trim(t->>'number', ' ' || chr(9) || chr(10) || chr(13))")
  expect(q.params).toContain('dispatch_pending')
  expect(q.where).toContain('owner_employee_id = ANY')
- expect(q.where).toContain("raw_bill_status='C' AND raw_order_status IN ('2','3')")
+ expect(q.where).toContain("raw_bill_status='C' AND raw_order_status NOT IN ('0','6')")
 })
 
 it('filters unpaid SKU association by native order status, defaulting to linked',()=>{

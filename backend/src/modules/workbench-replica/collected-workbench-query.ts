@@ -1,9 +1,12 @@
+import { sourceShipmentSql } from './source-shipment-sql'
 import { collectedDiagnosticTypeSql, collectedOutboundUnverifiedSql, collectedAllocationErrorSql } from './collected-exception-classification'
 import { collectedPaymentDataExceptionSql } from './collected-payment-data-quality'
 import { warehouseCodes } from './warehouse-codes'
 import { collectedDispatchTaskSql, collectedDispatchExceptionSql } from './collected-dispatch-status'
 import { collectedAllocationBillStatus, collectedAllocationPredicate, collectedAllocationCompletedAt } from './collected-allocation-query'
 type Query = Record<string, any>
+
+
 /** Same effective-document rule as the allocation UI; empty/only cancelled is incomplete. */
 export function collectedDispatchCompletePredicate(){
  return `EXISTS(SELECT 1 FROM jsonb_array_elements(coalesce(display->'dispatchDocuments','[]'::jsonb)) d WHERE coalesce(d->'association'->>'state','verified')='verified' AND d->>'rawInterceptStatus' IS DISTINCT FROM 'CANCELLED' HAVING count(*)>0 AND bool_and(coalesce(d->>'status'='approved',false)))`
@@ -15,7 +18,7 @@ export function collectedWhere(batchId:string,employeeIds:readonly string[]|null
  if(employeeIds!==null)clauses.push(`owner_employee_id = ANY(${bind(employeeIds)}::text[])`)
  const active="raw_order_status IN ('1','2','3','4','5','no')"
  const paidActive=`${active} AND raw_payment_status='1'`
- const dispatchPending=`raw_bill_status='C' AND raw_order_status IN ('2','3')`
+ const dispatchPending=`raw_bill_status='C' AND raw_order_status NOT IN ('0','6') AND (${sourceShipmentSql}) IN ('unfulfilled','partial')`
  const procurementPending=`${paidActive} AND raw_bill_status='C' AND display->>'nativeProcurementCaptured'='true' AND display->'procurementQueueFlags'->>'pending'='true'`
  const supplierPending=`${paidActive} AND raw_bill_status='C' AND display->>'nativeProcurementCaptured'='true' AND display->'procurementQueueFlags'->>'shipping'='true'`
  const pendingOutbound="((coalesce(display->'businessStatus'->>'outbound','unknown')='unknown' AND raw_delivery_status IN ('0','1')) OR display->'businessStatus'->>'outbound' IN ('pending','partial'))"
@@ -47,12 +50,23 @@ export function collectedWhere(batchId:string,employeeIds:readonly string[]|null
   allocation:collectedAllocationPredicate('allocation',!!q.completed),
   allocation_review:collectedAllocationPredicate('allocation_review',!!q.completed),
   shipping:q.completed?completedOutbound:shippingPending,
-  dispatch:q.completed?`raw_bill_status='C' AND raw_order_status IN ('4','5')`:dispatchPending,
+  dispatch:q.completed?`raw_bill_status='C' AND (${sourceShipmentSql})='fulfilled'`:dispatchPending,
   procurement:q.completed?`${paidActive} AND display->>'nativeProcurementCaptured'='true' AND display->'procurementQueueFlags'->>'completed'='true'`:procurementPending,
   procurement_shipping:supplierPending,
   unpaid,
   review:q.completed?"raw_bill_status = 'C'":reviewPending,
   exceptions:exceptionMode==='stored'?'is_exception':exceptions,
+ }
+ if(q.fulfillmentStage){
+  const allocationScope=`a.batch_id=hz_fop_collected_orders.batch_id AND a.entity_type='allocation' AND a.display->>'sourceOrderId'=hz_fop_collected_orders.source_id AND a.display->>'rawAllocationStatus' IS DISTINCT FROM 'voided' AND coalesce(a.display->'association'->>'state','verified')='verified'`
+  const progress:Record<string,string>={
+   unfulfilled:`(${sourceShipmentSql}) IN ('unfulfilled','partial')`, fulfilled:`(${sourceShipmentSql})='fulfilled'`,
+   unpurchased:`raw->>'hzkj_purchase_status' IN ('0','1')`,purchased:`raw->>'hzkj_purchase_status' IN ('2','3','4')`,
+   unallocated:`EXISTS(SELECT 1 FROM hz_fop_collected_entities a WHERE ${allocationScope} AND a.display->>'rawBillStatus' IN ('A','B'))`,
+   allocated:collectedAllocationPredicate('allocation_review',true),
+   unshipped:`raw_delivery_status IN ('0','1')`,shipped:`raw_delivery_status='2'`,
+  }
+  clauses.push(q.queue==='review'&&q.completed ? progress[q.fulfillmentStage]||'FALSE' : 'FALSE')
  }
  const membershipIndex=clauses.length
  clauses.push(queues[q.queue]||'FALSE')
@@ -81,7 +95,7 @@ export function collectedWhere(batchId:string,employeeIds:readonly string[]|null
  const sorts:Record<string,string>={...(q.queue==='dispatch'?{dispatchDocumentStatus:`array_position(ARRAY['dispatch_pending','dispatch_tracking','dispatch_cancelled','dispatch_synced'],${collectedDispatchTaskSql})`}:{}),paidAt:'paid_at',consumerPaidAt:paymentTime,reviewedAt:"NULLIF(display->>'reviewedAt','')::timestamptz",completedAt:['allocation','allocation_review'].includes(q.queue)?collectedAllocationCompletedAt():`NULLIF(display->>'${q.queue==='dispatch'?'dispatchApprovedAt':q.queue==='procurement'?'procurementCompletedAt':q.queue==='shipping'?'outboundCompletedAt':'reviewedAt'}','')::timestamptz`}
  return {where:clauses.map(x=>`(${x})`).join(' AND '),
   // Internal first pass only: the completed-page query must apply the shared exception predicate afterwards.
-  dispatchCandidateWhere:q.queue==='dispatch'&&q.completed?clauses.map((x,i)=>`(${i===membershipIndex?"raw_bill_status='C' AND raw_order_status IN ('4','5')":x})`).join(' AND '):undefined,
+  dispatchCandidateWhere:q.queue==='dispatch'&&q.completed?clauses.map(x=>`(${x})`).join(' AND '):undefined,
   // Candidate filtering is only an optimization; the exception page still applies the full where predicate.
   exceptionCandidateWhere:q.queue==='exceptions'?clauses.filter((_,i)=>i!==membershipIndex&&i!==exceptionTypeIndex).map(x=>`(${x})`).join(' AND '):undefined,
   params,orderBy:`${sorts[q.sortBy]||paymentTime} ${q.sortOrder==='asc'||!q.sortOrder&&q.paidAtOrder==='asc'?'ASC':'DESC'} NULLS LAST, source_id ASC`}

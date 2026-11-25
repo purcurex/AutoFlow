@@ -328,6 +328,7 @@ export interface FopOrderPageQuery {
   completed?: boolean
   timeRange?: 'all' | '1w' | '1m' | '3m'; departmentId?: string; ownerId?: string; warehouseCode?: 'HZ' | 'SZ'; shippingCountryCode?: string
   sortBy?: string; sortOrder?: 'asc' | 'desc'; paidAtOrder?: 'asc' | 'desc'
+  fulfillmentStage?: string
   taskStatus?: string; orderIds?: readonly string[]; exportManifest?: boolean
   procurementSource?: 'full_payment' | 'deposit' | 'direct'
 }

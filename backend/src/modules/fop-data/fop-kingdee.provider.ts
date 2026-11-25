@@ -1,3 +1,4 @@
+import { assertActiveFopEndpoint } from './fop-interface-policy'
 import { compareFulfillmentOrders, fulfillmentSortDirection, fulfillmentSortField } from './fop-order-sort'
 import Decimal from 'decimal.js'
 import { randomUUID } from 'crypto'
@@ -986,6 +987,7 @@ export class KingdeeFopDataProvider extends FopDataProvider {
   private endpoint(key: string): URL {
     const endpoint = new URL(this.config.get(key) ?? '')
     if (endpoint.protocol !== 'https:' || endpoint.username || endpoint.password || endpoint.search || endpoint.hash) throw new Error('Invalid Kingdee HTTPS endpoint')
+    assertActiveFopEndpoint(endpoint)
     return endpoint
   }
 

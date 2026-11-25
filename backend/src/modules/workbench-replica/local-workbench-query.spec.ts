@@ -129,7 +129,7 @@ it('keeps source checkout independent for unpaid date range, sort and response',
 it('uses the same unnumbered grouping in the formal local replica',()=>{
  const q=buildLocalOrderQuery(scopes,{queue:'dispatch',taskStatus:'dispatch_pending'})
  expect(q.where).toContain("delivery.has_tracking")
- expect(q.where).toContain("native.raw_order_status IN ('2','3')")
+ expect(q.where).toContain("IN ('unfulfilled','partial')")
  expect(q.values).toContain('dispatch_pending')
  expect(q.where).toContain('owner_employee_id = ANY')
 })

@@ -3,7 +3,6 @@ import { withPaymentDataQuality } from './payment-data-quality'
 import { orderDispatchTaskStatus, hasDispatchSyncFailure, hasMissingObtainedTracking, missingObtainedTrackingReason, hasMissingFulfilledTracking, missingFulfilledTrackingReason, dispatchSyncFailureReason } from './order-dispatch-status'
 import Decimal from 'decimal.js'
 import { physicalBusinessLines } from './physical-business-lines'
-import { withProcurementSources } from './stock-consumption-source'
 type Row=Record<string,any>
 export type PurchaseState='unpurchased'|'purchasing'|'partial_purchased'|'purchased'|'partial_shipped'|'shipped'|'partial_received'|'received'|'not_required'|'unknown'
 /** Partial completion is determined by the most advanced line, not the least advanced line. */
@@ -25,12 +24,8 @@ export function orderBusinessStatus(raw:Row) {
  const lines=entries.map(l=>{
   const excluded=!physicalEntries.has(l)
   // A stock selection/partial usage is not a purchase payment or receipt fact.
-  let purchase:PurchaseState=excluded?'not_required':
-   l.hzkj_entrypurc_status==='3'?'received':l.hzkj_entrypurc_status==='4'?'shipped':
-   l.supplierPaymentStatus==='paid'?'purchased':l.purchaseApplicationCreated===true||['1','2'].includes(l.hzkj_entrypurc_status)?'purchasing':
-   l.hzkj_entrypurc_status==='0'?'unpurchased':'unknown'
-  const required=qty(l.hzkj_qty),received=qty(l.hzkj_instock_qty)
-  if(!excluded&&required?.gt(0)&&received!==null&&received.gt(0))purchase=received.gte(required)?'received':'partial_received'
+  const purchase:PurchaseState=excluded?'not_required':({ '0':'unpurchased','1':'purchasing','2':'purchased','3':'received','4':'shipped' } as Record<string,PurchaseState>)[String(l.hzkj_entrypurc_status)]??'unknown'
+  const required=qty(l.hzkj_qty)
   const outboundQty=qty(l.hzkj_outbound_qty)
   const outbound=excluded?'not_required':required?.gt(0)&&outboundQty!==null?
    outboundQty.gte(required)?'completed':outboundQty.gt(0)?'partial':'pending':
@@ -38,28 +33,24 @@ export function orderBusinessStatus(raw:Row) {
   return {id:String(l.id??''),purchase,outbound,excluded,rawPurchaseStatus:l.hzkj_entrypurc_status??null}
  })
  const physical=lines.filter(l=>!l.excluded)
- let outbound=!entries.length?'unknown':!physical.length?'not_required':physical.some(l=>l.outbound==='unknown')?'unknown':
-  physical.every(l=>l.outbound==='completed')?'completed':physical.some(l=>['completed','partial'].includes(l.outbound))?'partial':'pending'
- // A native all/none header is retained as source evidence. The known-bug partial header is never used to reconstruct missing line facts.
- if(outbound==='unknown'&&physical.length&&['0','2'].includes(raw.hzkj_delivery_status))outbound=raw.hzkj_delivery_status==='2'?'completed':'pending'
+ // Whole-order outbound status is authoritative; line quantities do not override it.
+ const outbound=raw.hzkj_delivery_status==='2'?'completed':['0','1'].includes(raw.hzkj_delivery_status)?'pending':'unknown'
  // Display the order's source shipment fact; shop type never supplies a status.
  const source=raw.hzkj_fulfillment_status
- const sourceShipment=typeof source==='string'&&source.trim()?source.trim():'unknown'
- return {version:1,order:nativeOrderStates[raw.hzkj_orderstatus]??'unknown',sourceShipment,purchase:entries.length?aggregatePurchase(lines.map(l=>l.purchase)):'unknown',outbound,lines,
-  missingFields:[...(physical.some(l=>l.outbound==='unknown')?['lineOutboundStatus']:[]),...(lines.some(l=>l.purchase==='purchasing')?['supplierPaymentStatus']:[])],outboundBasis:physical.some(l=>l.outbound==='unknown')&&outbound!=='unknown'?'native_all_or_none_header':'physical_lines',basis:'same_fulfillment_document'}
+ const sourceShipment=typeof source==='string'&&source.trim()?source.trim():Object.prototype.hasOwnProperty.call(raw,'hzkj_fulfillment_status')?'unfulfilled':'unknown'
+ return {version:1,order:nativeOrderStates[raw.hzkj_orderstatus]??'unknown',sourceShipment,purchase:({ '0':'unpurchased','1':'partial_purchased','2':'purchased','3':'received','4':'shipped' } as Record<string,PurchaseState>)[String(raw.hzkj_purchase_status)]??'unknown',outbound,lines,
+  missingFields:[...(outbound==='unknown'?['orderOutboundStatus']:[]),...(physical.some(l=>l.purchase==='unknown')?['linePurchaseStatus']:[])],outboundBasis:'native_order_header',basis:'same_fulfillment_document'}
 }
 export function withOrderBusinessStatus(display:Row,raw:Row|undefined,companyId?:string,options:{persistedExceptions?:boolean}={}):Row {
  if(!raw||raw.id!==display.id)return display
  const supplement=display.salesSourceStatus
- const sourceRaw=!Object.prototype.hasOwnProperty.call(raw,'hzkj_fulfillment_status')&&supplement?.source==='fulfillment_capture'&&supplement.sourceId===raw.id&&supplement.orderStatus===raw.hzkj_orderstatus?{...raw,hzkj_fulfillment_status:supplement.fulfillmentStatus}:raw
- const payments=display.procurementLineEvidence
- const enriched=payments?.source==='verified_purchase_lines'&&payments.sourceOrderId===raw.id?{...sourceRaw,hzkj_orders_billentry:(sourceRaw.hzkj_orders_billentry??[]).map((l:Row)=>({...l,...(payments.applicationLineIds?.includes(String(l.id))?{purchaseApplicationCreated:true}:{}),...(payments.paidLineIds.includes(String(l.id))?{supplierPaymentStatus:'paid'}:{})}))}:sourceRaw
+ const sourceRaw=!Object.prototype.hasOwnProperty.call(raw,'hzkj_fulfillment_status')&&supplement?.source==='fulfillment_capture'&&Object.prototype.hasOwnProperty.call(supplement,'fulfillmentStatus')&&supplement.sourceId===raw.id&&supplement.orderStatus===raw.hzkj_orderstatus?{...raw,hzkj_fulfillment_status:supplement.fulfillmentStatus}:raw
  const identities=new Map((display.items??[]).map((item:Row)=>[String(item.id),item]))
- const identityRaw={...enriched,hzkj_orders_billentry:(enriched.hzkj_orders_billentry??[]).map((l:Row)=>{
+ const identityRaw={...sourceRaw,hzkj_orders_billentry:(sourceRaw.hzkj_orders_billentry??[]).map((l:Row)=>{
   const item=identities.get(String(l.id)) as Row|undefined
   return item?.isVirtual===true && item.sku===(l.hzkj_local_sku?.number??l.hzkj_local_sku_number)?{...l,isVirtual:true}:l
  })}
- const businessStatus=orderBusinessStatus(withProcurementSources(identityRaw,display.procurementSources))
+ const businessStatus=orderBusinessStatus(identityRaw)
  const items=(display.items??[]).map((item:Row)=>({...item,purchaseState:businessStatus.lines.find(l=>l.id===item.id)?.purchase??'unknown'}))
  const fulfillmentProgress={...display.fulfillmentProgress,outbound:businessStatus.outbound}
  const nativeFulfillmentProgress=display.nativeFulfillmentProgress?{...display.nativeFulfillmentProgress,outbound:businessStatus.outbound}:undefined

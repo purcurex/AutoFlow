@@ -1,0 +1,2392 @@
+{
+  "files": [
+    {
+      "file": "API服务(openapi_apilist)_D191.zip",
+      "sha256": "e5e9ddde526b26cb598ca952ce81b08489702554450e786f9cddfdcaece957cf"
+    },
+    {
+      "file": "API服务_工作台备货库存台账查询(queryWorkbenchReservedStock)_全部应用_907D.zip",
+      "sha256": "51c3b8396e3b17e59eae4d07b3ae011aa148037dd7e5fd65a0c894060c570982"
+    },
+    {
+      "file": "API服务_采购退料单查询(queryPurchaseMaterialReturn)_89CC.zip",
+      "sha256": "307c870efb3ce8add33e91e21665fededfcfd9c31c89c696db7092a9929b93ef"
+    },
+    {
+      "file": "工作台金蝶接口统一调用需求.md",
+      "sha256": "ba51de1e1fbbdb7f64728cd31de7159db2756f31c98d3cada901659f3a1f14cb"
+    },
+    {
+      "file": "自定义API_查询履约订单单据、分录关系及数量归属(openapibill-relationsquery)_39C5.dts",
+      "sha256": "ddc34ea482c022e865816aa3c92fd033555f3f1ffbb103c61b79b5f7dc190b27"
+    }
+  ],
+  "exports": [
+    {
+      "file": "API服务_员工及任职查询(queryWorkbenchEmployees)_D191.dts",
+      "entity": "openapi_apilist",
+      "number": "queryWorkbenchEmployees",
+      "url": "/v2/hzkj/base/bos_user/queryWorkbenchEmployees",
+      "class": null,
+      "request": [
+        {
+          "name": "id",
+          "type": "Long",
+          "required": "0"
+        }
+      ],
+      "response": [
+        {
+          "name": "entryentity",
+          "type": "Entries"
+        },
+        {
+          "name": "id",
+          "type": "Long"
+        },
+        {
+          "name": "dpt_id",
+          "type": "Long"
+        },
+        {
+          "name": "id",
+          "type": "Long"
+        },
+        {
+          "name": "number",
+          "type": "String"
+        },
+        {
+          "name": "name",
+          "type": "String"
+        },
+        {
+          "name": "enable",
+          "type": "String"
+        },
+        {
+          "name": "masterid",
+          "type": "Long"
+        },
+        {
+          "name": "isforbidden",
+          "type": "Boolean"
+        },
+        {
+          "name": "username",
+          "type": "String"
+        },
+        {
+          "name": "type",
+          "type": "String"
+        },
+        {
+          "name": "status",
+          "type": "String"
+        },
+        {
+          "name": "status_title",
+          "type": "String"
+        },
+        {
+          "name": "enable_title",
+          "type": "String"
+        },
+        {
+          "name": "createtime",
+          "type": "DateTime"
+        },
+        {
+          "name": "modifytime",
+          "type": "DateTime"
+        },
+        {
+          "name": "superior_id",
+          "type": "Long"
+        },
+        {
+          "name": "post_id",
+          "type": "Long"
+        },
+        {
+          "name": "orgstructure_id",
+          "type": "Long"
+        },
+        {
+          "name": "superiors",
+          "type": "Entries"
+        },
+        {
+          "name": "id",
+          "type": "Long"
+        },
+        {
+          "name": "ispartjob",
+          "type": "Boolean"
+        },
+        {
+          "name": "gender",
+          "type": "String"
+        },
+        {
+          "name": "isactived",
+          "type": "Boolean"
+        },
+        {
+          "name": "ns_nickname",
+          "type": "String"
+        },
+        {
+          "name": "isincharge",
+          "type": "Boolean"
+        },
+        {
+          "name": "position",
+          "type": "String"
+        },
+        {
+          "name": "dpt_name",
+          "type": "String"
+        },
+        {
+          "name": "dpt_number",
+          "type": "String"
+        },
+        {
+          "name": "superior_number",
+          "type": "String"
+        },
+        {
+          "name": "superior_name",
+          "type": "String"
+        },
+        {
+          "name": "superior_enable",
+          "type": "String"
+        },
+        {
+          "name": "superior_status",
+          "type": "String"
+        },
+        {
+          "name": "orgstructure_number",
+          "type": "String"
+        },
+        {
+          "name": "orgstructure_name",
+          "type": "String"
+        },
+        {
+          "name": "post_number",
+          "type": "String"
+        },
+        {
+          "name": "post_name",
+          "type": "String"
+        },
+        {
+          "name": "orgstructure_org_id",
+          "type": "Long"
+        },
+        {
+          "name": "orgstructure_org_number",
+          "type": "String"
+        },
+        {
+          "name": "orgstructure_org_name",
+          "type": "String"
+        },
+        {
+          "name": "orgstructure_org_status",
+          "type": "String"
+        },
+        {
+          "name": "orgstructure_org_enable",
+          "type": "String"
+        },
+        {
+          "name": "orgstructure_org_fisadministrative",
+          "type": "Boolean"
+        },
+        {
+          "name": "orgstructure_parent_id",
+          "type": "Long"
+        },
+        {
+          "name": "orgstructure_parent_number",
+          "type": "String"
+        },
+        {
+          "name": "orgstructure_parent_name",
+          "type": "String"
+        },
+        {
+          "name": "orgstructure_parent_status",
+          "type": "String"
+        },
+        {
+          "name": "orgstructure_parent_enable",
+          "type": "String"
+        }
+      ]
+    },
+    {
+      "file": "API服务_行政组织及部门查询(queryWorkbenchOrganizations)_D191.dts",
+      "entity": "openapi_apilist",
+      "number": "queryWorkbenchOrganizations",
+      "url": "/v2/hzkj/base/bos_adminorg/queryWorkbenchOrganizations",
+      "class": null,
+      "request": [
+        {
+          "name": "id",
+          "type": "Long",
+          "required": "1"
+        },
+        {
+          "name": "number",
+          "type": "String",
+          "required": "1"
+        },
+        {
+          "name": "name",
+          "type": "String",
+          "required": "1"
+        }
+      ],
+      "response": [
+        {
+          "name": "id",
+          "type": "Long"
+        },
+        {
+          "name": "number",
+          "type": "String"
+        },
+        {
+          "name": "name",
+          "type": "String"
+        },
+        {
+          "name": "fcomment",
+          "type": "String"
+        },
+        {
+          "name": "structure",
+          "type": "Entries"
+        },
+        {
+          "name": "fullname",
+          "type": "String"
+        },
+        {
+          "name": "orgpattern_number",
+          "type": "String"
+        },
+        {
+          "name": "orgpattern_name",
+          "type": "String"
+        },
+        {
+          "name": "orgpattern_id",
+          "type": "Long"
+        },
+        {
+          "name": "isfreeze",
+          "type": "Boolean"
+        },
+        {
+          "name": "sealuptime",
+          "type": "Date"
+        },
+        {
+          "name": "parent_number",
+          "type": "String"
+        },
+        {
+          "name": "parent_name",
+          "type": "String"
+        },
+        {
+          "name": "status",
+          "type": "String"
+        },
+        {
+          "name": "status_title",
+          "type": "String"
+        },
+        {
+          "name": "enable",
+          "type": "String"
+        },
+        {
+          "name": "enable_title",
+          "type": "String"
+        },
+        {
+          "name": "createtime",
+          "type": "DateTime"
+        },
+        {
+          "name": "modifytime",
+          "type": "DateTime"
+        },
+        {
+          "name": "id",
+          "type": "Long"
+        },
+        {
+          "name": "viewstatus",
+          "type": "String"
+        },
+        {
+          "name": "viewstatus_title",
+          "type": "String"
+        },
+        {
+          "name": "viewenable",
+          "type": "String"
+        },
+        {
+          "name": "belongcorporation_id",
+          "type": "Long"
+        },
+        {
+          "name": "viewparent_id",
+          "type": "Long"
+        },
+        {
+          "name": "view_id",
+          "type": "Long"
+        },
+        {
+          "name": "disabledate",
+          "type": "DateTime"
+        },
+        {
+          "name": "ishr",
+          "type": "Boolean"
+        },
+        {
+          "name": "viewcreatetime",
+          "type": "DateTime"
+        },
+        {
+          "name": "viewmodifytime",
+          "type": "DateTime"
+        },
+        {
+          "name": "xk_orgduty_id",
+          "type": "Long"
+        },
+        {
+          "name": "xk_orgduty_number",
+          "type": "String"
+        },
+        {
+          "name": "xk_orgduty_name",
+          "type": "String"
+        },
+        {
+          "name": "orgpattern_patterntype",
+          "type": "String"
+        },
+        {
+          "name": "vieworg_id",
+          "type": "Long"
+        },
+        {
+          "name": "vieworg_number",
+          "type": "String"
+        },
+        {
+          "name": "vieworg_name",
+          "type": "String"
+        },
+        {
+          "name": "vieworg_enable",
+          "type": "String"
+        },
+        {
+          "name": "view_treetypeid_fnumber",
+          "type": "String"
+        },
+        {
+          "name": "view_treetypeid_fname",
+          "type": "String"
+        },
+        {
+          "name": "view_treetypeid_id",
+          "type": "Long"
+        },
+        {
+          "name": "isbizorg",
+          "type": "Boolean"
+        },
+        {
+          "name": "xkparent_id",
+          "type": "Long"
+        },
+        {
+          "name": "xkparent_number",
+          "type": "String"
+        },
+        {
+          "name": "xkparent_name",
+          "type": "String"
+        },
+        {
+          "name": "xkparent_status",
+          "type": "String"
+        },
+        {
+          "name": "xkparent_enable",
+          "type": "String"
+        },
+        {
+          "name": "xkparent_enable_title",
+          "type": "String"
+        },
+        {
+          "name": "industrycode_number",
+          "type": "String"
+        },
+        {
+          "name": "industrycode_name",
+          "type": "String"
+        },
+        {
+          "name": "industrycode_id",
+          "type": "Long"
+        },
+        {
+          "name": "belongcorporation_number",
+          "type": "String"
+        },
+        {
+          "name": "belongcorporation_name",
+          "type": "String"
+        },
+        {
+          "name": "belongcorporation_status",
+          "type": "String"
+        },
+        {
+          "name": "belongcorporation_enable",
+          "type": "String"
+        },
+        {
+          "name": "view_name",
+          "type": "String"
+        },
+        {
+          "name": "view_status",
+          "type": "String"
+        },
+        {
+          "name": "view_enable",
+          "type": "String"
+        },
+        {
+          "name": "view_treetype",
+          "type": "String"
+        },
+        {
+          "name": "viewparent_status",
+          "type": "String"
+        },
+        {
+          "name": "viewparent_enable",
+          "type": "String"
+        },
+        {
+          "name": "vieworg_status",
+          "type": "String"
+        },
+        {
+          "name": "vieworg_simplename",
+          "type": "String"
+        },
+        {
+          "name": "viewmodifier_id",
+          "type": "Long"
+        },
+        {
+          "name": "viewmodifier_number",
+          "type": "String"
+        },
+        {
+          "name": "viewmodifier_name",
+          "type": "String"
+        }
+      ]
+    },
+    {
+      "file": "API服务_客户档案查询(queryCustomerRegistrations)_D191.dts",
+      "entity": "openapi_apilist",
+      "number": "queryCustomerRegistrations",
+      "url": "/v2/hzkj/hzkj_member/hzkj_member_customer/queryCustomerRegistrations",
+      "class": null,
+      "request": [
+        {
+          "name": "org_id",
+          "type": "Long",
+          "required": "1"
+        },
+        {
+          "name": "org_number",
+          "type": "String",
+          "required": "1"
+        },
+        {
+          "name": "org_name",
+          "type": "String",
+          "required": "1"
+        }
+      ],
+      "response": [
+        {
+          "name": "id",
+          "type": "Long"
+        },
+        {
+          "name": "createtime",
+          "type": "DateTime"
+        },
+        {
+          "name": "createorg_id",
+          "type": "Long"
+        },
+        {
+          "name": "createorg_name",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_biz_user_id",
+          "type": "Long"
+        },
+        {
+          "name": "hzkj_biz_user_name",
+          "type": "String"
+        },
+        {
+          "name": "number",
+          "type": "String"
+        },
+        {
+          "name": "name",
+          "type": "String"
+        },
+        {
+          "name": "status",
+          "type": "String"
+        },
+        {
+          "name": "status_title",
+          "type": "String"
+        },
+        {
+          "name": "enable",
+          "type": "String"
+        },
+        {
+          "name": "enable_title",
+          "type": "String"
+        },
+        {
+          "name": "modifytime",
+          "type": "DateTime"
+        },
+        {
+          "name": "hzkj_shop_entry",
+          "type": "Entries"
+        },
+        {
+          "name": "org_id",
+          "type": "Long"
+        },
+        {
+          "name": "useorg_id",
+          "type": "Long"
+        },
+        {
+          "name": "hzkj_member_level_id",
+          "type": "Long"
+        },
+        {
+          "name": "hzkj_member_class_id",
+          "type": "Long"
+        },
+        {
+          "name": "hzkj_member_type_id",
+          "type": "Long"
+        },
+        {
+          "name": "id",
+          "type": "Long"
+        },
+        {
+          "name": "hzkj_shop_id",
+          "type": "Long"
+        },
+        {
+          "name": "hzkj_stripe_customer",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_source_method",
+          "type": "String"
+        },
+        {
+          "name": "createorg_number",
+          "type": "String"
+        },
+        {
+          "name": "org_number",
+          "type": "String"
+        },
+        {
+          "name": "org_name",
+          "type": "String"
+        },
+        {
+          "name": "useorg_number",
+          "type": "String"
+        },
+        {
+          "name": "useorg_name",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_member_class_name",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_member_class_number",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_member_class_fullname",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_member_class_longnumber",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_member_level_number",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_member_level_name",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_country_name",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_country_number",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_country_id",
+          "type": "Long"
+        },
+        {
+          "name": "hzkj_customer_id",
+          "type": "Long"
+        },
+        {
+          "name": "hzkj_customer_number",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_customer_name",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_biz_user_number",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_biz_user_gender",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_biz_user_username",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_shop_number",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_shop_name",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_shop_hzkj_isbind",
+          "type": "Boolean"
+        },
+        {
+          "name": "hzkj_shop_hzkj_platform_id",
+          "type": "Long"
+        },
+        {
+          "name": "hzkj_shop_hzkj_platform_number",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_shop_hzkj_platform_name",
+          "type": "String"
+        }
+      ]
+    },
+    {
+      "file": "API服务_仓库查询接口(queryWareHouse)_D191.dts",
+      "entity": "openapi_apilist",
+      "number": "queryWareHouse",
+      "url": "/v2/hzkj/sbd/bd_warehouse/queryWareHouse",
+      "class": null,
+      "request": [
+        {
+          "name": "org_id",
+          "type": "Long",
+          "required": "1"
+        },
+        {
+          "name": "org_number",
+          "type": "String",
+          "required": "1"
+        },
+        {
+          "name": "org_name",
+          "type": "String",
+          "required": "1"
+        }
+      ],
+      "response": [
+        {
+          "name": "id",
+          "type": "Long"
+        },
+        {
+          "name": "number",
+          "type": "String"
+        },
+        {
+          "name": "name",
+          "type": "String"
+        },
+        {
+          "name": "address",
+          "type": "String"
+        },
+        {
+          "name": "detailaddress",
+          "type": "String"
+        },
+        {
+          "name": "telephone",
+          "type": "String"
+        },
+        {
+          "name": "description",
+          "type": "String"
+        },
+        {
+          "name": "status",
+          "type": "String"
+        },
+        {
+          "name": "enable",
+          "type": "String"
+        },
+        {
+          "name": "enable_title",
+          "type": "String"
+        },
+        {
+          "name": "createtime",
+          "type": "DateTime"
+        },
+        {
+          "name": "modifytime",
+          "type": "DateTime"
+        },
+        {
+          "name": "operatorentity",
+          "type": "Entries"
+        },
+        {
+          "name": "createorg_id",
+          "type": "Long"
+        },
+        {
+          "name": "org_id",
+          "type": "Long"
+        },
+        {
+          "name": "principal_id",
+          "type": "Long"
+        },
+        {
+          "name": "group_id",
+          "type": "Long"
+        },
+        {
+          "name": "isentrustverifycustomer_id",
+          "type": "Long"
+        },
+        {
+          "name": "id",
+          "type": "Long"
+        },
+        {
+          "name": "operatoruser_id",
+          "type": "Long"
+        },
+        {
+          "name": "status_title",
+          "type": "String"
+        },
+        {
+          "name": "entryentity",
+          "type": "Entries"
+        },
+        {
+          "name": "org_number",
+          "type": "String"
+        },
+        {
+          "name": "org_name",
+          "type": "String"
+        },
+        {
+          "name": "createorg_number",
+          "type": "String"
+        },
+        {
+          "name": "createorg_name",
+          "type": "String"
+        },
+        {
+          "name": "principal_number",
+          "type": "String"
+        },
+        {
+          "name": "principal_name",
+          "type": "String"
+        },
+        {
+          "name": "principal_status",
+          "type": "String"
+        },
+        {
+          "name": "principal_enable",
+          "type": "String"
+        },
+        {
+          "name": "auditor_id",
+          "type": "Long"
+        },
+        {
+          "name": "auditor_number",
+          "type": "String"
+        },
+        {
+          "name": "auditor_name",
+          "type": "String"
+        },
+        {
+          "name": "id",
+          "type": "Long"
+        },
+        {
+          "name": "isdefaultloc",
+          "type": "Boolean"
+        },
+        {
+          "name": "isentrustverifycustomer_name",
+          "type": "String"
+        },
+        {
+          "name": "isentrustverifycustomer_number",
+          "type": "String"
+        },
+        {
+          "name": "location_id",
+          "type": "Long"
+        },
+        {
+          "name": "location_number",
+          "type": "String"
+        },
+        {
+          "name": "location_name",
+          "type": "String"
+        },
+        {
+          "name": "location_status",
+          "type": "String"
+        },
+        {
+          "name": "location_enable",
+          "type": "String"
+        },
+        {
+          "name": "operatoruser_operatorname",
+          "type": "String"
+        },
+        {
+          "name": "operatoruser_operatornumber",
+          "type": "String"
+        },
+        {
+          "name": "operatoruser_opergrpname",
+          "type": "String"
+        },
+        {
+          "name": "isentrustverifycustomer_createorg_id",
+          "type": "Long"
+        },
+        {
+          "name": "isentrustverifycustomer_createorg_number",
+          "type": "String"
+        },
+        {
+          "name": "isentrustverifycustomer_createorg_name",
+          "type": "String"
+        },
+        {
+          "name": "isentrustverifycustomer_createorg_simplename",
+          "type": "String"
+        },
+        {
+          "name": "isentrustverifycustomer_createorg_masterid",
+          "type": "Long"
+        }
+      ]
+    },
+    {
+      "file": "API服务_商品档案查询(queryProductsList)_D191.dts",
+      "entity": "openapi_apilist",
+      "number": "queryProductsList",
+      "url": "/v2/hzkj/hzkj_commodity/hzkj_good_record/queryProductsList",
+      "class": null,
+      "request": [
+        {
+          "name": "hzkj_org_data_id",
+          "type": "Long",
+          "required": "1"
+        },
+        {
+          "name": "hzkj_org_data_number",
+          "type": "String",
+          "required": "1"
+        },
+        {
+          "name": "hzkj_org_data_name",
+          "type": "String",
+          "required": "1"
+        }
+      ],
+      "response": [
+        {
+          "name": "id",
+          "type": "Long"
+        },
+        {
+          "name": "number",
+          "type": "String"
+        },
+        {
+          "name": "name",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_picturefield",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_enname",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_pack_long",
+          "type": "Decimal"
+        },
+        {
+          "name": "hzkj_pack_wide",
+          "type": "Decimal"
+        },
+        {
+          "name": "hzkj_pack_high",
+          "type": "Decimal"
+        },
+        {
+          "name": "hzkj_pur_price",
+          "type": "Decimal"
+        },
+        {
+          "name": "status",
+          "type": "String"
+        },
+        {
+          "name": "status_title",
+          "type": "String"
+        },
+        {
+          "name": "enable",
+          "type": "String"
+        },
+        {
+          "name": "enable_title",
+          "type": "String"
+        },
+        {
+          "name": "createtime",
+          "type": "DateTime"
+        },
+        {
+          "name": "modifytime",
+          "type": "DateTime"
+        },
+        {
+          "name": "hzkj_goodtype_id",
+          "type": "Long"
+        },
+        {
+          "name": "hzkj_org_id",
+          "type": "Long"
+        },
+        {
+          "name": "hzkj_org_data_id",
+          "type": "Long"
+        },
+        {
+          "name": "hzkj_warehouse_id",
+          "type": "Long"
+        },
+        {
+          "name": "hzkj_pack_sku_id",
+          "type": "Long"
+        },
+        {
+          "name": "hzkj_good_carrier",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_good_carrier_title",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_goodtype_name",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_ispush",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_pack_physical_good",
+          "type": "Boolean"
+        },
+        {
+          "name": "hzkj_goodtype_number",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_good_labe_id",
+          "type": "Long"
+        },
+        {
+          "name": "hzkj_good_labe_number",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_good_labe_name",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_unitfield_id",
+          "type": "Long"
+        },
+        {
+          "name": "hzkj_unitfield_number",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_unitfield_name",
+          "type": "String"
+        }
+      ]
+    },
+    {
+      "file": "API服务_SKU档案查询(queryWorkbenchSkuMaterial)_D191.dts",
+      "entity": "openapi_apilist",
+      "number": "queryWorkbenchSkuMaterial",
+      "url": "/v2/hzkj/hzkj_commodity/hzkj_sku_record/queryWorkbenchSkuMaterial",
+      "class": null,
+      "request": [
+        {
+          "name": "hzkj_org_data_id",
+          "type": "Long",
+          "required": "1"
+        },
+        {
+          "name": "hzkj_org_data_number",
+          "type": "String",
+          "required": "1"
+        },
+        {
+          "name": "hzkj_org_data_name",
+          "type": "String",
+          "required": "1"
+        }
+      ],
+      "response": [
+        {
+          "name": "id",
+          "type": "Long"
+        },
+        {
+          "name": "number",
+          "type": "String"
+        },
+        {
+          "name": "name",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_picturefield",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_material_id",
+          "type": "Long"
+        },
+        {
+          "name": "hzkj_material_number",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_org_data_number",
+          "type": "String"
+        },
+        {
+          "name": "status",
+          "type": "String"
+        },
+        {
+          "name": "status_title",
+          "type": "String"
+        },
+        {
+          "name": "enable",
+          "type": "String"
+        },
+        {
+          "name": "enable_title",
+          "type": "String"
+        },
+        {
+          "name": "createtime",
+          "type": "DateTime"
+        },
+        {
+          "name": "modifytime",
+          "type": "DateTime"
+        },
+        {
+          "name": "hzkj_org_data_id",
+          "type": "Long"
+        },
+        {
+          "name": "hzkj_operator_id",
+          "type": "Long"
+        },
+        {
+          "name": "hzkj_good_id",
+          "type": "Long"
+        },
+        {
+          "name": "hzkj_cus_id",
+          "type": "Long"
+        },
+        {
+          "name": "hzkj_org_id",
+          "type": "Long"
+        },
+        {
+          "name": "hzkj_warehouse_id",
+          "type": "Long"
+        },
+        {
+          "name": "hzkj_public",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_public_title",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_unitfield_id",
+          "type": "Long"
+        },
+        {
+          "name": "hzkj_unitfield_name",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_sku_values",
+          "type": "Entries"
+        },
+        {
+          "name": "hzkj_picurl",
+          "type": "String"
+        },
+        {
+          "name": "id",
+          "type": "Long"
+        },
+        {
+          "name": "name",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_name",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_pur_price",
+          "type": "Decimal"
+        },
+        {
+          "name": "hzkj_pur_grossmargin",
+          "type": "Decimal"
+        },
+        {
+          "name": "hzkj_quotation",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_1688_price",
+          "type": "Decimal"
+        },
+        {
+          "name": "hzkj_vediourl",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_from_plant",
+          "type": "Entries"
+        },
+        {
+          "name": "hzkj_good_datum",
+          "type": "Entries"
+        },
+        {
+          "name": "hzkj_material_name",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_good_type_id",
+          "type": "Long"
+        },
+        {
+          "name": "hzkj_good_type_number",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_good_type_name",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_good_class_id",
+          "type": "Long"
+        },
+        {
+          "name": "hzkj_good_class_number",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_good_class_name",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_good_lable_id",
+          "type": "Long"
+        },
+        {
+          "name": "hzkj_good_lable_number",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_good_lable_name",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_unitfield_precision",
+          "type": "Integer"
+        },
+        {
+          "name": "previewurl",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_good_name",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_good_hzkj_enname",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_pack_sku_id",
+          "type": "Long"
+        },
+        {
+          "name": "hzkj_pack_sku_number",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_pack_sku_name",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_cus_name",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_cus_number",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_warehouse_number",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_warehouse_name",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_sales_attr_id",
+          "type": "Long"
+        },
+        {
+          "name": "hzkj_sales_attr_number",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_sales_attr_name",
+          "type": "String"
+        },
+        {
+          "name": "id",
+          "type": "Long"
+        },
+        {
+          "name": "number",
+          "type": "String"
+        },
+        {
+          "name": "name",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_pack_material_id",
+          "type": "Long"
+        },
+        {
+          "name": "hzkj_pack_material_number",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_pack_material_name",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_cny_id",
+          "type": "Long"
+        },
+        {
+          "name": "hzkj_cny_number",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_cny_name",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_cny_masterid",
+          "type": "Long"
+        },
+        {
+          "name": "hzkj_cny_priceprecision",
+          "type": "Integer"
+        },
+        {
+          "name": "hzkj_cny_amtprecision",
+          "type": "Integer"
+        },
+        {
+          "name": "hzkj_cny_isshowsign",
+          "type": "Boolean"
+        },
+        {
+          "name": "hzkj_cny_sign",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_usd_id",
+          "type": "Long"
+        },
+        {
+          "name": "hzkj_usd_number",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_usd_name",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_usd_amtprecision",
+          "type": "Integer"
+        },
+        {
+          "name": "hzkj_usd_priceprecision",
+          "type": "Integer"
+        },
+        {
+          "name": "hzkj_usd_isshowsign",
+          "type": "Boolean"
+        },
+        {
+          "name": "hzkj_usd_sign",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_exratetable_id",
+          "type": "Long"
+        },
+        {
+          "name": "hzkj_exratetable_number",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_exratetable_name",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_tax_id",
+          "type": "Long"
+        },
+        {
+          "name": "hzkj_tax_number",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_tax_name",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_tax_taxrate",
+          "type": "Decimal"
+        },
+        {
+          "name": "hzkj_org_data_name",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_operator_number",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_operator_name",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_good_hzkj_goodtype_id",
+          "type": "Long"
+        },
+        {
+          "name": "hzkj_good_hzkj_goodtype_number",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_good_hzkj_goodtype_name",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_good_class_modifier_id",
+          "type": "Long"
+        }
+      ]
+    },
+    {
+      "file": "API服务_店铺档案查询(TestShopAPI)_D191.dts",
+      "entity": "openapi_apilist",
+      "number": "TestShopAPI",
+      "url": "/v2/hzkj/hzkj_member/hzkj_shop_record/TestShopAPI",
+      "class": null,
+      "request": [
+        {
+          "name": "org_number",
+          "type": "String",
+          "required": "1"
+        },
+        {
+          "name": "org_name",
+          "type": "String",
+          "required": "1"
+        },
+        {
+          "name": "org_id",
+          "type": "Long",
+          "required": "1"
+        }
+      ],
+      "response": [
+        {
+          "name": "id",
+          "type": "Long"
+        },
+        {
+          "name": "number",
+          "type": "String"
+        },
+        {
+          "name": "name",
+          "type": "String"
+        },
+        {
+          "name": "status",
+          "type": "String"
+        },
+        {
+          "name": "status_title",
+          "type": "String"
+        },
+        {
+          "name": "enable",
+          "type": "String"
+        },
+        {
+          "name": "enable_title",
+          "type": "String"
+        },
+        {
+          "name": "createtime",
+          "type": "DateTime"
+        },
+        {
+          "name": "modifytime",
+          "type": "DateTime"
+        },
+        {
+          "name": "hzkj_bind_account",
+          "type": "Entries"
+        },
+        {
+          "name": "createorg_id",
+          "type": "Long"
+        },
+        {
+          "name": "org_id",
+          "type": "Long"
+        },
+        {
+          "name": "useorg_id",
+          "type": "Long"
+        },
+        {
+          "name": "hzkj_customer_id",
+          "type": "Long"
+        },
+        {
+          "name": "hzkj_user_id",
+          "type": "Long"
+        },
+        {
+          "name": "hzkj_shop_class_id",
+          "type": "Long"
+        },
+        {
+          "name": "hzkj_platform_id",
+          "type": "Long"
+        },
+        {
+          "name": "id",
+          "type": "Long"
+        },
+        {
+          "name": "hzkj_shopid",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_shop_domain",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_shop_currency",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_bind_status",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_bind_status_title",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_platform_name",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_bindtime",
+          "type": "DateTime"
+        },
+        {
+          "name": "createorg_number",
+          "type": "String"
+        },
+        {
+          "name": "createorg_name",
+          "type": "String"
+        },
+        {
+          "name": "org_number",
+          "type": "String"
+        },
+        {
+          "name": "org_name",
+          "type": "String"
+        },
+        {
+          "name": "useorg_number",
+          "type": "String"
+        },
+        {
+          "name": "useorg_name",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_customer_number",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_customer_name",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_user_number",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_user_name",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_shop_class_number",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_shop_class_name",
+          "type": "String"
+        },
+        {
+          "name": "name",
+          "type": "String"
+        },
+        {
+          "name": "number",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_platform_number",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_customer_hzkj_biz_user_id",
+          "type": "Long"
+        },
+        {
+          "name": "hzkj_customer_hzkj_biz_user_number",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_customer_hzkj_biz_user_name",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_customer_hzkj_biz_user_username",
+          "type": "String"
+        }
+      ]
+    },
+    {
+      "file": "API服务_工作台备货库存台账查询(queryWorkbenchReservedStock)_907D.dts",
+      "entity": "openapi_apilist",
+      "number": "queryWorkbenchReservedStock",
+      "url": "/v2/hzkj/hzkj_ordercenter/hzkj_stock_inventory_data/queryWorkbenchReservedStock",
+      "class": null,
+      "request": [
+        {
+          "name": "hzkj_customer_id",
+          "type": "Long",
+          "required": "0"
+        },
+        {
+          "name": "org_number",
+          "type": "String",
+          "required": "1"
+        }
+      ],
+      "response": [
+        {
+          "name": "id",
+          "type": "Long"
+        },
+        {
+          "name": "hzkj_total_available_qty",
+          "type": "Decimal"
+        },
+        {
+          "name": "hzkj_lock_qty",
+          "type": "Decimal"
+        },
+        {
+          "name": "hzkj_deposit_avail_qty",
+          "type": "Decimal"
+        },
+        {
+          "name": "hzkj_deposit_lock_qty",
+          "type": "Decimal"
+        },
+        {
+          "name": "org_id",
+          "type": "Long"
+        },
+        {
+          "name": "org_number",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_local_sku_id",
+          "type": "Long"
+        },
+        {
+          "name": "hzkj_local_sku_number",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_local_sku_name",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_local_sku_hzkj_picturefield",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_local_sku_hzkj_name",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_customer_id",
+          "type": "Long"
+        },
+        {
+          "name": "hzkj_customer_number",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_customer_name",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_warehouse_id",
+          "type": "Long"
+        },
+        {
+          "name": "hzkj_warehouse_number",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_warehouse_name",
+          "type": "String"
+        },
+        {
+          "name": "number",
+          "type": "String"
+        },
+        {
+          "name": "status",
+          "type": "String"
+        },
+        {
+          "name": "status_title",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_full_pay_total_qty",
+          "type": "Decimal"
+        },
+        {
+          "name": "hzkj_full_pay_used_qty",
+          "type": "Decimal"
+        },
+        {
+          "name": "hzkj_deposit_total_qty",
+          "type": "Decimal"
+        },
+        {
+          "name": "hzkj_deposit_used_qty",
+          "type": "Decimal"
+        },
+        {
+          "name": "hzkj_unitfield_name",
+          "type": "String"
+        }
+      ]
+    },
+    {
+      "file": "API服务_采购退料单查询(queryPurchaseMaterialReturn)_89CC.dts",
+      "entity": "openapi_apilist",
+      "number": "queryPurchaseMaterialReturn",
+      "url": "/v2/hzkj/im/im_purinbill/queryPurchaseMaterialReturn",
+      "class": null,
+      "request": [
+        {
+          "name": "billno",
+          "type": "String",
+          "required": "1"
+        }
+      ],
+      "response": [
+        {
+          "name": "billno",
+          "type": "String"
+        },
+        {
+          "name": "isinitbill",
+          "type": "Boolean"
+        },
+        {
+          "name": "biztime",
+          "type": "Date"
+        },
+        {
+          "name": "billstatus",
+          "type": "String"
+        },
+        {
+          "name": "billstatus_title",
+          "type": "String"
+        },
+        {
+          "name": "billentry",
+          "type": "Entries"
+        },
+        {
+          "name": "supplier_name",
+          "type": "String"
+        },
+        {
+          "name": "org_name",
+          "type": "String"
+        },
+        {
+          "name": "billtype_name",
+          "type": "String"
+        },
+        {
+          "name": "biztype_name",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_local_sku_number",
+          "type": "String"
+        },
+        {
+          "name": "invtype_name",
+          "type": "String"
+        },
+        {
+          "name": "invstatus_name",
+          "type": "String"
+        },
+        {
+          "name": "warehouse_name",
+          "type": "String"
+        },
+        {
+          "name": "unit_name",
+          "type": "String"
+        },
+        {
+          "name": "material_number",
+          "type": "String"
+        },
+        {
+          "name": "material_name",
+          "type": "String"
+        },
+        {
+          "name": "linetype_name",
+          "type": "String"
+        },
+        {
+          "name": "qty",
+          "type": "Decimal"
+        },
+        {
+          "name": "auxpty",
+          "type": "Flex"
+        },
+        {
+          "name": "returnmaterialtype",
+          "type": "String"
+        },
+        {
+          "name": "returnmaterialtype_title",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_salbillnumber",
+          "type": "String"
+        },
+        {
+          "name": "auditdate",
+          "type": "DateTime"
+        },
+        {
+          "name": "createtime",
+          "type": "DateTime"
+        },
+        {
+          "name": "comment",
+          "type": "String"
+        },
+        {
+          "name": "bookdate",
+          "type": "Date"
+        },
+        {
+          "name": "lastupdatetime",
+          "type": "DateTime"
+        },
+        {
+          "name": "exchangerate",
+          "type": "Decimal"
+        },
+        {
+          "name": "istax",
+          "type": "Boolean"
+        },
+        {
+          "name": "paymode",
+          "type": "String"
+        },
+        {
+          "name": "paymode_title",
+          "type": "String"
+        },
+        {
+          "name": "taxinprice",
+          "type": "Boolean"
+        },
+        {
+          "name": "purcostshare",
+          "type": "Boolean"
+        },
+        {
+          "name": "hzkj_jf_event_key",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_jf_business_no",
+          "type": "String"
+        },
+        {
+          "name": "creator_name",
+          "type": "String"
+        },
+        {
+          "name": "auditor_name",
+          "type": "String"
+        },
+        {
+          "name": "bizorg_name",
+          "type": "String"
+        },
+        {
+          "name": "bizdept_name",
+          "type": "String"
+        },
+        {
+          "name": "dept_name",
+          "type": "String"
+        },
+        {
+          "name": "operatorgroup_name",
+          "type": "String"
+        },
+        {
+          "name": "bizoperatorgroup_name",
+          "type": "String"
+        },
+        {
+          "name": "invscheme_name",
+          "type": "String"
+        },
+        {
+          "name": "bizoperator_operatorname",
+          "type": "String"
+        },
+        {
+          "name": "operator_operatorname",
+          "type": "String"
+        },
+        {
+          "name": "paycondition_name",
+          "type": "String"
+        },
+        {
+          "name": "settletype_name",
+          "type": "String"
+        },
+        {
+          "name": "settlecurrency_name",
+          "type": "String"
+        },
+        {
+          "name": "currency_name",
+          "type": "String"
+        },
+        {
+          "name": "exratetable_name",
+          "type": "String"
+        },
+        {
+          "name": "lastupdateuser_name",
+          "type": "String"
+        },
+        {
+          "name": "seq",
+          "type": "Integer"
+        },
+        {
+          "name": "qtyunit2nd",
+          "type": "Decimal"
+        },
+        {
+          "name": "baseqty",
+          "type": "Decimal"
+        },
+        {
+          "name": "producedate",
+          "type": "Date"
+        },
+        {
+          "name": "expirydate",
+          "type": "Date"
+        },
+        {
+          "name": "entrycomment",
+          "type": "String"
+        },
+        {
+          "name": "ownertype",
+          "type": "String"
+        },
+        {
+          "name": "keepertype",
+          "type": "String"
+        },
+        {
+          "name": "lotnumber",
+          "type": "String"
+        },
+        {
+          "name": "srcbillnumber",
+          "type": "String"
+        },
+        {
+          "name": "srcbillentryseq",
+          "type": "Long"
+        },
+        {
+          "name": "qtyunit3rd",
+          "type": "Decimal"
+        },
+        {
+          "name": "priceandtax",
+          "type": "Decimal"
+        },
+        {
+          "name": "taxrate",
+          "type": "Decimal"
+        },
+        {
+          "name": "taxamount",
+          "type": "Decimal"
+        },
+        {
+          "name": "curtaxamount",
+          "type": "Decimal"
+        },
+        {
+          "name": "discountrate",
+          "type": "Decimal"
+        },
+        {
+          "name": "discountamount",
+          "type": "Decimal"
+        },
+        {
+          "name": "curamount",
+          "type": "Decimal"
+        },
+        {
+          "name": "amountandtax",
+          "type": "Decimal"
+        },
+        {
+          "name": "curamountandtax",
+          "type": "Decimal"
+        },
+        {
+          "name": "ispresent",
+          "type": "Boolean"
+        },
+        {
+          "name": "price",
+          "type": "Decimal"
+        },
+        {
+          "name": "amount",
+          "type": "Decimal"
+        },
+        {
+          "name": "discounttype",
+          "type": "String"
+        },
+        {
+          "name": "discounttype_title",
+          "type": "String"
+        },
+        {
+          "name": "joinpriceqty",
+          "type": "Decimal"
+        },
+        {
+          "name": "remainjoinpriceqty",
+          "type": "Decimal"
+        },
+        {
+          "name": "remainreturnqty",
+          "type": "Decimal"
+        },
+        {
+          "name": "returnqty",
+          "type": "Decimal"
+        },
+        {
+          "name": "receivedate",
+          "type": "Date"
+        },
+        {
+          "name": "verifyqty",
+          "type": "Decimal"
+        },
+        {
+          "name": "unverifyqty",
+          "type": "Decimal"
+        },
+        {
+          "name": "provideraddress",
+          "type": "String"
+        },
+        {
+          "name": "conbillnumber",
+          "type": "String"
+        },
+        {
+          "name": "conbillrownum",
+          "type": "String"
+        },
+        {
+          "name": "joinpurinvoiceqty",
+          "type": "Decimal"
+        },
+        {
+          "name": "joinpurinvoiceamount",
+          "type": "Decimal"
+        },
+        {
+          "name": "calccosttaxamount",
+          "type": "Decimal"
+        },
+        {
+          "name": "costinctaxamount",
+          "type": "Decimal"
+        },
+        {
+          "name": "suppliermaterialnum",
+          "type": "String"
+        },
+        {
+          "name": "e_settlelineid",
+          "type": "Long"
+        },
+        {
+          "name": "suppliermaterialname",
+          "type": "String"
+        },
+        {
+          "name": "unit2nd_name",
+          "type": "String"
+        },
+        {
+          "name": "baseunit_name",
+          "type": "String"
+        },
+        {
+          "name": "location_name",
+          "type": "String"
+        },
+        {
+          "name": "owner_name",
+          "type": "String"
+        },
+        {
+          "name": "keeper_name",
+          "type": "String"
+        },
+        {
+          "name": "project_number",
+          "type": "String"
+        },
+        {
+          "name": "project_name",
+          "type": "String"
+        },
+        {
+          "name": "mversion_number",
+          "type": "String"
+        },
+        {
+          "name": "mversion_name",
+          "type": "String"
+        },
+        {
+          "name": "tracknumber_number",
+          "type": "String"
+        },
+        {
+          "name": "unit3rd_name",
+          "type": "String"
+        },
+        {
+          "name": "settleroute_name",
+          "type": "String"
+        },
+        {
+          "name": "entrysettleorg_name",
+          "type": "String"
+        },
+        {
+          "name": "taxrateid_name",
+          "type": "String"
+        },
+        {
+          "name": "entryreqorg_name",
+          "type": "String"
+        },
+        {
+          "name": "providersupplier_name",
+          "type": "String"
+        },
+        {
+          "name": "invoicesupplier_name",
+          "type": "String"
+        },
+        {
+          "name": "receivesupplier_name",
+          "type": "String"
+        },
+        {
+          "name": "providerlinkman_phone",
+          "type": "String"
+        },
+        {
+          "name": "providerlinkman_contactperson",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_local_sku_name",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_local_sku_hzkj_picturefield",
+          "type": "String"
+        },
+        {
+          "name": "hzkj_local_sku_hzkj_sku_value",
+          "type": "String"
+        },
+        {
+          "name": "material_masterid_modelnum",
+          "type": "String"
+        }
+      ]
+    },
+    {
+      "file": "自定义API_查询履约订单单据、分录关系及数量归属(openapibill-relationsquery)_39C5.dts",
+      "entity": "openapi_customapi",
+      "number": "openapi/bill-relations/query",
+      "url": "/v2/hzkj/hzkj_ordercenter/openapi/bill-relations/query",
+      "class": "hzkj.dtr5b.crm.ordercenter.relation.BillRelationApi",
+      "request": [
+        {
+          "name": "orderNo",
+          "type": "String",
+          "required": "1"
+        },
+        {
+          "name": "level",
+          "type": "String",
+          "required": "0"
+        }
+      ],
+      "response": [
+        {
+          "name": "status",
+          "type": "boolean"
+        },
+        {
+          "name": "errorCode",
+          "type": "String"
+        },
+        {
+          "name": "message",
+          "type": "String"
+        },
+        {
+          "name": "data",
+          "type": "JSONObject"
+        },
+        {
+          "name": "$key$",
+          "type": "Object"
+        },
+        {
+          "name": "$value$",
+          "type": "Object"
+        }
+      ]
+    }
+  ]
+}

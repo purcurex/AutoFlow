@@ -89,10 +89,10 @@ export const localAllocationApprovalJoin = `LEFT JOIN LATERAL (
 ) allocation_approval ON TRUE`
 
 export const localOrderDispatchTaskSql = `(CASE WHEN native.raw_order_status='6' THEN 'dispatch_cancelled'
- WHEN native.raw_order_status IN ('4','5') THEN 'dispatch_synced'
- WHEN native.raw_order_status NOT IN ('2','3') OR native.raw_order_status IS NULL OR delivery.incomplete THEN 'unknown'
+ WHEN sd.payload->>'hzkj_fulfillment_status'='fulfilled' THEN 'dispatch_synced'
+ WHEN coalesce((CASE WHEN sd.payload ? 'hzkj_fulfillment_status' THEN coalesce(NULLIF(sd.payload->>'hzkj_fulfillment_status',''),'unfulfilled') END) IN ('unfulfilled','partial'),false)=false OR native.raw_order_status IN ('0','6') OR delivery.incomplete THEN 'unknown'
  WHEN NOT EXISTS(SELECT 1 ${localValidDispatchFromSql} AND d.raw_delivery_status IS DISTINCT FROM 'CANCELLED' AND NULLIF(btrim(ds.document_number),'') IS NOT NULL) THEN CASE WHEN delivery.has_tracking THEN 'unknown' ELSE 'dispatch_missing' END
- WHEN delivery.has_tracking THEN CASE WHEN native.raw_order_status='3' THEN 'dispatch_tracking' ELSE 'unknown' END
+ WHEN delivery.has_tracking THEN 'dispatch_tracking'
  ELSE 'dispatch_pending' END)`
 
 export const localDispatchFailureSql = `(sd.raw_bill_status='C' AND native.raw_order_status IN ('2','3','4','5')

@@ -11,7 +11,7 @@ const api = await import('./fop-workbench-openapi.mjs').catch(error => {
   throw error
 })
 const config = { FOP_OPENAPI_IDENTITY: 'fake-private-identity', FOP_OPENAPI_ACCESS_TOKEN: 'fake-private-token' }
-const request = { operation: 'order-detail', id: '9223372036854775806' }
+const request = { operation: 'purchase', orgNumber:'hyperzone', id: '9223372036854775806' }
 const envelope = (rows = [], overrides = {}) => ({ status: true, errorCode: '0', data: { rows, pageNo: 1, pageSize: 10, totalCount: rows.length, lastPage: true, ...overrides } })
 const response = value => new Response(JSON.stringify(value))
 
@@ -77,12 +77,12 @@ test('rejects retired outbound date and array filters rather than silently ignor
 
 test('queries the confirmed origin with token reuse, safe headers and no redirects', async () => {
   const result = await api.runQuery(config, request, async (url, init) => {
-    assert.equal(url, 'https://hyperzone.test.kdgalaxy.com/kapi/v2/hzkj/hzkj_ordercenter/hzkj_orders/queryOrderDetail')
+    assert.equal(url, 'https://hyperzone.test.kdgalaxy.com/kapi/v2/hzkj/hzkj_einkauf/hzkj_purorderbill/queryPurchase')
     assert.equal(init.redirect, 'error'); assert.equal(init.method, 'POST')
     assert.equal(init.headers.accessToken, config.FOP_OPENAPI_ACCESS_TOKEN)
     assert.equal(init.headers['x-acgw-identity'], config.FOP_OPENAPI_IDENTITY)
     assert.ok(init.signal instanceof AbortSignal)
-    assert.deepEqual(JSON.parse(init.body), { data: { id: request.id }, pageNo: 1, pageSize: 10 })
+    assert.deepEqual(JSON.parse(init.body), { data: { org_number:'hyperzone', id: request.id }, pageNo: 1, pageSize: 10 })
     return response(envelope([{ id: request.id }]))
   })
   assert.equal(result.report.success, true); assert.equal(result.report.rowCount, 1)
@@ -198,7 +198,7 @@ test('CLI honors the project pause even with an alternate config and never calls
   const dir=realpathSync(mkdtempSync(join(tmpdir(),'hz-cli-pause-')))
   try{
     mkdirSync(join(dir,'scripts'));mkdirSync(join(dir,'backend'))
-    for(const name of ['fop-workbench-openapi.mjs','fop-openapi-smoke.mjs','fop-confirmed-origin.mjs'])cpSync(fileURLToPath(new URL('./'+name,import.meta.url)),join(dir,'scripts',name))
+    for(const name of ['fop-workbench-openapi.mjs','fop-openapi-smoke.mjs','fop-confirmed-origin.mjs','fop-interface-policy.cjs'])cpSync(fileURLToPath(new URL('./'+name,import.meta.url)),join(dir,'scripts',name))
     writeFileSync(join(dir,'backend/.env.fop-pause'),'FOP_QUERIES_PAUSED=true\n')
     const result = spawnSync(process.execPath, ['--import', `data:text/javascript,${encodeURIComponent(preload)}`, join(dir,'scripts/fop-workbench-openapi.mjs'), '--config', '/nonexistent/fop-fake-test.env', '--operation', 'order-detail', '--id', '123'], { encoding: 'utf8', env: config })
     assert.equal(result.status, 1)

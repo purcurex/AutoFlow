@@ -12,6 +12,7 @@ export interface LocalOrderFilters {
   purchaseGrouping?: boolean
   procurementSource?: 'full_payment' | 'deposit' | 'direct'
   returnStatus?: string
+  fulfillmentStage?: string
   queue: string; completed?: boolean; search?: string; orderNumber?: string; warehouseCode?: string; shippingCountryCode?: string
   procurementStage?: string; taskStatus?: string; warehouseStage?: string; timeRange?: string; sortBy?: string; sortOrder?: 'asc' | 'desc'; paidAtOrder?: 'asc' | 'desc'
   searchOwnerIds?: string[]; rmaType?: string; rmaFlowStatus?: string; stockType?: string; purchaseStatus?: string; orderStatus?: string; reviewStatus?: 'pending' | 'approved'; lifecycle?: string; page?: number; pageSize?: number
@@ -54,7 +55,20 @@ export function buildLocalOrderQuery(scopes: LocalReadScope[], query: LocalOrder
   if(!stock && query.queue==='unpaid') conditions.push(query.skuAssociation==='unlinked'?"native.raw_order_status='no'":"native.raw_order_status='1'")
   if(!stock && query.queue==='review' && query.completed) conditions.push("o.order_review_state='approved'")
   if(query.queue==='allocation_review' && query.completed) conditions.push("allocation_approval.review_state='approved'")
-  if(query.queue==='dispatch') conditions.push("sd.raw_bill_status='C'", query.completed ? "native.raw_order_status IN ('4','5')" : "native.raw_order_status IN ('2','3')")
+  if(query.queue==='dispatch') conditions.push("sd.raw_bill_status='C'", query.completed ? "sd.payload->>'hzkj_fulfillment_status'='fulfilled'" : "native.raw_order_status NOT IN ('0','6') AND (CASE WHEN sd.payload ? 'hzkj_fulfillment_status' THEN coalesce(NULLIF(sd.payload->>'hzkj_fulfillment_status',''),'unfulfilled') END) IN ('unfulfilled','partial')")
+  if(query.fulfillmentStage){
+    if(stock || query.queue!=='review' || !query.completed) throw new BadRequestException('Fulfillment progress requires approved sales orders')
+    const allocations=`SELECT a.raw_allocation_status,d.raw_bill_status FROM hz_fop_allocations a JOIN hz_fop_source_documents d ON d.id=a.document_id AND d.company_id=a.company_id AND d.dataset_id=a.dataset_id WHERE a.company_id=o.company_id AND a.dataset_id=o.dataset_id AND a.source_order_id=sd.source_id AND d.connection_id=o.connection_id AND d.deleted_at IS NULL AND a.raw_allocation_status IS DISTINCT FROM 'voided'`
+    const stages:Record<string,string>={
+      unfulfilled:"(CASE WHEN sd.payload ? 'hzkj_fulfillment_status' THEN coalesce(NULLIF(sd.payload->>'hzkj_fulfillment_status',''),'unfulfilled') END) IN ('unfulfilled','partial')",fulfilled:"sd.payload->>'hzkj_fulfillment_status'='fulfilled'",
+      unpurchased:"native.raw_purchase_status IN ('0','1')",purchased:"native.raw_purchase_status IN ('2','3','4')",
+      unallocated:`EXISTS(SELECT 1 FROM (${allocations}) a WHERE a.raw_bill_status IN ('A','B'))`,
+      allocated:`EXISTS(SELECT 1 FROM (${allocations}) a HAVING count(*)>0 AND bool_and(coalesce(a.raw_bill_status='C' AND a.raw_allocation_status='completed',false)))`,
+      unshipped:"native.raw_delivery_status IN ('0','1')",shipped:"native.raw_delivery_status='2'"
+    }
+    if(!stages[query.fulfillmentStage])throw new BadRequestException('Invalid fulfillment progress')
+    conditions.push(stages[query.fulfillmentStage])
+  }
   if(query.queue==='exceptions') conditions.push(`(${localOrderExceptionSql} OR m.classification_state='member')`)
   if(!stock && (query.queue==='procurement' || query.queue==='procurement_shipping')) {
     conditions.push("o.purchase_coverage_state IS DISTINCT FROM 'not_required'")

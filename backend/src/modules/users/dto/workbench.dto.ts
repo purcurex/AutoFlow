@@ -62,6 +62,10 @@ export class CompletionFiltersDto {
 
 export class FulfillmentOrderFiltersDto extends CompletionFiltersDto {
   @IsOptional()
+  @IsIn(['unfulfilled','fulfilled','unpurchased','purchased','unallocated','allocated','unshipped','shipped'])
+  fulfillmentStage?: string
+
+  @IsOptional()
   @IsIn(['A', 'B'])
   billStatus?: 'A' | 'B'
 

@@ -187,3 +187,15 @@ input.workbench-page-checkbox{width:15px;height:15px;min-width:15px;margin:0 7px
 .role-workbench.app-page .workbench-scroll-viewport > table > tbody > tr:not(:has(>td[colspan])),
 .role-workbench.app-page .workbench-scroll-viewport > table > tbody > tr.stock-root,
 .role-workbench.app-page .workbench-scroll-viewport > .purchase-group { scroll-snap-align:start;scroll-snap-stop:normal; }
+
+/* Consistent breathing room before document identifiers and selection controls. */
+.role-workbench.app-page { --workbench-document-inset:24px; }
+.role-workbench.app-page .workbench-scroll-viewport > table > thead > tr > th:first-child,
+.role-workbench.app-page .workbench-scroll-viewport > table > tbody > tr > td:first-child:not([colspan]),
+.role-workbench.app-page .workbench-scroll-viewport > table > tfoot > tr > :first-child {
+  padding-left:var(--workbench-document-inset);text-align:left;
+}
+.role-workbench.app-page .workbench-scroll-viewport :is(.purchase-columns,.group-head,.root-header) {
+  padding-left:var(--workbench-document-inset);
+}
+@media(max-width:700px){.role-workbench.app-page { --workbench-document-inset:16px; }}

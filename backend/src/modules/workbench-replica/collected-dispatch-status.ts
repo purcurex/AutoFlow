@@ -1,3 +1,4 @@
+import { sourceShipmentSql } from './source-shipment-sql'
 // Same rule as orderDispatchTaskStatus, evaluated before count, pagination and export.
 const array = (value: string) => `CASE WHEN jsonb_typeof(${value})='array' THEN ${value} ELSE '[]'::jsonb END`
 const documents = `jsonb_array_elements(${array("display->'dispatchDocuments'")}) d`
@@ -8,10 +9,10 @@ const unknown = `jsonb_typeof(display->'dispatchDocuments') IS DISTINCT FROM 'ar
 const tracked = `EXISTS(SELECT 1 FROM ${documents} CROSS JOIN LATERAL jsonb_array_elements(${array("d->'trackingNumbers'")}) t
  WHERE ${effective} AND t->>'type'='full' AND NULLIF(trim(t->>'number', ' ' || chr(9) || chr(10) || chr(13)),'') IS NOT NULL)`
 export const collectedDispatchTaskSql = `(CASE WHEN raw_order_status='6' THEN 'dispatch_cancelled'
- WHEN raw_order_status IN ('4','5') THEN 'dispatch_synced'
- WHEN raw_order_status NOT IN ('2','3') OR raw_order_status IS NULL OR (${unknown}) THEN 'unknown'
+ WHEN (${sourceShipmentSql})='fulfilled' THEN 'dispatch_synced'
+ WHEN coalesce((${sourceShipmentSql}) IN ('unfulfilled','partial'),false)=false OR raw_order_status IN ('0','6') OR (${unknown}) THEN 'unknown'
  WHEN NOT EXISTS(SELECT 1 FROM ${documents} WHERE ${effective} AND jsonb_typeof(d->'number')='string' AND NULLIF(trim(d->>'number', ' ' || chr(9) || chr(10) || chr(13)),'') IS NOT NULL) THEN CASE WHEN ${tracked} THEN 'unknown' ELSE 'dispatch_missing' END
- WHEN ${tracked} THEN CASE WHEN raw_order_status='3' THEN 'dispatch_tracking' ELSE 'unknown' END
+ WHEN ${tracked} THEN 'dispatch_tracking'
  ELSE 'dispatch_pending' END)`
 
 export const collectedDispatchFailureSql = `(raw_bill_status='C' AND raw_order_status IN ('2','3','4','5')

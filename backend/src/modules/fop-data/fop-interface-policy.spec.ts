@@ -1,0 +1,3 @@
+import {assertActiveFopEndpoint} from './fop-interface-policy'
+it.each(['queryOrderDetail','auditWorkbenchAllocation','queryOutbound','queryPurchaseMaterialReturn','queryReceiptAdjustment','queryWorkbenchInventoryBalance','employee-stock/inventory','employee-orders/allocation-inventory'])('blocks retired configured endpoint %s',path=>{expect(()=>assertActiveFopEndpoint(new URL('https://fop.test/kapi/v2/'+path))).toThrow('fop_retired_endpoint')})
+it.each(['queryOrderList','queryInbound','queryReceipt','queryOutboundList','queryWorkbenchReservedStock','customer-stock/query','employee-orders/allocation-approve'])('allows canonical endpoint %s',path=>{expect(()=>assertActiveFopEndpoint(new URL('https://fop.test/kapi/v2/'+path))).not.toThrow()})

@@ -1,3 +1,4 @@
+import interfacePolicy from './fop-interface-policy.cjs'
 import { existsSync, readFileSync, mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -198,6 +199,7 @@ export async function runQuery(config, options = {}, fetcher = fetch) {
   const { operation, saveResponse = false, ...parameters } = options
   if (typeof saveResponse !== 'boolean') fail('invalid-request')
   const { path, body } = buildRequest(operation, parameters)
+  interfacePolicy.assertActiveFopEndpoint(path)
   const report = { operation, success: false, httpStatus: null, rowCount: null, errorCategory: null }
   const failure = (category, raw = null) => ({ report: { ...report, errorCategory: category }, rows: [], raw })
   const header = config.FOP_OPENAPI_TOKEN_HEADER || 'accessToken'

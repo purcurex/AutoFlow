@@ -41,9 +41,6 @@ test('material return supports an optional exact bill number and uses the suppli
  assert.deepEqual(buildRequest('purchase-material-return',{}).body.data,{})
  assert.throws(()=>buildRequest('purchase-material-return',{billno:'*'}))
 })
-test('allows documented number-only return details, but rejects a different returned number',async()=>{
- const cfg={FOP_OPENAPI_ACCESS_TOKEN:'fixture',FOP_OPENAPI_IDENTITY:'fixture'},query={operation:'purchase-material-return',billno:'R1'}
- const reply=billno=>async()=>new Response(JSON.stringify({status:true,errorCode:'0',data:{rows:[{billno,billentry:[{seq:1,qty:-1}]}],pageNo:1,pageSize:10,totalCount:1,lastPage:true}}))
- assert.equal((await runQuery(cfg,query,reply('R1'))).report.success,true)
- assert.equal((await runQuery(cfg,query,reply('other'))).report.success,false)
+test('retired material-return API is blocked before token and network',async()=>{
+ let calls=0;await assert.rejects(runQuery({FOP_OPENAPI_ACCESS_TOKEN:'fixture',FOP_OPENAPI_IDENTITY:'fixture'},{operation:'purchase-material-return',billno:'R1'},async()=>{calls++;throw Error('network')}),/fop_retired_endpoint/);assert.equal(calls,0)
 })

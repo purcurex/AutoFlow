@@ -19,7 +19,7 @@ export function completionTime(order: FopOrder, role: WorkbenchRole): string | n
 }
 /** Validate archive responses against completion facts, independently of pending queue rules. */
 export function matchesCompletedQueue(order: FopOrder, queue: FopOrderQueue): boolean {
-  if (order.businessStatus && queue === 'dispatch') return order.reviewStatus === 'approved' && ['fulfilled','partial_fulfilled'].includes(order.businessStatus.order)
+  if (order.businessStatus && queue === 'dispatch') return order.reviewStatus === 'approved' && order.businessStatus.sourceShipment === 'fulfilled'
   if (order.businessStatus && queue === 'shipping') return order.businessStatus.outbound === 'completed'
   if (queue === 'review') return order.reviewStatus === 'approved'
   // The source header proves outbound completion even when unrelated collected facts are absent.
