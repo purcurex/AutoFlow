@@ -29,7 +29,7 @@ test('constructs company-scoped lists and ID-based details with the current requ
     const times=api.modificationWindowOperations.includes(operation)?{startModifytime:'2026-11-01 00:00:00',endModifytime:'2026-11-16 00:00:00'}:{}
     const sourceTimes=times.startModifytime?{start_modifytime:times.startModifytime,end_modifytime:times.endModifytime}:{}
     assert.deepEqual(api.buildRequest(operation, { orgNumber: 'hyperzone', billno: 'TEST-42', id: '123', ...times, pageNo: 2, pageSize: 5 }).body,
-      { data: { org_number: 'hyperzone', billno: 'TEST-42', id: '123', ...sourceTimes }, pageNo: 2, pageSize: 5 })
+      { data: { org_number: 'hyperzone', billno: 'TEST-42', id: operation==='order-list'?['123']:'123', ...sourceTimes }, pageNo: 2, pageSize: 5 })
     assert.throws(() => api.buildRequest(operation), /invalid-request/)
     assert.throws(() => api.buildRequest(operation, { orgNumber: '*' }), /invalid-request/)
   }

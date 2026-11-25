@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { runAutomaticCatalogues } from './workbench-automatic-catalog.mjs'
 // Persistent collected-mode scheduler. No source business writes or credential output.
 import { resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -43,7 +44,7 @@ export function scheduledPreflight(config) {
   report.executable = report.blockedReasons.length === 0
   return { ...report, automaticCallsEnabled: scheduledEnabled(config), schedule: 'UTC+8; 27 daily slots; missed slots coalesced', entities: ENTITIES }
 }
-const QUERY_ENTITIES = { 'order-list': 'hzkj_orders', allocation: 'hzkj_alloc_bill', dispatch: 'hzkj_deliver_bill', 'delivery-notice': 'hzkj_deliver_order' }
+const QUERY_ENTITIES = { 'fulfillment-ids': 'hzkj_orders', 'order-list': 'hzkj_orders', allocation: 'hzkj_alloc_bill', dispatch: 'hzkj_deliver_bill', 'delivery-notice': 'hzkj_deliver_order' }
 const SAFE_QUERY_CATEGORIES = new Set(['timeout', 'network-error', 'http-error', 'api-not-subscribed', 'authentication-error', 'configuration-error', 'invalid-request', 'invalid-origin', 'invalid-response', 'invalid-id', 'invalid-json', 'business-error', 'redirect-error', 'response-too-large', 'fop_queries_paused'])
 /** Retry one transient read only. No raw payload, URL, exception text or credential reaches diagnostics. */
 export async function scheduledPageQuery({ parameters, query, enabled, refreshCredentials, record = () => {}, sleep = ms => new Promise(resolve => setTimeout(resolve, ms)) }) {
@@ -81,7 +82,7 @@ export async function scheduledPageQuery({ parameters, query, enabled, refreshCr
   }
 }
 /** The durable claim is written before prepare() can authenticate. Global session lock spans all entities. */
-export async function runScheduledCycle({ config, db, prepare, runEntity, nextReplicaSync, dueReplicaSync, now = () => new Date(), enabled = () => scheduledEnabled(config), getRequestStats = () => ({ requests: 0, minStartIntervalMs: null }), getEntityDiagnostics = () => [], getSourceBlock = () => null, maintain }) {
+export async function runScheduledCycle({ config, db, prepare, runEntity, nextReplicaSync, dueReplicaSync, now = () => new Date(), enabled = () => scheduledEnabled(config), getRequestStats = () => ({ requests: 0, minStartIntervalMs: null }), getEntityDiagnostics = () => [], getSourceBlock = () => null, maintain, runSupplemental }) {
   if (!enabled()) return { status: 'paused', upstreamCalled: false }
   const q = db.createQueryRunner(); let locked = false
   const scope=syncScope(config),lockKey=`timestamp-scheduled:${scope.tenantId}:${scope.companyId}`
@@ -105,7 +106,7 @@ export async function runScheduledCycle({ config, db, prepare, runEntity, nextRe
       if (rows.length !== 1) throw Error('timestamp_batch_scope_changed')
     }
     const entityRetry={...previous.entityRetry}
-    if(ENTITIES.every(entity=>Date.parse(entityRetry[entity]?.nextAttemptAt)>started.getTime())){
+    if(!runSupplemental&&ENTITIES.every(entity=>Date.parse(entityRetry[entity]?.nextAttemptAt)>started.getTime())){
       const nextAttemptAt=new Date(Math.min(...ENTITIES.map(entity=>Date.parse(entityRetry[entity].nextAttemptAt)))).toISOString()
       await write({...previous,nextAttemptAt})
       return {status:'not_due',nextAttemptAt,upstreamCalled:false}
@@ -144,6 +145,7 @@ export async function runScheduledCycle({ config, db, prepare, runEntity, nextRe
         await write(state)
         if(globalFailure)break
       }
+      if(runSupplemental&&!globalFailure&&enabled()){state.supplemental=await runSupplemental({batchId:batch.id,prepared});if(state.supplemental.catalogues?.some(r=>r.status==='failed'))errorCode??='timestamp_catalogue_incomplete';await write(state)}
     } catch (error) { errorCode = getSourceBlock()?.code??safeCode(error);cooldownUntil=getSourceBlock()?.until??0;globalFailure=true }
     if(maintain){try{state.maintenance={status:'succeeded',...await maintain(q,batch.id)}}catch{state.maintenance={status:'failed',errorCode:'timestamp_retention_failed'}}}
     const finished = now()
@@ -221,6 +223,7 @@ async function main() {
               getConnection: () => provider.getConnectionContext(), acquireToken: c => getToken(c, guardedFetch), query: (c, p) => scheduledPageQuery({ parameters: p, enabled, record, refreshCredentials, query: () => runQuery(c, p, guardedFetch) }),
             })
           },
+          runSupplemental: ({batchId,prepared})=>runAutomaticCatalogues({config,db,batchId,prepared,enabled,getSourceBlock:()=>sourceBlock}),
           runEntity: async (scope, mode, prepared) => {
             const source = new TimestampPagedSource(scheduledProfile(scope.entityCode,config), () => !enabled(), prepared.query, prepared.identityBasis)
             const result = await new TimestampPagedSync(new TimestampPostgresStore(db), source).run(scope, mode)

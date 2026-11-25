@@ -15,7 +15,7 @@ it('includes unlinked orders and does not limit discovery to the default time ra
  expect(readCollectedChain).toHaveBeenCalledWith(db,{id:'b'},['employee'],'1','fulfillment')
 })
 it('looks up stock roots with stock ownership and restricts unavailable queue navigation',async()=>{
- const db={query:jest.fn().mockResolvedValueOnce([{kind:'stock',source_id:'s',number:'IO1',display:{}}]).mockResolvedValue([{found:1}])}
+ const db={query:jest.fn().mockResolvedValueOnce([{kind:'stock',source_id:'s',number:'IO1',display:{}}]).mockImplementation(async(sql:string)=>sql.includes("entity_type='api_bill_relations'")?[]:[{found:1}])}
  const r=await readOrderProgress(db,{id:'b'},['employee'],'IO1',['sales'])
  expect(r.memberships).toEqual([expect.objectContaining({queue:'stock',accessible:true}),expect.objectContaining({queue:'stock_procurement',accessible:false})])
  expect(readCollectedChain).toHaveBeenCalledWith(db,{id:'b'},['employee'],'s','stock')

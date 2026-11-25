@@ -3,11 +3,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { createHash, randomUUID } from 'node:crypto'
-import { parseEnv } from 'node:util'
-import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
-import { runQuery } from './fop-workbench-openapi.mjs'
-import { getToken } from './fop-openapi-smoke.mjs'
 export const sha = raw => createHash('sha256').update(raw).digest('hex')
 export function registrationWindow(from, toExclusive) {
   const valid = v => typeof v === 'string' && /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(v) && Number.isFinite(Date.parse(v.replace(' ', 'T') + '+08:00')) && new Date(Date.parse(v.replace(' ', 'T') + '+08:00') + 8 * 3600000).toISOString().slice(0,19).replace('T',' ') === v
@@ -103,23 +99,8 @@ export async function captureRegistrations({ query, directory, context, connecti
   fs.writeFileSync(path.join(directory,'manifest.json'),JSON.stringify(m,null,2),{ mode: 0o600, flag: 'wx' })
   return m
 }
-async function main() {
-  const a = process.argv.slice(2)
-  if (a.length !== 7 || a[0] !== '--authorize-one-shot' || a[1] !== '--from' || a[3] !== '--to-exclusive' || a[5] !== '--output') throw Error('explicit_one_shot_window_output_required')
-  registrationWindow(a[2],a[4])
-  const env = parseEnv(fs.readFileSync('backend/.env.workbench.local','utf8')), cfg = parseEnv(fs.readFileSync('backend/.env.fop.local','utf8'))
-  if (env.FOP_QUERIES_PAUSED !== 'true' || env.WORKBENCH_SYNC_ENABLED !== 'false' || env.WORKBENCH_AUTOMATIC_CALLS_ENABLED !== 'false') throw Error('persistent_pause_required')
-  if (cfg.FOP_KINGDEE_USERNAME !== 'limingsong' || cfg.FOP_KINGDEE_TENANT_ID !== 'hyperzone.test' || cfg.FOP_KINGDEE_ORGANIZATION_IDS !== '100000' || !cfg.FOP_KINGDEE_USER_ID) throw Error('confirmed_identity_required')
-  const config = { ...cfg, FOP_QUERIES_PAUSED: 'false' }
-  const require = createRequire(import.meta.url)
-  require('ts-node').register({ project: path.resolve('backend/tsconfig.json'), transpileOnly: true })
-  const { KingdeeFopDataProvider } = require('../backend/src/modules/fop-data/fop-kingdee.provider')
-  const provider = new KingdeeFopDataProvider({ get: key => config[key] })
-  const connection = await provider.getConnectionContext()
-  registrationConnectionProof(connection, { tenantId: cfg.FOP_KINGDEE_TENANT_ID, userId: cfg.FOP_KINGDEE_USER_ID })
-  config.FOP_OPENAPI_ACCESS_TOKEN = await getToken(config)
-  const m = await captureRegistrations({ query: opts => runQuery(config,opts), directory: path.resolve(a[6]), connection, context: { tenantId: cfg.FOP_KINGDEE_TENANT_ID, userId: cfg.FOP_KINGDEE_USER_ID }, from: a[2], toExclusive: a[4] })
-  console.log(JSON.stringify({ complete: m.complete, rows: m.rowCount, pages: m.pages.length, error: m.error ?? null, sourceFailure: m.sourceFailure ?? null, automaticCallsEnabled: false }))
-  if (!m.complete) process.exitCode = 1
+// Legacy capture validators remain for existing archived manifests; the retired API is never called.
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+ console.error('customer_creation_window_api_retired: use workbench-authorized-catalog-capture.mjs --execute; filter registration dates in the local database')
+ process.exitCode=1
 }
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main().catch(() => { console.error('customer_registration_capture_failed; private source data not logged'); process.exitCode = 1 })

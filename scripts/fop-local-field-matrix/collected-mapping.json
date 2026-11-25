@@ -1,212 +1,654 @@
-[
-  {
-    "label": "订单标识",
-    "local": "source_id · order_number",
-    "source": "hzkj_orders.id · billno",
-    "display": "id · orderNumber",
-    "state": "实际落库并展示"
+{
+  "订单编号": {
+    "display": "orderNumber",
+    "local": "hz_fop_collected_orders.order_number / source_id",
+    "source": "hzkj_orders.billno / id",
+    "rule": "履约订单整单展示；搜索某SKU仍返回整单。",
+    "evidence": [
+      "backend/src/modules/fop-data/collected-order-normalizer.ts"
+    ]
   },
-  {
-    "label": "原生状态",
-    "local": "raw_bill_status · raw_order_status · raw_payment_status · raw_delivery_status",
-    "source": "billstatus · hzkj_orderstatus · hzkj_receipt_status · hzkj_delivery_status",
-    "display": "reviewStatus · cancelled · paymentStatus · sourceOutboundStatus",
-    "state": "已知枚举展示，未知保留；表头出库2独立支持已出库清单；不推定 Shopify 履约或配货齐套"
+  "展开明细 · 履约订单": {
+    "display": "orderNumber",
+    "local": "hz_fop_collected_orders.order_number / source_id",
+    "source": "hzkj_orders.billno / id",
+    "rule": "履约订单整单展示；搜索某SKU仍返回整单。",
+    "evidence": [
+      "backend/src/modules/fop-data/collected-order-normalizer.ts"
+    ]
   },
-  {
-    "label": "客户与店铺",
-    "local": "customer_id · display.customerName · display.storeName",
-    "source": "hzkj_customer · hzkj_shop",
-    "display": "customerId · customerName · storeName",
-    "state": "实际落库并展示；空引用留空"
+  "备货单号": {
+    "display": "stockNumber",
+    "local": "hz_fop_collected_entities[stock_orders].display.stockNumber / raw",
+    "source": "hzkj_stock_order_new.billno / id",
+    "rule": "独立备货订单，不能代用履约单编号。",
+    "evidence": [
+      "backend/src/modules/fop-data/collected-stock-native.ts"
+    ]
   },
-  {
-    "label": "商品明细",
-    "local": "display.items · total_quantity",
-    "source": "hzkj_orders_billentry（hzkj_local_sku · hzkj_qty · hzkj_picture）",
-    "display": "items（sku/name/variant/imageUrl/quantity）",
-    "state": "明细原样保存；数量缺失不补零，SKU 缺失不生成虚拟商品"
+  "商品图片 / 商品信息": {
+    "display": "items[].name/sku/imageUrl/quantity/variant",
+    "local": "hz_fop_collected_orders.display.items；hz_fop_collected_entities[product].raw",
+    "source": "单据商品分录；SKU.name（中文配货名）、number、hzkj_sku_value；图片及数量按本单明细",
+    "rule": "优先本地商品档案中文配货名；不以英文名或属性值冒充。库存用途的SKU匹配不代表单据来源关系。",
+    "evidence": [
+      "backend/src/modules/workbench-replica/collected-product-display.ts",
+      "backend/src/modules/fop-data/collected-order-normalizer.ts"
+    ]
   },
-  {
-    "label": "产品金额",
-    "local": "product_amount · display.amountBreakdown.productAmount",
-    "source": "hzkj_order_amount",
-    "display": "amountBreakdown.productAmount",
-    "state": "已有值写入；结算币种未知时不标美元或本位币"
+  "展开明细 · 商品信息": {
+    "display": "items[].name/sku/imageUrl/quantity/variant",
+    "local": "hz_fop_collected_orders.display.items；hz_fop_collected_entities[product].raw",
+    "source": "单据商品分录；SKU.name（中文配货名）、number、hzkj_sku_value；图片及数量按本单明细",
+    "rule": "优先本地商品档案中文配货名；不以英文名或属性值冒充。库存用途的SKU匹配不代表单据来源关系。",
+    "evidence": [
+      "backend/src/modules/workbench-replica/collected-product-display.ts",
+      "backend/src/modules/fop-data/collected-order-normalizer.ts"
+    ]
   },
-  {
-    "label": "总额与币种",
-    "local": "total_amount · currency_code · display.amount · display.currency",
-    "source": "hzkj_total_amount · hzkj_settlecurrency.number",
-    "display": "amount · currency",
-    "state": "旧响应未提供，NULL／—；不以产品金额或 hzkj_currency 替代"
+  "Shopify 单号": {
+    "display": "shopifyOrderNumber",
+    "local": "hz_fop_collected_orders.display.shopifyOrderNumber",
+    "source": "hzkj_orders.hzkj_source_number",
+    "rule": "源平台单号。",
+    "evidence": [
+      "backend/src/modules/fop-data/collected-order-normalizer.ts"
+    ]
   },
-  {
-    "label": "金额明细",
-    "local": "display.amountBreakdown.shippingFee/taxAmount/discountAmount",
-    "source": "hzkj_fre_quo_amount · hzkj_fixed_tax_fee · hzkj_discount_cost",
-    "display": "amountBreakdown",
-    "state": "本轮未提供，NULL／—"
+  "订单金额": {
+    "display": "amount / currency / amountBreakdown",
+    "local": "hz_fop_collected_orders.raw → 本地读取时 collectedOrderMoney；total_amount / product_amount / display",
+    "source": "hzkj_total_amount（订单金额）；hzkj_order_amount（产品）；hzkj_fre_quo_amount（运费）；hzkj_fixed_tax_fee（现行税费）；hzkj_discount_cost；hzkj_settlecurrency_number",
+    "rule": "订单金额不由产品金额相加推算；缺币种默认USD。当前税费实现读取表头固定税费，与历史“包裹税费”描述不同，按代码记录，未在本次修改业务逻辑。RMA及备货见专用规则。",
+    "evidence": [
+      "backend/src/modules/fop-data/collected-order-money.ts"
+    ]
   },
-  {
-    "label": "业务归属",
-    "local": "owner_employee_id · display.owner；organization_employees/nodes",
-    "source": "hzkj_operator.id（业务员 masterId）",
-    "display": "owner · department",
-    "state": "采集归属入库；展示部门取本地已核实目录，不用认证用户ID代替业务员"
+  "Customer": {
+    "display": "shippingCountryCode / shippingRecipient",
+    "local": "hz_fop_collected_orders.country_code / display.shippingRecipient",
+    "source": "hzkj_country.twocountrycode；hzkj_customer_first_name/last_name、phone、email、state、city、post_code、address1、address2",
+    "rule": "C端收件人，独立于B端客户名称。",
+    "evidence": [
+      "backend/src/modules/fop-data/collected-order-normalizer.ts"
+    ]
   },
-  {
-    "label": "仓库与国家",
-    "local": "warehouse_code · country_code · display.warehouse",
-    "source": "hzkj_dst_warehouse · hzkj_country.twocountrycode",
-    "display": "warehouseCode · shippingCountryCode · warehouse",
-    "state": "已有值入库，仓库代码使用明确配置映射；未知留空"
+  "客户名称": {
+    "display": "customerName / storeName",
+    "local": "hz_fop_collected_orders.customer_id / display.customerName / display.storeName",
+    "source": "hzkj_customer / hzkj_shop（原生ID及名称经归一化）",
+    "rule": "来自本单客户、店铺引用；缺值不按同名猜测。",
+    "evidence": [
+      "backend/src/modules/fop-data/collected-order-normalizer.ts",
+      "backend/src/modules/workbench-replica/timestamp-projection-normalizer.ts"
+    ]
   },
-  {
-    "label": "收件信息",
-    "local": "display.shippingRecipient",
-    "source": "hzkj_customer_first_name/last_name · phone · email · state · city · post_code · address1/address2（hzkj_前缀）",
-    "display": "shippingRecipient",
-    "state": "原响应已有值入库，缺失子字段留空"
+  "店铺": {
+    "display": "customerName / storeName",
+    "local": "hz_fop_collected_orders.customer_id / display.customerName / display.storeName",
+    "source": "hzkj_customer / hzkj_shop（原生ID及名称经归一化）",
+    "rule": "来自本单客户、店铺引用；缺值不按同名猜测。",
+    "evidence": [
+      "backend/src/modules/fop-data/collected-order-normalizer.ts",
+      "backend/src/modules/workbench-replica/timestamp-projection-normalizer.ts"
+    ]
   },
-  {
-    "label": "事件时间",
-    "local": "created_at · paid_at · consumer_paid_at · display.reviewedAt",
-    "source": "createtime · hzkj_receipt_date · hzkj_datetimefield · auditdate",
-    "display": "createdAt · paidAt/consumerPaidAt兼容别名 · sourceOrderPaidAt · reviewedAt",
-    "state": "原时区保留；客户付款与 C 端付款独立；缺失不以创建时间补充"
+  "客户 / 店铺": {
+    "display": "customerName / storeName",
+    "local": "hz_fop_collected_orders.customer_id / display.customerName / display.storeName",
+    "source": "hzkj_customer / hzkj_shop（原生ID及名称经归一化）",
+    "rule": "来自本单客户、店铺引用；缺值不按同名猜测。",
+    "evidence": [
+      "backend/src/modules/fop-data/collected-order-normalizer.ts",
+      "backend/src/modules/workbench-replica/timestamp-projection-normalizer.ts"
+    ]
   },
-  {
-    "label": "物流渠道",
-    "local": "display.customLogisticsChannelName",
-    "source": "hzkj_customer_channel.name",
+  "展开明细 · 客户 / 店铺": {
+    "display": "customerName / storeName",
+    "local": "hz_fop_collected_orders.customer_id / display.customerName / display.storeName",
+    "source": "hzkj_customer / hzkj_shop（原生ID及名称经归一化）",
+    "rule": "来自本单客户、店铺引用；缺值不按同名猜测。",
+    "evidence": [
+      "backend/src/modules/fop-data/collected-order-normalizer.ts",
+      "backend/src/modules/workbench-replica/timestamp-projection-normalizer.ts"
+    ]
+  },
+  "业务员": {
+    "display": "owner / department",
+    "local": "hz_fop_collected_orders.owner_employee_id；organization_employees / organization_nodes",
+    "source": "hzkj_operator（业务员）→本地FOP绑定",
+    "rule": "姓名、部门与可见范围按当前本地账号组织授权计算，不固化每个用户的结果。",
+    "evidence": [
+      "backend/src/modules/fop-data/collected-order-normalizer.ts",
+      "backend/src/modules/workbench-replica/collected-workbench.service.ts"
+    ]
+  },
+  "展开明细 · 业务员 / 部门": {
+    "display": "owner / department",
+    "local": "hz_fop_collected_orders.owner_employee_id；organization_employees / organization_nodes",
+    "source": "hzkj_operator（业务员）→本地FOP绑定",
+    "rule": "姓名、部门与可见范围按当前本地账号组织授权计算，不固化每个用户的结果。",
+    "evidence": [
+      "backend/src/modules/fop-data/collected-order-normalizer.ts",
+      "backend/src/modules/workbench-replica/collected-workbench.service.ts"
+    ]
+  },
+  "发货仓库": {
+    "display": "warehouse / warehouseCode",
+    "local": "hz_fop_collected_orders.warehouse_code / display.warehouse；备货实体display",
+    "source": "履约hzkj_dst_warehouse；备货hzkj_warehouse",
+    "rule": "收货通知自带仓库与履约仓库分开，不能混用。",
+    "evidence": [
+      "backend/src/modules/fop-data/collected-order-normalizer.ts",
+      "backend/src/modules/fop-data/collected-stock-native.ts"
+    ]
+  },
+  "履约仓库": {
+    "display": "warehouse / warehouseCode",
+    "local": "hz_fop_collected_orders.warehouse_code / display.warehouse；备货实体display",
+    "source": "履约hzkj_dst_warehouse；备货hzkj_warehouse",
+    "rule": "收货通知自带仓库与履约仓库分开，不能混用。",
+    "evidence": [
+      "backend/src/modules/fop-data/collected-order-normalizer.ts",
+      "backend/src/modules/fop-data/collected-stock-native.ts"
+    ]
+  },
+  "收货仓库": {
+    "display": "warehouse / warehouseCode",
+    "local": "hz_fop_collected_orders.warehouse_code / display.warehouse；备货实体display",
+    "source": "履约hzkj_dst_warehouse；备货hzkj_warehouse",
+    "rule": "收货通知自带仓库与履约仓库分开，不能混用。",
+    "evidence": [
+      "backend/src/modules/fop-data/collected-order-normalizer.ts",
+      "backend/src/modules/fop-data/collected-stock-native.ts"
+    ]
+  },
+  "收款日期": {
+    "display": "paidAt / consumerPaidAt",
+    "local": "hz_fop_collected_orders.paid_at / display.paidAt；备货display",
+    "source": "hzkj_receipt_date",
+    "rule": "客户向FOP付款；兼容consumerPaidAt在业务查询中按对应队列返回，不凭字段名判断C端时间。",
+    "evidence": [
+      "backend/src/modules/fop-data/collected-order-normalizer.ts",
+      "backend/src/modules/workbench-replica/collected-workbench.service.ts"
+    ]
+  },
+  "客户付款时间": {
+    "display": "paidAt / consumerPaidAt",
+    "local": "hz_fop_collected_orders.paid_at / display.paidAt；备货display",
+    "source": "hzkj_receipt_date",
+    "rule": "客户向FOP付款；兼容consumerPaidAt在业务查询中按对应队列返回，不凭字段名判断C端时间。",
+    "evidence": [
+      "backend/src/modules/fop-data/collected-order-normalizer.ts",
+      "backend/src/modules/workbench-replica/collected-workbench.service.ts"
+    ]
+  },
+  "客户付款时间摘要": {
+    "display": "paidAt / consumerPaidAt",
+    "local": "hz_fop_collected_orders.paid_at / display.paidAt；备货display",
+    "source": "hzkj_receipt_date",
+    "rule": "客户向FOP付款；兼容consumerPaidAt在业务查询中按对应队列返回，不凭字段名判断C端时间。",
+    "evidence": [
+      "backend/src/modules/fop-data/collected-order-normalizer.ts",
+      "backend/src/modules/workbench-replica/collected-workbench.service.ts"
+    ]
+  },
+  "C端付款时间": {
+    "display": "sourceOrderPaidAt",
+    "local": "hz_fop_collected_orders.consumer_paid_at / display.sourceOrderPaidAt",
+    "source": "hzkj_datetimefield",
+    "rule": "待支付清单源单付款时间，与收款日期独立。",
+    "evidence": [
+      "backend/src/modules/fop-data/collected-order-normalizer.ts"
+    ]
+  },
+  "创建时间": {
+    "display": "createdAt",
+    "local": "hz_fop_collected_entities[stock_orders].display.createdAt",
+    "source": "备货createtime（facts.createdAt）；hzkj_bizdate作为独立业务日期保存",
+    "rule": "原生创建时间；不代替付款时间。",
+    "evidence": [
+      "backend/src/modules/fop-data/collected-stock-native.ts"
+    ]
+  },
+  "订单备注": {
+    "display": "orderRemark",
+    "local": "hz_fop_collected_orders.raw.hzkj_note / display.orderRemark",
+    "source": "hzkj_orders.hzkj_note",
+    "rule": "仅本履约单订单备注；缺失留空。",
+    "evidence": [
+      "backend/src/modules/fop-data/collected-order-notes.ts"
+    ]
+  },
+  "自定义物流渠道": {
     "display": "customLogisticsChannelName",
-    "state": "履约自定义渠道展示；发运QC/WC号已按单独立采集，实际渠道缺失留空"
+    "local": "hz_fop_collected_orders.display / raw",
+    "source": "hzkj_customer_channel",
+    "rule": "自定义渠道与实际渠道独立。",
+    "evidence": [
+      "backend/src/modules/fop-data/collected-order-normalizer.ts"
+    ]
   },
-  {
-    "label": "下游业务",
-    "local": "display.fulfillmentProgress · dispatchDocuments · allocationDocument · procurementProgress",
-    "source": "配货／发运／采购／出库实际关联事实",
-    "display": "进度与关联单据",
-    "state": "allocation/procurement两次完整父单游标采集，真实关联事实入库；按原生状态后端分类，未知单据状态进入待核查，不用未出库推定待出库"
+  "物流信息": {
+    "display": "logisticsChannels / dispatchLogistics / warehouseLogistics",
+    "local": "hz_fop_collected_orders.display；hz_fop_collected_entities[dispatch/receipt_notice].raw / display",
+    "source": "hzkj_channel；发运hzkj_logistics_orderno（全程）、hzkj_logistics_trackno（尾程）；收货通知物流信息见待入库专用规则",
+    "rule": "同一发运或国内物流记录分组展示，不能跨包裹拼接。",
+    "evidence": [
+      "backend/src/modules/fop-data/collected-native-facts.ts",
+      "backend/src/modules/fop-data/collected-receipt-notice.ts"
+    ]
   },
-  {
-    "label": "数据质量",
-    "local": "display.dataQuality · raw；hz_fop_collected_batches.source_as_of/metadata",
-    "source": "原响应＋本次采集校验",
-    "display": "采集时间 · 缺失字段 · 待核查原因 · readOnly",
-    "state": "只读核查，完整快照证明未建立；所有自动 FOP 调用暂停"
+  "物流渠道 / 跟踪号": {
+    "display": "logisticsChannels / dispatchLogistics / warehouseLogistics",
+    "local": "hz_fop_collected_orders.display；hz_fop_collected_entities[dispatch/receipt_notice].raw / display",
+    "source": "hzkj_channel；发运hzkj_logistics_orderno（全程）、hzkj_logistics_trackno（尾程）；收货通知物流信息见待入库专用规则",
+    "rule": "同一发运或国内物流记录分组展示，不能跨包裹拼接。",
+    "evidence": [
+      "backend/src/modules/fop-data/collected-native-facts.ts",
+      "backend/src/modules/fop-data/collected-receipt-notice.ts"
+    ]
   },
-  {
-    "label": "备货主体",
-    "local": "hz_fop_collected_entities（entity_type=stock_orders）source_id · display",
-    "source": "employee-stock_orders 授权分页；stock id/stockNumber/stockType",
-    "display": "id · stockNumber · stockType",
-    "state": "完整授权分页153笔；销售备货全部与采购备货24笔使用同一行事实；不混入履约订单"
+  "备货类型": {
+    "display": "stockType / orderStatus",
+    "local": "hz_fop_collected_entities[stock_orders].raw / display",
+    "source": "hzkj_stock_type：1全款/2押金；hzkj_orderstatus；billstatus为独立审核状态",
+    "rule": "全款／押金及待支付／已支付／已取消按原生枚举，不以审核状态替代。",
+    "evidence": [
+      "backend/src/modules/fop-data/collected-stock-native.ts",
+      "backend/src/modules/fop-data/collected-stock-normalizer.ts"
+    ]
   },
-  {
-    "label": "备货状态",
-    "local": "display.paymentStatus/reviewStatus/orderStatus/purchaseStatus",
-    "source": "已归一化备货收款、审核及原生采购状态",
-    "display": "订单状态 · 采购状态 · 备货阶段",
-    "state": "未付/已付/已审及采购进度据源事实筛选；采购中不推成供应商待发货"
+  "备货订单状态": {
+    "display": "stockType / orderStatus",
+    "local": "hz_fop_collected_entities[stock_orders].raw / display",
+    "source": "hzkj_stock_type：1全款/2押金；hzkj_orderstatus；billstatus为独立审核状态",
+    "rule": "全款／押金及待支付／已支付／已取消按原生枚举，不以审核状态替代。",
+    "evidence": [
+      "backend/src/modules/fop-data/collected-stock-native.ts",
+      "backend/src/modules/fop-data/collected-stock-normalizer.ts"
+    ]
   },
-  {
-    "label": "备货展示字段",
-    "local": "display.items/amount/currency/createdAt/paidAt/procurementPaidAt",
-    "source": "员工备货接口已提供商品、订单金额、币种及独立事件时间",
-    "display": "商品 · 金额 · 创建/客户付款/采购付款时间",
-    "state": "已有值展示与导出；缺失留空，时间不互相替代，未知币种不标USD"
+  "采购状态": {
+    "display": "businessStatus.purchase / items[].procurementStatus",
+    "local": "hz_fop_collected_orders.raw / display",
+    "source": "hzkj_purchase_status；履约订单商品分录采购状态",
+    "rule": "订单状态与行状态分别保存；采购来源全款／押金／直采独立。",
+    "evidence": [
+      "backend/src/modules/fop-data/collected-native-facts.ts",
+      "backend/src/modules/fop-data/workbench-queue-rules.ts"
+    ]
   },
-  {
-    "label": "备货当前归属",
-    "local": "owner_employee_id · display.customerId/owner/warehouseCode；本地组织目录",
-    "source": "已授权备货业务员、客户、仓库",
-    "display": "客户 · 业务员 · 部门 · 仓库",
-    "state": "租户公司与当前成员范围约束，先筛选后分页/合计；销售采购共用同一来源集合"
+  "供应商发货状态": {
+    "display": "purchase.payment / shipment / stage",
+    "local": "hz_fop_collected_entities[purchase].raw / display；本地采购分组",
+    "source": "hzkj_pay_status（1688订单状态）、采购明细发货事实、关联收货通知",
+    "rule": "已支付可覆盖该采购单关联订单付款判断；0未支付、1已支付、2未支付已取消、3已退款、4部分退款。行退款分摊待补。",
+    "evidence": [
+      "backend/src/modules/fop-data/collected-purchase-association.ts",
+      "backend/src/modules/fop-data/procurement-groups.ts"
+    ]
   },
-  {
-    "label": "清单阻塞原因",
-    "local": "dataAvailability.queueAvailable/missingFields/unclassifiedCount/reason",
-    "source": "本轮接口结果及当前授权集合分类证据",
-    "display": "无法判定原因 · 本环节待核查数量",
-    "state": "区分已入库字段缺失、接口当前零结果待核验、实体API未提供；不以0表示无待办"
+  "采购进度": {
+    "display": "purchase.payment / shipment / stage",
+    "local": "hz_fop_collected_entities[purchase].raw / display；本地采购分组",
+    "source": "hzkj_pay_status（1688订单状态）、采购明细发货事实、关联收货通知",
+    "rule": "已支付可覆盖该采购单关联订单付款判断；0未支付、1已支付、2未支付已取消、3已退款、4部分退款。行退款分摊待补。",
+    "evidence": [
+      "backend/src/modules/fop-data/collected-purchase-association.ts",
+      "backend/src/modules/fop-data/procurement-groups.ts"
+    ]
   },
-  {
-    "label": "售后主体",
-    "local": "hz_fop_collected_entities(entity_type=rma).source_id/display/raw",
-    "source": "hzkj_after_sale_orders.id/number/hzkj_sales_type/hzkj_orderstatus",
-    "display": "id/afterSaleNumber/afterSaleType/flowStatus",
-    "state": "313张原始售后单入库；297张关系核验通过，16张隔离待核查；当前客户扫描不是公司全部售后证明"
+  "付款 / 发货状态": {
+    "display": "purchase.payment / shipment / stage",
+    "local": "hz_fop_collected_entities[purchase].raw / display；本地采购分组",
+    "source": "hzkj_pay_status（1688订单状态）、采购明细发货事实、关联收货通知",
+    "rule": "已支付可覆盖该采购单关联订单付款判断；0未支付、1已支付、2未支付已取消、3已退款、4部分退款。行退款分摊待补。",
+    "evidence": [
+      "backend/src/modules/fop-data/collected-purchase-association.ts",
+      "backend/src/modules/fop-data/procurement-groups.ts"
+    ]
   },
-  {
-    "label": "售后来源归属",
-    "local": "display.rmaAssociation/sourceOrderId；owner_employee_id",
-    "source": "hzkj_source_number及已核对原单id/shop/customer/operator",
-    "display": "原单编号/客户/店铺/业务员",
-    "state": "按精确且唯一来源关联核验；公司与原单关系不能证明的隔离，不向普通业务清单释放"
+  "采购订单 / 1688 单号": {
+    "display": "purchase.number / platformOrderNumber",
+    "local": "hz_fop_collected_entities[purchase].raw / display",
+    "source": "hzkj_purorderbill.billno / hzkj_1688_order_n",
+    "rule": "采购主单独立保存；按明确来源单号关联履约。",
+    "evidence": [
+      "backend/src/modules/fop-data/collected-purchase-association.ts"
+    ]
   },
-  {
-    "label": "售后退款字段",
-    "local": "display.rmaCases[].refundAmount/refundCurrency/reason",
-    "source": "hzkj_refund_amount/hzkj_tocurr_number/hzkj_resason1",
-    "display": "退款金额/币种/售后原因",
-    "state": "已有值展示；缺失币种留空，申请金额不替代实际退款"
+  "采购单信息": {
+    "display": "purchase.number / platformOrderNumber",
+    "local": "hz_fop_collected_entities[purchase].raw / display",
+    "source": "hzkj_purorderbill.billno / hzkj_1688_order_n",
+    "rule": "采购主单独立保存；按明确来源单号关联履约。",
+    "evidence": [
+      "backend/src/modules/fop-data/collected-purchase-association.ts"
+    ]
   },
-  {
-    "label": "配货状态事实",
-    "local": "hz_fop_collected_entities(entity_type=allocation).display/raw",
-    "source": "hzkj_alloc_bill.id/billno/hzkj_order_id/billstatus/hzkj_alloc_status",
-    "display": "allocationDocuments/ready/approved",
-    "state": "12643张配货；全部有效单齐套/审核共同分类，保留原始状态与操作员"
+  "供应商": {
+    "display": "purchase.supplier",
+    "local": "hz_fop_collected_entities[purchase].raw / display",
+    "source": "采购订单供应商引用及联系信息",
+    "rule": "缺字段留空；不按联系人猜测供应商。",
+    "evidence": [
+      "backend/src/modules/fop-data/collected-purchase-association.ts"
+    ]
   },
-  {
-    "label": "发运状态事实",
-    "local": "hz_fop_collected_entities(entity_type=dispatch).display/raw",
-    "source": "hzkj_deliver_bill.billstatus/hzkj_delivery_status/hzkj_fulfillment_status",
-    "display": "dispatchDocuments/dispatchTaskStatus",
-    "state": "15149张发运；Shopify字段与发运流程分别保存，未知枚举待核查不当已履约"
+  "实际支付金额": {
+    "display": "purchase.actualPaidAmount / actualPaidFreight",
+    "local": "hz_fop_collected_entities[purchase].raw / display",
+    "source": "hzkj_actual_amount / hzkj_actual_free",
+    "rule": "采购整单实际支付及运费；不分摊为履约订单金额。",
+    "evidence": [
+      "backend/src/modules/fop-data/collected-purchase-association.ts",
+      "backend/src/modules/fop-data/collected-analytics-facts.ts"
+    ]
   },
-  {
-    "label": "发运跟踪号",
-    "local": "display.dispatchLogistics/warehouseLogistics",
-    "source": "hzkj_logistics_orderno/hzkj_logistics_trackno",
-    "display": "QC全程/WC尾程",
-    "state": "同一发运单分组；仓库仅显示审核C的有效发运单，缺渠道留空"
+  "关联履约 / 商品": {
+    "display": "orderCount / skuCount / quantity",
+    "local": "hz_fop_collected_entities[purchase].raw商品分录 / 本地分组查询",
+    "source": "hzkj_billentry；hzkj_salbillnumber（来源履约单）及SKU/数量",
+    "rule": "履约单号去重，按采购整单有效分录合计。",
+    "evidence": [
+      "backend/src/modules/fop-data/collected-purchase-association.ts",
+      "backend/src/modules/fop-data/procurement-groups.ts"
+    ]
   },
-  {
-    "label": "出库关联事实",
-    "local": "hz_fop_collected_entities(entity_type=outbound/delivery_notice).raw",
-    "source": "im_saloutbill/hzkj_deliver_order",
-    "display": "本地原始关联事实/履约出库状态",
-    "state": "10995张出库、14258张发货通知保存；履约出库0/1不直接证明可出库"
+  "履约笔数 / SKU数 / 数量": {
+    "display": "orderCount / skuCount / quantity",
+    "local": "hz_fop_collected_entities[purchase].raw商品分录 / 本地分组查询",
+    "source": "hzkj_billentry；hzkj_salbillnumber（来源履约单）及SKU/数量",
+    "rule": "履约单号去重，按采购整单有效分录合计。",
+    "evidence": [
+      "backend/src/modules/fop-data/collected-purchase-association.ts",
+      "backend/src/modules/fop-data/procurement-groups.ts"
+    ]
   },
-  {
-    "label": "采购整单事实",
-    "local": "hz_fop_collected_entities(entity_type=purchase).display/raw",
-    "source": "hzkj_purorderbill.id/billno/billstatus/hzkj_billentry",
-    "display": "purchase/rows.id/rows.orderId/quantity/skuCount/orderCount",
-    "state": "2929张采购单；跨页按稳定分录ID合并，归属先过滤，未知发货状态进入待核查；详情行以采购单/分录派生独立稳定ID，未关联履约ID仍留空，管理员可导出核查"
+  "采购付款时间": {
+    "display": "paidAt / completedAt",
+    "local": "hz_fop_collected_entities[purchase].raw / display",
+    "source": "hzkj_purorderbill.hzkj_pay_time",
+    "rule": "没有明确业务时间留空，不能用创建时间或收款日期代替。",
+    "evidence": [
+      "backend/src/modules/fop-data/collected-purchase-association.ts"
+    ]
   },
-  {
-    "label": "采购付款下单",
-    "local": "display.purchase.payment/placement/rawPaymentStatus/rawStandardPaymentStatus",
-    "source": "hzkj_pay_status/hzkj_paystatus/hzkj_purchase_channel/hzkj_1688_order_n",
-    "display": "付款/1688下单/采购渠道",
-    "state": "原生字段分别保存；已采购不当已付款，已付且下单完成仍不能证明供应商已发"
+  "采购完成时间": {
+    "display": "paidAt / completedAt",
+    "local": "hz_fop_collected_entities[purchase].raw / display",
+    "source": "采购供应商发货完成事实；当前 purchaseGroupFacts.completedAt=null，按读取器已补充事实返回，缺值留空",
+    "rule": "没有明确业务时间留空，不能用创建时间或收款日期代替。",
+    "evidence": [
+      "backend/src/modules/fop-data/collected-purchase-association.ts"
+    ]
   },
-  {
-    "label": "采购申请关系",
-    "local": "hz_fop_collected_entities(entity_type=purchase_application/native_links).raw",
-    "source": "hzkj_purapplybill/applicationLinks/purchaseLinks/receiptLinks",
-    "display": "本地来源关系",
-    "state": "11802张申请；显式链接保留，关系不唯一或分录冲突保留待核查"
+  "展开明细 · 发货仓库 / 客户付款时间": {
+    "display": "warehouse / paidAt / completedAt",
+    "local": "hz_fop_collected_orders.display；采购关联本地行",
+    "source": "关联履约仓库、hzkj_receipt_date；采购完成事实",
+    "rule": "展开行按关联履约单聚合，保留独立业务时间。",
+    "evidence": [
+      "backend/src/modules/fop-data/procurement-groups.ts"
+    ]
   },
-  {
-    "label": "收货通知事实",
-    "local": "hz_fop_collected_entities(entity_type=receipt_notice).display/raw",
-    "source": "hzkj_receiptnotice.id/billno/entryentity/hzkj_cancelstatus",
-    "display": "number/lines/quantity/status；lines.sku/name/imageUrl",
-    "state": "3165张真实通知；商品取精确通知→采购→履约行关联并标明productSource，通知数量独立；WMS/入库量/本单仓库供应商缺失留空，不将通知数量当已入库"
+  "展开明细 · 发货仓库 / 采购完成时间": {
+    "display": "warehouse / paidAt / completedAt",
+    "local": "hz_fop_collected_orders.display；采购关联本地行",
+    "source": "关联履约仓库、hzkj_receipt_date；采购完成事实",
+    "rule": "展开行按关联履约单聚合，保留独立业务时间。",
+    "evidence": [
+      "backend/src/modules/fop-data/procurement-groups.ts"
+    ]
+  },
+  "退款金额": {
+    "display": "rmaCases[].refundAmount / type / number / reason",
+    "local": "hz_fop_collected_entities[rma].raw.case / display",
+    "source": "hzkj_refund_amount / hzkj_tocurr_number / hzkj_sales_type / number / hzkj_resason1",
+    "rule": "按RMA单分行；补发货不显示退款额，RMA订单金额取hzkj_order_amount且不展示金额明细。19笔来源匹配缺口仍待补。",
+    "evidence": [
+      "backend/src/modules/fop-data/collected-rma.ts"
+    ]
+  },
+  "RMA单": {
+    "display": "rmaCases[].refundAmount / type / number / reason",
+    "local": "hz_fop_collected_entities[rma].raw.case / display",
+    "source": "hzkj_refund_amount / hzkj_tocurr_number / hzkj_sales_type / number / hzkj_resason1",
+    "rule": "按RMA单分行；补发货不显示退款额，RMA订单金额取hzkj_order_amount且不展示金额明细。19笔来源匹配缺口仍待补。",
+    "evidence": [
+      "backend/src/modules/fop-data/collected-rma.ts"
+    ]
+  },
+  "售后原因": {
+    "display": "rmaCases[].refundAmount / type / number / reason",
+    "local": "hz_fop_collected_entities[rma].raw.case / display",
+    "source": "hzkj_refund_amount / hzkj_tocurr_number / hzkj_sales_type / number / hzkj_resason1",
+    "rule": "按RMA单分行；补发货不显示退款额，RMA订单金额取hzkj_order_amount且不展示金额明细。19笔来源匹配缺口仍待补。",
+    "evidence": [
+      "backend/src/modules/fop-data/collected-rma.ts"
+    ]
+  },
+  "异常类型": {
+    "display": "exception / exceptions",
+    "local": "hz_fop_collected_orders.display；关联采购/配货/发运等本地事实",
+    "source": "订单异常、发运异常、配货异常、采购异常、妥投异常由本地规则计算",
+    "rule": "异常清单与主流程并行；原因及起始时间缺失不编造。",
+    "evidence": [
+      "backend/src/modules/workbench-replica/collected-workbench-query.ts",
+      "backend/src/modules/fop-data/collected-native-facts.ts"
+    ]
+  },
+  "异常原因": {
+    "display": "exception / exceptions",
+    "local": "hz_fop_collected_orders.display；关联采购/配货/发运等本地事实",
+    "source": "订单异常、发运异常、配货异常、采购异常、妥投异常由本地规则计算",
+    "rule": "异常清单与主流程并行；原因及起始时间缺失不编造。",
+    "evidence": [
+      "backend/src/modules/workbench-replica/collected-workbench-query.ts",
+      "backend/src/modules/fop-data/collected-native-facts.ts"
+    ]
+  },
+  "异常时长": {
+    "display": "exception / exceptions",
+    "local": "hz_fop_collected_orders.display；关联采购/配货/发运等本地事实",
+    "source": "订单异常、发运异常、配货异常、采购异常、妥投异常由本地规则计算",
+    "rule": "异常清单与主流程并行；原因及起始时间缺失不编造。",
+    "evidence": [
+      "backend/src/modules/workbench-replica/collected-workbench-query.ts",
+      "backend/src/modules/fop-data/collected-native-facts.ts"
+    ]
+  },
+  "履约状态": {
+    "display": "dispatchTaskStatus / salesSourceStatus",
+    "local": "hz_fop_collected_orders.raw / display；hz_fop_collected_entities[dispatch].raw",
+    "source": "hzkj_fulfillment_status（Shopify源单状态）；发运单号与跟踪号",
+    "rule": "已履约分类依据源单状态；待建发运单、已建单未取号为独立发运进度。",
+    "evidence": [
+      "backend/src/modules/fop-data/fulfillment-source-status.ts",
+      "backend/src/modules/fop-data/collected-native-facts.ts"
+    ]
+  },
+  "发运单编号": {
+    "display": "dispatchDocuments / number / billStatus / auditedAt",
+    "local": "hz_fop_collected_entities[dispatch].raw / display",
+    "source": "hzkj_deliver_bill.billno / billstatus / auditdate",
+    "rule": "按明确订单关联读取多张发运单。",
+    "evidence": [
+      "backend/src/modules/fop-data/collected-native-facts.ts"
+    ]
+  },
+  "发运单状态": {
+    "display": "dispatchDocuments / number / billStatus / auditedAt",
+    "local": "hz_fop_collected_entities[dispatch].raw / display",
+    "source": "hzkj_deliver_bill.billno / billstatus / auditdate",
+    "rule": "按明确订单关联读取多张发运单。",
+    "evidence": [
+      "backend/src/modules/fop-data/collected-native-facts.ts"
+    ]
+  },
+  "发运审核时间": {
+    "display": "dispatchDocuments / number / billStatus / auditedAt",
+    "local": "hz_fop_collected_entities[dispatch].raw / display",
+    "source": "hzkj_deliver_bill.billno / billstatus / auditdate",
+    "rule": "按明确订单关联读取多张发运单。",
+    "evidence": [
+      "backend/src/modules/fop-data/collected-native-facts.ts"
+    ]
+  },
+  "配货单号": {
+    "display": "allocationDocuments / ready / approved / auditedAt",
+    "local": "hz_fop_collected_entities[allocation].raw / display",
+    "source": "hzkj_alloc_bill.billno / billstatus / hzkj_alloc_status / auditdate",
+    "rule": "配货审核以配货单billstatus为准；仅已提交可审核，齐套时间缺失留空。",
+    "evidence": [
+      "backend/src/modules/fop-data/collected-native-facts.ts",
+      "backend/src/modules/workbench-replica/collected-allocation-query.ts"
+    ]
+  },
+  "配货单号 / 单据状态": {
+    "display": "allocationDocuments / ready / approved / auditedAt",
+    "local": "hz_fop_collected_entities[allocation].raw / display",
+    "source": "hzkj_alloc_bill.billno / billstatus / hzkj_alloc_status / auditdate",
+    "rule": "配货审核以配货单billstatus为准；仅已提交可审核，齐套时间缺失留空。",
+    "evidence": [
+      "backend/src/modules/fop-data/collected-native-facts.ts",
+      "backend/src/modules/workbench-replica/collected-allocation-query.ts"
+    ]
+  },
+  "审核状态": {
+    "display": "allocationDocuments / ready / approved / auditedAt",
+    "local": "hz_fop_collected_entities[allocation].raw / display",
+    "source": "hzkj_alloc_bill.billno / billstatus / hzkj_alloc_status / auditdate",
+    "rule": "配货审核以配货单billstatus为准；仅已提交可审核，齐套时间缺失留空。",
+    "evidence": [
+      "backend/src/modules/fop-data/collected-native-facts.ts",
+      "backend/src/modules/workbench-replica/collected-allocation-query.ts"
+    ]
+  },
+  "齐套时间": {
+    "display": "allocationDocuments / ready / approved / auditedAt",
+    "local": "hz_fop_collected_entities[allocation].raw / display",
+    "source": "hzkj_alloc_bill.billno / billstatus / hzkj_alloc_status / auditdate",
+    "rule": "配货审核以配货单billstatus为准；仅已提交可审核，齐套时间缺失留空。",
+    "evidence": [
+      "backend/src/modules/fop-data/collected-native-facts.ts",
+      "backend/src/modules/workbench-replica/collected-allocation-query.ts"
+    ]
+  },
+  "配货审核时间": {
+    "display": "allocationDocuments / ready / approved / auditedAt",
+    "local": "hz_fop_collected_entities[allocation].raw / display",
+    "source": "hzkj_alloc_bill.billno / billstatus / hzkj_alloc_status / auditdate",
+    "rule": "配货审核以配货单billstatus为准；仅已提交可审核，齐套时间缺失留空。",
+    "evidence": [
+      "backend/src/modules/fop-data/collected-native-facts.ts",
+      "backend/src/modules/workbench-replica/collected-allocation-query.ts"
+    ]
+  },
+  "订单审核时间": {
+    "display": "auditedAt",
+    "local": "hz_fop_collected_orders.raw.auditdate / display",
+    "source": "hzkj_orders.auditdate",
+    "rule": "审核时间不代替付款筛选时间。",
+    "evidence": [
+      "backend/src/modules/fop-data/collected-native-facts.ts"
+    ]
+  },
+  "出库状态": {
+    "display": "outboundStatus / outboundAt / wmsCreatedAt",
+    "local": "hz_fop_collected_orders.raw；hz_fop_collected_entities[delivery_notice/outbound].raw",
+    "source": "履约hzkj_delivery_status；发货通知auditdate为WMS创建时间；出库事实时间",
+    "rule": "整单出库；订单出库状态不单独证明待出库，需有效发货通知。",
+    "evidence": [
+      "backend/src/modules/fop-data/collected-native-facts.ts",
+      "backend/src/modules/workbench-replica/collected-workbench-query.ts"
+    ]
+  },
+  "出库完成时间": {
+    "display": "outboundStatus / outboundAt / wmsCreatedAt",
+    "local": "hz_fop_collected_orders.raw；hz_fop_collected_entities[delivery_notice/outbound].raw",
+    "source": "履约hzkj_delivery_status；发货通知auditdate为WMS创建时间；出库事实时间",
+    "rule": "整单出库；订单出库状态不单独证明待出库，需有效发货通知。",
+    "evidence": [
+      "backend/src/modules/fop-data/collected-native-facts.ts",
+      "backend/src/modules/workbench-replica/collected-workbench-query.ts"
+    ]
+  },
+  "WMS创建时间": {
+    "display": "outboundStatus / outboundAt / wmsCreatedAt",
+    "local": "hz_fop_collected_orders.raw；hz_fop_collected_entities[delivery_notice/outbound].raw",
+    "source": "履约hzkj_delivery_status；发货通知auditdate为WMS创建时间；出库事实时间",
+    "rule": "整单出库；订单出库状态不单独证明待出库，需有效发货通知。",
+    "evidence": [
+      "backend/src/modules/fop-data/collected-native-facts.ts",
+      "backend/src/modules/workbench-replica/collected-workbench-query.ts"
+    ]
+  },
+  "采购退货": {
+    "display": "purchaseReturns",
+    "local": "hz_fop_collected_entities原始退料记录及本地退货投影",
+    "source": "im_purinbill 采购退料类型；明细来源履约编号",
+    "rule": "履约视角展示。合并queryInbound缺类型名称及部分退料字段，不能仅凭负数量认定退料；不将采购退款候选当实物退货。",
+    "evidence": [
+      "backend/src/modules/workbench-replica/collected-material-returns.ts"
+    ]
+  },
+  "收货通知单": {
+    "display": "noticeNumbers / logistics[].shippedAt",
+    "local": "hz_fop_collected_entities[receipt_notice].raw / display",
+    "source": "hzkj_receiptnotice.billno；物流信息发货时间",
+    "rule": "待入库以履约单聚合；物流公司与国内快递号按同条物流记录展示。",
+    "evidence": [
+      "backend/src/modules/fop-data/collected-receipt-notice.ts",
+      "backend/src/modules/workbench-replica/receipt-notices.ts"
+    ]
+  },
+  "收货通知单编号": {
+    "display": "noticeNumbers / logistics[].shippedAt",
+    "local": "hz_fop_collected_entities[receipt_notice].raw / display",
+    "source": "hzkj_receiptnotice.billno；物流信息发货时间",
+    "rule": "待入库以履约单聚合；物流公司与国内快递号按同条物流记录展示。",
+    "evidence": [
+      "backend/src/modules/fop-data/collected-receipt-notice.ts",
+      "backend/src/modules/workbench-replica/receipt-notices.ts"
+    ]
+  },
+  "供应商发货时间": {
+    "display": "noticeNumbers / logistics[].shippedAt",
+    "local": "hz_fop_collected_entities[receipt_notice].raw / display",
+    "source": "hzkj_receiptnotice.hzkj_shipping_time",
+    "rule": "待入库以履约单聚合；物流公司与国内快递号按同条物流记录展示。",
+    "evidence": [
+      "backend/src/modules/fop-data/collected-receipt-notice.ts",
+      "backend/src/modules/workbench-replica/receipt-notices.ts"
+    ]
+  },
+  "入库进度": {
+    "display": "quantity / inboundQuantity / pendingQuantity / status",
+    "local": "hz_fop_collected_entities[receipt_notice/inbound]及本地明确关联",
+    "source": "收货通知明细与采购入库审核事实",
+    "rule": "没有关联入库量时保留未知，不将通知数量当入库量；部分通知关联缺口仍保留。",
+    "evidence": [
+      "backend/src/modules/workbench-replica/receipt-notices.ts"
+    ]
+  },
+  "需求 / 已入库 / 待入库": {
+    "display": "quantity / inboundQuantity / pendingQuantity / status",
+    "local": "hz_fop_collected_entities[receipt_notice/inbound]及本地明确关联",
+    "source": "收货通知明细与采购入库审核事实",
+    "rule": "没有关联入库量时保留未知，不将通知数量当入库量；部分通知关联缺口仍保留。",
+    "evidence": [
+      "backend/src/modules/workbench-replica/receipt-notices.ts"
+    ]
+  },
+  "通知 / 已入库 / 待入库": {
+    "display": "quantity / inboundQuantity / pendingQuantity / status",
+    "local": "hz_fop_collected_entities[receipt_notice/inbound]及本地明确关联",
+    "source": "收货通知明细与采购入库审核事实",
+    "rule": "没有关联入库量时保留未知，不将通知数量当入库量；部分通知关联缺口仍保留。",
+    "evidence": [
+      "backend/src/modules/workbench-replica/receipt-notices.ts"
+    ]
   }
-]
+}

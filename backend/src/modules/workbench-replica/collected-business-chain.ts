@@ -12,6 +12,7 @@ export const chainKinds: Record<string, { entity: string; table: string; entries
  allocation:{entity:'hzkj_alloc_bill',table:'hz_fop_allocations',entries:['hzkj_alloc_entry']},
  dispatch:{entity:'hzkj_deliver_bill',table:'hz_fop_dispatches',entries:[]},
  delivery_notice:{entity:'hzkj_deliver_order',table:'hz_fop_delivery_notices',entries:['entryentity']},
+ inbound:{entity:'im_purinbill',table:'hz_fop_inbound_bills',entries:['billentry']},
  outbound:{entity:'im_saloutbill',table:'hz_fop_outbound_bills',entries:['billentry']},
  receipt_notice:{entity:'hzkj_receiptnotice',table:'hz_fop_receipt_notices',entries:['entryentity']},
  receipt:{entity:'hzkj_receive_bill',table:'hz_fop_receipts',entries:['entryentity']},
@@ -72,6 +73,17 @@ export function buildCollectedBusinessChain(scope:ChainScope,inputs:ChainInput[]
  run('delivery_notice',d=>{const p=find('dispatch',null,d.raw.hzkj_deliver_billno);if(p)link(p,d,'delivery_notice',undefined,undefined,'unique_dispatch_number');else issue(d,'source_dispatch_unresolved')})
  run('outbound',d=>{for(const l of docLines.get(d.id)??[]){const p=find('fulfillment',null,l.raw.hzkj_entry_billno);if(p)link(p,d,'outbound',undefined,l,'explicit_order_number',l.quantity);else issue(d,'source_order_unresolved',l)}})
  run('receipt_notice',d=>{for(const l of docLines.get(d.id)??[]){const found=lineIds.get('purchase:'+receiptLinks[l.sourceEntryId]);const pl=found?.length===1?found[0]:undefined,p=pl&&byUuid.get(pl.documentId);if(p)link(p,d,'purchase_receipt',pl,l,'source_receipt_purchase_entry',l.quantity);else issue(d,'source_purchase_line_unresolved',l)}})
+ run('inbound',d=>{for(const l of docLines.get(d.id)??[]){
+  const r=l.raw,number=chainText(r.hzkj_salbillnumber),sales=find('fulfillment',null,number),stock=find('stock',null,number)
+  const root=sales&&!stock?sales:stock&&!sales?stock:undefined
+  // Explicit demand numbers are safe order-level facts; no SKU or quantity allocation inference.
+  if(root){link(root,d,'inbound',undefined,l,'explicit_inbound_demand_number',null);continue}
+  const kind=Object.keys(chainKinds).find(k=>chainKinds[k].entity===r.srcbillentity)
+  const parent=kind&&['receipt_notice','purchase'].includes(kind)?find(kind,r.srcbillid,r.srcbillnumber):undefined
+  const pl=parent&&sourceLine(parent,r.srcbillentryid,r.srcbillentryseq)
+  if(parent&&pl)link(parent,d,'inbound',pl,l,'explicit_source_document_and_entry',l.quantity)
+  else issue(d,'source_inbound_relation_unresolved',l)
+ }})
  run('receipt',d=>{const entries=docLines.get(d.id)??[];if(entries.length){for(const l of entries){const type=chainText(l.raw.hzkj_entry_src_type);if(!['A','C'].includes(type??'')){if(type!=='D')issue(d,'unsupported_receipt_source_type',l);continue}const p=find(type==='A'?'fulfillment':'stock',null,l.raw.hzkj_src_order);if(p)link(p,d,'receipt',undefined,l,'typed_receipt_source_number',null,chainDecimal(l.raw.hzkj_real_receive_amt));else issue(d,'receipt_source_unresolved',l)}}else{const type=chainText(d.raw.hzkj_src_type);if(type==='D')return;const p=['A','C'].includes(type??'')?find(type==='A'?'fulfillment':'stock',null,d.raw.hzkj_src_bill):undefined;if(p)link(p,d,'receipt',undefined,undefined,'typed_receipt_header_source',null,chainDecimal(d.raw.hzkj_rec_amount));else issue(d,'receipt_source_unresolved')}})
  return {documents,lines,relations,issues}
 }

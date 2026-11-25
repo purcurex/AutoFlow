@@ -1,7 +1,7 @@
 """Build the current unified requirements from reviewed sources and preserved evidence."""
 from pathlib import Path
 from html import escape
-import hashlib, importlib.util, json, zipfile
+import hashlib, importlib.util, json, zipfile, subprocess, sys
 ROOT=Path(__file__).resolve().parents[1]
 DEST=ROOT/'docs/requirements'
 TITLE='HyperZone智能办公平台项目开发需求说明书'
@@ -41,6 +41,8 @@ def table(head,rows,cls=''):
  return '<table class="'+cls+'"><thead><tr>'+''.join('<th>'+escape(x)+'</th>' for x in head)+'</tr></thead><tbody>'+''.join('<tr>'+''.join('<td>'+x+'</td>' for x in row)+'</tr>' for row in rows)+'</tbody></table>'
 def fields(value):return '<code>'+escape('、'.join(value) or '仅公共请求')+'</code>'
 def build():
+ subprocess.run([sys.executable,str(ROOT/"scripts/build-standalone-field-matrix.py")],check=True)
+ matrix_files=[DEST/"HyperZone23清单字段对照表.html",DEST/"field-matrix-manifest.json",DEST/"superseded-documents.json"]
  contract=json.loads(CONTRACT.read_text())
  assert set(contract['operations'])=={x[2] for x in SERVICES}
  # Current requirements contain one normative rule per topic. Historical captures
@@ -63,10 +65,10 @@ section{margin-bottom:36px}section h3{margin-top:24px}p{text-indent:2em}h1,h2,h3
 </style>'''
  spec=importlib.util.spec_from_file_location('hz_theme','/Library/VSCode/.hyperzone/html-style/render_html.py')
  theme=importlib.util.module_from_spec(spec);spec.loader.exec_module(theme)
- document=theme.render(TITLE,'FOP改造需求 · 接口补充 · 源端核验 · 交付验收',css+body,'FOP待办精简版','2026-11-19')
+ document=theme.render(TITLE,'FOP改造需求 · 接口补充 · 源端核验 · 交付验收',css+body,'FOP待办精简版','2026-11-25')
  document=document.replace('<h2>'+TITLE+'</h2>','<h2>HyperZone 统一需求说明</h2><small class="project-subtitle">智能办公平台项目</small>',1)
  theme.validate(document);OUTPUT.write_text(document)
- inputs=[CURRENT_REVIEW,PACKAGE_LOGISTICS_PROOF,API_PROOF,API_AUDIT,TIME_CAPABILITIES,PAGED_PROFILE,EMPLOYEE_PROOF,SOURCE,CONTRACT,DOMAIN,TIMESTAMP,TIMESTAMP_PROFILE,TIMESTAMP_PROOF,ANALYTICS,QUEUE_SCOPE,ANALYTICS_PROOF,PURCHASE_RETURN_PROOF,SALES_UNPAID_PROOF,SALES_REVIEW_PROOF,BUSINESS_STATUS_PROOF,Path(__file__).resolve()]
+ inputs=matrix_files+[CURRENT_REVIEW,PACKAGE_LOGISTICS_PROOF,API_PROOF,API_AUDIT,TIME_CAPABILITIES,PAGED_PROFILE,EMPLOYEE_PROOF,SOURCE,CONTRACT,DOMAIN,TIMESTAMP,TIMESTAMP_PROFILE,TIMESTAMP_PROOF,ANALYTICS,QUEUE_SCOPE,ANALYTICS_PROOF,PURCHASE_RETURN_PROOF,SALES_UNPAID_PROOF,SALES_REVIEW_PROOF,BUSINESS_STATUS_PROOF,Path(__file__).resolve()]
  # Chapter 05 describes implemented request/timing behavior; detect stale code evidence.
  inputs += [ROOT/p for p in [
   'backend/src/database/migrations/1794770000000-TimestampQueryReplica.ts',
@@ -169,6 +171,6 @@ section{margin-bottom:36px}section h3{margin-top:24px}p{text-indent:2em}h1,h2,h3
  (ROOT/'docs/integrations/fop-extension-requirements-index.json').write_text(json.dumps(index,ensure_ascii=False,indent=2)+'\n')
  package=DEST/'HyperZoneFOP同步服务开发交付包.zip'
  with zipfile.ZipFile(package,'w',zipfile.ZIP_DEFLATED) as z:
-  for p in [PRODUCTION_PROOF,PRODUCTION_MANUAL,CURRENT_REVIEW,PACKAGE_LOGISTICS_PROOF,API_PROOF,API_AUDIT,TIME_CAPABILITIES,PAGED_PROFILE,EMPLOYEE_PROOF,OUTPUT,CONTRACT,DOMAIN,TIMESTAMP,TIMESTAMP_PROFILE,TIMESTAMP_PROOF,ANALYTICS_PROOF,PURCHASE_RETURN_PROOF,SALES_UNPAID_PROOF,SALES_REVIEW_PROOF,BUSINESS_STATUS_PROOF]:z.write(p,str(p.relative_to(ROOT/'docs')))
+  for p in matrix_files+[PRODUCTION_PROOF,PRODUCTION_MANUAL,CURRENT_REVIEW,PACKAGE_LOGISTICS_PROOF,API_PROOF,API_AUDIT,TIME_CAPABILITIES,PAGED_PROFILE,EMPLOYEE_PROOF,OUTPUT,CONTRACT,DOMAIN,TIMESTAMP,TIMESTAMP_PROFILE,TIMESTAMP_PROOF,ANALYTICS_PROOF,PURCHASE_RETURN_PROOF,SALES_UNPAID_PROOF,SALES_REVIEW_PROOF,BUSINESS_STATUS_PROOF]:z.write(p,str(p.relative_to(ROOT/'docs')))
  print(json.dumps({'document':str(OUTPUT),'sections':6,'preferredSync':'timestamp-with-reconciliation','optionalStrictServices':6,'timestampRuntimeEnabled':api_proof.get('normalApiOperation20261118',{}).get('automaticCallsEnabled') is True,'htmlBytes':OUTPUT.stat().st_size,'package':str(package),'upstreamCalled':False},ensure_ascii=False))
 if __name__=='__main__':build()

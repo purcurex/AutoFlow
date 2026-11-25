@@ -109,14 +109,14 @@ integration('business chain selective PostgreSQL writes',()=>{
 it('hashes a large collection item by item while preserving the original JSON hash',()=>{
  const ordered=[{name:'中文😀',raw:{id:'1',empty:null}},{raw:{id:'2',nested:['x',0,false]}}]
  const links={receipt:'order'},count=2
- const expected=createHash('sha256').update(JSON.stringify([3,ordered,links,count])).digest('hex')
+ const expected=createHash('sha256').update(JSON.stringify([4,ordered,links,count])).digest('hex')
  const original=JSON.stringify
  const spy=jest.spyOn(JSON,'stringify').mockImplementation(((v:any,...rest:any[])=>{
   if(v===ordered||Array.isArray(v)&&v.includes(ordered))throw Error('whole_collection_stringify_forbidden')
   return (original as any)(v,...rest)
  }) as any)
  try{expect(chainContentHash(ordered,links,count)).toBe(expected)}finally{spy.mockRestore()}
- expect(chainContentHash([],{},0)).toBe(createHash('sha256').update('[3,[],{},0]').digest('hex'))
+ expect(chainContentHash([],{},0)).toBe(createHash('sha256').update('[4,[],{},0]').digest('hex'))
 })
 
 it('production offline graph records the provided production origin and organization',async()=>{

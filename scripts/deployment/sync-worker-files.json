@@ -4,5 +4,14 @@
   "workbench-sync-runtime.mjs",
   "fop-workbench-openapi.mjs",
   "fop-openapi-smoke.mjs",
-  "fop-confirmed-origin.mjs"
+  "fop-confirmed-origin.mjs",
+  "workbench-automatic-catalog.mjs",
+  "workbench-automatic-relations.mjs",
+  "workbench-authorized-catalog-capture.mjs",
+  "workbench-authorized-catalog-import.mjs",
+  "workbench-stock-native.cjs",
+  "workbench-analytics-import.cjs",
+  "workbench-customer-registrations-import.cjs",
+  "workbench-customer-registrations-capture.mjs",
+  "fop-interface-policy.cjs"
 ]

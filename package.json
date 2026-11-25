@@ -36,7 +36,9 @@
     "workbench:initialize": "node scripts/workbench-initialize.mjs",
     "workbench:chain:rebuild": "node scripts/workbench-chain-rebuild.cjs",
     "workbench:timestamp-sync": "node scripts/workbench-timestamp-sync.mjs",
-    "workbench:scheduled-sync": "node --max-old-space-size=8192 scripts/workbench-scheduled-sync.mjs"
+    "workbench:scheduled-sync": "node --max-old-space-size=8192 scripts/workbench-scheduled-sync.mjs",
+    "db:verify-build": "node scripts/deployment/verify-database-build.mjs",
+    "deploy:package": "node scripts/deployment/build-production-package.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

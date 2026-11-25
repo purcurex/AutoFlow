@@ -13,5 +13,18 @@
   "docs/solutions/HyperZone本地数据库建表前核验报告.html",
   "docs/FOP_RMA_HANDOFF.md",
   "docs/FOP_PURCHASE_RETURNS_HANDOFF.md",
-  "docs/FOP_USER_DATA_ACCESS.md"
+  "docs/FOP_USER_DATA_ACCESS.md",
+  "docs/requirements/FOP档案API需求清单.html",
+  "docs/requirements/HyperZone基础档案API接入需求清单.html",
+  "docs/requirements/HyperZoneAPI统一优化核查报告.html",
+  "docs/requirements/api-proposals/master-data-api.body.html",
+  "docs/requirements/api-proposals/fop-api-checklist.body.html",
+  "docs/requirements/source/api-unification-20261121.body.html",
+  "docs/analytics/HYPERZONE_ECHARTS_API_REQUIREMENTS.md",
+  "docs/analytics/HYPERZONE_ECHARTS_API_REQUIREMENTS.html",
+  "docs/analytics/REQUIREMENTS_OVERVIEW.md",
+  "docs/analytics/WORKBENCH_DELIVERY_BRIEF.html",
+  "docs/analytics/FOLLOW_UP_CHECKLIST.md",
+  "docs/FOP_ORDER_VOLUME_API.md",
+  "docs/FOP_DASHBOARD_INTEGRATION.md"
 ]

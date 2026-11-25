@@ -17231,5 +17231,768 @@
       "未审核履约当前无有效采购来源投影时不推算三类数量；沿用原接入口径。",
       "真实耗用样本尚无押金与混合来源，专项测试覆盖两类，不描述为真实联调。"
     ]
+  },
+  "authorizedApiIntegration20261125": {
+    "verifiedOn": "2026-11-25",
+    "environment": "test",
+    "upstreamBusinessWrites": false,
+    "frontendReadSource": "local_postgresql",
+    "auth": "new_application_verified_secret_not_recorded",
+    "catalogueRows": {
+      "stock": 168,
+      "purchase": 3142,
+      "purchase_requisition": 12170,
+      "receipt_notice": 3456,
+      "inbound": 3312,
+      "outbound": 14008,
+      "receipt": 3979,
+      "payment": 0,
+      "rma": 317,
+      "customer": 444
+    },
+    "catalogueConsistentSnapshot": false,
+    "absentRowsDeleted": false,
+    "rmaPublished": 298,
+    "rmaUnresolved": 19,
+    "receiptNoticeUnresolvedIssues": 156,
+    "chain": {
+      "datasetId": "73da277b-da9f-54f7-ad78-0a9651d33ec1",
+      "reused": false,
+      "documents": 128441,
+      "lines": 208653,
+      "relations": 132524,
+      "paths": 132524,
+      "issues": 5534,
+      "unresolvedConflicts": 0,
+      "byKind": {
+        "allocation": 12740,
+        "delivery_notice": 14512,
+        "dispatch": 15292,
+        "fulfillment": 45662,
+        "inbound": 3312,
+        "outbound": 14008,
+        "purchase_application": 12170,
+        "purchase": 3142,
+        "receipt_notice": 3456,
+        "receipt": 3979,
+        "stock": 168
+      },
+      "relationTypes": {
+        "demand_purchase": 28342,
+        "allocation": 12647,
+        "dispatch": 15245,
+        "delivery_notice": 14262,
+        "outbound": 16874,
+        "purchase_receipt": 14005,
+        "inbound": 13169,
+        "receipt": 17980
+      },
+      "sourceVersionsVerified": false,
+      "consistentSnapshot": false,
+      "upstreamCalled": false
+    },
+    "relationsSample100": {
+      "requested": 100,
+      "saved": 90,
+      "incomplete": 6,
+      "failed": [
+        {
+          "number": "IO20260715000001",
+          "category": "relation_document_invalid"
+        },
+        {
+          "number": "IO20260718000001",
+          "category": "relation_document_invalid"
+        },
+        {
+          "number": "IO20260727000001",
+          "category": "relation_document_invalid"
+        },
+        {
+          "number": "IO20260727000004",
+          "category": "relation_document_invalid"
+        },
+        {
+          "number": "TO261109051340",
+          "category": "http-error"
+        },
+        {
+          "number": "IO20260731000001",
+          "category": "relation_document_invalid"
+        },
+        {
+          "number": "IO20260908000003",
+          "category": "relation_document_invalid"
+        },
+        {
+          "number": "IO20260909000001",
+          "category": "relation_document_invalid"
+        },
+        {
+          "number": "IO20260918000001",
+          "category": "relation_document_invalid"
+        },
+        {
+          "number": "IO20260918000002",
+          "category": "relation_document_invalid"
+        }
+      ],
+      "upstreamBusinessWrites": false
+    },
+    "verification": {
+      "pending": [
+        {
+          "entity_code": "hzkj_alloc_bill",
+          "reason": "timestamp_projection_relation_unresolved",
+          "count": 93
+        },
+        {
+          "entity_code": "hzkj_deliver_bill",
+          "reason": "timestamp_projection_relation_unresolved",
+          "count": 47
+        },
+        {
+          "entity_code": "hzkj_deliver_order",
+          "reason": "timestamp_projection_relation_unresolved",
+          "count": 250
+        },
+        {
+          "entity_code": "hzkj_purorderbill",
+          "reason": "timestamp_projection_relation_unresolved",
+          "count": 213
+        }
+      ],
+      "progress": {
+        "number": "TO260725004786",
+        "nodes": 8,
+        "edges": 9,
+        "keys": [
+          "stockChains",
+          "number",
+          "id",
+          "kind",
+          "billStatus",
+          "customerName",
+          "details",
+          "businessStatus",
+          "conclusions",
+          "memberships",
+          "graph",
+          "source",
+          "asOf"
+        ],
+        "ms": 26
+      },
+      "native": [
+        {
+          "entity_code": "hzkj_alloc_bill",
+          "count": 12740
+        },
+        {
+          "entity_code": "hzkj_deliver_bill",
+          "count": 15292
+        },
+        {
+          "entity_code": "hzkj_deliver_order",
+          "count": 14512
+        },
+        {
+          "entity_code": "hzkj_orders",
+          "count": 45662
+        },
+        {
+          "entity_code": "hzkj_purapplybill",
+          "count": 12170
+        },
+        {
+          "entity_code": "hzkj_purorderbill",
+          "count": 3142
+        },
+        {
+          "entity_code": "hzkj_receiptnotice",
+          "count": 3456
+        },
+        {
+          "entity_code": "hzkj_receive_bill",
+          "count": 3979
+        },
+        {
+          "entity_code": "hzkj_stock_order_new",
+          "count": 168
+        },
+        {
+          "entity_code": "im_purinbill",
+          "count": 3312
+        },
+        {
+          "entity_code": "im_saloutbill",
+          "count": 14008
+        }
+      ]
+    },
+    "localQueries": {
+      "upstreamCalls": 0,
+      "role": "admin",
+      "results": [
+        {
+          "name": "review",
+          "success": true,
+          "ms": 41,
+          "total": 88,
+          "keys": [
+            "source",
+            "refreshedAt",
+            "replica",
+            "dataAvailability",
+            "items",
+            "total",
+            "page",
+            "pageSize",
+            "queueState",
+            "departments",
+            "salespeople",
+            "shippingCountries",
+            "totals"
+          ],
+          "rows": 10,
+          "availability": {
+            "mode": "collected",
+            "complete": false,
+            "reason": "时间增量事实已入库，关联展示投影待完成；有关联快照的工作台仍展示原采集批次，不能视为已刷新到增量水位。"
+          }
+        },
+        {
+          "name": "unpaid",
+          "success": true,
+          "ms": 16,
+          "total": 5997,
+          "keys": [
+            "source",
+            "refreshedAt",
+            "replica",
+            "dataAvailability",
+            "items",
+            "total",
+            "page",
+            "pageSize",
+            "queueState",
+            "departments",
+            "salespeople",
+            "shippingCountries",
+            "totals"
+          ],
+          "rows": 10,
+          "availability": {
+            "mode": "collected",
+            "complete": false,
+            "reason": "时间增量事实已入库，关联展示投影待完成；有关联快照的工作台仍展示原采集批次，不能视为已刷新到增量水位。"
+          }
+        },
+        {
+          "name": "exceptions",
+          "success": true,
+          "ms": 215,
+          "total": 337,
+          "keys": [
+            "source",
+            "refreshedAt",
+            "replica",
+            "dataAvailability",
+            "items",
+            "total",
+            "page",
+            "pageSize",
+            "queueState",
+            "departments",
+            "salespeople",
+            "shippingCountries",
+            "totals"
+          ],
+          "rows": 10,
+          "availability": {
+            "mode": "collected",
+            "complete": false,
+            "reason": "时间增量事实已入库，关联展示投影待完成；有关联快照的工作台仍展示原采集批次，不能视为已刷新到增量水位。"
+          }
+        },
+        {
+          "name": "dispatch",
+          "success": true,
+          "ms": 769,
+          "total": 3326,
+          "keys": [
+            "source",
+            "refreshedAt",
+            "replica",
+            "dataAvailability",
+            "items",
+            "total",
+            "page",
+            "pageSize",
+            "queueState",
+            "departments",
+            "salespeople",
+            "shippingCountries",
+            "totals"
+          ],
+          "rows": 10,
+          "availability": {
+            "mode": "collected",
+            "complete": false,
+            "queueAvailable": true,
+            "capturedAt": "2026-11-12T11:01:39.100Z",
+            "coverage": "full_parent_scan",
+            "executionAvailable": false,
+            "reason": "已采集完整履约扫描关联事实，本地按当前权限分类；不代表独立单据公司全集。未知状态保留核查，缺失字段留空。"
+          }
+        },
+        {
+          "name": "procurement",
+          "success": true,
+          "ms": 502,
+          "total": 832,
+          "keys": [
+            "source",
+            "refreshedAt",
+            "replica",
+            "dataAvailability",
+            "items",
+            "total",
+            "page",
+            "pageSize",
+            "queueState",
+            "departments",
+            "salespeople",
+            "shippingCountries",
+            "totals"
+          ],
+          "rows": 10,
+          "availability": {
+            "mode": "collected",
+            "complete": false,
+            "queueAvailable": true,
+            "capturedAt": "2026-11-12T11:05:41.259Z",
+            "coverage": "full_parent_scan",
+            "executionAvailable": false,
+            "reason": "已采集完整履约扫描关联事实，本地按当前权限分类；不代表独立单据公司全集。未知状态保留核查，缺失字段留空。"
+          }
+        },
+        {
+          "name": "allocation",
+          "success": true,
+          "ms": 270,
+          "total": 726,
+          "keys": [
+            "source",
+            "refreshedAt",
+            "replica",
+            "dataAvailability",
+            "items",
+            "total",
+            "page",
+            "pageSize",
+            "queueState",
+            "departments",
+            "salespeople",
+            "shippingCountries",
+            "totals"
+          ],
+          "rows": 10,
+          "availability": {
+            "mode": "collected",
+            "complete": false,
+            "queueAvailable": true,
+            "capturedAt": "2026-11-12T11:01:39.100Z",
+            "reason": "按完整履约扫描关联的有效配货单的原生齐套及审核状态展示；非一致快照，执行前仍需实时核验。"
+          }
+        },
+        {
+          "name": "shipping",
+          "success": true,
+          "ms": 376,
+          "total": 521,
+          "keys": [
+            "source",
+            "refreshedAt",
+            "replica",
+            "dataAvailability",
+            "items",
+            "total",
+            "page",
+            "pageSize",
+            "queueState",
+            "departments",
+            "salespeople",
+            "shippingCountries",
+            "totals"
+          ],
+          "rows": 10,
+          "availability": {
+            "mode": "collected",
+            "complete": false,
+            "queueAvailable": true,
+            "missingFields": [
+              "shipmentInterceptStatus",
+              "dispatchDocuments"
+            ],
+            "reason": "按真实已齐套且已审核配货单、有效审核发运单关联展示待出库；拦截状态未知，执行仍须 FOP 实时门禁。"
+          }
+        },
+        {
+          "name": "receipt_notices",
+          "success": true,
+          "ms": 638,
+          "total": 791,
+          "keys": [
+            "source",
+            "refreshedAt",
+            "replica",
+            "dataAvailability",
+            "items",
+            "parcelGroups",
+            "total",
+            "orderTotal",
+            "page",
+            "pageSize",
+            "view",
+            "departments",
+            "warehouses",
+            "totals"
+          ],
+          "rows": 10,
+          "availability": {
+            "mode": "collected",
+            "complete": false,
+            "queueAvailable": true,
+            "capturedAt": "2026-11-17T07:44:37.245Z",
+            "executionAvailable": false,
+            "unclassifiedCount": 8,
+            "missingFields": [
+              "hzkj_orders_billentry.hzkj_entrypurc_status",
+              "hzkj_orders_billentry.hzkj_purcqty",
+              "hzkj_orders_billentry.hzkj_instock_qty"
+            ],
+            "reason": "已发货订单的商品行入库信息尚未完整，缺失数量不按零处理。"
+          }
+        },
+        {
+          "name": "department_receipts",
+          "success": true,
+          "ms": 3307,
+          "total": null,
+          "keys": [
+            "rows",
+            "currencies",
+            "orderCount",
+            "warehouses",
+            "currencyBasis",
+            "totalQuantity",
+            "amountsByCurrency",
+            "missingAmountCount",
+            "missingPaidAtCount",
+            "missingCurrencyCount",
+            "missingPaidAtBreakdown",
+            "departments",
+            "defaultDepartmentId",
+            "window",
+            "chartId",
+            "summaryOnly",
+            "source",
+            "asOf",
+            "amountBasis",
+            "timeBasis",
+            "canExport",
+            "canViewDetails"
+          ],
+          "rows": 154,
+          "availability": null
+        },
+        {
+          "name": "salesperson_receipts",
+          "success": true,
+          "ms": 3237,
+          "total": null,
+          "keys": [
+            "rows",
+            "currencies",
+            "orderCount",
+            "warehouses",
+            "currencyBasis",
+            "totalQuantity",
+            "amountsByCurrency",
+            "missingAmountCount",
+            "missingPaidAtCount",
+            "missingCurrencyCount",
+            "missingPaidAtBreakdown",
+            "departments",
+            "defaultDepartmentId",
+            "window",
+            "chartId",
+            "summaryOnly",
+            "source",
+            "asOf",
+            "amountBasis",
+            "timeBasis",
+            "canExport",
+            "canViewDetails"
+          ],
+          "rows": 173,
+          "availability": null
+        },
+        {
+          "name": "order_volume",
+          "success": true,
+          "ms": 3379,
+          "total": null,
+          "keys": [
+            "rows",
+            "currencies",
+            "orderCount",
+            "warehouses",
+            "currencyBasis",
+            "totalQuantity",
+            "amountsByCurrency",
+            "missingAmountCount",
+            "missingPaidAtCount",
+            "missingCurrencyCount",
+            "missingPaidAtBreakdown",
+            "departments",
+            "defaultDepartmentId",
+            "window",
+            "chartId",
+            "summaryOnly",
+            "source",
+            "asOf",
+            "amountBasis",
+            "timeBasis",
+            "canExport",
+            "canViewDetails"
+          ],
+          "rows": 246,
+          "availability": null
+        },
+        {
+          "name": "customer_orders",
+          "success": true,
+          "ms": 3529,
+          "total": null,
+          "keys": [
+            "rows",
+            "currencies",
+            "orderCount",
+            "warehouses",
+            "currencyBasis",
+            "totalQuantity",
+            "amountsByCurrency",
+            "missingAmountCount",
+            "missingPaidAtCount",
+            "missingCurrencyCount",
+            "missingPaidAtBreakdown",
+            "departments",
+            "defaultDepartmentId",
+            "window",
+            "chartId",
+            "summaryOnly",
+            "source",
+            "asOf",
+            "amountBasis",
+            "timeBasis",
+            "canExport",
+            "canViewDetails"
+          ],
+          "rows": 320,
+          "availability": null
+        },
+        {
+          "name": "registrations",
+          "success": true,
+          "ms": 9,
+          "total": null,
+          "keys": [
+            "rows",
+            "currencies",
+            "orderCount",
+            "warehouses",
+            "amountsByCurrency",
+            "registrationCount",
+            "missingAmountCount",
+            "missingPaidAtCount",
+            "unmatchedOwnerCount",
+            "missingCurrencyCount",
+            "missingCreatedAtCount",
+            "departments",
+            "defaultDepartmentId",
+            "window",
+            "chartId",
+            "summaryOnly",
+            "source",
+            "asOf",
+            "amountBasis",
+            "timeBasis",
+            "canExport",
+            "canViewDetails"
+          ],
+          "rows": 170,
+          "availability": null
+        }
+      ]
+    },
+    "httpChecks": [
+      {
+        "check": "admin_login",
+        "status": 201
+      },
+      {
+        "check": "progress",
+        "status": 200,
+        "ms": 47,
+        "rows": 0,
+        "nodes": 8
+      },
+      {
+        "check": "registrations",
+        "status": 200,
+        "ms": 16,
+        "rows": 170,
+        "nodes": 0
+      }
+    ],
+    "tests": {
+      "scriptPassed": 29,
+      "backendPassed": 87,
+      "backendSkipped": 6,
+      "backendBuild": "passed"
+    },
+    "gaps": [
+      "current-inventory Page DTO serialization failure",
+      "stock usage records incomplete and some relation bill numbers missing",
+      "603 projection tasks awaiting confirmed source relationships",
+      "inbound billtype_id dictionary and merged purchase-return detail coverage",
+      "additional entity modification/deletion discovery contract",
+      "receipt adjustment merge identity contract"
+    ],
+    "notes": [
+      "Raw catalogues and manifests are private runtime artifacts, not committed.",
+      "Existing unmatched historical rows are not inferred deleted.",
+      "Full-year analytics measurements bypass controller/frontend caching.",
+      "Current-inventory capability remains unavailable; no mock success substituted."
+    ]
+  },
+  "automaticRelations20261125": {
+    "migration": "AutomaticRelations1795560000000",
+    "catalogues": [
+      {
+        "operation": "stock",
+        "imported": true,
+        "rows": 168,
+        "unresolved": 0,
+        "status": "succeeded"
+      },
+      {
+        "operation": "purchase",
+        "imported": true,
+        "rows": 3142,
+        "state": "projection_pending",
+        "pendingProjection": 213,
+        "status": "succeeded"
+      },
+      {
+        "operation": "purchase-requisition",
+        "imported": true,
+        "rows": 12170,
+        "unresolved": 0,
+        "status": "succeeded"
+      },
+      {
+        "operation": "receipt-notice",
+        "imported": true,
+        "rows": 3456,
+        "unresolved": 156,
+        "status": "succeeded"
+      },
+      {
+        "operation": "inbound",
+        "imported": true,
+        "rows": 3312,
+        "unresolved": 0,
+        "status": "succeeded"
+      },
+      {
+        "operation": "outbound-list",
+        "imported": true,
+        "rows": 14008,
+        "unresolved": 0,
+        "status": "succeeded"
+      },
+      {
+        "operation": "receipt",
+        "imported": true,
+        "rows": 3979,
+        "unresolved": 0,
+        "status": "succeeded"
+      },
+      {
+        "operation": "payment",
+        "imported": true,
+        "rows": 0,
+        "unresolved": 0,
+        "status": "succeeded"
+      },
+      {
+        "operation": "rma",
+        "imported": true,
+        "rows": 298,
+        "unresolved": 19,
+        "status": "succeeded"
+      },
+      {
+        "operation": "customer-registrations",
+        "imported": true,
+        "rowCount": 444,
+        "unknownCreationTime": 0,
+        "automaticCallsEnabled": false,
+        "status": "succeeded"
+      }
+    ],
+    "relations": {
+      "requested": 20,
+      "published": 15,
+      "incomplete": 1,
+      "failed": 5,
+      "superseded": 0,
+      "pending": 45815
+    },
+    "tests": {
+      "schedulerAndRelations": 30,
+      "backendPassed": 17,
+      "backendConditionalSkipped": 6,
+      "deployment": 10,
+      "sourceTriggerRollback": "passed",
+      "reassignmentOldAndNewRollback": "passed",
+      "backendBuild": "passed"
+    },
+    "historicalRoots": 45830,
+    "sourceIncrementalForAllCatalogues": false,
+    "missingDirectoryRowsDeleted": false,
+    "apiBusinessWrites": false,
+    "relationFailureReasons": {
+      "relation_document_invalid": 4,
+      "relation_response_incomplete": 1
+    },
+    "note": "Historical roots queued for bounded compensation; complete snapshots only. Catalogue scope follows authenticated company. Existing unresolved projections remain.",
+    "localQueries": {
+      "count": 13,
+      "allSucceeded": true,
+      "upstreamCalls": 0,
+      "sampleProgress": {
+        "nodes": 8,
+        "edges": 9,
+        "milliseconds": 26
+      },
+      "additionalExactRelationQuery": {
+        "requested": 1,
+        "published": 1
+      }
+    }
   }
 }

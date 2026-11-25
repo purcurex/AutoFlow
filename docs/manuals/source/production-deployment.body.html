@@ -1,4 +1,9 @@
 <style>.cover h1{text-wrap:balance}.sidebar h2{font-size:18px}</style>
+<h2 id="database-build">2026-11-25 数据库构建核验</h2>
+<p>最新验证覆盖78项迁移、110张表、413个索引、683个约束，重复执行为0项。以下旧演练记录保留其原始次数，以本次迁移清单为当前结构基准。未连接生产环境。</p>
+<p>源码迁移位于backend/src/database/migrations，生产执行scripts/deployment/migrate-compiled.mjs的show、run、show。先创建空数据库并配置backend/.env，升级保留typeorm_migrations记录。schema-reference.sql仅供结构核对，不作为初始化入口。</p>
+<p>开发环境运行npm run build后，设置DB_HOST、DB_PORT、DB_USERNAME、DB_PASSWORD、DB_DATABASE并执行npm run db:verify-build。验证账号需有创建数据库权限；脚本只在新建临时库执行迁移及初始化测试，结束自动删除临时库，不写入原业务库。PG_DUMP_PATH可指定PostgreSQL客户端路径。打包校验迁移数量与源码摘要，迁移变动后须重新验证。</p>
+<p>生产账号、域名、邮件、FOP连接和密钥由目标环境提供。迁移账号须具备目标库建表、索引、约束及所需扩展权限。业务数据跨环境迁移采用备份恢复，保留迁移记录，核对公司、账号绑定与同步水位后启用同步。</p>
 <h2 id="release">01 · 交付范围与部署准备</h2>
 <p>本手册用于HyperZone智能办公平台的全新生产环境部署。交付包包含前后端编译产物、全部数据库迁移、同步worker、生产配置模板、初始化命令、参数与账号绑定清单及文件校验清单。不含测试业务数据、真实凭据、用户密码或node_modules；在目标服务器按锁文件安装生产依赖。唯一业务契约仍为《HyperZone智能办公平台项目开发需求说明书》。</p>
 <p>当前已完成安装、建库及启动演练。后续准备包括：补齐生产租户、公司/组织ID、组织编码、接口地址、集成凭据与逐人绑定信息，执行生产数据首次采集，并核验权限和业务办理功能。初始同步命令覆盖履约订单、配货单、发运单、发货通知四实体；其他业务来源按对应生产API分别采集和验证。</p>

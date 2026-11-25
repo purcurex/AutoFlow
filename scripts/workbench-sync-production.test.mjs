@@ -55,13 +55,13 @@ test('deployment payload loads compiled worker modules without TypeScript and bl
   cpSync('backend/package.json',join(dir,'backend/package.json'))
   for(const file of JSON.parse(readFileSync('scripts/deployment/sync-worker-files.json','utf8')))cpSync(join('scripts',file),join(dir,'scripts',file))
   symlinkSync(join(process.cwd(),'node_modules'),join(dir,'node_modules'),'dir')
-  const modules=['workbench-replica/replica-schedule','workbench-replica/timestamp-postgres','workbench-replica/timestamp-paged-sync','workbench-replica/timestamp-paged-source','workbench-replica/timestamp-maintenance','fop-data/fop-kingdee.provider']
+  const modules=['workbench-replica/replica-schedule','workbench-replica/timestamp-postgres','workbench-replica/timestamp-paged-sync','workbench-replica/timestamp-paged-source','workbench-replica/timestamp-maintenance','fop-data/fop-kingdee.provider','workbench-replica/collected-api-relations','workbench-replica/relation-refresh','workbench-replica/collected-chain-storage','fop-data/collected-stock-native']
   writeFileSync(join(dir,'probe.cjs'),`const M=require('node:module'),load=M._load;M._load=function(id,...args){if(id.includes('ts-node')||id==='typescript'||id.endsWith('.ts'))throw Error('dev_dependency_used');return load.call(this,id,...args)};import('./scripts/workbench-sync-runtime.mjs').then(({syncRuntimeRequire})=>{const r=syncRuntimeRequire({NODE_ENV:'production'});for(const n of ${JSON.stringify(modules)})r(n);console.log('compiled-runtime-ok')}).catch(e=>{console.error(e.stack);process.exitCode=1})`)
   const loaded=spawnSync(process.execPath,['probe.cjs'],{cwd:dir,encoding:'utf8'})
   assert.equal(loaded.status,0,loaded.stderr);assert.match(loaded.stdout,/compiled-runtime-ok/)
   const env={PATH:process.env.PATH,...production}
   const preflight=spawnSync(process.execPath,['scripts/workbench-scheduled-sync.mjs'],{cwd:dir,env,encoding:'utf8'})
-  assert.equal(preflight.status,0);assert.equal(JSON.parse(preflight.stdout).executable,true)
+  assert.equal(preflight.status,0,preflight.stderr);assert.equal(JSON.parse(preflight.stdout).executable,true)
   const blocked=spawnSync(process.execPath,['scripts/workbench-scheduled-sync.mjs','--execute'],{cwd:dir,env:{...env,FOP_QUERIES_PAUSED:'true'},encoding:'utf8'})
   assert.equal(blocked.status,1);assert.equal(JSON.parse(blocked.stdout).upstreamCalled,false)
   rmSync(join(dir,'backend/dist/src/modules/workbench-replica/timestamp-maintenance.js'))

@@ -107,7 +107,7 @@ class PgTimestampSession implements TimestampSession {
   try{
    const [batch]=await this.q.query("SELECT * FROM hz_fop_collected_batches WHERE id=$1 AND tenant_id=$2 AND company_id=$3 AND state='active' FOR UPDATE",[this.scope.batchId,this.scope.tenantId,this.scope.companyId])
    if(!batch)throw Error('timestamp_batch_scope_changed')
-   if(captureMetadata.protocol==='ordinary_modified_pages')this.hasDependentSnapshot=true
+   if(['ordinary_modified_pages','authorized_company_catalogue'].includes(String(captureMetadata.protocol)))this.hasDependentSnapshot=true
    for(const table of ['hz_fop_collected_entities','hz_fop_collected_analytics_facts']){
     const [{present}]=await this.q.query('SELECT to_regclass($1) IS NOT NULL AS present',[table])
     if(present){const [{found}]=await this.q.query(`SELECT EXISTS(SELECT 1 FROM ${table} WHERE batch_id=$1) AS found`,[this.scope.batchId]);if(found)this.hasDependentSnapshot=true}
@@ -142,7 +142,7 @@ class PgTimestampSession implements TimestampSession {
      VALUES($1,$2,$3,$4,$5,$6,$7,true) ON CONFLICT(batch_id,entity_code,source_id) DO UPDATE SET removed=true,last_run_id=excluded.last_run_id,captured_at=now()`,[...this.identity,id,this.scope.companyId,JSON.stringify(previous??{}),digest(previous??{}),runId])
     await this.project(null,id,runId,previous??null);changed++
    }
-   const publication=captureMetadata.protocol==='ordinary_modified_pages'?await publishTimestampProjections(this.q,this.scope):null
+   const publication=['ordinary_modified_pages','authorized_company_catalogue'].includes(String(captureMetadata.protocol))?await publishTimestampProjections(this.q,this.scope):null
    const [{count}]=await this.q.query("SELECT count(*)::int count FROM hz_fop_timestamp_projection_tasks WHERE batch_id=$1 AND entity_code=$2 AND state='pending'",this.identity)
    const state=count?'projection_pending':'applied'
    await this.q.query(`INSERT INTO hz_fop_timestamp_state(batch_id,entity_code,watermark) VALUES($1,$2,$3)

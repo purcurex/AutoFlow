@@ -1,0 +1,10 @@
+<section id="additional"><h2>25 · 包裹、关系与分析字段</h2><div class="matrix-wrap"><table><thead><tr><th>场景</th><th>本地数据</th><th>来源与处理</th></tr></thead><tbody>
+<tr><td>待入库 · 国内包裹</td><td>收货通知原始物流、备货耗用表、本地履约和采购关联</td><td>国内快递号分组，区分直采、全款备货、押金备货；一组包裹、一组耗用订单、剩余商品分别统计，不制造逐包裹分摊。</td></tr>
+<tr><td>履约进度查询</td><td>hz_fop_source_documents、hz_fop_document_relations、hz_fop_order_relation_paths；hz_fop_collected_entities[api_bill_relations]</td><td>明确来源单号/ID及BILL关系API建立单据链，返回根订单、当前清单、履约/采购/配货/出库结论。备货耗用有明确记录时附备货采购入库链。</td></tr>
+<tr><td>API关系响应</td><td>api_bill_relations.raw：orderId、orderNo、level、bills、links、complete、issues</td><td>bills保留entity、billId、billNo、billStatus；links为sourceEntity/sourceBillId → targetEntity/targetBillId。完整且版本未变化才替换；单据级连线不代表分录数量或金额分摊。</td></tr>
+<tr><td>自动关系队列</td><td>hz_fop_relation_refresh：batch_id、root_kind、root_id、root_number、requested_version、published_version、attempts、next_attempt_at、checked_at、last_error；hz_fop_relation_dirty_sources</td><td>来源变更同事务登记，改挂登记旧/新根；每轮限额查询，失败30/60/120分钟退避，历史根分批补偿。当前根版本是本地任务版本，不是FOP事务版本。</td></tr>
+<tr><td>业绩收入与订单量</td><td>hz_fop_collected_orders.raw / display；本地分析查询聚合</td><td>履约订单金额使用hzkj_total_amount，时间按收款日期hzkj_receipt_date；维度为本地业务员/部门、仓库、日期。币种分别汇总，周/月环比在同一权限范围计算。</td></tr>
+<tr><td>客户注册</td><td>hz_fop_collected_customer_registrations</td><td>客户档案创建时间与归属，日期、业务员、业务部门、月度趋势；缺创建时间不自行补成采集时间。</td></tr>
+<tr><td>其他分析事实</td><td>hz_fop_collected_analytics_facts：entity_type、source_id、facts、raw、captured_at</td><td>订单、采购、收款、备货等来源事实分别保留；金额不能因同为amount而互换，业绩口径不直接使用旧原始分析映射的产品金额。</td></tr>
+</tbody></table></div></section>
+<section id="status"><h2>26 · 接通与缺口边界</h2><p>2026-11-25：履约、配货、发运、发货通知进入原有增量通道；备货、采购、采购申请、收货通知、采购入库、出库、收款、付款、RMA和客户档案进入自动目录核对。没有可靠修改时间条件的目录仍需全量读取后比较变化，不以目录缺行推定删除。关系API已进入后台自动任务，页面不回源扫描。</p><p>真实验证仍有603项业务投影关联问题、收货通知156项关联问题、RMA19笔匹配缺口；关系历史回填仍在队列中。即时库存返回对象序列化、备货耗用及部分关系节点字段、采购退料类型字典、删除与改挂契约继续按唯一需求说明书补齐。本表描述代码能力，不承诺所有单据字段均已完整。</p></section>

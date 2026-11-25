@@ -33,7 +33,7 @@ export async function publishTimestampProjections(q:QueryRunner,scope:TimestampS
  const required=['hz_fop_collected_analytics_facts','hz_fop_collected_chains','hz_fop_source_documents','hz_fop_document_relations']
  for(const name of required){const [{present}]=await q.query('SELECT to_regclass($1) IS NOT NULL AS present',[name]);if(!present)return {available:false,applied:0,blocked:[{reason:'timestamp_projection_schema_missing',table:name}],rebuildChain:false}}
  const [batch]=await q.query('SELECT * FROM hz_fop_collected_batches WHERE id=$1 FOR UPDATE',[scope.batchId])
- const tasks:Row[]=await q.query("SELECT p.*,d.captured_at FROM hz_fop_timestamp_projection_tasks p JOIN hz_fop_timestamp_documents d USING(batch_id,entity_code,source_id) WHERE p.batch_id=$1 AND p.state='pending' ORDER BY CASE p.entity_code WHEN 'hzkj_orders' THEN 0 WHEN 'hzkj_alloc_bill' THEN 1 WHEN 'hzkj_deliver_bill' THEN 2 ELSE 3 END,p.source_id",[scope.batchId])
+ const tasks:Row[]=await q.query("SELECT p.entity_code,p.source_id,p.run_id,p.removed,p.current_raw,d.captured_at FROM hz_fop_timestamp_projection_tasks p JOIN hz_fop_timestamp_documents d USING(batch_id,entity_code,source_id) WHERE p.batch_id=$1 AND p.state='pending' ORDER BY CASE p.entity_code WHEN 'hzkj_orders' THEN 0 WHEN 'hzkj_alloc_bill' THEN 1 WHEN 'hzkj_deliver_bill' THEN 2 ELSE 3 END,p.source_id",[scope.batchId])
  // Empty captures with no pending work do not scan/rebuild the entire collected graph.
  if(!tasks.length&&!batch.metadata?.timestampOwnershipPending)return {available:true,applied:0,blocked:[],rebuildChain:false,remaining:0,publishedEntities:[]}
  const orderRows:Row[]=await q.query('SELECT * FROM hz_fop_collected_orders WHERE batch_id=$1',[scope.batchId])

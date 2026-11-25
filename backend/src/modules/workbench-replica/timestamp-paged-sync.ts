@@ -2,6 +2,7 @@ import { sourceTime, timeText, sameTimestampScope, validateTimestampDocument, ty
 
 export type TimestampNumberedQuery = { from:string; to:string; pageNo:number; pageSize:number }
 export interface TimestampNumberedSource {
+  ordering?: 'modified' | 'id'
   assertReady(scope:TimestampScope):void
   captureIdentityBasis?():Record<string,unknown>|null
   page(scope:TimestampScope, query:TimestampNumberedQuery):Promise<{scope:TimestampScope;rows:TimestampDocument[];totalCount:number;lastPage:boolean}>
@@ -45,7 +46,7 @@ export class TimestampPagedSync {
             if(seen.has(row.id))throw Error('timestamp_duplicate_source')
             // Numbered pages expose seconds, not the precise source ordering key. Equal
             // timestamps may contain any ID order; global IDs/count still must reconcile.
-            if(after&&sourceTime(row.modifiedAt)<sourceTime(after.time))throw Error('timestamp_cursor_not_monotonic')
+            if(after&&(this.source.ordering==='id'?BigInt(row.id)<=BigInt(after.id):sourceTime(row.modifiedAt)<sourceTime(after.time)))throw Error('timestamp_cursor_not_monotonic')
             seen.add(row.id);after={time:row.modifiedAt,id:row.id}
           }
           if(seen.size>expected||page.lastPage!==(seen.size===expected)||!page.lastPage&&page.rows.length!==query.pageSize)throw Error('timestamp_page_incomplete')

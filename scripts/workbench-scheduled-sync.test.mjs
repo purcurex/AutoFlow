@@ -158,3 +158,11 @@ test('production refuses persisted origin or org drift before authentication and
  }
  const f=fixture({deploymentScope});assert.equal((await runScheduledCycle({...f.options,config:c})).status,'succeeded')
 })
+test('catalogues and relation work run after entities under the same scheduler lock',async()=>{
+ const f=fixture(),result=await runScheduledCycle({...f.options,runSupplemental:async({batchId,prepared})=>{assert.equal(batchId,'batch');assert.ok(prepared);f.events.push('catalogues');return {catalogues:[{status:'succeeded'}],relations:{published:1}}}})
+ assert.equal(result.status,'succeeded');assert.ok(f.events.indexOf('catalogues')>f.events.indexOf(ENTITIES.at(-1)));assert.equal(result.supplemental.relations.published,1)
+})
+test('supplemental entity failures remain visible and global auth failure prevents calls',async()=>{
+ const f=fixture(),r=await runScheduledCycle({...f.options,runSupplemental:async()=>({catalogues:[{status:'failed'}]})});assert.equal(r.status,'failed');assert.equal(r.errorCode,'timestamp_catalogue_incomplete')
+ const g=fixture({prepareError:'timestamp_source_unauthorized'});let called=false;await runScheduledCycle({...g.options,runSupplemental:async()=>{called=true}});assert.equal(called,false)
+})

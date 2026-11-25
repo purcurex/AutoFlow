@@ -54,3 +54,8 @@ it('keeps source order state separate from approval and never replaces a provide
  const r=projectCollectedStockNative({...fact,raw:{...fact.raw,hzkj_orderstatus:'2',hzkj_orderstatus_title:'新订单阶段',billstatus:'C'}},'hyperzone.test','100000')!
  expect(r).toMatchObject({orderStatus:null,orderStatusName:'新订单阶段',rawOrderStatus:'2',reviewStatus:'approved'})
 })
+it('replaces stock lines from a complete current capture rather than preserving stale quantities',()=>{
+ const raw={...fact.raw,hzkj_orders_billentry:[{id:'line1',hzkj_qty:'3',hzkj_local_sku_number:'SKU1'}]}
+ const r=projectCollectedStockNative({...fact,raw},'hyperzone.test','100000',{source_id:'1',captured_at:'2026-11-14T00:00:00Z',display:{stockNumber:'S1',items:[{sku:'SKU1',name:'中文配货名',quantity:8},{sku:'REMOVED',name:'旧商品',quantity:1}]}})!
+ expect(r.items).toHaveLength(1);expect(r.items[0]).toMatchObject({sku:'SKU1',name:'中文配货名',quantity:3})
+})

@@ -1,3 +1,4 @@
+import { readApiRelations } from './collected-api-relations'
 import { readConsumedStockChains } from './order-progress-stock'
 import { NotFoundException, ConflictException } from '@nestjs/common'
 import type { DataSource } from 'typeorm'
@@ -50,19 +51,23 @@ export async function readOrderProgress(db:Pick<DataSource,'query'>,batch:Row,em
   // Unbuilt/stale graph is independent of the exact-root list lookup. Never serve stale edges.
   if(![404,409,503].includes((e as any)?.getStatus?.()))throw e
  }
- if(graph){
+ const apiGraph=await readApiRelations(db,batch.id,root)
+ if(apiGraph&&(apiGraph.complete||!graph))graph=apiGraph
+ if(graph&&!apiGraph?.complete){
   const purchases=graph.documents.filter((d:Row)=>d.entity==='hzkj_purorderbill')
   if(purchases.length){
    const rows=await db.query(`SELECT source_id,raw FROM hz_fop_collected_entities WHERE batch_id=$1 AND entity_type='purchase' AND source_id=ANY($2::text[])`,[batch.id,purchases.map((d:Row)=>d.sourceId)])
    graph.relations.push(...purchaseApplicationEdges(graph,rows,root.number))
   }
  }
- if(graph)for(const node of supplement){
-  if(!graph.documents.some((d:Row)=>d.id===node.id)){graph.documents.push(node);graph.relations.push({id:'root:'+node.id,fromDocumentId:graph.rootDocumentId,toDocumentId:node.id,type:'source_order'})}
+ if(graph&&!apiGraph?.complete)for(const node of supplement){
+  if(!graph.documents.some((d:Row)=>d.id===node.id||(d.sourceId===node.sourceId&&(d.entity===node.entity||node.entity==='purchase_material_return'&&d.entity==='im_purinbill')))){graph.documents.push(node);graph.relations.push({id:'root:'+node.id,fromDocumentId:graph.rootDocumentId,toDocumentId:node.id,type:'source_order'})}
  }
  const stockChains=root.kind==='fulfillment'?await readConsumedStockChains(db,batch,employees,root.number):[]
  for(const chain of stockChains){
-  if(!chain.graph)continue
+  const apiStock=await readApiRelations(db,batch.id,{source_id:chain.id,number:chain.number,kind:'stock'})
+  if(apiStock&&(apiStock.complete||!chain.graph))chain.graph=apiStock
+  if(!chain.graph||apiStock?.complete)continue
   const purchases=chain.graph.documents.filter((d:Row)=>d.entity==='hzkj_purorderbill')
   if(purchases.length){
    const rows=await db.query(`SELECT source_id,raw FROM hz_fop_collected_entities WHERE batch_id=$1 AND entity_type='purchase' AND source_id=ANY($2::text[])`,[batch.id,purchases.map((d:Row)=>d.sourceId)])

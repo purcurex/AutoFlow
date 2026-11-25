@@ -5,7 +5,7 @@ const sourceId = (v: unknown): string | null => typeof v === 'string' && /^[1-9]
 /** Explicit company-catalogue confirmation supplements native scope, never employee access. */
 export function verifiedCustomerRegistrationScope(proof: Row | undefined, context: { companyId: string; tenantId: string }): boolean {
   if (!proof || proof.companyId !== context.companyId) return false
-  if (proof.basis === 'native_response_createorg_conjunction') return true
+  if (['native_response_createorg_conjunction','native_response_org_conjunction'].includes(String(proof.basis))) return true
   return proof.basis === 'user_confirmed_company_catalogue' && context.companyId === '100000'
     && context.tenantId === 'hyperzone.test' && proof.tenantId === context.tenantId
     && proof.sourceEntity === 'hzkj_member_customer' && proof.confirmedOn === '2026-11-16'

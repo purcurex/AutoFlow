@@ -51,3 +51,7 @@ it('trusts purchase sales numbers over stale optional source IDs',()=>{
  expect(g.issues).toEqual([])
  expect(g.relations.map(r=>[r.rootSourceId,r.fromEntryId,r.toEntryId])).toEqual([['1',null,'p1']])
 })
+it('stores inbound documents and associates only explicit order numbers without SKU inference',()=>{
+ const g=buildCollectedBusinessChain(scope,[order('1','TO1'),input('inbound',{id:'in1',billno:'IN1',org_id:'100000',billentry:[{id:'i1',hzkj_salbillnumber:'TO1',qty:'2'},{id:'i2',material_number:'SAME',qty:'4'}]})]);
+ expect(g.documents.some(d=>d.entity==='im_purinbill')).toBe(true);expect(g.relations.filter(r=>r.type==='inbound')).toHaveLength(1);expect(g.relations[0].rootSourceId).toBe('1');expect(g.issues.some(i=>i.reason==='source_inbound_relation_unresolved')).toBe(true)
+})

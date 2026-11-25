@@ -28,7 +28,12 @@ export function projectCollectedStockNative(fact:Row,tenantId:string,companyId:s
   warehouse: f.warehouse?.name??null,warehouseCode:old.warehouseCode??f.warehouse?.number??null,
   amount,currency,
   amountBasis:'hzkj_order_amount',currencyBasis:code?'source_hzkj_settlecurrency':'stock_metadata_default_usd',
-  items:old.items??(Array.isArray(raw.hzkj_orders_billentry)?f.lines.map((line:Row)=>({sku:line.sku?.number??'',name:line.sku?.name??'',quantity:number(line.quantities?.quantity),variant:'',imageUrl:null})):undefined),
+  items:Array.isArray(raw.hzkj_orders_billentry)?raw.hzkj_orders_billentry.map((line:Row)=>{
+   const sku=line.hzkj_local_sku_number??line.hzkj_local_sku?.number??''
+   const matches=(old.items??[]).filter((item:Row)=>item.sku===sku),prior=matches.length===1?matches[0]:{}
+   // Reuse only product presentation, never prior quantities or document relationships.
+   return {id:line.id,sku,name:line.hzkj_local_sku_hzkj_public_title??line.hzkj_local_sku?.hzkj_public_title??prior.name??'',quantity:number(line.hzkj_qty),variant:line.hzkj_local_sku_hzkj_sku_value??line.hzkj_local_sku?.hzkj_sku_value??'',imageUrl:line.hzkj_local_sku_hzkj_picturefield??line.hzkj_local_sku?.hzkj_picturefield??prior.imageUrl??null}
+  }):undefined,
  },{tenantId})
  row.nativeStockSource={entity:'hzkj_stock_order_new',sourceId:fact.source_id,capturedAt:new Date(fact.captured_at).toISOString()}
  return row

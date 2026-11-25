@@ -60,6 +60,8 @@ export function assertCompanyConjunction(filter:unknown,companyId:string,orgNumb
 }
 /** Uses the existing bounded/paused OpenAPI transport. Tenant is configuration context, not a fabricated server proof. */
 export class TimestampPagedSource implements TimestampNumberedSource {
+ get ordering():'modified'|'id'{return this.profile.entityCode==='hzkj_orders'?'id':'modified'}
+ private directory:{key:string;ids:string[]}|null=null
  constructor(private readonly profile:TimestampPagedProfile,private readonly paused:()=>boolean,private readonly query:QueryTransport,private readonly identityBasis?:Record<string,unknown>){}
  captureIdentityBasis(){return this.identityBasis??null}
  assertReady(scope:TimestampScope){
@@ -80,6 +82,39 @@ export class TimestampPagedSource implements TimestampNumberedSource {
   const definition=TIMESTAMP_PAGED_OPERATIONS[this.profile.entityCode as keyof typeof TIMESTAMP_PAGED_OPERATIONS]
   // DTS DateTime examples use UTC+8 wall-clock seconds; the persisted W uses the exact same instant.
   const wall=(v:string)=>{const t=sourceTime(v);if(t%1000000000n!==0n)throw Error('timestamp_window_precision');return new Date(Number(t/1000000n)+8*3600000).toISOString().slice(0,19).replace('T',' ')}
+  if(this.profile.entityCode==='hzkj_orders'){
+   const key=JSON.stringify([scope,q.from,q.to,q.pageSize])
+   if(q.pageNo===1){
+    this.directory=null
+    const result=await this.query({operation:'fulfillment-ids',orgNumber:this.profile.orgNumber,startModifytime:wall(q.from),endModifytime:wall(q.to),saveResponse:true})
+    this.assertReady(scope)
+    if(!result.report.success||!result.raw)throw Error('timestamp_source_rejected')
+    const d=JSON.parse(result.raw).data
+    if(d?.tenantId!==scope.tenantId||d.organizationId!==scope.companyId||d.orgNumber!==this.profile.orgNumber||d.formId!=='hzkj_orders'||!Array.isArray(d.ids)||!/^\d+$/.test(String(d.total))||BigInt(d.total)!==BigInt(d.ids.length)||d.ids.length>100000)throw Error('timestamp_directory_scope_invalid')
+    const ids=d.ids.map(sourceId)
+    if(ids.some((id:string,i:number)=>i>0&&BigInt(id)<=BigInt(ids[i-1])))throw Error('timestamp_directory_invalid')
+    this.directory={key,ids}
+   }
+   if(!this.directory||this.directory.key!==key)throw Error('timestamp_directory_required')
+   const ids=this.directory.ids.slice((q.pageNo-1)*q.pageSize,q.pageNo*q.pageSize),totalCount=this.directory.ids.length
+   if(!ids.length){if(q.pageNo!==1||totalCount!==0)throw Error('timestamp_page_invalid');return {scope,rows:[],totalCount,lastPage:true}}
+   const result=await this.query({operation:'order-list',orgNumber:this.profile.orgNumber,ids,pageNo:1,pageSize:q.pageSize,saveResponse:true})
+   this.assertReady(scope)
+   if(!result.report.success||!result.raw)throw Error('timestamp_source_rejected')
+   const data=JSON.parse(result.raw).data
+   if(!data||data.totalCount!==ids.length||data.lastPage!==true||data.pageNo!==1||data.pageSize!==q.pageSize||!Array.isArray(data.rows)||data.rows.length!==ids.length)throw Error('timestamp_id_batch_incomplete')
+   const byId=new Map<string,any>()
+   for(const raw of data.rows){if(!raw||typeof raw.id!=='string'||!ids.includes(raw.id)||byId.has(raw.id)||raw.org_id!==undefined&&raw.org_id!==scope.companyId||raw.org_number!==undefined&&raw.org_number!==this.profile.orgNumber)throw Error('timestamp_document_scope_invalid');byId.set(raw.id,raw)}
+   const rows:TimestampDocument[]=ids.map((id:string)=>{
+    const raw=byId.get(id)
+    for(const entry of definition.entries)if(raw[entry]!==null&&!Array.isArray(raw[entry]))throw Error('timestamp_partial_details')
+    const row={id,companyId:scope.companyId,createdAt:this.time(raw.createtime),modifiedAt:this.time(raw.modifytime),raw}
+    validateTimestampDocument(row,scope)
+    if(!row.modifiedAt||sourceTime(row.modifiedAt)<sourceTime(q.from)||sourceTime(row.modifiedAt)>=sourceTime(q.to))throw Error('timestamp_row_outside_window')
+    return row
+   })
+   return {scope,rows,totalCount,lastPage:q.pageNo*q.pageSize>=totalCount}
+  }
   const result=await this.query({operation:definition.operation,orgNumber:this.profile.orgNumber,startModifytime:wall(q.from),endModifytime:wall(q.to),pageNo:q.pageNo,pageSize:q.pageSize,saveResponse:true})
   this.assertReady(scope)
   if(!result?.report?.success||!result.raw)throw Error('timestamp_source_rejected')

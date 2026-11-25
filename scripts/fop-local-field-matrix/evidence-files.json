@@ -1,0 +1,20 @@
+[
+  "frontend/src/views/autoflow/FopOrdersView.vue",
+  "frontend/src/views/autoflow/StockOrdersView.vue",
+  "frontend/src/views/autoflow/ReceiptNoticesView.vue",
+  "frontend/src/views/autoflow/PurchaseGroupsView.vue",
+  "frontend/src/views/autoflow/WorkbenchView.vue",
+  "frontend/src/components/autoflow/RmaOrdersTable.vue",
+  "frontend/src/components/autoflow/PurchaseReturnOrdersTable.vue",
+  "backend/src/modules/workbench-replica/dashboard-analytics-query.ts",
+  "backend/src/modules/workbench-replica/order-progress.ts",
+  "backend/src/modules/workbench-replica/collected-api-relations.ts",
+  "backend/src/modules/workbench-replica/relation-refresh.ts",
+  "backend/src/modules/workbench-replica/collected-chain-storage.ts",
+  "backend/src/database/migrations/1795560000000-AutomaticRelations.ts",
+  "scripts/workbench-automatic-catalog.mjs",
+  "scripts/workbench-automatic-relations.mjs",
+  "scripts/workbench-authorized-catalog-import.mjs",
+  "scripts/workbench-scheduled-sync.mjs",
+  "docs/requirements/api-integration-verification-20261116.json"
+]

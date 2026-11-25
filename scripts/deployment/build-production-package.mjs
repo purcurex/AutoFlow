@@ -6,6 +6,7 @@ import {execFileSync} from 'node:child_process'
 import archiver from 'archiver'
 const rootDefault=resolve(dirname(fileURLToPath(import.meta.url)),'../..')
 const runtimeFiles=['migrate-compiled.mjs','initialize-production.mjs','production-readiness.mjs','verify-runtime.mjs','verify-package.mjs']
+const databaseFiles=['deployment/database/schema-reference.sql','deployment/database/migration-inventory.json','docs/requirements/HyperZone23清单字段对照表.html','docs/requirements/field-matrix-manifest.json']
 const optionalFiles=['docs/openapi/fop-query-timestamp-capabilities.json','docs/openapi/fop-api-field-audit-20261116.json','docs/openapi/fop-replica-service-contract.json','docs/openapi/fop-replica-domain.schema.json','docs/requirements/requirements-current-review.json','docs/requirements/api-integration-verification-20261116.json','deployment/database/schema-reference.sql','deployment/database/migration-inventory.json','docs/requirements/production-release-verification.json','deployment/postgres.env.example','deployment/docker-compose.postgres.yml','deployment/production-inputs.csv','deployment/account-bindings.template.csv','deployment/hyperzone.service.example','deployment/nginx.conf.example','scripts/deployment/install-runtime.ps1','scripts/deployment/start-production.ps1','scripts/deployment/backup-database.ps1','scripts/deployment/restore-database.ps1','scripts/deployment/verify-runtime.ps1','scripts/deployment/migrate-database.ps1']
 const digest=file=>createHash('sha256').update(readFileSync(file)).digest('hex')
 function walk(dir){return readdirSync(dir,{withFileTypes:true}).flatMap(entry=>{const p=join(dir,entry.name);if(entry.isSymbolicLink())throw Error('package_symlink_forbidden');return entry.isDirectory()?walk(p):[p]})}
@@ -14,11 +15,15 @@ export async function buildProductionPackage({root=rootDefault,version,sourceRev
  if(!/^[A-Za-z0-9][A-Za-z0-9._-]{0,70}$/.test(version??''))throw Error('package_invalid_version')
  const name='HyperZone-Production-'+version,directory=join(root,'artifacts',name),archive=directory+'.zip'
  if(existsSync(directory)||existsSync(archive))throw Error('package_version_already_exists')
- const fixed=['package.json','package-lock.json','backend/package.json','frontend/package.json','deployment/.env.production.example','docs/manuals/HyperZone生产部署指导手册.html','docs/requirements/HyperZone智能办公平台项目开发需求说明书.html',...runtimeFiles.map(f=>'scripts/deployment/'+f)]
+ const fixed=[...databaseFiles,'package.json','package-lock.json','backend/package.json','frontend/package.json','deployment/.env.production.example','docs/manuals/HyperZone生产部署指导手册.html','docs/requirements/HyperZone智能办公平台项目开发需求说明书.html',...runtimeFiles.map(f=>'scripts/deployment/'+f)]
  const workers=JSON.parse(readFileSync(join(root,'scripts/deployment/sync-worker-files.json'),'utf8'))
- if(!Array.isArray(workers)||workers.some(f=>!/^[-a-z]+\.mjs$/.test(f)))throw Error('package_invalid_worker_manifest')
+ if(!Array.isArray(workers)||workers.some(f=>!/^[-a-z]+\.(?:mjs|cjs)$/.test(f)))throw Error('package_invalid_worker_manifest')
  fixed.push('scripts/deployment/sync-worker-files.json',...workers.map(f=>'scripts/'+f))
  for(const p of [...fixed,'backend/dist/src/common/account-password-policy.js','backend/dist/src/main.js','backend/dist/public/index.html','backend/dist/src/database/migrations','backend/dist/src/modules/workbench-replica/timestamp-postgres.js'])if(!existsSync(join(root,p)))throw Error('package_missing_'+p)
+ const inventory=JSON.parse(readFileSync(join(root,'deployment/database/migration-inventory.json'),'utf8'))
+ const compiledMigrations=readdirSync(join(root,'backend/dist/src/database/migrations')).filter(n=>/^\d.*\.js$/.test(n))
+ if(inventory.count!==compiledMigrations.length||inventory.verification?.rerunExecuted!==0||inventory.verification?.emptyDatabase!==true)throw Error('package_database_verification_required')
+ for(const [name,hash] of Object.entries(inventory.sourceHashes??{})){if(digest(join(root,'backend/src/database/migrations',name))!==hash)throw Error('package_database_verification_stale')}
  const sourceFiles=[...fixed,...optionalFiles.filter(p=>existsSync(join(root,p))),...walk(join(root,'backend/dist')).map(p=>relative(root,p).replaceAll('\\','/')).filter(compiledAllowed)]
  mkdirSync(directory,{recursive:true})
  for(const p of new Set(sourceFiles)){if(lstatSync(join(root,p)).isSymbolicLink())throw Error('package_symlink_forbidden');mkdirSync(dirname(join(directory,p)),{recursive:true});cpSync(join(root,p),join(directory,p))}

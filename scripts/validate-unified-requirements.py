@@ -126,7 +126,7 @@ assert {x['name'] for x in proof['localSqlVerification'] if x['passed']}=={'admi
 assert all(p in manifest['inputHashes'] for p in proof['implementationFiles'])
 package=DEST/'HyperZoneFOP同步服务开发交付包.zip'
 with zipfile.ZipFile(package) as z:
- expected=[DEST/'production-release-verification.json',ROOT/'docs/manuals/HyperZone生产部署指导手册.html',DEST/'requirements-current-review.json',DEST/'fop-package-logistics-gap.json',DEST/'api-integration-verification-20261116.json',ROOT/'docs/openapi/fop-api-field-audit-20261116.json',ROOT/'docs/openapi/fop-query-timestamp-capabilities.json',ROOT/'docs/openapi/fop-timestamp-paged-profile.example.json',DEST/'employee-directory-verification.json',P,ROOT/'docs/openapi/fop-replica-service-contract.json',ROOT/'docs/openapi/fop-replica-domain.schema.json',ROOT/'docs/openapi/fop-timestamp-sync-contract.json',ROOT/'docs/openapi/fop-timestamp-profile.example.json',DEST/'timestamp-verification.json',DEST/'analytics-verification.json',DEST/'purchase-return-verification.json',DEST/'sales-unpaid-verification.json',DEST/'sales-review-stock-verification.json',DEST/'business-status-verification.json']
+ expected=[DEST/"HyperZone23清单字段对照表.html",DEST/"field-matrix-manifest.json",DEST/"superseded-documents.json",DEST/'production-release-verification.json',ROOT/'docs/manuals/HyperZone生产部署指导手册.html',DEST/'requirements-current-review.json',DEST/'fop-package-logistics-gap.json',DEST/'api-integration-verification-20261116.json',ROOT/'docs/openapi/fop-api-field-audit-20261116.json',ROOT/'docs/openapi/fop-query-timestamp-capabilities.json',ROOT/'docs/openapi/fop-timestamp-paged-profile.example.json',DEST/'employee-directory-verification.json',P,ROOT/'docs/openapi/fop-replica-service-contract.json',ROOT/'docs/openapi/fop-replica-domain.schema.json',ROOT/'docs/openapi/fop-timestamp-sync-contract.json',ROOT/'docs/openapi/fop-timestamp-profile.example.json',DEST/'timestamp-verification.json',DEST/'analytics-verification.json',DEST/'purchase-return-verification.json',DEST/'sales-unpaid-verification.json',DEST/'sales-review-stock-verification.json',DEST/'business-status-verification.json']
  assert set(z.namelist())=={str(p.relative_to(ROOT/'docs')) for p in expected}
  for p in expected:assert z.read(str(p.relative_to(ROOT/'docs')))==p.read_bytes(),p
 print(json.dumps({'ok':True,'sections':6,'localNarrativesPublished':False,'fopGaps':10,'currentRulesOnly':True,'timestampRuntimeEnabled':True,'sourceHashesVerified':True,'packageVerified':True,'upstreamCalled':False},ensure_ascii=False))
@@ -140,3 +140,8 @@ assert production['verification']['runtime']['sourceSyncedAt'] is None
 if production['verification']['e2e']['failed']:
  assert production['productionReleaseApproved'] is False and production['releaseBlockers']
 assert all(p in manifest['inputHashes'] for p in production['implementationFiles'])
+
+for retired in json.loads((DEST/"superseded-documents.json").read_text()):
+ assert not (ROOT/retired).exists(),retired
+import subprocess,sys
+subprocess.run([sys.executable,str(ROOT/"scripts/fop-local-field-matrix/validate.py")],check=True)

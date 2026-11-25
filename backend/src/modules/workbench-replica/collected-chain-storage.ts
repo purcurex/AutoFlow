@@ -1,3 +1,4 @@
+import { enqueueChangedRelations } from './relation-refresh'
 import { collectedChainInputs } from './collected-chain-inputs'
 import type { EntityManager } from 'typeorm'
 import { createHash } from 'node:crypto'
@@ -7,10 +8,10 @@ export const chainSourceSignature=(batch:Row)=>{
  // Scheduler receipts describe execution, not source facts. Updating the next
  // attempt must not invalidate an otherwise unchanged local business graph.
  const metadata=batch.metadata?{...batch.metadata}:batch.metadata
- if(metadata)delete metadata.timestampSchedule
+ if(metadata){delete metadata.timestampSchedule;delete metadata.catalogSchedule;delete metadata.catalogFingerprints}
  return createHash('sha256').update(JSON.stringify([batch.id,batch.source_as_of,metadata])).digest('hex')
 }
-const MAPPING_VERSION=3
+const MAPPING_VERSION=4
 /** Preserve the existing digest without building a single >512 MB JSON string. */
 export function chainContentHash(ordered:unknown[],receiptLinks:Record<string,string>,unresolvedConflicts:number){
  const hash=createHash('sha256').update(`[${MAPPING_VERSION},[`)
@@ -33,6 +34,7 @@ export async function rebuildCollectedChain(q:EntityManager,batchId:string,dryRu
  if(existing?.content_hash===contentHash&&existing?.mapping_version===MAPPING_VERSION){
   // A capture-only watermark change invalidates the metadata signature, not the unchanged graph.
   if(existing.source_signature!==signature)await q.query('UPDATE hz_fop_collected_chains SET source_signature=$2,built_at=now() WHERE batch_id=$1',[batch.id,signature])
+  await enqueueChangedRelations(q,batch.id)
   return {datasetId,reused:true,...summary}
  }
  await q.query("INSERT INTO hz_fop_connections(id,workspace_owner_id,name,environment,tenant_id,base_url,credential_ref,status,capabilities) VALUES($1,$2,'已采集离线业务链',$4,$3,$5,'collected/offline/no-credentials','disabled','{\"offlineCollectedOnly\":true}'::jsonb) ON CONFLICT(id) DO NOTHING",[connectionId,batch.workspace_owner_id,batch.tenant_id,collectedDeploymentScope(batch).environment,collectedDeploymentScope(batch).baseUrl])
@@ -74,6 +76,7 @@ export async function rebuildCollectedChain(q:EntityManager,batchId:string,dryRu
    if(kind==='dispatch')Object.assign(base,{raw_fulfillment_status:chainText(r.hzkj_fulfillment_status),raw_delivery_status:chainText(r.hzkj_delivery_status)})
    if(kind==='receipt_notice')Object.assign(base,{raw_wms_status:chainText(r.hzkj_receiptnotice_status),tracking_number:chainText(r.hzkj_waybill_number)})
    if(kind==='receipt')Object.assign(base,{receipt_type:chainText(r.hzkj_receive_type),raw_receive_status:chainText(r.hzkj_receive_status),raw_arrival_status:chainText(r.hzkj_receipt_status),received_amount:chainDecimal(r.hzkj_rec_amount),order_amount:chainDecimal(r.hzkj_receive_amount),received_at:chainTime(r.hzkj_receive_time)})
+   if(kind==='inbound')Object.assign(base,{warehouse_id:id('warehouse'),supplier_id:id('supplier'),business_at:chainTime(r.biztime),raw_cancel_status:chainText(r.cancelstatus)})
    if(kind==='outbound')base.movement_kind='unknown'
    return base
   });await insert(cfg.table,rows)
@@ -84,6 +87,7 @@ export async function rebuildCollectedChain(q:EntityManager,batchId:string,dryRu
  await q.query('DELETE FROM hz_fop_source_documents WHERE dataset_id=$1 AND NOT(id=ANY($2::uuid[]))',[datasetId,graph.documents.map(d=>d.id)])
  await insert('hz_fop_order_relation_paths',paths,pathKeys)
  await q.query(`INSERT INTO hz_fop_collected_chains(batch_id,dataset_id,source_signature,content_hash,mapping_version,summary) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(batch_id) DO UPDATE SET source_signature=excluded.source_signature,content_hash=excluded.content_hash,mapping_version=excluded.mapping_version,summary=excluded.summary,built_at=now()`,[batch.id,datasetId,signature,contentHash,MAPPING_VERSION,JSON.stringify(summary)])
+ await enqueueChangedRelations(q,batch.id)
  return {datasetId,reused:false,...summary}
 }
 

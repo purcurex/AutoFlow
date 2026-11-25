@@ -11,6 +11,10 @@ const root = dirname(dirname(fileURLToPath(import.meta.url)))
 const origin = 'https://hyperzone.test.kdgalaxy.com'
 const maxBytes = 4 * 1024 * 1024
 const routes = Object.freeze({
+  'fulfillment-ids': '/kapi/v2/hzkj/hzkj_ordercenter/fulfillment-orders/ids',
+  'bill-relations': '/kapi/v2/hzkj/hzkj_ordercenter/openapi/bill-relations/query',
+  'stock-relations': '/kapi/v2/hzkj/hzkj_ordercenter/openapi/bill-relations/stock/query',
+  'current-inventory': '/kapi/v2/hzkj/ocbsoc/customer-stock/query',
   'order-list': '/kapi/v2/hzkj/hzkj_ordercenter/hzkj_orders/queryOrderList',
   'order-detail': '/kapi/v2/hzkj/hzkj_ordercenter/hzkj_orders/queryOrderDetail',
   allocation: '/kapi/v2/hzkj/hzkj_ordercenter/hzkj_alloc_bill/queryAllocation',
@@ -33,7 +37,7 @@ const routes = Object.freeze({
   'purchase-refund-application': '/kapi/v2/hzkj/hzkj_einkauf/hzkj_purrefundapplybill/queryPurchaseRefundApplication',
   'freight-exception': '/kapi/v2/hzkj/hzkj_logistics/hzkj_freight_exception/queryFreightException',
 })
-export const modificationWindowOperations = Object.freeze(['order-list','allocation','dispatch','delivery-notice'])
+export const modificationWindowOperations = Object.freeze(['allocation','dispatch','delivery-notice'])
 class QueryError extends Error {
   constructor(category) { super(category); this.category = category }
 }
@@ -81,10 +85,43 @@ function page(value, fallback, max) {
 export function buildRequest(operation, options = {}) {
   if (typeof operation !== 'string' || !Object.hasOwn(routes, operation)) fail('invalid-operation')
   if (!object(options)) fail('invalid-request')
+  if (['fulfillment-ids','bill-relations','stock-relations','current-inventory'].includes(operation)) {
+    const data = {}, allowed = []
+    if (operation === 'fulfillment-ids') {
+      allowed.push('orgNumber','startModifytime','endModifytime')
+      data.orgNumber=exact(options.orgNumber)
+      if(options.startModifytime!==undefined||options.endModifytime!==undefined)
+        [data.startModifytime,data.endModifytime]=timeBounds(options.startModifytime,options.endModifytime)
+    } else if(operation.endsWith('relations')) {
+      const key=operation==='bill-relations'?'orderNo':'stockOrderNo'
+      allowed.push(key,'level');data[key]=exact(options[key]);data.level=oneOf(options.level??'BILL',['BILL','ENTRY'])
+    } else {
+      allowed.push('keyword','customerId','warehouseId','standardId','cursor','pageSize')
+      for(const key of ['customerId','warehouseId','standardId'])if(options[key]!==undefined)data[key]=id(options[key])
+      for(const key of ['keyword','cursor'])if(options[key]!==undefined){
+        if(typeof options[key]!=='string'||!options[key].trim()||options[key].length>2000||/[\r\n]/.test(options[key]))fail('invalid-request')
+        data[key]=options[key]
+      }
+      data.pageSize=page(options.pageSize,100,200)
+    }
+    if(Object.keys(options).some(key=>!allowed.includes(key)))fail('invalid-request')
+    return {path:routes[operation],body:operation.endsWith('relations')?data:{query:data}}
+  }
   const data = {}
   const allowed = ['pageNo', 'pageSize']
   if(operation==='customer-registrations'){
-    allowed.push('from','toExclusive');[data.from,data.toExclusive]=timeBounds(options.from,options.toExclusive)
+    allowed.push('orgNumber','orgId','orgName')
+    data.org_number=exact(options.orgNumber);data.org_id=id(options.orgId)
+    if(typeof options.orgName!=='string'||!options.orgName.trim()||options.orgName.length>200)fail('invalid-request')
+    data.org_name=options.orgName
+  } else if(operation==='order-list'){
+    allowed.push('orgNumber','billno','id','ids','modifytime','createtime')
+    data.org_number=exact(options.orgNumber)
+    if(options.billno!==undefined)data.billno=exact(options.billno)
+    if(options.id!==undefined&&options.ids!==undefined)fail('invalid-request')
+    const ids=options.ids??(options.id!==undefined?[options.id]:undefined)
+    if(ids!==undefined){if(!Array.isArray(ids)||!ids.length||ids.length>100||new Set(ids).size!==ids.length)fail('invalid-request');data.id=ids.map(id)}
+    for(const key of ['modifytime','createtime'])if(options[key]!==undefined)data[key]=sourceDateTime(options[key])
   } else if(operation==='freight-exception'){
     allowed.push('orderNumber');data.hzkj_sale_order_no=exact(options.orderNumber)
   } else if(operation==='purchase-material-return'){
@@ -94,8 +131,10 @@ export function buildRequest(operation, options = {}) {
   } else if (operation === 'order-detail' || operation === 'outbound') {
     allowed.push('id'); data.id = id(options.id)
   } else if (operation === 'rma') {
-    allowed.push('customerId', 'shopId', 'salesType', 'startDate', 'endDate', 'orderNumber', 'orderStatus', 'reasonId')
-    data.hzkj_payingcustomer_id = id(options.customerId)
+    allowed.push('customerId', 'shopId', 'salesType', 'startDate', 'endDate', 'orderNumber', 'orderStatus', 'reasonId','orgNumber')
+    if(options.customerId===undefined&&options.orgNumber===undefined)fail('invalid-request')
+    if(options.customerId!==undefined)data.hzkj_payingcustomer_id = id(options.customerId)
+    if(options.orgNumber!==undefined)data.org_number=exact(options.orgNumber)
     if (options.shopId !== undefined) data.hzkj_shop_id = id(options.shopId)
     if (options.reasonId !== undefined) data.hzkj_resason_id = id(options.reasonId)
     if (options.salesType !== undefined) data.hzkj_sales_type = oneOf(options.salesType, ['A', 'B', 'C', 'D'])
@@ -188,6 +227,16 @@ function validate(json, body, operation) {
   if(object(json)&&json.status!==true&&['401','612'].includes(String(json.errorCode)))return 'authentication-error'
   if (!object(json) || json.status !== true || !['0', 0].includes(json.errorCode)) return 'business-error'
   const data = json.data
+  if(operation==='fulfillment-ids'){
+    if(!object(data)||!Array.isArray(data.ids)||!/^\d+$/.test(String(data.total))||BigInt(data.total)!==BigInt(data.ids.length)||new Set(data.ids).size!==data.ids.length)return 'invalid-response'
+    try{data.ids.forEach(id);id(data.organizationId)}catch{return 'invalid-id'}
+    if(typeof data.tenantId!=='string'||data.orgNumber!==body.query.orgNumber||data.formId!=='hzkj_orders')return 'invalid-response'
+    if(data.ids.some((v,i)=>i>0&&BigInt(v)<=BigInt(data.ids[i-1])))return 'invalid-response'
+    return null
+  }
+  // Relations are retained as source evidence only until their undocumented data schema is verified.
+  if(operation.endsWith('relations'))return object(data)?null:'invalid-response'
+  if(operation==='current-inventory')return object(data)&&Array.isArray(data.items)&&validIds(data)?null:'invalid-response'
   if (!object(data) || !Array.isArray(data.rows) || data.pageNo !== body.pageNo || data.pageSize !== body.pageSize || !Number.isSafeInteger(data.totalCount) || data.totalCount < 0 || typeof data.lastPage !== 'boolean' || data.rows.length > data.pageSize || data.rows.length > data.totalCount) return 'invalid-response'
   if (data.rows.some(row => !object(row) || (operation==='purchase-material-return' ? typeof row.billno!=='string'||!row.billno.trim()||(body.data.billno!==undefined&&row.billno!==body.data.billno) : typeof row.id !== 'string' || !row.id) || !validIds(row))) return 'invalid-id'
   return null
@@ -227,20 +276,21 @@ export async function runQuery(config, options = {}, fetcher = fetch) {
   if (!result.ok) {
     let errorCode
     try { errorCode = String(JSON.parse(result.raw)?.errorCode) } catch { /* no untrusted response text in reports */ }
-    return failure(result.status===519&&errorCode==='2505'?'api-not-subscribed':'http-error',raw)
+    return failure(result.status===519&&errorCode==='2505'?'api-not-subscribed':result.status===401||result.status===519&&errorCode==='2508'?'authentication-error':'http-error',raw)
   }
   let json
   try { json = JSON.parse(result.raw) } catch { return failure('invalid-json', raw) }
   const category = validate(json, body, operation)
   if (category) return failure(category, raw)
-  return { report: { ...report, success: true, rowCount: json.data.rows.length }, rows: json.data.rows, raw }
+  const rows=json.data.rows??json.data.items??[]
+  return { report: { ...report, success: true, rowCount: rows.length }, rows, data:json.data, raw }
 }
 
 const cliNames = {
   operation: 'operation', config: 'config', id: 'id', billno: 'billno', 'customer-id': 'customerId',
   'page-no': 'pageNo', 'page-size': 'pageSize', 'shop-id': 'shopId', 'sales-type': 'salesType',
   'start-date': 'startDate', 'end-date': 'endDate', 'order-number': 'orderNumber', 'order-status': 'orderStatus',
-  'reason-id': 'reasonId', 'org-number': 'orgNumber',
+  'reason-id': 'reasonId', 'org-number': 'orgNumber', 'org-id':'orgId', 'org-name':'orgName', level:'level', keyword:'keyword', cursor:'cursor', 'warehouse-id':'warehouseId', 'standard-id':'standardId', modifytime:'modifytime', createtime:'createtime',
   from:'from','to-exclusive':'toExclusive','start-modifytime':'startModifytime','end-modifytime':'endModifytime',
   'source-stock-billno':'sourceStockBillno','purchase-order-number':'purchaseOrderNumber','purchase-1688-order-number':'purchase1688OrderNumber',
   'source-bill-number':'sourceBillNumber','dispatch-number':'dispatchNumber','package-number':'packageNumber',
