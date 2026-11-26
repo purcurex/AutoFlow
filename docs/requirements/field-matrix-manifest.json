@@ -97,11 +97,11 @@
     },
     {
       "path": "backend/src/modules/workbench-replica/collected-workbench.service.ts",
-      "sha256": "d46f3ad297b9fd0cc98aace681f4cae59b27994c0b75cbbb8353a40698361df2"
+      "sha256": "ed423c7d3c813aa11e71386c54273d220c6294d62786676ec68b00e195a75383"
     },
     {
       "path": "backend/src/modules/workbench-replica/dashboard-analytics-query.ts",
-      "sha256": "6cb47aef671094a7fda858cd2409932393d3274eeef924bbdb1669bc7f407f24"
+      "sha256": "09947f43c5bb773cf4b237a242120979ab85a7ac1c6a753803cf3bbe7314c863"
     },
     {
       "path": "backend/src/modules/workbench-replica/order-progress.ts",
@@ -125,7 +125,7 @@
     },
     {
       "path": "docs/requirements/api-integration-verification-20261116.json",
-      "sha256": "2e522cfa37b2c4d5a1a498361409a435f5a2c489c9d128e72304ba91fdf7b82d"
+      "sha256": "0397a02a8e6e189df1b9d573dfb986dd2d9c655208eb34f6741ac51cf04f458d"
     },
     {
       "path": "frontend/src/components/autoflow/PurchaseReturnOrdersTable.vue",

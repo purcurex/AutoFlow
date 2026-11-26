@@ -21,3 +21,10 @@ export class DashboardTrendQueryDto extends DashboardAnalyticsQueryDto {
  @IsIn(['day','month']) grain: 'day'|'month'
 }
 export type DashboardTrendFocus = Pick<DashboardTrendQueryDto,'dimension'|'id'|'grain'>
+
+export class CustomerContributionQueryDto extends DashboardAnalyticsQueryDto {
+ @IsIn(['customer_orders']) chartId: 'customer_orders'
+ @IsIn(['department','person']) dimension: 'department'|'person'
+ @IsString() @MinLength(1) @MaxLength(128) id: string
+}
+export type CustomerContributionFocus = Pick<CustomerContributionQueryDto,'dimension'|'id'>

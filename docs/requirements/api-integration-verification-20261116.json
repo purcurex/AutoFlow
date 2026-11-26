@@ -941,7 +941,13 @@
     "frontend/src/tests/LocalFreightAnalysis.test.ts",
     "frontend/src/tests/WorkbenchAnalyticsRouting.test.ts",
     "backend/src/modules/workbench-replica/dashboard-payment-date.database.spec.ts",
-    "frontend/src/tests/analytics-query-integration.test.ts"
+    "frontend/src/tests/analytics-query-integration.test.ts",
+    "backend/src/modules/users/data-display-scope.spec.ts",
+    "backend/src/modules/fop-data/sales-performance.service.spec.ts",
+    "frontend/src/api/workbench-dashboard.ts",
+    "frontend/src/utils/analytics-cache.ts",
+    "frontend/src/tests/analytics-cache.test.ts",
+    "frontend/src/tests/AnalyticsDepartmentPermissions.test.ts"
   ],
   "timestampPublication": {
     "implemented": true,
@@ -3015,7 +3021,9 @@
         ".runtime/local-demo/cici-peer-summary.png"
       ]
     },
-    "privacy": "其他部门个人／客户身份不进入响应；当前与上期按同一数据库快照分别聚合；跨部门个人及订单请求拒绝；缓存包含授权版本。旧 FOP 汇总仍受原授权边界限制。"
+    "privacy": "其他部门个人／客户身份不进入响应；当前与上期按同一数据库快照分别聚合；跨部门个人及订单请求拒绝；缓存包含授权版本。旧 FOP 汇总仍受原授权边界限制。",
+    "supersededBy": "managerSummaryPermissionsRestored20261125",
+    "historicalScope": "历史验证事实保留；当前经理汇总与明细边界以managerSummaryPermissionsRestored20261125为准。"
   },
   "workbenchAnalyticsRetirement": {
     "scope": "五个工作台移除订单分析、物流运费页签及渲染；统一使用 Dashboard 图表。",
@@ -18515,5 +18523,464 @@
     "upstreamCalledForVerification": false,
     "productionDeployed": false,
     "remainingFopGap": "获取跟踪号失败仍待FOP提供持久化取号尝试与渠道失败结果字段，不从空跟踪号推断。"
+  },
+  "customerOrderAmountPrimary20261125": {
+    "request": "客户订单分析以订单金额为主统计量，订单笔数为附带统计量，左侧刻度展示金额。",
+    "implementation": [
+      "客户、业务员、月度趋势、环比与趋势明细采用金额口径，金额显示美元符号。",
+      "订单笔数保留在汇总与明细提示；订单类型筛选、客户归属及数据权限沿用现有规则。",
+      "本地履约订单金额hzkj_total_amount、备货订单金额hzkj_order_amount按单据汇总；沿用既有币种和收款单金额核验规则。",
+      "金额缺失不补零，分组金额留空，合计显示已知金额范围。"
+    ],
+    "targetedTests": {
+      "frontend": {
+        "passed": 121,
+        "failed": 0,
+        "log": ".runtime/customer-order-amount-frontend.log"
+      },
+      "backend": {
+        "passed": 62,
+        "failed": 0,
+        "log": ".runtime/customer-order-amount-backend.log"
+      },
+      "postgres": {
+        "passed": 9,
+        "isolation": "BEGIN事务内创建临时表，结束回滚；未改写本地业务表。"
+      }
+    },
+    "fullRegression": {
+      "frontend": {
+        "total": 1312,
+        "passed": 1310,
+        "failed": 0,
+        "skipped": 2,
+        "report": ".runtime/customer-order-amount-frontend-full.json",
+        "sha256": "651a6a515e5c296532b3c4db4a138aa25d4d42710040d7093bdc64847a100b5e"
+      },
+      "backend": {
+        "total": 2934,
+        "passed": 2696,
+        "failed": 0,
+        "skipped": 238,
+        "report": ".runtime/customer-order-amount-backend-full.json",
+        "sha256": "692592705e8a0b2c9ce0e3f5e223d8182b2686e5ce460f91222804d849632133"
+      }
+    },
+    "skipBoundary": "全量前端2项、后端238项条件测试跳过，未计为已验证；本次另行启用9项PostgreSQL临时表集成验证。",
+    "builds": {
+      "frontend": "passed",
+      "backend": "passed",
+      "frontendLog": ".runtime/customer-order-amount-frontend-build.log",
+      "backendLog": ".runtime/customer-order-amount-backend-build.log"
+    },
+    "localPage": {
+      "theme": "purple/light",
+      "viewport": "1920×1080",
+      "orderCount": 2874,
+      "orderAmount": "$51,309.41",
+      "leftAxis": "美元金额刻度",
+      "screenshot": ".runtime/customer-order-amount-1920.png"
+    },
+    "businessDatabaseChanged": false,
+    "upstreamCalledForVerification": false,
+    "productionDeployed": false
+  },
+  "customerContributionDrilldown20261125": {
+    "request": "客户订单分析业务员维度：部门柱客户金额前10名；业务员柱归属客户金额前5名。",
+    "implementation": [
+      "主图部门与业务员立柱保持原样；点击或客户贡献入口打开独立客户金额柱状图。",
+      "沿用已提交日期、仓库及订单类型；环比点击采用所选柱对应期间。",
+      "客户档案当前归属、稳定客户ID聚合，同名不同ID分开，同一客户改名合并。",
+      "排名在后台按金额倒序截取，完整范围金额和笔数先汇总，贡献占比不使用前N客户金额作分母。",
+      "缺失金额的客户不参与排名，整体金额及占比留空。",
+      "独立校验图表可见性、明细授权、部门及个人范围；经理不能下钻其他部门汇总。",
+      "切换对象清空前次客户结果，丢弃迟到响应；权限或来源版本变化返回冲突，退出会话关闭弹窗。"
+    ],
+    "endpoint": "GET /api/workbench/analytics/dashboard/customer-contribution",
+    "targetedTests": {
+      "frontend": {
+        "passed": 104,
+        "failed": 0,
+        "log": ".runtime/customer-contribution-frontend.log"
+      },
+      "backend": {
+        "passed": 60,
+        "failed": 0,
+        "log": ".runtime/customer-contribution-backend.log"
+      },
+      "postgres": {
+        "passed": 10,
+        "isolation": "本地数据库事务内临时表；全部回滚，不改业务表。"
+      }
+    },
+    "fullRegression": {
+      "frontend": {
+        "passed": 1316,
+        "failed": 0,
+        "skipped": 2,
+        "total": 1318,
+        "report": ".runtime/customer-contribution-frontend-full.json",
+        "sha256": "67f88befa48a508c5644cba793796c90885b6a9f7f6a183d49fe34581edd5152"
+      },
+      "backend": {
+        "passed": 2700,
+        "failed": 0,
+        "skipped": 239,
+        "total": 2939,
+        "report": ".runtime/customer-contribution-backend-full.json",
+        "sha256": "1011739c9cd48ee83a6291bd2c31990a0aaa97530bf5a40bf121720efb638140"
+      }
+    },
+    "skipBoundary": "前端2项、后端239项条件测试跳过，未计为已验证；另行启用10项PostgreSQL临时表测试已通过。",
+    "builds": {
+      "frontend": "passed",
+      "backend": "passed",
+      "frontendLog": ".runtime/customer-contribution-frontend-build.log",
+      "backendLog": ".runtime/customer-contribution-backend-build.log"
+    },
+    "uiVerification": {
+      "theme": "purple/light",
+      "viewport": "2560×1440",
+      "period": [
+        "2026-11-01",
+        "2026-11-26"
+      ],
+      "department": {
+        "name": "业务一部",
+        "displayedCustomers": 10,
+        "totalCustomers": 13,
+        "orderCount": 391,
+        "amount": "11376.68",
+        "topShare": "98.82%",
+        "screenshot": ".runtime/customer-contribution-department-2560.png"
+      },
+      "person": {
+        "name": "Wendy",
+        "displayedCustomers": 5,
+        "totalCustomers": 10,
+        "orderCount": 352,
+        "amount": "6880.85",
+        "topShare": "81.68%",
+        "screenshot": ".runtime/customer-contribution-person-2560.png"
+      }
+    },
+    "businessDatabaseChanged": false,
+    "newFopApiCalls": false,
+    "productionDeployed": false
+  },
+  "customerContributionTopThree20261125": {
+    "implementation": "客户贡献弹窗在上榜客户贡献之前显示前三客户贡献；前三名客户金额合计／所选范围全部订单金额。不足三名按实际客户，分母零或缺失显示—。",
+    "targetedTests": {
+      "passed": 10,
+      "failed": 0,
+      "log": ".runtime/customer-contribution-top-three-test.log"
+    },
+    "frontendRegression": {
+      "numPassedTests": 1326,
+      "numFailedTests": 0,
+      "numPendingTests": 2,
+      "success": true
+    },
+    "report": ".runtime/customer-contribution-top-three-full.json",
+    "sha256": "9e5bc27cb3e6c93d5f5674588a553426b8e99ed305de8ba71790491dc1363cf6",
+    "frontendBuild": "passed",
+    "buildLog": ".runtime/customer-contribution-top-three-build.log",
+    "businessDatabaseChanged": false,
+    "newFopApiCalls": false
+  },
+  "chartDepartmentPermissions20261125": {
+    "request": "所有统计图表筛选选项与当前账号权限一致，业务员仅本人、经理仅本部门、管理员营销中心及四部；通用筛选保留，工作台清单范围不变。",
+    "implementation": [
+      "经理图表及部门汇总统一限制在所属部门；历史营销中心或其他部门汇总配置不能扩大范围，独立图表拒绝配置继续生效。",
+      "业务员部门选项仅所属部门，查询按本人员工ID限定；空部门保留自身选项并返回空数据。",
+      "仓库、国家等通用筛选保留，并与已有记录权限取交集；图表可见性不变，物流运费仍仅管理员。",
+      "主图、趋势、环比、客户贡献共用后端范围校验，越界部门及员工请求被拒绝；前端额外按账号部门收窄选项。",
+      "图表授权缓存版本更新；查询中途权限变化返回chart_scope_changed，清除旧结果、旧筛选项及参考统计。",
+      "旧业绩分析路径同样按经理部门统计，不再受工作台个人显示偏好影响；待办清单仍采用原有权限及显示偏好。"
+    ],
+    "liveVerification": {
+      "source": "本地数据库及真实账号记录，只读查询；管理员HTTP查询200。",
+      "accounts": 9,
+      "departmentManagers": 4,
+      "salespeople": 4,
+      "administrators": 1,
+      "allowedChartCases": 41,
+      "deniedChartCases": 4,
+      "deniedChartReason": "四个业务员账号无部门业绩图表可见权限，接口返回403。",
+      "managerChartMembersByDepartment": [
+        5,
+        5,
+        6,
+        4
+      ],
+      "salespersonChartMembers": 1,
+      "ordinaryListMembersForEachEmployeeAccount": 1,
+      "forgedDepartmentTrendAndContributionRequests": "403",
+      "generalWarehouseFilter": "保留选项，查询结果未扩大部门范围",
+      "log": ".runtime/chart-permissions/live-verification.json",
+      "sha256": "954b2284ca66f904df748a7e784bd003bb58fecaa9b42f8fb3cf8959b969f2e0"
+    },
+    "fullRegression": {
+      "backend": {
+        "passed": 2707,
+        "failed": 0,
+        "skipped": 239,
+        "passedSuites": 220,
+        "log": ".runtime/chart-permissions/backend-verified.log",
+        "sha256": "b18a49be574e336298a3d8cf2f7828219fc64498a17cd2ad6495bef3a6440493"
+      },
+      "frontend": {
+        "passed": 1326,
+        "failed": 0,
+        "skipped": 2,
+        "passedSuites": 139,
+        "log": ".runtime/chart-permissions/frontend-full-final.log",
+        "sha256": "66effcd7ee96de148c947bbf3b190acebe4edf1af3fe3cc481171aeebc4484f8"
+      },
+      "skipBoundary": "条件测试跳过项未计入已验证结果。"
+    },
+    "builds": {
+      "backend": {
+        "status": "passed",
+        "log": ".runtime/chart-permissions/backend-build-final.log",
+        "sha256": "a3161757f3a31a27027c000c9a4aba6ce90d7b494d488c94fa1c0b8327973378"
+      },
+      "frontend": {
+        "status": "passed",
+        "log": ".runtime/chart-permissions/frontend-build-final.log",
+        "sha256": "23f90dc492d2a2622b138c55de0fabd8a112cb7c9364319388b72665d8293542"
+      }
+    },
+    "runtime": "本机后端已加载编译结果，健康检查和管理员本地统计接口均返回200。",
+    "businessDatabaseChanged": false,
+    "accountPermissionSettingsChanged": false,
+    "newFopApiCalls": false,
+    "productionDeployed": false,
+    "supersededBy": "managerSummaryPermissionsRestored20261125",
+    "historicalScope": "仅经理汇总限制已按用户修订恢复；业务员范围、无权限选项隐藏、后端校验、缓存失效及工作台范围保持。"
+  },
+  "managerSummaryPermissionsRestored20261125": {
+    "request": "恢复经理营销中心及其他业务部门汇总权限，其他优化保留。",
+    "implementation": [
+      "部门经理默认可选营销中心及四部：本部门成员／客户明细、其他部门仅汇总；显式汇总范围配置收窄时隐藏未授权部门。",
+      "业务员仍仅所属部门选项及本人数据；管理员保持营销中心及四部。",
+      "其他部门默认展示部门汇总，隐藏业务员与客户明细维度；保留已支持的日期、仓库及国家汇总维度和通用筛选。",
+      "后端拒绝跨部门个人趋势、客户贡献及记录查询；环比沿用同一汇总范围。",
+      "授权缓存版本更新，原权限失效清理、空部门选项、经理图表与工作台个人显示偏好分离等优化保留。"
+    ],
+    "fullRegression": {
+      "backend": {
+        "passed": 2717,
+        "failed": 0,
+        "skipped": 239,
+        "passedSuites": 220,
+        "log": ".runtime/chart-peer-restore/backend-full.log",
+        "sha256": "e9db6a454e31f96261fd648a3f66a77ba960023ef5319169fb0aacca038bf081"
+      },
+      "frontend": {
+        "passed": 1331,
+        "failed": 0,
+        "skipped": 2,
+        "passedSuites": 139,
+        "log": ".runtime/chart-peer-restore/frontend-full.log",
+        "sha256": "caa5f2474ae3b489b83e7e0acfb4d431e4769a1efc9537e3a48abd29cc06f34a"
+      },
+      "skipBoundary": "条件测试跳过项未计入已验证结果。"
+    },
+    "builds": {
+      "backend": {
+        "status": "passed",
+        "log": ".runtime/chart-peer-restore/backend-build.log",
+        "sha256": "a3161757f3a31a27027c000c9a4aba6ce90d7b494d488c94fa1c0b8327973378"
+      },
+      "frontend": {
+        "status": "passed",
+        "log": ".runtime/chart-peer-restore/frontend-build.log",
+        "sha256": "60870b7c978814ffd01e7f65059ec243d042f523741cc3d747f359566a4f66c8"
+      }
+    },
+    "runtime": {
+      "backendRestarted": true,
+      "health": 200,
+      "environmentPreserved": true
+    },
+    "workbenchListScopeChanged": false,
+    "businessDatabaseChanged": false,
+    "accountPermissionSettingsChanged": false,
+    "newFopApiCalls": false,
+    "productionDeployed": false,
+    "liveVerification": {
+      "accounts": 9,
+      "departmentManagers": 4,
+      "salespeople": 4,
+      "administrators": 1,
+      "allowedChartCases": 41,
+      "deniedChartCases": 4,
+      "managerChecks": "四部门经理营销中心及其他部门汇总可查询；其他部门个人趋势、客户贡献及指定员工查询返回403；环比不返回其他部门个人或客户维度。",
+      "salespersonChecks": "四部门业务员仅所属部门选项、本人数据，越界部门与趋势请求返回403。",
+      "listScopeChecks": "八个员工账号待办查询仍各限本人1个员工ID，与原显示偏好规则一致。",
+      "source": "本地数据库真实账号与统计数据，只读核查，无FOP调用。",
+      "log": ".runtime/chart-peer-restore/live-verification.json",
+      "sha256": "66a6e4251e5bfd2cde5dcb136701f646d498e49d98755bebb5e764952f372985"
+    }
+  },
+  "customerContributionLoading20261125": {
+    "scope": "Dashboard客户订单分析的部门／业务员客户贡献明细",
+    "implementation": [
+      "首次查询预筛选目标客户归属、收款日期与仓库，保留金额和唯一单据匹配规则。",
+      "复用浏览器授权版本缓存；后端独立缓存5分钟、64项、8MB，同条件在途请求合并。",
+      "权限和来源版本每次读取复核，收款补充加入浏览器版本；失败与无效聚合不缓存。",
+      "切换对象清空原数据并复用图表实例；旧响应不覆盖新对象。",
+      "可见弹窗每分钟校验版本；同条件刷新保留数据，无变化不重绘；主图自动刷新不关闭弹窗，撤销权限时关闭。"
+    ],
+    "verification": {
+      "frontend": {
+        "passed": 127,
+        "failed": 0,
+        "log": ".runtime/contribution-frontend-verification.log"
+      },
+      "backend": {
+        "passed": 82,
+        "failed": 0,
+        "postgresTempTableTests": 11,
+        "log": ".runtime/contribution-backend-verification.log"
+      },
+      "builds": {
+        "frontend": "passed",
+        "backend": "passed"
+      },
+      "performance": {
+        "environment": "本地autoflow_local_demo服务层，只读已采集数据",
+        "period": [
+          "2026-01-01",
+          "2026-11-26"
+        ],
+        "samples": [
+          {
+            "dimension": "department",
+            "run": 0,
+            "beforeMs": 817.58,
+            "afterMs": 320.1,
+            "identicalTotalsAndRankings": true
+          },
+          {
+            "dimension": "department",
+            "run": 1,
+            "beforeMs": 8.46,
+            "afterMs": 9.76,
+            "identicalTotalsAndRankings": true
+          },
+          {
+            "dimension": "department",
+            "run": 2,
+            "beforeMs": 7.3,
+            "afterMs": 7.02,
+            "identicalTotalsAndRankings": true
+          },
+          {
+            "dimension": "person",
+            "run": 0,
+            "beforeMs": 442.43,
+            "afterMs": 196.7,
+            "identicalTotalsAndRankings": true
+          },
+          {
+            "dimension": "person",
+            "run": 1,
+            "beforeMs": 7.42,
+            "afterMs": 7.69,
+            "identicalTotalsAndRankings": true
+          },
+          {
+            "dimension": "person",
+            "run": 2,
+            "beforeMs": 7.04,
+            "afterMs": 7.22,
+            "identicalTotalsAndRankings": true
+          }
+        ],
+        "limitation": "本机样本；不代表生产并发或网络延迟"
+      },
+      "ui": {
+        "theme": "purple/light",
+        "viewport": [
+          2560,
+          1440
+        ],
+        "reopenReadyMs": 263,
+        "switchToWendyReadyMs": 117,
+        "timingMethod": "浏览器自动化点击至明细统计文字可见，包含自动化开销",
+        "backgroundRefreshKeptModalOpen": true,
+        "screenshot": ".runtime/customer-contribution-cache-2560.png"
+      }
+    },
+    "businessDataChanged": false,
+    "newFopInterfaceCalls": false,
+    "databaseMigrationRequired": false
+  },
+  "chartInitialDefaults20261125": {
+    "request": "各账号登录后图表具有默认初始筛选，且符合数据权限范围。",
+    "implementation": [
+      "后端在聚合前确定授权默认部门，返回defaultDepartmentId及selectedDepartmentId，首屏显示、缓存、刷新和下钻统一使用实际查询部门。",
+      "系统管理员及部门经理优先营销中心；业务员仅本人归属部门；独立授权收窄时从允许选项选择默认值。无允许部门时拒绝查询，不扩大范围。",
+      "管理员有员工部门绑定时仍默认营销中心；仅授权多个指定部门的协同账号，初次数据只按默认选中部门计算。",
+      "业务员首个请求直接携带所属部门；登录会话切换清除旧图表数据、日期、部门、仓库、订单类型和对比状态，取消延迟查询。",
+      "普通图表默认本月，注册日期受已采集范围限制；物流运费保留近半年、按月六组、全部仓库、物流服务商维度及关闭环比；物流图表仍仅系统管理员。",
+      "订单类型默认履约订单，仓库默认全部，对比关闭；相同已生效的本月快捷筛选不重复查询。经理的其他部门汇总及本部门明细边界不变，工作台清单权限不变。"
+    ],
+    "liveVerification": {
+      "accounts": 9,
+      "departmentManagers": 4,
+      "salespeople": 4,
+      "administrators": 1,
+      "allowedChartCases": 41,
+      "deniedChartCases": 4,
+      "defaults": "管理员和四位经理的五张可见统计图均默认营销中心；四位业务员各四张可见图默认各自业务部门。",
+      "initialVsExplicit": "九个账号首次订单量查询与显式提交默认部门的行数据、总数及部门汇总一致。",
+      "source": "本地真实账号与统计数据，只读查询；未调用FOP。",
+      "log": ".runtime/chart-initial-defaults/live-verification.json",
+      "sha256": "742874aea0bdcc41b9b42505b68563d0d81ee3d1acd1baeaff5ef99699f53110"
+    },
+    "fullRegression": {
+      "backend": {
+        "passed": 2720,
+        "failed": 0,
+        "skipped": 240,
+        "passedSuites": 220,
+        "log": ".runtime/chart-initial-defaults/backend-full.log",
+        "sha256": "9964d31e278ef79be70f3c99cf0caeb8184c3d921cbdb97c843abbfd3f0f9d3e"
+      },
+      "frontend": {
+        "passed": 1339,
+        "failed": 0,
+        "skipped": 2,
+        "passedSuites": 140,
+        "log": ".runtime/chart-initial-defaults/frontend-full.log",
+        "sha256": "325eb90551ef57baee650cc36c47a8576d8117c6837530f8a019fd7a4341bad4"
+      },
+      "skipBoundary": "条件测试跳过项未计入已验证结果。"
+    },
+    "builds": {
+      "backend": {
+        "status": "passed",
+        "log": ".runtime/chart-initial-defaults/backend-build.log",
+        "sha256": "a3161757f3a31a27027c000c9a4aba6ce90d7b494d488c94fa1c0b8327973378"
+      },
+      "frontend": {
+        "status": "passed",
+        "log": ".runtime/chart-initial-defaults/frontend-build.log",
+        "sha256": "b19087b105e5dd90f46d7a697ab87e45ae2b3061f480926bb17d7ff23a184a0a"
+      }
+    },
+    "runtime": {
+      "backendRestarted": true,
+      "health": 200,
+      "environmentPreserved": true
+    },
+    "workbenchListScopeChanged": false,
+    "businessDatabaseChanged": false,
+    "accountPermissionSettingsChanged": false,
+    "newFopApiCalls": false,
+    "productionDeployed": false
   }
 }

@@ -5,7 +5,7 @@ import type { LocalWorkbenchOrganization } from '../users/local-workbench-organi
 import type { User } from '../users/user.entity'
 import { collectedAnalyticsScope } from './collected-analytics-scope'
 
-/** Independent grants: own-department records, peer-department aggregates only. */
+/** Own-department records and independently authorized department summaries; list preferences do not expand either grant. */
 export function managerDashboardScope(user: User, org: LocalWorkbenchOrganization, query: { departmentId?: string; ownerId?: string }, chartId: ChartId) {
   if (user.role === 'admin' || user.businessRole !== 'department_manager' || !org.analyticsPeers) return undefined
   const access = resolveChartAccess(user).find(p => p.chartId === chartId)
@@ -16,9 +16,9 @@ export function managerDashboardScope(user: User, org: LocalWorkbenchOrganizatio
   const own = org.departmentId!
   const detail = access.dataScope === 'none' ? [] : collectedAnalyticsScope(user, org, {}, chartId).employeeIds ?? []
   const permitted = directory.departments.filter(d => org.marketingScope!.departmentIds.includes(d.id)
-    && (d.id === own && detail.length > 0 || policy.mode === 'marketing' || policy.mode === 'selected' && policy.departments.some(code => codes[code] === d.name)))
+    && (d.id === own && access.dataScope !== 'none' || policy.mode === 'marketing' || policy.mode === 'selected' && policy.departments.some(code => codes[code] === d.name)))
   const permittedIds = new Set(permitted.map(d => d.id))
-  const departments = localDepartments(directory).filter(d => permittedIds.has(d.id) || d.id === org.marketingScope!.rootId && permitted.length > 0)
+  const departments = localDepartments(directory).filter(d => permittedIds.has(d.id) || d.id === org.marketingScope!.rootId && policy.mode !== 'none' && permitted.length > 0)
   if (query.departmentId && !departments.some(d => d.id === query.departmentId)) throw new ForbiddenException('Department summary is not authorized')
   const selected = localEmployeeFilter(directory, query).employeeIds ?? []
   const summaryEmployeeIds = directory.members.filter(m => permittedIds.has(m.departmentId) && selected.includes(m.employeeId)).map(m => m.employeeId).sort()

@@ -26,7 +26,7 @@ describe('manager display scope', () => {
     expect(effectiveBusinessScope({ ...user, role: UserRole.ADMIN }).role).toBe('admin')
     expect(effectiveBusinessScope({ ...user, businessRole: 'none' }).role).toBe('none')
   })
-  it('keeps personal list scope separate from authorized peer chart summaries', () => {
+  it('keeps personal list scope separate from authorized marketing chart summaries', () => {
     const user = { ...manager(), dataDisplayScope: 'self' as const }
     expect(resolveChartSummaryPolicy(user, 'registrations').mode).toBe('marketing')
     expect(resolveChartAccess(user).find(row => row.chartId === 'department_receipts')).toMatchObject({visible:true,summaryOnly:true,canViewDetails:false})

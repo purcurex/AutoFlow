@@ -8,6 +8,9 @@ import type { User } from '../users/user.entity'
 export function collectedAnalyticsScope(user: User, org: LocalWorkbenchOrganization, query: { departmentId?: string; ownerId?: string }, chartId: ChartId = 'order_volume') {
   const filter = localEmployeeFilter(org, query)
   const denied = (): never => { throw new ForbiddenException('Analytics access is not authorized for the selected scope') }
+  // Department controls are chart capabilities, not a route to other departments' empty or summary results.
+  if (user.role !== 'admin' && ['salesperson', 'department_manager'].includes(user.businessRole)
+    && query.departmentId && query.departmentId !== (org.departmentId ?? user.businessDepartmentId)) denied()
   if (chartId === 'freight' && user.role !== 'admin') denied()
   if (user.role !== 'admin' && !validateChartPermissions(user.chartPermissions ?? [])) denied()
   const policy = user.role === 'admin' ? undefined : user.chartPermissions?.find(p => p.chartId === chartId)

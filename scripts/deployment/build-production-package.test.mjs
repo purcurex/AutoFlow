@@ -11,11 +11,12 @@ test('package whitelist excludes real config, source captures, uploads and execu
   for(const p of ['package.json','package-lock.json','backend/package.json','frontend/package.json','backend/dist/src/common/account-password-policy.js','backend/dist/src/main.js','backend/dist/src/database/workbench-schema.js','backend/dist/src/database/migrations/123-test.js','backend/dist/src/modules/workbench-replica/timestamp-postgres.js','backend/dist/public/index.html','deployment/.env.production.example','docs/manuals/HyperZone生产部署指导手册.html','docs/requirements/HyperZone智能办公平台项目开发需求说明书.html'])write(p)
   write('deployment/database/schema-reference.sql','-- reference');write('deployment/database/migration-inventory.json',JSON.stringify({count:1,verification:{rerunExecuted:0,emptyDatabase:true}}));write('docs/requirements/HyperZone23清单字段对照表.html');write('docs/requirements/field-matrix-manifest.json')
   write('scripts/deployment/sync-worker-files.json','["workbench-scheduled-sync.mjs","fop-interface-policy.cjs"]');write('scripts/workbench-scheduled-sync.mjs');write('scripts/fop-interface-policy.cjs')
-  for(const p of ['migrate-compiled.mjs','initialize-production.mjs','production-readiness.mjs','verify-runtime.mjs','verify-package.mjs'])write('scripts/deployment/'+p)
+  for(const p of ['portable-directory.mjs','migrate-compiled.mjs','initialize-production.mjs','production-readiness.mjs','verify-runtime.mjs','verify-package.mjs'])write('scripts/deployment/'+p)
   for(const p of ['backend/.env','backend/.env.fop.local','backend/uploads/customer.csv','backend/dist/src/fail.spec.js','.runtime/raw.json','deployment/secret.env'])write(p,'DO_NOT_SHIP_SECRET')
   const result=await buildProductionPackage({root,version:'test-release',sourceRevision:'fixture',allowDirty:true})
   const manifest=JSON.parse(readFileSync(join(result.directory,'release-manifest.json'),'utf8'))
   assert.ok(existsSync(join(result.directory,'backend/dist/src/database/workbench-schema.js')));assert.ok(existsSync(result.archive));assert.match(readFileSync(result.archive+'.sha256','utf8'),/^[a-f0-9]{64} /)
+  assert.ok(manifest.files.some(f=>f.path==='scripts/deployment/portable-directory.mjs'));
   assert.ok(manifest.files.some(f=>f.path==='backend/dist/public/index.html'&&/^[a-f0-9]{64}$/.test(f.sha256)))
   for(const p of ['backend/.env','backend/.env.fop.local','backend/uploads/customer.csv','backend/dist/src/fail.spec.js','.runtime/raw.json','deployment/secret.env'])assert.equal(existsSync(join(result.directory,p)),false,p)
   write('deployment/database/migration-inventory.json',JSON.stringify({count:0,verification:{rerunExecuted:0,emptyDatabase:true}}));await assert.rejects(buildProductionPackage({root,version:'stale'}),/database_verification_required/)

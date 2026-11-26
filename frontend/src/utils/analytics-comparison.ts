@@ -38,7 +38,7 @@ export function comparisonChart(result:LocalAnalyticsResult,dimension:string,met
  const value=(r:AnalyticsRow|undefined)=>!r?0:monetary?(r.amount===null?null:Number(r.amount)):registration?r.registrationCount??r.orderCount:metric==='quantity'?(r.quantity===null?null:Number(r.quantity)):r.orderCount
  const dateAt=(start:string,index:number)=>new Date(Date.parse(start)+index*86400000).toISOString().slice(0,10)
  const days=(p:{from:string;to:string})=>Math.round((Date.parse(p.to)-Date.parse(p.from))/86400000)+1
- let keys=time?Array.from({length:Math.max(days(comparison.current),days(comparison.previous))},(_,i)=>String(i)):[...new Set([...a,...b].map(r=>r.id))].sort((x,y)=>Number(value(a.find(r=>r.id===y))??0)-Number(value(a.find(r=>r.id===x))??0))
+ let keys=time?Array.from({length:Math.max(days(comparison.current),days(comparison.previous))},(_,i)=>String(i)):[...new Set([...a,...b].map(r=>r.id))].sort((x,y)=>result.chartId==='order_volume'&&dimension==='customer'?(a.find(r=>r.id===y)?.orderCount??0)-(a.find(r=>r.id===x)?.orderCount??0):Number(value(a.find(r=>r.id===y))??0)-Number(value(a.find(r=>r.id===x))??0))
  if(dimension==='department')keys.sort((x,y)=>compareBusinessDepartments((a.find(r=>r.id===x)??b.find(r=>r.id===x))!.label,(a.find(r=>r.id===y)??b.find(r=>r.id===y))!.label))
  if(grouped){
   const departments=[...new Set([...a,...b].filter(r=>r.dimension==='department').map(r=>r.id))].sort((x,y)=>compareBusinessDepartments((a.find(r=>r.id===x)??b.find(r=>r.id===x))!.label,(a.find(r=>r.id===y)??b.find(r=>r.id===y))!.label))
@@ -56,16 +56,16 @@ export function comparisonChart(result:LocalAnalyticsResult,dimension:string,met
  return {trendTargets,legend:{show:true,top:0,data:series.map(s=>s.name)},tooltip:{trigger:'axis' as const,renderMode:'richText' as const,formatter:(raw:unknown)=>{
   const points=(Array.isArray(raw)?raw:[raw]) as {dataIndex:number;seriesIndex:number;value:number|null;seriesName:string}[]
   const index=points[0]?.dataIndex??0
-  if(result.chartId==='customer_orders'&&['customer','person'].includes(dimension)){
+  if(result.chartId==='customer_orders'&&['customer','person'].includes(dimension)||result.chartId==='order_volume'&&dimension==='customer'){
    const id=ids[index],currentRow=a.find(r=>r.id===id),previousRow=b.find(r=>r.id===id)
    const owner=currentRow??previousRow
    if(!owner)return ''
    const name=(dimension==='customer'?owner.customerOwnerName:owner.label)?.trim()||'未绑定业务员'
-   return [...(owner.dimension==='department'?[owner.label,'部门汇总']:[`业务员：${name}`]),...points.flatMap(p=>{
+   return [...(result.chartId==='order_volume'&&dimension==='customer'?[`客户：${owner.label}`,`业务部门：${owner.customerDepartmentName?.trim()||'—'}`]:[]),...(owner.dimension==='department'?[owner.label,'部门汇总']:[`业务员：${name}`]),...points.flatMap(p=>{
     const row=p.seriesIndex%2?currentRow:previousRow
     const orders=`${p.seriesName}订单数：${(row?.orderCount??0).toLocaleString('zh-CN')}`
-    return metric==='quantity'?[orders,`${p.seriesName}商品件数：${p.value==null?'—':p.value.toLocaleString('zh-CN')}`]:[orders]
-   }),`订单数环比：${signedComparisonPercent(currentRow?.orderCount??0,previousRow?.orderCount??0)}`,...(metric==='quantity'?[`商品件数环比：${signedComparisonPercent(value(currentRow),value(previousRow))}`]:[])].join('\n')
+    return monetary?[`${p.seriesName}订单金额：${formatKnownCurrency(p.value,codes[Math.floor(p.seriesIndex/2)])}`,orders]:metric==='quantity'?[orders,`${p.seriesName}商品件数：${p.value==null?'—':p.value.toLocaleString('zh-CN')}`]:[orders]
+   }),...(monetary?[`金额环比：${signedComparisonPercent(value(currentRow),value(previousRow))}`]:[]),`订单数环比：${signedComparisonPercent(currentRow?.orderCount??0,previousRow?.orderCount??0)}`,...(!monetary&&metric==='quantity'?[`商品件数环比：${signedComparisonPercent(value(currentRow),value(previousRow))}`]:[])].join('\n')
   }
   return [time?'同期进度':`${[...a,...b].find(r=>r.id===ids[index])?.departmentName??''} ${label(ids[index]??'')}`.trim(),...points.map(p=>{
    const period=p.seriesIndex%2?comparison.current:comparison.previous

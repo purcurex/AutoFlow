@@ -25,3 +25,9 @@ it('distinguishes zero, new, missing and positive comparisons',()=>{
  expect(comparisonMetrics({orderCount:15},{orderCount:10},'registrations')[0]).toMatchObject({percent:50,delta:5})
  expect(comparisonMetrics({amountsByCurrency:[{currency:'USD',amount:'1.10'}],missingAmountCount:1},{amountsByCurrency:[{currency:'USD',amount:'1.00'}]},'department_receipts')[0].status).toBe('unavailable')
 })
+it('compares customer dollar amounts independently of the accompanying order count',()=>{
+ const current={orderCount:2,amountsByCurrency:[{currency:'USD',amount:'1000.25'}]}
+ const previous={orderCount:10,amountsByCurrency:[{currency:'USD',amount:'500.00'}]}
+ expect(comparisonMetrics(current,previous,'customer_orders')).toEqual([expect.objectContaining({key:'USD',current:1000.25,previous:500,delta:500.25,percent:100.05})])
+ expect(comparisonMetrics({...current,missingAmountCount:1},previous,'customer_orders')[0].status).toBe('unavailable')
+})

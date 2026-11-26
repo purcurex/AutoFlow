@@ -3,13 +3,15 @@ import api from './index'
 import { assertCurrentSession, captureSession } from '@/utils/session'
 export type LocalChartId = 'registrations'|'department_receipts'|'salesperson_receipts'|'order_volume'|'customer_orders'
 export interface LocalAnalyticsQuery {chartId:LocalChartId;from:string;to:string;comparison?:'week'|'month';departmentId?:string;warehouseCode?:string;currency?:string;entityType?:'fulfillment'|'stock'}
-export interface AnalyticsRow {dimension:string;id:string;label:string;currency:string|null;orderCount:number;amount:string|null;quantity:string|null;registrationCount?:number;customerOwnerName?:string|null;departmentId?:string|null;departmentName?:string|null;englishName?:string|null}
+export interface AnalyticsRow {dimension:string;id:string;label:string;currency:string|null;orderCount:number;amount:string|null;quantity:string|null;registrationCount?:number;customerOwnerName?:string|null;customerDepartmentName?:string|null;departmentId?:string|null;departmentName?:string|null;englishName?:string|null}
 export interface LocalAnalyticsResult {
+ customerContributionTargets?:{dimension:ContributionTarget['dimension'];id:string}[]
  comparison?:{mode:'week'|'month';available:boolean;current:{from:string;to:string;start:string;end:string};previous:{from:string;to:string;start:string;end:string};previousData:LocalAnalyticsResult|null;metrics:ComparisonMetric[];departmentMetrics?:ComparisonMetric[]}
  personalDepartmentId?:string
  departmentSummary?:LocalAnalyticsResult
  totalQuantity?:string|null
  defaultDepartmentId?:string|null
+ selectedDepartmentId?:string|null
  registrationCount?:number;missingCreatedAtCount?:number;unmatchedOwnerCount?:number
  amountsByCurrency?:{currency:string;amount:string;orderCount:number}[]
  source:'local';chartId:LocalChartId;asOf:string;summaryOnly:boolean;rows:AnalyticsRow[];orderCount:number
@@ -37,5 +39,17 @@ export interface DashboardTrendResult {
 export async function getLocalDashboardTrend(query:DashboardTrendQuery,options?:AnalyticsQueryOptions):Promise<DashboardTrendResult>{
  const session=captureSession(),endpoint='/workbench/analytics/dashboard/trend'
  const result=await analyticsQuery(endpoint,query,()=>api.get<DashboardTrendResult,DashboardTrendResult>(endpoint,{params:query}),options)
+ assertCurrentSession(session);return result
+}
+
+export interface ContributionTarget {dimension:'department'|'person';id:string;name:string}
+export interface CustomerContributionQuery extends Omit<LocalAnalyticsQuery,'comparison'> {dimension:ContributionTarget['dimension'];id:string}
+export interface CustomerContributionResult {
+ source:'local';dimension:ContributionTarget['dimension'];id:string;limit:5|10;from:string;to:string;asOf:string
+ currency:'USD';amount:string|null;orderCount:number;customerCount:number;missingAmountCount:number;rows:AnalyticsRow[]
+}
+export async function getCustomerContribution(query:CustomerContributionQuery,options?:AnalyticsQueryOptions):Promise<CustomerContributionResult>{
+ const session=captureSession(),endpoint='/workbench/analytics/dashboard/customer-contribution'
+ const result=await analyticsQuery(endpoint,query,()=>api.get<CustomerContributionResult,CustomerContributionResult>(endpoint,{params:query}),options)
  assertCurrentSession(session);return result
 }

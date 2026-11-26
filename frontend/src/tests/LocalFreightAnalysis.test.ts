@@ -9,7 +9,7 @@ vi.mock('@/api/local-freight',()=>({getLocalFreight:vi.fn(),peekLocalFreight:vi.
 vi.mock('@/components/freight/FreightDetailsDialog.vue',()=>({default:{props:['query','name'],template:'<div />'}}))
 vi.mock('@/composables/useAnalyticsRefresh',()=>({useAnalyticsRefresh:()=>({updated:vi.fn()})}))
 vi.mock('@/components/charts/EChart.vue',()=>({default:{props:['option','label'],template:'<div class="chart-stub" />'}}))
-const measure={amount:'12.34',previousAmount:'10',delta:'2.34',percent:23.4}
+const measure={billCount:2,previousBillCount:1,amount:'12.34',previousAmount:'10',delta:'2.34',percent:23.4}
 const sample={source:'local',currency:'CNY',asOf:'2026-11-17T01:00:00Z',periods:[{id:'p',label:'11-09',from:'2026-11-09',to:'2026-11-15',partial:false}],values:[measure],totals:measure,billCount:2,averagePerBill:'6.17',weightKg:'1',weightBillCount:1,costPerKg:'6.17',series:[{id:'native',label:'实际渠道中文名称',values:[measure],totals:measure,billCount:2}],currencies:['CNY'],warehouses:['HangZhou'],quality:{missingCurrencyCount:1,missingDateCount:0}}
 const mountView=()=>mount(LocalFreightAnalysis,{global:{plugins:[createI18n({legacy:false,locale:'zh-CN',messages:{}})]}})
 beforeEach(()=>{vi.useFakeTimers();vi.mocked(peekLocalFreight).mockReset();vi.mocked(getLocalFreight).mockReset().mockResolvedValue(sample as any)})
@@ -38,7 +38,7 @@ describe('real local freight chart',()=>{
   expect(chart().xAxis.data).toEqual(['业务一部','Alex','','业务二部','Bob'])
   expect(chart().series[0].data.map((r:any)=>r?.value??null)).toEqual([10,10,null,20,20])
   expect(chart().series[0].name).toBe('实际运费')
-  expect(chart().tooltip.formatter([{dataIndex:1,seriesIndex:0,value:10}])).toContain('发运单量：2')
+  expect(chart().tooltip.formatter([{dataIndex:1,seriesIndex:0,value:10}])).toContain('订单量：2')
   await w.get('input[type=checkbox]').setValue(true)
   expect(chart().series[0].name).toBe('运费变化')
   expect(chart().series[0].data[0].value).toBe(2.34)
@@ -60,10 +60,18 @@ describe('real local freight chart',()=>{
     expect(option.xAxis.data).toEqual([grain])
     expect(option.series[0].data).toEqual([2.34])
     const tip=option.tooltip.formatter([{seriesName:'实际渠道中文名称',seriesIndex:0,dataIndex:0,value:2.34}])
+    expect(tip).toContain('订单量：2')
+    expect(tip).toContain('上期订单量：1')
     expect(tip).toContain('当期');expect(tip).toContain('12.34');expect(tip).toContain('上期');expect(tip).toContain('10.00');expect(tip).toContain('23.40%')
     expect(w.get('tbody').text()).toContain('2.34');expect(w.get('tbody').text()).toContain('23.40%')
     await w.get('input[type=checkbox]').setValue(false)
     expect((w.findComponent(EChartStub).props('option') as any).series[0].data).toEqual([12.34])
+    const compact=(w.findComponent(EChartStub).props('option') as any).tooltip.formatter([{seriesName:'万邦物流',seriesIndex:0,dataIndex:0}])
+    expect(compact).toContain('display:grid')
+    expect(compact).toContain('text-align:right')
+    expect(compact).toContain('text-align:left')
+    expect(compact).toContain('>2</span>')
+    expect(compact).not.toContain('订单量：')
    }
   }
   w.unmount()

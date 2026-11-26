@@ -50,7 +50,7 @@ const averageUsd=computed(()=>{
  const value=Number(raw)
  return Number.isFinite(value)?formatChartCurrency(value):''
 })
-const number=(n:string|number)=>Number(n).toLocaleString(String(locale.value),{maximumFractionDigits:3})
+const number=(n:string|number|null)=>n===null?'—':Number(n).toLocaleString(String(locale.value),{maximumFractionDigits:3})
 const percent=(n:number|null)=>n===null?'—':`${n>0?'+':''}${n.toFixed(2)}%`
 const warehouseOptions=ref<{id:string;name:string}[]>([])
 let request=0,updatingClock=false
@@ -91,17 +91,36 @@ const ownerChart=computed(()=>{
   measures.set(`${s.dimension}:${s.id}`,s.totals)
   return {dimension:s.dimension,id:s.id,label:s.label,englishName:s.englishName,departmentId:s.departmentId,departmentName:s.departmentName,currency:d.currency,amount:compare.value?s.totals.delta:s.totals.amount,orderCount:s.billCount,quantity:null}
  })
- const grouped=salespersonGroupedChart(rows,'amount',{amount:compare.value?t('运费变化','Freight change'):t('实际运费','Actual freight'),count:t('发运单量','Dispatches'),...(compare.value?{extraTooltip:(row:AnalyticsRow)=>comparisonText(measures.get(`${row.dimension}:${row.id}`),'\n')}:{})})
+ const grouped=salespersonGroupedChart(rows,'amount',{amount:compare.value?t('运费变化','Freight change'):t('实际运费','Actual freight'),count:t('订单量','Orders'),...(compare.value?{extraTooltip:(row:AnalyticsRow)=>`${comparisonText(measures.get(`${row.dimension}:${row.id}`),'\n')}\n${countText(measures.get(`${row.dimension}:${row.id}`),true)}`}:{})})
  return {...grouped,option:{...grouped.option,series:(grouped.option.series as any[]).map(s=>({...s,...freightBarLayout}))}}
 })
+function countText(value:FreightMeasure|undefined,previousOnly=false){
+ const current=`${t('订单量','Orders')}：${number(value?.billCount??null)}`
+ const previous=`${t('上期订单量','Previous orders')}：${number(value?.previousBillCount??null)}`
+ return previousOnly?previous:compare.value?`${current} · ${previous}`:current
+}
 function comparisonText(value:FreightMeasure|undefined,separator='<br>'){
  if(!value)return '—'
  return [`${t('当期','Current')}：${money(value.amount)}`,`${t('上期','Previous')}：${money(value.previousAmount)}`,`${t('差额','Change')}：${money(value.delta)}`,`${t('环比','Period comparison')}：${percent(value.percent)}`].join(separator)
 }
+function freightTooltip(items:any[],rows:LocalFreightResult['series']){
+ const cells=items.map(x=>{
+  const value=rows[x.seriesIndex]?.values[x.dataIndex]
+  const label=String(x.seriesName??'')
+  const short=data.value?.query.dimension==='carrier'?(['原飞航','万邦','云途','燕文','递四方','极速'].find(name=>label.includes(name))??label):label
+  const name=`<span style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escape(short)}</span>`
+  const count=`<span style="text-align:right;font-variant-numeric:tabular-nums;min-width:0">${escape(number(value?.billCount??null))}</span>`
+  const divider='<span aria-hidden="true" style="width:1px;height:11px;background:var(--color-text-secondary);opacity:.35;align-self:center"></span>'
+  const amount=`<span style="text-align:left;font-variant-numeric:tabular-nums;white-space:nowrap">${escape(money(value?.amount??null))}</span>`
+  const comparison=compare.value?`<div style="grid-column:1 / -1;font-size:11px;color:var(--color-text-secondary);padding-bottom:6px">${comparisonText(value)}<br>${countText(value)}</div>`:''
+  return name+count+divider+amount+comparison
+ }).join('')
+ return `<div style="display:grid;grid-template-columns:max-content 5ch 1px max-content;column-gap:8px;row-gap:8px;align-items:center;font-size:12px;line-height:18px;color:var(--color-text)">${cells}</div>`
+}
 function chart(group?:string){
  const d=data.value;if(!d)return {}
  const rows=group?d.series.filter(s=>s.id===group):d.series
- return {tooltip:{trigger:'axis',confine:true,formatter:(items:any[])=>items.map(x=>`${escape(String(x.seriesName))}: ${compare.value?comparisonText(rows[x.seriesIndex]?.values[x.dataIndex]):money(x.value??null)}`).join('<br>')},
+ return {tooltip:{trigger:'axis',confine:true,formatter:(items:any[])=>freightTooltip(items,rows)},
   legend:{type:'scroll',bottom:0},grid:{left:75,right:24,top:25,bottom:65},xAxis:{type:'category',data:d.periods.map(p=>p.label)},
   yAxis:{type:'value',axisLabel:{formatter:(v:number)=>v.toLocaleString(String(locale.value))}},
   series:rows.map(s=>({id:s.id,name:s.label,type:group&&!compare.value?'line':'bar',...freightBarLayout,data:s.values.map(v=>compare.value?v.delta===null?null:Number(v.delta):Number(v.amount)),emphasis:{focus:'series'}}))}
@@ -144,7 +163,7 @@ const displayPeriods=computed(()=>data.value?.periods.map((p,index)=>({...p,inde
   <template v-else-if="data">
    <dl class="freight-metrics" :aria-label="t('运费汇总','Freight summary')">
     <div class="freight-metric freight-metric-primary"><dt>{{t('实际运费合计','Actual freight')}}</dt><dd data-freight-total>{{money(data.totals.amount)}}</dd></div>
-    <div class="freight-metric" :title="t('当前范围内计入运费统计的已确认发运单','Confirmed dispatches included in this freight total')"><dt>{{t('单量','Dispatches')}}</dt><dd>{{number(data.billCount)}} <span class="metric-unit">{{t('单','bills')}}</span></dd></div>
+    <div class="freight-metric"><dt>{{t('订单量','Orders')}}</dt><dd>{{number(data.billCount)}} <span class="metric-unit">{{t('单','bills')}}</span></dd></div>
     <div class="freight-metric" :title="t('汇总已填写有效计费重量的单据，未填写的重量不计入','Sum of known valid chargeable weights; missing weights are excluded')"><dt>{{t('合计计费重量','Chargeable weight')}}</dt><dd>{{number(data.weightKg)}} <span class="metric-unit">kg</span></dd><span class="metric-detail">{{t('计重','Weighed')}} {{number(data.weightBillCount)}} / {{number(data.billCount)}} {{t('单','bills')}}</span></div>
     <div class="freight-metric"><dt>{{t('平均每单运费','Cost per dispatch')}}</dt><dd>{{money(data.averagePerBill)}}</dd><span v-if="averageUsd" class="metric-detail" data-average-freight-usd>{{averageUsd}}</span></div>
     <div class="freight-metric" :title="t('有有效计费重量单据的运费合计 ÷ 对应计费重量合计','Freight cost of weight-known dispatches ÷ their total chargeable weight')"><dt>{{t('每公斤运费','Cost per kg')}}</dt><dd>{{money(data.costPerKg)}}</dd></div>
@@ -158,7 +177,7 @@ const displayPeriods=computed(()=>data.value?.periods.map((p,index)=>({...p,inde
    <div class="freight-chart" :class="{'owner-groups':ownerChart}"><EChart :logistics-colors="['channel', 'carrier'].includes(data?.query.dimension ?? '')" :option="option" @select="selectChart" :style="ownerChart?{minWidth:`${ownerChart.minWidth}px`}:undefined" :label="t('实际物流运费统计','Actual freight statistics')" /></div>
    <div v-if="data.canViewDetails" class="freight-trend-actions"><button class="ov-link" :disabled="busy" @click="openDetails()">{{t('查看发运单明细 / 导出','Dispatch details / Export')}}</button><button v-for="s in data.series" :key="s.id" class="ov-link" :disabled="busy" @click="openDetails(s.id)">{{s.label}} · {{t('明细','Details')}}</button></div>
    <div class="freight-trend-actions"><span>{{t('分组趋势','Group trends')}}</span><button v-for="s in data.series" :key="s.id" class="ov-link" @click="selected=s.id">{{s.label}} ↗</button></div>
-   <details><summary>{{t('运费统计表','Freight statistics')}}</summary><div class="ov-table-scroll"><table class="ov-table"><thead><tr><th>{{t('统计周期','Period')}}</th><th>{{compare?t('合计差额','Total change'):t('合计','Total')}}</th><th v-for="s in data.series" :key="s.id">{{s.label}}</th></tr></thead><tbody><tr v-for="p in displayPeriods" :key="p.id"><th>{{p.label}} <small v-if="p.partial">{{t('非完整周期','Partial')}}</small></th><td>{{money(compare?data.values[p.index]!.delta:data.values[p.index]!.amount)}}<small v-if="compare">{{percent(data.values[p.index]!.percent)}}</small></td><td v-for="s in data.series" :key="s.id">{{money(compare?s.values[p.index]!.delta:s.values[p.index]!.amount)}}<small v-if="compare">{{percent(s.values[p.index]!.percent)}}</small></td></tr></tbody></table></div></details>
+   <details><summary>{{t('运费统计表','Freight statistics')}}</summary><div class="ov-table-scroll"><table class="ov-table"><thead><tr><th>{{t('统计周期','Period')}}</th><th>{{compare?t('合计差额','Total change'):t('合计','Total')}}</th><th v-for="s in data.series" :key="s.id">{{s.label}}</th></tr></thead><tbody><tr v-for="p in displayPeriods" :key="p.id"><th>{{p.label}} <small v-if="p.partial">{{t('非完整周期','Partial')}}</small></th><td>{{money(compare?data.values[p.index]!.delta:data.values[p.index]!.amount)}}<small v-if="compare">{{percent(data.values[p.index]!.percent)}}</small><small class="dispatch-count">{{countText(data.values[p.index])}}</small></td><td v-for="s in data.series" :key="s.id">{{money(compare?s.values[p.index]!.delta:s.values[p.index]!.amount)}}<small v-if="compare">{{percent(s.values[p.index]!.percent)}}</small><small class="dispatch-count">{{countText(s.values[p.index])}}</small></td></tr></tbody></table></div></details>
    <FreightDetailsDialog v-if="detail" :query="detail.query" :name="detail.name" @close="detail=undefined" />
    <FreightTrendDialog v-if="selected" :name="selectedName" scope="CNY · UTC+8" @close="selected=''"><div class="freight-chart"><EChart :logistics-colors="['channel', 'carrier'].includes(data?.query.dimension ?? '')" :option="trend" :label="selectedName" /></div></FreightTrendDialog>
   </template>
@@ -187,4 +206,8 @@ header{display:flex;align-items:center;justify-content:space-between;flex-wrap:w
 .freight-quality{color:var(--color-chart-muted)}
 @container(max-width:760px){.freight-metrics{grid-template-columns:repeat(3,minmax(0,1fr))}.freight-metric{padding:14px}.freight-metric dd{font-size:21px}}
 @container(max-width:460px){.freight-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.freight-metric-primary{grid-column:1/-1}.freight-metric dd{font-size:22px}}
+</style>
+
+<style scoped>
+.dispatch-count{color:var(--color-text-secondary);font-size:12px;margin-top:4px}
 </style>

@@ -26,7 +26,7 @@ import { ServiceUnavailableException } from '@nestjs/common'
 import { ReceiptNoticesQueryDto } from '../workbench-replica/receipt-notices.dto'
 import { LocalWorkbenchService } from '../workbench-replica/local-workbench.service'
 import { CollectedWorkbenchService } from '../workbench-replica/collected-workbench.service'
-import { DashboardAnalyticsQueryDto, DashboardTrendQueryDto, CollectedAnalyticsQueryDto } from '../workbench-replica/collected-analytics.dto'
+import { DashboardAnalyticsQueryDto, DashboardTrendQueryDto, CustomerContributionQueryDto, CollectedAnalyticsQueryDto } from '../workbench-replica/collected-analytics.dto'
 import { LocalFreightQueryDto } from '../workbench-replica/local-freight'
 
 @AllowWithoutBusinessData()
@@ -66,6 +66,12 @@ export class WorkbenchController {
   @Header('Cache-Control', 'private, no-store')
   getDashboardAnalytics(@Request() req: ExpressRequest, @Query() query: DashboardAnalyticsQueryDto) {
     return this.collected.dashboardAnalytics(req.user!.userId, query)
+  }
+
+  @Get('analytics/dashboard/customer-contribution')
+  @Header('Cache-Control', 'private, no-store')
+  getCustomerContribution(@Request() req: ExpressRequest, @Query() query: CustomerContributionQueryDto) {
+    return this.collected.customerContribution(req.user!.userId, query)
   }
 
   @Get('analytics/dashboard/trend')

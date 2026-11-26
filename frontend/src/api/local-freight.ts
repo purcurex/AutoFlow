@@ -2,7 +2,7 @@ import api from './index'
 import { analyticsQuery, peekAnalyticsQuery, type AnalyticsQueryOptions } from '@/utils/analytics-cache'
 export type FreightDimension='carrier'|'channel'|'warehouse'|'country'|'customer'|'owner'|'department'
 export interface LocalFreightQuery {grain:'week'|'month'|'year';year:number;weekOf?:string;monthOf?:string;range?:'last6months';warehouse?:string;currency:string;dimension:FreightDimension;departmentId?:string;ownerId?:string}
-export interface FreightMeasure {amount:string;previousAmount:string|null;delta:string|null;percent:number|null}
+export interface FreightMeasure {billCount?:number;previousBillCount?:number|null;amount:string;previousAmount:string|null;delta:string|null;percent:number|null}
 export interface FreightSeries {id:string;label:string;totals:FreightMeasure;values:FreightMeasure[];billCount:number;departmentId?:string|null;departmentName?:string|null;englishName?:string|null}
 export interface LocalFreightResult {
  source:'local';currency:string;asOf:string;query:LocalFreightQuery;canViewDetails?:boolean;canExport?:boolean
@@ -13,14 +13,14 @@ export interface LocalFreightResult {
 }
 export function peekLocalFreight(query:LocalFreightQuery):LocalFreightResult|undefined {
  const params={...query,currency:'CNY',dimension:'carrier' as const,allDimensions:true}
- const result=peekAnalyticsQuery<LocalFreightResult & {dimensionSeries:Record<FreightDimension,{series:FreightSeries[];departmentSeries?:FreightSeries[]}>}>('/workbench/analytics/freight:dimensions-v1',params)
+ const result=peekAnalyticsQuery<LocalFreightResult & {dimensionSeries:Record<FreightDimension,{series:FreightSeries[];departmentSeries?:FreightSeries[]}>}>('/workbench/analytics/freight:dimensions-v2-counts',params)
  const view=result?.dimensionSeries?.[query.dimension]
  return result&&view?{...result,...view,query:{...query,currency:'CNY'}}:undefined
 }
 /** All dimension summaries share the same scope, source revision and expiry. */
 export async function getLocalFreight(query:LocalFreightQuery,options?:AnalyticsQueryOptions):Promise<LocalFreightResult>{
  const params={...query,currency:'CNY',dimension:'carrier' as const,allDimensions:true}
- const result=await analyticsQuery<LocalFreightResult & {dimensionSeries:Record<FreightDimension,{series:FreightSeries[];departmentSeries?:FreightSeries[]}>}>('/workbench/analytics/freight:dimensions-v1',params,()=>api.get('/workbench/analytics/freight',{params}),options)
+ const result=await analyticsQuery<LocalFreightResult & {dimensionSeries:Record<FreightDimension,{series:FreightSeries[];departmentSeries?:FreightSeries[]}>}>('/workbench/analytics/freight:dimensions-v2-counts',params,()=>api.get('/workbench/analytics/freight',{params}),options)
  const view=result.dimensionSeries?.[query.dimension]
  if(!view)throw new Error('Freight dimension summary unavailable')
  // Mutate this isolated cache clone to preserve its query-time metadata.

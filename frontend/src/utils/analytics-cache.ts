@@ -74,7 +74,7 @@ export async function analyticsQuery<T>(endpoint: string, params: object, fetch:
     assertCurrentSession(session)
     const current = await scope()
     assertCurrentSession(session)
-    if (generation !== revision || current.version !== access.version) throw new Error('Chart authorization changed; reload')
+    if (generation !== revision || current.version !== access.version) throw Object.assign(new Error('Chart authorization changed; reload'), { code: 'chart_scope_changed' })
     // Publish only the newest request, but each caller owns its response and failure.
     // Refreshing another instance must not replace or delay this chart's result.
     const entry = { json: JSON.stringify(value), queriedAt: Date.now() }

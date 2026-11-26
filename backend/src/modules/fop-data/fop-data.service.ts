@@ -234,7 +234,10 @@ export class FopDataService {
     if (workbench === 'analytics' && this.provider.supportsEmployeeBinding && !this.provider.usesLocalWorkbenchOrganization) {
       throw new ServiceUnavailableException({ code: 'local_analytics_scope_required', message: 'Legacy analytics requires the current local marketing organization scope' })
     }
-    const business = effectiveBusinessScope(user), details = user.fopBindingDetails
+    // Chart scope uses the assigned role; the personal/department preference only controls workbench lists.
+    const analyticsUser = workbench === 'analytics' && user.businessRole === 'department_manager' && user.businessDepartmentId
+      ? { ...user, dataDisplayScope: 'department' as const } : user
+    const business = effectiveBusinessScope(analyticsUser), details = user.fopBindingDetails
     // A system administrator uses an explicitly enabled company service context.
     // Employee bindings remain unique and are never copied from another account.
     const administrator = user.role === 'admin' ? await this.providerCall(() => this.provider.administratorIdentity?.(forApproval) ?? Promise.resolve(null)) : null
@@ -251,7 +254,7 @@ export class FopDataService {
       ? { ...user, businessEmployeeId: business.employeeId } : user
     const verified = !!administrator || !this.provider.supportsEmployeeBinding || !!details
     const localOrganization = workbench && this.provider.usesLocalWorkbenchOrganization && business.role !== 'none' && verified && (administrator || user.fopTenantId && user.fopUserId)
-      ? await this.users.localWorkbenchOrganization(user, administrator?.[FOP_ADMIN_CONTEXT]
+      ? await this.users.localWorkbenchOrganization(analyticsUser, administrator?.[FOP_ADMIN_CONTEXT]
         ? { tenantId: administrator.tenantId, organizationId: administrator[FOP_ADMIN_CONTEXT]!.organizationId } : undefined) : undefined
     if (localOrganization) {
       // Legacy analytics still sends verified source IDs to its provider; the local owner cap is additional.
@@ -262,7 +265,7 @@ export class FopDataService {
       business.localOrganization = localEmployeeFilter(localOrganization, {})
     }
     return {
-      organizationMode: localOrganization && workbench ? workbench : undefined,
+      organizationMode: workbench === 'analytics' ? 'analytics' : localOrganization && workbench ? workbench : undefined,
       localOrganization,
       business,
       employeeMasterId: details?.employeeMasterId,
@@ -363,8 +366,7 @@ export class FopDataService {
     return initial.charts.map(local => {
       if (!initial.roles.length || local.chartId === 'sales_performance' && !initial.roles.includes('sales')) return { ...local, visible: false, dataScope: 'none', scopeLabel: '尚未分配工作台岗位', summaryDepartments: [], summaryOnly: false, canViewDetails: false, canExport: false }
       const policy = initial.summaryPolicies[local.chartId]
-      // Peer summaries are assembled by the collected Dashboard using its verified local hierarchy.
-      // Legacy FOP grants do not prove peer membership; retain their direct-department boundary.
+      // Manager summaries remain inside the assigned department, including legacy FOP grants.
       const granted = (permission.organizationSummaries?.find(g => g.chartId === local.chartId)?.departments ?? [])
         .filter(d => initial.business.role !== 'department_manager' || d.departmentId === initial.business.departmentId)
       const summaryDepartments = !local.visible ? [] : granted.filter(d => policy.mode === 'marketing'

@@ -125,8 +125,15 @@ export function aggregateLocalFreight(buckets:Bucket[],query:LocalFreightQueryDt
  const inRange=(r:Bucket,from:string,to:string)=>r.day>=from&&r.day<=to
  const current=rows.filter(r=>periods.some(p=>inRange(r,p.from,p.to)))
  const total=(matching:Bucket[])=>{
-  const values=periods.map(p=>comparison(sum(matching.filter(r=>inRange(r,p.from,p.to)),'amount'),sum(matching.filter(r=>inRange(r,p.previousFrom,p.previousTo)),'amount'),p.previousFrom>='2026-01-01'))
-  return {values,totals:comparison(values.reduce((s,v)=>s.plus(v.amount),new Decimal(0)),values.reduce((s,v)=>s.plus(v.previousAmount??0),new Decimal(0)),values.every(v=>v.previousAmount!==null)),billCount:matching.filter(r=>periods.some(p=>inRange(r,p.from,p.to))).reduce((n,r)=>n+r.bill_count,0)}
+  const count=(items:Bucket[])=>items.reduce((n,r)=>n+Number(r.bill_count),0)
+  const values=periods.map(p=>{
+   const present=matching.filter(r=>inRange(r,p.from,p.to)),previous=matching.filter(r=>inRange(r,p.previousFrom,p.previousTo))
+   const available=p.previousFrom>='2026-01-01'
+   return {...comparison(sum(present,'amount'),sum(previous,'amount'),available),billCount:count(present),previousBillCount:available?count(previous):null}
+  })
+  const billCount=count(matching.filter(r=>periods.some(p=>inRange(r,p.from,p.to))))
+  const previousBillCount=values.every(v=>v.previousBillCount!==null)?count(matching.filter(r=>periods.some(p=>inRange(r,p.previousFrom,p.previousTo)))):null
+  return {values,totals:{...comparison(values.reduce((s,v)=>s.plus(v.amount),new Decimal(0)),values.reduce((s,v)=>s.plus(v.previousAmount??0),new Decimal(0)),values.every(v=>v.previousAmount!==null)),billCount,previousBillCount},billCount}
  }
  const byId=new Map<string,Bucket[]>(),amounts=new Map<string,Decimal>()
  for(const r of rows){const group=byId.get(r.dimension_id)??[];group.push(r);byId.set(r.dimension_id,group)}

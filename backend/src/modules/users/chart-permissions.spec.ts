@@ -56,7 +56,7 @@ describe('account chart policy', () => {
     expect(access(manager, 'department_receipts')?.summaryDepartments).toEqual(['sales1','sales2','sales3','sales4'])
   })
 
-  it('narrows manager record access to self without altering independent organization summaries', () => {
+  it('narrows manager record access to self while authorized peer summaries remain available', () => {
     const user = account({ businessRole: 'department_manager', dataDisplayScope: 'department' as const, chartPermissions: [override({ chartId: 'order_volume', dataScope: 'self', details: 'deny', export: 'deny' })] })
     expect(access(user, 'order_volume')).toMatchObject({ visible: true, dataScope: 'self', canViewDetails: false, canExport: false, summaryDepartments: ['sales1', 'sales2', 'sales3', 'sales4'] })
     expect(access(user, 'customer_orders')?.dataScope).toBe('department')
@@ -77,7 +77,7 @@ describe('account chart policy', () => {
     expect(access(user, 'customer_orders')?.dataScope).toBe('self')
   })
 
-  it('managers keep department personal access with independent peer-department summaries', () => {
+  it('managers retain department charts even with personal lists, with independent peer summaries', () => {
     const manager=account({businessRole:'department_manager',dataDisplayScope:'self'})
     for(const chartId of ['registrations','salesperson_receipts','order_volume','customer_orders']) {
       expect(access(manager,chartId)).toMatchObject({dataScope:'department',summaryOnly:false,summaryDepartments:['sales1','sales2','sales3','sales4']})

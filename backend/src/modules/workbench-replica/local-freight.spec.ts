@@ -114,3 +114,17 @@ it('limits month shortcuts to the requested month and its comparison range',()=>
  const result=aggregateLocalFreight([row(),row({day:'2026-10-01',amount:'20'})],{...query,monthOf:'2026-11'},now)
  expect(result.totals.amount).toBe('0.1')
 })
+
+describe('dispatch counts for all freight dimensions',()=>{
+ it.each(['carrier','channel','warehouse','country','customer','owner','department'] as const)('%s exposes period and previous counts without changing amounts',dimension=>{
+  const result=aggregateLocalFreight([row({bill_count:3}),row({day:'2026-10-09',bill_count:2})],{...query,dimension,monthOf:'2026-11'},now)
+  expect(result.values[0]).toMatchObject({billCount:3,previousBillCount:2,amount:'0.1',previousAmount:'0.1'})
+  expect(result.series[0].totals).toMatchObject({billCount:3,previousBillCount:2})
+  expect(result.totals.billCount).toBe(result.billCount)
+ })
+ it('preserves counts when low-ranked groups are combined',()=>{
+  const result=aggregateLocalFreight(Array.from({length:12},(_,i)=>row({dimension_id:String(i),bill_count:i+1})),{...query,monthOf:'2026-11'},now)
+  expect(result.series.reduce((n,s)=>n+s.values[0].billCount,0)).toBe(78)
+  expect(result.values[0].billCount).toBe(78)
+ })
+})

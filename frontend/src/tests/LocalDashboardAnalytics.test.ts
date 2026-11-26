@@ -7,9 +7,9 @@ vi.mock('@/utils/session',async original=>({...await original<object>(),onSessio
 vi.mock('@/components/charts/EChart.vue',()=>({default:{name:'EChart',props:['option','label'],template:'<div data-chart />'}}))
 const value={source:'local',asOf:'2026-11-12T00:00:00Z',summaryOnly:false,rows:[{dimension:'month',id:'2026-11',label:'2026-11',currency:null,orderCount:42,amount:null,quantity:'71'}],orderCount:42,departments:[{id:'d1',name:'业务一部'}],warehouses:[],currencies:[],missingCurrencyCount:42,missingAmountCount:0,missingPaidAtCount:2}
 beforeEach(()=>{vi.useFakeTimers();get.mockReset();get.mockResolvedValue(value)})
-it.each(['customer_orders','order_volume'] as const)('groups %s orders and quantities with matching department subtotals',async chartId=>{
- for(const metric of ['orders','quantity']){
- const row=(dimension:string,id:string,label:string,count:number,quantity:string|null,extra={})=>({...value.rows[0],dimension,id,label,orderCount:count,quantity,...extra})
+it.each(['customer_orders','order_volume'] as const)('groups %s main metrics with matching department subtotals',async chartId=>{
+ for(const metric of chartId==='customer_orders'?['amount']:['orders','quantity']){
+ const row=(dimension:string,id:string,label:string,count:number,quantity:string|null,extra={})=>({...value.rows[0],dimension,id,label,orderCount:count,quantity,...(metric==='amount'?{currency:'USD',amount:String(count*10+0.25)}:{}),...extra})
  get.mockResolvedValue({...value,chartId,orderCount:10,totalQuantity:'30',rows:[
   ...(chartId==='customer_orders'?[row('department','d1','业务一部',10,'30')]:[]),
   ...[4,2,3,1].flatMap(i=>[
@@ -19,11 +19,11 @@ it.each(['customer_orders','order_volume'] as const)('groups %s orders and quant
  ]})
  const w=mount(LocalDashboardAnalytics,{props:{chartId,title:'订单分析'}});await flushPromises()
  await w.find('.analysis-controls select').setValue('person')
- await w.findAll('.analysis-controls select')[1]!.setValue(metric)
+ if(metric!=='amount')await w.findAll('.analysis-controls select')[1]!.setValue(metric)
  const chart=w.findComponent({name:'EChart'}).props('option')
  expect(chart.xAxis.data).toEqual(['业务一部','Person1','','业务二部','Person2','','业务三部','Person3','','业务四部','Person4'])
- expect(chart.series[0].data.map((r:any)=>r?.value??null)).toEqual(metric==='orders'?[1,1,null,2,2,null,3,3,null,4,4]:[3,3,null,6,6,null,9,9,null,12,12])
- expect(chart.tooltip.formatter([{dataIndex:0,seriesIndex:0,value:metric==='orders'?1:3}])).toContain('订单数：1')
+ expect(chart.series[0].data.map((r:any)=>r?.value??null)).toEqual(metric==='amount'?[10.25,10.25,null,20.25,20.25,null,30.25,30.25,null,40.25,40.25]:metric==='orders'?[1,1,null,2,2,null,3,3,null,4,4]:[3,3,null,6,6,null,9,9,null,12,12])
+ expect(chart.tooltip.formatter([{dataIndex:0,seriesIndex:0,value:metric==='amount'?10.25:metric==='orders'?1:3}])).toContain(metric==='amount'?'订单量：1 笔':'订单数：1')
  if(metric==='quantity')expect(chart.tooltip.formatter([{dataIndex:0,seriesIndex:0,value:3}])).toContain('商品件数：3')
  expect(w.find('.analysis-controls').text()).toContain('10 笔')
  expect(w.text()).not.toContain('前 20 项')
@@ -34,7 +34,7 @@ it.each(['customer_orders','order_volume'] as const)('groups %s orders and quant
 it.each([
  ['registrations',['注册日期','业务员','月度趋势'],'day'],
  ['salesperson_receipts',['业务员','月度趋势'],'person'],
- ['order_volume',['业务员','仓库','国家','月度趋势'],'person'],
+ ['order_volume',['业务员','客户','仓库','国家','月度趋势'],'person'],
  ['customer_orders',['客户','业务员','月度趋势'],'customer'],
 ] as const)('merges the department dimension into salesperson without changing the %s default',async(chartId,labels,initial)=>{
  const w=mount(LocalDashboardAnalytics,{props:{chartId,title:'统计'}});await flushPromises()
@@ -127,43 +127,40 @@ it('does not mark unpaid orders as missing-date warnings or unknown statuses as 
  expect(w.find('.payment-date-note').text()).not.toContain('未收款')
  w.unmount()
 })
-it('keeps customer axis names while tooltips use the corresponding customer owner and order data',async()=>{
- get.mockResolvedValue({...value,rows:[value.rows[0],
-  {...value.rows[0],dimension:'customer',id:'c1',label:'Same Customer',orderCount:2,quantity:'4',customerOwnerName:'叶力铭（Jenny）'},
-  {...value.rows[0],dimension:'customer',id:'c2',label:'Same Customer',orderCount:12,quantity:null,customerOwnerName:'陈宣竹（Joy）'},
+it('keeps customer axis names while tooltips use the corresponding customer owner and amount data',async()=>{
+ get.mockResolvedValue({...value,rows:[{...value.rows[0],currency:'USD',amount:'42'},
+  {...value.rows[0],dimension:'customer',id:'c1',label:'Same Customer',currency:'USD',amount:'10',orderCount:2,quantity:'4',customerOwnerName:'叶力铭（Jenny）'},
+  {...value.rows[0],dimension:'customer',id:'c2',label:'Same Customer',currency:'USD',amount:'30',orderCount:12,quantity:null,customerOwnerName:'陈宣竹（Joy）'},
   {...value.rows[0],dimension:'department',id:'d1',label:'业务一部'},
  ]})
  const w=mount(LocalDashboardAnalytics,{props:{chartId:'customer_orders',title:'客户订单分析'}});await flushPromises()
  const chart=()=>w.findComponent({name:'EChart'}).props('option')
  expect(chart().xAxis.data).toEqual(['Same Customer','Same Customer'])
- expect(chart().tooltip.formatter([{dataIndex:0}])).toBe('业务员：陈宣竹（Joy）\n订单数：12')
- expect(chart().tooltip.formatter([{dataIndex:1}])).toBe('业务员：叶力铭（Jenny）\n订单数：2')
- await w.findAll('.analysis-controls select')[1]!.setValue('quantity')
- expect(chart().tooltip.formatter([{dataIndex:0}])).toContain('商品件数：—')
- expect(chart().tooltip.formatter([{dataIndex:1}])).toContain('商品件数：4')
+ expect(chart().tooltip.formatter([{dataIndex:0}])).toBe('业务员：陈宣竹（Joy）\n订单金额：$30.00\n订单数：12')
+ expect(chart().tooltip.formatter([{dataIndex:1}])).toBe('业务员：叶力铭（Jenny）\n订单金额：$10.00\n订单数：2')
  await w.find('.analysis-controls select').setValue('month')
- expect(chart().tooltip.formatter).toBeUndefined()
+ expect(chart().tooltip.formatter([{dataIndex:0,seriesIndex:0,value:42}])).toContain('订单金额：$42.00\n订单量：42 笔')
  w.unmount()
 })
-it('offers salesperson second and displays aggregated order counts under salesperson names',async()=>{
+it('offers salesperson second and displays amounts with supporting counts under salesperson names',async()=>{
  get.mockResolvedValue({...value,rows:[
-  {...value.rows[0],dimension:'person',id:'p1',label:'叶力铭（Jenny）',orderCount:8,quantity:'12'},
-  {...value.rows[0],dimension:'person',id:'p2',label:'陈宣竹（Joy）',orderCount:34,quantity:'59'},
+  {...value.rows[0],dimension:'person',id:'p1',label:'叶力铭（Jenny）',currency:'USD',amount:'100',orderCount:8,quantity:'12'},
+  {...value.rows[0],dimension:'person',id:'p2',label:'陈宣竹（Joy）',currency:'USD',amount:'50',orderCount:34,quantity:'59'},
  ]})
  const w=mount(LocalDashboardAnalytics,{props:{chartId:'customer_orders',title:'客户订单分析'}});await flushPromises()
  const selector=w.find('.analysis-controls select')
  expect(selector.findAll('option').map(o=>o.text())).toEqual(['客户','业务员','月度趋势'])
  await selector.setValue('person')
  const option=w.findComponent({name:'EChart'}).props('option')
- expect(option.xAxis.data).toEqual(['陈宣竹（Joy）','叶力铭（Jenny）'])
- expect(option.series[0].data).toEqual([34,8]);expect(option.tooltip.formatter).toBeUndefined()
+ expect(option.xAxis.data).toEqual(['叶力铭（Jenny）','陈宣竹（Joy）'])
+ expect(option.series[0].data).toEqual([100,50]);expect(option.tooltip.formatter([{dataIndex:0,seriesIndex:0,value:100}])).toContain('订单量：8 笔')
  w.unmount()
 })
 it('shows an explicit unavailable owner instead of reusing the customer name',async()=>{
- get.mockResolvedValue({...value,rows:[{...value.rows[0],dimension:'customer',id:'c1',label:'Customer',customerOwnerName:null}]})
+ get.mockResolvedValue({...value,rows:[{...value.rows[0],dimension:'customer',id:'c1',label:'Customer',currency:'USD',amount:'5',customerOwnerName:null}]})
  const w=mount(LocalDashboardAnalytics,{props:{chartId:'customer_orders',title:'客户订单分析'}});await flushPromises()
  const chart=w.findComponent({name:'EChart'}).props('option')
- expect(chart.tooltip.formatter([{dataIndex:0}])).toBe('业务员：未绑定业务员\n订单数：42')
+ expect(chart.tooltip.formatter([{dataIndex:0}])).toBe('业务员：未绑定业务员\n订单金额：$5.00\n订单数：42')
  expect(chart.xAxis.data).toEqual(['Customer']);w.unmount()
 })
 afterEach(()=>vi.useRealTimers())
@@ -249,10 +246,10 @@ describe('local dashboard analytics',()=>{
   get.mockRejectedValue(new Error('forbidden'));await w.find('form').trigger('submit');await flushPromises()
   expect(w.find('[data-chart]').exists()).toBe(false);expect(w.text()).toContain('加载失败')
  })
- it('keeps customer controls available while backend scope limits returned data',async()=>{
+ it('hides customer dimensions when only department summaries are authorized',async()=>{
   get.mockResolvedValue({...value,summaryOnly:true,rows:[]})
   const w=mount(LocalDashboardAnalytics,{props:{chartId:'customer_orders',title:'客户订单分析'}});await flushPromises()
-  expect(w.findAll('option').map(o=>o.text())).toContain('客户')
+  expect(w.findAll('option').map(o=>o.text())).not.toContain('客户')
  })
 })
 it('shows salesperson revenue in USD, ranked by amount rather than order count',async()=>{
@@ -307,11 +304,11 @@ it('shows customer creation registrations with no order/quantity filter or FOP r
  expect(w.findAll('option').map(o=>o.text())).toContain('业务员')
  w.unmount()
 })
-it('registration summary grants preserve the same dimension controls',async()=>{
+it('registration summary grants preserve date aggregates without personal dimensions',async()=>{
  get.mockResolvedValue({...value,summaryOnly:true,rows:[],registrationCount:0})
  const w=mount(LocalDashboardAnalytics,{props:{chartId:'registrations',title:'客户注册统计'}});await flushPromises()
  const options=w.findAll('option').map(o=>o.text())
- expect(options).toContain('业务员');expect(options).toContain('月度趋势');expect(options).toContain('注册日期')
+ expect(options).not.toContain('业务员');expect(options).toContain('业务部门');expect(options).toContain('月度趋势');expect(options).toContain('注册日期')
  w.unmount()
 })
 
@@ -547,8 +544,10 @@ it.each([
  const untouched=(other.find('input[type="date"]').element as HTMLInputElement).value
  get.mockClear()
  await first.get('.receipt-month-shortcuts button').trigger('click');await flushPromises()
- expect(get).toHaveBeenCalledTimes(1)
- expect(get.mock.calls[0]![0]).toMatchObject({from:start,to:end,departmentId:'d1',chartId:'department_receipts'})
+ expect(get).not.toHaveBeenCalled()
+ expect((first.find('input[type="date"]').element as HTMLInputElement).value).toBe(start)
+ expect((first.findAll('input[type="date"]')[1]!.element as HTMLInputElement).value).toBe(end)
+ expect((first.get('select[aria-label="业务部门"]').element as HTMLSelectElement).value).toBe('d1')
  expect((other.find('input[type="date"]').element as HTMLInputElement).value).toBe(untouched)
  get.mockClear()
  await first.findAll('.receipt-month-shortcuts button')[1]!.trigger('click');await flushPromises()
@@ -668,5 +667,18 @@ it('separates the center scale and shares single-department peaks between depart
  await w.get('select[aria-label="业务部门"]').setValue('center')
  await vi.advanceTimersByTimeAsync(1000);await flushPromises()
  expect(chart().yAxis).toMatchObject({max:12,interval:2})
+ w.unmount()
+})
+it('order volume adds customer after person and ranks 20 customers with archive ownership',async()=>{
+ get.mockResolvedValue({...value,chartId:'order_volume',rows:Array.from({length:23},(_,i)=>({...value.rows[0],dimension:'customer',id:`c${i}`,label:`客户${i}`,orderCount:i+1,customerOwnerName:'Alex',customerDepartmentName:'业务一部'}))})
+ const w=mount(LocalDashboardAnalytics,{props:{chartId:'order_volume',title:'订单量分析'}});await flushPromises()
+ const select=w.find('.analysis-controls select')
+ expect(select.findAll('option').map(o=>o.attributes('value')).slice(0,2)).toEqual(['person','customer'])
+ await select.setValue('customer')
+ const chart=w.findComponent({name:'EChart'}).props('option')
+ expect(chart.xAxis.data).toHaveLength(20);expect(chart.xAxis.data[0]).toBe('客户22')
+ expect(chart.series[0].data).toEqual(Array.from({length:20},(_,i)=>23-i))
+ expect(chart.tooltip.formatter([{dataIndex:0}])).toContain('业务部门：业务一部')
+ expect(chart.tooltip.formatter([{dataIndex:0}])).toContain('业务员：Alex')
  w.unmount()
 })

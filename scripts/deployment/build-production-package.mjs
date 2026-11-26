@@ -5,7 +5,7 @@ import {createHash} from 'node:crypto'
 import {execFileSync} from 'node:child_process'
 import archiver from 'archiver'
 const rootDefault=resolve(dirname(fileURLToPath(import.meta.url)),'../..')
-const runtimeFiles=['migrate-compiled.mjs','initialize-production.mjs','production-readiness.mjs','verify-runtime.mjs','verify-package.mjs']
+const runtimeFiles=['portable-directory.mjs','migrate-compiled.mjs','initialize-production.mjs','production-readiness.mjs','verify-runtime.mjs','verify-package.mjs']
 const databaseFiles=['deployment/database/schema-reference.sql','deployment/database/migration-inventory.json','docs/requirements/HyperZone23清单字段对照表.html','docs/requirements/field-matrix-manifest.json']
 const optionalFiles=['docs/openapi/fop-query-timestamp-capabilities.json','docs/openapi/fop-api-field-audit-20261116.json','docs/openapi/fop-replica-service-contract.json','docs/openapi/fop-replica-domain.schema.json','docs/requirements/requirements-current-review.json','docs/requirements/api-integration-verification-20261116.json','deployment/database/schema-reference.sql','deployment/database/migration-inventory.json','docs/requirements/production-release-verification.json','deployment/postgres.env.example','deployment/docker-compose.postgres.yml','deployment/production-inputs.csv','deployment/account-bindings.template.csv','deployment/hyperzone.service.example','deployment/nginx.conf.example','scripts/deployment/install-runtime.ps1','scripts/deployment/start-production.ps1','scripts/deployment/backup-database.ps1','scripts/deployment/restore-database.ps1','scripts/deployment/verify-runtime.ps1','scripts/deployment/migrate-database.ps1']
 const digest=file=>createHash('sha256').update(readFileSync(file)).digest('hex')

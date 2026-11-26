@@ -86,9 +86,9 @@ describe('independently authorized sales performance', () => {
     expect((await service.getSalesPerformance('u', { ...query, ownerId: 'bob' })).totals).toMatchObject({ collectionsAmount: 80, estimatedGrossProfit: 0, settledGrossProfit: 0 })
     expect((await service.getSalesPerformance('u', { ...query, ownerId: 'alice' })).totals.settledGrossProfit).toBe(60)
   })
-  it('lets managers select only authorized department owners, defaulting to their binding and never silently selecting a colleague', async () => {
+  it.each(['department','self'] as const)('keeps manager chart owners in the assigned department with %s list preference', async dataDisplayScope => {
     const rows = [profit('a'), profit('b', { owner: { id: 'bob', name: 'Bob' } }), profit('outside', { department: { id: 'd2', name: 'Private' }, departmentPathIds: ['d2'] })]
-    const { service, account } = setup({ profits: rows, account: { businessRole: 'department_manager', dataDisplayScope: 'department' as const, businessDepartmentId: 'd1', businessEmployeeId: 'bob' } })
+    const { service, account } = setup({ profits: rows, account: { businessRole: 'department_manager', dataDisplayScope, businessDepartmentId: 'd1', businessEmployeeId: 'bob' } })
     expect(await service.getSalesPerformance('u', query)).toMatchObject({ canSelectOwner: true, selectedOwner: { id: 'bob' }, totals: { collectionsAmount: 0, estimatedGrossProfit: 60 } })
     expect((await service.getSalesPerformance('u', { ...query, ownerId: 'alice' })).totals.collectionsAmount).toBe(80)
     account.businessEmployeeId = 'not-present'

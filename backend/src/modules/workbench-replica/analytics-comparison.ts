@@ -38,7 +38,7 @@ export function comparisonStatement(current:{sql:string;params:unknown[]},previo
  return {sql:`SELECT c.analytics, p.analytics AS previous FROM (${current.sql}) c CROSS JOIN (${previous.sql.replace(/\$(\d+)/g,(_,n)=>'$'+(Number(n)+offset))}) p`,params:[...current.params,...previous.params]}
 }
 export function comparisonMetrics(current:any,previous:any,chartId:string){
- const money=['department_receipts','salesperson_receipts'].includes(chartId)
+ const money=['department_receipts','salesperson_receipts','customer_orders'].includes(chartId)
  const codes=money?[...new Set<string>([...(current.amountsByCurrency??[]),...(previous.amountsByCurrency??[])].map(x=>x.currency))]:['count',...(chartId==='registrations'?[]:['quantity'])]
  return codes.map(code=>{
   const value=(r:any):number|null=> money?(r.missingAmountCount||r.missingCurrencyCount?null:Number(r.amountsByCurrency?.find((a:any)=>a.currency===code)?.amount??0)):code==='quantity'?(r.totalQuantity==null?null:Number(r.totalQuantity)):Number(r.registrationCount??r.orderCount??0)

@@ -65,7 +65,7 @@ import { collectedAnalyticsScope } from './collected-analytics-scope'
 import { dashboardAnalyticsQuery } from './dashboard-analytics-query'
 import { managerDashboardScope, combineDashboardStatements, withDepartmentSummary } from './manager-dashboard-scope'
 import { dimensions, aggregateLocalFreight, localFreightQuery, LocalFreightQueryDto } from './local-freight'
-import { DashboardAnalyticsQueryDto, DashboardTrendQueryDto, DashboardTrendFocus, CollectedAnalyticsQueryDto } from './collected-analytics.dto'
+import { DashboardAnalyticsQueryDto, DashboardTrendQueryDto, DashboardTrendFocus, CustomerContributionQueryDto, CustomerContributionFocus, CollectedAnalyticsQueryDto } from './collected-analytics.dto'
 type Row=Record<string,any>
 type CollectedRow=Row & {items:Row[]}
 type CollectedPage={items:CollectedRow[];total:number;page:number;pageSize:number;[key:string]:any}
@@ -107,6 +107,7 @@ export class CollectedWorkbenchService {
  private readonly salesReads=new ExceptionPageCache<Row[]>(()=>Date.now(),30_000)
  private readonly exceptionPages=new ExceptionPageCache<Row>(()=>Date.now(),30_000)
  private readonly analyticsTrendReads=new ExceptionPageCache<Row[]>(()=>Date.now(),30_000,64)
+ private readonly customerContributionReads=new ExceptionPageCache<Row[]>(()=>Date.now(),300_000,64)
  private nativeInventory?: KingdeeFopDataProvider
  private nativeSupplier?: KingdeeFopDataProvider
  async supplierContacts(userId:string,query:FopSupplierContext,launch?:{contactVersion:string;purchaseOrderId?:string}):Promise<any>{
@@ -293,7 +294,7 @@ export class CollectedWorkbenchService {
   // Do not enable chart timers for remote providers or revive suspended FOP calls.
   if(!this.enabled||this.config.get<string>('WORKBENCH_READ_MODE')!=='local')return {cacheable:false}
   const c=await this.context(userId)
-  const version=createHash('sha256').update(JSON.stringify(['manager-chart-grants-v2',c.user.id,c.user.sessionVersion,c.user.dataDisplayScope,effectiveWorkbenchRoles(c.user),c.org.version,c.user.chartPermissions,c.batch.id,c.batch.source_as_of,c.batch.metadata?.analyticsCaptures,c.batch.metadata?.entityCaptures,c.batch.metadata?.moneyCaptureUpdatedAt,c.batch.metadata?.timestampSync,c.batch.metadata?.businessStatusProjection,c.batch.metadata?.manualApprovalReadbackAt])).digest('hex')
+  const version=createHash('sha256').update(JSON.stringify(['chart-grants-v7-initial-filter-scope',c.user.id,c.user.sessionVersion,c.user.dataDisplayScope,effectiveWorkbenchRoles(c.user),c.org.version,c.user.chartPermissions,c.batch.id,c.batch.source_as_of,c.batch.metadata?.analyticsCaptures,c.batch.metadata?.entityCaptures,c.batch.metadata?.moneyCaptureUpdatedAt,c.batch.metadata?.timestampSync,c.batch.metadata?.businessStatusProjection,c.batch.metadata?.manualApprovalReadbackAt,c.batch.metadata?.receiptSupplement])).digest('hex')
   return {cacheable:true,version}
  }
  async freightAnalytics(userId:string,query:LocalFreightQueryDto):Promise<Row>{
@@ -368,7 +369,7 @@ export class CollectedWorkbenchService {
  async dashboardTrend(userId:string,query:DashboardTrendQueryDto):Promise<Row>{
   const {dimension,id,grain,...base}=query
   if(base.comparison||base.ownerId)throw new BadRequestException('Trend uses one selected period and chart scope')
-  const money=['department_receipts','salesperson_receipts'].includes(query.chartId)
+  const money=['department_receipts','salesperson_receipts','customer_orders'].includes(query.chartId)
   const result=await this.dashboardAnalytics(userId,{...base,...money?{currency:'USD'}:{}},{dimension,id,grain})
   return {source:'local',chartId:query.chartId,dimension,id,grain,from:query.from,to:query.to,asOf:result.asOf,timeBasis:result.timeBasis,summaryOnly:result.summaryOnly,
    orderCount:result.orderCount,registrationCount:result.registrationCount,totalQuantity:result.totalQuantity,
@@ -376,16 +377,45 @@ export class CollectedWorkbenchService {
    missingAmountCount:result.missingAmountCount??0,missingPaidAtCount:result.missingPaidAtCount??0,
    points:(result.rows??[]).map((r:Row)=>({period:r.id,orderCount:r.orderCount,registrationCount:r.registrationCount,quantity:r.quantity,amount:r.amount}))}
  }
- async dashboardAnalytics(userId:string,query:DashboardAnalyticsQueryDto,trend?:DashboardTrendFocus):Promise<Row>{
+ async customerContribution(userId:string,query:CustomerContributionQueryDto):Promise<Row>{
+  const {dimension,id,...base}=query
+  if(base.chartId!=='customer_orders'||base.comparison||base.ownerId||!['department','person'].includes(dimension)||!id||id.length>128)throw new BadRequestException('Unsupported customer contribution request')
+  const result=await this.dashboardAnalytics(userId,{...base,currency:'USD'},undefined,{dimension,id})
+  return {source:'local',dimension,id,limit:dimension==='department'?10:5,from:query.from,to:query.to,asOf:result.asOf,
+   currency:'USD',amount:result.missingAmountCount?null:result.amountsByCurrency?.find((r:Row)=>r.currency==='USD')?.amount??'0',
+   orderCount:result.orderCount,customerCount:result.customerCount,missingAmountCount:result.missingAmountCount??0,rows:result.rows}
+ }
+ async dashboardAnalytics(userId:string,query:DashboardAnalyticsQueryDto,trend?:DashboardTrendFocus,contribution?:CustomerContributionFocus):Promise<Row>{
   if(!this.enabled)throw new ServiceUnavailableException('Local analytics is not enabled')
   let window=analyticsWindow(query);const c=await this.context(userId,undefined,query,true)
   const access=resolveChartAccess(c.user).find(p=>p.chartId===query.chartId)
   if(!access?.visible)throw new ForbiddenException('Chart access denied')
+  const requestedQuery=query
+  const optionManager=managerDashboardScope(c.user,c.org,{},query.chartId)
+  const optionScope=optionManager??collectedAnalyticsScope(c.user,c.org,{},query.chartId)
+  const policy=c.user.role==='admin'?undefined:c.user.chartPermissions?.find(p=>p.chartId===query.chartId)
+  const departments=optionManager?.departments??localDepartments(c.org).filter(d=>{
+   if(c.user.role!=='admin'&&['salesperson','department_manager'].includes(c.user.businessRole)&&d.id!==(c.org.departmentId??c.user.businessDepartmentId))return false
+   if(optionScope.summaryOnly){
+    try{collectedAnalyticsScope(c.user,c.org,{departmentId:d.id},query.chartId);return true}
+    catch(error){if(error instanceof ForbiddenException)return false;throw error}
+   }
+   return !policy||policy.dataScope==='inherit'||c.org.members.some(m=>optionScope.employeeIds?.includes(m.employeeId)&&c.org.departments.find(x=>x.id===m.departmentId)?.pathIds.includes(d.id))
+  })
+  const defaultDepartmentId=optionManager?.defaultDepartmentId??(c.user.role==='admin'||c.user.businessRole==='admin'?departments.find(d=>d.name==='营销中心')?.id:undefined)??departments.find(d=>d.id===c.org.departmentId)?.id??departments.find(d=>d.name==='营销中心')?.id??departments[0]?.id??null
+  const selectedDepartmentId=query.departmentId||defaultDepartmentId
+  if(!selectedDepartmentId)throw new ForbiddenException('No authorized chart department')
+  query={...query,departmentId:selectedDepartmentId}
   const manager=managerDashboardScope(c.user,c.org,query,query.chartId)
   const scope=manager??collectedAnalyticsScope(c.user,c.org,query,query.chartId)
   if(manager&&query.chartId==='department_receipts')scope.summaryOnly=true
+  if(contribution){
+   if(query.chartId!=='customer_orders'||!access.canViewDetails||scope.summaryOnly)throw new ForbiddenException('Customer detail access denied')
+   const members=(manager?.directory??c.org).members.filter(m=>scope.employeeIds===null||scope.employeeIds.includes(m.employeeId))
+   if(!members.some(m=>contribution.dimension==='person'?m.employeeId===contribution.id:m.departmentId===contribution.id))throw new ForbiddenException('Customer contribution target is outside the chart scope')
+  }
   if(trend){
-   const supported:Record<string,string[]>={registrations:['department','person'],department_receipts:['department'],salesperson_receipts:['department','person'],order_volume:['department','person','country','warehouse'],customer_orders:['department','person','customer']}
+   const supported:Record<string,string[]>={registrations:['department','person'],department_receipts:['department'],salesperson_receipts:['department','person'],order_volume:['department','person','customer','country','warehouse'],customer_orders:['department','person','customer']}
    if(!supported[query.chartId]?.includes(trend.dimension)||!['day','month'].includes(trend.grain)||!trend.id||trend.id.length>128)throw new BadRequestException('Unsupported trend dimension')
    if(scope.summaryOnly&&!['department','country','warehouse'].includes(trend.dimension))throw new ForbiddenException('Department trend aggregates only')
    const ids=manager&&trend.dimension==='department'?manager.summaryEmployeeIds:scope.employeeIds
@@ -406,32 +436,29 @@ export class CollectedWorkbenchService {
   const aggregate=(period:{start:string;end:string},summary=false)=>dashboardAnalyticsQuery({batchId:c.batch.id,companyId:c.batch.company_id,
    employeeIds:manager&&(summary||scope.summaryOnly)?manager.summaryEmployeeIds:scope.employeeIds,members,start:period.start,end:period.end,chartId:query.chartId,
    summaryOnly:summary||scope.summaryOnly,warehouseCode:query.warehouseCode,currency:query.currency,entityType:entity,
-   customerOwnershipScope:!!manager,recordEmployeeIds:manager?.recordEmployeeIds,trend})
+   customerOwnershipScope:!!manager,recordEmployeeIds:manager?.recordEmployeeIds,trend,contribution})
   const q=aggregate(window,!!trend&&trend.dimension==='department'&&!!manager),prior=periods&&previousCovered?aggregate(periods.previous):undefined
-  const mixed=!!manager&&!scope.summaryOnly&&!trend
+  const mixed=!!manager&&!scope.summaryOnly&&!trend&&!contribution
   const statement=mixed?combineDashboardStatements([{key:'analytics',...q},...(prior?[{key:'previous',...prior}]:[]),
    {key:'departmentSummary',...aggregate(window,true)},...(prior?[{key:'previousDepartmentSummary',...aggregate(periods!.previous,true)}]:[])]):prior?comparisonStatement(q,prior):q
   // Cache only SQL aggregates; every caller still validates current chart/target access and rechecks the revision below.
-  const read=()=>this.db.query(statement.sql,statement.params)
-  const [result]=trend?await this.analyticsTrendReads.read(JSON.stringify([userId,c.signature,statement.sql,statement.params]),read):await read()
-  if((await this.context(userId,undefined,query,true)).signature!==c.signature)throw new ConflictException('Permission or source changed; reload')
+  const read=async()=>{
+   const rows:Row[]=await this.db.query(statement.sql,statement.params)
+   if(!rows[0]?.analytics||mixed&&!rows[0].departmentSummary)throw new ServiceUnavailableException('Local aggregate unavailable')
+   return rows
+  }
+  const cache=contribution?this.customerContributionReads:this.analyticsTrendReads
+  const [result]=trend||contribution?await cache.read(JSON.stringify([userId,c.signature,statement.sql,statement.params]),read):await read()
+  if((await this.context(userId,undefined,requestedQuery,true)).signature!==c.signature)throw new ConflictException({code:'chart_scope_changed',message:'Permission or source changed; reload'})
   if(!result?.analytics||mixed&&!result.departmentSummary)throw new ServiceUnavailableException('Local aggregate unavailable')
   const current=mixed?withDepartmentSummary(result.analytics,result.departmentSummary,query.chartId==='customer_orders'):result.analytics
   const previous=mixed&&result.previous?withDepartmentSummary(result.previous,result.previousDepartmentSummary,query.chartId==='customer_orders'):result.previous
-  const optionScope=manager??collectedAnalyticsScope(c.user,c.org,{},query.chartId)
-  const policy=c.user.role==='admin'?undefined:c.user.chartPermissions?.find(p=>p.chartId===query.chartId)
-  const departments=manager?.departments??localDepartments(c.org).filter(d=>{
-   if(optionScope.summaryOnly){
-    try{collectedAnalyticsScope(c.user,c.org,{departmentId:d.id},query.chartId);return true}
-    catch(error){if(error instanceof ForbiddenException)return false;throw error}
-   }
-   return !policy||policy.dataScope==='inherit'||c.org.members.some(m=>optionScope.employeeIds?.includes(m.employeeId)&&c.org.departments.find(x=>x.id===m.departmentId)?.pathIds.includes(d.id))
-  })
-  const defaultDepartmentId=manager?.defaultDepartmentId??departments.find(d=>d.id===c.org.departmentId)?.id??departments.find(d=>d.name==='营销中心')?.id??departments[0]?.id??null
-  return {...current,...(periods?{comparison:{...periods,available:previousCovered&&!!previous,previousData:previous??null,
+  const contributionMembers=query.chartId==='customer_orders'&&access.canViewDetails&&!scope.summaryOnly?members.filter(m=>scope.employeeIds===null||scope.employeeIds.includes(m.employeeId)):[]
+  const customerContributionTargets=[...new Set(contributionMembers.map(m=>m.departmentId))].map(id=>({dimension:'department',id})).concat(contributionMembers.map(m=>({dimension:'person',id:m.employeeId})))
+  return {...current,...(query.chartId==='customer_orders'?{customerContributionTargets}:{}),...(periods?{comparison:{...periods,available:previousCovered&&!!previous,previousData:previous??null,
    metrics:previousCovered&&previous?comparisonMetrics(current,previous,query.chartId):[],
    ...mixed&&result.previousDepartmentSummary?{departmentMetrics:comparisonMetrics(result.departmentSummary,result.previousDepartmentSummary,query.chartId)}:{}}}:{}),
-   departments,defaultDepartmentId,...manager?{personalDepartmentId:manager.personalDepartmentId}:{},window,chartId:query.chartId,summaryOnly:scope.summaryOnly||!!trend&&trend.dimension==='department'&&!!manager&&trend.id!==manager.personalDepartmentId,source:'local',asOf:capture.capturedAt,
+   departments,defaultDepartmentId,selectedDepartmentId,...manager?{personalDepartmentId:manager.personalDepartmentId}:{},window,chartId:query.chartId,summaryOnly:scope.summaryOnly||!!trend&&trend.dimension==='department'&&!!manager&&trend.id!==manager.personalDepartmentId,source:'local',asOf:capture.capturedAt,
    amountBasis:registrations?null:'order_amount',timeBasis:registrations?'customer_created_at':'customer_paid_at',canExport:false,canViewDetails:false}
 
  }

@@ -68,7 +68,7 @@ export function resolveChartSummaryPolicy(user: ChartPolicyUser, chartId: ChartI
   if (scope.role === 'none' || !summaryCharts.includes(chartId) || !validateChartPermissions(user.chartPermissions ?? [])) return none
   const override = user.chartPermissions?.find(row => row.chartId === chartId)
   if (override?.visibility === 'deny' || override?.summaryMode === 'none') return none
-  // Managers have separate peer-summary access; record scope remains their own department.
+  // Managers may compare authorized department totals; record grants stay within their own department.
   if (scope.role === 'salesperson') return none
   if (scope.role === 'department_manager') return !scope.departmentId ? none : override?.summaryMode === 'selected'
     ? { mode: 'selected', departments: [...override.summaryDepartments] } : { mode: 'marketing', departments: [] }

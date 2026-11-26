@@ -84,3 +84,11 @@ it('does not propagate another chart forced-refresh failure to an existing query
  finish({value:'own result'})
  expect(await first).toEqual({value:'own result'})
 })
+
+it('identifies an in-flight permission revision change so charts discard the old display',async()=>{
+ const {isWorkbenchScopeError}=await import('@/api/workbench-dashboard')
+ get.mockResolvedValueOnce({cacheable:true,version:'scope1'}).mockResolvedValue({cacheable:true,version:'scope2'})
+ const error=await analyticsQuery('/changed',{},async()=>({rows:['old']})).catch(error=>error)
+ expect(isWorkbenchScopeError(error)).toBe(true)
+ expect(error.code).toBe('chart_scope_changed')
+})

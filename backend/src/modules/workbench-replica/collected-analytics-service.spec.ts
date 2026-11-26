@@ -241,6 +241,16 @@ it('returns only time aggregates for an authorized dashboard trend',async()=>{
  expect(result).not.toHaveProperty('rows')
  expect(db.query.mock.calls[0][1].slice(-1)[0]).toBe('70')
 })
+it('returns customer trend dollars with accompanying order counts and preserves unknown amounts',async()=>{
+ const {service,db}=setup()
+ const analytics={rows:[{dimension:'month',id:'2026-11',orderCount:2,amount:'20.50'}],orderCount:2,amountsByCurrency:[{currency:'USD',amount:'20.50',orderCount:2}],missingAmountCount:0}
+ db.query.mockResolvedValue([{analytics}])
+ const args={...query,chartId:'customer_orders' as const,dimension:'customer' as const,id:'c1',grain:'month' as const}
+ const result=await service.dashboardTrend('u',args)
+ expect(result).toMatchObject({currency:'USD',amount:'20.50',orderCount:2,points:[{amount:'20.50',orderCount:2}]})
+ db.query.mockResolvedValue([{analytics:{...analytics,missingAmountCount:1}}])
+ expect(await service.dashboardTrend('u',{...args,id:'c2'})).toMatchObject({amount:null,orderCount:2})
+})
 it('coalesces identical trend reads and reuses their SQL result while rechecking authorization',async()=>{
  const {service,db,contextSpy}=setup()
  db.query.mockResolvedValue([{analytics:{rows:[{id:'2026-11',orderCount:2}],orderCount:2}}])
@@ -312,4 +322,114 @@ it('uses peer department aggregates for manager trends but rejects peer member t
  await expect(service.dashboardTrend('u',{...args,dimension:'person',id:'71'})).rejects.toThrow()
  contextSpy.mockResolvedValueOnce(context).mockResolvedValueOnce({...context,signature:'revoked'})
  await expect(service.dashboardTrend('u',args)).rejects.toThrow('Permission or source changed')
+})
+
+it('returns bounded customer contributions with exact totals and excludes unrelated result metadata',async()=>{
+ const {service,db}=setup()
+ db.query.mockResolvedValue([{analytics:{rows:[{id:'c1',label:'Customer',amount:'20.50',orderCount:2}],customerCount:1,orderCount:2,amountsByCurrency:[{currency:'USD',amount:'20.50'}],missingAmountCount:0}}])
+ const result=await (service as any).customerContribution('u',{...query,chartId:'customer_orders',dimension:'person',id:'70',warehouseCode:'HZ',currency:'USD'})
+ expect(result).toMatchObject({limit:5,amount:'20.50',orderCount:2,customerCount:1,currency:'USD',rows:[{id:'c1',amount:'20.50'}]})
+ expect(result).not.toHaveProperty('departments')
+ expect(db.query.mock.calls[0][1].slice(-1)[0]).toBe('70')
+ db.query.mockResolvedValue([{analytics:{rows:[],customerCount:0,orderCount:2,amountsByCurrency:[{currency:'USD',amount:'10.50'}],missingAmountCount:1}}])
+ expect(await (service as any).customerContribution('u',{...query,chartId:'customer_orders',dimension:'department',id:'d1'})).toMatchObject({limit:10,amount:null,missingAmountCount:1})
+})
+it('customer contributions reject summary-only, foreign target and revoked detail grants',async()=>{
+ const {service,context,db}=setup()
+ const args={...query,chartId:'customer_orders',dimension:'department',id:'d1'}
+ context.user={role:'user',businessRole:'salesperson',businessEmployeeId:'70',businessDepartmentId:'d1',workbenchRoles:['sales'],chartPermissions:[]};context.org.employeeIds=['70'];context.org.employeeId='70'
+ await expect((service as any).customerContribution('u',{...args,dimension:'person',id:'71'})).rejects.toThrow()
+ await expect((service as any).customerContribution('u',{...args,id:'d2'})).rejects.toThrow()
+ context.user.chartPermissions=[{chartId:'customer_orders',visibility:'allow',dataScope:'inherit',summaryMode:'inherit',summaryDepartments:[],details:'deny',export:'inherit'}]
+ await expect((service as any).customerContribution('u',args)).rejects.toThrow()
+ context.user.chartPermissions[0].details='allow';context.user.chartPermissions[0].dataScope='none'
+ await expect((service as any).customerContribution('u',args)).rejects.toThrow()
+ expect(db.query).not.toHaveBeenCalled()
+})
+it('manager customer contributions stay within the assigned department',async()=>{
+ const {service,context,db,contextSpy}=setup()
+ context.user={role:'user',businessRole:'department_manager',businessDepartmentId:'d1',workbenchRoles:['sales'],chartPermissions:[]}
+ context.org={...context.org,marketingScope:{rootId:'marketing',departmentIds:['d1','d2']},departmentId:'d1',employeeIds:['70'],analyticsPeers:{departments:context.org.departments,members:context.org.members},members:[context.org.members[0]],departments:context.org.departments.filter((d:any)=>d.id==='d1')}
+ db.query.mockResolvedValue([{analytics:{rows:[],orderCount:0,customerCount:0,amountsByCurrency:[]}}])
+ const args={...query,chartId:'customer_orders',dimension:'department',id:'d1'}
+ await expect((service as any).customerContribution('u',args)).resolves.toMatchObject({limit:10,rows:[]})
+ expect(db.query.mock.calls[0][1][2]).toEqual(['70'])
+ await expect((service as any).customerContribution('u',{...args,id:'d2'})).rejects.toThrow()
+ await expect((service as any).customerContribution('u',{...args,dimension:'person',id:'71'})).rejects.toThrow()
+ contextSpy.mockResolvedValueOnce(context).mockResolvedValueOnce({...context,signature:'revoked'})
+ await expect((service as any).customerContribution('u',args)).rejects.toThrow('Permission or source changed')
+})
+it('contribution target metadata only advertises customer-detail grants',async()=>{
+ const {service,context,db}=setup()
+ db.query.mockResolvedValue([{analytics:{rows:[],orderCount:0}}])
+ const data=await service.dashboardAnalytics('u',{...query,chartId:'customer_orders'})
+ expect(data.customerContributionTargets).toEqual(expect.arrayContaining([{dimension:'department',id:'d1'},{dimension:'person',id:'70'}]))
+ context.user={role:'user',businessRole:'salesperson',businessEmployeeId:'70',businessDepartmentId:'d1',workbenchRoles:['sales'],chartPermissions:[{chartId:'customer_orders',visibility:'allow',dataScope:'inherit',summaryMode:'inherit',summaryDepartments:[],details:'deny',export:'inherit'}]}
+ context.org.employeeIds=['70'];context.org.employeeId='70'
+ expect((await service.dashboardAnalytics('u',{...query,chartId:'customer_orders'})).customerContributionTargets).toEqual([])
+})
+
+it('reuses customer ranking for five minutes, coalesces reads and invalidates by source revision',async()=>{
+ const now=jest.spyOn(Date,'now').mockReturnValue(1000)
+ try{
+  const {service,db,context,contextSpy}=setup()
+  db.query.mockResolvedValue([{analytics:{rows:[{id:'c1',amount:'20.50'}],customerCount:1,orderCount:2,amountsByCurrency:[{currency:'USD',amount:'20.50'}]}}])
+  const args={...query,chartId:'customer_orders' as const,dimension:'person' as const,id:'70'}
+  const [first,second]=await Promise.all([service.customerContribution('u',args),service.customerContribution('u',args)])
+  first.rows[0].amount='999';expect(second.rows[0].amount).toBe('20.50')
+  now.mockReturnValue(121000)
+  expect((await service.customerContribution('u',args)).rows[0].amount).toBe('20.50')
+  expect(db.query).toHaveBeenCalledTimes(1);expect(contextSpy).toHaveBeenCalledTimes(6)
+  context.signature='new-source';await service.customerContribution('u',args)
+  expect(db.query).toHaveBeenCalledTimes(2)
+  now.mockReturnValue(421001);await service.customerContribution('u',args)
+  expect(db.query).toHaveBeenCalledTimes(3)
+ }finally{now.mockRestore()}
+})
+
+it('changes browser cache revision after a receipt amount supplement',async()=>{
+ const {service,context}=setup();(service as any).config.set('WORKBENCH_READ_MODE','local')
+ const before=await service.analyticsCacheScope('u')
+ context.batch.metadata.receiptSupplement={updatedAt:'2026-11-25T00:00:00Z'}
+ expect((await service.analyticsCacheScope('u')).version).not.toBe(before.version)
+})
+it('does not cache an unavailable customer aggregate and allows an immediate retry',async()=>{
+ const {service,db}=setup()
+ const args={...query,chartId:'customer_orders' as const,dimension:'person' as const,id:'70'}
+ db.query.mockResolvedValueOnce([]).mockResolvedValue([{analytics:{rows:[],customerCount:0,orderCount:0,amountsByCurrency:[]}}])
+ await expect(service.customerContribution('u',args)).rejects.toThrow('Local aggregate unavailable')
+ await expect(service.customerContribution('u',args)).resolves.toMatchObject({rows:[],orderCount:0})
+ expect(db.query).toHaveBeenCalledTimes(2)
+})
+
+it.each(['registrations','salesperson_receipts','order_volume','customer_orders'] as const)('only offers the salesperson own department for %s, retaining common warehouse filters',async chartId=>{
+ const {service,context,db}=setup()
+ context.user={role:'user',businessRole:'salesperson',businessEmployeeId:'70',businessDepartmentId:'d1',workbenchRoles:['sales'],chartPermissions:[]}
+ context.org.employeeIds=['70'];context.org.employeeId='70';context.org.departmentId='d1'
+ context.batch.metadata.analyticsCaptures.registrations={companyId:'100000',coverage:'company_creation_window',scopeProof:{companyId:'100000',basis:'native_response_createorg_conjunction'},connectionProof:{tenantId:'tenant',userId:'900',companyId:'100000',basis:'authenticated_connection_context'},start:'2026-01-01T00:00:00Z',end:'2026-12-01T00:00:00Z',capturedAt:'2026-11-16T00:00:00Z'}
+ db.query.mockResolvedValue([{analytics:{rows:[],orderCount:0,warehouses:[{id:'HZ',name:'杭州仓'},{id:'SZ',name:'深圳仓'}]}}])
+ const result=await service.dashboardAnalytics('u',{...query,chartId,...chartId==='registrations'?{}:{warehouseCode:'SZ'}})
+ expect(result.departments).toEqual([{id:'d1',name:'业务一部'}]);expect(result.defaultDepartmentId).toBe('d1')
+ expect(result.warehouses).toHaveLength(2);expect(db.query.mock.calls[0][1][2]).toEqual(['70'])
+ for(const departmentId of ['marketing','d2'])await expect(service.dashboardAnalytics('u',{...query,chartId,departmentId})).rejects.toThrow()
+ await expect(service.dashboardTrend('u',{...query,chartId,dimension:'person',id:'71',grain:'month'})).rejects.toThrow()
+})
+
+it('uses marketing as the admin initial selection even when the account is assigned to a department',async()=>{
+ const {service,context,db}=setup();context.org.departmentId='d2'
+ const data=await service.dashboardAnalytics('u',{...query,chartId:'order_volume'})
+ expect(data.defaultDepartmentId).toBe('marketing');expect(data.selectedDepartmentId).toBe('marketing')
+ expect(db.query.mock.calls[0][1][2]).toEqual(['70','71'])
+})
+it('queries exactly the first authorized department when a collaboration account has no marketing grant',async()=>{
+ const {service,context,db}=setup();const policies=collaborationChartPermissions()
+ Object.assign(policies.find(p=>p.chartId==='order_volume')!,{summaryMode:'selected',summaryDepartments:['sales1','sales2']})
+ context.user={role:'user',businessRole:'admin',chartPermissions:policies}
+ const data=await service.dashboardAnalytics('u',{...query,chartId:'order_volume'})
+ expect(data.departments.map((d:any)=>d.id)).toEqual(['d1','d2'])
+ expect(data.defaultDepartmentId).toBe('d1');expect(data.selectedDepartmentId).toBe('d1')
+ expect(db.query.mock.calls[0][1][2]).toEqual(['70'])
+ db.query.mockClear()
+ const second=await service.dashboardAnalytics('u',{...query,chartId:'order_volume',departmentId:'d2'})
+ expect(second.selectedDepartmentId).toBe('d2');expect(db.query.mock.calls[0][1][2]).toEqual(['71'])
 })
