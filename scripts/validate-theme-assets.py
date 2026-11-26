@@ -3,6 +3,7 @@ from pathlib import Path
 import re,subprocess
 root=Path(__file__).resolve().parents[1]
 css=root/'frontend/src/theme/palettes.css'
+subprocess.run(['python3',str(root/'scripts/build-avatar-assets.py'),'--check'],check=True)
 before=css.read_bytes()
 subprocess.run(['python3',str(root/'scripts/build-theme-assets.py')],check=True)
 assert css.read_bytes()==before,'Regenerate palettes.css from palettes.json'

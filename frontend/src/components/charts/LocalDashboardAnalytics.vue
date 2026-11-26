@@ -80,7 +80,7 @@ const groupedSalespeople=computed(()=>!result.value?.comparison?.available&&sale
 const salespersonChart=computed(()=>groupedSalespeople.value?salespersonGroupedChart(result.value?.rows??[],monetary.value?'amount':registration.value?'registrations':metric.value==='quantity'?'quantity':'orders'):undefined)
 const paymentDateWarning=computed(()=>{
  const missing=displayedTotals.value?.missingPaidAtBreakdown
- return [missing?.paid?`已收款但缺少收款日期 ${missing.paid.toLocaleString('zh-CN')} 笔`:null,missing?.unknown?`收款状态及日期待核查 ${missing.unknown.toLocaleString('zh-CN')} 笔`:null].filter(Boolean).join('；')
+ return [missing?.paid?`已收款缺日期 ${missing.paid.toLocaleString('zh-CN')} 笔`:null,missing?.unknown?`收款信息待核查 ${missing.unknown.toLocaleString('zh-CN')} 笔`:null].filter(Boolean).join('；')
 })
 const incomeTotals=computed(()=>(displayedTotals.value?.amountsByCurrency??[]).filter(total=>!monetary.value||total.currency==='USD'))
 const usd=(value:unknown)=>typeof value==='number'&&Number.isFinite(value)?formatChartCurrency(value):'—'
@@ -94,10 +94,12 @@ const dimensions=computed(()=>{
  if(registration.value)return [{id:'day',name:'注册日期'},...people,...monthly]
  return [...people,{id:'warehouse',name:'仓库'},{id:'country',name:'国家'},...monthly]
 })
+const dimensionRows=computed(()=>(result.value?.rows??[]).filter(r=>r.dimension===dimension.value&&(!summaryOnly.value||!['person','customer','person_department'].includes(r.dimension))&&(!monetary.value||r.currency==='USD')))
 const rows=computed(()=>{
- const values=(result.value?.rows??[]).filter(r=>r.dimension===dimension.value&&(!summaryOnly.value||!['person','customer','person_department'].includes(r.dimension))&&(!monetary.value||r.currency==='USD'))
+ const values=dimensionRows.value
  return groupedSalespeople.value||['day','month'].includes(dimension.value)?values:values.slice().sort((a,b)=>dimension.value==='department'?compareBusinessDepartments(a.label,b.label):monetary.value?Number(b.amount??0)-Number(a.amount??0):b.orderCount-a.orderCount).slice(0,20)
 })
+const categoriesTruncated=computed(()=>!groupedSalespeople.value&&!result.value?.comparison?.available&&rows.value.length<dimensionRows.value.length)
 const comparisonPeople=computed(()=>!!result.value?.comparison?.available&&salespersonGrouping.value)
 const hasData=computed(()=>!!result.value?.comparison?.available||(groupedSalespeople.value?salespersonRows(result.value?.rows??[]):rows.value).some(r=>monetary.value?r.amount!==null:!registration.value&&metric.value==='quantity'?r.quantity!==null:true))
 const comparisonOption=computed(()=>result.value?comparisonChart(result.value,dimension.value,metric.value,monetary.value):undefined)
@@ -129,7 +131,7 @@ const baseOption=computed(()=>{
  }}:{}
  return {tooltip:{trigger:'axis' as const,renderMode:'richText' as const,...(usdOnly?{valueFormatter:usd}:{}),...moneyTooltip,...customerTooltip},legend:{show:monetary.value&&!departmentRevenue.value},grid:{left:usdOnly?16:65,right:25,bottom:70,top:40,containLabel:usdOnly},
  xAxis:{type:'category' as const,data:labels,axisLabel:{rotate:labels.length>8?25:0,width:100,overflow:'truncate' as const}},
- yAxis:{type:'value' as const,name:monetary.value?'订单金额（美元）':registration.value?'注册客户数':metric.value==='quantity'?'商品件数':'订单数',minInterval:monetary.value?undefined:1,...(usdOnly?{axisLabel:{formatter:usd}}:{})},
+ yAxis:{type:'value' as const,minInterval:monetary.value?undefined:1,...(usdOnly?{axisLabel:{formatter:usd}}:{})},
  series:currencies.map(code=>({name:monetary.value?(currencies.length===1?'订单金额':`订单金额（${code}）`):code,type:['day','month'].includes(dimension.value)?'line' as const:'bar' as const,smooth:true,barMaxWidth:32,...(monetary.value&&code==='USD'?{tooltip:{valueFormatter:usd}}:{}),
  data:ids.map(id=>{const r=rows.value.find(r=>r.id===id&&(!monetary.value||r.currency===code));const value=r?(monetary.value?r.amount:registration.value?r.registrationCount??r.orderCount:metric.value==='quantity'?r.quantity:r.orderCount):null;return value===null?null:Number(value)})}))}
 })
@@ -207,13 +209,13 @@ watch(department,value=>{if(result.value?.personalDepartmentId&&value!==result.v
   <label v-if="comparison">选择{{ comparison==='week'?'周':'月份' }}<input v-model="comparisonAnchor" type="date" aria-label="对比周期日期" :min="availableStart" :max="availableEnd" @change="chooseComparison"></label>
   <button :disabled="busy">查询</button>
  </form><p v-if="error && result" class="ov-note" role="alert">查询未完成，当前显示上次查询结果。</p>
- <div class="analysis-controls"><label>展示维度<select v-model="dimension" aria-label="展示维度"><option v-for="d in dimensions" :key="d.id" :value="d.id">{{ d.name }}</option></select></label><label v-if="!monetary&&!registration">指标<select v-model="metric"><option value="orders">订单数</option><option value="quantity">商品件数</option></select></label><span v-if="displayedTotals" :title="result?.personalDepartmentId?'本部门成员个人数据；其他部门仅显示部门汇总':undefined">{{ (registration?displayedTotals.registrationCount??displayedTotals.orderCount:displayedTotals.orderCount).toLocaleString() }} {{ registration?'位注册客户':'笔订单' }} · {{ registration?'按客户档案创建时间统计':monetary?'业绩收入按订单金额统计':'按收款日期统计' }}</span><button v-if="availableTrendTargets.length" type="button" class="trend-open" :disabled="busy" @click="openTrend(availableTrendTargets[0])">趋势明细</button></div>
+ <div class="analysis-controls"><label>展示维度<select v-model="dimension" aria-label="展示维度"><option v-for="d in dimensions" :key="d.id" :value="d.id">{{ d.name }}</option></select></label><label v-if="!monetary&&!registration">指标<select v-model="metric"><option value="orders">订单数</option><option value="quantity">商品件数</option></select></label><span v-if="displayedTotals">{{ (registration?displayedTotals.registrationCount??displayedTotals.orderCount:displayedTotals.orderCount).toLocaleString() }} {{ registration?'位注册客户':'笔' }} · {{ registration?'按档案创建时间统计':monetary?'按订单金额统计':'按收款日期统计' }}</span><button v-if="availableTrendTargets.length" type="button" class="trend-open" :disabled="busy" @click="openTrend(availableTrendTargets[0])">趋势明细</button></div>
  <div v-if="monetary&&incomeTotals.length" class="income-total"><span>业绩收入合计</span><strong v-for="total in incomeTotals" :key="total.currency">{{ total.currency==='USD'?usd(Number(total.amount)):`${total.currency} ${Number(total.amount).toLocaleString('zh-CN',{minimumFractionDigits:2,maximumFractionDigits:2})}` }}</strong></div>
  <ComparisonSummary v-if="displayedComparison" :comparison="displayedComparison" :metric="monetary?'amount':registration?'count':metric==='quantity'?'quantity':'count'"/>
  <p v-if="error" role="alert">{{ error }}</p>
  <div v-if="groupedSalespeople&&hasData" class="revenue-legend"><span><i class="department-swatch"/>部门汇总</span><span><i class="person-swatch"/>业务员</span></div>
  <div class="chart" :class="{'grouped-revenue':groupedSalespeople||comparisonPeople}" :aria-busy="busy"><EChart v-if="hasData" :option="option" :style="comparisonPeople?{minWidth:`${Math.max(600, (option.xAxis as {data:unknown[]}).data.length*85)}px`}:salespersonChart?{minWidth:`${salespersonChart.minWidth}px`}:undefined" :label="title" :can-export="false" @select="selectChart"/><p v-else class="empty">{{ busy?'正在查询…':monetary&&result?.missingCurrencyCount?'订单结算币种待补齐，暂不汇总业绩金额':error?'暂不可用':'所选范围暂无可展示数据' }}</p></div>
- <p v-if="displayedTotals" class="note">{{ registration&&displayedTotals.missingCreatedAtCount?`${displayedTotals.missingCreatedAtCount.toLocaleString()} 位客户缺少有效创建时间，未计入时间统计。`:'' }}<span v-if="!registration&&displayedTotals.missingPaidAtCount" class="payment-date-note" title="客户付款时间取 FOP 订单收款日期；以下为当前部门、订单类型及仓库等范围内无收款日期的记录，不限定所选付款期间。"><template v-if="displayedTotals.missingPaidAtBreakdown"><span v-if="displayedTotals.missingPaidAtBreakdown.unpaid">未收款 {{ displayedTotals.missingPaidAtBreakdown.unpaid.toLocaleString('zh-CN') }} 笔未计入。 </span><span v-if="paymentDateWarning" class="payment-date-warning">{{ paymentDateWarning }}，未计入统计，待核查。 </span></template><template v-else>{{ displayedTotals.missingPaidAtCount.toLocaleString() }} 笔无收款日期，未计入时间统计。 </template></span>{{ monetary&&displayedTotals.missingCurrencyCount?`${displayedTotals.missingCurrencyCount.toLocaleString()} 笔缺少币种，未计入金额统计。`:'' }}{{ !groupedSalespeople&&!comparisonPeople&&!['day','month'].includes(dimension)?(monetary?'按订单金额展示前 20 项，合计包含全部授权结果。':'分类图展示前 20 项。'):'' }}</p>
+ <p v-if="displayedTotals" class="note">{{ registration&&displayedTotals.missingCreatedAtCount?`${displayedTotals.missingCreatedAtCount.toLocaleString()} 位客户缺少创建时间，未计入。`:'' }}<span v-if="!registration&&displayedTotals.missingPaidAtCount" class="payment-date-note" title="按收款日期统计；缺日期记录不限定所选付款期间。"><template v-if="displayedTotals.missingPaidAtBreakdown"><span v-if="displayedTotals.missingPaidAtBreakdown.unpaid">未收款 {{ displayedTotals.missingPaidAtBreakdown.unpaid.toLocaleString('zh-CN') }} 笔未计入。 </span><span v-if="paymentDateWarning" class="payment-date-warning">{{ paymentDateWarning }}，未计入。 </span></template><template v-else>{{ displayedTotals.missingPaidAtCount.toLocaleString() }} 笔无收款日期，未计入。 </template></span>{{ monetary&&displayedTotals.missingCurrencyCount?`${displayedTotals.missingCurrencyCount.toLocaleString()} 笔缺少币种，未计入金额。`:'' }}{{ categoriesTruncated?'仅显示前 20 项。':'' }}</p>
 <AnalyticsTrendDialog v-if="selectedTrend" :title="title" :target="selectedTrend.target" :targets="availableTrendTargets" :query="selectedTrend.query" :metric="trendMetric" :metric-label="trendMetricLabel" :scope="trendScope" @close="selectedTrend=undefined" @select="selectedTrend.target=$event"/>
 </section>
 </template>

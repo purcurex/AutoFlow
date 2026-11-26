@@ -11,7 +11,7 @@ import { ExceptionPageCache } from './exception-page-cache'
 import { NativeSupplierContacts } from '../fop-data/native-supplier-contact'
 import type { FopSupplierContext } from '../fop-data/fop-realtime.types'
 import { KingdeeFopDataProvider } from '../fop-data/fop-kingdee.provider'
-import { inventoryPages, reservedInventoryRow, currentInventoryRow, inventoryMaterial } from '../fop-data/native-inventory'
+import { inventoryPages, reservedInventoryRow, customerInventoryPages, inventoryMaterial } from '../fop-data/native-inventory'
 import { persistedExceptionDisplaySql } from './persisted-exception-read'
 import { stockExceptionDisplay, canViewUnassignedStockExceptions } from './collected-stock-exceptions'
 import { usesReservedStock } from '../fop-data/procurement-demand'
@@ -106,6 +106,7 @@ export class CollectedWorkbenchService {
  private readonly warehouseReads=new ExceptionPageCache<Row[]>(()=>Date.now(),30_000)
  private readonly salesReads=new ExceptionPageCache<Row[]>(()=>Date.now(),30_000)
  private readonly exceptionPages=new ExceptionPageCache<Row>(()=>Date.now(),30_000)
+ private readonly analyticsTrendReads=new ExceptionPageCache<Row[]>(()=>Date.now(),30_000,64)
  private nativeInventory?: KingdeeFopDataProvider
  private nativeSupplier?: KingdeeFopDataProvider
  async supplierContacts(userId:string,query:FopSupplierContext,launch?:{contactVersion:string;purchaseOrderId?:string}):Promise<any>{
@@ -210,24 +211,24 @@ export class CollectedWorkbenchService {
     items=raw.filter(r=>r.status==='C'&&customers.has(r.hzkj_customer_id)).map(reservedInventoryRow).filter(r=>(!pairs||pairs.has(JSON.stringify([r.customerId,r.sku])))&&(!query.customerId||r.customerId===query.customerId)&&(!query.search||[r.sku,r.name].some(v=>v.toLowerCase().includes(query.search.toLowerCase())))&&(!query.customerSearch||[r.customerName,r.customerCode].some(v=>v.toLowerCase().includes(query.customerSearch.toLowerCase()))))
    }else{
     if(query.mode==='selected'&&!selected?.length||query.mode==='search'&&!query.search?.trim())throw new BadRequestException('SKU or selected orders required')
-    const skus=new Map<string,{sku:string;name:string}>()
+    const skus=new Map<string,{sku:string;name:string;code:string}>()
     const lines:Row[]=selected?selected.flatMap(r=>r.raw.hzkj_orders_billentry??[]):(await this.db.query("SELECT DISTINCT l AS entry FROM hz_fop_collected_orders CROSS JOIN LATERAL jsonb_array_elements(coalesce(raw->'hzkj_orders_billentry','[]'::jsonb)) l WHERE batch_id=$1 AND ($2::text[] IS NULL OR owner_employee_id=ANY($2::text[])) AND position(lower($3) in lower(coalesce(l->'hzkj_local_sku'->>'number',l->>'hzkj_local_sku_number')))>0 LIMIT 101",[c.batch.id,c.filter.employeeIds,query.search.trim()])).map((r:Row)=>r.entry)
     if(!selected&&lines.length>100)throw new BadRequestException({code:'fop_inventory_result_too_large',message:'请减少所选商品后查询库存'})
     for(const line of lines){
      let material:ReturnType<typeof inventoryMaterial>
      try{material=inventoryMaterial(line)}catch{throw new ServiceUnavailableException({code:'fop_inventory_material_missing',message:'所选商品的库存信息暂不可查询，请联系管理员'})}
      if(skus.has(material.id)&&skus.get(material.id)!.sku!==material.sku)throw Error('Ambiguous material mapping')
-     skus.set(material.id,material)
+     const code=line.hzkj_material?.number??line.hzkj_material_number??line.hzkj_local_sku?.hzkj_material?.number
+     if(typeof code!=='string'||!code.trim())throw new ServiceUnavailableException({code:'fop_inventory_material_missing',message:'所选商品的库存信息暂不可查询，请联系管理员'})
+     skus.set(material.id,{...material,code})
     }
     if(skus.size>20)throw new BadRequestException({code:'fop_inventory_result_too_large',message:'请减少所选商品后查询库存'})
     items=[]
     for(const [id,sku] of skus){
-     const rows=await inventoryPages(read,kind,c.batch.company_id,orgNumber,{material_id:id})
-     if(rows.some(r=>r.material_id!==id))throw Error('Inventory material mismatch')
-     // Company-wide readers may inspect raw balances without claiming public ownership.
-     // Restricted readers still require an explicit customer-pool contract from FOP.
-     if(rows.length&&c.filter.employeeIds!==null)throw new ServiceUnavailableException({code:'fop_inventory_scope_unavailable',message:'暂时无法核实库存查看范围，请联系管理员'})
-     items.push(...rows.map(r=>({...currentInventoryRow(r),sku:sku.sku,name:sku.name})))
+     // New API omits customer/company IDs; retain the existing restricted-reader guard.
+     if(c.filter.employeeIds!==null)throw new ServiceUnavailableException({code:'fop_inventory_scope_unavailable',message:'暂时无法核实库存查看范围，请联系管理员'})
+     const rows=await customerInventoryPages(read,sku.code)
+     items.push(...rows.map(r=>({...r,sku:sku.sku,name:sku.name})))
     }
    }
   }catch(error){
@@ -242,8 +243,9 @@ export class CollectedWorkbenchService {
    const current=await this.db.query("SELECT source_id FROM hz_fop_collected_customer_registrations WHERE batch_id=$1 AND company_id=$2 AND source_owner_user_id=ANY($3::text[])",[c.batch.id,c.batch.company_id,allowedUsers])
    const ids=new Set(current.map((r:Row)=>r.source_id));items=items.filter(r=>ids.has(r.customerId))
   }
+  if(kind==='current'&&query.warehouseCode)throw new ServiceUnavailableException({code:'fop_inventory_scope_unavailable',message:'暂时无法核实仓库筛选范围，请联系管理员'})
   if(query.warehouseCode)items=items.filter(r=>warehouseCodes(query.warehouseCode).includes(r.warehouseCode))
-  items.sort((a,b)=>String(a.customerId??'').localeCompare(String(b.customerId??''))||a.sku.localeCompare(b.sku)||a.warehouseCode.localeCompare(b.warehouseCode)||a.id.localeCompare(b.id))
+  items.sort((a,b)=>String(a.customerId??'').localeCompare(String(b.customerId??''))||a.sku.localeCompare(b.sku)||String(a.warehouseCode??a.warehouse??'').localeCompare(String(b.warehouseCode??b.warehouse??''))||a.id.localeCompare(b.id))
   const page=query.page??1,pageSize=query.pageSize??50,asOf=new Date().toISOString()
   return {items:items.slice((page-1)*pageSize,page*pageSize),total:items.length,page,pageSize,source:'fop',asOf,refreshedAt:asOf,customerId:query.customerId??null}
  }
@@ -409,7 +411,9 @@ export class CollectedWorkbenchService {
   const mixed=!!manager&&!scope.summaryOnly&&!trend
   const statement=mixed?combineDashboardStatements([{key:'analytics',...q},...(prior?[{key:'previous',...prior}]:[]),
    {key:'departmentSummary',...aggregate(window,true)},...(prior?[{key:'previousDepartmentSummary',...aggregate(periods!.previous,true)}]:[])]):prior?comparisonStatement(q,prior):q
-  const [result]=await this.db.query(statement.sql,statement.params)
+  // Cache only SQL aggregates; every caller still validates current chart/target access and rechecks the revision below.
+  const read=()=>this.db.query(statement.sql,statement.params)
+  const [result]=trend?await this.analyticsTrendReads.read(JSON.stringify([userId,c.signature,statement.sql,statement.params]),read):await read()
   if((await this.context(userId,undefined,query,true)).signature!==c.signature)throw new ConflictException('Permission or source changed; reload')
   if(!result?.analytics||mixed&&!result.departmentSummary)throw new ServiceUnavailableException('Local aggregate unavailable')
   const current=mixed?withDepartmentSummary(result.analytics,result.departmentSummary,query.chartId==='customer_orders'):result.analytics

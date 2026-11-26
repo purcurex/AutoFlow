@@ -68,7 +68,7 @@ export function salespersonGroupedChart(input: AnalyticsRow[], metric: Salespers
     legend: { show: monetary && currencies.length > 1 },
     grid: { left: 16, right: 24, top: 34, bottom: 22, containLabel: true },
     xAxis: { type: 'category', data: columns.map(column => column?.label ?? ''), axisTick: { show: false }, axisLabel: { interval: 0, rotate: 0, lineHeight: 18, fontSize: 12 } },
-    yAxis: { type: 'value', name: !monetary ? metricLabel : `${amountLabel}（${usdOnly?'美元':'原币'}）`, ...(!monetary ? { minInterval: 1 } : {}), ...(usdOnly ? { axisLabel: { formatter: usd } } : {}) },
+    yAxis: { type: 'value', ...(!monetary ? { minInterval: 1 } : {}), ...(usdOnly ? { axisLabel: { formatter: usd } } : {}) },
     series: (monetary ? currencies : [metric]).map(code => ({ name: !monetary ? metricLabel : currencies.length === 1 ? amountLabel : `${amountLabel}（${code}）`, type: 'bar', barMaxWidth: 32,
       ...(monetary && code === 'USD' ? { tooltip: { valueFormatter: usd } } : {}),
       data: columns.map(column => {

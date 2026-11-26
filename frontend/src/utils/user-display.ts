@@ -39,8 +39,9 @@ export const AVATAR_GROUPS = [
   { id: 'women', zh: '靓丽女士', en: 'Elegant style', avatars: WOMEN_AVATARS },
 ]
 
-export function presetAvatarSrc(url: string): string {
-  return `${import.meta.env.BASE_URL}${url.slice(1)}?v=avatars-6`
+export function presetAvatarSrc(url: string, palette: 'blue' | 'green' | 'purple' | 'orange' = 'blue', dark = false): string {
+  const file = url.slice('/avatars/'.length)
+  return `${import.meta.env.BASE_URL}avatars/themes/${palette}/${dark ? 'dark' : 'light'}/${file}?v=avatars-7`
 }
 
 /** Stable per account; changing a display name never changes its default avatar. */

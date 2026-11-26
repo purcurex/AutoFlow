@@ -18,3 +18,15 @@ it('accepts explicit flattened material relation returned by collection APIs',()
  expect(inventoryMaterial({hzkj_material_id:'material',hzkj_local_sku_number:'SKU',hzkj_local_sku_name:'中文配货名'})).toEqual({id:'material',sku:'SKU',name:'中文配货名'})
  expect(()=>inventoryMaterial({hzkj_material_id:'a',hzkj_material:{id:'b'},hzkj_local_sku_number:'SKU'})).toThrow('Conflicting')
 })
+
+import {customerInventoryPages} from './native-inventory'
+it('uses new cursor API and excludes fuzzy material matches',async()=>{
+ const read=jest.fn().mockResolvedValueOnce({items:[{materialCode:'MAT',quantity:'0',warehouse:'杭州'},{materialCode:'MAT2',quantity:'2',warehouse:'杭州'}],nextCursor:'next'}).mockResolvedValueOnce({items:[{materialCode:'MAT',quantity:'3',warehouse:'深圳',customer:'公共库存'}],nextCursor:null})
+ const result=await customerInventoryPages(read,'MAT')
+ expect(result).toHaveLength(2);expect(result[0].onHand).toBe(0);expect(result[1]).toMatchObject({onHand:3,pool:'public',free:null})
+ expect(read.mock.calls[1][1]).toEqual({query:{keyword:'MAT',pageSize:100,cursor:'next'}})
+})
+it('rejects looping cursors and invalid quantities',async()=>{
+ await expect(customerInventoryPages(async()=>({items:[],nextCursor:'loop'}),'MAT')).rejects.toThrow('Repeated')
+ await expect(customerInventoryPages(async()=>({items:[{materialCode:'MAT',warehouse:'杭州',quantity:'bad'}]}),'MAT')).rejects.toThrow()
+})

@@ -1,7 +1,7 @@
 export const WORK_REGIONS = [
-  { code: 'US', zone: 'America/New_York', name: '美东 · 纽约', englishName: 'New York · US East', color: '#768bc6' },
-  { code: 'EUR', zone: 'Europe/Berlin', name: '中欧 · 柏林', englishName: 'Berlin · Central Europe', color: '#3aab9c' },
-  { code: 'AUD', zone: 'Australia/Sydney', name: '澳东 · 悉尼', englishName: 'Sydney · AU East', color: '#cf9b53' },
+  { code: 'US', label: 'USA', zone: 'America/New_York', name: '美东 · 纽约', englishName: 'New York · US East', color: '#768bc6' },
+  { code: 'EUR', label: 'EUR', zone: 'Europe/Berlin', name: '中欧 · 柏林', englishName: 'Berlin · Central Europe', color: '#3aab9c' },
+  { code: 'AUD', label: 'AUD', zone: 'Australia/Sydney', name: '澳东 · 悉尼', englishName: 'Sydney · AU East', color: '#cf9b53' },
 ] as const
 
 const BEIJING_ZONE = 'Asia/Shanghai'

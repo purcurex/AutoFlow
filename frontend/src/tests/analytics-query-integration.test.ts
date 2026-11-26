@@ -1,5 +1,5 @@
 import { beforeEach, expect, it, vi } from 'vitest'
-import { getLocalDashboardAnalytics } from '@/api/local-dashboard-analytics'
+import { getLocalDashboardAnalytics, getLocalDashboardTrend } from '@/api/local-dashboard-analytics'
 import { getFopFreight, getFopFreightDetails } from '@/api/fop-freight'
 import { getOrderVolume, getOrderVolumeDetails } from '@/api/fop-order-volume'
 import { getSalesPerformance } from '@/api/fop-sales-performance'
@@ -12,6 +12,7 @@ beforeEach(() => {
  get.mockReset().mockImplementation(async (url: string) => url.endsWith('/cache-scope') ? { cacheable: true, version: 'account-scope' } : { rows: [], endpoint: url })
 })
 const charts: Array<[string, (options?: AnalyticsQueryOptions) => Promise<unknown>]> = [
+ ['/workbench/analytics/dashboard/trend', options => getLocalDashboardTrend({ chartId: 'order_volume', from: '2026-11-01', to: '2026-11-16', dimension: 'person', id: 'employee-1', grain: 'day' }, options)],
  ['/workbench/analytics/dashboard', options => getLocalDashboardAnalytics({ chartId: 'order_volume', from: '2026-11-01', to: '2026-11-16' }, options)],
  ['/autoflow/integrations/fop/freight', options => getFopFreight({ grain: 'month', year: 2026, warehouse: 'ALL' }, options)],
  ['/autoflow/integrations/fop/order-volume', options => getOrderVolume({ category: 'customer', warehouse: 'ALL', from: '2026-11-01', to: '2026-11-16' }, options)],

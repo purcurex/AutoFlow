@@ -56,6 +56,24 @@
     "yuanfeihang": {
       "light": "#D78632",
       "dark": "#EDB36E"
+    },
+    "exceptionTypes": {
+      "light": {
+        "logistics_exception": "#A14356",
+        "dispatch_exception": "#326B9F",
+        "allocation_exception": "#7A641C",
+        "procurement_exception": "#7451A3",
+        "outbound_exception": "#A34C21",
+        "delivery_exception": "#247276"
+      },
+      "dark": {
+        "logistics_exception": "#EBA2AE",
+        "dispatch_exception": "#9EBFE7",
+        "allocation_exception": "#D8C479",
+        "procurement_exception": "#C6ADE8",
+        "outbound_exception": "#EDAE7D",
+        "delivery_exception": "#8ACED0"
+      }
     }
   },
   "green": {
@@ -115,6 +133,24 @@
     "yuanfeihang": {
       "light": "#9070BD",
       "dark": "#B79BDC"
+    },
+    "exceptionTypes": {
+      "light": {
+        "logistics_exception": "#A14356",
+        "dispatch_exception": "#326B9F",
+        "allocation_exception": "#7A641C",
+        "procurement_exception": "#7451A3",
+        "outbound_exception": "#A34C21",
+        "delivery_exception": "#247276"
+      },
+      "dark": {
+        "logistics_exception": "#EBA2AE",
+        "dispatch_exception": "#9EBFE7",
+        "allocation_exception": "#D8C479",
+        "procurement_exception": "#C6ADE8",
+        "outbound_exception": "#EDAE7D",
+        "delivery_exception": "#8ACED0"
+      }
     }
   },
   "purple": {
@@ -174,6 +210,24 @@
     "yuanfeihang": {
       "light": "#289B89",
       "dark": "#67C9B7"
+    },
+    "exceptionTypes": {
+      "light": {
+        "logistics_exception": "#A14356",
+        "dispatch_exception": "#326B9F",
+        "allocation_exception": "#7A641C",
+        "procurement_exception": "#7451A3",
+        "outbound_exception": "#A34C21",
+        "delivery_exception": "#247276"
+      },
+      "dark": {
+        "logistics_exception": "#EBA2AE",
+        "dispatch_exception": "#9EBFE7",
+        "allocation_exception": "#D8C479",
+        "procurement_exception": "#C6ADE8",
+        "outbound_exception": "#EDAE7D",
+        "delivery_exception": "#8ACED0"
+      }
     }
   },
   "orange": {
@@ -233,6 +287,24 @@
     "yuanfeihang": {
       "light": "#367EB5",
       "dark": "#79B7E5"
+    },
+    "exceptionTypes": {
+      "light": {
+        "logistics_exception": "#A14356",
+        "dispatch_exception": "#326B9F",
+        "allocation_exception": "#7A641C",
+        "procurement_exception": "#7451A3",
+        "outbound_exception": "#A34C21",
+        "delivery_exception": "#247276"
+      },
+      "dark": {
+        "logistics_exception": "#EBA2AE",
+        "dispatch_exception": "#9EBFE7",
+        "allocation_exception": "#D8C479",
+        "procurement_exception": "#C6ADE8",
+        "outbound_exception": "#EDAE7D",
+        "delivery_exception": "#8ACED0"
+      }
     }
   }
 }

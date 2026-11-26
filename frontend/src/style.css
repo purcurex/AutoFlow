@@ -44,6 +44,7 @@
   .btn-secondary { @apply border-slate-300 bg-white text-slate-700 hover:border-slate-400 hover:bg-slate-50 dark:border-slate-700 dark:bg-[#171b21] dark:text-slate-200 dark:hover:border-slate-600 dark:hover:bg-[#20252d]; }
   .btn-danger { @apply border-red-600 bg-red-600 text-white hover:bg-red-700; }
   .brand-avatar, .btn-account { background: var(--color-account-action); color: var(--color-account-action-text); }
+  .profile-avatar { background: var(--color-selection-surface); color: var(--color-selection-text); border: 1px solid var(--color-selection-border); }
   .btn-account { border-color: var(--color-account-action); }
   .btn-account:hover:not(:disabled), button.brand-avatar:hover:not(:disabled) { background: var(--color-account-action-hover); border-color: var(--color-account-action-hover); }
   .btn-account:active:not(:disabled) { transform: translateY(1px); }

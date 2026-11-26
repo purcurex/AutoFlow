@@ -4,10 +4,12 @@ import type { User } from '@/types'
 import { authApi } from '@/api/auth'
 import { defaultAvatarUrl, englishDisplayName, presetAvatarSrc, PRESET_AVATARS } from '@/utils/user-display'
 import { assertCurrentSession, captureSession, invalidateSession, isCurrentSession, onSessionReset } from '@/utils/session'
+import { useTheme } from '@/composables/useTheme'
 
 const API_URL = import.meta.env.VITE_API_URL || '/api'
 
 export const useUserStore = defineStore('user', () => {
+  const { palette, isDark } = useTheme()
   const user = ref<User | null>(null)
   onScopeDispose(onSessionReset(() => { user.value = null }))
   let authMutation: Promise<unknown> = Promise.resolve()
@@ -22,8 +24,8 @@ export const useUserStore = defineStore('user', () => {
   const isAdmin = computed(() => user.value?.role === 'admin')
   const avatarUrl = computed(() => {
     if (!user.value) return null
-    if (!user.value.avatarUrl) return presetAvatarSrc(defaultAvatarUrl(user.value))
-    if (PRESET_AVATARS.some(avatar => avatar.url === user.value?.avatarUrl)) return presetAvatarSrc(user.value.avatarUrl)
+    if (!user.value.avatarUrl) return presetAvatarSrc(defaultAvatarUrl(user.value), palette.value, isDark.value)
+    if (PRESET_AVATARS.some(avatar => avatar.url === user.value?.avatarUrl)) return presetAvatarSrc(user.value.avatarUrl, palette.value, isDark.value)
     // 如果是完整URL则直接返回，否则拼接API地址
     if (user.value.avatarUrl.startsWith('http')) {
       return user.value.avatarUrl

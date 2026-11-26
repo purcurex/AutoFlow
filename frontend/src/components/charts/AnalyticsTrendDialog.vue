@@ -10,6 +10,7 @@ import { trendChart,type TrendMetric } from '@/utils/dashboard-trend'
 import { formatKnownCurrency } from '@/utils/currency'
 import { onSessionReset } from '@/utils/session'
 import { useTheme } from '@/composables/useTheme'
+import { useChartQuerySchedule } from '@/composables/useChartQuerySchedule'
 const props=defineProps<{title:string;target:TrendTarget;targets:TrendTarget[];query:LocalAnalyticsQuery;metric:TrendMetric;metricLabel:string;scope:string}>()
 const emit=defineEmits<{close:[];select:[target:TrendTarget]}>()
 const dialog=ref<HTMLDialogElement>(),closeButton=ref<HTMLButtonElement>(),titleId=useId()
@@ -20,7 +21,9 @@ const selected=computed(()=>props.targets.findIndex(t=>t.id===props.target.id&&t
 const option=computed(()=>data.value?trendChart(data.value,props.metric,props.metricLabel,isDark.value):{})
 const total=computed(()=>{const d=data.value;if(!d)return '—';const value=props.metric==='registrations'?d.registrationCount??d.orderCount:props.metric==='orders'?d.orderCount:props.metric==='quantity'?d.totalQuantity:d.amount;return value==null?'—':props.metric==='amount'?formatKnownCurrency(Number(value),d.currency??'USD'):Number(value).toLocaleString('zh-CN')})
 let request=0,opener:HTMLElement|undefined
+const querySchedule=useChartQuerySchedule(()=>load(),()=>{request++;busy.value=true;error.value=''})
 async function load(){
+ querySchedule.cancel()
  const current=++request;busy.value=true;error.value=''
  const {comparison:_comparison,...query}=props.query
  const submitted={...query,dimension:props.target.dimension,id:props.target.id,grain:grain.value}
@@ -30,7 +33,7 @@ async function load(){
  finally{if(current===request)busy.value=false}
 }
 const stop=onSessionReset(()=>{request++;data.value=undefined;emit('close')})
-watch(()=>[props.target.id,props.target.dimension,props.query,grain.value],load,{immediate:true})
+watch(()=>[props.target.id,props.target.dimension,props.query,grain.value],(_value,previous)=>{if(previous)querySchedule.schedule();else void load()},{immediate:true})
 onMounted(()=>{opener=document.activeElement instanceof HTMLElement?document.activeElement:undefined;dialog.value?.showModal();closeButton.value?.focus({preventScroll:true});ready.value=true})
 onBeforeUnmount(()=>{request++;stop();dialog.value?.close();if(opener?.isConnected)opener.focus({preventScroll:true})})
 </script>
@@ -40,7 +43,7 @@ onBeforeUnmount(()=>{request++;stop();dialog.value?.close();if(opener?.isConnect
   <div class="trend-body">
    <div class="trend-toolbar"><label>分析对象<select :value="selected" aria-label="趋势分析对象" @change="emit('select',targets[Number(($event.target as HTMLSelectElement).value)]!)"><option v-for="(t,index) in targets" :key="`${t.dimension}:${t.id}`" :value="index">{{t.dimension==='department'?'部门 · ':t.dimension==='person'?'业务员 · ':''}}{{t.name}}</option></select></label><div class="trend-grain" role="group" aria-label="趋势时间维度"><button :class="{active:grain==='day'}" :aria-pressed="grain==='day'" @click="grain='day'">按日</button><button :class="{active:grain==='month'}" :aria-pressed="grain==='month'" @click="grain='month'">按月</button></div></div>
    <div class="trend-context"><span>{{query.from}} — {{query.to}}</span><span>{{scope}}</span><span>{{query.chartId==='registrations'?'客户创建时间':'收款日期'}} · UTC+8</span></div>
-   <div class="trend-total"><span>{{metricLabel}}合计</span><strong>{{total}}</strong><small v-if="data&&metric==='amount'">{{data.orderCount.toLocaleString('zh-CN')}} 笔订单</small></div>
+   <div class="trend-total"><span>{{metricLabel}}合计</span><strong>{{total}}</strong><small v-if="data&&metric==='amount'">{{data.orderCount.toLocaleString('zh-CN')}} 笔</small></div>
    <div class="trend-plot" :aria-busy="busy"><EChart v-if="ready&&data" :option="option" :label="`${target.name} · ${metricLabel}趋势`" :can-export="false"/><div v-else-if="error" class="trend-empty" role="alert">{{error}}<button @click="load">重试</button></div><div v-else class="trend-empty">正在查询趋势…</div></div>
    <p v-if="data?.missingAmountCount&&metric==='amount'" class="trend-note">{{data.missingAmountCount}} 笔订单金额不完整，相关周期留空。</p>
    <p v-else-if="data&&metric==='quantity'&&data.totalQuantity===null" class="trend-note">部分商品数量不完整，相关周期留空。</p>

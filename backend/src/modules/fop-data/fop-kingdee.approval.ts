@@ -1,4 +1,5 @@
 import { createHash } from 'crypto'
+import { normalizeTimestampProjectionRaw } from '../workbench-replica/timestamp-projection-normalizer'
 import { FopPermissionDeniedError, type FopIdentity } from './fop-data.types'
 import { approvalEntity, approvalVersion, type ApprovalCommand, type ApprovalOutcome, type ApprovalQueue, type ApprovalTarget } from './fop-approval.types'
 import type { FopRealtimeApprovalContext, FopRealtimeScope } from './fop-realtime.types'
@@ -25,19 +26,49 @@ export class KingdeeNativeApprovalAdapter {
     return { ...identity, organizationIds: [...this.organizations], scopeRole: scope.business.role,
       employeeId: scope.business.employeeId, departmentIds: scope.business.departmentId ? [scope.business.departmentId] : [], queue, page: 1, pageSize: 1 }
   }
+  private async sourcePage(identity: Readonly<FopIdentity>, orderId: string, queue: ApprovalQueue) {
+    const result = obj(await this.call('FOP_APPROVAL_ORDER_LIST_URL', { data: { org_number: this.organizationNumber, id: [orderId] }, pageNo: 1, pageSize: 1 }))
+    const source = rows(result.rows)
+    if (Number(result.totalCount) !== 1 || source.length !== 1 || source[0].id !== orderId) throw new FopPermissionDeniedError('Order no longer visible')
+    const company = str(source[0].org_id)
+    if (!this.organizations.includes(company) || source[0].hzkj_org_id != null && source[0].hzkj_org_id !== company) throw new FopPermissionDeniedError('Order company mismatch')
+    const order = normalizeTimestampProjectionRaw('hzkj_orders', source[0], company)
+    const page: Row = { subject: { ...identity }, organizationIds: [company], workbenchFactsSchemaVersion: 1, items: [order], facts: { allocations: [], dispatches: [] } }
+    if (queue === 'allocation_review') {
+      // Exact order filter plus bounded pagination; never replace missing facts with a local snapshot.
+      const read = async (key: string, entity: string) => {
+        const records: Row[] = [], seen = new Set<string>()
+        for (let pageNo = 1; pageNo <= 20; pageNo++) {
+          const response = obj(await this.call(key, { data: { org_number: this.organizationNumber, hzkj_order_no: order.billno,
+            start_modifytime: '2000-01-01 00:00:00', end_modifytime: '2100-01-01 00:00:00' }, pageNo, pageSize: 100 }))
+          const entries = rows(response.rows)
+          if (response.pageNo !== pageNo || typeof response.lastPage !== 'boolean' || !Number.isInteger(response.totalCount)) throw new Error('Invalid approval pagination')
+          for (const entry of entries) {
+            if (entry.org_id !== company || entry.hzkj_order_no !== order.billno || seen.has(entry.id)) throw new Error('Unrelated approval fact')
+            seen.add(entry.id); records.push(normalizeTimestampProjectionRaw(entity, entry, company))
+          }
+          if (response.lastPage) { if (records.length !== response.totalCount) throw new Error('Incomplete approval facts'); return records }
+          if (!entries.length) throw new Error('Incomplete approval facts')
+        }
+        throw new Error('Approval fact page limit exceeded')
+      }
+      ;[page.facts.allocations, page.facts.dispatches] = await Promise.all([
+        read('FOP_APPROVAL_ALLOCATION_LIST_URL', 'hzkj_alloc_bill'), read('FOP_APPROVAL_DISPATCH_LIST_URL', 'hzkj_deliver_bill'),
+      ])
+    }
+    return page
+  }
   async context(identity: Readonly<FopIdentity>, scope: FopRealtimeScope, queue: ApprovalQueue, orderId: string): Promise<FopRealtimeApprovalContext> {
     if (!/^[1-9]\d{0,18}$/.test(orderId) || !['review', 'allocation_review'].includes(queue)) throw new FopPermissionDeniedError('Invalid approval target')
     const query = this.query(identity, scope, queue)
     // Independent read-only proofs run together; both are validated before any audit.
     const [grantResponse, pageResponse] = await Promise.all([
       this.call('FOP_KINGDEE_ANALYTICS_PERMISSIONS_URL', { query }),
-      this.call('FOP_KINGDEE_QUERY_URL', { query: { ...query, rawWorkbenchFacts: true, afterOrderId: String(BigInt(orderId) - 1n) } }),
+      this.sourcePage(identity, orderId, queue),
     ])
     const grant = obj(grantResponse)
     this.subject(grant, identity)
     if (queue === 'allocation_review' && !grant.approvalActions?.includes(queue)) throw new FopPermissionDeniedError('Allocation audit permission denied')
-    // The published raw-facts API ignores orderIds. A one-row cursor plus exact ID check
-    // prevents a full scan and refuses the next visible row when this ID is inaccessible.
     const page = obj(pageResponse)
     this.subject(page, identity)
     const source = rows(page.items)
@@ -53,11 +84,7 @@ export class KingdeeNativeApprovalAdapter {
     let dispatchDocuments: FopRealtimeApprovalContext['order']['dispatchDocuments'] = null
     let inQueue = false
     if (queue === 'review') {
-      const detail = obj(await this.call('FOP_KINGDEE_ORDER_DETAIL_URL', { data: { id: orderId }, pageNo: 1, pageSize: 1 }))
-      const details = rows(detail.rows)
-      if (Number(detail.totalCount) !== 1 || details.length !== 1 || details[0].id !== orderId || details[0].billno !== number
-        || details[0].billstatus !== order.billstatus || details[0].hzkj_orderstatus !== order.hzkj_orderstatus) throw new Error('Order changed during approval precheck')
-      const d = details[0]
+      const d = order
       if (!['A', 'B', 'C'].includes(d.billstatus)) throw new Error('Unsupported document status')
       str(d.modifytime)
       inQueue = active && d.hzkj_receipt_status === '1' && d.hzkj_orderstatus === '2' && ['A', 'B'].includes(d.billstatus)

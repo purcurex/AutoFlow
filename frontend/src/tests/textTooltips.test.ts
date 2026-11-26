@@ -51,3 +51,19 @@ it('suppresses duplicate headings and descriptions but preserves clipped reasons
  hover(reason);vi.advanceTimersByTime(1000);expect(document.querySelector('[role=tooltip]')?.textContent).toBe('完整异常原因')
  hover(document.querySelector('button')!);vi.advanceTimersByTime(1000);expect(document.querySelector('[role=tooltip]')?.textContent).toBe('复制订单编号')
 })
+
+it('never turns a clipped dashboard panel or chart SVG into a whole-panel tooltip',async()=>{
+ vi.useFakeTimers();document.body.innerHTML='<section style="overflow:hidden"><h2>部门业绩</h2><label>收款日期<input></label><div role="img"><svg><text>一月 二月 三月 订单金额</text></svg></div><div id="blank"></div></section>'
+ const panel=document.querySelector('section')!;Object.defineProperties(panel,{clientHeight:{value:100},scrollHeight:{value:300}})
+ dispose=installTextTooltips()
+ for(const el of [document.querySelector('text')!,document.querySelector('#blank')!,panel]){
+  el.dispatchEvent(new MouseEvent('pointerover',{bubbles:true}));vi.advanceTimersByTime(1000)
+  expect(document.querySelector('[role=tooltip]')).toBeNull()
+ }
+})
+it('keeps clipped leaf text hints inside a panel without collecting sibling filters',()=>{
+ vi.useFakeTimers();document.body.innerHTML='<section style="overflow:hidden"><h2>统计</h2><span style="overflow:hidden;text-overflow:ellipsis">需要完整显示的异常原因</span><button>查询</button></section>'
+ const text=document.querySelector('span')!;Object.defineProperties(text,{clientWidth:{value:20},scrollWidth:{value:120}})
+ dispose=installTextTooltips();hover(text);vi.advanceTimersByTime(1000)
+ expect(document.querySelector('[role=tooltip]')?.textContent).toBe('需要完整显示的异常原因')
+})

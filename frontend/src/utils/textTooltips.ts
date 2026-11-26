@@ -12,7 +12,7 @@ export function installTextTooltips(root: HTMLElement = document.body): () => vo
   let active: HTMLElement | null = null, popup: HTMLDivElement | null = null
   let timer: ReturnType<typeof setTimeout> | undefined, serial = 0, description: string | null = null
   const marker = 'data-app-tooltip'
-  const excluded = '[data-picking-name-tooltip],.info-tip,[role="tooltip"],input,textarea,[contenteditable="true"]'
+  const excluded = '[data-picking-name-tooltip],.info-tip,[role="tooltip"],input,textarea,[contenteditable="true"],[data-chart-tooltip-boundary],[role="img"]'
   function close() {
     clearTimeout(timer); timer = undefined
     if (popup && active) {
@@ -61,7 +61,11 @@ export function installTextTooltips(root: HTMLElement = document.body): () => vo
     // A distinct action/explanation is useful; repeating fully visible text is not.
     const normalize = (text: string) => text.replace(/\s+/g, '')
     if (explicit && (clipped || normalize(explicit) !== normalize(visible))) return explicit
-    return clipped ? visible : ''
+    // Overflow on layout/scroll containers is not evidence that their combined text is a label.
+    // Inline emphasis remains eligible; panels, tables and chart scenes never aggregate.
+    const layout = element.matches('main,section,article,aside,nav,form,table,thead,tbody,tr,dialog')
+      || element.querySelector('div,p,h1,h2,h3,h4,h5,h6,section,article,table,ul,ol,form,label,input,select,textarea,button,svg,canvas,[role="img"]')
+    return clipped && !layout ? visible : ''
   }
   function target(event: Event): HTMLElement | null {
     let element = event.target instanceof Element ? event.target : null

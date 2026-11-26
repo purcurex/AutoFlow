@@ -47,4 +47,35 @@ integration('dashboard receipt date diagnostics in PostgreSQL TEMP tables', () =
   it('does not assign undated records to the selected payment period', async () => {
     expect(await run({ start: '2026-10-01', end: '2026-11-01' })).toMatchObject({ orderCount: 0, missingPaidAtCount: 5, missingPaidAtBreakdown: { unpaid: 2, paid: 1, unknown: 2 } })
   })
+  it('does not execute receipt fallback aggregation when source order amounts are complete',async()=>{
+    await client.query('SAVEPOINT lazy_receipts')
+    try{
+      await client.query(`UPDATE hz_fop_collected_analytics_facts SET raw=raw||'{"hzkj_total_amount":"12.34"}'::jsonb`)
+      const q=dashboardAnalyticsQuery(input)
+      const plan=(await client.query('EXPLAIN (ANALYZE,FORMAT JSON) '+q.sql,q.params)).rows[0]['QUERY PLAN'][0].Plan
+      const receiptPlans:any[]=[]
+      const visit=(node:any)=>{if(node['Subplan Name']==='CTE receipt_totals')receiptPlans.push(node);for(const child of node.Plans??[])visit(child)}
+      visit(plan)
+      expect(receiptPlans).toHaveLength(1)
+      expect(receiptPlans[0]['Actual Loops']).toBe(0)
+      expect(await run()).toMatchObject({orderCount:1,missingAmountCount:0})
+    }finally{await client.query('ROLLBACK TO SAVEPOINT lazy_receipts')}
+  })
+  it('retains exact receipt fallback, source amount precedence and ambiguity protection',async()=>{
+    await client.query('SAVEPOINT fallback_receipts')
+    try{
+      const receipt={hzkj_receive_type:'A',hzkj_settlecurrency_number:'USD',entryentity:[{id:'line',hzkj_src_order:'dated',hzkj_entry_src_type:'A',hzkj_samount:'9.99001'}]}
+      await client.query(`INSERT INTO hz_fop_collected_analytics_facts(batch_id,company_id,entity_type,source_id,document_number,raw,raw_status,currency_code) VALUES('b','100000','receipt','receipt','R1',$1,'C','USD')`,[JSON.stringify(receipt)])
+      const options={chartId:'salesperson_receipts',members:[{employeeId:'alice',name:'Alice',departmentId:'d1'}],trend:{dimension:'person' as const,id:'alice',grain:'month' as const}}
+      expect(await run(options)).toMatchObject({orderCount:1,missingAmountCount:0,amountsByCurrency:[{currency:'USD',amount:'9.99001'}]})
+      await client.query(`UPDATE hz_fop_collected_analytics_facts SET raw=raw||'{"hzkj_total_amount":"2.12345"}'::jsonb WHERE source_id='dated'`)
+      expect(await run(options)).toMatchObject({amountsByCurrency:[{amount:'2.12345'}]})
+      await client.query(`UPDATE hz_fop_collected_analytics_facts SET raw=raw-'hzkj_total_amount' WHERE source_id='dated'`)
+      await client.query(`INSERT INTO hz_fop_collected_analytics_facts SELECT batch_id,company_id,entity_type,'receipt2','R2',paid_at,owner_employee_id,raw,facts,quantity,raw_status,currency_code FROM hz_fop_collected_analytics_facts WHERE source_id='receipt'`)
+      expect(await run(options)).toMatchObject({orderCount:1,missingAmountCount:1,amountsByCurrency:[],rows:[{amount:null}]})
+      await client.query(`DELETE FROM hz_fop_collected_analytics_facts WHERE source_id='receipt2'`)
+      await client.query(`INSERT INTO hz_fop_collected_analytics_facts SELECT batch_id,company_id,entity_type,'duplicate','dated',paid_at,owner_employee_id,raw,facts,quantity,raw_status,currency_code FROM hz_fop_collected_analytics_facts WHERE source_id='dated'`)
+      expect(await run(options)).toMatchObject({orderCount:2,missingAmountCount:2,amountsByCurrency:[]})
+    }finally{await client.query('ROLLBACK TO SAVEPOINT fallback_receipts')}
+  })
 })

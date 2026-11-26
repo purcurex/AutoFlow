@@ -39,7 +39,7 @@ onBeforeUnmount(() => {
     </header>
     <div class="calendar-regions">
       <section v-for="region in calendar.regions" :key="region.code" class="calendar-region" :data-region="region.code" :style="{ '--region-color': region.color }">
-        <div class="region-heading"><strong>{{ region.code }}</strong><span>{{ zh ? region.name : region.englishName }}</span></div>
+        <div class="region-heading"><strong>{{ region.label }}</strong><span>{{ zh ? region.name : region.englishName }}</span></div>
         <div class="region-now">
           <time class="local-clock" :datetime="now.toISOString()">{{ region.local.time }}</time>
           <span class="work-state" :class="region.status" role="status"><component :is="region.status === 'working' ? CircleCheck : region.status === 'weekend' ? CalendarOff : Moon" :size="12" aria-hidden="true" />{{ stateLabel(region.status) }}</span>

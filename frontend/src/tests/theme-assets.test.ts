@@ -2,6 +2,7 @@ import { expect, it } from 'vitest'
 import palettes from '@/theme/palettes.json'
 import css from '@/theme/palettes.css?raw'
 import { applyChartTheme } from '@/utils/chartTheme'
+import { taskStatusOptions } from '@/utils/workbench-status'
 const contrast = (a:string,b:string) => {
  const luminance=(s:string)=>s.slice(1).match(/../g)!.map(v=>parseInt(v,16)/255).map(v=>v<=.04045?v/12.92:((v+.055)/1.055)**2.4).reduce((a,v,i)=>a+v*[.2126,.7152,.0722][i]!,0)
  const x=luminance(a),y=luminance(b);return (Math.max(x,y)+.05)/(Math.min(x,y)+.05)
@@ -11,6 +12,21 @@ it('provides eight complete themes with readable primary button labels',()=>{
   const values=palette[mode];expect(values).toHaveLength(5)
   expect(contrast(values[0]!,values[4]!)).toBeGreaterThanOrEqual(4.5)
   expect(css).toContain(`[data-palette="${name}"]${mode==='dark'?'.dark':':not(.dark)'}`)
+ }
+})
+it('provides six distinct, readable exception colors in every theme',()=>{
+ const mix=(ink:string,surface:string)=>'#'+[0,1,2].map(i=>Math.round(parseInt(ink.slice(1+i*2,3+i*2),16)*.09+parseInt(surface.slice(1+i*2,3+i*2),16)*.91).toString(16).padStart(2,'0')).join('')
+ for(const [name,palette] of Object.entries(palettes)) for(const mode of ['light','dark'] as const){
+  const colors=palette.exceptionTypes[mode]
+  expect(Object.keys(colors).sort()).toEqual([...taskStatusOptions('exceptions')].sort())
+  expect(new Set(Object.values(colors)).size).toBe(6)
+  const selector=`:root[data-palette="${name}"]${mode==='dark'?'.dark':':not(.dark)'}`
+  const block=css.slice(css.indexOf(selector)).split('}')[0]!
+  const surface=block.match(/--color-surface: (#[0-9A-Fa-f]{6});/)![1]!
+  for(const [type,ink] of Object.entries(colors)){
+   expect(block).toContain(`--color-exception-${type}: ${ink};`)
+   expect(contrast(ink,mix(ink,surface))).toBeGreaterThanOrEqual(4.5)
+  }
  }
 })
 it('recolors standard chart series while preserving semantic colors and callbacks',()=>{

@@ -22,7 +22,7 @@ export async function persistApprovalReadback(db: DataSource, proof: ApprovalRea
       if (existing.owner_employee_id !== source.hzkj_operator?.id || existing.raw.billno !== source.billno) throw new Error('Readback identity or owner changed')
       if (existing.display.approvalReadbackAt && existing.display.approvalReadbackAt > proof.capturedAt) continue
       const rawPatch = Object.fromEntries(['billstatus', 'hzkj_orderstatus', 'hzkj_receipt_status', 'hzkj_delivery_status', 'hzkj_purchase_status', 'hzkj_fulfillment_status', 'auditdate'].filter(key => Object.prototype.hasOwnProperty.call(source, key)).map(key => [key, source[key]]))
-      const displayPatch = { ...native.parents.get(proof.orderId), reviewStatus: source.billstatus === 'C' ? 'approved' : existing.display.reviewStatus,
+      const displayPatch = { ...(proof.entity === 'hzkj_alloc_bill' ? native.parents.get(proof.orderId) : {}), reviewStatus: source.billstatus === 'C' ? 'approved' : existing.display.reviewStatus,
         reviewedAt: normalizeBusinessTimestamp(source.auditdate), approvalReadbackAt: proof.capturedAt }
       await manager.query(`UPDATE hz_fop_collected_orders SET raw=raw||$3::jsonb,display=display||$4::jsonb,
         raw_bill_status=$5,raw_order_status=$6,raw_payment_status=$7,raw_delivery_status=$8 WHERE batch_id=$1 AND source_id=$2`,

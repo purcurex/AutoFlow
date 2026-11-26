@@ -34,3 +34,26 @@ export function inventoryMaterial(line:Row):{id:string;sku:string;name:string}{
  if(typeof id!=='string'||!id||typeof number!=='string'||!number)throw Error('Inventory material mapping unavailable')
  return {id,sku:number,name:sku?.name?.zh_CN??sku?.name??line.hzkj_local_sku_name??''}
 }
+
+/** Current inventory uses a cursor contract, not the retired material-ID balance API. */
+export async function customerInventoryPages(read: InventoryRead, materialCode: string) {
+ if (!materialCode.trim()) throw Error('Missing inventory material code')
+ const result: Row[] = [], cursors = new Set<string>(); let cursor: string | undefined
+ for (let page = 0; page < 20; page++) {
+  const d = await read('current', { query: { keyword: materialCode, pageSize: 100, ...(cursor ? { cursor } : {}) } })
+  if (!d || !Array.isArray(d.items) || d.items.length > 100 || d.nextCursor != null && typeof d.nextCursor !== 'string') throw Error('Invalid current inventory response')
+  for (const r of d.items) {
+   if (typeof r.materialCode !== 'string' || typeof r.warehouse !== 'string') throw Error('Invalid current inventory identity')
+   // Upstream keyword is fuzzy; only the selected material belongs to this result.
+   if (r.materialCode !== materialCode) continue
+   const value = typeof r.quantity === 'string' && r.quantity.trim() ? Number(r.quantity) : r.quantity
+   result.push({ id: JSON.stringify([materialCode, page, result.length]), sku: materialCode, name: r.materialName ?? '',
+    warehouseCode: null, warehouse: r.warehouse, customer: r.customer ?? null,
+    pool: r.customer === '公共库存' ? 'public' : r.customer ? 'customer' : 'unknown', onHand: qty(value), occupied: null, free: null })
+  }
+  if (!d.nextCursor) return result
+  if (cursors.has(d.nextCursor)) throw Error('Repeated inventory cursor')
+  cursors.add(d.nextCursor); cursor = d.nextCursor
+ }
+ throw Error('Inventory result too large; narrow customer or SKU')
+}

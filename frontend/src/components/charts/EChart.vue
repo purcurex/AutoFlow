@@ -113,5 +113,5 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div ref="element" class="h-full min-h-64 w-full min-w-0" role="img" :aria-label="label" @pointerdown.capture="startDrag" />
+  <div ref="element" data-chart-tooltip-boundary class="h-full min-h-64 w-full min-w-0" role="img" :aria-label="label" @pointerdown.capture="startDrag" />
 </template>

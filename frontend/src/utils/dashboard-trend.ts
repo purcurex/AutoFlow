@@ -19,6 +19,6 @@ export function trendChart(data:DashboardTrendResult,metric:TrendMetric,label:st
   const p=(Array.isArray(raw)?raw[0]:raw) as {dataIndex:number};const row=points[p.dataIndex];if(!row)return ''
   return [`${row.period}${data.grain==='month'?'（所选日期内）':''}`,`${label}：${format(value(row))}`,...(metric==='amount'||metric==='quantity'?[`订单数：${row.orderCount.toLocaleString('zh-CN')}`]:[])].join('\n')
  }},grid:{left:16,right:24,top:38,bottom:22,containLabel:true},xAxis:{type:'category' as const,boundaryGap:false,data:points.map(p=>p.period),axisLabel:{hideOverlap:true}},
- yAxis:{type:'value' as const,name:money?'订单金额（$）':label,...(money?{axisLabel:{formatter:format}}:{minInterval:1})},
+ yAxis:{type:'value' as const,...(money?{axisLabel:{formatter:format}}:{minInterval:1})},
  series:[{name:label,type:'line' as const,smooth:false,connectNulls:false,showSymbol:points.length<=40,symbolSize:6,lineStyle:{width:2},itemStyle:{color:dark?'#91a6ff':'#5c72d4'},areaStyle:{color:dark?'rgba(145,166,255,0.08)':'rgba(92,114,212,0.06)'},data:points.map(p=>value(p)==null?null:Number(value(p)))}]}
 }

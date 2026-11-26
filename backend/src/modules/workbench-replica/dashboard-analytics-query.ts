@@ -28,6 +28,7 @@ export function dashboardAnalyticsQuery(o:DashboardAnalyticsOptions){
  const trendColumn=o.trend?({department:customerOwners?'customer_owner_department_id':'department_id',person:customerOwners?'customer_owner_id':'owner_employee_id',customer:'customer_id',country:'country_code',warehouse:'warehouse_code'}[o.trend.dimension]):undefined
  const trendParam=o.customerOwnershipScope&&customerOwners?11:10
  if(o.trend){const format=o.trend.grain==='day'?'YYYY-MM-DD':'YYYY-MM';dimensions.splice(0,dimensions.length,`('${o.trend.grain}',to_char(paid_at AT TIME ZONE 'Asia/Shanghai','${format}'),to_char(paid_at AT TIME ZONE 'Asia/Shanghai','${format}'))`)}
+ // COALESCE evaluates the receipt subquery only for a missing order amount; do not eagerly join the company-wide fallback.
  const sql=`WITH members AS (
  SELECT * FROM jsonb_to_recordset($6::jsonb) AS m("employeeId" text,"fopUserId" text,"departmentId" text,"name" text,"englishName" text,"departmentName" text)
  ), ${customerOwners?`customer_owners AS (
@@ -62,14 +63,14 @@ export function dashboardAnalyticsQuery(o:DashboardAnalyticsOptions){
  NULLIF(f.facts->'customer'->>'id','') customer_id,NULLIF(f.facts->'customer'->>'name','') customer_name,
  ${customerOwners?'c.customer_owner_id,c.customer_owner_name,c.customer_owner_department_id,c.customer_owner_department_name,c.customer_owner_english_name,':''}
  NULLIF(f.facts->>'countryCode','') country_code,coalesce(NULLIF(f.facts->'warehouse'->>'number',''),NULLIF(f.facts->'warehouse'->>'id','')) warehouse_code,NULLIF(f.facts->'warehouse'->>'name','') warehouse_name,
- COALESCE(CASE WHEN (f.raw->>(CASE WHEN f.entity_type='fulfillment' THEN 'hzkj_total_amount' ELSE 'hzkj_order_amount' END)) ~ '^-?[0-9]+([.][0-9]+)?$' THEN (f.raw->>(CASE WHEN f.entity_type='fulfillment' THEN 'hzkj_total_amount' ELSE 'hzkj_order_amount' END))::numeric END,CASE WHEN f.entity_type='fulfillment' AND f.company_id='100000' AND coalesce(NULLIF(f.raw->>'hzkj_settlecurrency_number',''),NULLIF(f.raw->'hzkj_settlecurrency'->>'number',''),'USD')='USD' THEN (rt.amounts->>f.document_number)::numeric END) order_amount,
+ COALESCE(CASE WHEN (f.raw->>(CASE WHEN f.entity_type='fulfillment' THEN 'hzkj_total_amount' ELSE 'hzkj_order_amount' END)) ~ '^-?[0-9]+([.][0-9]+)?$' THEN (f.raw->>(CASE WHEN f.entity_type='fulfillment' THEN 'hzkj_total_amount' ELSE 'hzkj_order_amount' END))::numeric END,CASE WHEN f.entity_type='fulfillment' AND f.company_id='100000' AND coalesce(NULLIF(f.raw->>'hzkj_settlecurrency_number',''),NULLIF(f.raw->'hzkj_settlecurrency'->>'number',''),'USD')='USD' THEN (SELECT (rt.amounts->>f.document_number)::numeric FROM receipt_lookup rt) END) order_amount,
  CASE WHEN coalesce(f.raw->>'hzkj_settlecurrency_number',f.raw->'hzkj_settlecurrency'->>'number') ~ '^[A-Z]{3}$' THEN coalesce(f.raw->>'hzkj_settlecurrency_number',f.raw->'hzkj_settlecurrency'->>'number')
  WHEN f.company_id='100000' AND f.entity_type='fulfillment' AND NULLIF(coalesce(f.raw->>'hzkj_settlecurrency_number',f.raw->'hzkj_settlecurrency'->>'number'),'') IS NULL THEN 'USD' END currency,
  f.quantity
  FROM hz_fop_collected_analytics_facts f LEFT JOIN members m ON m."employeeId"=f.owner_employee_id
  ${customerOwners?`CROSS JOIN customer_lookup cl
  LEFT JOIN LATERAL jsonb_to_record(cl.owners->(f.facts->'customer'->>'id'))
- AS c(customer_owner_id text,customer_owner_name text,customer_owner_department_id text,customer_owner_department_name text,customer_owner_english_name text) ON true`:''} CROSS JOIN receipt_lookup rt
+ AS c(customer_owner_id text,customer_owner_name text,customer_owner_department_id text,customer_owner_department_name text,customer_owner_english_name text) ON true`:''}
  WHERE batch_id=$1 AND company_id=$2 AND entity_type=$9
  AND ($3::text[] IS NULL OR ${o.customerOwnershipScope&&customerOwners?'c.customer_owner_id':'owner_employee_id'} = ANY($3::text[]))
  ${o.customerOwnershipScope&&customerOwners?'AND owner_employee_id = ANY($10::text[])':''}

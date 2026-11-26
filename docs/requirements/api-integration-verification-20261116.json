@@ -939,7 +939,9 @@
     "backend/src/modules/workbench-replica/local-freight-details.spec.ts",
     "frontend/src/api/local-freight.ts",
     "frontend/src/tests/LocalFreightAnalysis.test.ts",
-    "frontend/src/tests/WorkbenchAnalyticsRouting.test.ts"
+    "frontend/src/tests/WorkbenchAnalyticsRouting.test.ts",
+    "backend/src/modules/workbench-replica/dashboard-payment-date.database.spec.ts",
+    "frontend/src/tests/analytics-query-integration.test.ts"
   ],
   "timestampPublication": {
     "implemented": true,
@@ -18272,5 +18274,109 @@
     "upstreamCalled": false,
     "databaseChanged": false,
     "productionDeployed": false
+  },
+  "dashboardTrendPerformance20261125": {
+    "scope": [
+      "registrations",
+      "department_receipts",
+      "salesperson_receipts",
+      "order_volume",
+      "customer_orders"
+    ],
+    "cause": "本地分析SQL提前聚合整公司收款备用金额，即使订单原始金额完整仍执行；趋势重复请求未复用后端聚合。",
+    "sql": "收款关联改为COALESCE缺值分支内的标量子查询；保留原金额精度、币种、唯一来源单号及收款单歧义校验。",
+    "cache": {
+      "ttlMs": 30000,
+      "maxEntries": 64,
+      "maxBytes": 8388608,
+      "key": [
+        "account",
+        "permissionAndDataRevision",
+        "sql",
+        "parameters"
+      ],
+      "scope": "仅缓存SQL聚合，不缓存授权响应；前置权限检查及返回前版本复核保留，相同并发请求合并。"
+    },
+    "interaction": "首次选择立即执行，200毫秒内连续切换合并为最后一次；过期响应、卸载、会话重置均受保护。物流趋势继续直接复用父级统计结果。",
+    "benchmark": {
+      "environment": "本机已采集本地数据，非生产；同一查询优化前后各一次，不代表P95或并发容量。",
+      "dateRange": [
+        "2026-06-01",
+        "2026-11-25"
+      ],
+      "registrationCoverageEnd": "2026-11-16",
+      "registrationBoundary": "超出完整采集期仍返回registration_window_not_captured；注册趋势按已采集期比较。",
+      "results": [
+        {
+          "chart": "registrations",
+          "beforeMs": 12.5,
+          "afterMs": 12.4,
+          "repeatMs": 11.5,
+          "improvementPercent": 0.8,
+          "identical": true,
+          "points": 23
+        },
+        {
+          "chart": "department_receipts",
+          "beforeMs": 907.0,
+          "afterMs": 539.1,
+          "repeatMs": 10.1,
+          "improvementPercent": 40.6,
+          "identical": true,
+          "points": 103
+        },
+        {
+          "chart": "salesperson_receipts",
+          "beforeMs": 503.3,
+          "afterMs": 158.8,
+          "repeatMs": 10.0,
+          "improvementPercent": 68.4,
+          "identical": true,
+          "points": 92
+        },
+        {
+          "chart": "order_volume",
+          "beforeMs": 520.0,
+          "afterMs": 162.8,
+          "repeatMs": 13.9,
+          "improvementPercent": 68.7,
+          "identical": true,
+          "points": 92
+        },
+        {
+          "chart": "customer_orders",
+          "beforeMs": 384.5,
+          "afterMs": 226.4,
+          "repeatMs": 13.2,
+          "improvementPercent": 41.1,
+          "identical": true,
+          "points": 6
+        }
+      ],
+      "allFiveFullResultsEqual": true
+    },
+    "verification": {
+      "backendSuites": 5,
+      "backendTests": 70,
+      "frontendSuites": 6,
+      "frontendTests": 128,
+      "backendBuild": "passed",
+      "frontendBuild": "passed",
+      "databaseTests": "真实PostgreSQL临时表事务回滚：完整金额时备用收款CTE不执行；缺值关联精确金额、原金额优先、多收款及重复单号保护通过。",
+      "cacheTests": "并发合并、账号/查询/版本隔离、30秒过期、权限撤销、返回前版本变化及副本隔离通过。"
+    },
+    "implementationFiles": [
+      "backend/src/modules/workbench-replica/dashboard-analytics-query.ts",
+      "backend/src/modules/workbench-replica/collected-workbench.service.ts",
+      "backend/src/modules/workbench-replica/collected-analytics-service.spec.ts",
+      "backend/src/modules/workbench-replica/dashboard-payment-date.database.spec.ts",
+      "frontend/src/components/charts/AnalyticsTrendDialog.vue",
+      "frontend/src/tests/AnalyticsTrendDialog.test.ts",
+      "frontend/src/tests/analytics-query-integration.test.ts"
+    ],
+    "upstreamCalledForVerification": false,
+    "businessDatabaseChanged": false,
+    "productionDeployed": false,
+    "localRuntime": "后端已重启并通过健康检查，前端热更新。"
   }
 }

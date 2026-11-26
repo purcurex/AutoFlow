@@ -5,7 +5,8 @@ import { useI18n } from 'vue-i18n'
 import { RouterLink } from 'vue-router'
 import { AlertCircle, RefreshCw, ArrowUpRight } from 'lucide-vue-next'
 import { type FopOrder } from '@/api/fop-orders'
-import { getTaskStatus, taskStatusLabel } from '@/utils/workbench-status'
+import { getTaskStatus } from '@/utils/workbench-status'
+import ExceptionTypeBadge from '@/components/autoflow/ExceptionTypeBadge.vue'
 import { workbenchOrderLocation } from '@/utils/workbench'
 import { onSessionReset } from '@/utils/session'
 import { EXCEPTION_CACHE_TTL, getDashboardExceptions, peekDashboardExceptions } from '@/utils/dashboard-exception-cache'
@@ -31,7 +32,6 @@ let timer:ReturnType<typeof setInterval>|undefined
 function refreshVisible(){if(document.visibilityState==='visible' && navigator.onLine && !busy.value)void load()}
 onMounted(()=>{void load(props.forceRefresh);timer=setInterval(refreshVisible,EXCEPTION_CACHE_TTL);document.addEventListener('visibilitychange',refreshVisible)})
 onBeforeUnmount(()=>{revision++;reset();clearInterval(timer);document.removeEventListener('visibilitychange',refreshVisible)})
-function typeLabel(row:FopOrder){const status=getTaskStatus(row,'exceptions');return status==='unknown'?'':taskStatusLabel(status,'exceptions')[zh.value?0:1]}
 </script>
 <template>
  <section class="dashboard-panel exception-panel" aria-labelledby="dashboard-exceptions-title">
@@ -41,7 +41,7 @@ function typeLabel(row:FopOrder){const status=getTaskStatus(row,'exceptions');re
    <p v-else-if="error && total === null" class="empty">{{ text('暂时无法加载，请重试','Unable to load. Please retry.') }}</p>
    <p v-else-if="total === 0" class="empty">{{ text('暂无异常订单','No order exceptions') }}</p>
    <RouterLink v-for="row in rows" :key="row.id" :to="workbenchOrderLocation('exceptions',{orderNumber:row.orderNumber})" class="exception-item">
-    <div class="item-heading"><strong>{{ row.orderNumber }}</strong><span v-if="typeLabel(row)" class="type">{{ typeLabel(row) }}</span><ArrowUpRight :size="13" /></div>
+    <div class="item-heading"><strong>{{ row.orderNumber }}</strong><ExceptionTypeBadge class="type" :type="getTaskStatus(row,'exceptions')" compact /><ArrowUpRight :size="13" /></div>
     <p v-if="row.exception?.reason" class="reason" :title="row.exception.reason">{{ row.exception.reason }}</p>
    </RouterLink>
   </div>
@@ -51,11 +51,12 @@ function typeLabel(row:FopOrder){const status=getTaskStatus(row,'exceptions');re
 <style scoped>
 .exception-panel{min-width:0;background:var(--color-surface);border:1px solid var(--color-border);border-radius:8px;overflow:hidden;display:flex;flex-direction:column;height:420px}
 header{display:flex;align-items:center;justify-content:space-between;padding:18px 20px;border-bottom:1px solid var(--color-border)}
-h2{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:650;color:var(--color-text)}
-.count{font-size:11px;font-variant-numeric:tabular-nums;color:var(--color-text-secondary);font-weight:500}
+h2{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:650;color:color-mix(in srgb,var(--color-warning-text) 80%,var(--color-link))}
+h2>svg{color:var(--color-warning-text);flex-shrink:0}
+.count{font-size:13px;font-variant-numeric:tabular-nums;color:var(--color-exception-logistics_exception);font-weight:700}
 button{padding:4px;color:var(--color-text-secondary);border-radius:4px}button:hover{background:#5873d410}button:disabled{opacity:.5}
 .exception-list{flex:1;min-height:0;overflow:auto;padding:0 20px}.exception-item{display:block;padding:12px 0;border-bottom:1px solid var(--color-border)}.exception-item:hover{background:#5873d408}
 .item-heading{display:flex;align-items:center;gap:8px;min-width:0}.item-heading strong{font-size:12px;font-weight:550;color:var(--color-text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.item-heading>svg{margin-left:auto;flex-shrink:0;color:var(--color-text-secondary)}
-.type{font-size:10px;white-space:nowrap;color:var(--color-text-secondary);background:#8390a512;padding:2px 6px;border-radius:4px}.reason{font-size:11px;color:var(--color-text-secondary);margin-top:5px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.reason{font-size:11px;color:var(--color-text-secondary);margin-top:5px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
 .empty{height:100%;display:grid;place-content:center;font-size:12px;color:var(--color-text-secondary)}footer{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:11px 20px;border-top:1px solid var(--color-border);font-size:10px;color:var(--color-text-secondary)}footer a{display:flex;align-items:center;gap:4px;color:var(--color-text)}
 </style>

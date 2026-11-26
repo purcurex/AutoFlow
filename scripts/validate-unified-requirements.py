@@ -53,8 +53,8 @@ for marker in ['id="scope"','id="fop"','id="sync-api"','id="relations"','id="rea
  'queryWorkbenchInventoryBalance','同一时间','归档','解除','已提交','幂等','全款／押金',
  '未重新调用测试环境API','不要求包裹与耗用逐行对应','7项前端']:
  assert marker in s,marker
-# Allow the standard-space budget/recovery contract while retaining the concise six-section scope.
-assert 10000<len(s)<50000,'Unexpected FOP-only document size'
+# Allow current theme/avatar contracts while retaining the concise six-section scope.
+assert 10000<len(s)<55000,'Unexpected FOP-only document size'
 manifest=json.loads((DEST/'build-manifest.json').read_text())
 assert manifest['focus']=='fop-outstanding-requirements' and manifest['sections']==6
 assert not manifest['analyticsChapter'] and not manifest['queueScopeReview'] and manifest['upstreamCalled'] is False

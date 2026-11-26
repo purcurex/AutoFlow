@@ -35,7 +35,7 @@ function option(warehouse?: VolumeWarehouse) {
     legend: { type: byCarrier.value ? 'plain' : 'scroll', itemGap: 12, top: 2, left: 8, right: 10, icon: 'roundRect', itemWidth: 13, itemHeight: 5, textStyle: { color: axis.value, fontSize: 11 } },
     grid: { top: byCarrier.value ? 86 : 55, left: 12, right: 18, bottom: 65, containLabel: true },
     xAxis: { type: 'category', data: props.data.periods.map(p => p.label), axisTick: { show: false }, axisLine: { show: false }, axisLabel: { color: axis.value, fontSize: 11, hideOverlap: true } },
-    yAxis: { type: 'value', name: t('订单 / 单', 'Orders'), minInterval: 1, ...(props.split ? { max: maxY.value } : {}), splitLine: { lineStyle: { color: grid.value, type: 'dashed' } } },
+    yAxis: { type: 'value', minInterval: 1, ...(props.split ? { max: maxY.value } : {}), splitLine: { lineStyle: { color: grid.value, type: 'dashed' } } },
     dataZoom: [{ type: 'inside', ...latestVolumeWindow(chartGrain.value, props.data.periods), filterMode: 'none' }, { type: 'slider', ...latestVolumeWindow(chartGrain.value, props.data.periods), height: 16, bottom: 13, borderColor: 'transparent', backgroundColor: grid.value, fillerColor: '#94A5DD25', handleStyle: { color: '#A8B6DE', borderColor: '#A8B6DE' }, showDetail: false, brushSelect: false }],
     series: plotted.value.map(s => ({ id: s.id, name: s.label, type: s.kind === 'total' || chartGrain.value !== 'month' ? 'line' : 'bar', smooth: .2, symbol: 'circle', symbolSize: 5, barMaxWidth: 20,
       itemStyle: { color: volumeColor(s), borderRadius: [3, 3, 0, 0] }, lineStyle: { width: s.kind === 'total' ? 3 : 2 }, emphasis: { focus: 'series' }, data: warehouse ? s.warehouses[warehouse] : s.values })),

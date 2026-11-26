@@ -2,6 +2,7 @@
 import OrderTypeLabel from '@/components/autoflow/OrderTypeLabel.vue'
 import WorkbenchPagination from '@/components/autoflow/WorkbenchPagination.vue'
 import OrderExceptionLabel from '@/components/autoflow/OrderExceptionLabel.vue'
+import ExceptionTypeBadge from '@/components/autoflow/ExceptionTypeBadge.vue'
 import { vPickingNameTooltip } from '@/directives/picking-name-tooltip'
 import { vTaskTableLayout } from '@/directives/task-table-layout'
 import { skuPickingName } from '@/utils/product-display'
@@ -174,7 +175,7 @@ const descriptions = computed(() => ({
   allocation: text('已生成配货单但尚未齐套，可按选中订单查询即时库存，配货操作请在 FOP 完成。', 'Existing allocation documents awaiting stock completion. Query current inventory for selected orders and allocate in FOP.'),
   dispatch: text('已审核履约订单按实际跟踪号区分待建发运单、已建单未取号、已取号未同步；取消履约进入订单异常，部分履约及已履约进入已履约清单。', 'Approved orders grouped by current tracking; cancelled fulfillment moves to order exceptions, while partial and full fulfillment move to fulfilled orders.'),
   shipping: text('配货单已审核，按履约订单整单跟进打包及出库。', 'Approved allocations awaiting packing and whole-order outbound completion.'),
-  exceptions: text('按异常类型跟进；正常清单同时保留业务行并标红，问题解决且同步后取消异常。', 'Track exceptions alongside normal queues; resolved issues clear after synchronization.'),
+  exceptions: text('按异常类型跟进；正常清单同时保留业务行并标注异常类型，问题解决且同步后取消异常。', 'Track exceptions alongside normal queues; resolved issues clear after synchronization.'),
 }))
 const search = ref('')
 const data = ref<FopQueuePage>()
@@ -613,6 +614,7 @@ const { expandedProductIds, hasExpandableProducts, allProductsExpanded, setProdu
                 <td v-else-if="queue === 'procurement'" :data-label="statusHeading"><ProcurementStatus :stage="getTaskStatus(order, 'procurement')" :paid-at="order.procurementPaidAt" :now="currentTime" :progress="order.procurementProgress" :shipment="order.fulfillmentProgress.supplierShipment" /></td>
                 <td v-else-if="queue === 'dispatch' || isAllocation" :data-label="statusHeading"><DispatchStatus :queue="queue ?? undefined" :stage="queue === 'dispatch' ? getTaskStatus(order, 'dispatch') as FopOrder['dispatchTaskStatus'] : order.dispatchTaskStatus" :documents="order.dispatchDocuments" :shopify-sync="order.fulfillmentProgress.shopifySync" /></td>
                 <td v-else-if="queue === 'procurement_shipping'" :data-label="statusHeading"><SupplierShipmentStatus class="status-pill" :paid-at="order.procurementPaidAt" :now="currentTime" :shipment="order.fulfillmentProgress.supplierShipment === 'partial' ? 'partial' : 'pending'" /></td>
+                <td v-else-if="queue === 'exceptions' && canFilterTaskStatus('exceptions', getTaskStatus(order, 'exceptions'))" :data-label="statusHeading"><ExceptionTypeBadge :type="getTaskStatus(order, 'exceptions')" /></td>
                 <td v-else-if="hasStatus && !pendingOutbound" :data-label="statusHeading"><WorkbenchStatusBadge class="status-pill pending" tone="info">{{ statusLabel(order) }}</WorkbenchStatusBadge></td>
                 <td v-if="showOrderRemark" :data-label="text('订单备注', 'Order remark')"><span class="order-remark-text" v-picking-name-tooltip.quick="order.orderRemark || ''">{{ order.orderRemark }}</span></td>
                 <td v-if="!pendingOutbound" :data-label="text('客户名称', 'Customer name')"><button type="button" class="copy-customer" :aria-label="`${text('复制客户名称', 'Copy customer name')} ${order.customerName}`" :title="order.customerName || undefined" @click="copyOrderValue(order, 'customerName')"><span>{{ order.customerName }}</span><Check v-if="copiedValue === `customerName:${order.id}`" :size="14" /><Copy v-else :size="14" /></button></td>

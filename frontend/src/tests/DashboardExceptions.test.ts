@@ -4,6 +4,8 @@ import { createI18n } from 'vue-i18n'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import { beforeEach, expect, it, vi } from 'vitest'
 import DashboardExceptions from '@/components/charts/DashboardExceptions.vue'
+import OrderExceptionLabel from '@/components/autoflow/OrderExceptionLabel.vue'
+import { taskStatusOptions, taskStatusLabels } from '@/utils/workbench-status'
 import { getFopOrders } from '@/api/fop-orders'
 vi.mock('@/api/fop-orders',()=>({getFopOrders:vi.fn()}))
 async function setup(){const router=createRouter({history:createMemoryHistory(),routes:[{path:'/workbench/:role',name:'RoleWorkbench',component:{template:'<div />'}},{path:'/:pathMatch(.*)*',component:{template:'<div />'}}]});await router.push('/dashboard');return mount(DashboardExceptions,{global:{plugins:[router,createI18n({legacy:false,locale:'zh-CN',messages:{}})]}})}
@@ -25,6 +27,16 @@ it.each([['outbound_exception','出库异常','部分出库无法核实'],['allo
  const wrapper=await setup();await flushPromises()
  expect(wrapper.get('.type').text()).toBe(label);expect(wrapper.get('.reason').text()).toBe(reason)
  wrapper.unmount()
+})
+it.each(taskStatusOptions('exceptions'))('shares the %s color token with workbench order labels',async type=>{
+ vi.mocked(getFopOrders).mockResolvedValue({total:1,items:[{id:'x',orderNumber:'TO1',exception:{type,reason:'异常原因'}}]} as never)
+ const dashboard=await setup();await flushPromises()
+ const workbench=mount(OrderExceptionLabel,{props:{exception:{type,reason:'异常原因'}},global:{plugins:[createI18n({legacy:false,locale:'zh-CN',messages:{}})]}})
+ const selector=`[data-exception-type="${type}"]`
+ expect(dashboard.get(selector).text()).toBe(taskStatusLabels[type][0])
+ expect(dashboard.get(selector).attributes('style')).toBe(workbench.get(selector).attributes('style'))
+ expect(workbench.get(selector).attributes('title')).toBe('异常原因')
+ dashboard.unmount();workbench.unmount()
 })
 it('does not report an empty list when loading fails',async()=>{
  vi.mocked(getFopOrders).mockRejectedValue(new Error('denied'))

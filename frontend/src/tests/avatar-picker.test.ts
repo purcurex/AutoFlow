@@ -7,10 +7,12 @@ import { useUserStore } from '@/stores/user'
 import { authApi } from '@/api/auth'
 import { defaultAvatarUrl, englishDisplayName, presetAvatarSrc, PRESET_AVATARS } from '@/utils/user-display'
 import type { User } from '@/types'
+import { useTheme } from '@/composables/useTheme'
+import palettes from '@/theme/palettes.json'
 
 vi.mock('@/api/auth', () => ({ authApi: { updateProfile: vi.fn(), uploadAvatar: vi.fn() } }))
 const account = { id: 'test', username: 'admin@hzdrop.com', email: 'admin@hzdrop.com', avatarUrl: '' } as User
-beforeEach(() => { setActivePinia(createPinia()); vi.clearAllMocks(); useUserStore().user = { ...account } })
+beforeEach(() => { setActivePinia(createPinia()); vi.clearAllMocks(); useTheme().setPalette('blue'); useTheme().setTheme(false); useUserStore().user = { ...account } })
 
 it('shows a capitalized English name instead of the login email', () => {
   expect(englishDisplayName(account)).toBe('Admin')
@@ -73,6 +75,44 @@ it('switches to the women collection and persists a selected style through the e
   expect(wrapper.get('fieldset[aria-label="宠物插画"]').isVisible()).toBe(false)
   await wrapper.get('button[aria-label="紫韵女士"]').trigger('click'); await flushPromises()
   expect(authApi.updateProfile).toHaveBeenCalledWith({ avatarUrl: '/avatars/preset-violet.svg' })
+  expect(wrapper.get('button[aria-label="紫韵女士"]').attributes('aria-pressed')).toBe('true')
+  wrapper.unmount()
+})
+
+it.each(Object.keys(palettes) as (keyof typeof palettes)[])('adapts the selected preset to %s in both modes without saving or changing its identity', async palette => {
+  const store = useUserStore()
+  store.user = { ...account, avatarUrl: '/avatars/preset-mint.svg' }
+  const wrapper = mount(AvatarPicker, { global: { plugins: [i18n] } })
+  for (const dark of [false, true]) {
+    useTheme().setPalette(palette); useTheme().setTheme(dark)
+    await flushPromises()
+    expect(store.avatarUrl).toContain(`/avatars/themes/${palette}/${dark ? 'dark' : 'light'}/preset-mint.svg`)
+    expect(wrapper.get('button[aria-label="元气柴犬"] img').attributes('src')).toBe(store.avatarUrl)
+    expect(wrapper.get('button[aria-label="元气柴犬"]').attributes('aria-pressed')).toBe('true')
+    expect(store.user?.avatarUrl).toBe('/avatars/preset-mint.svg')
+  }
+  expect(authApi.updateProfile).not.toHaveBeenCalled()
+  expect(authApi.uploadAvatar).not.toHaveBeenCalled()
+  wrapper.unmount()
+})
+
+it('keeps uploaded photos unchanged when switching all themes', () => {
+  const store = useUserStore()
+  store.user = { ...account, avatarUrl: '/uploads/avatars/photo.png' }
+  const photo = store.avatarUrl
+  for (const palette of Object.keys(palettes) as (keyof typeof palettes)[]) for (const dark of [false, true]) {
+    useTheme().setPalette(palette); useTheme().setTheme(dark)
+    expect(store.avatarUrl).toBe(photo)
+  }
+  expect(authApi.updateProfile).not.toHaveBeenCalled()
+})
+
+it('opens the saved collection when the profile arrives after the picker mounts', async () => {
+  const store = useUserStore(); store.user = null
+  const wrapper = mount(AvatarPicker, { global: { plugins: [i18n] } })
+  store.user = { ...account, avatarUrl: '/avatars/preset-violet.svg' }
+  await flushPromises()
+  expect(wrapper.get('fieldset[aria-label="靓丽女士"]').isVisible()).toBe(true)
   expect(wrapper.get('button[aria-label="紫韵女士"]').attributes('aria-pressed')).toBe('true')
   wrapper.unmount()
 })

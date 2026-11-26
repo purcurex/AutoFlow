@@ -1463,6 +1463,8 @@ it('shows a stock exception in the existing order table with stock identity and 
  expect(record.find('.recipient-name').exists()).toBe(false)
  expect(record.text()).toContain('Stock Customer')
  expect(record.text()).toContain('已支付，收款状态为空')
+ const statusBadge=record.get('[data-label="异常类型"] [data-exception-type="logistics_exception"]')
+ expect(statusBadge.attributes('style')).toBe(record.get('.order-exception-label [data-exception-type="logistics_exception"]').attributes('style'))
 })
 
 it.each(['sales','dispatch','procurement','allocation','warehouse'] as const)('shows an exception type below the normal %s order number',async role=>{
@@ -1472,5 +1474,5 @@ it.each(['sales','dispatch','procurement','allocation','warehouse'] as const)('s
  const {wrapper}=await setup('?queue='+queue,role)
  const badge=wrapper.get('tbody .order-cell .order-exception-label')
  expect(badge.text()).toBe('出库异常')
- expect(badge.find('[data-tone="danger"]').exists()).toBe(true)
+ expect(badge.find('[data-exception-type="outbound_exception"]').exists()).toBe(true)
 })

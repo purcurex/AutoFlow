@@ -97,11 +97,11 @@
     },
     {
       "path": "backend/src/modules/workbench-replica/collected-workbench.service.ts",
-      "sha256": "578a6f9d53efa6e66e9046196a6d5571be2939e48aab9a596a63614ab0b81b3d"
+      "sha256": "27e09fbcf91618fca52ebc0c6976df89e16b46c216bc881219fbfb5e71693653"
     },
     {
       "path": "backend/src/modules/workbench-replica/dashboard-analytics-query.ts",
-      "sha256": "68b54e5ce9c568622077696ded407ef262bc411c8314626512d9f5f9e1d812bb"
+      "sha256": "6cb47aef671094a7fda858cd2409932393d3274eeef924bbdb1669bc7f407f24"
     },
     {
       "path": "backend/src/modules/workbench-replica/order-progress.ts",
@@ -125,7 +125,7 @@
     },
     {
       "path": "docs/requirements/api-integration-verification-20261116.json",
-      "sha256": "f02514e14afa93509e3b30f4000bf408791484ed285a09a1a992082a74a360dd"
+      "sha256": "c3d960f36fd006e64bdd573d265c0f5b63085d245320f5cf45ca7df7ceaa6bcf"
     },
     {
       "path": "frontend/src/components/autoflow/PurchaseReturnOrdersTable.vue",
@@ -137,7 +137,7 @@
     },
     {
       "path": "frontend/src/views/autoflow/FopOrdersView.vue",
-      "sha256": "0666fce6e55a851597eae94c3b5581a84c4f3fc0860fa96a47d1568362fac533"
+      "sha256": "5c50919dc14fc966a772f989a84a3cc72eeb41344b6f4ea408130dd4df78bb18"
     },
     {
       "path": "frontend/src/views/autoflow/PurchaseGroupsView.vue",

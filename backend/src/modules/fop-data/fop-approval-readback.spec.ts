@@ -11,6 +11,8 @@ it('only merges source-confirmed state, preserving existing business fields',asy
  expect(update[0]).toContain('raw=raw||');expect(update[0]).toContain('display=display||')
  expect(JSON.parse(update[1][2])).toEqual(expect.objectContaining({billstatus:'C',hzkj_orderstatus:'3'}))
  expect(JSON.parse(update[1][3])).not.toHaveProperty('amount')
+ expect(JSON.parse(update[1][3])).not.toHaveProperty('dispatchDocuments')
+ expect(JSON.parse(update[1][3])).not.toHaveProperty('nativeFulfillmentProgress')
 })
 it.each([{documentId:'other'},{orderId:'other'},{companyId:'other'},{page:{items:[{...source,billstatus:'B'}]}}])('does not persist an unconfirmed proof %j',async change=>{
  const db:any={transaction:jest.fn()};await expect(persistApprovalReadback(db,{...proof,...change})).rejects.toThrow();expect(db.transaction).not.toHaveBeenCalled()

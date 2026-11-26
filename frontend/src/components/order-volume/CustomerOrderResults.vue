@@ -82,7 +82,7 @@ function trendOption(metric: Metric) {
     legend: { top: 0, left: 4, icon: 'roundRect', itemWidth: 13, itemHeight: 6, textStyle: { color: axis.value, fontSize: 10 } },
     grid: { left: 10, right: 18, top: 42, bottom: 55, containLabel: true },
     xAxis: { type: 'category', data: props.data.periods.map(p => p.label), axisTick: { show: false }, axisLine: { show: false }, axisLabel: { color: axis.value, fontSize: 10, hideOverlap: true } },
-    yAxis: { type: 'value', name: metric === 'amount' ? '$' : t('单', 'Orders'), ...(metric === 'orders' ? { minInterval: 1 } : {}), splitLine: { lineStyle: { color: grid.value, type: 'dashed' } } },
+    yAxis: { type: 'value', ...(metric === 'orders' ? { minInterval: 1 } : {}), splitLine: { lineStyle: { color: grid.value, type: 'dashed' } } },
     dataZoom: [{ type: 'slider', ...latestVolumeWindow('day', props.data.periods), filterMode: 'none', height: 16, bottom: 8, borderColor: 'transparent', backgroundColor: grid.value, fillerColor: '#94A5DD25', handleStyle: { color: '#A8B6DE' }, showDetail: false, brushSelect: false }],
     series: chartGroups.value.map(group => ({ id: group.id, name: group.label, type: 'line', smooth: .2, symbol: 'circle', symbolSize: 4, itemStyle: { color: group.color }, lineStyle: { width: 2 }, data: metricValues(total.value, metric, group.warehouse) })),
   }

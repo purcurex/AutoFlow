@@ -241,6 +241,47 @@ it('returns only time aggregates for an authorized dashboard trend',async()=>{
  expect(result).not.toHaveProperty('rows')
  expect(db.query.mock.calls[0][1].slice(-1)[0]).toBe('70')
 })
+it('coalesces identical trend reads and reuses their SQL result while rechecking authorization',async()=>{
+ const {service,db,contextSpy}=setup()
+ db.query.mockResolvedValue([{analytics:{rows:[{id:'2026-11',orderCount:2}],orderCount:2}}])
+ const args={...query,chartId:'order_volume' as const,dimension:'person' as const,id:'70',grain:'month' as const}
+ const [first,second]=await Promise.all([service.dashboardTrend('u',args),service.dashboardTrend('u',args)])
+ expect(db.query).toHaveBeenCalledTimes(1)
+ first.points[0].orderCount=999
+ expect(second.points[0].orderCount).toBe(2)
+ expect((await service.dashboardTrend('u',args)).points[0].orderCount).toBe(2)
+ expect(db.query).toHaveBeenCalledTimes(1)
+ expect(contextSpy).toHaveBeenCalledTimes(6)
+})
+it('invalidates trend cache by account, query, source revision and expiry',async()=>{
+ const now=jest.spyOn(Date,'now').mockReturnValue(1000)
+ try{
+ const {service,db,context}=setup()
+ db.query.mockResolvedValue([{analytics:{rows:[],orderCount:2}}])
+ const args={...query,chartId:'order_volume' as const,dimension:'person' as const,id:'70',grain:'month' as const}
+ await service.dashboardTrend('u',args);await service.dashboardTrend('u',args)
+ expect(db.query).toHaveBeenCalledTimes(1)
+ await service.dashboardTrend('other',args)
+ await service.dashboardTrend('u',{...args,grain:'day'})
+ context.signature='new-source';await service.dashboardTrend('u',args)
+ expect(db.query).toHaveBeenCalledTimes(4)
+ now.mockReturnValue(31001);await service.dashboardTrend('u',args)
+ expect(db.query).toHaveBeenCalledTimes(5)
+ }finally{now.mockRestore()}
+})
+it('never serves a cached trend after access is revoked or changes during the read',async()=>{
+ const {service,db,context,contextSpy}=setup()
+ db.query.mockResolvedValue([{analytics:{rows:[],orderCount:2}}])
+ const args={...query,chartId:'order_volume' as const,dimension:'person' as const,id:'70',grain:'month' as const}
+ await service.dashboardTrend('u',args)
+ contextSpy.mockResolvedValueOnce(context).mockResolvedValueOnce({...context,signature:'revoked'})
+ await expect(service.dashboardTrend('u',args)).rejects.toThrow('Permission or source changed')
+ expect(db.query).toHaveBeenCalledTimes(1)
+ context.user={role:'user',businessRole:'salesperson',businessEmployeeId:'71',businessDepartmentId:'d2',workbenchRoles:['sales']}
+ context.org.employeeIds=['71'];context.org.employeeId='71'
+ await expect(service.dashboardTrend('u',args)).rejects.toThrow()
+ expect(db.query).toHaveBeenCalledTimes(1)
+})
 it('rejects personal trend requests outside the current chart record grant',async()=>{
  const {service,context,db}=setup()
  context.user={role:'user',businessRole:'salesperson',businessEmployeeId:'70',businessDepartmentId:'d1',workbenchRoles:['sales']}

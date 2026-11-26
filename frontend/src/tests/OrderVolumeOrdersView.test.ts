@@ -16,6 +16,6 @@ it('retains customer dates in workbench details without inventing a year or time
   expect(query).toMatchObject({ from: '2025-12-31', to: '2026-01-02', seriesId: 'other', workbenchRole: 'sales' })
   expect(query).not.toHaveProperty('grain'); expect(query).not.toHaveProperty('year')
   expect(wrapper.get('.ov-applied-filters').text()).toContain('2025-12-31 — 2026-01-02')
-  expect(wrapper.find('tfoot').text()).toContain('0 笔订单')
+  expect(wrapper.find('tfoot').text()).toContain('0 笔')
   wrapper.unmount()
 })

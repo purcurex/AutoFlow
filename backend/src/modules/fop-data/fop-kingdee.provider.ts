@@ -103,9 +103,18 @@ export class KingdeeFopDataProvider extends FopDataProvider {
     this.manualApprovalProvider ??= new KingdeeFopDataProvider({ get: key => key === 'FOP_QUERIES_PAUSED' ? 'false' : key === 'FOP_MANUAL_APPROVAL_CONTEXT' ? 'true' : this.config.get(key) }, this.request, this.resolveBinding)
     return this.manualApprovalProvider
   }
+  private nativeApprovalInstance?: KingdeeNativeApprovalAdapter
   private nativeApprovalAdapter() {
-    return new KingdeeNativeApprovalAdapter(this.organizationIds, this.config.get('FOP_KINGDEE_APPROVAL_ORG_NUMBER') || '',
-      (key, body, mutate, idempotencyKey) => this.performCall(key, body, undefined, !mutate, idempotencyKey))
+    if (this.nativeApprovalInstance) return this.nativeApprovalInstance
+    const origin = new URL(this.config.get('FOP_KINGDEE_TOKEN_URL')!).origin
+    const routes: Record<string, string> = {
+      FOP_APPROVAL_ORDER_LIST_URL: '/kapi/v2/hzkj/hzkj_ordercenter/hzkj_orders/queryOrderList',
+      FOP_APPROVAL_ALLOCATION_LIST_URL: '/kapi/v2/hzkj/hzkj_ordercenter/hzkj_alloc_bill/queryAllocation',
+      FOP_APPROVAL_DISPATCH_LIST_URL: '/kapi/v2/hzkj/hzkj_logistics/hzkj_deliver_bill/queryDispatch',
+    }
+    const transport = new KingdeeFopDataProvider({ get: key => routes[key] ? origin + routes[key] : this.config.get(key) }, this.request, this.resolveBinding)
+    return this.nativeApprovalInstance = new KingdeeNativeApprovalAdapter(this.organizationIds, this.config.get('FOP_KINGDEE_APPROVAL_ORG_NUMBER') || '',
+      (key, body, mutate, idempotencyKey) => transport.performCall(key, body, undefined, !mutate, idempotencyKey))
   }
   private inventoryProvider?: KingdeeFopDataProvider
   private supplierSourceProvider?: KingdeeFopDataProvider
@@ -125,7 +134,7 @@ export class KingdeeFopDataProvider extends FopDataProvider {
     if(this.config.get('FOP_MANUAL_INVENTORY_ENABLED')!=='true') throw new FopIntegrationUnavailableError('fop_feature_not_configured')
     if(!this.inventoryProvider){
       const origin=new URL(this.config.get('FOP_KINGDEE_TOKEN_URL')!).origin
-      this.inventoryProvider=new KingdeeFopDataProvider({get:key=>key==='FOP_QUERIES_PAUSED'?'false':key==='FOP_NATIVE_RESERVED_INVENTORY_URL'?this.config.get(key)||origin+'/kapi/v2/hzkj/hzkj_ordercenter/hzkj_stock_inventory_data/queryWorkbenchReservedStock':key==='FOP_NATIVE_CURRENT_INVENTORY_URL'?this.config.get(key)||origin+'/kapi/v2/hzkj/im/im_inv_realbalance/queryWorkbenchInventoryBalance':this.config.get(key)},this.request,this.resolveBinding)
+      this.inventoryProvider=new KingdeeFopDataProvider({get:key=>key==='FOP_QUERIES_PAUSED'?'false':key==='FOP_NATIVE_RESERVED_INVENTORY_URL'?this.config.get(key)||origin+'/kapi/v2/hzkj/hzkj_ordercenter/hzkj_stock_inventory_data/queryWorkbenchReservedStock':key==='FOP_NATIVE_CURRENT_INVENTORY_URL'?this.config.get(key)||origin+'/kapi/v2/hzkj/ocbsoc/customer-stock/query':this.config.get(key)},this.request,this.resolveBinding)
     }
     return this.inventoryProvider.performCall(kind==='reserved'?'FOP_NATIVE_RESERVED_INVENTORY_URL':'FOP_NATIVE_CURRENT_INVENTORY_URL',body)
   }

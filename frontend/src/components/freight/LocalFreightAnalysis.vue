@@ -74,7 +74,7 @@ async function load(force=false){
  const cached=peekLocalFreight(submitted)
  if(cached)data.value={...cached,query:submitted,series:cached.series.map(s=>submitted.dimension==='warehouse'?{...s,label:warehouseName(s.label)}:s)}
  try{const result=await getLocalFreight(submitted,{force});if(id===request){data.value={...result,query:submitted,series:result.series.map(s=>submitted.dimension==='warehouse'?{...s,label:warehouseName(s.label)}:s)};refresh.updated(result)}}
- catch(cause){if(id===request){if(isWorkbenchScopeError(cause)){data.value=undefined;warehouseOptions.value=[]}error.value=t('运费数据加载失败，请重试或检查查询权限。','Unable to load freight data. Retry or check access.')}}
+ catch(cause){if(id===request){if(isWorkbenchScopeError(cause)){data.value=undefined;warehouseOptions.value=[]}error.value=t('运费加载失败，请重试。','Unable to load freight data. Please retry.')}}
  finally{if(id===request)busy.value=false}
 }
 watch(year,v=>{weekOf.value=v===currentYear.value?today.value:`${v}-12-31`},{flush:'sync'})
@@ -103,7 +103,7 @@ function chart(group?:string){
  const rows=group?d.series.filter(s=>s.id===group):d.series
  return {tooltip:{trigger:'axis',confine:true,formatter:(items:any[])=>items.map(x=>`${escape(String(x.seriesName))}: ${compare.value?comparisonText(rows[x.seriesIndex]?.values[x.dataIndex]):money(x.value??null)}`).join('<br>')},
   legend:{type:'scroll',bottom:0},grid:{left:75,right:24,top:25,bottom:65},xAxis:{type:'category',data:d.periods.map(p=>p.label)},
-  yAxis:{type:'value',name:compare.value?`${t('差额','Change')} · ${d.currency}`:d.currency,axisLabel:{formatter:(v:number)=>v.toLocaleString(String(locale.value))}},
+  yAxis:{type:'value',axisLabel:{formatter:(v:number)=>v.toLocaleString(String(locale.value))}},
   series:rows.map(s=>({id:s.id,name:s.label,type:group&&!compare.value?'line':'bar',...freightBarLayout,data:s.values.map(v=>compare.value?v.delta===null?null:Number(v.delta):Number(v.amount)),emphasis:{focus:'series'}}))}
 }
 const option=computed(()=>ownerChart.value?.option??chart()),trend=computed(()=>chart(selected.value)),selectedName=computed(()=>data.value?.series.find(s=>s.id===selected.value)?.label??'')
