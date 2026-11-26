@@ -398,7 +398,7 @@ it.each(['order_volume','customer_orders','department_receipts','salesperson_rec
  const w=mount(LocalDashboardAnalytics,{props:{chartId,title:'分析'}});await flushPromises()
  expect(get).toHaveBeenCalledTimes(1)
  await w.get('[aria-label="业务部门"]').setValue('d2');await flushPromises()
- expect(get).toHaveBeenCalledTimes(2);expect(get.mock.lastCall?.[0].departmentId).toBe('d2')
+ expect(get).toHaveBeenCalledTimes(chartId==='registrations'?3:2);expect(get.mock.calls.some(([q])=>q.departmentId==='d2')).toBe(true)
  if(chartId!=='registrations'){
   const warehouse=w.get('select[aria-label="仓库"]')
   expect(warehouse.text()).toContain('HangZhou');expect(warehouse.text()).toContain('ShenZhen')
@@ -645,5 +645,28 @@ it('preserves business filters and exits period comparison for the six-month que
  expect(get).toHaveBeenCalledTimes(1)
  expect(get.mock.lastCall?.[0]).toMatchObject({from:'2026-06-01',to:'2026-11-25',departmentId:'d1',warehouseCode:'HangZhou',entityType:'stock',comparison:undefined})
  expect((w.get('select[aria-label="对比方式"]').element as HTMLSelectElement).value).toBe('')
+ w.unmount()
+})
+
+it('separates the center scale and shares single-department peaks between departments',async()=>{
+ const row=(count:number)=>({...value.rows[0],dimension:'day',id:'2026-11-01',label:'2026-11-01',orderCount:count,registrationCount:count})
+ const departments=[{id:'center',name:'营销中心'},...['一','二','三','四'].map((name,i)=>({id:`d${i+1}`,name:`业务${name}部`}))]
+ get.mockImplementation(async(query:any)=>({...value,chartId:'registrations',defaultDepartmentId:'center',rows:[row(({d1:4,d2:1,d3:2,d4:3} as Record<string,number>)[query.departmentId]??10)],departments}))
+ const w=mount(LocalDashboardAnalytics,{props:{chartId:'registrations',title:'注册统计'}})
+ await flushPromises()
+ const chart=()=>w.findComponent({name:'EChart'}).props('option')
+ expect(chart().yAxis).toMatchObject({min:0,max:12,interval:2})
+ await w.get('select[aria-label="业务部门"]').setValue('d2')
+ await vi.advanceTimersByTimeAsync(1000);await flushPromises()
+ const departmentAxis=chart().yAxis
+ expect(departmentAxis).toMatchObject({min:0,max:5,interval:1})
+ expect(chart().series[0].data).toEqual([1])
+ await w.get('select[aria-label="业务部门"]').setValue('d3')
+ await vi.advanceTimersByTimeAsync(1000);await flushPromises()
+ expect(chart().yAxis).toEqual(departmentAxis)
+ expect(chart().series[0].data).toEqual([2])
+ await w.get('select[aria-label="业务部门"]').setValue('center')
+ await vi.advanceTimersByTimeAsync(1000);await flushPromises()
+ expect(chart().yAxis).toMatchObject({max:12,interval:2})
  w.unmount()
 })

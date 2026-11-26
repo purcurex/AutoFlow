@@ -75,7 +75,6 @@ function queueLink(value: string) { return { name: 'RoleWorkbench', params: { ro
       <div class="workbench-navigation"><nav class="role-tabs" :aria-label="text('岗位工作台', 'Role workbenches')"><RouterLink v-for="item in roles" :key="item" :to="roleLink(item)" :class="{ active: role === item }" :aria-current="role === item ? 'page' : undefined"><component :is="icons[item]" :size="19" /><span>{{ workbenchNames[item][zh ? 0 : 1] }}</span></RouterLink></nav></div>
       <template v-if="allowed && role">
         <div class="workbench-queue-row"><nav class="workbench-queues" :aria-label="text('工作台功能', 'Workbench functions')">
-          <RouterLink v-if="role === 'sales'" :to="queueLink('progress')" :class="{ active: choice === 'progress' }">{{ text('履约进度查询', 'Order progress') }}</RouterLink>
           <RouterLink v-if="role === 'warehouse'" :to="queueLink('receipt_notices')" :class="{ active: choice === 'receipt_notices' }">{{ text('待入库清单', 'Pending inbound') }}</RouterLink>
           <template v-for="item in workbenchQueues[role]" :key="item">
             <RouterLink v-if="role === 'sales' && item === 'exceptions'" :to="queueLink('rma')" :class="{ active: choice === 'rma' }">{{ text('RMA售后清单', 'RMA after-sales') }}</RouterLink>
@@ -86,7 +85,8 @@ function queueLink(value: string) { return { name: 'RoleWorkbench', params: { ro
           </template>
           <RouterLink v-if="role === 'procurement' || role === 'warehouse'" :to="queueLink('purchase_returns')" :class="{ active: choice === 'purchase_returns' }">{{ text('采购退货清单', 'Purchase returns') }}</RouterLink>
           <RouterLink v-if="role !== 'sales'" :to="queueLink('completed')" :class="{ active: choice === 'completed' }">{{ completedNames[role][zh ? 0 : 1] }}</RouterLink>
-          <RouterLink v-if="role === 'sales' && chartVisible('sales_performance')" :to="queueLink('performance')" :class="{ active: choice === 'performance' }">{{ text('业绩收入与毛利', 'Revenue and profit') }}</RouterLink>
+          <!-- Analytics implementation and its permission checks remain available; navigation is hidden for all accounts. -->
+          <RouterLink v-if="role === 'sales'" :to="queueLink('progress')" :class="{ active: choice === 'progress' }">{{ text('履约进度查询', 'Order progress') }}</RouterLink>
         </nav><div ref="refreshTarget" class="workbench-queue-refresh" /></div>
         <div v-if="!analyticsAllowed" class="access-message" role="alert">{{ text('暂无此功能权限，请选择其他工作台功能。', 'This feature is not available for your account.') }}</div>
         <WorkbenchAnalytics v-else-if="['performance','receipts'].includes(String(choice))" :key="String(choice)" :page="String(choice)" />

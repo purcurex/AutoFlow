@@ -153,7 +153,7 @@
     },
     {
       "path": "frontend/src/views/autoflow/WorkbenchView.vue",
-      "sha256": "19b51540276bae66be17bbe7705e5cde2ef514198db5b071b42b2e1842ac52a4"
+      "sha256": "642e1d0fa6daa2cb46aab304fddba96c18fb6d5a4975992490d482bf996ec40f"
     },
     {
       "path": "scripts/build-standalone-field-matrix.py",

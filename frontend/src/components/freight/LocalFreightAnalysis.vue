@@ -10,7 +10,7 @@ import FreightTrendDialog from './FreightTrendDialog.vue'
 import FreightDetailsDialog from './FreightDetailsDialog.vue'
 import { getLocalFreight, peekLocalFreight, type LocalFreightQuery, type LocalFreightResult, type FreightDimension, type FreightMeasure, type LocalFreightDetailsQuery } from '@/api/local-freight'
 import { businessYears } from '@/utils/business-years'
-import { formatCurrency } from '@/utils/currency'
+import { formatCurrency, formatChartCurrency } from '@/utils/currency'
 import { onSessionReset } from '@/utils/session'
 import { useAnalyticsRefresh } from '@/composables/useAnalyticsRefresh'
 import { salespersonGroupedChart } from '@/utils/salesperson-revenue-chart'
@@ -44,6 +44,12 @@ const data=ref<LocalFreightResult>(),busy=ref(false),error=ref(''),selected=ref(
 const dimensions=computed(()=>[{id:'carrier',name:t('物流服务商','Carrier')},{id:'channel',name:t('物流渠道','Channel')},{id:'owner',name:t('业务员','Salesperson')},{id:'department',name:t('业务部门','Department')},{id:'country',name:t('国家','Country')},{id:'warehouse',name:t('仓库','Warehouse')},{id:'customer',name:t('客户','Customer')}])
 const query=computed<LocalFreightQuery>(()=>({grain:grain.value,year:year.value,...grain.value==='week'?{weekOf:weekOf.value}:{},...warehouse.value?{warehouse:warehouse.value}:{},...(shortcut.value==='last6months'?{range:'last6months' as const}:shortcut.value?{monthOf:selectedMonth.value}:{}),currency:'CNY',dimension:dimension.value}))
 const money=(n:string|number|null)=>n===null?'—':formatCurrency(Number(n),data.value?.currency??'CNY',String(locale.value))
+const averageUsd=computed(()=>{
+ const raw=data.value?.averagePerBillUsd
+ if(raw===undefined||raw===null||!String(raw).trim())return ''
+ const value=Number(raw)
+ return Number.isFinite(value)?formatChartCurrency(value):''
+})
 const number=(n:string|number)=>Number(n).toLocaleString(String(locale.value),{maximumFractionDigits:3})
 const percent=(n:number|null)=>n===null?'—':`${n>0?'+':''}${n.toFixed(2)}%`
 const warehouseOptions=ref<{id:string;name:string}[]>([])
@@ -140,7 +146,7 @@ const displayPeriods=computed(()=>data.value?.periods.map((p,index)=>({...p,inde
     <div class="freight-metric freight-metric-primary"><dt>{{t('实际运费合计','Actual freight')}}</dt><dd data-freight-total>{{money(data.totals.amount)}}</dd></div>
     <div class="freight-metric" :title="t('当前范围内计入运费统计的已确认发运单','Confirmed dispatches included in this freight total')"><dt>{{t('单量','Dispatches')}}</dt><dd>{{number(data.billCount)}} <span class="metric-unit">{{t('单','bills')}}</span></dd></div>
     <div class="freight-metric" :title="t('汇总已填写有效计费重量的单据，未填写的重量不计入','Sum of known valid chargeable weights; missing weights are excluded')"><dt>{{t('合计计费重量','Chargeable weight')}}</dt><dd>{{number(data.weightKg)}} <span class="metric-unit">kg</span></dd><span class="metric-detail">{{t('计重','Weighed')}} {{number(data.weightBillCount)}} / {{number(data.billCount)}} {{t('单','bills')}}</span></div>
-    <div class="freight-metric"><dt>{{t('平均每单运费','Cost per dispatch')}}</dt><dd>{{money(data.averagePerBill)}}</dd></div>
+    <div class="freight-metric"><dt>{{t('平均每单运费','Cost per dispatch')}}</dt><dd>{{money(data.averagePerBill)}}</dd><span v-if="averageUsd" class="metric-detail" data-average-freight-usd>{{averageUsd}}</span></div>
     <div class="freight-metric" :title="t('有有效计费重量单据的运费合计 ÷ 对应计费重量合计','Freight cost of weight-known dispatches ÷ their total chargeable weight')"><dt>{{t('每公斤运费','Cost per kg')}}</dt><dd>{{money(data.costPerKg)}}</dd></div>
    </dl>
    <div class="freight-notes">

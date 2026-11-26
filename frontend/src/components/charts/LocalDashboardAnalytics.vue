@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { registrationAxis, registrationReferences, mergeRegistrationReferences } from '@/utils/registration-axis'
 import ChartUpdateStatus from '@/components/charts/ChartUpdateStatus.vue'
 import { peekAnalyticsQuery } from '@/utils/analytics-cache'
 import { isWorkbenchScopeError } from '@/api/workbench-dashboard'
@@ -100,7 +101,8 @@ const rows=computed(()=>{
 const comparisonPeople=computed(()=>!!result.value?.comparison?.available&&salespersonGrouping.value)
 const hasData=computed(()=>!!result.value?.comparison?.available||(groupedSalespeople.value?salespersonRows(result.value?.rows??[]):rows.value).some(r=>monetary.value?r.amount!==null:!registration.value&&metric.value==='quantity'?r.quantity!==null:true))
 const comparisonOption=computed(()=>result.value?comparisonChart(result.value,dimension.value,metric.value,monetary.value):undefined)
-const option=computed(()=>{
+const registrationReference=ref<LocalAnalyticsResult>()
+const baseOption=computed(()=>{
  const compared=comparisonOption.value
  if(compared){const {trendTargets:_targets,...chart}=compared;return chart}
  if(salespersonChart.value)return salespersonChart.value.option
@@ -131,6 +133,12 @@ const option=computed(()=>{
  series:currencies.map(code=>({name:monetary.value?(currencies.length===1?'订单金额':`订单金额（${code}）`):code,type:['day','month'].includes(dimension.value)?'line' as const:'bar' as const,smooth:true,barMaxWidth:32,...(monetary.value&&code==='USD'?{tooltip:{valueFormatter:usd}}:{}),
  data:ids.map(id=>{const r=rows.value.find(r=>r.id===id&&(!monetary.value||r.currency===code));const value=r?(monetary.value?r.amount:registration.value?r.registrationCount??r.orderCount:metric.value==='quantity'?r.quantity:r.orderCount):null;return value===null?null:Number(value)})}))}
 })
+const option=computed(()=>{
+ const chart=baseOption.value
+ if(!registration.value||!registrationReference.value)return chart
+ return {...chart,grid:{left:65,right:25,bottom:70,top:40,containLabel:false},
+  yAxis:{...(chart.yAxis as Record<string,unknown>),...registrationAxis(registrationReference.value,dimension.value)}} as typeof chart
+})
 const selectedTrend=ref<{target:TrendTarget;query:LocalAnalyticsQuery}>()
 const trendMetric=computed<TrendMetric>(()=>monetary.value?'amount':registration.value?'registrations':metric.value==='quantity'?'quantity':'orders')
 const trendMetricLabel=computed(()=>monetary.value?'订单金额':registration.value?'注册客户数':metric.value==='quantity'?'商品件数':'订单数')
@@ -160,11 +168,23 @@ async function load(force=false,automatic=false){
  const request=++generation;busy.value=true;error.value=''
  const submitted=automatic&&appliedQuery?appliedQuery:{chartId:props.chartId,from:from.value,to:to.value,comparison:comparison.value||undefined,departmentId:department.value||undefined,warehouseCode:registration.value?undefined:warehouse.value||undefined,currency:monetary.value?'USD':undefined,entityType:registration.value?undefined:entity.value}
  const cached=peekAnalyticsQuery<LocalAnalyticsResult>(props.workbench?'/workbench/analytics/workbench':'/workbench/analytics/dashboard',submitted)
- if(cached){result.value={...cached,rows:cached.rows.map(r=>r.dimension==='warehouse'?{...r,label:warehouseName(r.label||r.id)}:r)};filters.value=cached;summaryOnly.value=cached.summaryOnly;appliedQuery={...submitted}}
- try{const value=await getLocalDashboardAnalytics(submitted,{force},props.workbench);if(request!==generation)return;appliedQuery={...submitted};chartRefresh.updated(value);result.value={...value,rows:value.rows.map(r=>r.dimension==='warehouse'?{...r,label:warehouseName(r.label||r.id)}:r)};filters.value=value;if(!department.value)department.value=value.defaultDepartmentId??value.departments.find(d=>d.name==='营销中心')?.id??value.departments[0]?.id??'';summaryOnly.value=value.summaryOnly;if(!dimensions.value.some(d=>d.id===dimension.value))dimension.value=dimensions.value[0]!.id}
+ const referenceQueries=registration.value?registrationReferences(submitted,filters.value.departments):[]
+ const endpoint=props.workbench?'/workbench/analytics/workbench':'/workbench/analytics/dashboard'
+ const cachedReferences=referenceQueries.map(query=>peekAnalyticsQuery<LocalAnalyticsResult>(endpoint,query))
+ if(cached&&(!registration.value||cachedReferences.every(Boolean))){
+  if(registration.value)registrationReference.value=mergeRegistrationReferences(cachedReferences as LocalAnalyticsResult[])
+  result.value={...cached,rows:cached.rows.map(r=>r.dimension==='warehouse'?{...r,label:warehouseName(r.label||r.id)}:r)};filters.value=cached;summaryOnly.value=cached.summaryOnly;appliedQuery={...submitted}
+ }
+ try{
+ const dataRequest=getLocalDashboardAnalytics(submitted,{force},props.workbench)
+ const references=referenceQueries.map(query=>query.departmentId===submitted.departmentId?dataRequest:getLocalDashboardAnalytics(query,{force},props.workbench))
+ const [value,referenceValues]=await Promise.all([dataRequest,Promise.all(references)])
+ if(request!==generation)return
+ if(registration.value)registrationReference.value=mergeRegistrationReferences(referenceValues)
+ appliedQuery={...submitted};chartRefresh.updated(value);result.value={...value,rows:value.rows.map(r=>r.dimension==='warehouse'?{...r,label:warehouseName(r.label||r.id)}:r)};filters.value=value;if(!department.value)department.value=value.defaultDepartmentId??value.departments.find(d=>d.name==='营销中心')?.id??value.departments[0]?.id??'';summaryOnly.value=value.summaryOnly;if(!dimensions.value.some(d=>d.id===dimension.value))dimension.value=dimensions.value[0]!.id}
  catch(e){if(request===generation){if(isWorkbenchScopeError(e))result.value=undefined;const failure=e as {code?:string;response?:{data?:{code?:string}}};const code=failure?.code??failure?.response?.data?.code;error.value=code==='comparison_window_not_captured'?'数据尚未覆盖所选对比周期，请选择较早周期。':registration.value&&code==='local_analytics_capture_unavailable'?'客户注册数据尚未完成本地采集，请稍后重试。':registration.value&&code==='registration_window_not_captured'?'所选创建日期尚未完整采集，请调整日期或补采。':'分析数据加载失败，请重试。'}}finally{if(request===generation)busy.value=false}
 }
-const stop=onSessionReset(()=>{generation++;selectedTrend.value=undefined;department.value='';warehouse.value='';result.value=undefined;filters.value={departments:[],warehouses:[],currencies:[]};error.value='';busy.value=false})
+const stop=onSessionReset(()=>{generation++;selectedTrend.value=undefined;department.value='';warehouse.value='';result.value=undefined;registrationReference.value=undefined;filters.value={departments:[],warehouses:[],currencies:[]};error.value='';busy.value=false})
 onBeforeUnmount(()=>{generation++;stop()})
 watch(()=>[props.chartId,props.revision],()=>load(!!props.revision),{immediate:true})
 watch(department,value=>{if(result.value?.personalDepartmentId&&value!==result.value.personalDepartmentId)warehouse.value=''}, {flush:'sync'})
@@ -187,7 +207,7 @@ watch(department,value=>{if(result.value?.personalDepartmentId&&value!==result.v
   <label v-if="comparison">选择{{ comparison==='week'?'周':'月份' }}<input v-model="comparisonAnchor" type="date" aria-label="对比周期日期" :min="availableStart" :max="availableEnd" @change="chooseComparison"></label>
   <button :disabled="busy">查询</button>
  </form><p v-if="error && result" class="ov-note" role="alert">查询未完成，当前显示上次查询结果。</p>
- <div class="analysis-controls"><label>展示维度<select v-model="dimension" aria-label="展示维度"><option v-for="d in dimensions" :key="d.id" :value="d.id">{{ d.name }}</option></select></label><label v-if="!monetary&&!registration">指标<select v-model="metric"><option value="orders">订单数</option><option value="quantity">商品件数</option></select></label><span v-if="displayedTotals" :title="result?.personalDepartmentId?'本部门成员个人数据；其他部门仅显示部门汇总':undefined">{{ (registration?displayedTotals.registrationCount??displayedTotals.orderCount:displayedTotals.orderCount).toLocaleString() }} {{ registration?'位注册客户':'笔订单' }} · {{ registration?'按客户档案创建时间统计':monetary?'业绩收入按订单金额统计':'按客户付款时间（收款日期）统计' }}</span><button v-if="availableTrendTargets.length" type="button" class="trend-open" :disabled="busy" @click="openTrend(availableTrendTargets[0])">趋势明细</button></div>
+ <div class="analysis-controls"><label>展示维度<select v-model="dimension" aria-label="展示维度"><option v-for="d in dimensions" :key="d.id" :value="d.id">{{ d.name }}</option></select></label><label v-if="!monetary&&!registration">指标<select v-model="metric"><option value="orders">订单数</option><option value="quantity">商品件数</option></select></label><span v-if="displayedTotals" :title="result?.personalDepartmentId?'本部门成员个人数据；其他部门仅显示部门汇总':undefined">{{ (registration?displayedTotals.registrationCount??displayedTotals.orderCount:displayedTotals.orderCount).toLocaleString() }} {{ registration?'位注册客户':'笔订单' }} · {{ registration?'按客户档案创建时间统计':monetary?'业绩收入按订单金额统计':'按收款日期统计' }}</span><button v-if="availableTrendTargets.length" type="button" class="trend-open" :disabled="busy" @click="openTrend(availableTrendTargets[0])">趋势明细</button></div>
  <div v-if="monetary&&incomeTotals.length" class="income-total"><span>业绩收入合计</span><strong v-for="total in incomeTotals" :key="total.currency">{{ total.currency==='USD'?usd(Number(total.amount)):`${total.currency} ${Number(total.amount).toLocaleString('zh-CN',{minimumFractionDigits:2,maximumFractionDigits:2})}` }}</strong></div>
  <ComparisonSummary v-if="displayedComparison" :comparison="displayedComparison" :metric="monetary?'amount':registration?'count':metric==='quantity'?'quantity':'count'"/>
  <p v-if="error" role="alert">{{ error }}</p>

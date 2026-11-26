@@ -32,3 +32,11 @@ it('keeps management-only analytics hidden for ordinary accounts',async()=>{
  expect(wrapper.find('[data-testid=local-analysis]').exists()).toBe(false)
  expect(wrapper.get('[role=alert]').text()).toContain('暂无此功能权限')
 })
+
+it.each([true,false])('hides the revenue tab and places progress last (admin=%s)',async admin=>{
+ state.admin=admin;const wrapper=await setup('/workbench/sales')
+ const links=wrapper.get('.workbench-queues').findAll('a')
+ expect(links.some(link=>link.attributes('href')?.includes('queue=performance'))).toBe(false)
+ expect(links.at(-1)?.text()).toBe('履约进度查询')
+ expect(wrapper.find('[data-testid=orders]').exists()).toBe(true)
+})

@@ -7,7 +7,7 @@ export interface FreightSeries {id:string;label:string;totals:FreightMeasure;val
 export interface LocalFreightResult {
  source:'local';currency:string;asOf:string;query:LocalFreightQuery;canViewDetails?:boolean;canExport?:boolean
  periods:{id:string;label:string;from:string;to:string;previousFrom:string;previousTo:string;partial:boolean}[]
- totals:FreightMeasure;values:FreightMeasure[];billCount:number;averagePerBill:string|null;weightKg:string;weightBillCount:number;costPerKg:string|null
+ totals:FreightMeasure;values:FreightMeasure[];billCount:number;averagePerBill:string|null;averagePerBillUsd?:string|null;weightKg:string;weightBillCount:number;costPerKg:string|null
  series:FreightSeries[];departmentSeries?:FreightSeries[]
  quality:{missingCurrencyCount:number;missingDateCount:number};currencies:string[];warehouses:string[];warehouseOptions?:{id:string;name:string}[]
 }

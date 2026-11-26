@@ -177,3 +177,12 @@ it.each([
  expect(vi.mocked(getLocalFreight).mock.lastCall?.[0].range).toBeUndefined()
  w.unmount()
 })
+
+it.each([['1.23','$1.23'],['0','$0.00'],[null,''],[undefined,''],['invalid','']])('shows the provided USD average without inventing a missing conversion (%s)',async(amount,expected)=>{
+ vi.mocked(getLocalFreight).mockResolvedValue({...sample,averagePerBillUsd:amount} as any)
+ const w=mountView();await flushPromises()
+ const label=w.find('[data-average-freight-usd]')
+ expect(label.exists()).toBe(!!expected)
+ if(expected){expect(label.text()).toBe(expected);expect(label.classes()).toContain('metric-detail')}
+ w.unmount()
+})
