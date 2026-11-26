@@ -26,8 +26,8 @@ Standalone HTML deliverables follow `/Library/VSCode/.hyperzone/html-style/STAND
 
 ## 八套视觉资产与后续 UI 开发
 
-四色系（商务蓝、清新绿、典雅紫、活力橙）均支持深浅模式；新浏览器默认商务蓝浅色。唯一色值源 `frontend/src/theme/palettes.json`，修改后运行 `python3 scripts/build-theme-assets.py`。共用组件规范为 `frontend/src/theme/components.css`；资产手册 `docs/design-system/index.html`。新功能必须使用语义变量和公共组件，不新增独立主操作色或按主题复制业务页面；保留 Logo、Dashboard 卡片和业务状态色。交付验证八种组合、按钮文字对比度、焦点、弹窗及表格；执行 theme-assets、theme-bootstrap 测试与前端构建。主题切换不触发业务取数。
+四色系（商务蓝、清新绿、典雅紫、活力橙）均支持深浅模式；新浏览器默认商务蓝深色。唯一色值源 `frontend/src/theme/palettes.json`，修改后运行 `python3 scripts/build-theme-assets.py`。共用组件规范为 `frontend/src/theme/components.css`；资产手册 `docs/design-system/index.html`。新功能必须使用语义变量和公共组件，不新增独立主操作色或按主题复制业务页面；保留 Logo、Dashboard 卡片和业务状态色。交付验证八种组合、按钮文字对比度、焦点、弹窗及表格；执行 theme-assets、theme-bootstrap 测试与前端构建。主题切换不触发业务取数。
 
 ## 截图确认默认规范（2026-11-18）
 
-　　后续本项目界面截图、视觉确认及验收截图统一使用“典雅紫 · 浅色”主题，并默认使用宽屏视口。截图前确认主题色系为 purple、模式为 light；用户明确要求核查其他主题或深色适配时，按该次要求补充对应截图。此规范仅规定截图验收环境，应用首次使用默认主题仍为“商务蓝 · 浅色”。
+　　后续本项目界面截图、视觉确认及验收截图统一使用“典雅紫 · 浅色”主题，并默认使用宽屏视口。截图前确认主题色系为 purple、模式为 light；用户明确要求核查其他主题或深色适配时，按该次要求补充对应截图。此规范仅规定截图验收环境，应用首次使用默认主题为“商务蓝 · 深色”。

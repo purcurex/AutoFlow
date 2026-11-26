@@ -3,7 +3,7 @@ import { computed, ref } from 'vue'
 import palettes from '@/theme/palettes.json'
 export type Palette = keyof typeof palettes
 const palette = ref<Palette>('blue')
-const isDark = ref(false)
+const isDark = ref(true)
 let initialized = false
 
 function applyTheme(dark: boolean) {
@@ -15,8 +15,8 @@ function applyTheme(dark: boolean) {
 export function initializeTheme() {
   if (initialized) return
   initialized = true
-  let dark = document.documentElement.classList.contains('dark')
-  try { dark = localStorage.getItem('autoflow-theme') === 'dark' } catch { /* Keep the pre-paint theme when storage is unavailable. */ }
+  let dark = true
+  try { dark = localStorage.getItem('autoflow-theme') !== 'light' } catch { /* Use the same dark default as the pre-paint script. */ }
   try { const saved = localStorage.getItem('autoflow-palette'); if (saved && Object.hasOwn(palettes, saved)) palette.value = saved as Palette } catch {}
   document.documentElement.dataset.palette = palette.value
   applyTheme(dark)

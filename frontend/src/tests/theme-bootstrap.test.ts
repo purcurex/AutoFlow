@@ -12,7 +12,7 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks())
 
 it.each([
-  [null, false], ['light', false], ['dark', true], ['invalid', false],
+  [null, true], ['light', false], ['dark', true], ['invalid', true],
 ] as const)('restores %s before app startup and retains it at mount', async (saved, dark) => {
   if (saved !== null) localStorage.setItem('autoflow-theme', saved)
   runBootstrap()
@@ -30,10 +30,10 @@ it('allows startup and manual switching when storage is disabled', async () => {
   runBootstrap()
   const { useTheme } = await import('@/composables/useTheme')
   const theme = useTheme()
-  expect(theme.isDark.value).toBe(false)
-  theme.setTheme(true)
   expect(theme.isDark.value).toBe(true)
-  expect(document.documentElement.classList.contains('dark')).toBe(true)
+  theme.setTheme(false)
+  expect(theme.isDark.value).toBe(false)
+  expect(document.documentElement.classList.contains('dark')).toBe(false)
 })
 
  it.each(['blue','green','purple','orange'] as const)('persists %s in both modes without changing the other preference', async palette => {

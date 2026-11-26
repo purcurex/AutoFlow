@@ -4,8 +4,8 @@
   var palette = 'blue'
   try { var saved = localStorage.getItem('autoflow-palette'); if (['blue','green','purple','orange'].indexOf(saved) >= 0) palette = saved } catch (_) {}
   document.documentElement.setAttribute('data-palette', palette)
-  var dark = false
-  try { dark = localStorage.getItem('autoflow-theme') === 'dark' } catch (_) { /* Storage may be disabled. */ }
+  var dark = true
+  try { dark = localStorage.getItem('autoflow-theme') !== 'light' } catch (_) { /* Storage may be disabled. */ }
   document.documentElement.classList.toggle('dark', dark)
   document.documentElement.style.colorScheme = dark ? 'dark' : 'light'
   var meta = document.querySelector('meta[name="theme-color"]')
