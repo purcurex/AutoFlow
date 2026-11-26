@@ -13,7 +13,7 @@ export function isProcurementReady(purchase: ProcurementProgress | undefined): b
 export function matchesQueue(order: FopOrder, queue: Queue, warehouseStage?: ListFulfillmentOrdersDto['warehouseStage']): boolean {
   if (queue === 'exceptions' && order.businessStatus?.order === 'fulfillment_cancelled') return true
   if (queue === 'exceptions' && hasDispatchException(order)) return true
-  if (queue === 'dispatch' && order.businessStatus) return order.reviewStatus === 'approved' && ['paid','processing'].includes(order.businessStatus.order)
+  if (queue === 'dispatch' && order.businessStatus) return order.reviewStatus === 'approved' && !order.cancelled && !['cancelled','fulfillment_cancelled'].includes(order.businessStatus.order) && ['unfulfilled','partial'].includes(order.businessStatus.sourceShipment)
   if (order.cancelled) return false
   if (queue === 'exceptions') return order.exception != null
   if (queue === 'unpaid') return order.paymentStatus === 'unpaid' && !['refunded', 'voided', 'expired', 'unpaid'].includes(order.sourcePaymentStatus ?? '')

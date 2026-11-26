@@ -51,7 +51,8 @@ assert 'data-local-gap=' not in s and 'data-chart-id=' not in s
 for marker in ['id="scope"','id="fop"','id="sync-api"','id="relations"','id="realtime"','id="acceptance"',
  '待部署／授权','待核验','待开发','修改时间',
  'queryWorkbenchInventoryBalance','同一时间','归档','解除','已提交','幂等','全款／押金',
- '未重新调用测试环境API','不要求包裹与耗用逐行对应','7项前端']:
+ '具体实测范围以各项验证证据为准','不要求包裹与耗用逐行对应','regressionRepair20261125',
+ '履约异常','获取跟踪号失败','真实取号失败自动识别尚未接入']:
  assert marker in s,marker
 # Allow current theme/avatar contracts while retaining the concise six-section scope.
 assert 10000<len(s)<55000,'Unexpected FOP-only document size'
@@ -74,6 +75,15 @@ assert timestamp['optionalStrictProtocol']['requiredForFirstPhase'] is False
 assert timestamp['localImplementation']['automaticScheduler'] is True
 assert timestamp['localImplementation']['sourceLiveVerified'] is True
 api=json.loads((DEST/'api-integration-verification-20261116.json').read_text())
+regression=api['regressionRepair20261125']
+assert regression['baseline']['frontend']['failed']==78 and regression['baseline']['backend']['failed']==38
+for layer,label in [('frontend','前端'),('backend','后端')]:
+ result=regression['final'][layer]
+ assert result['failed']==0 and result['total']==result['passed']+result['skipped']
+ assert f"{label}{result['passed']}项通过、0项失败、{result['skipped']}项" in s
+ assert regression['builds'][layer]['status']=='passed'
+assert regression['skipBoundary']['newSkips']==0 and not regression['skipBoundary']['skippedTestsCountAsVerified']
+assert not regression['businessDatabaseChanged'] and not regression['upstreamCalledForVerification']
 rate=api['publicCloudRateLimits20261125']
 assert rate['standardSpaceLimits']=={'qps':20,'qpm':500,'qph':10000,'qpd':200000}
 assert rate['projectDefaults']=={'qps':16,'qpm':400,'qph':8000,'qpd':160000,'minStartIntervalMs':500,'shortQueueMaxMs':5000}

@@ -7,7 +7,9 @@ it('patches by line ID, preserves zero and purchase evidence, excludes virtual o
  const prior=original(),before=JSON.stringify(prior),result=supplementOutboundLineFacts(prior,source(),context)
  expect(JSON.stringify(prior)).toBe(before)
  expect(result.raw.hzkj_orders_billentry[0]).toMatchObject({id:'11',hzkj_outbound_qty:0,hzkj_outbound_status:'0'})
- expect(result.display.businessStatus).toMatchObject({outbound:'pending',outboundBasis:'physical_lines',purchase:'purchased'})
+ expect(result.display.businessStatus).toMatchObject({outbound:'pending',outboundBasis:'native_order_header',purchase:'unknown'})
+ expect(result.display.procurementLineEvidence).toEqual(prior.display.procurementLineEvidence)
+ expect(result.display.businessStatus.lines[0].outbound).toBe('pending')
  expect(result.display.businessStatus.lines[1].outbound).toBe('not_required')
  expect(result.display.nativeAssociationIssues).toEqual(['keep'])
  expect(result.display.nativeShippingReady).toBe(true)
@@ -34,10 +36,11 @@ it('normalizes flat API line facts without dropping zero or long IDs',()=>{
  const missing:any=source();delete missing.hzkj_orders_billentry[1].hzkj_outbound_qty
  expect(()=>normalizeTimestampProjectionRaw('hzkj_orders',missing,'100000',raw)).toThrow('timestamp_projection_missing_line_outbound_fact')
 })
-it('keeps explicit null unknown for a partial header, never invents quantities',()=>{
+it('keeps explicit null line facts unknown without overriding native partial outbound',()=>{
  const next:any=source();next.hzkj_orders_billentry[1].hzkj_outbound_status=null;next.hzkj_orders_billentry[1].hzkj_outbound_qty=null
  const result=supplementOutboundLineFacts(original(),next,context)
- expect(result.display.businessStatus.outbound).toBe('unknown')
+ expect(result.display.businessStatus.outbound).toBe('pending')
+ expect(result.display.businessStatus.lines[0].outbound).toBe('unknown')
  expect(result.raw.hzkj_orders_billentry[0].hzkj_outbound_qty).toBeNull()
 })
 it('does not let an older field scan override a newer full sync with the same source modification time',()=>{

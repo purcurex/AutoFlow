@@ -5,7 +5,7 @@
   "displayFields": 290,
   "upstreamCalled": false,
   "databaseQueried": false,
-  "sha256": "05d29a46e54595498abc78e31c6d5d3b984e0261aef1f48783c06811bf0efdb5",
+  "sha256": "1b19693acb1a0fcfcd67614842c638536c552896d84647e4d54bd55d25858d68",
   "sourceEvidence": [
     {
       "path": "backend/src/database/migrations/1795560000000-AutomaticRelations.ts",
@@ -69,7 +69,7 @@
     },
     {
       "path": "backend/src/modules/fop-data/workbench-queue-rules.ts",
-      "sha256": "bcfc21f8e41dd0584f9124ba24830c201e1cd3fc69974d5fab93cf737243f736"
+      "sha256": "5d7634158668f0e4f4d829d2d7736b9e23b82de22bb68eaa0891268e6c27205d"
     },
     {
       "path": "backend/src/modules/workbench-replica/collected-allocation-query.ts",
@@ -97,7 +97,7 @@
     },
     {
       "path": "backend/src/modules/workbench-replica/collected-workbench.service.ts",
-      "sha256": "27e09fbcf91618fca52ebc0c6976df89e16b46c216bc881219fbfb5e71693653"
+      "sha256": "d46f3ad297b9fd0cc98aace681f4cae59b27994c0b75cbbb8353a40698361df2"
     },
     {
       "path": "backend/src/modules/workbench-replica/dashboard-analytics-query.ts",
@@ -125,7 +125,7 @@
     },
     {
       "path": "docs/requirements/api-integration-verification-20261116.json",
-      "sha256": "c3d960f36fd006e64bdd573d265c0f5b63085d245320f5cf45ca7df7ceaa6bcf"
+      "sha256": "2e522cfa37b2c4d5a1a498361409a435f5a2c489c9d128e72304ba91fdf7b82d"
     },
     {
       "path": "frontend/src/components/autoflow/PurchaseReturnOrdersTable.vue",
@@ -161,7 +161,7 @@
     },
     {
       "path": "scripts/fop-local-field-matrix/collected-mapping.json",
-      "sha256": "d8a0dbb9b9c047afd460ad9c6d30f331b231891b566055adac2240d1451a3244"
+      "sha256": "f7d5ccbd864359f5a3c80667df0e3579407cd0df8ffa38002a03c175bde96522"
     },
     {
       "path": "scripts/fop-local-field-matrix/current-additional.body.html",

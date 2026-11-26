@@ -2,7 +2,7 @@ import { supplementOutboundStatus, assertOutboundFieldCoverage } from './collect
 const row=()=>({source_id:'10',order_number:'TO10',owner_employee_id:'7',raw_delivery_status:null,raw:{id:'10',billno:'TO10',hzkj_org:{id:'100000'},modifytime:'2026-11-16T00:00:00+08:00',hzkj_orders_billentry:[{id:'11',hzkj_qty:'1',hzkj_local_sku:{number:'SKU'}}]},display:{id:'10',orderNumber:'TO10',owner:{id:'7'},nativeShippingReady:true,items:[{id:'11',name:'Keep name'}],nativeAssociationIssues:['current_source_outbound_status_unknown','keep_issue']}})
 const source=(status:any='0')=>({id:'10',billno:'TO10',org_id:'100000',hzkj_operator_id:'7',modifytime:'2026-11-16 01:00:00',hzkj_delivery_status:status})
 const context={companyId:'100000',capturedAt:'2026-11-17T05:30:00Z'}
-it.each([['0','pending'],['2','completed'],['1','unknown'],[null,'unknown'],['','unknown']])('projects native outbound %s without changing other fields',(status,expected)=>{
+it.each([['0','pending'],['2','completed'],['1','pending'],[null,'unknown'],['','unknown']])('projects native outbound %s without changing other fields',(status,expected)=>{
  const prior=row(),before=JSON.stringify(prior),r=supplementOutboundStatus(prior,source(status),context)
  expect(JSON.stringify(prior)).toBe(before)
  expect(r.raw.hzkj_delivery_status).toBe(status)

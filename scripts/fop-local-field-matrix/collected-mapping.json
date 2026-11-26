@@ -432,7 +432,7 @@
   "异常类型": {
     "display": "exception / exceptions",
     "local": "hz_fop_collected_orders.display；关联采购/配货/发运等本地事实",
-    "source": "订单异常、发运异常、配货异常、采购异常、妥投异常由本地规则计算",
+    "source": "订单异常、履约异常、配货异常、采购异常、出库异常、妥投异常由本地规则计算",
     "rule": "异常清单与主流程并行；原因及起始时间缺失不编造。",
     "evidence": [
       "backend/src/modules/workbench-replica/collected-workbench-query.ts",
@@ -442,8 +442,8 @@
   "异常原因": {
     "display": "exception / exceptions",
     "local": "hz_fop_collected_orders.display；关联采购/配货/发运等本地事实",
-    "source": "订单异常、发运异常、配货异常、采购异常、妥投异常由本地规则计算",
-    "rule": "异常清单与主流程并行；原因及起始时间缺失不编造。",
+    "source": "订单异常、履约异常、配货异常、采购异常、出库异常、妥投异常由本地规则计算",
+    "rule": "异常清单与主流程并行；原因及起始时间缺失不编造。 履约异常包含“获取跟踪号失败”：至少一次渠道取号尝试且渠道明确返回失败；尝试记录及结果字段待FOP提供，目前未接入，不以无跟踪号替代失败。",
     "evidence": [
       "backend/src/modules/workbench-replica/collected-workbench-query.ts",
       "backend/src/modules/fop-data/collected-native-facts.ts"
@@ -452,7 +452,7 @@
   "异常时长": {
     "display": "exception / exceptions",
     "local": "hz_fop_collected_orders.display；关联采购/配货/发运等本地事实",
-    "source": "订单异常、发运异常、配货异常、采购异常、妥投异常由本地规则计算",
+    "source": "订单异常、履约异常、配货异常、采购异常、出库异常、妥投异常由本地规则计算",
     "rule": "异常清单与主流程并行；原因及起始时间缺失不编造。",
     "evidence": [
       "backend/src/modules/workbench-replica/collected-workbench-query.ts",

@@ -352,7 +352,7 @@ function validateQuery(query: FopOrderQuery) {
 export function matchesFopQueue(order: FopOrder, queue: FopOrderQueue, warehouseStage?: WarehouseStage, completed = false): boolean {
   if (queue === 'exceptions' && order.businessStatus?.order === 'fulfillment_cancelled') return true
   if (queue === 'exceptions' && hasDispatchException(order)) return true
-  if (queue === 'dispatch' && order.businessStatus) return order.reviewStatus === 'approved' && (completed ? order.businessStatus.sourceShipment === 'fulfilled' : !order.cancelled && ['unfulfilled','partial'].includes(order.businessStatus.sourceShipment))
+  if (queue === 'dispatch' && order.businessStatus) return order.reviewStatus === 'approved' && (completed ? order.businessStatus.sourceShipment === 'fulfilled' : !order.cancelled && !['cancelled','fulfillment_cancelled'].includes(order.businessStatus.order) && ['unfulfilled','partial'].includes(order.businessStatus.sourceShipment))
   if (completed) return matchesCompletedQueue(order, queue)
   if (queue === 'exceptions' && order.dataQuality?.mode === 'collected' && order.dataQuality.readOnly === true && order.dataQuality.reasons.length > 0) return true
   if (['allocation','allocation_review'].includes(queue) && order.dataQuality?.mode === 'collected' && order.dataQuality.readOnly) return matchesCollectedAllocation(order, queue)

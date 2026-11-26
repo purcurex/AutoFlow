@@ -13,8 +13,8 @@ const shapes = [
 describe('virtual product states cannot classify physical business',()=>{
  it.each(shapes)('excludes every supported identity shape %j',shape=>{
   for(const state of ['0','1','2','3','4',null,'invalid']){
-   const result=orderBusinessStatus({hzkj_orders_billentry:[physical,{id:'2',pid:'1',hzkj_qty:'999',hzkj_entrypurc_status:state,hzkj_instock_qty:'999',hzkj_outbound_status:state,hzkj_outbound_qty:'999',...shape}]})
-   expect(result).toMatchObject({purchase:'unpurchased',outbound:'pending',lines:[{excluded:false},{excluded:true,purchase:'not_required',outbound:'not_required'}]})
+   const result=orderBusinessStatus({hzkj_purchase_status:'0',hzkj_delivery_status:'0',hzkj_orders_billentry:[physical,{id:'2',pid:'1',hzkj_qty:'999',hzkj_entrypurc_status:state,hzkj_instock_qty:'999',hzkj_outbound_status:state,hzkj_outbound_qty:'999',...shape}]})
+   expect(result).toMatchObject({purchase:'unpurchased',outbound:'pending',lines:[{excluded:false,purchase:'unpurchased',outbound:'pending'},{excluded:true,purchase:'not_required',outbound:'not_required'}]})
   }
  })
  it('does not use virtual shipment states to make a purchase group partial',()=>{
@@ -26,6 +26,10 @@ describe('virtual product states cannot classify physical business',()=>{
   const parent={id:'10',billstatus:'C',hzkj_orderstatus:'2',hzkj_orders_billentry:[physical,{id:'2',hzkj_local_sku:{number:'HZ000020-001'}}]}
   const group={raw:{hzkj_cancelstatus:'A',hzkj_purchase_channel:'1',hzkj_1688_order_n:'123',hzkj_pay_status:'0'},display:{association:{state:'verified'},rows:[{orderId:'10',associationState:'verified',lines:[{fulfillmentLineId:'2',quantity:1}]}]}}
   expect(timestampProcurementProjection(parent,[group],[],[])).toMatchObject({procurementStage:'purchase_order_pending',procurementQueueFlags:{pending:true,shipping:false,completed:false}})
+ })
+ it.each([['0','unpurchased'],['2','purchased'],['4','shipped']])('excludes virtual-only orders from procurement work while preserving native header %s', (status,purchase)=>{
+  const parent={id:'10',billstatus:'C',hzkj_orderstatus:'2',hzkj_purchase_status:status,hzkj_orders_billentry:[{id:'2',hzkj_qty:'1',hzkj_entrypurc_status:'2',hzkj_local_sku:{number:'HZ000020-001'}}]}
+  expect(timestampProcurementProjection(parent,[],[],[])).toMatchObject({businessStatus:{purchase},procurementStage:'not_required',procurementQueueFlags:{pending:false,shipping:false,completed:false}})
  })
  it('allocation completion requires both ready and audited, independent of item or outbound state',()=>{
   const order:any={reviewStatus:'approved',paymentStatus:'paid',fulfillmentProgress:{allocationCreated:true,allocationReview:'approved',stockReadiness:'incomplete',outbound:'completed'}}

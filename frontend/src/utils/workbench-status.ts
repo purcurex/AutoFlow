@@ -11,7 +11,7 @@ export const taskStatusLabels: Record<TaskStatus, readonly [string, string]> = {
   dispatch_missing: ['待建发运单', 'Dispatch document needed'], dispatch_draft: ['暂存', 'Draft'], dispatch_submitted: ['已提交', 'Submitted'], dispatch_approved: ['已审核', 'Approved'], dispatch_synced: ['已同步', 'Synced'],
   logistics_pending: ['待获取物流单号', 'Logistics order number needed'],
   outbound_pending: ['待出库', 'Awaiting outbound'], shipment_intercepted: ['拦截发货', 'Shipment intercepted'], shipment_released: ['取消拦截', 'Interception released'],
-  procurement_exception: ['采购异常', 'Purchase exception'], dispatch_exception: ['发运异常', 'Dispatch exception'], allocation_exception: ['配货异常', 'Allocation exception'], logistics_exception: ['订单异常', 'Order exception'], outbound_exception: ['\u51fa\u5e93\u5f02\u5e38', 'Outbound exception'], delivery_exception: ['妥投异常', 'Delivery exception'],
+  procurement_exception: ['采购异常', 'Purchase exception'], dispatch_exception: ['履约异常', 'Fulfillment exception'], allocation_exception: ['配货异常', 'Allocation exception'], logistics_exception: ['订单异常', 'Order exception'], outbound_exception: ['\u51fa\u5e93\u5f02\u5e38', 'Outbound exception'], delivery_exception: ['妥投异常', 'Delivery exception'],
 }
 /** Labels are contextual: procurement retains an actionable collaboration instruction. */
 export function taskStatusLabel(status: TaskStatus, queue: string): readonly [string, string] {

@@ -12602,7 +12602,7 @@
     "groups": [
       {
         "key": "sync-fulfilled",
-        "category": "发运异常",
+        "category": "履约异常",
         "title": "审核同步失败，但履约订单已履约",
         "count": 18,
         "latestCount": 18,
@@ -12610,7 +12610,7 @@
       },
       {
         "key": "sync-pending",
-        "category": "发运异常",
+        "category": "履约异常",
         "title": "审核同步失败，履约订单尚未完成",
         "count": 25,
         "latestCount": 25,
@@ -12618,7 +12618,7 @@
       },
       {
         "key": "tracking-present",
-        "category": "发运异常",
+        "category": "履约异常",
         "title": "履约物流号为空，有有效发运单号码",
         "count": 30,
         "latestCount": 30,
@@ -12626,7 +12626,7 @@
       },
       {
         "key": "tracking-absent",
-        "category": "发运异常",
+        "category": "履约异常",
         "title": "已履约，但缺少当前有效物流证据",
         "count": 6,
         "latestCount": 6,
@@ -18378,5 +18378,142 @@
     "businessDatabaseChanged": false,
     "productionDeployed": false,
     "localRuntime": "后端已重启并通过健康检查，前端热更新。"
+  },
+  "fulfillmentExceptionTerminology20261125": {
+    "displayLabel": "履约异常",
+    "stableTypeCode": "dispatch_exception",
+    "surfaces": [
+      "dashboard",
+      "workbench_lists",
+      "filters",
+      "excel",
+      "manual",
+      "field_mapping"
+    ],
+    "requestedReason": "获取跟踪号失败",
+    "requiredFacts": [
+      "current_effective_dispatch",
+      "at_least_one_carrier_tracking_attempt",
+      "explicit_carrier_failure_response"
+    ],
+    "excludedInferences": [
+      "tracking_number_blank",
+      "never_attempted",
+      "processing",
+      "carrier_tracking_not_ready",
+      "SYNC_FAILED",
+      "query_api_error"
+    ],
+    "automaticClassification": "awaiting_fop_persisted_attempt_and_result_fields",
+    "fieldNamesAndEnums": "待提供",
+    "liveRead": {
+      "operation": "dispatch",
+      "companyNumber": "hyperzone.test",
+      "httpStatus": 200,
+      "rowCount": 5,
+      "trackingAttemptResultFieldsReturned": false,
+      "responseSha256": "4c9243012eb404f822e6da8df9fff5354d477588803a44925736d5f3f70b6a8d"
+    },
+    "sourceReviewed": [
+      "crm/logistics/plugin/op/DeliverBillGetTrackingNo.java",
+      "crm/logistics/plugin/op/DeliverBillCreateOrderOpPlugin.java",
+      "hzkj_deliver_bill.dym"
+    ],
+    "sourceFinding": "取号失败经operationResult返回错误，未见取号尝试及渠道失败结果持久化字段。",
+    "businessDatabaseChanged": false,
+    "mockReasonExampleOnly": true
+  },
+  "regressionRepair20261125": {
+    "scope": "复现并修复上一轮全量回归的前端78项、后端38项失败；不执行FOP业务操作。",
+    "baseline": {
+      "frontend": {
+        "total": 1303,
+        "passed": 1223,
+        "failed": 78,
+        "skipped": 2,
+        "report": ".runtime/regression-20261125-frontend-before.json",
+        "sha256": "ad537aa5289de37b5ec54370e2185e0b8e2153e38a0268f409e5edbfb433353f"
+      },
+      "backend": {
+        "total": 2916,
+        "passed": 2643,
+        "failed": 38,
+        "skipped": 235,
+        "report": ".runtime/regression-20261125-backend-before.json",
+        "sha256": "dd8933eff29a8584feda7da097b4e55e577b756751aaadcedade9219a393644f"
+      }
+    },
+    "rootCauses": [
+      "测试未同步已确认的原生表头状态、近三月默认时间、紧凑工作台布局及缓存行为。",
+      "jsdom缺少ResizeObserver；旧数据库测试适配器未支持JSON键存在判断。",
+      "当前待办计数误用清单默认日期参数；纯虚拟订单无需采购误判；发运清单内存路径未同步源单发货口径。"
+    ],
+    "productionFixes": [
+      {
+        "file": "backend/src/modules/workbench-replica/collected-analytics-query.ts",
+        "behavior": "当前待办计数明确使用timeRange=all，避免日期参数与员工权限参数冲突；历史统计时间条件保留。"
+      },
+      {
+        "file": "backend/src/modules/workbench-replica/timestamp-procurement-projection.ts",
+        "behavior": "商品事实非空且无实物外购需求为not_required，空明细保持unknown，原生表头值不变。"
+      },
+      {
+        "files": [
+          "backend/src/modules/fop-data/completed-orders.ts",
+          "backend/src/modules/fop-data/workbench-queue-rules.ts",
+          "frontend/src/api/fop-orders.ts"
+        ],
+        "behavior": "有原生businessStatus时按sourceShipment分类；fulfilled为已履约，unfulfilled/partial为待履约，待履约排除取消与取消履约；保留无原生对象的旧数据兼容路径。"
+      }
+    ],
+    "final": {
+      "frontend": {
+        "total": 1307,
+        "passed": 1305,
+        "failed": 0,
+        "skipped": 2,
+        "report": ".runtime/regression-20261125-frontend-after.json",
+        "sha256": "e2988a274d4c391b8ad9e019a7c9b6e30003594545d2bcedfe2227387b899c84"
+      },
+      "backend": {
+        "total": 2929,
+        "passed": 2694,
+        "failed": 0,
+        "skipped": 235,
+        "report": ".runtime/regression-20261125-backend-after.json",
+        "sha256": "0a61cc3acf155df46297fa60f9a1287bbaf41d3cb59b7eba23df8b64739f6ad4"
+      }
+    },
+    "builds": {
+      "frontend": {
+        "status": "passed",
+        "log": ".runtime/regression-20261125-frontend-build.log"
+      },
+      "backend": {
+        "status": "passed",
+        "log": ".runtime/regression-20261125-backend-build.log"
+      }
+    },
+    "skipBoundary": {
+      "frontend": "2项运行中本地服务／数据库缓存测试未启用。",
+      "backend": "235项PostgreSQL／数据库集成条件测试未启用。",
+      "newSkips": 0,
+      "skippedTestsCountAsVerified": false
+    },
+    "postgresVerification": {
+      "isolation": "独立测试数据库，仅临时表；未连接业务数据库。",
+      "script": ".runtime/regression-analytics-postgres.cjs",
+      "passedCases": 4,
+      "coverage": [
+        "历史及当前待支付任务均计入当前待办",
+        "员工70仅查自身范围",
+        "员工71仅查自身范围",
+        "空范围返回0，全范围返回完整计数"
+      ]
+    },
+    "businessDatabaseChanged": false,
+    "upstreamCalledForVerification": false,
+    "productionDeployed": false,
+    "remainingFopGap": "获取跟踪号失败仍待FOP提供持久化取号尝试与渠道失败结果字段，不从空跟踪号推断。"
   }
 }

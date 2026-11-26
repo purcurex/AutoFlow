@@ -2,32 +2,36 @@ import { timestampProcurementProjection as project } from './timestamp-procureme
 const line=(id:string,status:string,extra:any={})=>({id,hzkj_entrypurc_status:status,hzkj_qty:'2',...extra})
 const parent=(lines:any[],extra:any={})=>({id:'1',billstatus:'C',hzkj_orderstatus:'2',hzkj_orders_billentry:lines,...extra})
 const purchase=(raw:any={},state='verified')=>({raw:{hzkj_cancelstatus:'A',hzkj_pay_status:'1',hzkj_purchase_channel:'1',hasAlibabaOffer:true,hzkj_1688_order_n:'1688',...raw},display:{rows:[{orderId:'1',associationState:state,lines:[{fulfillmentLineId:'11',quantity:'1'}]}]}})
-it('payment establishes purchased without requiring full line quantity; application alone is purchasing',()=>{
- expect(project(parent([line('11','2')]),[]).businessStatus.purchase).toBe('purchasing')
- expect(project(parent([line('11','2')]),[purchase()])).toMatchObject({businessStatus:{purchase:'purchased'},procurementStage:'supplier_pending',procurementQueueFlags:{shipping:true,pending:false}})
+it('preserves native purchased lines while verified payment establishes the independent payment fact',()=>{
+ expect(project(parent([line('11','2')]),[])).toMatchObject({businessStatus:{purchase:'unknown',lines:[{purchase:'purchased'}]},procurementProgress:{supplierPayment:'unknown'}})
+ expect(project(parent([line('11','2')]),[purchase()])).toMatchObject({businessStatus:{purchase:'unknown',lines:[{purchase:'purchased'}]},procurementProgress:{supplierPayment:'paid'},procurementStage:'supplier_pending',procurementQueueFlags:{shipping:true,pending:false}})
 })
-it('does not infer receipt-notice approval from supplier logistics or override lines with header',()=>{
- expect(project(parent([line('11','2')],{hzkj_purchase_status:'3'}),[purchase({hzkj_ship_status:'1'})]).businessStatus.purchase).toBe('purchased')
- expect(project(parent([line('11','4')],{hzkj_purchase_status:'0'}),[])).toMatchObject({businessStatus:{purchase:'shipped'},procurementQueueFlags:{completed:true}})
+it('preserves conflicting header and line values while procurement work follows physical line facts',()=>{
+ expect(project(parent([line('11','2')],{hzkj_purchase_status:'3'}),[purchase({hzkj_ship_status:'1'})])).toMatchObject({businessStatus:{purchase:'received',lines:[{purchase:'purchased'}]},procurementQueueFlags:{shipping:true,completed:false}})
+ expect(project(parent([line('11','4')],{hzkj_purchase_status:'0'}),[])).toMatchObject({businessStatus:{purchase:'unpurchased',lines:[{purchase:'shipped'}]},procurementQueueFlags:{completed:true}})
 })
-it('highest line stage wins while outstanding purchasing and shipping tasks may coexist',()=>{
+it('preserves mixed line progress without filling the missing header purchase status',()=>{
  const r=project(parent([line('11','2'),line('12','0'),line('13','3')]),[purchase()])
- expect(r.businessStatus.purchase).toBe('partial_received');expect(r.procurementQueueFlags).toEqual({pending:false,shipping:true,completed:false})
+ expect(r.businessStatus).toMatchObject({purchase:'unknown',lines:[{purchase:'purchased'},{purchase:'unpurchased'},{purchase:'received'}]});expect(r.procurementQueueFlags).toEqual({pending:false,shipping:true,completed:false})
 })
 it('only full ledger coverage suppresses supplier work; a selection flag never overrides receipt',()=>{
- expect(project(parent([line('11','3',{hzkj_use_stock:'1',procurementSource:{complete:true,directQuantity:'0'}})]),[])).toMatchObject({businessStatus:{purchase:'received'},procurementStage:'not_required',procurementQueueFlags:{pending:false,shipping:false,completed:false}})
+ expect(project(parent([line('11','3',{hzkj_use_stock:'1',procurementSource:{complete:true,directQuantity:'0'}})]),[])).toMatchObject({businessStatus:{purchase:'unknown',lines:[{purchase:'received'}]},procurementStage:'not_required',procurementQueueFlags:{pending:false,shipping:false,completed:false}})
  expect(project(parent([line('11','2')],{hzkj_orderstatus:'0'}),[purchase()])).toMatchObject({procurementStage:'cancelled',procurementQueueFlags:{pending:false,shipping:false,completed:false}})
 })
 it('unresolved or cancelled purchase links cannot prove payment; missing facts remain unknown',()=>{
- expect(project(parent([line('11','2')]),[purchase({},'unresolved')]).businessStatus.purchase).toBe('purchasing')
- expect(project(parent([line('11','2')]),[purchase({hzkj_cancelstatus:'B'})]).businessStatus.purchase).toBe('purchasing')
+ for(const group of [purchase({},'unresolved'),purchase({hzkj_cancelstatus:'B'})]){
+  expect(project(parent([line('11','2')]),[group])).toMatchObject({businessStatus:{purchase:'unknown',lines:[{purchase:'purchased'}]},procurementProgress:{supplierPayment:'unknown'},procurementLineEvidence:{paidLineIds:[]}})
+ }
  expect(project(parent([line('11','')]),[]).businessStatus.purchase).toBe('unknown')
 })
-it('a saved active application starts purchasing before approval, using source entry sequence',()=>{
+it('records active application evidence by source entry sequence without replacing native purchase state',()=>{
  const p=parent([line('11','0',{seq:1})],{billno:'O1'})
  const application={hzkj_cancelstatus:'A',billstatus:'A',entryentity:[{hzkj_srcbillnumber:'O1',hzkj_srcbillentryseq:'1'}]}
- expect(project(p,[],[application]).businessStatus.purchase).toBe('purchasing')
- expect(project(p,[],[{...application,hzkj_cancelstatus:'B'}]).businessStatus.purchase).toBe('unpurchased')
+ expect(project(p,[],[application])).toMatchObject({businessStatus:{purchase:'unknown',lines:[{purchase:'unpurchased'}]},procurementLineEvidence:{applicationLineIds:['11']},procurementStage:'purchase_order_pending'})
+ expect(project(p,[],[{...application,hzkj_cancelstatus:'B'}])).toMatchObject({businessStatus:{purchase:'unknown',lines:[{purchase:'unpurchased'}]},procurementLineEvidence:{applicationLineIds:[]},procurementStage:'purchase_order_pending'})
+})
+it('does not infer no procurement requirement from missing item facts',()=>{
+ expect(project(parent([],{hzkj_purchase_status:'2'}),[])).toMatchObject({businessStatus:{purchase:'purchased'},procurementStage:'unknown',procurementQueueFlags:{pending:false,shipping:false,completed:false}})
 })
 it('excludes fully covered deposit demand based on records rather than a line quantity hint',()=>{
  const r=project(parent([line('11','2',{hzkj_deposit_use_qty:'2',procurementSource:{complete:true,directQuantity:'0'}})]),[])

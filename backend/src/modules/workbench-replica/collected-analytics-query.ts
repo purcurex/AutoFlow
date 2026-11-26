@@ -28,7 +28,9 @@ export interface CollectedAnalyticsQueryOptions {
 export function collectedAnalyticsQuery(options: CollectedAnalyticsQueryOptions) {
   const employeeScope = '($3::text[] IS NULL OR owner_employee_id = ANY($3::text[]))'
   const queuePredicates = ANALYTICS_QUEUES.map(queue => {
-    const predicate = collectedWhere(options.batchId, options.employeeIds, { queue }).where.replace(/\$2\b/g, '$3')
+    // Current workload counts have no date window; list defaults must not add
+    // an unbound day parameter (which would collide with the employee scope).
+    const predicate = collectedWhere(options.batchId, options.employeeIds, { queue, timeRange: 'all' }).where.replace(/\$2\b/g, '$3')
     return `${options.availableQueues.includes(queue) ? `(${predicate})` : 'NULL::boolean'} AS todo_${queue}`
   })
   const groupDepartment = options.summaryOnly ? 'member.department_id' : 'NULL::text'

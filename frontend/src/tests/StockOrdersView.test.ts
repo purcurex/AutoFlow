@@ -258,8 +258,10 @@ it.each([false, true])('shows the account department on stock lists, procurement
   vi.mocked(api.get).mockResolvedValue({ ...response, items: [], departments: [], total: 0 })
   try {
     const { wrapper, router } = await setup(procurement ? '/workbench/procurement?queue=stock_procurement' : '/workbench/sales?queue=stock', procurement)
-    expect(wrapper.findAll('select')[0].get('option[value=""]').text()).toBe('业务一部')
+    const department = wrapper.findAll('.stock-filters label').find(label => label.text().startsWith('业务部门'))!
+    expect(department.get('select option[value=""]').text()).toBe('业务一部')
     expect(router.currentRoute.value.query.departmentId).toBeUndefined()
+    expect(api.get).toHaveBeenLastCalledWith(expect.stringContaining('stock-orders'), expect.objectContaining({ params: expect.objectContaining({ departmentId: undefined }) }))
     wrapper.unmount()
   } finally { clearWorkbenchAccess() }
 })

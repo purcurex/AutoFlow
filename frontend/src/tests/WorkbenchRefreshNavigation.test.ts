@@ -44,7 +44,7 @@ it.each([
   await vi.dynamicImportSettled(); await flushPromises()
   await wrapper.get('input[type=search]').setValue('draft not submitted')
   const originalList = wrapper.find('.fulfillment-page').element
-  const originalSummary = wrapper.find('.workbench-filter-summary').element
+  const originalNavigation = wrapper.get('.workbench-queue-row').element
   const checks = vi.mocked(getWorkbenchAccess).mock.calls.length
   if (cancelOnce) removeGuard = router.beforeResolve(() => { removeGuard?.(); removeGuard = undefined; return false })
   total = 1
@@ -60,7 +60,7 @@ it.each([
   expect(router.currentRoute.value.query).toMatchObject({ page: '1', departmentId: 'd1', search: 'submitted' })
   expect(vi.mocked(getWorkbenchAccess).mock.calls.length).toBeGreaterThan(checks)
   expect(wrapper.find('.fulfillment-page').element).toBe(originalList)
-  expect(wrapper.find('.workbench-filter-summary').element).toBe(originalSummary)
+  expect(wrapper.get('.workbench-queue-row').element).toBe(originalNavigation)
   expect(wrapper.findAll('button.refresh-orders')).toHaveLength(1)
   expect(wrapper.text()).not.toContain('刷新状态')
   expect((wrapper.get('input[type=search]').element as HTMLInputElement).value).toBe('draft not submitted')
@@ -77,7 +77,7 @@ it.each([
 it('allows review-list navigation without invoking approval APIs merely by selecting rows', async () => {
   localStorage.setItem('user', JSON.stringify({ id: 'test-user' }))
   vi.mocked(getWorkbenchAccess).mockResolvedValue({ roles: ['sales'], isAdmin: false, businessRole: 'salesperson' })
-  const order = mockFopOrders.find(row => matchesFopQueue(row, 'review'))!
+  const order = { ...mockFopOrders.find(row => matchesFopQueue(row, 'review'))!, rawBillStatus: 'B' }
   vi.mocked(getFopOrders).mockImplementation(async query => ({ source: 'mock', refreshedAt: '2026-10-25T08:00:00Z', departments: [], items: [order], total: 1, page: query.page, pageSize: query.pageSize, totals: { orderCount: 1, itemQuantity: 1, amountsByCurrency: [] } }))
   await router.push('/workbench/sales?queue=review'); await router.isReady()
   wrapper = mount({ template: '<RouterView />' }, { global: { plugins: [router, createI18n({ legacy: false, locale: 'zh-CN', messages: {} })] } })
@@ -98,7 +98,7 @@ it('allows review-list navigation without invoking approval APIs merely by selec
 it('keeps an in-flight approval visible when a previously started lazy navigation finishes', async () => {
   localStorage.setItem('user', JSON.stringify({ id: 'test-user' }))
   vi.mocked(getWorkbenchAccess).mockResolvedValue({ roles: ['sales'], isAdmin: false, businessRole: 'salesperson' })
-  const order = mockFopOrders.find(row => matchesFopQueue(row, 'review'))!
+  const order = { ...mockFopOrders.find(row => matchesFopQueue(row, 'review'))!, rawBillStatus: 'B' }
   vi.mocked(getFopOrders).mockImplementation(async query => ({ source: 'mock', refreshedAt: '2026-10-27T08:00:00Z', departments: [], items: [order], total: 1, page: query.page, pageSize: query.pageSize, totals: { orderCount: 1, itemQuantity: 1, amountsByCurrency: [] } }))
   vi.mocked(previewOrderApproval).mockResolvedValue({ source: 'mock', queue: 'review', items: [{ orderId: order.id, orderNumber: order.orderNumber, version: 'v1', eligible: true, documents: [{ id: order.id, number: order.orderNumber, status: 'B', eligible: true, reason: null }] }] })
   let resolveApproval!: (result: Awaited<ReturnType<typeof submitOrderApproval>>) => void

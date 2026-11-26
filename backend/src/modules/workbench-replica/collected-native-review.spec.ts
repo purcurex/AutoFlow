@@ -25,7 +25,9 @@ for row in payload['rows']:
 for row in payload['rows']:
  if row.get('allocation'):
   db.execute('INSERT INTO hz_fop_collected_entities VALUES(?,?,?,?,?)',('b','allocation','allocation-'+row['id'],json.dumps(dict(row['allocation'],sourceOrderId=row['id'])), '{}'))
-where=payload['where'].replace('::jsonb','').replace('jsonb_array_length','json_array_length').replace('jsonb_typeof','json_type').replace("='string'","='text'")
+# Translate PostgreSQL JSON key existence without changing its missing/null semantics.
+where=re.sub(r"(\\w+(?:->'[^']+')*) [?] ('[^']+')",r'jsonb_exists(\\1,\\2)',payload['where'])
+where=where.replace('::jsonb','').replace('jsonb_array_length','json_array_length').replace('jsonb_typeof','json_type').replace("='string'","='text'")
 where=where.replace('jsonb_array_elements_text','json_each').replace('jsonb_array_elements','json_each').replace('CROSS JOIN LATERAL','CROSS JOIN').replace('WHERE issue IN','WHERE issue.value IN').replace('d->','d.value->').replace('t->','t.value->').replace('pkg->','pkg.value->')
 where=re.sub(r'unnest\\(ARRAY\\[(.*?)\\]\\) company',r'json_each(json_array(\\1)) company',where)
 where=where.replace('company IS NOT NULL','company.value IS NOT NULL').replace('company<>','company.value<>').replace('virtual_entry->','virtual_entry.value->')
@@ -104,15 +106,21 @@ it('sales review requires native paid order and draft/submitted bill, independen
  expect(select('review',rows,true)).toEqual(['no-C','0-C','1-C','2-C','3-C','4-C','5-C','null-C'])
 })
 
-it('defaults approved sales orders to thirty days of customer payment time',()=>{
+it('defaults approved sales orders to ninety days of customer payment time',()=>{
  const q=collectedWhere('b',null,{queue:'review',completed:true})
- expect(q.params).toEqual(['b',30]);expect(q.where).toContain('paid_at >= now()')
+ expect(q.params).toEqual(['b',90]);expect(q.where).toContain('paid_at >= now()')
  expect(collectedWhere('b',null,{queue:'review',completed:true,timeRange:'1m'}).params).toEqual(['b',30])
 })
-it('executes dispatch membership from the approved order lifecycle, even without downstream capture',()=>{
- const rows=['A','B','C'].flatMap(bill=>['no','0','1','2','3','4','5','6'].map(order=>({id:bill+order,bill,order,payment:null,display:{},raw:{hzkj_logistics_info:[{hzkj_tracking_number:'TRACK'}]}})))
- expect(select('dispatch',rows)).toEqual(['C2','C3'])
- expect(select('dispatch',rows,true)).toEqual(['C4','C5'])
+it('uses the approved source shipment state independently of order lifecycle and downstream capture',()=>{
+ const rows=['A','B','C'].flatMap(bill=>[
+  {id:bill+'-pending',bill,order:'2',raw:{hzkj_fulfillment_status:'unfulfilled'}},
+  {id:bill+'-partial',bill,order:'5',raw:{hzkj_fulfillment_status:'partial'}},
+  {id:bill+'-fulfilled',bill,order:'3',raw:{hzkj_fulfillment_status:'fulfilled'}},
+  {id:bill+'-missing',bill,order:'4',raw:{}},
+  {id:bill+'-cancelled',bill,order:'0',raw:{hzkj_fulfillment_status:'unfulfilled'}},
+ ])
+ expect(select('dispatch',rows)).toEqual(['C-pending','C-partial'])
+ expect(select('dispatch',rows,true)).toEqual(['C-fulfilled'])
 })
 it('warehouse SQL keeps unresolved native partial headers in normal shipping plus diagnosis',()=>{
  const rows=[{id:'virtual-excluded-complete',delivery:'1',display:{nativeShippingReady:'true',businessStatus:{outbound:'completed'}}},{id:'unresolved-partial',delivery:'1',display:{nativeShippingReady:'true',businessStatus:{outbound:'unknown'}}},{id:'actual-partial',delivery:'1',display:{nativeShippingReady:'true',businessStatus:{outbound:'partial'}}},{id:'virtual-only',delivery:'1',display:{nativeShippingReady:'true',businessStatus:{outbound:'not_required'}}}]
@@ -144,21 +152,21 @@ it('source-payment exclusions do not manufacture exception work',()=>{
 it('adds SYNC_FAILED exceptions alongside the native lifecycle and clears after writeback',()=>{
  const dispatch=(deliveryStatus:string,extra={})=>({association:{state:'verified'},deliveryStatus,trackingNumbers:[{type:'full',number:'TRACK'}],...extra})
  const rows=[
-  {id:'failed-paid',order:'2',display:{...known,dispatchDocuments:[dispatch('SYNC_FAILED')]}},
-  {id:'failed-processing',order:'3',display:{...known,dispatchDocuments:[dispatch('SYNC_FAILED')]}},
-  {id:'failed-partial',order:'5',display:{...known,dispatchDocuments:[dispatch('FULFILLED'),dispatch('SYNC_FAILED')]}},
-  {id:'success',order:'4',delivery:'2',raw:{hzkj_logistics_info:[{hzkj_tracking_number:'TRACK'}]},display:{...known,dispatchTaskStatus:'dispatch_synced',dispatchDocuments:[dispatch('FULFILLED')]}},
-  {id:'old-cancelled',order:'3',display:{...known,dispatchDocuments:[dispatch('SYNC_FAILED',{rawInterceptStatus:'CANCELLED'})]}},
-  {id:'unresolved',order:'3',display:{...known,dispatchDocuments:[dispatch('SYNC_FAILED',{association:{state:'unresolved'}})]}},
+  {id:'failed-paid',order:'2',raw:{hzkj_fulfillment_status:'unfulfilled'},display:{...known,dispatchDocuments:[dispatch('SYNC_FAILED')]}},
+  {id:'failed-processing',order:'3',raw:{hzkj_fulfillment_status:'unfulfilled'},display:{...known,dispatchDocuments:[dispatch('SYNC_FAILED')]}},
+  {id:'failed-partial',order:'5',raw:{hzkj_fulfillment_status:'partial'},display:{...known,dispatchDocuments:[dispatch('FULFILLED'),dispatch('SYNC_FAILED')]}},
+  {id:'success',order:'4',delivery:'2',raw:{hzkj_fulfillment_status:'fulfilled',hzkj_logistics_info:[{hzkj_tracking_number:'TRACK'}]},display:{...known,dispatchTaskStatus:'dispatch_synced',dispatchDocuments:[dispatch('FULFILLED')]}},
+  {id:'old-cancelled',order:'3',raw:{hzkj_fulfillment_status:'unfulfilled'},display:{...known,dispatchDocuments:[dispatch('SYNC_FAILED',{rawInterceptStatus:'CANCELLED'})]}},
+  {id:'unresolved',order:'3',raw:{hzkj_fulfillment_status:'unfulfilled'},display:{...known,dispatchDocuments:[dispatch('SYNC_FAILED',{association:{state:'unresolved'}})]}},
  ]
- expect(select('dispatch',rows)).toEqual(['failed-paid','failed-processing','old-cancelled','unresolved'])
+ expect(select('dispatch',rows)).toEqual(['failed-paid','failed-processing','failed-partial','old-cancelled','unresolved'])
  expect(select('exceptions',rows,false,'dispatch_exception')).toEqual(['failed-paid','failed-processing','failed-partial'])
- expect(select('dispatch',rows,true)).toEqual(['failed-partial','success'])
+ expect(select('dispatch',rows,true)).toEqual(['success'])
 })
 
 it('retains fulfilled orders while independently diagnosing missing package tracking',()=>{
  const rows=[undefined,null,[],[{hzkj_tracking_number:null}],[{hzkj_tracking_number:' \t\r\n '}],[{hzkj_tracking_number:'CURRENT'}],[{hzkj_tracking_number:null},{hzkj_tracking_number:'PARTIAL'}]].map((packages,i)=>({
-  id:String(i),order:i===6?'5':'4',delivery:'2',raw:{hzkj_logistics_info:packages},
+  id:String(i),order:i===6?'5':'4',delivery:'2',raw:{hzkj_fulfillment_status:'fulfilled',hzkj_logistics_info:packages},
   display:{...known,dispatchTaskStatus:'dispatch_synced',dispatchDocuments:[{deliveryStatus:'FULFILLED',trackingNumbers:[{type:'full',number:'OLD'}]}]},
  }))
  expect(select('dispatch',rows,true)).toEqual(['0','1','2','3','4','5','6'])
@@ -170,7 +178,7 @@ it('retains fulfilled orders while independently diagnosing missing package trac
 
 it('uses same-order same-company supplemental packages only when the native field is omitted',()=>{
  const capture=(sourceId:string,companyId='company',packages:any=[{hzkj_tracking_number:'SUPPLEMENT'}])=>({moneyCapture:{sourceId,orderNumber:'TO1',companyId,operation:'order-list',values:{hzkj_logistics_info:packages}}})
- const raw={id:'1',billno:'TO1'}
+ const raw={id:'1',billno:'TO1',hzkj_fulfillment_status:'fulfilled'}
  const rows=[
   {id:'valid',order:'4',raw,display:capture('1')},
   {id:'other-order',order:'4',raw,display:capture('2')},
@@ -195,7 +203,7 @@ it('keeps obtained dispatches in normal lists while diagnosing their own missing
   {id:'mixed',docs:[doc('TRACKING_OBTAINED'),doc('TRACKING_OBTAINED',[{type:'full',number:'OTHER'}])]},
   {id:'cancelled',docs:[doc('TRACKING_OBTAINED',[],{rawInterceptStatus:'CANCELLED'})]},
   {id:'unverified',docs:[doc('TRACKING_OBTAINED',[],{association:{state:'unresolved'}})]},
- ].map(r=>({id:r.id,order:'3',display:{...known,dispatchDocuments:r.docs}}))
+ ].map(r=>({id:r.id,order:'3',raw:{hzkj_fulfillment_status:'unfulfilled'},display:{...known,dispatchDocuments:r.docs}}))
  expect(select('exceptions',rows,false,'dispatch_exception')).toEqual(['missing','null','blank','tail-only','inferred-tail-only','mixed'])
  expect(select('dispatch',rows)).toEqual(rows.map(r=>r.id))
  expect(select('dispatch',rows,false,'dispatch_tracking')).toEqual(['valid','mixed'])

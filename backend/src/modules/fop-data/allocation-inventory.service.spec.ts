@@ -97,5 +97,6 @@ it('rejects missing searches and conflicting input modes before calling provider
   expect(provider.getAllocationInventory).not.toHaveBeenCalled()
 })
 it('validates public request limits, enums and paging', async () => {
-  for (const patch of [{ orderIds: Array.from({ length: 101 }, (_, i) => String(i)) }, { orderIds: ['o1', 'o1'] }, { page: 0 }, { page: null }, { pageSize: null }, { warehouseCode: null }, { orderIds: [' '] }, { pageSize: 200 }, { warehouseCode: 'FOREIGN' }]) expect((await validate(plainToInstance(AllocationInventoryQueryDto, { ...query, ...patch }))).length).toBeGreaterThan(0)
+  for (const patch of [{ orderIds: Array.from({ length: 1001 }, (_, i) => String(i)) }, { orderIds: ['o1', 'o1'] }, { page: 0 }, { page: null }, { pageSize: null }, { warehouseCode: null }, { orderIds: [' '] }, { pageSize: 200 }, { warehouseCode: 'FOREIGN' }]) expect((await validate(plainToInstance(AllocationInventoryQueryDto, { ...query, ...patch }))).length).toBeGreaterThan(0)
+  expect(await validate(plainToInstance(AllocationInventoryQueryDto, { ...query, orderIds: Array.from({ length: 1000 }, (_, i) => String(i)) }))).toEqual([])
 })

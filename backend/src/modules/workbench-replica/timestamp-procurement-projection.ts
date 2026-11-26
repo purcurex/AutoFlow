@@ -54,7 +54,7 @@ export function timestampProcurementProjection(parent:Row,groups:{raw:Row;displa
  const cancelled=businessStatus.order==='cancelled'
  const pendingStage=pendingPurchaseStage(parent,demand,groups,dispatches)
  const flags={pending:pendingStage!==null,shipping:!cancelled&&demand.some(l=>l.purchase==='purchased'),completed:!cancelled&&demand.length>0&&demand.every(l=>['shipped','partial_received','received'].includes(l.purchase))}
- const noNeed=physical.length>0&&demand.length===0||businessStatus.purchase==='not_required'
+ const noNeed=businessStatus.lines.length>0&&demand.length===0
  // Supplier tracking is not receipt-notice approval. Never let the old order header override lines.
  const shipment=demand.length&&demand.every(l=>['shipped','partial_received','received'].includes(l.purchase))?'shipped':demand.some(l=>['shipped','received','partial_received'].includes(l.purchase))?'partial':demand.some(l=>l.purchase==='purchased')?'pending':'unknown'
  if(cancelled)stage='cancelled'

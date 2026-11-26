@@ -1,9 +1,13 @@
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { createI18n } from 'vue-i18n'
+import { defineComponent } from 'vue'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import WorkbenchView from '@/views/autoflow/WorkbenchView.vue'
+import FopOrdersView from '@/views/autoflow/FopOrdersView.vue'
 import OrderApprovalDialog from '@/components/autoflow/OrderApprovalDialog.vue'
+import WorkbenchReplicaControls from '@/components/autoflow/WorkbenchReplicaControls.vue'
+import { provideWorkbenchReplica } from '@/composables/workbenchReplicaContext'
 import { previewOrderApproval } from '@/api/fop-approvals'
 import api from '@/api/index'
 import { getWorkbenchAccess } from '@/api/workbench-access'
@@ -18,7 +22,7 @@ vi.mock('@/views/autoflow/DashboardView.vue', () => ({ default: { template: '<di
 vi.mock('@/api/fop-approvals', () => ({ previewOrderApproval: vi.fn(), submitOrderApproval: vi.fn() }))
 vi.mock('@/api/workbench-access', () => ({ getWorkbenchAccess: vi.fn() }))
 vi.mock('@/api/index', () => ({ default: { get: vi.fn() } }))
-vi.mock('@/api/workbench-replica', () => ({ getWorkbenchReplicaStatus: vi.fn(), requestWorkbenchReplicaSync: vi.fn(), getWorkbenchReplicaJob: vi.fn() }))
+vi.mock('@/api/workbench-replica', () => ({ getWorkbenchReplicaStatus: vi.fn(), requestWorkbenchReplicaSync: vi.fn(), getWorkbenchReplicaJob: vi.fn(), configureWorkbenchReplica: vi.fn(), initializeWorkbenchReplica: vi.fn() }))
 const ready = { readMode: 'local', initialized: true, state: 'ready', syncConfigured: true, paused: false, sourceSyncedAt: null, nextScheduledAt: null, datasetId: 'd1', revision: '1' } as const
 let wrapper: VueWrapper | undefined
 beforeEach(async () => {
@@ -28,7 +32,7 @@ beforeEach(async () => {
   vi.mocked(getWorkbenchReplicaStatus).mockResolvedValue(ready)
   vi.mocked(requestWorkbenchReplicaSync).mockResolvedValue({ id: null, state: 'skipped', reason: 'cooldown' })
   vi.mocked(api.get).mockImplementation(async (_url, options: any) => {
-    const query = options?.params ?? {}, items = mockFopOrders.filter(order => matchesFopQueue(order, query.queue))
+    const query = options?.params ?? {}, items = mockFopOrders.filter(order => matchesFopQueue(order, query.queue)).map(order => ({ ...order, ...(query.queue === 'review' ? { rawBillStatus: 'B' } : {}) }))
     return { source: 'mock', items, total: items.length, page: query.page ?? 1, pageSize: query.pageSize ?? 50, departments: [], refreshedAt: '2026-11-11T00:00:00Z', totals: { orderCount: items.length, itemQuantity: 0, amountsByCurrency: [] }, replica: { readMode: 'local', datasetId: 'd1', revision: '1', sourceSyncedAt: null } }
   })
 })
@@ -40,21 +44,38 @@ async function setup() {
   await vi.dynamicImportSettled(); await flushPromises()
   return router
 }
-it('has one shared sync action beside the workbench tabs; local lists keep only local refresh', async () => {
+// The compact workbench no longer mounts source synchronization controls.
+// Keep their explicit-job/context lifecycle covered independently of that shell.
+async function setupReplicaControls() {
+  vi.mocked(getWorkbenchReplicaStatus).mockResolvedValue({ ...ready, automaticCallsEnabled: false })
+  const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/workbench/:role', name: 'RoleWorkbench', component: FopOrdersView }] })
+  await router.push('/workbench/sales?queue=review'); await router.isReady()
+  const host = defineComponent({
+    components: { WorkbenchReplicaControls },
+    setup: () => provideWorkbenchReplica(),
+    template: '<div><WorkbenchReplicaControls :replica="replica" :disabled="disabled" :navigation-ready="navigationReady" @synced="reload" /><RouterView /></div>',
+  })
+  wrapper = mount(host, { global: { plugins: [router, createI18n({ legacy: false, locale: 'zh-CN', messages: {} })] } })
+  await flushPromises()
+  return router
+}
+it('keeps one local refresh beside the queue tabs without starting source synchronization', async () => {
   const router = await setup()
   for (const path of ['/workbench/sales?queue=review','/workbench/sales?queue=exceptions','/workbench/dispatch','/workbench/procurement?view=fulfillment','/workbench/allocation','/workbench/warehouse']) {
     await router.push(path); await flushPromises()
-    expect(wrapper!.findAll('[data-testid="sync-workbench"]')).toHaveLength(1)
-    expect(wrapper!.find('.workbench-navigation [data-testid="sync-workbench"]').exists()).toBe(true)
-    expect(wrapper!.find('.workbench-task-heading [data-testid="sync-workbench"]').exists()).toBe(false)
+    expect(wrapper!.findAll('button.refresh-orders')).toHaveLength(1)
+    expect(wrapper!.find('.workbench-queue-refresh button.refresh-orders').exists()).toBe(true)
+    expect(wrapper!.find('[data-testid="sync-workbench"]').exists()).toBe(false)
   }
-  const before = vi.mocked(requestWorkbenchReplicaSync).mock.calls.length
+  const reads = vi.mocked(api.get).mock.calls.length
   await wrapper!.get('button.refresh-orders').trigger('click'); await flushPromises()
-  expect(requestWorkbenchReplicaSync).toHaveBeenCalledTimes(before)
+  expect(api.get).toHaveBeenCalledTimes(reads + 1)
+  expect(requestWorkbenchReplicaSync).not.toHaveBeenCalled()
+  expect(getWorkbenchReplicaJob).not.toHaveBeenCalled()
 })
-it('keeps a global manual job across queue switches and reloads the current list only after completion', async () => {
+it('keeps an explicit replica job across queue switches and reloads the registered list only after completion', async () => {
   vi.useFakeTimers()
-  const router = await setup()
+  const router = await setupReplicaControls()
   vi.mocked(requestWorkbenchReplicaSync).mockResolvedValueOnce({ id: 'global-job', state: 'pending' })
   vi.mocked(getWorkbenchReplicaJob).mockResolvedValue({ id: 'global-job', state: 'succeeded' })
   await wrapper!.get('[data-testid="sync-workbench"]').trigger('click'); await flushPromises()
@@ -72,7 +93,7 @@ it('keeps a global manual job across queue switches and reloads the current list
 
 it('defers shared sync completion until the current approval dialog is closed', async () => {
   vi.useFakeTimers()
-  await setup()
+  await setupReplicaControls()
   vi.mocked(requestWorkbenchReplicaSync).mockResolvedValueOnce({ id: 'approval-job', state: 'pending' })
   vi.mocked(getWorkbenchReplicaJob).mockResolvedValue({ id: 'approval-job', state: 'succeeded' })
   vi.mocked(previewOrderApproval).mockResolvedValue({ source: 'mock', queue: 'review', items: [] })
@@ -86,7 +107,7 @@ it('defers shared sync completion until the current approval dialog is closed', 
   wrapper!.getComponent(OrderApprovalDialog).vm.$emit('close'); await flushPromises()
   expect(api.get).toHaveBeenCalledTimes(reads + 1)
 })
-it('waits for the new local queue read before requesting its automatic incremental sync', async () => {
+it('finishes a pending local queue read without requesting an automatic source increment', async () => {
   const router = await setup()
   const syncs = vi.mocked(requestWorkbenchReplicaSync).mock.calls.length
   let finish!: (value: unknown) => void
@@ -96,5 +117,7 @@ it('waits for the new local queue read before requesting its automatic increment
   expect(requestWorkbenchReplicaSync).toHaveBeenCalledTimes(syncs)
   finish({ source: 'mock', items: [], total: 0, page: 1, pageSize: 50, departments: [], refreshedAt: '2026-11-11T00:00:00Z', totals: { orderCount: 0, itemQuantity: 0, amountsByCurrency: [] } })
   await flushPromises()
-  expect(requestWorkbenchReplicaSync).toHaveBeenCalledTimes(syncs + 1)
+  expect(requestWorkbenchReplicaSync).toHaveBeenCalledTimes(syncs)
+  expect(wrapper!.get('button.refresh-orders').attributes('disabled')).toBeUndefined()
+  expect(getWorkbenchReplicaJob).not.toHaveBeenCalled()
 })

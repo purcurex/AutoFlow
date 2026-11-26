@@ -17,7 +17,7 @@ export const completionTimeLabels: Record<CompletionQueue, readonly [string, str
 }
 export function isCompletionQueue(queue: string): queue is CompletionQueue { return Object.prototype.hasOwnProperty.call(completionFields, queue) }
 export function isStageCompleted(order: FopOrder, queue: string): boolean {
-  if (order.businessStatus && queue === 'dispatch') return order.reviewStatus === 'approved' && ['fulfilled','partial_fulfilled'].includes(order.businessStatus.order)
+  if (order.businessStatus && queue === 'dispatch') return order.reviewStatus === 'approved' && order.businessStatus.sourceShipment === 'fulfilled'
   if (order.businessStatus && queue === 'shipping') return order.businessStatus.outbound === 'completed'
   if (queue === 'review') return order.reviewStatus === 'approved'
   if (!isCompletionQueue(queue) || order.cancelled || order.paymentStatus !== 'paid') return false

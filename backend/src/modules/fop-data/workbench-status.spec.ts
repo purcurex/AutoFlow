@@ -89,21 +89,25 @@ describe('current procurement filter business states', () => {
     }
   })
 
-describe('fulfillment header plus active tracking', () => {
+describe('native source shipment plus active tracking', () => {
   it.each([
-    ['paid', [], 'dispatch_missing'],
-    ['processing', [{ number:'FY1', trackingNumbers: [] }], 'dispatch_pending'],
-    ['processing', [{ number:'FY1', deliveryStatus: 'PENDING', trackingNumbers: [{type:'full',number:'TRACK'}] }], 'dispatch_tracking'],
-    ['processing', [{ number:'FY1', deliveryStatus: 'TRACKING_OBTAINED', trackingNumbers: [] }], 'dispatch_pending'],
-    ['processing', [{ number:'FY1', trackingNumbers: [{type:'full',number:'   '}] }], 'dispatch_pending'],
-    ['processing', [{ rawInterceptStatus:'CANCELLED',trackingNumbers:[{type:'full',number:'OLD'}] }], 'dispatch_missing'],
-    ['processing', [{ number:'FY1', deliveryStatus:'CANCELLED',trackingNumbers:[{type:'full',number:'OLD'}] }], 'dispatch_missing'],
-    ['fulfillment_cancelled', [], 'dispatch_cancelled'],
-    ['partial_fulfilled', [], 'dispatch_synced'], ['fulfilled', [], 'dispatch_synced'],
-    ['paid', [{ number:'FY1', trackingNumbers:[{type:'full',number:'CONFLICT'}] }], 'unknown'],
-    ['processing', null, 'unknown'],
-  ])('%s uses actual tracking and header state', (state, docs, expected) => {
-    const order={businessStatus:{order:state},dispatchDocuments:docs,dispatchTaskStatus:'dispatch_updating',reviewStatus:'approved'} as unknown as FopOrder
+    ['paid', 'unfulfilled', [], 'dispatch_missing'],
+    ['processing', 'unfulfilled', [{ number:'FY1', trackingNumbers: [] }], 'dispatch_pending'],
+    ['processing', 'partial', [{ number:'FY1', deliveryStatus: 'PENDING', trackingNumbers: [{type:'full',number:'TRACK'}] }], 'dispatch_tracking'],
+    ['processing', 'unfulfilled', [{ number:'FY1', deliveryStatus: 'TRACKING_OBTAINED', trackingNumbers: [] }], 'dispatch_pending'],
+    ['processing', 'unfulfilled', [{ number:'FY1', trackingNumbers: [{type:'full',number:'   '}] }], 'dispatch_pending'],
+    ['processing', 'unfulfilled', [{ rawInterceptStatus:'CANCELLED',trackingNumbers:[{type:'full',number:'OLD'}] }], 'dispatch_missing'],
+    ['processing', 'unfulfilled', [{ number:'FY1', deliveryStatus:'CANCELLED',trackingNumbers:[{type:'full',number:'OLD'}] }], 'dispatch_missing'],
+    ['fulfillment_cancelled', 'unfulfilled', [], 'dispatch_cancelled'],
+    ['partial_fulfilled', 'fulfilled', [], 'dispatch_synced'], ['fulfilled', 'fulfilled', [], 'dispatch_synced'],
+    ['paid', 'unfulfilled', [{ number:'FY1', trackingNumbers:[{type:'full',number:'CURRENT'}] }], 'dispatch_tracking'],
+    ['processing', 'unfulfilled', null, 'unknown'],
+    ['fulfilled', 'unfulfilled', [{number:'FY1',trackingNumbers:[]}], 'dispatch_pending'],
+    ['processing', 'fulfilled', [], 'dispatch_synced'],
+    ['fulfilled', undefined, [], 'unknown'],
+    ['processing', 'unfulfilled', [{number:'FY1',association:{state:'unresolved'},trackingNumbers:[{type:'full',number:'UNVERIFIED'}]}], 'unknown'],
+  ])('%s with source shipment %s uses the independent source fact', (state, sourceShipment, docs, expected) => {
+    const order={businessStatus:{order:state,sourceShipment},dispatchDocuments:docs,dispatchTaskStatus:'dispatch_updating',reviewStatus:'approved'} as unknown as FopOrder
     expect(getTaskStatus(order,'dispatch')).toBe(expected)
   })
 })

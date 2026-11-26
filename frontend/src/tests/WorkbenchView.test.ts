@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from 'vitest'
 import WorkbenchView from '@/views/autoflow/WorkbenchView.vue'
 import { mockFopOrders } from '@/api/fop-order-fixtures'
 import { matchesFopQueue } from '@/api/fop-orders'
+import api from '@/api/index'
 import { getWorkbenchAccess } from '@/api/workbench-access'
 import { refreshWorkbenchAccess } from '@/composables/useWorkbenchAccess'
 
@@ -41,7 +42,7 @@ describe('role workbench content', () => {
         await router.push(`/workbench/${role}?queue=${queue}`); await flushPromises()
         expect(wrapper.get('.workbench-queues').text()).not.toMatch(/订单分析|物流运费/)
         expect(wrapper.findComponent({ name: 'WorkbenchAnalytics' }).exists()).toBe(false)
-        expect(wrapper.get('.dashboard-link').attributes('href')).toBe('/dashboard')
+        expect(wrapper.get('[role="alert"]').text()).toContain('该清单不属于当前工作台')
       }
       wrapper.unmount()
     }
@@ -94,23 +95,24 @@ describe('role workbench content', () => {
     wrapper.unmount()
   })
 
-  it('retains the same summary and tabs across every kind of workbench page', async () => {
+  it('retains the same navigation and refresh slot across every kind of workbench page', async () => {
     const { wrapper, router } = await setup('/workbench/sales')
-    const summary = wrapper.get('.workbench-filter-summary').element
+    const navigation = wrapper.get('.workbench-queue-row').element
+    const refresh = wrapper.get('.workbench-queue-refresh').element
     const tabs = wrapper.get('.workbench-queues').element
     for (const queue of ['performance', 'overview', 'receipts', 'stock', 'review']) {
       await router.push(`/workbench/sales?queue=${queue}`); await flushPromises()
-      expect(wrapper.get('.workbench-filter-summary').element).toBe(summary)
+      expect(wrapper.get('.workbench-queue-row').element).toBe(navigation)
       expect(wrapper.get('.workbench-queues').element).toBe(tabs)
-      expect(summary.nextElementSibling).toBe(tabs)
-      expect(wrapper.get('.workbench-filter-summary p').text()).not.toBe('')
+      expect(wrapper.get('.workbench-queue-refresh').element).toBe(refresh)
+      expect(tabs.nextElementSibling).toBe(refresh)
     }
     wrapper.unmount()
   })
 
   it('opens sales review by default with assigned workbench tabs and no duplicate prospecting entry', async () => {
     const { wrapper, router } = await setup('/workbench/sales', ['sales'], undefined, true)
-    expect(wrapper.find('h1').text()).toBe('销售工作台')
+    expect(wrapper.get('.role-tabs a[aria-current="page"]').text()).toBe('销售工作台')
     expect(wrapper.find('h2').text()).toContain('待审核清单')
     expect(wrapper.findAll('.workbench-queues a').slice(0, 6).map(a => a.text())).toEqual(['待支付清单', '待审核清单', '已审核清单', '备货清单', 'RMA售后清单', '异常订单清单'])
     expect(wrapper.find('.workbench-queues a.active').text()).toBe('待审核清单')
@@ -132,7 +134,7 @@ describe('role workbench content', () => {
   it('puts procurement details inside its workbench and rejects another role’s queue', async () => {
     const { wrapper, router } = await setup('/workbench/procurement?view=fulfillment')
     expect(wrapper.findAll('.role-tabs a').map(tab => tab.text())).toEqual(['销售工作台', '发运工作台', '采购工作台', '配货工作台', '仓库工作台'])
-    expect(wrapper.find('h1').text()).toBe('采购工作台')
+    expect(wrapper.get('.role-tabs a[aria-current="page"]').text()).toBe('采购工作台')
     expect(wrapper.find('.workbench-queues a').text()).toBe('待采购清单')
     expect(wrapper.find('.workbench-queues a').classes()).toContain('active')
     expect(wrapper.find('thead').text()).toContain('采购状态')
@@ -168,7 +170,7 @@ describe('role workbench content', () => {
 
   it.each([
     ['allocation', '已齐套未审核', 'allocation_review', '发运单状态'],
-    ['procurement', '已采购待发货', 'procurement_shipping', '采购状态'],
+    ['procurement', '已采购待发货', 'procurement_shipping', '供应商发货状态'],
   ])('opens the separate %s follow-up tab and retains department filters', async (role, label, queue, column) => {
     const { wrapper, router } = await setup(`/workbench/${role}?departmentId=d1${role === 'procurement' ? '&view=fulfillment' : ''}`)
     if (role === 'allocation') {
@@ -200,9 +202,7 @@ describe('role workbench content', () => {
     await wrapper.findAll('.role-tabs a').find(a => a.text().includes('采购'))!.trigger('click'); await flushPromises()
     expect(router.currentRoute.value.params.role).toBe('procurement')
     expect(router.currentRoute.value.query).toEqual({ departmentId: 'd1', ownerId: 'employee-1' })
-    await wrapper.get('.dashboard-link').trigger('click'); await flushPromises()
-    expect(router.currentRoute.value.name).toBe('FopDashboard')
-    expect(router.currentRoute.value.query.ownerId).toBeUndefined()
+    expect(wrapper.get('.role-tabs a[aria-current="page"]').text()).toBe('采购工作台')
     wrapper.unmount()
   })
 })
@@ -218,6 +218,7 @@ it.each([['sales', '已审核清单'], ['dispatch', '已履约订单'], ['procur
   expect(tab.exists()).toBe(true)
   expect(tab.attributes('class')).toContain('active')
   expect(tab.attributes('href')).toContain('queue=completed')
-  expect(tab.attributes('href')).toContain('timeRange=1m')
+  expect(tab.attributes('href')).toContain('timeRange=3m')
+  expect(api.get).toHaveBeenLastCalledWith(expect.any(String), expect.objectContaining({ params: expect.objectContaining({ timeRange: '3m' }) }))
   wrapper.unmount()
 })

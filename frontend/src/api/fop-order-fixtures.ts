@@ -26,7 +26,7 @@ export const mockFopOrders: FopOrder[] = stages.flatMap((stage, stageIndex) => A
   const orderNumber = `TO${documentDate}${String(36000 + stageIndex * 100 + index).padStart(6, '0')}`
   const dispatchNumber = (part = 1) => `FY${documentDate}${String(200 + stageIndex * 100 + index * 2 + part).padStart(6, '0')}`
   const exception: FopOrder['exception'] = index === 0 && stage !== 'shipping'
-    ? { type: stage === 'review' ? 'procurement_exception' : stage === 'allocation' ? 'allocation_exception' : 'dispatch_exception', reason: null, hours: stage === 'review' ? 26 : stage === 'allocation' ? 38 : 18 }
+    ? { type: stage === 'review' ? 'procurement_exception' : stage === 'allocation' ? 'allocation_exception' : 'dispatch_exception', reason: stage === 'dispatch' ? '获取跟踪号失败' : null, hours: stage === 'review' ? 26 : stage === 'allocation' ? 38 : 18 }
     : null
   const paid = stage !== 'review' || index % 3 !== 2
   const dispatchDocuments: NonNullable<FopOrder['dispatchDocuments']> = stage === 'dispatch'

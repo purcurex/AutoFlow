@@ -10,7 +10,7 @@ import { businessScope } from './business-scope'
 /** Workbench entry permissions do not broaden employee/department or chart data scope. */
 export function effectiveWorkbenchRoles(user: Pick<User, 'role' | 'businessRole' | 'businessDepartmentId' | 'businessEmployeeId' | 'accountDisabled' | 'workbenchRoles'>): WorkbenchRole[] {
   const role = businessScope(user).role
-  if (user.accountDisabled || role === 'none') return []
+  if (user.accountDisabled) return []
   if (role === 'admin' || role === 'salesperson') return [...WORKBENCH_ROLES]
   return [...new Set((user.workbenchRoles ?? []).filter(isWorkbenchRole))]
 }

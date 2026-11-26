@@ -267,12 +267,12 @@ it('purchase headers avoid product hydration; expanded rows hydrate only their p
  await service.purchaseGroups('admin',query)
  expect(hydrate).not.toHaveBeenCalled()
  await service.purchaseGroups('admin',query,'p')
- expect(hydrate).toHaveBeenCalledWith('b',expect.arrayContaining([expect.objectContaining({orderId:'0'})]),'lines')
+ expect(hydrate).toHaveBeenCalledWith('b',expect.arrayContaining([expect.objectContaining({orderId:'0'})]),'lines',expect.objectContaining({query:expect.any(Function)}))
  expect((hydrate.mock.calls[0][1] as any[]).length).toBe(10)
- expect(db.query.mock.calls.filter(([sql])=>sql.includes('hz_fop_collected_entities'))).toHaveLength(2)
+ expect(db.query.mock.calls.filter(([sql])=>sql.includes('hz_fop_collected_entities'))).toHaveLength(1)
  context.signature='v2'
  await service.purchaseGroups('admin',query)
- expect(db.query.mock.calls.filter(([sql])=>sql.includes('hz_fop_collected_entities'))).toHaveLength(3)
+ expect(db.query.mock.calls.filter(([sql])=>sql.includes('hz_fop_collected_entities'))).toHaveLength(2)
 })
 
 it.each([

@@ -12,6 +12,7 @@ vi.mock('echarts/core', () => ({ init: () => state.chart, use: vi.fn() }))
 describe('chart horizontal navigation', () => {
   beforeEach(() => {
     useTheme().setTheme(false)
+    useTheme().setPalette('blue')
     vi.clearAllMocks()
     vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} })
     state.chart.setOption.mockImplementation(option => { state.options = option })
@@ -22,7 +23,8 @@ describe('chart horizontal navigation', () => {
   const option = () => ({ dataZoom: [{ type: 'inside', start: 50, end: 100 }, { type: 'slider', start: 50, end: 100 }] })
   it('keeps the slider window while disabling wheel, plot dragging and brush zoom on every render', async () => {
     const wrapper = mount(EChart, { props: { option: option(), label: 'Trend' } })
-    expect(state.options.dataZoom).toEqual([{ type: 'slider', start: 50, end: 100, brushSelect: false, zoomLock: true }])
+    expect(state.options.dataZoom).toHaveLength(1)
+    expect(state.options.dataZoom[0]).toMatchObject({ type: 'slider', start: 50, end: 100, brushSelect: false, zoomLock: true })
     await wrapper.setProps({ option: option() })
     expect(state.options.dataZoom).toHaveLength(1)
     expect(state.options.dataZoom[0].zoomLock).toBe(true)
@@ -63,6 +65,7 @@ describe('chart horizontal navigation', () => {
       series: [{ type: 'bar', data: [10, 20], itemStyle: { color: '#78b5c7' } }],
     }
     const wrapper = mount(EChart, { props: { option: source, label: 'Trend' } })
+    const lightChrome = { tooltip: state.options.tooltip.backgroundColor, axisLabel: state.options.xAxis.axisLabel.color }
     wrapper.element.dispatchEvent(new MouseEvent('pointerdown', { button: 0, clientX: 100, clientY: 100 }))
     window.dispatchEvent(new MouseEvent('pointermove', { buttons: 1, clientX: 140, clientY: 100 }))
     state.options.dataZoom = [{ type: 'slider', start: 75, end: 100 }]
@@ -80,8 +83,8 @@ describe('chart horizontal navigation', () => {
     expect(source.xAxis.axisLabel.color).toBe('#8793a7')
     useTheme().setTheme(false)
     await nextTick()
-    expect(state.options.tooltip.backgroundColor).toBe('#ffffff')
-    expect(state.options.xAxis.axisLabel.color).toBe('#8793a7')
+    expect(state.options.tooltip.backgroundColor).toBe(lightChrome.tooltip)
+    expect(state.options.xAxis.axisLabel.color).toBe(lightChrome.axisLabel)
     expect(state.options.dataZoom[0]).toMatchObject({ start: 75, end: 100 })
     wrapper.unmount()
   })

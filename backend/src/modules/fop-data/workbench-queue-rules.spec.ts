@@ -103,18 +103,26 @@ it.each(['paid','pending','partially_refunded',null])('retains nonexcluded sourc
  expect(matchesQueue({...order(),paymentStatus:'unpaid',sourcePaymentStatus},'unpaid')).toBe(true)
 })
 
-it.each(['paid','processing','fulfillment_cancelled','partial_fulfilled','fulfilled','cancelled'])('routes native %s exclusively between pending and fulfilled lists',state=>{
- const row={...order(),reviewStatus:'approved',logisticsInfo:[{packageTrackingNumber:'TRACK'}],businessStatus:{order:state}} as unknown as FopOrder
- expect(matchesQueue(row,'dispatch')).toBe(['paid','processing'].includes(state))
- expect(isStageCompleted(row,'dispatch')).toBe(['partial_fulfilled','fulfilled'].includes(state))
+it.each([
+ ['paid','unfulfilled',true,false],['processing','partial',true,false],
+ ['fulfillment_cancelled','unfulfilled',false,false],['cancelled','unfulfilled',false,false],
+ ['partial_fulfilled','fulfilled',false,true],['fulfilled','fulfilled',false,true],
+ ['fulfilled','unfulfilled',true,false],['processing','fulfilled',false,true],
+ ['paid',undefined,false,false],['fulfilled',undefined,false,false],
+])('routes native %s using independent source shipment %s', (state,sourceShipment,pending,completed)=>{
+ const row={...order(),reviewStatus:'approved',logisticsInfo:[{packageTrackingNumber:'TRACK'}],businessStatus:{order:state,sourceShipment}} as unknown as FopOrder
+ expect(matchesQueue(row,'dispatch')).toBe(pending)
+ expect(isStageCompleted(row,'dispatch')).toBe(completed)
 })
 
 it('keeps sync failures in normal dispatch stages and exceptions until successful native writeback',()=>{
- const row={...order(),reviewStatus:'approved',exception:null,logisticsInfo:[{packageTrackingNumber:'TRACK'}],businessStatus:{order:'paid'},dispatchDocuments:[{id:'d',number:'FY',status:'approved',association:{state:'verified'},deliveryStatus:'SYNC_FAILED',trackingNumbers:[{type:'full',number:'TRACK'}]}]} as unknown as FopOrder
+ const row={...order(),reviewStatus:'approved',exception:null,logisticsInfo:[{packageTrackingNumber:'TRACK'}],businessStatus:{order:'paid',sourceShipment:'unfulfilled'},dispatchDocuments:[{id:'d',number:'FY',status:'approved',association:{state:'verified'},deliveryStatus:'SYNC_FAILED',trackingNumbers:[{type:'full',number:'TRACK'}]}]} as unknown as FopOrder
  expect(matchesQueue(row,'exceptions')).toBe(true)
  expect(matchesQueue(row,'dispatch')).toBe(true)
  expect(isStageCompleted(row,'dispatch')).toBe(false)
  row.businessStatus!.order='fulfilled'
+ expect(isStageCompleted(row,'dispatch')).toBe(false)
+ row.businessStatus!.sourceShipment='fulfilled'
  expect(isStageCompleted(row,'dispatch')).toBe(true)
  row.dispatchDocuments![0].deliveryStatus='FULFILLED'
  expect(matchesQueue(row,'exceptions')).toBe(false)

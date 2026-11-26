@@ -22,7 +22,7 @@ it('leaves unknown exception facts blank rather than exposing technical diagnost
  vi.mocked(getFopOrders).mockResolvedValue({total:1,items:[{id:'x',orderNumber:'TO1',exception:null,dataQuality:{reasons:['missing_api_field']}}]} as never)
  const wrapper=await setup();await flushPromises();expect(wrapper.find('.type').exists()).toBe(false);expect(wrapper.find('.reason').exists()).toBe(false);expect(wrapper.text()).not.toContain('missing_api');wrapper.unmount()
 })
-it.each([['outbound_exception','出库异常','部分出库无法核实'],['allocation_exception','配货异常','配货单报错']])('shows classified %s with its actionable reason',async(type,label,reason)=>{
+it.each([['outbound_exception','出库异常','部分出库无法核实'],['allocation_exception','配货异常','配货单报错'],['dispatch_exception','履约异常','获取跟踪号失败']])('shows classified %s with its actionable reason',async(type,label,reason)=>{
  vi.mocked(getFopOrders).mockResolvedValue({total:1,items:[{id:'x',orderNumber:'TO1',exception:{type,reason}}]} as never)
  const wrapper=await setup();await flushPromises()
  expect(wrapper.get('.type').text()).toBe(label);expect(wrapper.get('.reason').text()).toBe(reason)
